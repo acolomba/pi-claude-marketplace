@@ -1,0 +1,525 @@
+// orchestrators/plugin/update-constraint-gate.ts
+//
+// Answers what the installed records that declare a plugin hold it to: the
+// gate `preparePluginUpdate` composes before resolving an update candidate,
+// so a plugin's version never moves outside what its own dependents allow
+// (UPDT-01, UPDT-02).
+//
+// Deliberately ABSENT from `tests/architecture/gate-targets.ts`'s
+// `NETWORK_FREE_TARGETS`, for the same reason its tag-probe callees are
+// (D-10-19): stage one's tag query reaches the network from inside this
+// leaf, and `update-preflight.ts` composes and invokes it through the
+// `constraintGate` injected field -- a name the network-free gate does not
+// match -- so neither owner gains a git surface and no gate edit is needed.
+//
+// AUTH-09: the credential bundle is threaded in through `options.auth` from
+// the caller, which builds it once and shares it with the clone probe; this
+// leaf reads no credential value, stores none, and places none on a
+// returned verdict.
+//
+// The range algebra is `intersectDependencyRanges` alone: the two
+// project-owned caps on total input size and projected conjuncts live
+// there, and calling `semver` directly from this leaf would bypass both.
+
+import {
+  intersectDependencyRanges,
+  isUnconstrainedRange,
+  recordedVersionSatisfies,
+  renderConstraintRange,
+} from "../../domain/dependency-range.ts";
+import { parsePluginSource } from "../../domain/source.ts";
+import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+
+import { buildScopeDeclarationDetail } from "./dependency-index.ts";
+import { probeDependencyTags } from "./dependency-tag-probe.ts";
+import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
+
+import type { AddressedDependency } from "./dependency-index.ts";
+import type { DependencyTagListingFailureReason } from "./dependency-tag-probe.ts";
+import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
+import type { GitBackedSource } from "../../domain/source.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { RemoteTag } from "../../platform/git.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+
+/**
+ * One installed record that declares the target, with the range it declared
+ * and whether it is currently disabled. `range` is absent when the
+ * declaration names the key with no version -- it still HOLDS the key (a
+ * declaration holds whatever it names), but contributes nothing to the fold.
+ */
+export interface ConstraintHolder {
+  readonly key: string;
+  readonly range?: string;
+  readonly disabled: boolean;
+}
+
+/**
+ * The declaration-walk and tag-probe operations this leaf composes,
+ * injectable for tests.
+ */
+export interface UpdateConstraintSeam {
+  readonly buildScopeDeclarationDetail: typeof buildScopeDeclarationDetail;
+  readonly probeDependencyTags: typeof probeDependencyTags;
+  readonly probeMarketplaceTags: typeof probeMarketplaceTags;
+}
+
+/** Inputs required to evaluate one plugin's declared constraints. */
+export interface UpdateConstraintOptions {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly entry: PluginEntry;
+  readonly marketplaceRoot: string;
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly seam?: UpdateConstraintSeam;
+  /** Per-URL tag-listing memo, one update run wide (D-10-18). */
+  readonly tagMemo?: Map<string, readonly RemoteTag[]>;
+  /** The path-source analogue of `tagMemo` (D-10-18), same status. */
+  readonly marketplaceTagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
+  readonly auth: {
+    readonly ctx?: NotificationContext;
+    readonly credentialOps: CredentialOps;
+    readonly deviceFlowHttp?: DeviceFlowHttp;
+    readonly authMemo?: Map<string, AuthAttemptResult>;
+  };
+}
+
+/**
+ * A satisfying release tag's identity: the commit it resolved to and the
+ * version its name declares. Shared with `update-preflight.ts`'s candidate
+ * resolution, which threads the SAME pin through the resolver's callbacks
+ * (D-10-17) -- one declaration, not two structurally-identical ones.
+ */
+export interface UpdateTagPin {
+  readonly oid: string;
+  readonly version: string;
+}
+
+/** What the target's installed dependents hold it to. */
+export type UpdateConstraintVerdict =
+  | { readonly kind: "unconstrained" }
+  | {
+      readonly kind: "admits";
+      readonly range: string;
+      readonly holders: readonly ConstraintHolder[];
+      readonly pin?: UpdateTagPin;
+      readonly fellBackToCurrentCopy: boolean;
+      /**
+       * D-10-13 / D-10-17a: the ceiling disclosure -- the effective range and
+       * its holders, composed once here so every `admits` arm has it ready
+       * for the two `unchanged` construction sites and for
+       * `PreparedPluginUpdate.constraint`. Composed the same way whether or
+       * not a pin or a fallback produced this verdict; the caller decides
+       * which row (if any) actually shows it.
+       */
+      readonly disclosure: string;
+    }
+  | { readonly kind: "held"; readonly cause: string };
+
+/** Stage two's re-check of the version that actually landed. */
+export type StageTwoVerdict =
+  { readonly kind: "admitted" } | { readonly kind: "held"; readonly cause: string };
+
+const REAL_UPDATE_CONSTRAINT_SEAM: UpdateConstraintSeam = Object.freeze({
+  buildScopeDeclarationDetail,
+  probeDependencyTags,
+  probeMarketplaceTags,
+});
+
+/**
+ * The ways stage one can fail to admit a version, the two ranges
+ * `intersectDependencyRanges` can fail to fold a set into (D-10-10), and the
+ * three arms that describe a version already in hand rather than a search
+ * failure: `out-of-range` is stage two's post-fetch guard (UPDT-02),
+ * `already-resolved` is the D-10-13 ceiling disclosure, and `range-only`
+ * is its counterpart on an arm where no tag search established a ceiling.
+ */
+type ConstraintArm =
+  | "disjoint"
+  | "invalid"
+  | "too-complex"
+  | "no-satisfying-tag"
+  | "transport"
+  | "out-of-range"
+  | "already-resolved"
+  | "range-only";
+
+/** Fixed clause per arm (D-10-10): the situation, never an identifier. */
+const ARM_CLAUSE: Record<ConstraintArm, string> = {
+  disjoint: "the declared ranges admit no version in common",
+  invalid: "a declared range could not be read",
+  "too-complex": "the declared ranges are too complex to combine",
+  // A later stage's post-fetch guard reaches this arm: stage one itself
+  // never holds on a no-satisfying-tag answer (it leaves the outcome open,
+  // see `decodeTagProbe` below).
+  "no-satisfying-tag": "no release tag satisfies the combined range",
+  transport: "the release tags could not be listed",
+  // UPDT-02: the version that actually landed (a no-tag repository, or a
+  // drifted path-source current copy) falls outside what the dependents
+  // named below admit.
+  "out-of-range": "falls outside what the combined range admits",
+  // D-10-13: the plugin is already at the highest version the combined
+  // range admits -- disclosed on an `{up-to-date}` row's cause line, never a
+  // second reason token. Only a PIN earns this clause: the tag search ran
+  // and selected the highest satisfying release.
+  "already-resolved": "already the highest version the combined range admits",
+  // D-10-13 on an arm that established no ceiling -- no tag matched, the
+  // listing was unreadable, or the entry source has no tag listing at all.
+  // The range and its holders are still the truth; "highest admitted" is
+  // not.
+  "range-only": "constrained to the combined range",
+};
+
+function nameHolder(holder: ConstraintHolder): string {
+  return holder.disabled ? `"${holder.key}" (currently disabled)` : `"${holder.key}"`;
+}
+
+/**
+ * Composes the ONE cause line every constraint arm shares (D-10-11): a fixed
+ * arm clause, the bounded diagnostic detail behind it, and the declaring
+ * plugins in walk order, each marked when currently disabled. Every new arm
+ * extends `ARM_CLAUSE` rather than writing a second composer -- the
+ * holder-naming half is identical across all of them, so a second composer
+ * would be a second place to drift the disabled marking. `detail` carries
+ * whatever bounded diagnostic text the calling arm has -- `intersectDependencyRanges`'
+ * own measurement/position-only text for the three range-fold arms, the
+ * transport classification for the `transport` arm, or the effective range
+ * for the `out-of-range` / `already-resolved` arms -- passed through
+ * `renderConstraintRange` so a synthesized detail cannot flood the line and
+ * never a declared range's raw content. `version` is stage two's own arm
+ * only: the fetched version that landed, interpolated with NO transformation
+ * (never bounded -- a resolved version is never attacker-controlled length
+ * the way a declared range is) ahead of the arm clause.
+ */
+function describeConstraint(
+  detail: string,
+  holders: readonly ConstraintHolder[],
+  arm: ConstraintArm,
+  version?: string,
+): string {
+  const bounded = renderConstraintRange(detail);
+  const required = holders.map(nameHolder).join(", ");
+  const fetched = version === undefined ? "" : `version ${version} `;
+  return `${fetched}${ARM_CLAUSE[arm]} (${bounded}) -- required by ${required}`;
+}
+
+/** The `name@marketplace` key naming one record, on the D-05-06 convention. */
+function recordKey(name: string, marketplace: string): string {
+  return `${name}@${marketplace}`;
+}
+
+/**
+ * Every OTHER installed record that declares the target, sorted by key.
+ *
+ * Walks the scope's own records (never a second scope, D-10-07) rather than
+ * the `declarations` map's keys, so each declarer's `enabled` bit is read off
+ * the SAME record the walk already holds -- no second state lookup, and no
+ * key-string parsing to recover a declarer's name and marketplace. A
+ * declarer whose key equals the target's own is skipped before its
+ * declarations are even read: a plugin that declares itself constrains
+ * nothing. `provenance` is never read -- the question is who declares this
+ * key, not how the record got here (D-10-08).
+ */
+function collectHolders(
+  declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
+  state: ExtensionState,
+  target: string,
+): readonly ConstraintHolder[] {
+  const holders: ConstraintHolder[] = [];
+  for (const marketplace of Object.values(state.marketplaces)) {
+    for (const [name, record] of Object.entries(marketplace.plugins)) {
+      const declarerKey = recordKey(name, marketplace.name);
+      if (declarerKey === target) {
+        continue;
+      }
+
+      const declared = declarations.get(declarerKey) ?? [];
+      for (const dependency of declared) {
+        if (recordKey(dependency.name, dependency.marketplace) !== target) {
+          continue;
+        }
+
+        holders.push({
+          key: declarerKey,
+          ...(dependency.version !== undefined && { range: dependency.version }),
+          disabled: isRecordedButDisabled(record),
+        });
+      }
+    }
+  }
+
+  return holders.sort((left, right) => left.key.localeCompare(right.key));
+}
+
+/** Whether the target's own entry source has a tag listing either probe can read. */
+type ConstraintTagSource =
+  | { readonly kind: "git"; readonly source: GitBackedSource }
+  | { readonly kind: "path" }
+  | { readonly kind: "absent" };
+
+/**
+ * Decides which tag listing, if any, the target's own entry source has --
+ * mirroring `install-cascade.ts`'s `resolveMemberTagSource` branch exactly: a
+ * git-clonable source (`url` / `git-subdir` / `github`) probes its own
+ * repository, a `path` source probes its marketplace clone, and every other
+ * kind (`npm`, `unknown`) has no tags either probe can read.
+ */
+function constraintTagSource(entry: PluginEntry): ConstraintTagSource {
+  const parsed = parsePluginSource(entry.source);
+  if (parsed.kind === "url" || parsed.kind === "git-subdir" || parsed.kind === "github") {
+    return { kind: "git", source: parsed };
+  }
+
+  if (parsed.kind === "path") {
+    return { kind: "path" };
+  }
+
+  return { kind: "absent" };
+}
+
+/**
+ * The `admits` arm, with or without a pin (the shape every stage-one branch
+ * below returns). `disclosure` is composed here ONCE per verdict, from the
+ * SAME range and holders every branch already has, so it is ready for the
+ * `unchanged` ceiling row (D-10-13) and `PreparedPluginUpdate.constraint`
+ * (D-10-17a) without a second composition site.
+ *
+ * The clause follows the PIN. A pin means the tag search ran and chose the
+ * highest satisfying release, so the ceiling is established and the line
+ * may claim it. Every other admitting branch -- no matching tag, an
+ * unreadable listing, a source with no tag listing at all -- searched
+ * nothing or found nothing, so its line discloses the range alone.
+ */
+function admitsRange(
+  range: string,
+  holders: readonly ConstraintHolder[],
+  options?: { readonly pin?: UpdateTagPin; readonly fellBackToCurrentCopy?: boolean },
+): UpdateConstraintVerdict {
+  return {
+    kind: "admits",
+    range,
+    holders,
+    ...(options?.pin !== undefined && { pin: options.pin }),
+    fellBackToCurrentCopy: options?.fellBackToCurrentCopy === true,
+    disclosure: describeConstraint(
+      range,
+      holders,
+      options?.pin === undefined ? "range-only" : "already-resolved",
+    ),
+  };
+}
+
+/**
+ * Decodes a tag probe's three-way answer into a stage-one verdict -- the SAME
+ * shape both `probeDependencyTags` and `probeMarketplaceTags` converge on.
+ * `pinned` admits the fold at the tag's own oid and version, read verbatim
+ * and neither sorted, filtered nor re-derived; `no-matching-tag` admits the
+ * fold with no pin, leaving the outcome to a later stage; `tag-listing-failed`
+ * holds the update and names the transport classification, because a
+ * repository that could not be reached has not told us anything -- the path
+ * arm below folds ITS OWN unreadable listing into `no-matching-tag` before
+ * ever reaching this branch (D-10-16), so only the git arm's failure lands
+ * here.
+ */
+function decodeTagProbe(
+  range: string,
+  holders: readonly ConstraintHolder[],
+  probed:
+    | { readonly kind: "pinned"; readonly oid: string; readonly version: string }
+    | { readonly kind: "no-matching-tag" }
+    | {
+        readonly kind: "tag-listing-failed";
+        readonly classification: DependencyTagListingFailureReason;
+      },
+): UpdateConstraintVerdict {
+  if (probed.kind === "pinned") {
+    return admitsRange(range, holders, { pin: { oid: probed.oid, version: probed.version } });
+  }
+
+  if (probed.kind === "no-matching-tag") {
+    return admitsRange(range, holders);
+  }
+
+  return {
+    kind: "held",
+    cause: describeConstraint(
+      probed.classification ?? "an unclassified transport failure",
+      holders,
+      "transport",
+    ),
+  };
+}
+
+/**
+ * Stage one on a git-backed entry source: probes the source repository's own
+ * release tags through the SAME host auth bundle `preparePluginUpdate`
+ * already built for the clone probe, passed through untouched -- no second
+ * credential acquisition path (AUTH-09).
+ *
+ * Every REAL caller threads a `ctx` (`UpdatePluginsOptions.ctx` is required
+ * the entire way down this call chain); `UpdateConstraintOptions.auth.ctx`
+ * stays optional only so a caller that never reaches this arm -- unconstrained,
+ * or held before stage one -- needs none. Reaching here with no `ctx` at all
+ * cannot safely authenticate a git host, so the query is skipped and the fold
+ * admits the range unpinned, leaving the outcome to a later stage -- the same
+ * "cannot decide, defer" shape D-10-16 gives an unreadable local listing.
+ */
+async function probeGitStageOne(
+  options: UpdateConstraintOptions,
+  seam: UpdateConstraintSeam,
+  source: GitBackedSource,
+  range: string,
+  holders: readonly ConstraintHolder[],
+): Promise<UpdateConstraintVerdict> {
+  if (options.auth.ctx === undefined) {
+    return admitsRange(range, holders);
+  }
+
+  const probed = await seam.probeDependencyTags({
+    pluginName: options.plugin,
+    source,
+    range,
+    auth: {
+      ctx: options.auth.ctx,
+      credentialOps: options.auth.credentialOps,
+      ...(options.auth.deviceFlowHttp !== undefined && {
+        deviceFlowHttp: options.auth.deviceFlowHttp,
+      }),
+      ...(options.auth.authMemo !== undefined && { authMemo: options.auth.authMemo }),
+    },
+    ...(options.tagMemo !== undefined && { tagMemo: options.tagMemo }),
+  });
+  return decodeTagProbe(range, holders, probed);
+}
+
+/**
+ * Stage one on a `path` entry source: probes the marketplace clone's own
+ * local release tags -- no auth, no network (TAGS-01).
+ */
+async function probePathStageOne(
+  options: UpdateConstraintOptions,
+  seam: UpdateConstraintSeam,
+  range: string,
+  holders: readonly ConstraintHolder[],
+): Promise<UpdateConstraintVerdict> {
+  const probed = await seam.probeMarketplaceTags({
+    pluginName: options.plugin,
+    marketplaceRoot: options.marketplaceRoot,
+    range,
+    ...(options.marketplaceTagMemo !== undefined && { tagMemo: options.marketplaceTagMemo }),
+  });
+
+  // D-10-14 / D-10-16: an unreadable local listing and an empty one are the
+  // same user-visible fact, so both fall back to the marketplace's CURRENT
+  // copy and leave the outcome to a later stage instead of holding the
+  // update the way an unreachable remote does above. The git arm's own
+  // no-satisfying-tag branch (`decodeTagProbe` above) leaves
+  // `fellBackToCurrentCopy` at its `false` default -- a git source with no
+  // satisfying tag refreshes its own branch head, not a marketplace's
+  // current copy, so it must not claim that token.
+  if (probed.kind === "no-matching-tag" || probed.kind === "tag-listing-failed") {
+    return admitsRange(range, holders, { fellBackToCurrentCopy: true });
+  }
+
+  return decodeTagProbe(range, holders, probed);
+}
+
+/**
+ * Evaluates what the target plugin's installed dependents hold it to.
+ *
+ * The `state` walked is the ONE document the caller already loaded for the
+ * target scope: this leaf never loads a second scope's state, so constraints
+ * are scope-local by construction (D-10-07). A constrained range reaches
+ * stage one: the entry source decides which tag listing to probe, and the
+ * highest satisfying tag -- if any -- pins the admitted range.
+ */
+export async function evaluateUpdateConstraint(
+  options: UpdateConstraintOptions,
+): Promise<UpdateConstraintVerdict> {
+  const seam = options.seam ?? REAL_UPDATE_CONSTRAINT_SEAM;
+  const target = recordKey(options.plugin, options.marketplace);
+
+  const walked = await seam.buildScopeDeclarationDetail({
+    state: options.state,
+    locations: options.locations,
+  });
+  if (!walked.ok) {
+    // D-10-05: the walk's own message IS the rendered cause line -- it is
+    // already path-redacted and built without `{ cause }` chaining, so the
+    // renderer's cause-chain walk cannot print a raw path behind it.
+    // Re-wrapping it here would reintroduce exactly that. This is the same
+    // fail-closed model the uninstall refusal uses on an unreadable
+    // declarer, and differs from it only in outcome: an update is SKIPPED
+    // here, never refused.
+    return { kind: "held", cause: walked.cause.message };
+  }
+
+  const holders = collectHolders(walked.declarations, options.state, target);
+  // A declaration HOLDS the key whatever it names, but only a declared RANGE
+  // constrains a version: a holder with no `range` stays in `holders` for
+  // the cause line and is left out of the fold below.
+  const ranges = holders.flatMap((holder) => (holder.range === undefined ? [] : [holder.range]));
+  const fold = intersectDependencyRanges(ranges);
+  if (!fold.ok) {
+    return { kind: "held", cause: describeConstraint(fold.detail, holders, fold.reason) };
+  }
+
+  if (isUnconstrainedRange(fold.range)) {
+    return { kind: "unconstrained" };
+  }
+
+  const tagSource = constraintTagSource(options.entry);
+  if (tagSource.kind === "git") {
+    return probeGitStageOne(options, seam, tagSource.source, fold.range, holders);
+  }
+
+  if (tagSource.kind === "path") {
+    return probePathStageOne(options, seam, fold.range, holders);
+  }
+
+  // `npm` / `unknown`: no tag listing either probe can read, so the fold
+  // admits the range with no pin and makes no probe call.
+  return admitsRange(fold.range, holders);
+}
+
+/**
+ * Stage two: re-checks the version that actually landed against the SAME
+ * intersected range stage one already computed (UPDT-01, D-10-01). Catches a
+ * no-tag repository and a drifted path-source current copy -- the two cases
+ * a tag probe cannot answer on its own. PURE: no I/O, no seam, and no second
+ * range fold -- `admits.range` is the fold stage one already produced.
+ *
+ * A version that fails the fold is held naming only the holders whose OWN
+ * declared range rejects it (`!recordedVersionSatisfies(toVersion,
+ * holder.range)`), never the whole holder set: a holder whose own range the
+ * fetched version DOES satisfy would send the user to the wrong plugin. A
+ * holder with no declared range never rejects -- it has nothing to test the
+ * version against.
+ */
+export function admitResolvedVersion(
+  admits: Extract<UpdateConstraintVerdict, { readonly kind: "admits" }>,
+  toVersion: string,
+): StageTwoVerdict {
+  if (recordedVersionSatisfies(toVersion, admits.range)) {
+    return { kind: "admitted" };
+  }
+
+  // The rejecting set is never empty here, so the line always has a subject
+  // behind `-- required by`. `admits.range` IS the intersection of the
+  // holders' own declared ranges, and a version outside an intersection is
+  // outside at least one of its members. An `admits` verdict only exists once
+  // that intersection is narrower than `*`, and a holder set whose members
+  // all declared no range folds to `*` and returns `unconstrained` instead,
+  // so at least one declared range is always in play.
+  const rejecting = admits.holders.filter(
+    (holder) => holder.range !== undefined && !recordedVersionSatisfies(toVersion, holder.range),
+  );
+  return {
+    kind: "held",
+    cause: describeConstraint(admits.range, rejecting, "out-of-range", toVersion),
+  };
+}

@@ -36,16 +36,24 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
+  createInstallMissingDependency,
   createInstallPlugin,
   type InstallTransaction,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
+  clonePluginRecord,
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import {
+  DependencyCascadeError,
+  InvalidMarketplaceManifestError,
+  PluginShapeError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   createRemovalOps,
   pathExists,
@@ -73,6 +81,7 @@ import type {
 import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
 import type { InstallFailureCapture } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import type { MarketplaceTagProbeOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   NotificationContext,
@@ -84,6 +93,7 @@ import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/typ
 import type { TestContext } from "node:test";
 
 type InstallOperation = ReturnType<typeof createInstallPlugin>;
+type InstallMissingDependencyOperation = ReturnType<typeof createInstallMissingDependency>;
 
 const filesystemPromises = createRequire(import.meta.url)(
   "node:fs/promises",
@@ -99,6 +109,8 @@ interface InstallTestOwner {
   readonly hooksRouting: InstallHooksRouting;
   readonly hooksRuntime: HooksRuntime;
   readonly installPlugin: InstallOperation;
+  /** MISS-01: the reload-only missing-dependency entry point beside `installPlugin`. */
+  readonly installMissingDependency: InstallMissingDependencyOperation;
   readonly transaction: InstallTransaction;
   readonly transactionControl: InstallTransactionControl;
 }
@@ -315,6 +327,11 @@ async function withHermeticHome<T>(fn: (owner: InstallTestOwner) => Promise<T>):
       hooksRouting,
       hooksRuntime,
       installPlugin: createInstallPlugin(transaction, hooksRouting, completionCache),
+      installMissingDependency: createInstallMissingDependency(
+        transaction,
+        hooksRouting,
+        completionCache,
+      ),
       transaction,
       transactionControl,
     });
@@ -493,10 +510,28 @@ function conflictingMarketplaceRecord(
           workflows: [],
         },
         enabled: true,
+        provenance: "explicit",
         installedAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     },
+  };
+}
+
+/**
+ * The one dependency element every declaring fixture carries, on both the
+ * plugin's own manifest and its marketplace entry. It names `some-other-plugin`
+ * in the declaring marketplace unless the case addresses another one -- the
+ * cross-marketplace shape a dependency reaches through the CMP-3 fallback.
+ */
+function seededDependencyElement(opts: {
+  dependencyVersion?: string;
+  dependencyMarketplace?: string;
+}): Record<string, unknown> {
+  return {
+    name: "some-other-plugin",
+    ...(opts.dependencyMarketplace !== undefined && { marketplace: opts.dependencyMarketplace }),
+    version: opts.dependencyVersion ?? "*",
   };
 }
 
@@ -519,6 +554,9 @@ function buildSeededPluginManifest(
     pluginJsonVersion?: string | null;
     experimental?: object;
     pluginJsonDefaultEnabled?: boolean;
+    declareDependencies?: boolean;
+    dependencyVersion?: string;
+    dependencyMarketplace?: string;
   },
 ): Record<string, unknown> {
   return {
@@ -526,6 +564,15 @@ function buildSeededPluginManifest(
     ...(opts.pluginJsonVersion === undefined
       ? { version: "0.0.1" }
       : opts.pluginJsonVersion !== null && { version: opts.pluginJsonVersion }),
+    // D-01-32: the cascade reads the plugin's OWN manifest first and treats it
+    // as authoritative, so a fixture that declared the dependency on the entry
+    // alone would have this manifest suppress it. Both sides carry the same
+    // declaration, the shape a real plugin ships, which keeps these fixtures
+    // about the CASCADE rather than about the read order -- the read order has
+    // its own cases, where the two sides deliberately disagree.
+    ...(opts.declareDependencies === true && {
+      dependencies: [seededDependencyElement(opts)],
+    }),
     // D-64-06: declaring experimental kinds drives `resolveStrict` to the
     // `partially-available` arm without a structural defect.
     ...(opts.experimental !== undefined && { experimental: opts.experimental }),
@@ -543,6 +590,8 @@ function buildSeededMarketplaceEntry(
     rawSourceOverride?: unknown;
     pluginVersion?: string;
     declareDependencies?: boolean;
+    dependencyVersion?: string;
+    dependencyMarketplace?: string;
     entryDefaultEnabled?: boolean;
   },
 ): Record<string, unknown> {
@@ -551,8 +600,12 @@ function buildSeededMarketplaceEntry(
     source: opts.rawSourceOverride ?? `./plugins/${pluginName}`,
     ...(opts.agentDirectories !== undefined && { agents: [...opts.agentDirectories] }),
     ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
-    // PI-13: the exact dependency shape is not validated; presence is.
-    ...(opts.declareDependencies === true && { dependencies: { "some-other-plugin": "*" } }),
+    // RESV-01: a declaration the cascade can actually satisfy, so the case
+    // exercises the successful-install surface. The named plugin must be seeded
+    // as a sibling; an unresolvable declaration now fails the whole install.
+    ...(opts.declareDependencies === true && {
+      dependencies: [seededDependencyElement(opts)],
+    }),
     ...(opts.entryDefaultEnabled !== undefined && { defaultEnabled: opts.entryDefaultEnabled }),
   };
 }
@@ -567,7 +620,14 @@ async function seedSiblingPlugins(
   marketplaceRoot: string,
   opts: {
     pluginVersion?: string;
-    siblingPlugins?: readonly { name: string; entryDefaultEnabled?: boolean }[];
+    siblingPlugins?: readonly {
+      name: string;
+      entryDefaultEnabled?: boolean;
+      /** RESV-01: hooks on a DEPENDENCY, whose routing is the cascade's to hydrate. */
+      hooksJson?: object;
+      /** D-64-06: unsupported kinds on a DEPENDENCY, so its record is partially installed. */
+      experimental?: object;
+    }[];
   },
 ): Promise<Record<string, unknown>[]> {
   const entries: Record<string, unknown>[] = [];
@@ -576,11 +636,21 @@ async function seedSiblingPlugins(
     await mkdir(path.join(siblingRoot, ".claude-plugin"), { recursive: true });
     await writeFile(
       path.join(siblingRoot, ".claude-plugin", "plugin.json"),
-      JSON.stringify({ name: sibling.name, version: "0.0.1" }),
+      JSON.stringify({
+        name: sibling.name,
+        version: "0.0.1",
+        ...(sibling.experimental !== undefined && { experimental: sibling.experimental }),
+      }),
     );
     const siblingSkillDir = path.join(siblingRoot, "skills", "tool");
     await mkdir(siblingSkillDir, { recursive: true });
     await writeFile(path.join(siblingSkillDir, "SKILL.md"), `---\nname: tool\n---\n\nBody.\n`);
+    if (sibling.hooksJson !== undefined) {
+      const siblingHooksDir = path.join(siblingRoot, "hooks");
+      await mkdir(siblingHooksDir, { recursive: true });
+      await writeFile(path.join(siblingHooksDir, "hooks.json"), JSON.stringify(sibling.hooksJson));
+    }
+
     entries.push({
       name: sibling.name,
       source: `./plugins/${sibling.name}`,
@@ -647,8 +717,23 @@ async function seedPathMarketplaceWithPlugin(opts: {
   mcpServers?: Record<string, unknown>;
   /** WLIF-01: workflow scripts -- each becomes <pluginRoot>/workflows/<sourceName>.js. */
   workflows?: { sourceName: string; body?: string }[];
-  /** PI-13: declares dependencies. The exact shape isn't validated; presence is. */
+  /** PI-13: declares a valid dependency on another plugin. */
   declareDependencies?: boolean;
+  /**
+   * RESV-03: the version range that declaration carries. Defaults to the
+   * wildcard, which is no constraint at all and keeps every other fixture
+   * offline; a real range routes the cascade into constraint resolution.
+   */
+  dependencyVersion?: string;
+  /**
+   * D-04-05: the marketplace that declaration addresses. Absent, the element
+   * names no marketplace and resolves in the declaring one; set, it names a
+   * marketplace another `seedPathMarketplaceWithPlugin` call recorded, at
+   * whichever scope that call chose.
+   */
+  dependencyMarketplace?: string;
+  /** Foreign marketplaces the root marketplace explicitly permits. */
+  allowedDependencyMarketplaces?: readonly string[];
   /** Pre-seed a state.json with this plugin already installed (PI-5/PI-15). */
   preInstall?: boolean;
   /** Seed an additional plugin in state that already owns one of the generated names (PI-6). */
@@ -675,7 +760,14 @@ async function seedPathMarketplaceWithPlugin(opts: {
    * declaration and compare the resulting rows inside one run. Absent -> the
    * manifest carries `pluginName` alone, exactly as before.
    */
-  siblingPlugins?: readonly { name: string; entryDefaultEnabled?: boolean }[];
+  siblingPlugins?: readonly {
+    name: string;
+    entryDefaultEnabled?: boolean;
+    /** RESV-01: hooks on a DEPENDENCY, whose routing is the cascade's to hydrate. */
+    hooksJson?: object;
+    /** D-64-06: unsupported kinds on a DEPENDENCY, so its record is partially installed. */
+    experimental?: object;
+  }[];
 }): Promise<SeededPlugin> {
   const { cwd, marketplaceRoot, marketplaceName, pluginName } = opts;
   const scope = opts.scope ?? "project";
@@ -694,6 +786,9 @@ async function seedPathMarketplaceWithPlugin(opts: {
 
   const manifest = {
     name: marketplaceName,
+    ...(opts.allowedDependencyMarketplaces !== undefined && {
+      allowCrossMarketplaceDependenciesOn: [...opts.allowedDependencyMarketplaces],
+    }),
     plugins: [
       buildSeededMarketplaceEntry(pluginName, opts),
       ...(await seedSiblingPlugins(marketplaceRoot, opts)),
@@ -707,7 +802,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
   await mkdir(locations.extensionRoot, { recursive: true });
 
   const state: ExtensionState = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {
       [marketplaceName]: {
         name: marketplaceName,
@@ -737,6 +832,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
                     workflows: [],
                   },
                   enabled: true,
+                  provenance: "explicit",
                   installedAt: "2026-01-01T00:00:00.000Z",
                   updatedAt: "2026-01-01T00:00:00.000Z",
                 },
@@ -3097,7 +3193,7 @@ test("CMD-01 / WARN-01: standalone install of a plugin with one unparseable comm
 // PI-13 -- dependencies declaration -> manual-install note
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-13: entry declares dependencies -> V2 dropped per D-19-01 (no PR-5 trailer)", async () => {
+test("RESV-01 / D-19-01: an entry declaring a dependency renders no PR-5 trailer", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi13-"));
     try {
@@ -3108,6 +3204,7 @@ test("PI-13: entry declares dependencies -> V2 dropped per D-19-01 (no PR-5 trai
         pluginName: "hello",
         skills: [{ sourceName: "tool" }],
         declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
       });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -3140,6 +3237,426 @@ test("PI-13: entry declares dependencies -> V2 dropped per D-19-01 (no PR-5 trai
         false,
         "D-19-01: PR-5 phrase must not appear on the V2 success surface",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-03: installPlugin's marketplaceTagProbe seam reaches a path-source dependency's constraint", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-marketplace-tag-probe-"));
+    try {
+      // arrange: a path-source dependency constrained to `^1.0.0`, on a
+      // marketplace root that is deliberately NOT a git repository -- the
+      // `marketplaceTagProbe` seam is what lets this case answer the
+      // constraint instead of taking the real probe's `ENOENT` on `.git`.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        dependencyVersion: "^1.0.0",
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const seen: MarketplaceTagProbeOptions[] = [];
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        marketplaceTagProbe: (options) => {
+          seen.push(options);
+          return Promise.resolve({ kind: "no-matching-tag", range: options.range });
+        },
+      });
+
+      // assert: the fake was reached exactly once, with the constraint the
+      // cascade intersected, and the fallback it answered carried the install
+      // through -- proof the seam substitutes the real filesystem probe
+      // rather than merely being ignored.
+      assert.equal(outcome.status, "installed");
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0]?.pluginName, "some-other-plugin");
+      assert.equal(seen[0]?.range, ">=1.0.0 <2.0.0-0");
+      const after = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["some-other-plugin"]?.version, "0.0.1");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const allowed of [false, true]) {
+  test(`XMKT-01 direct install ${allowed ? "allows listed" : "refuses unlisted"} foreign dependency`, async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-xmkt01-policy-"));
+      try {
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "tools-src"),
+          marketplaceName: "tools",
+          pluginName: "some-other-plugin",
+          scope: "user",
+          skills: [{ sourceName: "tool" }],
+        });
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "official-src"),
+          marketplaceName: "official",
+          pluginName: "hello",
+          skills: [{ sourceName: "tool" }],
+          declareDependencies: true,
+          dependencyMarketplace: "tools",
+          ...(allowed && { allowedDependencyMarketplaces: ["tools"] }),
+        });
+        const project = locationsFor("project", cwd);
+        const user = locationsFor("user", cwd);
+        const projectStateBefore = await readFile(project.stateJsonPath, "utf8");
+        const userStateBefore = await readFile(user.stateJsonPath, "utf8");
+        const projectTreeBefore = await retryTree(project.scopeRoot);
+        const userTreeBefore = await retryTree(user.scopeRoot);
+        const { ctx, pi, notifications } = makeCtx();
+
+        const outcome = await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "official",
+          plugin: "hello",
+        });
+
+        if (allowed) {
+          assert.equal(outcome.status, "installed");
+          const installed = await loadState(project.extensionRoot);
+          assert.equal(installed.marketplaces["official"]?.plugins.hello?.provenance, "explicit");
+          assert.equal(
+            installed.marketplaces["tools"]?.plugins["some-other-plugin"]?.provenance,
+            "dependency",
+          );
+        } else {
+          assertRetryFailure(
+            outcome,
+            'Dependency "some-other-plugin@tools", declared by "hello@official", is from marketplace "tools", which root marketplace "official" does not allow. Install "some-other-plugin@tools" manually first, or add "tools" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "official".',
+          );
+          assert.equal(await readFile(project.stateJsonPath, "utf8"), projectStateBefore);
+          assert.deepEqual(await retryTree(project.scopeRoot), projectTreeBefore);
+          await assert.rejects(stat(project.configJsonPath), /ENOENT/);
+        }
+
+        assert.equal(await readFile(user.stateJsonPath, "utf8"), userStateBefore);
+        assert.deepEqual(await retryTree(user.scopeRoot), userTreeBefore);
+        assert.equal(notifications.length, 1);
+        assert.equal(notifications[0]?.severity, allowed ? undefined : "error");
+        assert.equal(
+          notifications[0]?.message,
+          allowed
+            ? "● official [project]\n" +
+                "  ● hello v0.0.1 (installed)\n" +
+                "  ● some-other-plugin@tools v0.0.1 (installed)\n\n" +
+                "/reload to pick up changes"
+            : "Some plugin operations have failed.\n\n" +
+                "● official [project]\n" +
+                "  ⊘ hello (failed) {dependency failed}\n" +
+                "  ⊘ some-other-plugin@tools (failed) {cross-marketplace}\n" +
+                '    cause: Dependency "some-other-plugin@tools", declared by "hello@official", is from marketplace "tools", which root marketplace "official" does not allow. Install "some-other-plugin@tools" manually first, or add "tools" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "official".',
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const allowGamma of [false, true]) {
+  test(`XMKT-01 direct install ${allowGamma ? "allows" : "refuses"} a transitive foreign marketplace using the original root policy`, async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-xmkt01-transitive-"));
+      try {
+        const project = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "gamma-src"),
+          marketplaceName: "gamma",
+          pluginName: "some-other-plugin",
+          skills: [{ sourceName: "gamma-tool" }],
+        });
+        const gamma = (await loadState(project.extensionRoot)).marketplaces.gamma;
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "beta-src"),
+          marketplaceName: "beta",
+          pluginName: "some-other-plugin",
+          skills: [{ sourceName: "beta-tool" }],
+          declareDependencies: true,
+          dependencyMarketplace: "gamma",
+          allowedDependencyMarketplaces: ["gamma"],
+        });
+        const beta = (await loadState(project.extensionRoot)).marketplaces.beta;
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "alpha-src"),
+          marketplaceName: "alpha",
+          pluginName: "hello",
+          skills: [{ sourceName: "alpha-tool" }],
+          declareDependencies: true,
+          dependencyMarketplace: "beta",
+          allowedDependencyMarketplaces: allowGamma ? ["beta", "gamma"] : ["beta"],
+        });
+        const state = await loadState(project.extensionRoot);
+        assert.ok(gamma !== undefined && beta !== undefined);
+        await saveState(project.extensionRoot, {
+          ...state,
+          marketplaces: { ...state.marketplaces, beta, gamma },
+        });
+        const stateBefore = await readFile(project.stateJsonPath, "utf8");
+        const treeBefore = await retryTree(cwd);
+        const { ctx, pi, notifications } = makeCtx();
+
+        const outcome = await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "alpha",
+          plugin: "hello",
+        });
+
+        if (allowGamma) {
+          assert.equal(outcome.status, "installed");
+          const installed = await loadState(project.extensionRoot);
+          assert.ok(installed.marketplaces.alpha?.plugins.hello !== undefined);
+          assert.ok(installed.marketplaces.beta?.plugins["some-other-plugin"] !== undefined);
+          assert.ok(installed.marketplaces.gamma?.plugins["some-other-plugin"] !== undefined);
+        } else {
+          assertRetryFailure(
+            outcome,
+            'Dependency "some-other-plugin@gamma", declared by "some-other-plugin@beta", is from marketplace "gamma", which root marketplace "alpha" does not allow. Install "some-other-plugin@gamma" manually first, or add "gamma" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
+          );
+          assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBefore);
+          assert.deepStrictEqual(await retryTree(cwd), treeBefore);
+          await assert.rejects(stat(project.configJsonPath), /ENOENT/);
+          assert.deepStrictEqual(notifications, [
+            {
+              severity: "error",
+              message:
+                "Some plugin operations have failed.\n\n" +
+                "● alpha [project]\n" +
+                "  ⊘ hello (failed) {dependency failed}\n" +
+                "  ⊘ some-other-plugin@gamma (failed) {cross-marketplace}\n" +
+                '    cause: Dependency "some-other-plugin@gamma", declared by "some-other-plugin@beta", is from marketplace "gamma", which root marketplace "alpha" does not allow. Install "some-other-plugin@gamma" manually first, or add "gamma" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
+            },
+          ]);
+        }
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("RESV-01 / RESV-06: a dependency no marketplace declares fails the install whole", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-missing-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const beforeTree = await retryTree(locations.scopeRoot);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert
+      assertRetryFailure(
+        outcome,
+        'Dependency "some-other-plugin@mp" is not declared by its marketplace.',
+      );
+      // The closure fails before any member is materialized, so the scope root
+      // and state.json are byte-identical to their pre-command values.
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), beforeTree);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("TAGS-02: a dependency whose constraint no release tag satisfies installs the marketplace's current copy instead of failing", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-tags02-constraint-"));
+    try {
+      // arrange: the dependency is declared, seeded and resolvable -- only its
+      // VERSION constraint is unsatisfiable. Its entry is a path source, so
+      // TAGS-02's fallback applies: the marketplace's current copy installs in
+      // place of a pin, and the whole install succeeds.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        dependencyVersion: "^2.0.0",
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert: the requesting plugin's own install succeeded, orchestrated
+      // mode emits no notification, and the dependency's record carries its
+      // OWN source version rather than a tag pin -- there was no tag.
+      assert.equal(outcome.status, "installed");
+      assert.deepStrictEqual(notifications, []);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "0.0.1");
+      assert.equal(after.marketplaces["mp"]?.plugins["some-other-plugin"]?.version, "0.0.1");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-03 regression: an unreadable version constraint still fails the install whole -- TAGS-02 does not touch this arm", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv03-invalid-"));
+    try {
+      // arrange: TAGS-02's fallback is strictly the path-source NO-MATCHING-TAG
+      // and TAG-LISTING-FAILED arms. `range-invalid` is decided in
+      // `resolveOneMember`, before any tag source is even resolved, so it stays
+      // a whole-install failure whatever kind of source the dependency names.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        dependencyVersion: "not-a-version-range",
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const beforeTree = await retryTree(locations.scopeRoot);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert: the constraint verdict is reached before any member becomes a
+      // ledger phase, so state.json and the scope root are byte-identical.
+      assertRetryFailure(
+        outcome,
+        'Dependency "some-other-plugin@mp" declares an unparseable version constraint "not-a-version-range" (input 1 of 1 is not a valid version range).',
+      );
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), beforeTree);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-06 / NFR-3: a failed cascade never reaches tx.save() and replays the same", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-nosave-"));
+    try {
+      // arrange: the requesting plugin is already recorded, so its own ledger
+      // throws AFTER its dependency has fully materialized.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+        preInstall: true,
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      // Files only. A rolled-back member leaves behind the EMPTY container and
+      // staging directories its bridges created; those are per-scope scaffolding
+      // the bridges create idempotently and reuse, not per-plugin artifacts, and
+      // nothing discovers or reconciles an empty one. What must not survive is a
+      // file or a record.
+      async function artifacts(): Promise<readonly string[]> {
+        return (await retryTree(locations.scopeRoot)).filter((entry) => !entry.endsWith("/"));
+      }
+
+      const beforeArtifacts = await artifacts();
+      const { ctx, notifications, pi } = makeCtx();
+      async function install(): Promise<Awaited<ReturnType<InstallOperation>>> {
+        return installPlugin({
+          ctx,
+          cwd,
+          marketplace: "mp",
+          notifications: { mode: "orchestrated" },
+          pi,
+          plugin: "hello",
+          scope: "project",
+        });
+      }
+
+      // act
+      const first = await install();
+      const second = await install();
+
+      // assert: the dependency materialized and was unwound, and the snapshot
+      // the guard held was discarded rather than persisted -- state.json is
+      // byte-identical, so no other process can observe half a cascade.
+      assertRetryFailure(first, 'Plugin "hello" is already installed in marketplace "mp".');
+      assertRetryFailure(second, 'Plugin "hello" is already installed in marketplace "mp".');
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      assert.deepStrictEqual(await artifacts(), beforeArtifacts);
+      await assert.rejects(stat(locations.configJsonPath), /ENOENT/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3446,6 +3963,322 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
       assert.equal(userAfter.marketplaces["mp"]?.plugins["hello"], undefined);
       assert.equal(projectAfter.marketplaces["mp"]?.scope, "project");
       assert.ok(projectAfter.marketplaces["mp"]?.plugins["hello"] !== undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-01 / D-04-04: an orchestrated install records its cascade dependency undeclared, and the next reload keeps it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-orchestrated-"));
+    try {
+      // arrange: the reconcile shape. The user declares the parent only --
+      // `hello@mp` -- and the cascade installs `some-other-plugin@mp` with it.
+      // `runInstallCascade` runs on EVERY install, orchestrated or not, so the
+      // record is written either way, and D-04-02 declares the dependency on
+      // neither arm.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+
+      const { loadConfig, saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        {
+          schemaVersion: 1,
+          marketplaces: { mp: { source: "./mp-src" } },
+          plugins: { "hello@mp": { enabled: true } },
+        },
+        locations.scopeRoot,
+      );
+
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { createApplyReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+      const applyReconcile = createApplyReconcile({ loadState });
+      async function reconcilePass(): Promise<void> {
+        const pass = makeCtx();
+        await applyReconcile({
+          ctx: pass.ctx,
+          pi: pass.pi,
+          cwd,
+          scope: "project",
+          completionCache: createCompletionCache(),
+          hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        });
+        assert.deepEqual(
+          pass.notifications.filter((n) => n.severity === "error"),
+          [],
+        );
+      }
+
+      // act
+      await reconcilePass();
+
+      // assert: both records exist, and the dependency is NOT declared
+      // (D-04-02): the config names the user's own entry and nothing else. The
+      // dependency's record carries `provenance: "dependency"`, which is what
+      // keeps it out of `buildUninstallBucket`'s sweep (D-04-05).
+      const installed = await loadState(locations.extensionRoot);
+      assert.deepEqual(Object.keys(installed.marketplaces["mp"]?.plugins ?? {}).sort(), [
+        "hello",
+        "some-other-plugin",
+      ]);
+      const declared = await loadConfig(locations.configJsonPath);
+      assert.equal(declared.status, "valid");
+      if (declared.status === "valid") {
+        assert.deepEqual(
+          declared.config.plugins,
+          { "hello@mp": { enabled: true } },
+          "the user's own entry is untouched and no dependency key joins it",
+        );
+      }
+
+      // act: the next `resources_discover`.
+      const { merged } = await loadMergedScopeConfig(locations);
+      const planned = planReconcile(merged, installed, "project");
+
+      // assert: nothing is planned for removal (CR-01). A planner that read
+      // the config alone would tear the dependency down while its parent stays
+      // installed and broken.
+      assert.deepEqual(planned.pluginsToUninstall, []);
+      await reconcilePass();
+      const converged = await loadState(locations.extensionRoot);
+      assert.deepEqual(
+        Object.keys(converged.marketplaces["mp"]?.plugins ?? {}).sort(),
+        ["hello", "some-other-plugin"],
+        "the dependency survives the reload that follows the install",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace survives the project reload that follows the install", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0405-adopted-"));
+    try {
+      // arrange: `marketplace add` ran at user scope for `deps-mp`, which holds
+      // the dependency, and `mp` is a project-scope marketplace whose `hello`
+      // names `some-other-plugin@deps-mp`. The install targets project, so the
+      // cascade resolves the dependency through the CMP-3 fallback and records
+      // it under a `deps-mp` record the project config never declares -- only
+      // the requesting plugin's own marketplace is adopted into the config.
+      const projectLocations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "deps-mp-src"),
+        marketplaceName: "deps-mp",
+        pluginName: "some-other-plugin",
+        scope: "user",
+        skills: [{ sourceName: "tool" }],
+      });
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        dependencyMarketplace: "deps-mp",
+        allowedDependencyMarketplaces: ["deps-mp"],
+      });
+      const install = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx: install.ctx,
+        pi: install.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      const installed = await loadState(projectLocations.extensionRoot);
+      assert.equal(
+        installed.marketplaces["deps-mp"]?.plugins["some-other-plugin"]?.provenance,
+        "dependency",
+        "the cascade recorded the dependency under its own, adopted marketplace",
+      );
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const declared = await loadConfig(projectLocations.configJsonPath);
+      assert.equal(declared.status, "valid");
+      if (declared.status === "valid") {
+        assert.deepEqual(
+          Object.keys(declared.config.marketplaces ?? {}),
+          ["mp"],
+          "the dependency's marketplace is declared nowhere, which is what the planner must respect",
+        );
+      }
+
+      // act: the next `resources_discover`.
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { createApplyReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+      const applyReconcile = createApplyReconcile({ loadState });
+      const { merged } = await loadMergedScopeConfig(projectLocations);
+      const planned = planReconcile(merged, installed, "project");
+      const reload = makeCtx();
+      await applyReconcile({
+        ctx: reload.ctx,
+        pi: reload.pi,
+        cwd,
+        scope: "project",
+        completionCache: createCompletionCache(),
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      });
+
+      // assert: neither teardown path names the adopted marketplace or the
+      // dependency under it (D-04-05), and the pass leaves every record exactly
+      // as the install wrote it (the pass stamps its own extension version on
+      // the document, which is why the comparison is over the records).
+      assert.deepEqual(
+        {
+          marketplacesToRemove: planned.marketplacesToRemove,
+          pluginsToUninstall: planned.pluginsToUninstall,
+        },
+        { marketplacesToRemove: [], pluginsToUninstall: [] },
+      );
+      assert.deepEqual(reload.notifications, [], "a converged pass says nothing");
+      assert.deepStrictEqual(
+        (await loadState(projectLocations.extensionRoot)).marketplaces,
+        installed.marketplaces,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("DFEN-04 / D-04-02: an orchestrated cascade whose root lands disabled declares the disabled root and not the dependency", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-orchestrated-disabled-"));
+    try {
+      // arrange: the parent's marketplace entry defaults to disabled, so the
+      // orchestrated install applies the default and the root lands disabled
+      // while its dependency installs enabled.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        entryDefaultEnabled: false,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert: DFEN-04 -- the root ran to completion and then unstaged, so
+      // it changed no resources and reports the disabled landing.
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        landedDisabled: true,
+        resourcesChanged: false,
+        status: "installed",
+        version: "0.0.1",
+      });
+      const declared = await loadConfig(locations.configJsonPath);
+      assert.strictEqual(declared.status, "valid");
+      if (declared.status === "valid") {
+        assert.deepStrictEqual(declared.config.plugins, {
+          "hello@mp": { enabled: false },
+        });
+      }
+
+      const installed = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(
+        {
+          hello: installed.marketplaces["mp"]?.plugins["hello"]?.enabled,
+          "some-other-plugin": installed.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled,
+        },
+        { hello: false, "some-other-plugin": true },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CMP-3 / D-03-08: a project install off a user-scope marketplace resolves a same-marketplace dependency", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cmp3-dep-"));
+    try {
+      // arrange: `marketplace add` ran at its default user scope, and the
+      // install targets project. The dependency is a SIBLING in that same
+      // marketplace, so the walk's own catalog read resolves it through the
+      // CMP-3 fallback -- the guard must admit the marketplaces this install
+      // can READ, not the raw project-scope key set.
+      const projectLocations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "user-mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        scope: "user",
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert: the user HAS added the marketplace and installing `hello`
+      // alone works, so refusing the sibling would be a resolution bug wearing
+      // the D-03-08 trust refusal's message.
+      assert.equal(outcome.status, "installed");
+      assert.doesNotMatch(notifications[0]?.message ?? "", /marketplace/i);
+      const projectAfter = await loadState(projectLocations.extensionRoot);
+      assert.deepEqual(
+        Object.keys(projectAfter.marketplaces["mp"]?.plugins ?? {}).sort(),
+        ["hello", "some-other-plugin"],
+        "the dependency lands in the requesting plugin's own scope",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4676,6 +5509,1056 @@ test("WB-01: standalone install writes the plugin entry to claude-plugins.json",
   });
 });
 
+test("D-03-05 / D-04-02: a cascade dependency lands in the parent's scope and stays out of the parent's config file", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-declare-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const userLocations = locationsFor("user", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert: D-03-05 -- the dependency's record lives in the requesting
+      // plugin's scope, as a dependency, and in no other scope.
+      const projectAfter = await loadState(locations.extensionRoot);
+      const userAfter = await loadState(userLocations.extensionRoot);
+      assert.deepStrictEqual(
+        {
+          projectScope: projectAfter.marketplaces["mp"]?.scope,
+          projectPlugins: Object.keys(projectAfter.marketplaces["mp"]?.plugins ?? {}).sort(),
+          dependencyProvenance:
+            projectAfter.marketplaces["mp"]?.plugins["some-other-plugin"]?.provenance,
+          userPlugins: Object.keys(userAfter.marketplaces["mp"]?.plugins ?? {}),
+        },
+        {
+          projectScope: "project",
+          projectPlugins: ["hello", "some-other-plugin"],
+          dependencyProvenance: "dependency",
+          userPlugins: [],
+        },
+      );
+
+      // assert: D-04-02 -- the whole written document, so a stray key or a
+      // second file would show up here. The config names the requesting
+      // plugin alone; the dependency's record, not a declaration, is what
+      // keeps `buildUninstallBucket` from planning its removal on the next
+      // `resources_discover`.
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {}\n  }\n}\n',
+      );
+      await assert.rejects(stat(locations.configLocalJsonPath), /ENOENT/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * D-04-01: the persisted document, read back as raw JSON rather than through
+ * `loadState`, so the assertion sees the bytes a later build will load -- the
+ * loader would silently rebuild `schemaVersion` on the way in.
+ */
+async function readPersistedProvenance(
+  stateJsonPath: string,
+  marketplace: string,
+): Promise<{ schemaVersion: unknown; provenance: Record<string, unknown> }> {
+  const persisted = JSON.parse(await readFile(stateJsonPath, "utf8")) as {
+    schemaVersion: unknown;
+    marketplaces: Record<string, { plugins: Record<string, { provenance?: unknown }> }>;
+  };
+  const plugins = persisted.marketplaces[marketplace]?.plugins ?? {};
+  return {
+    schemaVersion: persisted.schemaVersion,
+    provenance: Object.fromEntries(
+      Object.entries(plugins).map(([name, record]) => [name, record.provenance]),
+    ),
+  };
+}
+
+test("D-04-01: a cascade records its root as explicit and its dependency as a dependency", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0401-cascade-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(await readPersistedProvenance(locations.stateJsonPath, "mp"), {
+        schemaVersion: 3,
+        provenance: { hello: "explicit", "some-other-plugin": "dependency" },
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-01: a plugin declaring no dependencies records its single member as explicit", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0401-standalone-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(await readPersistedProvenance(locations.stateJsonPath, "mp"), {
+        schemaVersion: 3,
+        provenance: { hello: "explicit" },
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-01: a direct install stays a direct install when a later plugin declares it", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0401-ratchet-"));
+    try {
+      // arrange: install the dependency by name first, then snapshot the WHOLE
+      // record it wrote. The cascade that follows must leave every field of it
+      // alone, not only `provenance` -- a snapshot of one field would pass
+      // against a cascade that rewrote the rest.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+      const directRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "some-other-plugin"
+      ];
+      assert.ok(directRecord !== undefined, "the direct install succeeded, so its record exists");
+      const directSnapshot = clonePluginRecord(directRecord);
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["some-other-plugin"],
+        directSnapshot,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * D-04-07: seed a marketplace whose `hello` declares `some-other-plugin`, run
+ * the cascade so the dependency is recorded as such, and hand back the whole
+ * state document as it stands before the promotion. Every case below compares
+ * the AFTER document against this one, so a promotion that touched any other
+ * field or any other record would show up in the diff.
+ */
+async function seedDependencyInstalled(
+  cwd: string,
+  installPlugin: InstallOperation,
+  /**
+   * D-04-07: seed the dependency with unsupported kinds and install the
+   * cascade under `--partial`, so its record is partially installed
+   * (`compatibility.installable: false`) -- the record whose promotion needs
+   * the same consent.
+   */
+  shape: { readonly partialDependency?: boolean } = {},
+): Promise<{
+  readonly before: ExtensionState;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
+  readonly notifications: NotifyRecord[];
+}> {
+  const locations = locationsFor("project", cwd);
+  const partial = shape.partialDependency === true;
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    pluginName: "hello",
+    skills: [{ sourceName: "tool" }],
+    declareDependencies: true,
+    siblingPlugins: [
+      {
+        name: "some-other-plugin",
+        ...(partial && { experimental: { themes: "./themes" } }),
+      },
+    ],
+  });
+  const { ctx, pi, notifications } = makeCtx();
+  await installPlugin({
+    ctx,
+    pi,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "hello",
+    ...(partial && { partial: true }),
+  });
+  const before = await loadState(locations.extensionRoot);
+  const dependency = before.marketplaces["mp"]?.plugins["some-other-plugin"];
+  assert.equal(
+    dependency?.provenance,
+    "dependency",
+    "the cascade recorded the dependency as such, so the promotion has something to promote",
+  );
+  assert.equal(
+    dependency?.compatibility.installable,
+    !partial,
+    "the dependency's record carries the availability the case asked for",
+  );
+  notifications.length = 0;
+  return { before, ctx, pi, notifications };
+}
+
+test("D-04-07: installing a dependency by name flips its provenance and nothing else in the state document", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-record-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { before, ctx, pi } = await seedDependencyInstalled(cwd, installPlugin);
+      const marketplaceBefore = before.marketplaces["mp"];
+      assert.ok(marketplaceBefore !== undefined);
+      const dependencyBefore = marketplaceBefore.plugins["some-other-plugin"];
+      assert.ok(dependencyBefore !== undefined);
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert: the whole document, so a rewritten version, timestamp or
+      // resource list on the promoted record -- or any change to `hello`'s
+      // record -- fails here, not only a wrong provenance.
+      const expectedState: ExtensionState = {
+        ...before,
+        marketplaces: {
+          ...before.marketplaces,
+          mp: {
+            ...marketplaceBefore,
+            plugins: {
+              ...marketplaceBefore.plugins,
+              "some-other-plugin": { ...dependencyBefore, provenance: "explicit" },
+            },
+          },
+        },
+      };
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), expectedState);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: the promotion declares the promoted key and reports one installed row at info severity", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-row-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert: D-04-02 -- the whole config document. The promoted key joins
+      // the requesting plugin's, and nothing else is written.
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {},\n    "some-other-plugin@mp": {}\n  }\n}\n',
+      );
+      // assert: the row is an `installed` row carrying the promotion brace, at
+      // info severity (the dispatcher passes no severity argument for info),
+      // with no summary line and no reload trailer -- nothing was materialized.
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ● some-other-plugin v0.0.1 (installed) {already installed, dependency promoted}",
+        },
+      ]);
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: false,
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        promoted: true,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: an orchestrated promotion flips the record, writes no declaration and emits nothing", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-orchestrated-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      const configBefore = await readFile(locations.configJsonPath, "utf8");
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          provenance: (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+            "some-other-plugin"
+          ]?.provenance,
+          config: await readFile(locations.configJsonPath, "utf8"),
+          notifications,
+          outcome,
+        },
+        {
+          provenance: "explicit",
+          config: configBefore,
+          notifications: [],
+          outcome: {
+            status: "installed",
+            version: "0.0.1",
+            resourcesChanged: false,
+            declaresAgents: false,
+            declaresMcp: false,
+            declaresWorkflows: false,
+            promoted: true,
+          },
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * D-04-07: the refusal a promotion falls back to, byte for byte, with neither
+ * document written -- the already-installed refusal the cascade raises for a
+ * plugin it finds recorded.
+ */
+async function assertPromotionRefused(args: {
+  readonly cwd: string;
+  readonly installPlugin: InstallOperation;
+  readonly seeded: {
+    readonly ctx: NotificationContext;
+    readonly pi: ToolInventory;
+    readonly notifications: NotifyRecord[];
+  };
+  readonly flags: { readonly pinVersionOverride?: string; readonly partial?: boolean };
+}): Promise<void> {
+  const { cwd, installPlugin, seeded, flags } = args;
+  const locations = locationsFor("project", cwd);
+  const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+  const configBefore = await readFile(locations.configJsonPath, "utf8");
+
+  const outcome = await installPlugin({
+    ctx: seeded.ctx,
+    pi: seeded.pi,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "some-other-plugin",
+    ...flags,
+  });
+
+  assert.deepStrictEqual(
+    {
+      notifications: seeded.notifications,
+      status: outcome.status,
+      state: await readFile(locations.stateJsonPath, "utf8"),
+      config: await readFile(locations.configJsonPath, "utf8"),
+    },
+    {
+      notifications: [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ some-other-plugin (failed) {already installed}\n" +
+            '    cause: Plugin "some-other-plugin" is already installed in marketplace "mp".',
+          severity: "error",
+        },
+      ],
+      status: "failed",
+      state: stateBefore,
+      config: configBefore,
+    },
+  );
+}
+
+test("D-04-07: a version pin refuses the promotion and the already-installed refusal stands", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-pin-"));
+    try {
+      // arrange
+      const seeded = await seedDependencyInstalled(cwd, installPlugin);
+
+      // act & assert: the pin asks for a version no promotion can deliver, so
+      // the record is left a dependency at its recorded version and the
+      // refusal names the remedy's precondition -- the plugin is installed.
+      await assertPromotionRefused({
+        cwd,
+        installPlugin,
+        seeded,
+        flags: { pinVersionOverride: "2.0.0" },
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: promoting a partially installed dependency by name refuses without --partial", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-partial-refused-"));
+    try {
+      // arrange
+      const seeded = await seedDependencyInstalled(cwd, installPlugin, {
+        partialDependency: true,
+      });
+
+      // act & assert
+      await assertPromotionRefused({ cwd, installPlugin, seeded, flags: {} });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: --partial is the consent that promotes a partially installed dependency by name", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-partial-consented-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { before, ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin, {
+        partialDependency: true,
+      });
+      const dependencyBefore = before.marketplaces["mp"]?.plugins["some-other-plugin"];
+      assert.ok(dependencyBefore !== undefined);
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        partial: true,
+      });
+
+      // assert: the same one-field flip the fully-supported record gets, and
+      // the same row -- the record's degraded shape is what the flag accepted.
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["some-other-plugin"],
+        { ...dependencyBefore, provenance: "explicit" },
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ● some-other-plugin v0.0.1 (installed) {already installed, dependency promoted}",
+        },
+      ]);
+      assert.equal(outcome.status, "installed");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * D-04-07: disable the seeded dependency through the real disable verb, so its
+ * record carries `enabled: false` with its inventory kept (ENBL-18) and its
+ * artifacts are off disk -- the state a promotion of a disabled record starts
+ * from. EDEP-02: "hello" (the requesting plugin this fixture installed
+ * alongside it) is still enabled and still declares "some-other-plugin", so a
+ * STANDALONE disable of it is now correctly refused -- that refusal is not
+ * what this fixture means to exercise. Orchestrated mode is the same
+ * call-site EDEP-01's own enable cascade uses to bypass its guard
+ * (`runEnableCascadeStep` skips identically): it skips EDEP-02's guard AND
+ * skips the config write-back (RECON-03), so "some-other-plugin@mp" gets no
+ * transient config entry here -- the later install-by-name promotion writes
+ * its own entry unconditionally, so the final config bytes are unaffected.
+ */
+async function disableSeededDependency(
+  cwd: string,
+  hooksRouting: InstallHooksRouting,
+  seeded: { readonly ctx: NotificationContext; readonly pi: ToolInventory },
+): Promise<void> {
+  const { createEnableOperation } =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
+  const outcome = await createEnableOperation(hooksRouting)({
+    ctx: seeded.ctx,
+    pi: seeded.pi,
+    cwd,
+    scope: "project",
+    marketplace: "mp",
+    plugin: "some-other-plugin",
+    enable: false,
+    notifications: { mode: "orchestrated" },
+  });
+  assert.equal(outcome.status, "disabled", "the disable verb reported once, and not as a failure");
+}
+
+test("D-04-07: installing a disabled dependency by name promotes it, re-materializes it and enables it", async () => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-disabled-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { before, ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      const dependencyBefore = before.marketplaces["mp"]?.plugins["some-other-plugin"];
+      assert.ok(dependencyBefore !== undefined);
+      await disableSeededDependency(cwd, hooksRouting, { ctx, pi });
+      const skillDir = path.join(locations.skillsTargetDir, "some-other-plugin-tool");
+      await assert.rejects(stat(skillDir), "the disable took the dependency's skill off disk");
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert: the record is the one the cascade wrote, enabled again and
+      // promoted, with its install time kept and its update time moved; the
+      // skill is back on disk; the declaration carries the enable path's own
+      // `enabled: true`; the row is the promotion row with the reload trailer
+      // a re-materialization earns.
+      const promoted = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "some-other-plugin"
+      ];
+      assert.ok(promoted !== undefined);
+      assert.ok(promoted.updatedAt > dependencyBefore.updatedAt, "the update time moved");
+      assert.deepStrictEqual(promoted, {
+        ...dependencyBefore,
+        provenance: "explicit",
+        updatedAt: promoted.updatedAt,
+      });
+      await stat(skillDir);
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {},\n    "some-other-plugin@mp": {\n      "enabled": true\n    }\n  }\n}\n',
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ● some-other-plugin v0.0.1 (installed) {already installed, dependency promoted}\n\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        promoted: true,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: a --local promotion of a disabled dependency writes the enable path's own declaration to the local file", async () => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-disabled-local-"));
+    try {
+      // arrange: `disableSeededDependency` disables orchestrated (RECON-03
+      // skips the config write-back), so the base file's `{ enabled: false }`
+      // for the dependency -- the state a real `disable --local` shadowing
+      // hazard starts from -- is seeded directly here. A bare local key would
+      // replace that entry wholesale (CFG-02) and enable the plugin by
+      // omission; the promotion enables it on purpose and says so in the file
+      // it writes.
+      const locations = locationsFor("project", cwd);
+      const { ctx, pi } = await seedDependencyInstalled(cwd, installPlugin);
+      await disableSeededDependency(cwd, hooksRouting, { ctx, pi });
+      await writeFile(
+        locations.configJsonPath,
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {},\n    "some-other-plugin@mp": {\n      "enabled": false\n    }\n  }\n}\n',
+        "utf8",
+      );
+      const baseBefore = await readFile(locations.configJsonPath, "utf8");
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        local: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          base: await readFile(locations.configJsonPath, "utf8"),
+          local: await readFile(locations.configLocalJsonPath, "utf8"),
+          enabled: (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+            "some-other-plugin"
+          ]?.enabled,
+        },
+        {
+          base: baseBefore,
+          local:
+            '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "some-other-plugin@mp": {\n      "enabled": true\n    }\n  }\n}\n',
+          enabled: true,
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CR-01: the install cascade's re-enable arm overwrites a stale config enabled: false entry", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cr01-reenable-config-"));
+    try {
+      // arrange: "some-other-plugin" is installed and then disabled STANDALONE
+      // while nothing declares it, so the disable verb writes
+      // `{ enabled: false }` for it into the config -- exactly the
+      // `disable <dep>` (after `disable <dependent>`, per EDEP-02's mandated
+      // order) hazard CR-01 covers. "hello" is installed SECOND and declares
+      // "some-other-plugin", so the cascade's re-enable arm materializes it.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+      const { createEnableOperation } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
+      await createEnableOperation(createHooksRouting(createHooksRuntime(), { readHooksJson }))({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        enable: false,
+      });
+      const locations = locationsFor("project", cwd);
+      const disabledState = await loadState(locations.extensionRoot);
+      assert.equal(
+        disabledState.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled,
+        false,
+        "nothing declared it yet, so the disable stood",
+      );
+      assert.deepStrictEqual(
+        JSON.parse(await readFile(locations.configJsonPath, "utf8")) as unknown,
+        {
+          schemaVersion: 1,
+          marketplaces: { mp: { source: "./mp-src" } },
+          plugins: { "some-other-plugin@mp": { enabled: false } },
+        },
+      );
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      const state = await loadState(locations.extensionRoot);
+      assert.equal(state.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled, true);
+      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(cfg.plugins?.["some-other-plugin@mp"], { enabled: true });
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { emptyReconcilePlan } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts");
+      const { merged } = await loadMergedScopeConfig(locations);
+      assert.deepStrictEqual(
+        planReconcile(merged, state, "project"),
+        emptyReconcilePlan("project"),
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CR-06: install hello --local overwrites a base-file stale entry for a re-enabled member", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cr06-reenable-local-"));
+    try {
+      // arrange: identical seed to CR-01's own case, except the SECOND
+      // install (the one that re-enables "some-other-plugin") passes
+      // `local: true`. "some-other-plugin"'s stale `enabled: false` entry
+      // still lives in the BASE file -- nothing about its own declaring file
+      // changes -- so the member write must find it by declaration, not by
+      // the root's own `--local` flag.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+      const { createEnableOperation } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
+      await createEnableOperation(createHooksRouting(createHooksRuntime(), { readHooksJson }))({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        enable: false,
+      });
+      const locations = locationsFor("project", cwd);
+      const disabledState = await loadState(locations.extensionRoot);
+      assert.equal(
+        disabledState.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled,
+        false,
+        "nothing declared it yet, so the disable stood",
+      );
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+
+      // assert
+      const state = await loadState(locations.extensionRoot);
+      assert.equal(state.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled, true);
+      const baseCfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(baseCfg.plugins?.["some-other-plugin@mp"], { enabled: true });
+      const localCfg = JSON.parse(await readFile(locations.configLocalJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(localCfg.plugins, { "hello@mp": {} });
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { emptyReconcilePlan } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts");
+      const { merged } = await loadMergedScopeConfig(locations);
+      assert.deepStrictEqual(
+        planReconcile(merged, state, "project"),
+        emptyReconcilePlan("project"),
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CR-01: the install cascade's re-enable arm leaves a member with no config entry untouched", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cr01-reenable-no-entry-"));
+    try {
+      // arrange: "some-other-plugin" is installed and then disabled
+      // ORCHESTRATED (RECON-03 skips the config write-back), so its config
+      // entry never gains an `enabled` value at all -- D-04-02: no config
+      // file gains a key for a dependency the user never asked for by
+      // name. "hello" is installed FRESH afterward and declares
+      // "some-other-plugin", so the cascade's re-enable arm materializes
+      // it, and the config write-back must leave the entry exactly as it
+      // was.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+      const locations = locationsFor("project", cwd);
+      const configAfterInstall = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(configAfterInstall.plugins?.["some-other-plugin@mp"], {});
+      const { createEnableOperation } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
+      await createEnableOperation(createHooksRouting(createHooksRuntime(), { readHooksJson }))({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        enable: false,
+        notifications: { mode: "orchestrated" },
+      });
+      const disabledState = await loadState(locations.extensionRoot);
+      assert.equal(
+        disabledState.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled,
+        false,
+        "the orchestrated disable stood",
+      );
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert: the record is re-enabled, but the config entry -- which
+      // never said `enabled: false` -- is untouched.
+      const state = await loadState(locations.extensionRoot);
+      assert.equal(state.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled, true);
+      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(cfg.plugins?.["some-other-plugin@mp"], {});
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: a plugin already recorded as a direct install still fails with the already-installed refusal", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-explicit-"));
+    try {
+      // arrange: `hello` is installed by name, so its record is explicit; the
+      // second install by name is D-04-07's empty case and must refuse exactly
+      // as it does for any other repeat install.
+      const locations = locationsFor("project", cwd);
+      const { ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const configBefore = await readFile(locations.configJsonPath, "utf8");
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert: the refusal's bytes, and no write to either document.
+      assert.deepStrictEqual(
+        {
+          notifications,
+          status: outcome.status,
+          state: await readFile(locations.stateJsonPath, "utf8"),
+          config: await readFile(locations.configJsonPath, "utf8"),
+        },
+        {
+          notifications: [
+            {
+              message:
+                "A plugin operation has failed.\n\n" +
+                "● mp [project]\n" +
+                "  ⊘ hello (failed) {already installed}\n" +
+                '    cause: Plugin "hello" is already installed in marketplace "mp".',
+              severity: "error",
+            },
+          ],
+          status: "failed",
+          state: stateBefore,
+          config: configBefore,
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-01 / D-01-32: a dependency declared only in the plugin's own manifest installs", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-ownmanifest-"));
+    try {
+      // arrange: the marketplace ENTRY declares nothing, and only the plugin's
+      // own manifest names the dependency. A lookup that read the entry alone
+      // would install `hello` by itself and this case would pass vacuously.
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        pluginName: "hello",
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      await writeFile(
+        path.join(marketplaceRoot, "plugins", "hello", ".claude-plugin", "plugin.json"),
+        JSON.stringify({
+          name: "hello",
+          version: "0.0.1",
+          dependencies: [{ name: "some-other-plugin", version: "*" }],
+        }),
+      );
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert: both plugins recorded, and only the parent's key declared in
+      // its own config file (D-04-02) -- whole values, never one filtered row.
+      const after = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(Object.keys(after.marketplaces["mp"]?.plugins ?? {}).sort(), [
+        "hello",
+        "some-other-plugin",
+      ]);
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {}\n  }\n}\n',
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("WB-01: --local routes the write to claude-plugins.local.json; base file untouched", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-local-"));
@@ -5349,6 +7232,122 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 
       // Local file untouched.
       assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESV-01: the cascade's members are owed the same hooks-routing contract as
+// the plugin the user typed (WR-03 / D-60-05, now proven on the composed
+// operation in operations.test.ts).
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("RESV-01: the caller's version pin reaches the named plugin and no dependency", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-pin-scope-"));
+    try {
+      // arrange: a pin the caller states for the plugin it named.
+      // `pinVersionOverride` takes absolute precedence in
+      // `deriveInstallVersion`, so a cascade that copied it onto every member
+      // would stamp the requesting plugin's version string on each dependency
+      // -- a version no dependency's own source ever carried.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        pinVersionOverride: "7.7.7",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "7.7.7");
+      assert.equal(
+        after.marketplaces["mp"]?.plugins["some-other-plugin"]?.version,
+        "0.0.1",
+        "the dependency keeps the version its own source declares",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-01 / WR-03: a cascade-installed dependency's hooks reach the routing table too", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-hooks-"));
+    try {
+      // arrange: the HOOKS are on the dependency, not on the plugin the user
+      // typed. The standalone-install contract is that hooks dispatch
+      // immediately; a member the cascade installed is owed the same, or its
+      // hooks sit on disk inert until the next `/reload`.
+      const ownerRuntime = createHooksRuntime();
+      const runtimeInstallPlugin = createInstallOperation(
+        createHooksRouting(ownerRuntime, { readHooksJson }),
+        createCompletionCache(),
+      );
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [
+          {
+            name: "some-other-plugin",
+            hooksJson: {
+              PreToolUse: [
+                { matcher: "", hooks: [{ type: "command", command: "echo dependency" }] },
+              ],
+            },
+          },
+        ],
+      });
+      assert.equal(ownerRuntime.getRoutingBucket("PreToolUse").length, 0);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await runtimeInstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.deepStrictEqual(
+        ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => ({
+          pluginId: entry.pluginId,
+          scope: entry.scope,
+          command: entry.handlerDecl.command,
+        })),
+        [{ pluginId: "some-other-plugin", scope: "project", command: "echo dependency" }],
+        "the dependency's hooks are routable without a reload",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -6123,6 +8122,17 @@ async function seedGitSourceMarketplace(opts: {
   fixtureRepoDir: string;
   subdirPath?: string;
   scope?: "user" | "project";
+  /**
+   * RESV-03: path-sourced plugins seeded beside the git-sourced one, each
+   * declaring it as a dependency at its own version range. The cascade then has
+   * a root whose own install needs no clone and a DEPENDENCY whose source
+   * carries release tags, which is the only shape a re-pin can be observed in.
+   *
+   * More than one is what lets a SECOND install read back the version the
+   * first one's pin recorded (RESV-05): re-running the first root instead
+   * would stop at the PI-5 already-installed guard before any constraint check.
+   */
+  dependentPlugins?: readonly { name: string; range: string }[];
 }): Promise<void> {
   const scope = opts.scope ?? "project";
   // The plugin tree the mock clone copies into staging. For git-subdir it lives
@@ -6142,11 +8152,32 @@ async function seedGitSourceMarketplace(opts: {
 
   await mkdir(path.join(opts.marketplaceRoot, ".claude-plugin"), { recursive: true });
   const manifestPath = path.join(opts.marketplaceRoot, ".claude-plugin", "marketplace.json");
+  const dependents = opts.dependentPlugins ?? [];
+  for (const dependent of dependents) {
+    const dependentRoot = path.join(opts.marketplaceRoot, "plugins", dependent.name);
+    await mkdir(path.join(dependentRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(dependentRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: dependent.name,
+        version: "0.0.1",
+        dependencies: [{ name: opts.pluginName, version: dependent.range }],
+      }),
+    );
+  }
+
   await writeFile(
     manifestPath,
     JSON.stringify({
       name: opts.marketplaceName,
-      plugins: [{ name: opts.pluginName, source: opts.source }],
+      plugins: [
+        { name: opts.pluginName, source: opts.source },
+        ...dependents.map((dependent) => ({
+          name: dependent.name,
+          source: `./plugins/${dependent.name}`,
+          dependencies: [{ name: opts.pluginName, version: dependent.range }],
+        })),
+      ],
     }),
   );
 
@@ -6168,6 +8199,94 @@ async function seedGitSourceMarketplace(opts: {
   };
   await saveState(locations.extensionRoot, state);
 }
+
+test("RESV-03/RESV-05: a tag-pinned dependency records the tag's own version, and a later constraint reads it back", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv03-repin-"));
+    try {
+      // arrange: the dependency's entry names a source with NO sha of its own,
+      // so the only thing that can pin its checkout is the selected release tag.
+      // Two dependents declare the SAME range, which is what lets the second
+      // install read back what the first one's pin recorded -- re-running the
+      // first root would stop at the PI-5 already-installed guard instead.
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "url", url: "https://example.com/org/repo" },
+        fixtureRepoDir,
+        dependentPlugins: [
+          { name: "root", range: "^9.0.0" },
+          { name: "second", range: "^9.0.0" },
+        ],
+      });
+      const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "root",
+        cloneCacheSeam: seamWith(gitOps),
+        tagProbe: () =>
+          Promise.resolve({
+            kind: "pinned",
+            tag: "gp--v9.9.9",
+            oid: GIT_SOURCE_SHA,
+            version: "9.9.9",
+          }),
+      });
+
+      // assert: the checkout addresses the tag's commit, and the recorded
+      // version is the SEMVER that tag carries -- the value the constraint
+      // machinery reads back. The git-source `sha-<12hex>` form would coerce to
+      // an arbitrary digit run instead (this fixture's coerces to 1.0.0), so
+      // recording it would make the dependency fail the very range it just
+      // satisfied.
+      assert.equal(outcome.status, "installed");
+      assert.equal(gitState.checkoutCalls.length, 1, "one checkout, at the selected tag");
+      assert.equal(gitState.checkoutCalls[0]?.ref, GIT_SOURCE_SHA);
+      const after = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["gp"]?.version, "9.9.9");
+
+      // act: a second plugin constraining the same dependency at the same range.
+      // RESV-05 checks the RECORDED version and makes no tag query at all, so
+      // an unresolvable recorded form has nothing to fall back on.
+      const second = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "second",
+        cloneCacheSeam: seamWith(gitOps),
+        tagProbe: () => {
+          throw new Error("an already-installed dependency must not reach a remote");
+        },
+      });
+
+      // assert
+      assert.equal(
+        second.status,
+        "installed",
+        "the recorded version satisfies the second declaration's range",
+      );
+      assert.equal(
+        gitState.checkoutCalls.length,
+        1,
+        "the already-installed dependency is left exactly as it was",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex> + resolvedSha", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
@@ -7697,7 +9816,16 @@ test("install cleans up each bridge staging root inside its own phase and a repe
       // skills -> commands -> agents cleanup order the phase array fixes,
       // and any staging tree a bridge failed to reclaim would appear here as
       // a surviving inventory instead of `empty`.
+      //
+      // RESV-01: the census observes BOTH ledgers install schedules. The OUTER
+      // cascade ledger carries one phase per closure member, named by the
+      // member's `<plugin>@<marketplace>` key, and each of those phases runs
+      // the six-phase bridge ledger inside itself. The trailing
+      // `complete@mp` row is the SECOND install: its cascade phase runs and the
+      // bridge ledger inside it throws `already installed` before scheduling a
+      // phase of its own, which is why no bridge rows follow it.
       assert.deepStrictEqual(stagingLedger, [
+        "before:complete@mp skills=absent commands=absent agents=absent",
         "before:skills skills=absent commands=absent agents=absent",
         "before:commands skills=empty commands=absent agents=absent",
         "before:agents skills=empty commands=empty agents=absent",
@@ -7705,6 +9833,7 @@ test("install cleans up each bridge staging root inside its own phase and a repe
         "before:mcp skills=empty commands=empty agents=empty",
         "before:workflows skills=empty commands=empty agents=empty",
         "before:state skills=empty commands=empty agents=empty",
+        "before:complete@mp skills=empty commands=empty agents=empty",
       ]);
       assert.deepStrictEqual(first, {
         declaresAgents: true,
@@ -7919,6 +10048,70 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
   });
 });
 
+test("RESV-01: a post-save routing rebuild failure leaves the install recorded with its hooks on disk", async (t) => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-post-save-rebuild-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hooky",
+      });
+      const schedule: string[] = [];
+      t.mock.method(hooksRouting, "rebuildRoutingTables", () => {
+        schedule.push("post-save:rebuild:failed");
+        throw new Error("post-save routing rebuild denied");
+      });
+      const locations = locationsFor("project", cwd);
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hooky",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        resourcesChanged: false,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(schedule, ["post-save:rebuild:failed"]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hooky/",
+        "pi-claude-marketplace/hooks/",
+        "pi-claude-marketplace/hooks/hooky/",
+        "pi-claude-marketplace/hooks/hooky/hooks.json",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hooky?.resources,
+        { workflows: [], agents: [], hooks: ["hooky"], mcpServers: [], prompts: [], skills: [] },
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
 test("retry proof: install: disabled cascade failure preserves shrunken record and retry is safely idempotent", async (t) => {
   await withHermeticHome(async ({ hooksRouting, installPlugin, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-disable-hooks-mcp-failure-"));
@@ -7947,7 +10140,12 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       let mcpError: Error | undefined;
       transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
         const result = await runPhases(phases, ctx);
-        if (result.ok && mcpFault) {
+        // RESV-01: install schedules TWO ledgers -- the outer cascade, one
+        // phase per closure member, and the six-phase bridge ledger inside each
+        // of those phases. The fault arms after the BRIDGE ledger commits, so
+        // the arming gate names that ledger by a phase it owns rather than
+        // firing on whichever `runPhases` call returns first.
+        if (result.ok && mcpFault && phases.some((phase) => phase.name === "mcp")) {
           activeSchedule.push("commit:mcp", "disable:mcp:armed");
           await chmod(locations.mcpJsonPath, 0o000);
           try {
@@ -8191,6 +10389,7 @@ test("install forwards explicit map-model and version-pin entrypoint options", a
         {
           compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
           enabled: true,
+          provenance: "explicit",
           installedAt: (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp
             ?.plugins.plain?.installedAt,
           resolvedSource: pluginRoot,
@@ -9432,6 +11631,1319 @@ test("retry proof: install: state commit race after staged work retries from unc
   });
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// RESV-06 -- the cascade block the user reads
+//
+// Each case compares the WHOLE emitted notification rather than grepping one
+// row out of it. A filtered assertion would pass over a member row that never
+// rendered, a second block, or a reload trailer that fired when nothing landed
+// -- which are exactly the failures this surface exists to prevent.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("RESV-01 / RESV-06: a successful cascade renders one row per member", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-rows-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ● hello v0.0.1 (installed)",
+            "  ● some-other-plugin@mp v0.0.1 (installed)",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-05 / RESV-06: an already-installed dependency renders as left alone", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-skip-"));
+    try {
+      // arrange: install the dependency on its own first, so the cascade meets
+      // it as an existing record rather than as work to do.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+      notifications.length = 0;
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ● hello v0.0.1 (installed)",
+            "  ⊘ some-other-plugin@mp v0.0.1 (skipped) {already installed}",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-06: a dependency its marketplace does not declare is what the block names", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-absent-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message: [
+            "Some plugin operations have failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {dependency failed}",
+            "  ⊘ some-other-plugin@mp (failed) {not in manifest}",
+            '    cause: Dependency "some-other-plugin@mp" is not declared by its marketplace.',
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("TAGS-02 / D-07-03: an unsatisfiable path-source constraint installs the current copy, named on its own row", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-tags02-cascade-row-"));
+    try {
+      // arrange: the dependency resolves; only its VERSION constraint cannot be
+      // satisfied, and its path source's marketplace clone carries no tag that
+      // satisfies it. TAGS-02: the install succeeds anyway, and the fallback
+      // dependency's OWN row names it as a quiet info note.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        dependencyVersion: "^2.0.0",
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ● hello v0.0.1 (installed)",
+            "  ● some-other-plugin@mp v0.0.1 (installed) {dependency current copy}",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-06: a dependency whose own ledger throws is the block's subject", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-member-"));
+    try {
+      // arrange: a prior plugin already owns the name the DEPENDENCY's skill
+      // would generate, so the cross-plugin guard refuses the dependency's own
+      // ledger -- the requesting plugin never gets that far.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+        conflictingPriorPlugin: {
+          marketplace: "other-mp",
+          plugin: "world",
+          skillName: "some-other-plugin-tool",
+        },
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert: the failing DEPENDENCY is the subject and carries its ledger's
+      // own cause; the requesting plugin's row says why it is there.
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message: [
+            "Some plugin operations have failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {dependency failed}",
+            "  ⊘ some-other-plugin@mp (failed)",
+            "    cause: Cross-plugin name conflict:",
+            '  - skill "some-other-plugin-tool" already owned by plugin "world"',
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// MISS-01 / MISS-02 / D-09-04 / D-09-05 / D-09-06: the orchestrated-only
+// missing-dependency entry point `createInstallMissingDependency`. It runs
+// the SAME locked transaction and cascade `installPlugin` runs, rooted at
+// the missing dependency instead of a user-typed plugin, minus every arm
+// that names a config file or a disabled landing.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("XMKT-01 reload refuses an unlisted original declarer before installing the missing root", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-original-edge-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "alpha-src"),
+        marketplaceName: "alpha",
+        pluginName: "a",
+        preInstall: true,
+      });
+      const alpha = (await loadState(locations.extensionRoot)).marketplaces["alpha"];
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "beta-src"),
+        marketplaceName: "beta",
+        pluginName: "b",
+        allowedDependencyMarketplaces: ["alpha"],
+      });
+      const state = await loadState(locations.extensionRoot);
+      assert.ok(alpha !== undefined);
+      state.marketplaces["alpha"] = alpha;
+      await saveState(locations.extensionRoot, state);
+      const before = await readFile(locations.stateJsonPath);
+      const beforeTree = await retryTree(locations.scopeRoot);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.ok(outcome.status === "failed");
+      assert.equal("reason" in outcome ? outcome.reason : undefined, "cross-marketplace");
+      assert.equal(
+        outcome.error.message,
+        'Dependency "b@beta", declared by "a@alpha", is from marketplace "beta", which root marketplace "alpha" does not allow. Install "b@beta" manually first, or add "beta" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
+      );
+      assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), beforeTree);
+      assert.equal(await pathExists(locations.configJsonPath), false);
+      assert.equal(await pathExists(locations.configLocalJsonPath), false);
+
+      await writeFile(
+        path.join(cwd, "alpha-src", ".claude-plugin", "marketplace.json"),
+        JSON.stringify({
+          name: "alpha",
+          allowCrossMarketplaceDependenciesOn: ["beta"],
+          plugins: [{ name: "a", source: "./plugins/a" }],
+        }),
+      );
+      const retry = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+      });
+      assert.equal(retry.status, "installed");
+      assert.equal(
+        (await loadState(locations.extensionRoot)).marketplaces["beta"]?.plugins["b"]?.provenance,
+        "dependency",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const scenario of [
+  { name: "a later allowlisted marketplace", secondMarketplace: "gamma" },
+  { name: "a later same marketplace declarer", secondMarketplace: "beta" },
+] as const) {
+  test(`XMKT-01 reload accepts ${scenario.name}`, async () => {
+    await withHermeticHome(async ({ installMissingDependency }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-original-allowed-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "alpha-src"),
+          marketplaceName: "alpha",
+          pluginName: "a",
+          preInstall: true,
+        });
+        const alpha = (await loadState(locations.extensionRoot)).marketplaces["alpha"];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, `${scenario.secondMarketplace}-source`),
+          marketplaceName: scenario.secondMarketplace,
+          pluginName: "c",
+          preInstall: true,
+          ...(scenario.secondMarketplace === "gamma" && {
+            allowedDependencyMarketplaces: ["beta"],
+          }),
+        });
+        const second = (await loadState(locations.extensionRoot)).marketplaces[
+          scenario.secondMarketplace
+        ];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "beta-src"),
+          marketplaceName: "beta",
+          pluginName: "b",
+        });
+        const state = await loadState(locations.extensionRoot);
+        assert.ok(alpha !== undefined && second !== undefined);
+        state.marketplaces["alpha"] = alpha;
+        if (scenario.secondMarketplace === "beta") {
+          const beta = state.marketplaces["beta"];
+          const c = second.plugins["c"];
+          assert.ok(beta !== undefined && c !== undefined);
+          beta.plugins["c"] = c;
+        } else {
+          state.marketplaces["gamma"] = second;
+        }
+
+        await saveState(locations.extensionRoot, state);
+        if (scenario.secondMarketplace === "beta") {
+          await writeFile(
+            alpha.manifestPath,
+            JSON.stringify({
+              name: "alpha",
+              allowCrossMarketplaceDependenciesOn: "beta",
+              plugins: [],
+            }),
+          );
+        }
+
+        const { ctx, pi } = makeCtx();
+
+        // act
+        const outcome = await installMissingDependency({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "beta",
+          plugin: "b",
+          ranges: [],
+          requiredBy: "a@alpha",
+          declarers:
+            scenario.secondMarketplace === "gamma"
+              ? ["@beta", "broken@", "a@alpha", "c@gamma"]
+              : ["a@alpha", "c@beta"],
+        });
+
+        // assert
+        assert.equal(outcome.status, "installed");
+        assert.equal(
+          (await loadState(locations.extensionRoot)).marketplaces["beta"]?.plugins["b"]?.provenance,
+          "dependency",
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const scenario of [
+  { betaAllowsGamma: false, gammaRecorded: false },
+  { betaAllowsGamma: true, gammaRecorded: false },
+  { betaAllowsGamma: false, gammaRecorded: true },
+] as const) {
+  test(`XMKT-01 missing B uses B's policy when beta grants ${String(scenario.betaAllowsGamma)} and C is recorded ${String(scenario.gammaRecorded)}`, async () => {
+    await withHermeticHome(async ({ installMissingDependency }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-nested-policy-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "alpha-src"),
+          marketplaceName: "alpha",
+          pluginName: "a",
+          preInstall: true,
+          allowedDependencyMarketplaces: ["beta", "gamma"],
+        });
+        const alpha = (await loadState(locations.extensionRoot)).marketplaces["alpha"];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "gamma-src"),
+          marketplaceName: "gamma",
+          pluginName: "some-other-plugin",
+          preInstall: scenario.gammaRecorded,
+        });
+        const gamma = (await loadState(locations.extensionRoot)).marketplaces["gamma"];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "beta-src"),
+          marketplaceName: "beta",
+          pluginName: "b",
+          declareDependencies: true,
+          dependencyMarketplace: "gamma",
+          allowedDependencyMarketplaces: scenario.betaAllowsGamma ? ["gamma"] : [],
+        });
+        const state = await loadState(locations.extensionRoot);
+        assert.ok(alpha !== undefined && gamma !== undefined);
+        state.marketplaces["alpha"] = alpha;
+        state.marketplaces["gamma"] = gamma;
+        await saveState(locations.extensionRoot, state);
+        const before = await readFile(locations.stateJsonPath);
+        const { ctx, pi } = makeCtx();
+
+        // act
+        const outcome = await installMissingDependency({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "beta",
+          plugin: "b",
+          ranges: [],
+          requiredBy: "a@alpha",
+        });
+
+        // assert
+        if (scenario.betaAllowsGamma || scenario.gammaRecorded) {
+          assert.equal(outcome.status, "installed");
+          assert.ok(outcome.status === "installed");
+          assert.deepStrictEqual(
+            outcome.members.map((member) => member.key),
+            scenario.gammaRecorded ? ["b@beta"] : ["some-other-plugin@gamma", "b@beta"],
+          );
+        } else {
+          assert.equal(outcome.status, "failed");
+          assert.ok(outcome.status === "failed");
+          assert.equal(outcome.reason, "cross-marketplace");
+          assert.match(
+            outcome.error.message,
+            /Dependency "some-other-plugin@gamma", declared by "b@beta".*root marketplace "beta" does not allow/,
+          );
+          assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
+        }
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const scenario of [
+  { firstSource: "malformed", laterAuthorizer: false },
+  { firstSource: "malformed", laterAuthorizer: true },
+  { firstSource: "missing", laterAuthorizer: false },
+  { firstSource: "missing", laterAuthorizer: true },
+] as const) {
+  test(`XMKT-01 reload checks a ${scenario.firstSource} first source with later grant ${String(scenario.laterAuthorizer)}`, async () => {
+    await withHermeticHome(async ({ installMissingDependency }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-malformed-policy-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "alpha-src"),
+          marketplaceName: "alpha",
+          pluginName: "a",
+          preInstall: true,
+        });
+        const alpha = (await loadState(locations.extensionRoot)).marketplaces["alpha"];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "gamma-src"),
+          marketplaceName: "gamma",
+          pluginName: "c",
+          preInstall: true,
+          allowedDependencyMarketplaces: ["beta"],
+        });
+        const gamma = (await loadState(locations.extensionRoot)).marketplaces["gamma"];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "beta-src"),
+          marketplaceName: "beta",
+          pluginName: "b",
+        });
+        const state = await loadState(locations.extensionRoot);
+        assert.ok(alpha !== undefined && gamma !== undefined);
+        if (scenario.firstSource === "malformed") {
+          state.marketplaces["alpha"] = alpha;
+        }
+
+        state.marketplaces["gamma"] = gamma;
+        await saveState(locations.extensionRoot, state);
+        if (scenario.firstSource === "malformed") {
+          await writeFile(
+            alpha.manifestPath,
+            JSON.stringify({
+              name: "alpha",
+              allowCrossMarketplaceDependenciesOn: "beta",
+              plugins: [],
+            }),
+          );
+        }
+
+        const { ctx, pi } = makeCtx();
+
+        // act
+        const outcome = await installMissingDependency({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "beta",
+          plugin: "b",
+          ranges: [],
+          requiredBy: "a@alpha",
+          declarers: scenario.laterAuthorizer ? ["a@alpha", "c@gamma"] : ["a@alpha"],
+        });
+
+        // assert
+        if (scenario.laterAuthorizer) {
+          assert.equal(outcome.status, "installed");
+          assert.equal(
+            (await loadState(locations.extensionRoot)).marketplaces["beta"]?.plugins["b"]
+              ?.provenance,
+            "dependency",
+          );
+        } else {
+          assert.equal(outcome.status, "failed");
+          assert.ok(outcome.status === "failed");
+          if (scenario.firstSource === "malformed") {
+            assert.ok(outcome.error instanceof InvalidMarketplaceManifestError);
+            assert.match(outcome.error.message, /allowCrossMarketplaceDependenciesOn/);
+          } else {
+            assert.equal(outcome.reason, "cross-marketplace");
+          }
+
+          assert.equal(
+            (await loadState(locations.extensionRoot)).marketplaces["beta"]?.plugins["b"],
+            undefined,
+          );
+        }
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("XMKT-01 project declaring policy outranks a permissive user source", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-project-policy-"));
+    try {
+      // arrange
+      const project = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "alpha-user-src"),
+        marketplaceName: "alpha",
+        pluginName: "a",
+        allowedDependencyMarketplaces: ["beta"],
+      });
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "alpha-project-src"),
+        marketplaceName: "alpha",
+        pluginName: "a",
+        preInstall: true,
+      });
+      const alpha = (await loadState(project.extensionRoot)).marketplaces["alpha"];
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "beta-src"),
+        marketplaceName: "beta",
+        pluginName: "b",
+      });
+      const state = await loadState(project.extensionRoot);
+      assert.ok(alpha !== undefined);
+      state.marketplaces["alpha"] = alpha;
+      await saveState(project.extensionRoot, state);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.ok(outcome.status === "failed");
+      assert.equal(outcome.reason, "cross-marketplace");
+      assert.equal(
+        (await loadState(project.extensionRoot)).marketplaces["beta"]?.plugins["b"],
+        undefined,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("XMKT-01 project missing install reads a user-only target source into project scope", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-user-target-"));
+    try {
+      // arrange
+      const project = locationsFor("project", cwd);
+      const user = locationsFor("user", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "beta-user-src"),
+        marketplaceName: "beta",
+        pluginName: "b",
+      });
+      const userBefore = await readFile(user.stateJsonPath);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "alpha-project-src"),
+        marketplaceName: "alpha",
+        pluginName: "a",
+        preInstall: true,
+        allowedDependencyMarketplaces: ["beta"],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.equal(
+        (await loadState(project.extensionRoot)).marketplaces["beta"]?.plugins["b"]?.provenance,
+        "dependency",
+      );
+      assert.deepStrictEqual(await readFile(user.stateJsonPath), userBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("XMKT-01 missing install reports a source removed after authorization", async () => {
+  await withHermeticHome(async ({ installMissingDependency, transactionControl }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-source-race-"));
+    try {
+      // arrange
+      const project = locationsFor("project", cwd);
+      const user = locationsFor("user", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "beta-user-src"),
+        marketplaceName: "beta",
+        pluginName: "b",
+      });
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "alpha-project-src"),
+        marketplaceName: "alpha",
+        pluginName: "a",
+        preInstall: true,
+        allowedDependencyMarketplaces: ["beta"],
+      });
+      let removed = false;
+      transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
+        if (!removed) {
+          removed = true;
+          const state = await loadState(user.extensionRoot);
+          delete state.marketplaces["beta"];
+          await saveState(user.extensionRoot, state);
+        }
+
+        return runPhases(phases, ctx);
+      };
+
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+      });
+
+      // assert
+      assert.equal(removed, true);
+      assert.equal(outcome.status, "failed");
+      assert.match("cause" in outcome ? outcome.cause : "", /not added/i);
+      assert.equal((await loadState(project.extensionRoot)).marketplaces["beta"], undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MISS-01 / D-09-05: the entry point installs the missing dependency and its closure as dependencies, enabled, with no config entry", async (t) => {
+  await withHermeticHome(async ({ completionCache, installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-closure-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+      const cacheDrops = observeCompletionDrops(t, completionCache);
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.ok(outcome.status === "installed");
+      assert.deepStrictEqual(
+        outcome.members.map((member) => member.key),
+        ["some-other-plugin@mp", "secrets-vault@mp"],
+      );
+      assert.deepStrictEqual(await readPersistedProvenance(locations.stateJsonPath, "mp"), {
+        schemaVersion: 3,
+        provenance: { "secrets-vault": "dependency", "some-other-plugin": "dependency" },
+      });
+      const after = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(
+        {
+          root: after.marketplaces["mp"]?.plugins["secrets-vault"]?.enabled,
+          dependency: after.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled,
+        },
+        { root: true, dependency: true },
+      );
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
+      assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+      assert.deepStrictEqual(
+        cacheDrops.map((drop) => drop.marketplace),
+        ["mp"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-09-05: a dependency whose entry declares defaultEnabled false still lands enabled", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-default-disabled-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+        entryDefaultEnabled: false,
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["secrets-vault"]?.enabled, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-09-05: the declarers' ranges reach the cascade as the root range", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-root-range-"));
+    try {
+      // arrange -- two declarers' ranges accumulate to a contradiction, which
+      // the cascade's own fold site (effectiveRanges + intersectDependencyRanges)
+      // must reach for the root exactly as it reaches a constrained member's.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: ["^1.0.0", "^2.0.0"],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.ok(outcome.status === "failed" && outcome.error instanceof DependencyCascadeError);
+      assert.match(
+        (outcome as { cause: string }).cause,
+        /^Dependency "secrets-vault@mp" has contradictory version constraints "\^1\.0\.0 \^2\.0\.0"/,
+      );
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["secrets-vault"], undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-09-05: a satisfiable root range reaches the marketplace tag probe through options.marketplaceRecordFor", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-root-range-probed-"));
+    try {
+      // arrange -- a real (non-contradictory) range reaches probeMemberPin,
+      // which for a path source resolves through options.marketplaceRecordFor
+      // and the local marketplace tag probe, exactly as a constrained member
+      // does. The marketplace root carries no `.git`, so TAGS-02's fallback
+      // installs the current copy -- the probe still ran and named the source.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act -- the injected probe exercises the same options.marketplaceTagProbe
+      // spread a caller-supplied seam takes; its "no-matching-tag" answer
+      // still resolves through TAGS-02's current-copy fallback.
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: ["^1.0.0"],
+        requiredBy: "deploy-kit@mp",
+        marketplaceTagProbe: () => Promise.resolve({ kind: "no-matching-tag", range: "^1.0.0" }),
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["secrets-vault"]?.enabled, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-09-05: a pinned git-source root records the tag's own version through the shared ledger options", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-git-pin-"));
+    try {
+      // arrange -- the root itself carries the declarers' range and resolves
+      // through a real (faked-offline) tag probe, so member.pin is set on the
+      // SAME shared ledgerOptionsFor call site the entry point owns.
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "url", url: "https://example.com/org/repo" },
+        fixtureRepoDir,
+      });
+      const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const locations = locationsFor("project", cwd);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        ranges: ["^9.0.0"],
+        requiredBy: "deploy-kit@mp",
+        cloneCacheSeam: seamWith(gitOps),
+        tagProbe: () =>
+          Promise.resolve({
+            kind: "pinned",
+            tag: "gp--v9.9.9",
+            oid: GIT_SOURCE_SHA,
+            version: "9.9.9",
+          }),
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.equal(gitState.checkoutCalls.length, 1, "one checkout, at the selected tag");
+      assert.equal(gitState.checkoutCalls[0]?.ref, GIT_SOURCE_SHA);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["gp"]?.version, "9.9.9");
+      assert.equal(after.marketplaces["mp"]?.plugins["gp"]?.provenance, "dependency");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-09-05: a malformed skill degrades the missing dependency and surfaces a post-commit warning", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-malformed-skill-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+        skills: [{ sourceName: "bad", frontmatterName: "[unterminated", body: "# Bad\nBody.\n" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert -- the degrade still installs; orchestrated mode collects the
+      // warning instead of firing it individually (D-19-01).
+      assert.equal(outcome.status, "installed");
+      assert.ok(outcome.status === "installed");
+      assert.ok((outcome.postCommitWarnings ?? []).length > 0);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["secrets-vault"]?.enabled, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SURF-05: an orphan-rewake hook on the missing dependency carries orphanRewake on the outcome", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-orphan-rewake-"));
+    try {
+      // arrange -- SURF-05 fixture: rewakeMessage WITHOUT asyncRewake: true
+      // triggers detectOrphanRewake -> partial.orphanRewake = true, exactly as
+      // it does for a config-driven install.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+        hooksJson: {
+          PreToolUse: [
+            {
+              matcher: "",
+              hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "wake me" }],
+            },
+          ],
+        },
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.ok(outcome.status === "installed");
+      assert.equal(outcome.orphanRewake, true);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["secrets-vault"]?.enabled, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-09-04: the entry point walks with disabled records as walls", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-wall-"));
+    try {
+      // arrange -- secrets-vault declares some-other-plugin, already recorded
+      // and disabled. D-09-04 treats it as a wall: the entry point must not
+      // read through it or re-enable it.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const seeded = await loadState(locations.extensionRoot);
+      const mp = seeded.marketplaces["mp"];
+      assert.ok(mp !== undefined);
+      mp.plugins["some-other-plugin"] = {
+        version: "1.0.0",
+        resolvedSource: path.join(cwd, "mp-src", "plugins", "some-other-plugin"),
+        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+        resources: {
+          workflows: [],
+          skills: [],
+          prompts: [],
+          agents: [],
+          mcpServers: [],
+          hooks: [],
+        },
+        enabled: false,
+        provenance: "dependency",
+        installedAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      };
+      await saveState(locations.extensionRoot, seeded);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert -- only the root materializes; the walled dependency neither
+      // becomes a member nor is re-enabled.
+      assert.equal(outcome.status, "installed");
+      assert.ok(outcome.status === "installed");
+      assert.deepStrictEqual(
+        outcome.members.map((member) => member.key),
+        ["secrets-vault@mp"],
+      );
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled, false);
+      assert.equal(
+        after.marketplaces["mp"]?.plugins["some-other-plugin"]?.updatedAt,
+        "2026-01-01T00:00:00.000Z",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-09-06: an already-recorded key is skipped inside the lock", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-already-recorded-"));
+    try {
+      // arrange -- a config install's cascade earlier in the same pass (or a
+      // disabled record D-09-04 leaves alone) already recorded this key.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+        preInstall: true,
+      });
+      const seeded = await loadState(locations.extensionRoot);
+      const recorded = seeded.marketplaces["mp"]?.plugins["secrets-vault"];
+      assert.ok(recorded !== undefined);
+      recorded.enabled = false;
+      await saveState(locations.extensionRoot, seeded);
+      await unlink(path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"));
+      const before = await stat(locations.stateJsonPath);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert -- skipped with no save: state.json's mtime is untouched.
+      assert.deepStrictEqual(outcome, { status: "skipped" });
+      const after = await stat(locations.stateJsonPath);
+      assert.equal(after.mtimeMs, before.mtimeMs);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MISS-02: the root's own ledger failure passes through unwrapped", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-root-not-in-manifest-"));
+    try {
+      // arrange -- the marketplace exists but never declares "secrets-vault"
+      // at all; the root catalog-absent exemption lets the closure walk
+      // succeed, and the real materialization then throws from its own
+      // ledger, unwrapped (no cascadeFailure.subject).
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "other-plugin",
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.ok(outcome.status === "failed" && outcome.error instanceof PluginShapeError);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["secrets-vault"], undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MISS-02 / D-03-07: a closure failure leaves nothing materialized and returns the cascade's own cause", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-closure-fail-"));
+    try {
+      // arrange -- secrets-vault declares some-other-plugin, which this
+      // marketplace does not declare (no siblingPlugins entry seeds it).
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+        declareDependencies: true,
+      });
+      const before = await loadState(locations.extensionRoot);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.ok(outcome.status === "failed" && outcome.error instanceof DependencyCascadeError);
+      assert.equal(
+        (outcome as { cause: string }).cause,
+        retryCauseChain('Dependency "some-other-plugin@mp" is not declared by its marketplace.'),
+      );
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), before);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MISS-02 / D-03-08: an unreachable marketplace fails as not added and is never added", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-not-added-"));
+    try {
+      // arrange -- "other" is not added in either scope.
+      const locations = locationsFor("project", cwd);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "other",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.ok(outcome.status === "failed" && outcome.error instanceof DependencyCascadeError);
+      assert.match(
+        (outcome as { cause: string }).cause,
+        /requires marketplace "other", which is not added/,
+      );
+      const after = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(Object.keys(after.marketplaces), []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // WLIF-01: the workflows ledger phase -- the sixth and LAST bridge slot.
 //
@@ -9470,6 +12982,7 @@ function raceRecordAtStateCommit(
   const marketplace = state.marketplaces[marketplaceName];
   assert.ok(marketplace !== undefined);
   const racedRecord: ExtensionState["marketplaces"][string]["plugins"][string] = {
+    provenance: "explicit",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     enabled: true,
     installedAt: "2026-01-01T00:00:00.000Z",

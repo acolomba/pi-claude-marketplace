@@ -31,6 +31,20 @@
 //   pluginsToEnable       -> child row { status: "will enable" }
 //                            (recorded-but-disabled detection via the
 //                            empty-resources marker)
+//   pluginsToDependencyDisable
+//                         -> child row { status: "will disable" }, folded into
+//                            the pluginsToDisable loop (LOAD-01). The planner's
+//                            claimedPluginKeys keeps the two buckets from
+//                            naming one plugin twice. The bucket is empty for a
+//                            caller that passes no satisfaction verdict, which
+//                            is every caller today (PENDING-VERDICT-01 /
+//                            D-06-25).
+//   pluginsToDependencyInstall
+//                         -> child row { status: "will install" }, folded into
+//                            the pluginsToInstall loop (MISS-01, D-09-12). The
+//                            bucket is empty for a caller that passes no
+//                            satisfaction verdict, which is every caller today
+//                            (PENDING-VERDICT-01).
 //
 // The empty-plan case is handled by the orchestrator (`pending.ts`) which
 // switches on `plans.every(isPlanEmpty)` and emits a free-form advisory line
@@ -282,9 +296,10 @@ function forceInstallKey(scope: Scope, marketplace: string, plugin: string): str
  * default), never a crash on this read-only surface (IL-2).
  *
  * D-66-05: there is deliberately NO `will partially update` analog. The
- * `ReconcilePlan` has no update bucket (install/uninstall/enable/disable +
- * marketplace add/remove + sourceMismatches only), so only `pluginsToInstall`
- * is resolved here -- the will-partially-update token is vacuous.
+ * `ReconcilePlan` has no update bucket (install/uninstall/enable/disable/
+ * dependency-disable + marketplace add/remove + sourceMismatches only), so only
+ * `pluginsToInstall` is resolved here -- the will-partially-update token is
+ * vacuous.
  */
 export async function resolvePendingForceInstalls(
   plans: readonly ReconcilePlan[],
@@ -356,6 +371,22 @@ export async function resolvePendingForceInstalls(
  *   - pluginsToEnable       -> child row { status: "will enable" }
  *                              (recorded-but-disabled detection via the
  *                              empty-resources marker)
+ *   - pluginsToDependencyDisable
+ *                           -> child row { status: "will disable" }, folded
+ *                              into the pluginsToDisable loop (LOAD-01). The
+ *                              planner's claimedPluginKeys keeps the two
+ *                              buckets from naming one plugin twice. The
+ *                              bucket is empty for a caller that passes no
+ *                              satisfaction verdict, which is every caller
+ *                              today (PENDING-VERDICT-01 / D-06-25).
+ *   - pluginsToDependencyInstall
+ *                           -> child row { status: "will install" }, folded
+ *                              into the pluginsToInstall loop (MISS-01,
+ *                              D-09-12). A bucket entry never matches a force-
+ *                              install key, so its row is the bare token. The
+ *                              bucket is empty for a caller that passes no
+ *                              satisfaction verdict, which is every caller
+ *                              today (PENDING-VERDICT-01).
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). Plugin rows within a
@@ -386,16 +417,21 @@ export function buildReconcilePendingNotification(
       );
     }
 
-    for (const o of plan.pluginsToInstall) {
+    // MISS-01 / D-09-12: the dependency-install bucket previews the same
+    // action the config-driven install bucket does, so both feed one loop
+    // and one token. A bucket entry never matches a key
+    // `resolvePendingForceInstalls` resolved (its candidates come from
+    // `pluginsToInstall` alone), so its row is always the bare token.
+    for (const o of [...plan.pluginsToInstall, ...plan.pluginsToDependencyInstall]) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       // FSTAT-06 / D-66-04: stamp the partial modifier when the planned install
       // candidate resolved `partially-available` (no-network resolveStrict, computed
       // ahead of time by resolvePendingForceInstalls). The modifier renders
       // `(will partially install)` in place of `(will install)`. D-66-05: there is
       // deliberately NO `will partially update` analog -- the ReconcilePlan has no
-      // update bucket (only install/uninstall/enable/disable + marketplace
-      // add/remove + sourceMismatches), so no partial-update row is ever
-      // constructed here; the will-partially-update token is vacuous.
+      // update bucket (only install/uninstall/enable/disable/dependency-disable +
+      // marketplace add/remove + sourceMismatches), so no partial-update row is
+      // ever constructed here; the will-partially-update token is vacuous.
       const force = forceInstallKeys.has(forceInstallKey(o.scope, o.marketplace, o.plugin));
       block.plugins.push({
         status: "will install",
@@ -412,7 +448,14 @@ export function buildReconcilePendingNotification(
       });
     }
 
-    for (const o of plan.pluginsToDisable) {
+    // LOAD-01 / WR-02: the held-down bucket previews the same action the
+    // config-driven disable bucket does, so both feed one loop and one token.
+    // The planner drops a key already claimed by `pluginsToDisable`
+    // (`plan.ts::claimedPluginKeys`), so the concatenation never names one
+    // plugin twice. The held-down bucket is empty for a caller that supplies
+    // no satisfaction verdict, which is every caller today
+    // (PENDING-VERDICT-01 / D-06-25).
+    for (const o of [...plan.pluginsToDisable, ...plan.pluginsToDependencyDisable]) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       block.plugins.push({
         status: "will disable",
@@ -457,6 +500,16 @@ export function buildReconcilePendingNotification(
  * recorded plugins (its reload-deferred uninstall cascade); a removal with no
  * recorded plugins is immediate de-registration and contributes nothing. The
  * surviving plugin-level buckets always map to a pending row.
+ *
+ * WR-02: `pluginsToDependencyDisable` is counted alongside the other
+ * plugin-level buckets. It is empty for every caller that supplies no
+ * satisfaction verdict, so counting it changes nothing today -- and it stops a
+ * scope whose only pending change is a load-time disable from reporting
+ * "0 actions" once a caller starts populating it.
+ *
+ * MISS-01 / D-09-12: `pluginsToDependencyInstall` is counted the same way, so
+ * a scope whose only pending change is a missing declared dependency does not
+ * report "0 actions" once a caller starts populating it.
  */
 export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boolean {
   return plans.every(
@@ -466,6 +519,8 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
       p.pluginsToUninstall.length === 0 &&
       p.pluginsToEnable.length === 0 &&
       p.pluginsToDisable.length === 0 &&
+      p.pluginsToDependencyDisable.length === 0 &&
+      p.pluginsToDependencyInstall.length === 0 &&
       p.sourceMismatches.length === 0,
   );
 }
@@ -514,10 +569,22 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
  * use -- `{orphan rewake}` first, then the per-kind malformed tokens. The
  * orphan token moves no severity channel: the malformed rule alone decides
  * `warning` versus `info`.
+ *
+ * MISS-01 / D-09-09: `dependencyInstalled` pushes `{dependency installed}`
+ * FIRST, ahead of `orphan rewake`, on the `{dependency pruned, data kept}`
+ * precedent -- the why-this-row marker leads and the ledger signals follow.
+ * The token moves no severity channel.
+ *
+ * TAGS-02: `dependencyCurrentCopy` pushes `{dependency current copy}` right
+ * after `dependency installed`, the same relative position the standalone
+ * cascade's `composeCascadeMemberRows` gives it. The token moves no severity
+ * channel.
  */
 function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstalledMessage {
   const degradedReasons = malformedReasonsForKinds(outcome.degradedKinds);
   const reasons: ContentReason[] = [
+    ...(outcome.dependencyInstalled === true ? (["dependency installed"] as const) : []),
+    ...(outcome.dependencyCurrentCopy === true ? (["dependency current copy"] as const) : []),
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...degradedReasons,
   ];
@@ -773,6 +840,25 @@ function applyMarketplaceOutcomeToBlock(
 }
 
 /**
+ * D-05-16 / RESV-06: the cause a REFUSED uninstall or a dependency-cascade
+ * install failure carries onto its reconcile row, so a config-driven failure
+ * renders the same cause line the standalone command / single-plugin install
+ * does. Every other outcome, including a cause-less failure, answers the
+ * empty object and keeps the bare row.
+ */
+function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
+  if (outcome.kind === "plugin-uninstall-failed" && outcome.cause !== undefined) {
+    return { cause: outcome.cause };
+  }
+
+  if (outcome.kind === "plugin-install-failed" && outcome.cause !== undefined) {
+    return { cause: outcome.cause };
+  }
+
+  return {};
+}
+
+/**
  * Apply a PLUGIN-subject outcome: one row pushed onto the block's children.
  *
  * WR-03: the return type is the exhaustiveness mechanism, not the narrowed
@@ -793,6 +879,7 @@ function applyPluginOutcomeToBlock(
         | "plugin-uninstalled"
         | "plugin-enabled"
         | "plugin-disabled"
+        | "plugin-dependency-disabled"
         | "plugin-install-failed"
         | "plugin-uninstall-failed"
         | "plugin-enable-failed"
@@ -869,6 +956,25 @@ function applyPluginOutcomeToBlock(
         needsReload: true,
       });
       return block;
+    case "plugin-dependency-disabled":
+      block.plugins.push({
+        status: "disabled",
+        name: outcome.plugin,
+        ...(outcome.version !== undefined && { version: outcome.version }),
+        // LOAD-01: the brace and the remedy are both composed by the producer;
+        // this arm forwards them. The remedy interpolates the dependency and
+        // the dependent, so it rides the cause chain -- no closed-set token and
+        // no frozen trailer can carry an identifier.
+        reasons: outcome.reasons,
+        cause: outcome.cause,
+        // The disable was carried out in full, but the desired state -- the
+        // plugin loading -- was not reached, which is the warning arm of the
+        // tri-state severity model. The toggle arm above stays `info` and
+        // byte-frozen.
+        severity: "warning",
+        needsReload: true,
+      });
+      return block;
     case "plugin-install-failed":
     case "plugin-uninstall-failed":
     case "plugin-enable-failed":
@@ -877,6 +983,9 @@ function applyPluginOutcomeToBlock(
         status: "failed",
         name: outcome.plugin,
         reasons: reasonAsContent(outcome.reason),
+        // D-05-16 / RESV-06: only a refused uninstall or a dependency-cascade
+        // install failure carries a cause onto this row.
+        ...failedRowCause(outcome),
         // D-03/D-06: a failed reconcile apply row -> error, no reload.
         severity: "error",
         needsReload: false,
@@ -914,6 +1023,7 @@ function applyOutcomeToBlock(
     case "plugin-uninstalled":
     case "plugin-enabled":
     case "plugin-disabled":
+    case "plugin-dependency-disabled":
     case "plugin-install-failed":
     case "plugin-uninstall-failed":
     case "plugin-enable-failed":

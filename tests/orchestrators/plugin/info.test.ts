@@ -30,8 +30,9 @@
 import assert from "node:assert/strict";
 import { createHook } from "node:async_hooks";
 import * as fs from "node:fs";
-import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
+import { devNull } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -70,7 +71,7 @@ import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestra
 import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-type FaultableFsPromiseMethod = "readFile" | "readdir";
+type FaultableFsPromiseMethod = "readFile" | "readdir" | "stat";
 
 // info.ts publishes the factory and its injected reader contract; the single
 // production composition of them lives in orchestrators/plugin/operations.ts.
@@ -82,10 +83,11 @@ void ({} satisfies { readonly retired?: typeof InfoOrchestrator.getPluginInfo })
 
 /**
  * The Node-backed read capability, stated once so the fault-injecting reader
- * below delegates to it rather than restating the two real reads. It is the
+ * below delegates to it rather than restating the three real reads. It is the
  * same pair the production composition binds.
  */
 const NODE_READER: PluginInfoReader = {
+  isRegularFile: async (filePath) => (await stat(filePath)).isFile(),
   readTextFile: (filePath) => readFile(filePath, "utf8"),
   listDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
 };
@@ -134,6 +136,14 @@ async function withFsPromiseFault<T>(
 ): Promise<T> {
   let faultRaised = false;
   const reader: PluginInfoReader = {
+    async isRegularFile(filePath) {
+      if (method === "stat" && filePath === targetPath) {
+        faultRaised = true;
+        throw error;
+      }
+
+      return (await stat(filePath)).isFile();
+    },
     async readTextFile(filePath) {
       if (method === "readFile" && filePath === targetPath) {
         faultRaised = true;
@@ -1436,6 +1446,7 @@ test("BOUND-01: a manifest READ FAILURE with an installed record present still r
                 workflows: [],
               },
               enabled: true,
+              provenance: "explicit",
               installedAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },
@@ -1579,6 +1590,7 @@ test("OPIC-F27: required reader preserves an available-row directory failure and
     const calls: string[] = [];
     let raised: unknown;
     const reader: PluginInfoReader = {
+      isRegularFile: async (filePath) => (await stat(filePath)).isFile(),
       readTextFile: (filePath) => readFile(filePath, "utf8"),
       listDirectory: async (directoryPath) => {
         calls.push(directoryPath);
@@ -1619,11 +1631,10 @@ test("OPIC-F27: required reader preserves an available-row directory failure and
 });
 
 // ---------------------------------------------------------------------------
-// (j-S-3) normalizeDependencies: non-array shapes (object, empty array)
-// return undefined -> renderer omits `dependencies:` line entirely.
+// Non-array declarations reject the entry; an empty array declares nothing.
 // ---------------------------------------------------------------------------
 
-test("normalizeDependencies: object-shaped `dependencies` field omits the line", async () => {
+test("object-shaped dependencies reject an installed marketplace entry", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -1640,7 +1651,7 @@ test("normalizeDependencies: object-shaped `dependencies` field omits the line",
             source: "./p",
             version: "1.0.0",
             skills: "skills",
-            // Object shape, not string[] -- normalizer returns undefined.
+            // A declaration must be an array.
             dependencies: { foo: "1.0.0", bar: "2.0.0" },
           },
         ],
@@ -1655,7 +1666,10 @@ test("normalizeDependencies: object-shaped `dependencies` field omits the line",
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
-    assert.doesNotMatch(notifications[0]!.message, /dependencies:/);
+    assert.equal(
+      notifications[0]!.message,
+      "● mp [user] <no autoupdate>\n  ● p v1.0.0 (installed) {unsupported source}\n    components: not resolved",
+    );
   });
 });
 
@@ -1847,6 +1861,7 @@ test("NFR-5 end-to-end: github-source marketplace record resolves plugin info fr
                 workflows: [],
               },
               enabled: true,
+              provenance: "explicit",
               installedAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },
@@ -2680,6 +2695,7 @@ test("OPIC-F27: required reader preserves a state-only file failure and reason o
     const lists: string[] = [];
     let raised: unknown;
     const reader: PluginInfoReader = {
+      isRegularFile: async (filePath) => (await stat(filePath)).isFile(),
       readTextFile: async (filePath) => {
         reads.push(filePath);
         if (filePath === file) {
@@ -4871,12 +4887,13 @@ test("PHOOK-05: a hooks.json that mutates between resolve and the strict re-read
       installablePluginDirs: ["raced"],
     });
 
-    // `resolveStrict` always reads real fs (it takes no reader capability),
-    // so it sees this VALID content and records `hooksConfigPath`. The
-    // injected reader below then answers the SEPARATE strict re-read
-    // (`readHookSummaryEntries`) with malformed JSON for that same path --
-    // the only way the bytes seen by resolve and by the re-read can differ
-    // is a mutation in between (a TOCTOU race); this reader simulates that.
+    // The resolver reads through the same injected reader as the SEPARATE
+    // strict re-read (`readHookSummaryEntries`), so the reader answers the
+    // FIRST read of this path -- the resolver's -- with the valid bytes on
+    // disk, recording `hooksConfigPath`, and every later read with malformed
+    // JSON. The only way the bytes seen by resolve and by the re-read can
+    // differ is a mutation in between (a TOCTOU race); this reader simulates
+    // that.
     const pluginDir = path.join(mpRoot, "raced");
     const hooksConfigFile = path.join(pluginDir, "hooks", "hooks.json");
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
@@ -4887,11 +4904,19 @@ test("PHOOK-05: a hooks.json that mutates between resolve and the strict re-read
       }),
       "utf8",
     );
+    let hooksConfigReads = 0;
     const reader: PluginInfoReader = {
-      readTextFile: (filePath) =>
-        filePath === hooksConfigFile
-          ? Promise.resolve("{ not valid json")
-          : NODE_READER.readTextFile(filePath),
+      isRegularFile: (filePath) => NODE_READER.isRegularFile(filePath),
+      readTextFile: (filePath) => {
+        if (filePath !== hooksConfigFile) {
+          return NODE_READER.readTextFile(filePath);
+        }
+
+        hooksConfigReads += 1;
+        return hooksConfigReads === 1
+          ? NODE_READER.readTextFile(filePath)
+          : Promise.resolve("{ not valid json");
+      },
       listDirectory: (directoryPath) => NODE_READER.listDirectory(directoryPath),
     };
 
@@ -7258,6 +7283,781 @@ test("an available path plugin renders sorted dependencies after its inventory",
 });
 
 // ---------------------------------------------------------------------------
+// DEPS-01 / DEPS-02: every usable dependency element reaches the rendered
+// line, carrying whichever constraint it declared (D-01-30).
+// ---------------------------------------------------------------------------
+
+/**
+ * Seed one available path plugin in marketplace `mp` carrying `dependencies`,
+ * render its info block, and return the single notification message.
+ */
+async function renderDependencyLine(dependencies: unknown): Promise<string> {
+  return withHermeticHome(async ({ home, cwd }) => {
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "host", source: "./host", version: "1.0.0", dependencies }],
+      },
+      installablePluginDirs: ["host"],
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "host", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    return notifications[0]!.message;
+  });
+}
+
+const DEPENDENCY_BLOCK_HEAD = "● mp [user] <no autoupdate>\n  ○ host v1.0.0 (available)\n";
+
+test("rejects a declaration when its substituted marketplace name is not renderable", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const marketplace = "mp+invalid";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: marketplace,
+      manifest: {
+        name: marketplace,
+        plugins: [{ name: "host", source: "./host", dependencies: ["valid@explicit", "implicit"] }],
+      },
+      installablePluginDirs: ["host"],
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace, plugin: "host", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map(({ message }) => message),
+      [
+        "● mp+invalid [user] <no autoupdate>\n  ⊘ host (unavailable) {invalid manifest}\n    components: not resolved",
+      ],
+    );
+  });
+});
+
+test("DEPS-02: a mixed array of strings and objects lists every usable element", async () => {
+  // arrange
+  const dependencies = ["zulu@mp", { name: "alfa", version: "^1.0.0" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.0.0), zulu@mp`);
+});
+
+test("DEPS-01: an object dependency renders its own marketplace, not the declaring one", async () => {
+  // arrange
+  const dependencies = [{ name: "alfa", version: "^2.0.0", marketplace: "other-mp" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@other-mp (^2.0.0)`);
+});
+
+test("D-01-02: an element declaring no marketplace takes the declaring plugin's", async () => {
+  // arrange
+  const dependencies = [{ name: "alfa", version: "^2.0.0" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^2.0.0)`);
+});
+
+test("D-01-27: a bare string's trailing range renders as a constraint", async () => {
+  // arrange
+  const dependencies = ["alfa@^1.2.3"];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.2.3)`);
+});
+
+test("D-01-30: a sha alone renders labelled and short-formed to seven characters", async () => {
+  // arrange
+  const dependencies = [{ name: "alfa", sha: "abc1234def5678abc1234def5678abc1234def56" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (sha abc1234)`);
+});
+
+test("D-01-30: a version and a sha share one parenthetical, version first", async () => {
+  // arrange
+  const dependencies = [
+    { name: "alfa", version: "^1.0.0", sha: "def5678abc1234def5678abc1234def5678abc12" },
+  ];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.0.0, sha def5678)`);
+});
+
+test("D-01-30: an element declaring no constraint renders the bare address", async () => {
+  // arrange
+  const dependencies = [{ name: "alfa" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp`);
+});
+
+test("D-01-31: two elements resolving to one address collapse, the last winning", async () => {
+  // arrange
+  const dependencies = [
+    { name: "alfa", version: "^1.0.0" },
+    { name: "alfa", version: "^2.0.0" },
+  ];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^2.0.0)`);
+});
+
+test("D-01-04: the list orders by dependency name, not by the rendered string", async () => {
+  // arrange
+  const dependencies = [{ name: "bravo", version: "^9.0.0" }, { name: "alfa" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp, bravo@mp (^9.0.0)`);
+});
+
+test("D-01-04: two entries sharing a name keep their declaration order", async () => {
+  // arrange
+  const dependencies = [
+    { name: "alfa", marketplace: "zulu-mp" },
+    { name: "alfa", marketplace: "bravo-mp" },
+  ];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@zulu-mp, alfa@bravo-mp`);
+});
+
+test("invalid marketplace dependencies make the plugin unavailable", async () => {
+  // arrange
+  const dependencies = [{ version: "^1.0.0" }, 42, { name: "bad name" }, { name: "a", sha: "zz" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(
+    message,
+    "● mp [user] <no autoupdate>\n  ⊘ host (unavailable) {unsupported source}\n    components: not resolved",
+  );
+});
+
+test("invalid own dependencies are reported without the entry or bare fallback", async () => {
+  // arrange
+  const manifests = {
+    entryDependencies: ["entry"],
+    wrapped: '{"dependencies":["foo@~1.0.0"]}',
+    bare: '{"dependencies":["fallback"]}',
+  };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
+
+  // assert
+  assert.equal(
+    message,
+    "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {invalid manifest}\n    components: not resolved",
+  );
+});
+
+for (const { label, installed, entryVersion, description, dependencies, expected } of [
+  {
+    label: "an installed plugin with an invalid own manifest",
+    installed: { host: { version: "2.0.0" } },
+    entryVersion: "1.0.0",
+    description: "Host plugin.",
+    dependencies: undefined,
+    expected:
+      "  ● host v2.0.0 (installed) {invalid manifest}\n    Host plugin.\n    components: not resolved",
+  },
+  {
+    label: "an unversioned plugin with an invalid own manifest",
+    installed: undefined,
+    entryVersion: undefined,
+    description: undefined,
+    dependencies: undefined,
+    expected: "  ⊘ host (unavailable) {invalid manifest}\n    components: not resolved",
+  },
+  {
+    label: "an installed plugin with invalid marketplace dependencies",
+    installed: { host: { version: "2.0.0" } },
+    entryVersion: "1.0.0",
+    description: undefined,
+    dependencies: ["foo@~1.0.0"],
+    expected: "  ● host v2.0.0 (installed) {unsupported source}\n    components: not resolved",
+  },
+]) {
+  test(`reports ${label} without changing the installation record`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const marketplaceRoot = await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: path.join(home, ".pi", "agent"),
+        cwd,
+        mpName: "mp",
+        manifest: {
+          name: "mp",
+          plugins: [
+            {
+              name: "host",
+              source: "./host",
+              ...(entryVersion !== undefined && { version: entryVersion }),
+              ...(description !== undefined && { description }),
+              ...(dependencies !== undefined && { dependencies }),
+            },
+          ],
+        },
+        ...(installed !== undefined && { installed }),
+        installablePluginDirs: ["host"],
+      });
+      await plantOwnManifest(path.join(marketplaceRoot, "host"), {
+        bare: '{"dependencies":["foo@~1.0.0"]}',
+      });
+      const statePath = path.join(locationsFor("user", cwd).extensionRoot, "state.json");
+      const stateBefore = await readFile(statePath, "utf8");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "host", scope: "user", cwd });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map(({ message }) => message),
+        [`● mp [user] <no autoupdate>\n${expected}`],
+      );
+      assert.equal(await readFile(statePath, "utf8"), stateBefore);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// D-01-32: `info` sources `dependencies` from the plugin's OWN `plugin.json`
+// whenever that manifest is readable WITHOUT a network call, and from the
+// marketplace entry when it is not. The entry is a mirror that can go stale;
+// the manifest is what the plugin actually declares.
+// ---------------------------------------------------------------------------
+
+/**
+ * Plant the plugin's own manifest under a path-source plugin root. A location
+ * left unnamed is absent from disk, which is the only condition a reader may
+ * fall through on (D-01-07).
+ */
+async function plantOwnManifest(
+  pluginRoot: string,
+  manifests: { readonly wrapped?: string; readonly bare?: string },
+): Promise<void> {
+  if (manifests.wrapped !== undefined) {
+    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      manifests.wrapped,
+      "utf8",
+    );
+  }
+
+  if (manifests.bare !== undefined) {
+    await writeFile(path.join(pluginRoot, "plugin.json"), manifests.bare, "utf8");
+  }
+}
+
+/**
+ * Seed one path-source plugin whose marketplace ENTRY declares
+ * `entryDependencies`, plant whichever own-manifest locations the case names,
+ * and return the single rendered notification message.
+ */
+async function renderOwnManifestCase(opts: {
+  readonly entryDependencies?: unknown;
+  readonly wrapped?: string;
+  readonly bare?: string;
+}): Promise<string> {
+  return withHermeticHome(async ({ home, cwd }) => {
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "host",
+            source: "./host",
+            version: "1.0.0",
+            ...(opts.entryDependencies !== undefined && { dependencies: opts.entryDependencies }),
+          },
+        ],
+      },
+      installablePluginDirs: ["host"],
+    });
+    await plantOwnManifest(path.join(mpRoot, "host"), opts);
+    const { ctx, pi, notifications } = makeCtx();
+
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "host", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    return notifications[0]!.message;
+  });
+}
+
+test("D-01-32: a bare plugin.json outranks the marketplace entry's dependency list", async () => {
+  // arrange
+  const manifests = {
+    entryDependencies: ["stale@mp"],
+    bare: JSON.stringify({ name: "host", dependencies: ["fresh@mp"] }),
+  };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: fresh@mp`);
+});
+
+test("D-01-32: the wrapped manifest outranks a bare sibling, matching the shared ordering", async () => {
+  // arrange
+  const manifests = {
+    entryDependencies: ["stale@mp"],
+    wrapped: JSON.stringify({ name: "host", dependencies: ["wrapped-dep@mp"] }),
+    bare: JSON.stringify({ name: "host", dependencies: ["bare-dep@mp"] }),
+  };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: wrapped-dep@mp`);
+});
+
+test("D-01-32: a readable manifest declaring nothing omits the line; the entry does not reappear", async () => {
+  // arrange
+  const manifests = { entryDependencies: ["stale@mp"], bare: JSON.stringify({ name: "host" }) };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
+
+  // assert
+  assert.equal(message, DEPENDENCY_BLOCK_HEAD.trimEnd());
+});
+
+test("D-01-32: a plugin with no manifest at either candidate falls back to the entry", async () => {
+  // arrange
+  const manifests = { entryDependencies: ["from-entry@mp"] };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: from-entry@mp`);
+});
+
+test("D-01-07: an unparseable first candidate ends the walk; the bare sibling never rescues it", async () => {
+  // arrange
+  const manifests = {
+    entryDependencies: ["from-entry@mp"],
+    wrapped: "{ not json",
+    bare: JSON.stringify({ name: "host", dependencies: [42] }),
+  };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
+
+  // assert
+  assert.equal(
+    message,
+    "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {unsupported source}",
+  );
+});
+
+test("a non-object own manifest stops before the bare sibling", async () => {
+  // arrange
+  const manifests = { wrapped: "[]", bare: '{"dependencies":[42]}' };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
+
+  // assert
+  assert.equal(
+    message,
+    "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {unsupported source}",
+  );
+});
+
+// The read failure propagates out of the resolver with its identity intact, so
+// the probe classifier names its class on the row instead of a bare sibling
+// standing in for the unreadable manifest.
+for (const { label, error, reason } of [
+  {
+    label: "a permission error",
+    error: Object.assign(new Error("denied"), { code: "EACCES" }),
+    reason: "permission denied",
+  },
+  { label: "an error without an errno", error: new Error("unreadable"), reason: "unreadable" },
+]) {
+  test(`an own manifest read with ${label} does not use a valid bare sibling`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const root = await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: path.join(home, ".pi", "agent"),
+        cwd,
+        mpName: "mp",
+        manifest: { name: "mp", plugins: [{ name: "host", source: "./host" }] },
+        installablePluginDirs: ["host"],
+      });
+      await plantOwnManifest(path.join(root, "host"), {
+        wrapped: '{"dependencies":["original"]}',
+        bare: '{"dependencies":["fallback"]}',
+      });
+      const manifestPath = path.join(root, "host", ".claude-plugin", "plugin.json");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await withFsPromiseFault("readFile", manifestPath, error, async (getPluginInfoWithFault) => {
+        await getPluginInfoWithFault({
+          ctx,
+          pi,
+          marketplace: "mp",
+          plugin: "host",
+          scope: "user",
+          cwd,
+        });
+      });
+
+      // assert
+      assert.deepEqual(
+        notifications.map(({ message }) => message),
+        [
+          `● mp [user] <no autoupdate>\n  ⊘ host (unavailable) {${reason}}\n    components: not resolved`,
+        ],
+      );
+    });
+  });
+}
+
+for (const error of [
+  Object.assign(new Error("denied"), { code: "EACCES" }),
+  Object.assign(new Error("loop"), { code: "ELOOP" }),
+  new Error("stat failed"),
+]) {
+  test(`a manifest stat failure (${error.message}) stops before the bare sibling`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const root = await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: path.join(home, ".pi", "agent"),
+        cwd,
+        mpName: "mp",
+        manifest: {
+          name: "mp",
+          plugins: [{ name: "host", source: "./host", dependencies: ["entry"] }],
+        },
+        installablePluginDirs: ["host"],
+      });
+      await plantOwnManifest(path.join(root, "host"), {
+        wrapped: '{"dependencies":["original"]}',
+        bare: '{"dependencies":[42]}',
+      });
+      const manifestPath = path.join(root, "host", ".claude-plugin", "plugin.json");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await withFsPromiseFault("stat", manifestPath, error, async (getPluginInfoWithFault) => {
+        await getPluginInfoWithFault({
+          ctx,
+          pi,
+          marketplace: "mp",
+          plugin: "host",
+          scope: "user",
+          cwd,
+        });
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [user] <no autoupdate>\n  ○ host (available)\n    dependencies: entry@mp",
+        },
+      ]);
+    });
+  });
+}
+
+for (const { label, createObstacle, expected } of [
+  {
+    label: "a device instead of plugin.json",
+    createObstacle: async (root: string) => {
+      await mkdir(path.join(root, ".claude-plugin"));
+      await symlink(devNull, path.join(root, ".claude-plugin", "plugin.json"));
+    },
+    expected: "  ○ host (available)\n    dependencies: bare-dep@mp",
+  },
+  {
+    label: "a directory instead of plugin.json",
+    createObstacle: async (root: string) => {
+      await mkdir(path.join(root, ".claude-plugin", "plugin.json"), { recursive: true });
+    },
+    expected: "  ○ host (available)\n    dependencies: bare-dep@mp",
+  },
+  {
+    label: "a file instead of the wrapper directory",
+    createObstacle: async (root: string) => {
+      await writeFile(path.join(root, ".claude-plugin"), "not a directory");
+    },
+    expected: "  ○ host (available)\n    dependencies: bare-dep@mp",
+  },
+]) {
+  test(`info contains ${label} without throwing`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const root = await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: path.join(home, ".pi", "agent"),
+        cwd,
+        mpName: "mp",
+        manifest: { name: "mp", plugins: [{ name: "host", source: "./host" }] },
+        installablePluginDirs: ["host"],
+      });
+      const pluginRoot = path.join(root, "host");
+      await createObstacle(pluginRoot);
+      await plantOwnManifest(pluginRoot, { bare: '{"dependencies":["bare-dep"]}' });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "host", scope: "user", cwd });
+
+      // assert
+      assert.deepEqual(
+        notifications.map(({ message }) => message),
+        [`● mp [user] <no autoupdate>\n${expected}`],
+      );
+    });
+  });
+}
+
+test("info reports a warm installed plugin's own dependencies", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "gplug", source: cloneUrl }] },
+      installed: { gplug: { version: "2.0.0" } },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "gplug", dependencies: ["fresh@mp"] },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(
+      notifications.map(({ message }) => message),
+      ["● mp [user] <no autoupdate>\n  ● gplug v2.0.0 (installed)\n    dependencies: fresh@mp"],
+    );
+  });
+});
+
+test("info tolerates a corrupt cached mirror without fetching", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "gplug", source: cloneUrl }] },
+    });
+    await seedWarmMirror({ scope: "user", cwd, cloneUrl, pluginJson: { name: "gplug" } });
+    const mirrorDir = await locationsFor("user", cwd).pluginCloneDir(pluginMirrorKey(cloneUrl));
+    await writeFile(path.join(mirrorDir, ".git", "HEAD"), "ref: refs/heads/missing\n");
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(
+      notifications.map(({ message }) => message),
+      [
+        "● mp [user] <no autoupdate>\n  ◌ gplug (remote) {source missing}\n    components: not resolved",
+      ],
+    );
+  });
+});
+
+test("D-01-32: a path source whose root fails containment falls back to the entry without throwing", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- `../escape` resolves outside the marketplace root, so
+    // `derivePluginRootForInfo`'s `assertPathInside` refuses it at block level.
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "host",
+            source: "../escape",
+            version: "1.0.0",
+            dependencies: ["from-entry@mp"],
+          },
+        ],
+      },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act -- a propagating PathContainmentError would fail this call outright.
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "host", scope: "user", cwd });
+
+    // assert -- the row is byte-unchanged: the ROW builder's own containment
+    // throw still lands on the pre-existing `{unreadable}` arm. What is new is
+    // that the BLOCK-level read refused the same path quietly instead of
+    // throwing past every catch in the file.
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "\u25cf mp [user] <no autoupdate>\n" +
+          "  \u2298 host v1.0.0 (unavailable) {unreadable}\n" +
+          "    components: not resolved",
+      },
+    ]);
+  });
+});
+
+test("D-01-32: a WARM git clone's plugin.json supplies the dependency list, not the entry", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "gplug", source: cloneUrl, version: "1.0.0", dependencies: ["stale@mp"] },
+        ],
+      },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "gplug", dependencies: ["fresh@mp"] },
+      componentDirs: ["skills/warm-skill"],
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(
+      notifications.map(({ message }) => message),
+      [
+        "● mp [user] <no autoupdate>\n" +
+          "  ○ gplug v1.0.0 (available)\n" +
+          "    skills: warm-skill\n" +
+          "    dependencies: fresh@mp",
+      ],
+    );
+  });
+});
+
+test("D-01-32 / NFR-5: a COLD git source renders the entry's list and creates no clone directory", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: "https://example.com/repo",
+            version: "1.0.0",
+            dependencies: ["from-entry@mp"],
+          },
+        ],
+      },
+    });
+    const clonesDir = path.join(userRoot, "pi-claude-marketplace", "plugin-clones");
+    assert.equal(fs.existsSync(clonesDir), false, "precondition: cold cache");
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act -- `--fetch` is deliberately NOT passed: "readable" never means
+    // fetching, so this is the arm that must NOT read a manifest at all.
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
+    // assert -- the `(remote)` row carries the entry-declared list because the
+    // cold clone leaves no manifest readable without a fetch (D-01-32); the
+    // line renders after the `components: not resolved` marker. The
+    // load-bearing half is still that nothing was cloned to make the manifest
+    // readable (NFR-5).
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n" +
+          "  ◌ gplug v1.0.0 (remote)\n" +
+          "    components: not resolved\n" +
+          "    dependencies: from-entry@mp",
+      },
+    ]);
+    assert.equal(fs.existsSync(clonesDir), false, "info must not create plugin-clones/ (NFR-5)");
+  });
+});
+
 // WFLW-04: the `workflows:` line on the resolved component arm.
 //
 // The names are the generated `<plugin>:<name>` of every ADMITTED script, read

@@ -73,6 +73,15 @@ const PERSISTED_HOOK_ENTRY_SCHEMA = Type.Object({
  * before validation runs, so v1.0..v1.13 state.json files load cleanly.
  * `enabled: false` is the sole disable marker; `true` means active.
  *
+ * D-04-01 / D-04-03: `provenance` is REQUIRED (schemaVersion 3+) and states
+ * how the plugin got here -- `"explicit"` when the user named it, `"dependency"`
+ * when another plugin's declaration pulled it in. The migration fills
+ * `"explicit"` for every record that lacks the field via
+ * `ensurePluginProvenance` before validation runs, so schemaVersion 1 and 2
+ * state.json files load cleanly. `"explicit"` is the truthful default rather
+ * than a guess: no released build ran a dependency cascade, so every record a
+ * released build wrote is a plugin the user asked for by name.
+ *
  * COMPAT-01: the public PluginInstallRecord type and saved records expose the
  * compatibility contract; the schema remains this module's validation boundary.
  */
@@ -105,6 +114,18 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   // Named for the entries themselves because `resources.hooks` already holds
   // a different fact -- the hooks CONTAINER slug.
   hookEntries: Type.Optional(Type.Array(PERSISTED_HOOK_ENTRY_SCHEMA)),
+  // LOAD-02 / D-06-01: the record is disabled as a CONSEQUENCE of a
+  // declaration the load-time check found unsatisfied, not by a user choice.
+  // OPTIONAL and additive -- NO schemaVersion bump (the resolvedSha /
+  // hookEntries precedent), so a legacy record without it loads unchanged and
+  // absence needs no migrate fill.
+  //
+  // ABSENCE MEANS "not currently held down by the check". It is never a claim
+  // that the check ran and found nothing: the verdict is re-derived live on
+  // every reconcile pass, and this boolean only answers whether the record is
+  // held down right now. A widening into a reason enum would make it a durable
+  // claim about WHY, which nothing keeps honest.
+  dependencyDisabled: Type.Optional(Type.Boolean()),
   compatibility: Type.Object({
     installable: Type.Boolean(),
     notes: Type.Array(Type.String()),
@@ -125,6 +146,10 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
     workflows: Type.Array(Type.String()),
   }),
   enabled: Type.Boolean(),
+  // D-04-01: the mode only. A declarer list would be a cache of another
+  // plugin's manifest that nothing keeps honest; prune re-derives "does
+  // anything still need this?" from the installed declarations instead.
+  provenance: Type.Union([Type.Literal("explicit"), Type.Literal("dependency")]),
   installedAt: Type.String(),
   updatedAt: Type.String(),
 });
@@ -162,6 +187,13 @@ export function clonePluginRecord(record: PluginInstallRecord): PluginInstallRec
     ...(record.hookEntries !== undefined && {
       hookEntries: record.hookEntries.map((entry) => ({ ...entry })),
     }),
+    // LOAD-02 / D-06-01: preserve the consequence-disable marker across the
+    // snapshot. This function enumerates fields rather than spreading, so
+    // dropping it here would let a failed reinstall restore a record that
+    // reads as a user's own disable.
+    ...(record.dependencyDisabled !== undefined && {
+      dependencyDisabled: record.dependencyDisabled,
+    }),
     compatibility: {
       installable: record.compatibility.installable,
       notes: [...record.compatibility.notes],
@@ -179,6 +211,7 @@ export function clonePluginRecord(record: PluginInstallRecord): PluginInstallRec
       workflows: [...record.resources.workflows],
     },
     enabled: record.enabled,
+    provenance: record.provenance,
     installedAt: record.installedAt,
     updatedAt: record.updatedAt,
   };
@@ -287,11 +320,12 @@ const MARKETPLACE_RECORD_SCHEMA = Type.Object({
 /**
  * ST-1: state.json shape. schemaVersion 1 is the pre-ENBL-02 shape (no
  * `enabled` field on plugin records); schemaVersion 2 is the ENBL-02 shape
- * (`enabled: boolean` required). The union lets loadState accept both during
- * the migration cycle; `persistMigratedState` always writes schemaVersion 2.
+ * (`enabled: boolean` required); schemaVersion 3 is the D-04-03 shape
+ * (`provenance` required). The union lets loadState accept all three during
+ * the migration cycle; `persistMigratedState` always writes schemaVersion 3.
  */
 const STATE_SCHEMA = Type.Object({
-  schemaVersion: Type.Union([Type.Literal(1), Type.Literal(2)]),
+  schemaVersion: Type.Union([Type.Literal(1), Type.Literal(2), Type.Literal(3)]),
   // BFILL-02 / D-68-01: the last extension version that reconciled this state.
   // OPTIONAL and additive -- NO schemaVersion bump. An absent stamp means
   // scan-once (treated as version-changed) so an old doc without it loads
@@ -309,7 +343,7 @@ const STATE_VALIDATOR = Compile(STATE_SCHEMA);
 
 /** First-load default (ENOENT and empty treated identically). */
 export const DEFAULT_STATE: ExtensionState = Object.freeze({
-  schemaVersion: 2,
+  schemaVersion: 3,
   marketplaces: {},
 });
 
@@ -374,11 +408,15 @@ function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): voi
  * error or on post-migration schema validation failure (caller logs and
  * surfaces).
  *
- * Async best-effort persist of migrated state happens in the background
- * via persistMigratedState; this function does NOT await it. The IL-3
- * sanctioned warn site in migrate.ts handles persist failures.
+ * By default, migrated state persists in the background via
+ * persistMigratedState; this function does NOT await it. Pass
+ * `persistMigration: false` for a read-only snapshot. The IL-3 sanctioned
+ * warn site in migrate.ts handles persist failures.
  */
-export async function loadState(extensionRoot: string): Promise<ExtensionState> {
+export async function loadState(
+  extensionRoot: string,
+  options: { readonly persistMigration?: boolean } = {},
+): Promise<ExtensionState> {
   const stateJsonPath = stateJsonPathFor(extensionRoot);
 
   let raw: string;
@@ -387,7 +425,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       // Missing file -> default state (NOT throw).
-      return { schemaVersion: 2, marketplaces: {} };
+      return { schemaVersion: 3, marketplaces: {} };
     }
 
     throw new Error(`Failed to read ${stateJsonPath}: ${errorMessage(err)}`, { cause: err });
@@ -410,7 +448,8 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
     parsedRecord !== undefined &&
     Object.hasOwn(parsedRecord, "schemaVersion") &&
     parsedRecord.schemaVersion !== 1 &&
-    parsedRecord.schemaVersion !== 2
+    parsedRecord.schemaVersion !== 2 &&
+    parsedRecord.schemaVersion !== 3
   ) {
     throw new Error(`state.json at ${stateJsonPath} has an unsupported schema version`);
   }
@@ -430,8 +469,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   // `locationsFor` construction in `persistence/locations.ts` byte-for-byte
   // (pinned by a drift-guard test in tests/persistence/state-io.test.ts).
   // We do NOT import `locationsFor` here because the external
-  // `loadState(extensionRoot)` signature MUST stay unchanged for
-  // orchestrator callers.
+  // `loadState` keeps the extension-root path contract for orchestrator callers.
   const configJsonPath = path.join(path.dirname(extensionRoot), "claude-plugins.json");
   const scrubAutoupdate = existsSync(configJsonPath);
   const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
@@ -458,11 +496,11 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   const normalized: unknown =
     typeof reconciliationStamp === "string"
       ? {
-          schemaVersion: 2,
+          schemaVersion: 3,
           lastReconciledExtensionVersion: reconciliationStamp,
           marketplaces,
         }
-      : { schemaVersion: 2, marketplaces };
+      : { schemaVersion: 3, marketplaces };
 
   const [validationError] = STATE_VALIDATOR.Errors(normalized);
   if (validationError !== undefined) {
@@ -475,8 +513,8 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   const state = normalized as ExtensionState;
 
   // ST-4 best-effort async save -- fire-and-forget; the IL-3 sanctioned warn
-  // in persistMigratedState handles failure.
-  if (mutated) {
+  // in persistMigratedState handles failure. Preview explicitly suppresses it.
+  if (mutated && options.persistMigration !== false) {
     void persistMigratedState(stateJsonPath, state);
   }
 

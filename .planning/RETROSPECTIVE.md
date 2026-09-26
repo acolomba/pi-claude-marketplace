@@ -40,6 +40,60 @@
 - Model mix: adaptive profile -- opus researcher, planner, executors and code reviewer; sonnet plan checker, verifier and integration checker
 - Phases: 9 over 6 days of execution (2026-09-04 -> 2026-09-09), then a debt-clearing close on 2026-09-10 and 2026-09-21; ~447 commits on the branch since 2026-09-03
 - Notable: the close's four parallel sonnet re-verifications took 6-7 minutes each and ~90-175k tokens apiece; the one gaps-only re-run took 2 minutes. The full `npm run check` chain is ~15 minutes and was run once, detached.
+## Milestone: v1.20 transitive-dependencies
+
+**Completed:** 2026-09-24 (no npm release)
+**Phases:** 12 | **Plans:** 55 | **Tasks:** 94 | **Requirements:** 45/45
+**Gate:** 7,760 unit tests, 63 integration tests, 100% aggregate production
+coverage in a clean checkout; audit `tech_debt`, one deferred live UAT subcase.
+
+### What Was Built
+
+- Shared manifest reading, transitive dependency installation, version ranges,
+  install provenance, and a fail-clean dependency cascade.
+- Load-time checks, reload installation, dependency-aware enable and disable,
+  constraint-aware update, and a cross-marketplace allowlist.
+- Uninstall data and prune options, plus standalone `prune --dry-run`.
+
+### What Worked
+
+- Phase verification, validation, security, and integration reports were
+  reconciled against the final tree before close. The final clean checkout ran
+  the full gate instead of inferring success from partial runs.
+- A live Pi run checked the standalone prune preview, removal, reload, and
+  cross-scope preservation together.
+
+### What Was Inefficient
+
+- Older verification reports named planning files that later phases changed.
+  Their fingerprints had to be refreshed together at close.
+- A successful private-repository credential challenge could not be exercised
+  without an accessible private GitHub or GitLab repository. Its UAT status
+  remains `testing` and the operator deferred it explicitly.
+- The active worktree's operator-owned `.planning/config.json` formatting drift
+  prevented its chained `npm run check`; a clean checkout with copied
+  dependencies was needed to measure the committed tree.
+
+### Patterns Established
+
+- Keep dependency provenance in the install record and user intent in the
+  desired-state config. Reload can retain and repair dependencies without
+  inventing user declarations.
+- Check marketplace permission before a new foreign dependency is installed;
+  an already-installed dependency remains available.
+- Record UAT exceptions through the audit acknowledgment writer and preserve
+  the artifact's own verdict.
+
+### Key Lessons
+
+1. Verify the final committed tree when local operator files affect the gate.
+2. Distinguish an untested live path from a failed requirement or phase check.
+3. Update historical decisions when later phases supersede their behavior.
+
+### Cost Observations
+
+- Model mix and session count were not measured.
+- The 12 phases ran from 2026-09-14 through 2026-09-24; 55 plans completed.
 
 ## Milestone: test-backlog -- Test Backlog
 
@@ -822,6 +876,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.18 | 6 | Characterize-then-change phasing; predicate collapse behind an inverted drift gate ("no twin survives"); milestone extended mid-flight rather than opening a successor |
 | workflows-detection | 1 | Unsupported declaration as opaque presence; shared strict/loose collector; exact no-materialization boundary |
 | v1.19 | 10 | One mirrored owner test per production module, coverage measured in isolation; land-the-control-first sequencing; plants over green runs as the standard of proof |
+| v1.20 | 12 | Dependency provenance in records, upstream parity research, and a final clean-tree gate |
 
 ### Cumulative Quality
 
@@ -835,6 +890,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.18 | 3386 + 18 int | COMPAT-01 no-expansion gate (closed sets, glyph roster, record key set, schema union, network clause) in one test; whole-tree predicate drift gate covering four spellings |
 | workflows-detection | 3649 + 21 int assertions | Fixed unsupported convention, reason parity, rollback/retry, and exact resource/discovery boundaries |
 | v1.19 | 5144 + 31 int | 204/204 mirrored pairs at zero correspondence violations; per-pair direct coverage measured in isolation; gate scripts finally wired into `npm run check`; green on two Node majors |
+| v1.20 | 7760 + 63 int | Full `npm run check` green in a clean checkout; 100% aggregate production coverage; one deferred live credential UAT subcase |
 
 ### Top Lessons (Verified Across Milestones)
 

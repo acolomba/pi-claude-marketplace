@@ -516,6 +516,69 @@ test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate n
   });
 });
 
+test("accepts a path marketplace with an allowed dependency marketplace", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "allowed-marketplace");
+    const manifestDirectory = path.join(marketplaceRoot, ".claude-plugin");
+    await mkdir(manifestDirectory, { recursive: true });
+    await writeFile(
+      path.join(manifestDirectory, "marketplace.json"),
+      JSON.stringify({
+        name: "allowed-marketplace",
+        plugins: [],
+        allowCrossMarketplaceDependenciesOn: ["tools"],
+      }),
+    );
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps, state } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● allowed-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
+      "allowed-marketplace",
+    ]);
+    assert.deepStrictEqual(state.cloneCalls, []);
+  });
+});
+
+test("rejects a path marketplace with a scalar dependency allowlist", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "invalid-allowlist");
+    const manifestDirectory = path.join(marketplaceRoot, ".claude-plugin");
+    await mkdir(manifestDirectory, { recursive: true });
+    await writeFile(
+      path.join(manifestDirectory, "marketplace.json"),
+      JSON.stringify({
+        name: "invalid-allowlist",
+        plugins: [],
+        allowCrossMarketplaceDependenciesOn: "tools",
+      }),
+    );
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps, state } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          `⊘ ${marketplaceRoot} [project] (failed) {invalid manifest}`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+    assert.deepStrictEqual(state.cloneCalls, []);
+  });
+});
+
 test("MA-9 / ATTR-07: invalid manifest after clone renders (failed) {invalid manifest}; cleanupStaging still runs", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
@@ -624,7 +687,7 @@ test("classifies an invalid manifest through a staging-cleanup leak and preserve
       state.cloneCalls[0]?.dir === undefined ? "" : path.basename(state.cloneCalls[0].dir),
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -709,7 +772,7 @@ for (const source of [
         resolveRefCalls: [],
       });
       assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {},
       });
     });
@@ -826,7 +889,7 @@ test("normalizes a non-Error config-write throw after a path mutation", async (t
       resolveRefCalls: [],
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -980,7 +1043,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     assert.deepStrictEqual(
       { ...persisted, marketplaces: { "valid-marketplace": stableRecord } },
       {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {
           "valid-marketplace": {
             name: "valid-marketplace",
@@ -1176,7 +1239,7 @@ test("does not invalidate when source validation fails before commit", async () 
 
     assert.deepStrictEqual(recorder.calls, []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.deepStrictEqual(await loadConfig(locations.configJsonPath), {
@@ -1810,7 +1873,7 @@ test("orchestrated mode normalizes a non-Error opaque failure without mutation",
       resolveRefCalls: [],
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -1869,7 +1932,7 @@ test("normalizes a structurally classified exotic throw in orchestrated mode", a
       resolveRefCalls: [],
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -1936,7 +1999,7 @@ test("cleans the final clone when state-record construction fails after rename",
       false,
     );
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });

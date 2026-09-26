@@ -135,27 +135,27 @@ ______________________________________________________________________
 
 The table below holds ONE row per member of the 19-member `PLUGIN_STATUSES` tuple. Two members that render the same glyph get two rows and the Icon column repeats the character: `(installed)`, `(updated)`, `(reinstalled)`, `(upgradable)`, `(partially-upgradable)` and `(will install)` / `(will enable)` all render `●`, and each keeps its own row, because the token is what the reader looks up and the glyph alone does not identify it.
 
-| Token                    | Icon | Where it appears                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `(installed)`            | ●    | Plugin row -- `list` (steady-state inventory), install, import cascade, reinstall (rare), update (rare). On the list surface the same token is the steady-state inventory row; it does not trigger the reload-hint per SNM-15 / G-21-01, while the install/cascade transition does.                                                                                                                                                                                                                                                         |
-| `(partially-installed)`  | ◉    | Plugin row -- list / info inventory surfaces AND the install / update / enable success cascades for a recorded-installed plugin that currently re-resolves `partially-available` (FSTAT-02 / D-66-03). DERIVED, never persisted. Carries the dropped-component kinds in the brace; the success rows also thread `dependencies`, so the soft-dep markers can follow the kinds in the same brace.                                                                                                                                             |
-| `(updated)`              | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `(reinstalled)`          | ●    | Plugin row -- reinstall cascade.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `(uninstalled)`          | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `(available)`            | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11). It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, answered from the marketplace entry in the cached manifest and never from the plugin's own `plugin.json`, which this path declines to fetch (OUT-02 / OUT-05).                                                                                                                                                             |
-| `(remote)`               | ◌    | Plugin row -- list / info / install-completion surfaces for a not-installed git-source plugin whose clone/mirror is not yet materialized locally (RSTA-01 / D-80-03). No scope bracket (SNM-11), and no probe-derived or soft-dependency-derived reason brace -- no materialized tree exists to derive one from. It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, which needs no tree because the marketplace entry is readable from the cached manifest (OUT-05 / RSTA-01). |
-| `(partially-available)`  | ⊖    | Plugin row -- list / info surfaces AND the install-failure surface (XSURF-01) for a partially-available plugin (resolver `partially-available`: LSP / hooks / unsupported component); carries `{unsupported hooks}` / `{lsp}` / `{unsupported component}`. A normal install rejects this arm. With `--partial`, the install materializes its supported subset (USTAT-01 / D-64-01); the install-failure row carries the `--partial` hint trailer.                                                                                           |
-| `(unavailable)`          | ⊘    | Plugin row -- install / reinstall / import / list / info surfaces for a STRUCTURALLY-unavailable plugin (malformed manifest / hooks.json, unreadable source, or a broken `mcpServers` string reference -- missing file / malformed JSON / wrapper-less / out-of-root -> `{malformed mcp}`); carries the structural reasons.                                                                                                                                                                                                                 |
-| `(upgradable)`           | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `(partially-upgradable)` | ●    | Plugin row -- list inventory surface AND the manual update-decline surface (XSURF-03) for a currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it (FSTAT-04 / D-66-02). REUSES `●` rather than `◉` because the row is clean today -- only its candidate would degrade. The decline row carries the update-worded `--partial` hint trailer; the inventory row renders byte-frozen.                                                                                                                  |
-| `(failed)`               | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `(skipped)`              | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `(manual recovery)`      | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `(will install)`         | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `(will uninstall)`       | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `(will enable)`          | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable; applies on next reload.                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `(will disable)`         | ◍    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `(disabled)`             | ◍    | Plugin row -- list / info inventory surfaces, the `/claude:plugin disable` fresh-cascade row, and the install surfaces (`/claude:plugin install` and the load-time reconcile cascade) when the plugin's own `defaultEnabled: false` declaration made the install land disabled; the install surfaces carry `{installs disabled}` and the enable-hint trailer, the others render bare.                                                                                                                                                       |
+| Token                    | Icon | Where it appears                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `(installed)`            | ●    | Plugin row -- `list` (steady-state inventory), install, import cascade, reinstall (rare), update (rare). On the list surface the same token is the steady-state inventory row; it does not trigger the reload-hint per SNM-15 / G-21-01, while the install/cascade transition does.                                                                                                                                                                                                                                                                                                                                                                                |
+| `(partially-installed)`  | ◉    | Plugin row -- list / info inventory surfaces AND the install / update / enable success cascades for a recorded-installed plugin that currently re-resolves `partially-available` (FSTAT-02 / D-66-03). DERIVED, never persisted. Carries the dropped-component kinds in the brace; the success rows also thread `dependencies`, so the soft-dep markers can follow the kinds in the same brace.                                                                                                                                                                                                                                                                    |
+| `(updated)`              | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `(reinstalled)`          | ●    | Plugin row -- reinstall cascade.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `(uninstalled)`          | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows. It admits up to two tokens: the data-disposition marker `{data kept}`, stamped by `uninstall --keep-data` (DATA-01 / WR-06) on any `(uninstalled)` row; and `{dependency pruned}` (D-05-11 / PRUNE-04), stamped only on a dependency record `uninstall --prune` swept out after the named plugin, ordered before `{data kept}` when both apply (`{dependency pruned, data kept}`). A bare row means the plugin's data directory went with it and, for the named plugin's own row, that no pruning happened. `marketplace remove` has no such opt-out, so its rows are always bare. |
+| `(available)`            | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11). It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, answered from the marketplace entry in the cached manifest and never from the plugin's own `plugin.json`, which this path declines to fetch (OUT-02 / OUT-05).                                                                                                                                                                                                                                                                                    |
+| `(remote)`               | ◌    | Plugin row -- list / info / install-completion surfaces for a not-installed git-source plugin whose clone/mirror is not yet materialized locally (RSTA-01 / D-80-03). No scope bracket (SNM-11), and no probe-derived or soft-dependency-derived reason brace -- no materialized tree exists to derive one from. It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, which needs no tree because the marketplace entry is readable from the cached manifest (OUT-05 / RSTA-01).                                                                                                                        |
+| `(partially-available)`  | ⊖    | Plugin row -- list / info surfaces AND the install-failure surface (XSURF-01) for a partially-available plugin (resolver `partially-available`: LSP / hooks / unsupported component); carries `{unsupported hooks}` / `{lsp}` / `{unsupported component}`. A normal install rejects this arm. With `--partial`, the install materializes its supported subset (USTAT-01 / D-64-01); the install-failure row carries the `--partial` hint trailer.                                                                                                                                                                                                                  |
+| `(unavailable)`          | ⊘    | Plugin row -- install / reinstall / import / list / info surfaces for a STRUCTURALLY-unavailable plugin (malformed manifest / hooks.json, unreadable source, or a broken `mcpServers` string reference -- missing file / malformed JSON / wrapper-less / out-of-root -> `{malformed mcp}`); carries the structural reasons.                                                                                                                                                                                                                                                                                                                                        |
+| `(upgradable)`           | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `(partially-upgradable)` | ●    | Plugin row -- list inventory surface AND the manual update-decline surface (XSURF-03) for a currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it (FSTAT-04 / D-66-02). REUSES `●` rather than `◉` because the row is clean today -- only its candidate would degrade. The decline row carries the update-worded `--partial` hint trailer; the inventory row renders byte-frozen.                                                                                                                                                                                                                                         |
+| `(failed)`               | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `(skipped)`              | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `(manual recovery)`      | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `(will install)`         | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `(will uninstall)`       | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `(will enable)`          | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable; applies on next reload.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `(will disable)`         | ◍    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `(disabled)`             | ◍    | Plugin row -- list / info inventory surfaces, the `/claude:plugin disable` fresh-cascade row, and the install surfaces (`/claude:plugin install` and the load-time reconcile cascade) when the plugin's own `defaultEnabled: false` declaration made the install land disabled; the install surfaces carry `{installs disabled}` and the enable-hint trailer, the others render bare.                                                                                                                                                                                                                                                                              |
 
 Marketplace status tokens (drawn from the 7-member `MARKETPLACE_STATUSES` tuple; the `autoupdate enabled` / `autoupdate disabled` statuses render the marker-as-outcome forms `<autoupdate>` / `<no autoupdate>` per UXG-04 rather than parenthesised tokens):
 
@@ -810,11 +810,262 @@ The reservation is deliberate. It is what lets `/claude:plugin enable` re-take t
 
 The refusal is otherwise unexplainable from disk, because the name occupies no file. Thus the conflict line names the owner as disabled: `skill "a-foo" already owned by disabled plugin "alpha"`. An enabled owner keeps the shorter form: `skill "g-foo" already owned by plugin "gamma"`. The remedy is `/claude:plugin uninstall <owner>@<marketplace>`, which removes the record and releases the names. The row form is unchanged -- this text rides the `cause:` trailer of the `failure-runtime-with-cause` state above. Severity `error`; no reload-hint (nothing landed).
 
+### Dependency cascade -- row-per-member conventions (RESV-01 / RESV-06)
+
+A plugin that declares `dependencies` installs as a CASCADE: the requesting plugin plus every member of its dependency closure, all-or-nothing (D-03-07). The block keeps the always-marketplace-header form -- one header for the marketplace the user named, every row indented two spaces beneath it -- and adds three conventions of its own.
+
+**Subjects.** A dependency renders by its full `<plugin>@<marketplace>` key, because it may resolve from a marketplace other than the header's. The requesting plugin renders by its bare name, because the header already names its marketplace. A row therefore always states which marketplace its subject came from, without repeating the header for the common case.
+
+**Order.** Rows sort by the project's canonical name-then-scope comparator, so the requesting plugin takes its alphabetical place among the members rather than leading or trailing them. Every member of one cascade lands in the requesting plugin's own scope (D-03-05), so the scope half of the comparator never separates them and no row carries a `[scope]` bracket.
+
+**Cardinality.** The cascade emits `single`, not `plural`: the user named ONE plugin, and the members are that install's transitive consequence rather than a bulk operation. So no trailing tally line appears, and a plugin that declares nothing renders exactly as it always did.
+
+**Failure attribution.** One failing dependency fails the whole install, and the row that carries the reason is the DEPENDENCY's, never only the requesting plugin's. The requesting plugin still gets its own row, stamped `{dependency failed}`, so the command the user typed is visibly accounted for. Both rows stamp `error`, so the summary line counts two operations. No cascade row interpolates a filesystem path: every rendered value is a token-allowlisted key, a bounded rendered constraint, a recorded version, or a closed-set reason.
+
+### Dependency cascade -- success (RESV-01 / RESV-05)
+
+<!-- catalog-state: dependency-cascade-success -->
+
+```text
+● official [user]
+  ● formatter@tools v2.1.0 (installed)
+  ● helper v1.0.0 (installed)
+  ⊘ linter@tools v3.0.0 (skipped) {already installed}
+
+/reload to pick up changes
+```
+
+`helper` declares `formatter@tools` and `linter@tools`. `formatter` was materialized by this command and renders the ordinary `(installed)` row; `linter` was already present in the target scope, so RESV-05 CHECKED it against the effective constraint and left it exactly as it was -- reported as the benign `(skipped) {already installed}` and never reinstalled. That token pair is what makes "installed by this command" and "already here" readable apart. Severity `info`: the benign skip is in the idempotent closed set, so the cascade does not compute warning. The reload-hint fires on the `installed` rows.
+
+### Dependency cascade -- the already-installed dependency is disabled, and this command turns it on (EDEP-03)
+
+<!-- catalog-state: install-cascade-dependency-enabled -->
+
+```text
+● official [user]
+  ● helper v1.0.0 (installed)
+  ● linter@tools v3.0.0 (installed) {already installed, dependency enabled}
+
+/reload to pick up changes
+```
+
+`linter` was already present in the target scope but its record was DISABLED. Instead of leaving it exactly as it was, this command re-materializes it through that same record -- the same `runInstallLedger` re-enable machinery `enable`'s own cascade member row already uses (`pinVersionOverride` + `allowExistingRecord: true`) -- so its artifacts return to disk. The desired-state configuration is not touched: no config file gains a key for `linter` (D-04-02), the write reaches the state record alone, and `linter`'s `provenance` stays `"dependency"` -- only a by-name install promotes a record (A2). The row is `installed`, not `skipped`, because state changed and something was materialized; the brace carries both facts this command is responsible for, `{already installed, dependency enabled}`, on the same split the promotion row's own `{already installed, dependency promoted}` pair already sets out. Severity `info`, and the reload-hint fires because artifacts were re-materialized. A cascade failure anywhere puts `linter` back to disabled rather than deleting its record (D-03-07): the record is what still owns those artifacts.
+
+### Dependency cascade -- a path-source dependency falls back to the marketplace's current copy (TAGS-02 / D-07-03)
+
+<!-- catalog-state: dependency-cascade-fallback-current-copy -->
+
+```text
+● official [user]
+  ● formatter@tools v2.1.0 (installed) {dependency current copy}
+  ● helper v1.0.0 (installed)
+
+/reload to pick up changes
+```
+
+`formatter` is a PATH-source dependency (declared with a relative `source`, the common case for a marketplace's own plugins) whose marketplace clone carries no release tag satisfying `helper`'s declared constraint. Rather than failing the whole install the way the git-backed arm below does, the cascade installs the marketplace's CURRENT copy instead and names it on the dependency's own row with a quiet `info`-level note (D-07-03) -- a deliberate divergence from upstream, which surfaces this exact fallback as a warning. The constraint itself is left unenforced here: the load-time check is what disables `helper` later if the fallback copy turns out to be genuinely out of range. The token rides an `installed` row and never a failure row, because the install DID succeed; it never raises the row's severity on its own, and a member whose companion is unloaded still reports that genuine SEV-01 degradation on top of it.
+
+### Dependency cascade -- no release tag satisfies the constraint (RESV-03)
+
+<!-- catalog-state: dependency-no-matching-version -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {no matching version}
+    cause: Dependency "formatter@tools" has no release tag satisfying "^2.0.0".
+  ⊘ helper (failed) {dependency failed}
+```
+
+The effective constraint is valid and the tag listing was read; nothing in it falls inside the constraint. `{no matching version}` is deliberately distinct from the transport tokens below: it says the listing held nothing usable, not that it could not be read. This arm is reachable ONLY from a git-backed dependency source: TAGS-02 gives the path-source arm (the state above) a non-failure fallback instead. A git-backed source that does not follow Anthropic's `<plugin-name>--v<semver>` release-tag convention reports this, which today is the expected answer for most third-party git sources (see `docs/dependency-resolution.md`). The constraint rides the `cause:` trailer bounded by the same renderer every constraint row uses. No reload-hint -- nothing landed, and the cascade rolled back whatever it had already materialized.
+
+### Dependency cascade -- contradictory declarations (RESV-03)
+
+<!-- catalog-state: dependency-version-conflict -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {version conflict}
+    cause: Dependency "formatter@tools" has contradictory version constraints "^1.0.0 ^2.0.0" (inputs 1 and 2 do not overlap).
+  ⊘ helper (failed) {dependency failed}
+```
+
+Two plugins in one graph declared version sets for `formatter` that do not overlap, so the intersection is empty and no version can satisfy both. The cause names the JOINED DECLARED ranges rather than a combined one, because an intersection that failed produced no combined range to report. The parenthesised detail is the evaluator's own measurement (which inputs, by position), never a declaration's prose.
+
+### Dependency cascade -- an installed copy the constraint rejects (RESV-05)
+
+<!-- catalog-state: dependency-installed-version-conflict -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}
+    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy "^2.0.0".
+  ⊘ helper (failed) {dependency failed}
+```
+
+The SAME `version conflict` token as the row above, over a different subject: the copy already on disk. The pair `{already installed, version conflict}` and the recorded version on the row are what separate the two, which is why the cascade mints one token rather than two -- the fact is identical and only the subject moves. RESV-05 is a check, never a touch: nothing reinstalls, re-pins or re-declares the existing copy, and no tag is queried for one.
+
+### Dependency cascade -- constraints too complex to combine (RESV-03)
+
+<!-- catalog-state: dependency-constraint-too-complex -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {constraint too complex}
+    cause: Dependency "formatter@tools" declares version constraints too complex to combine (total input 5400 characters exceeds the 4096 character cap).
+  ⊘ helper (failed) {dependency failed}
+```
+
+The declarations pass one of the two combination size caps (4096 declared characters, 1024 alternative ranges). The input is well formed -- it is the COMBINATION that is refused -- so the truthful token is this one and not `{invalid version constraint}`. The cost is measured BEFORE the work, so a very large input fails fast rather than running for a long time. The cause carries which cap tripped and by how much.
+
+### Dependency cascade -- an unreadable version range (RESV-03)
+
+<!-- catalog-state: dependency-invalid-version-constraint -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {invalid version constraint}
+    cause: Dependency "formatter@tools" declares an unparseable version constraint "nope" (input 1 of 1 is not a valid version range).
+  ⊘ helper (failed) {dependency failed}
+```
+
+A declared constraint is not a range the evaluator can read. Distinct from the inherited `{unparseable}`, whose subject is a whole document: here exactly one field of one declaration is at fault, and the row says so. The rendered range is bounded by the shared constraint renderer, so a very long declaration cannot flood the block.
+
+### Dependency cascade -- the tag listing could not be read (RESV-03)
+
+<!-- catalog-state: dependency-tag-listing-failed -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {authentication required}
+    cause: Dependency "formatter@tools" could not be checked against "^2.0.0" (authentication required).
+  ⊘ helper (failed) {dependency failed}
+```
+
+The constraint was never evaluated, because listing the source's tags failed. The probe's classification is ALREADY a member of the inherited vocabulary, so the row carries `{authentication required}` -- or `{network unreachable}` on the other arm -- and the cascade mints nothing. Truthful attribution: a 401/403 is an auth failure and must not read as unreachable, exactly as on the marketplace-clone surface. An unclassifiable transport failure falls back to `{unreadable}`.
+
+### Dependency cascade -- the dependency's marketplace is not added (RESV-02 / D-03-08)
+
+<!-- catalog-state: dependency-marketplace-not-added -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {dependency marketplace not added}
+    cause: Dependency "formatter@tools" requires marketplace "tools", which is not added. Run marketplace add <source> to add it.
+  ⊘ helper (failed) {dependency failed}
+```
+
+The dependency's marketplace is absent from the target scope. The cascade does not add or clone a marketplace to satisfy a declaration (D-03-08). The row names the marketplace through the dependency key, and its cause points at `marketplace add <source>`, which takes a source rather than a marketplace name. An added marketplace is available, but its presence alone does not grant permission for a new cross-marketplace dependency edge (D-11-01).
+
+`{dependency marketplace not added}` is a CONTENT reason and therefore a different token from the three structural `marketplace not added*` markers. Those three carry a standalone marketplace row as their subject and are excluded from `ContentReason` for that reason; this one rides the DEPENDENCY's row, on the `{marketplace in user scope}` precedent -- it explains why THIS dependency could not be resolved and makes no claim about a marketplace the user named.
+
+One deliberate divergence from upstream (D-03-08): upstream warns and installs the requesting plugin degraded. Under this project's all-or-nothing rollback an unknown-marketplace dependency is one more failure among the others and triggers the same whole-cascade unwind.
+
+### Dependency cascade -- root marketplace disallows the target marketplace (D-11-06)
+
+<!-- catalog-state: dependency-cross-marketplace -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {cross-marketplace}
+    cause: Dependency "formatter@tools", declared by "helper@official", is from marketplace "tools", which root marketplace "official" does not allow. Install "formatter@tools" manually first, or add "tools" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "official".
+  ⊘ helper (failed) {dependency failed}
+```
+
+The target marketplace is added, but the root marketplace has not granted permission to install a new dependency from it. The failed dependency row identifies its declarer, target marketplace, and policy root. Its cause offers both remedies: install the named dependency manually first, or edit the root marketplace's `allowCrossMarketplaceDependenciesOn` list. The requesting plugin has its own failed row. Severity is `error`; neither row requests reload because the refusal happens before materialization.
+
+### Dependency cascade -- the dependency is not in its marketplace (RESV-01)
+
+<!-- catalog-state: dependency-not-in-manifest -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {not in manifest}
+    cause: Dependency "formatter@tools" is not declared by its marketplace.
+  ⊘ helper (failed) {dependency failed}
+```
+
+The marketplace IS added and its manifest declares no entry under that name. The inherited `{not in manifest}` states exactly this, so the cascade reuses it -- the ATTR-08 split holds here as everywhere else: an absent CONTAINER is a marketplace-subject fact, an absent ENTRY in a present manifest is a plugin-row fact.
+
+### Dependency cascade -- a cycle in the graph (RESV-04)
+
+<!-- catalog-state: dependency-cycle -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {dependency cycle}
+    cause: Dependency cycle: helper@official -> formatter@tools -> linter@tools -> formatter@tools.
+  ⊘ helper (failed) {dependency failed}
+```
+
+The subject is the key the walk met a second time on its own ancestor chain, and the cause renders the whole chain in walk order with that key shown where it recurs -- a cycle is a property of the PATH, so a row alone cannot state it. A legal diamond (two siblings depending on the same third plugin) is deduped by the walk's visited memo and never reaches this row (D-03-11).
+
+### Dependency cascade -- an unusable `dependencies` declaration (RESV-01)
+
+<!-- catalog-state: dependency-unusable-declaration -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper (failed) {invalid manifest}
+    cause: Plugin "helper@official" declares an unusable dependency (dependencies.0: Invalid input).
+```
+
+One element breaking a character rule refuses the WHOLE `dependencies` array -- a constraint that disappears quietly is worse than a declaration that is refused, because the install would then pin a version nobody asked for. The subject is the plugin whose declaration is at fault, which here is the requesting plugin itself, so there is no second row to add and the summary counts one operation. The cause carries the validator's field path, never the manifest's text.
+
+### Dependency cascade -- a dependency whose own install threw (RESV-06 / D-03-07)
+
+<!-- catalog-state: dependency-install-failed -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed)
+    cause: failed to stage skill a-fmt: EACCES
+  ⊘ helper (failed) {dependency failed}
+```
+
+The dependency resolved cleanly and its own six-phase ledger then failed. There is no cascade reason to add -- the ledger's error IS the fact -- so the row carries an empty reasons array and the renderer suppresses the brace. The requesting plugin's row still says why it is there. Everything this command had already materialized is unwound; a dependency installed BEFORE the command ran is not touched (D-03-07). Re-running the same command after fixing the cause starts from the same state as the first attempt.
+
+### Dependency promoted to a direct install (D-04-07)
+
+<!-- catalog-state: dependency-promoted -->
+
+```text
+● official [user]
+  ● linter v3.0.0 (installed) {already installed, dependency promoted}
+```
+
+`linter` was recorded as another plugin's dependency, and the user then installed it by name. Nothing is materialized: the record already holds the plugin's artifacts, so the command changes exactly one thing -- the record now says the user asked for it -- and writes the plugin's key into the desired-state config, the same declaration a fresh install by name makes (D-04-02). The row is `installed` because the desired state IS reached, and its brace names both facts: `{already installed}` says the record was here before, `{dependency promoted}` says what this command did to it. Neither token alone would do. `{already installed}` on its own is the refusal row above, `(failed) {already installed}`, and a row that changed state cannot borrow a failure's bytes -- `error` means the operation was not carried out. Severity `info`; no reload-hint, because nothing on disk moved. A plugin asked for by name is enabled, so when the dependency had been disabled the same command also re-materializes it the way `enable` does: the record keeps its version and is enabled again, its declaration carries `enabled: true` exactly as an enable writes it, and the row is this same row followed by the `/reload to pick up changes` trailer, because artifacts reached disk. A plugin already recorded as a direct install is not promoted and still gets the refusal. A promotion resolves no version: `install` takes none at the command line, and the orchestrator option that pins one (`pinVersionOverride`) is refused on this arm, because `update` and `reinstall` are the verbs that act on versions. A dependency whose record is partially installed is promoted only with `--partial`, the consent every partial install needs; without the flag it gets the refusal too. On a fully-supported record `--partial` changes nothing, and `--map-model` has no bearing on a promotion in either direction.
+
 ______________________________________________________________________
 
 ## `/claude:plugin uninstall <plugin>@<marketplace>`
 
 Single-plugin command in v2 still renders the always-marketplace-header form; the marketplace appears as a bare header and the plugin row indents underneath.
+
+The command takes `[--scope user|project] [--keep-data] [--local] [--prune]`. `--keep-data` preserves the plugin's persistent data directory (DATA-01 / D-02-03); the plugin's artifacts and its installation record are removed either way. The flag adds the `data kept` reason to the row and changes nothing else -- there is no retained-data report and no retained-path trailer (D-02-01). Omitting `--keep-data` deletes that data directory with no confirmation prompt (DATA-02 / D-02-04), and the load-time reconcile that uninstalls a plugin dropped from `claude-plugins.json` takes the same deletion default, because it has no command line to carry the flag (DATA-03). `--delete-data`, `-y` and `--yes` are rejected as unknown flags before any state changes (D-02-05): there is no prompt to answer, and the default needs no second spelling. `--local` keeps its shared write-target meaning, selecting `claude-plugins.local.json` for the config write. An uninstall is refused while another installed plugin in the same scope still declares the target as a dependency (PRUNE-05 / D-05-14): nothing is removed and the row names the dependents. `--prune` also removes, after the named plugin, every dependency-installed plugin in the scope that no remaining installed plugin declares (PRUNE-01 / D-05-01): never a plugin installed by name, never one something still needs, and never anything unless the named plugin was actually removed.
 
 ### Success
 
@@ -828,6 +1079,21 @@ Single-plugin command in v2 still renders the always-marketplace-header form; th
 ```
 
 `(uninstalled)` uses the `○` glyph per the effective-state rule (plugin no longer installed, no error). Plugin status `uninstalled` triggers the reload-hint per D-16-12.
+
+The bare row above is the DELETING disposition: the plugin's persistent data directory was removed with it. That is what the `data kept` reason below distinguishes it from (WR-06) -- the destructive branch is the default, so the reversible one carries the token and the absence of a brace states the destruction.
+
+### Success with `--keep-data`
+
+<!-- catalog-state: success-keep-data -->
+
+```text
+● official [user]
+  ○ helper v1.0.0 (uninstalled) {data kept}
+
+/reload to pick up changes
+```
+
+Same row as the plain success case with the `data kept` reason added (DATA-01 / D-02-03). The artifacts and the installation record are gone exactly as above; only the data directory survives, and it survives under the same path a later install of the same plugin would use. No path trailer: the reason states the disposition, not the location (D-02-01).
 
 ### Success when the plugin declared soft-dep resources
 
@@ -927,6 +1193,296 @@ A plugin operation has failed.
 
 ● official [user]
   ⊘ helper (failed) {not installed, marketplace in project scope}
+```
+
+### Success -- removed while other plugins still declared it (LOAD-03 / D-06-06)
+
+Triggered when `uninstall <plugin>@<marketplace>` names a plugin that another installed plugin in the SAME scope still declares as a dependency. The removal PROCEEDS: this is upstream's behaviour, and it is what breaks the deadlock two plugins declaring each other would otherwise create. The row is the ordinary `uninstalled` row -- `info` severity, reload-hint, the same glyph -- carrying the `dependents unsatisfied` reason, and the 4-space-indent `cause:` trailer names every dependent as a `name@marketplace` key, sorted, on the `dependency cycle` precedent: the names ride the cause line and never the token. The keys are checked against the dependency token rule first, and if any of them fails it the line reports the count instead (`required by 2 other plugins`) -- a recorded name is bounded only by `assertSafeName`, which admits quotes, commas and bidi controls. Nothing is lost: the next load gives each dependent its own row. The severity stays `info` because the uninstall was carried out in full; the consequence for the dependents is not this row's subject and is reported at the next load, at `warning`, by the load-time dependency check, which gives each dependent its own row and the full remedy (`reconcile-dependency-unsatisfied`). A DISABLED dependent still holds the target (D-05-04): installed is installed. Only the target scope's own `state.json` is consulted (D-05-05), and every declaration is read offline from the dependent's own manifest, with its marketplace entry as the fallback (D-05-06). It is catalogued here beside the fail-closed refusal below because the two are the two outcomes of the same declarer read. Under `--prune`, a declarer the same command sweeps is not named: the declarer set and the sweep share one snapshot. The reconcile-driven uninstall does NOT carry this brace -- reporting it there would state one fact twice in a single emission, since the check already reports it better.
+
+<!-- catalog-state: success-dependents-unsatisfied -->
+
+```text
+● official [user]
+  ○ helper v1.0.0 (uninstalled) {dependents unsatisfied}
+    cause: required by deploy-kit@official
+
+/reload to pick up changes
+```
+
+### Failure -- refused, a declarer could not be read (D-05-07)
+
+Triggered when some OTHER installed record in the scope has declarations the guard cannot establish: its marketplace manifest fails to load, that manifest does not list it, its declaration parses as unusable, or its own manifest is present but cannot be read. The rule is fail-closed -- an unreadable record is never read as "declares nothing", because deleting on incomplete information is the one outcome the guard must never produce -- so the uninstall is refused rather than risked. The brace carries `unreadable` -- the "could not read on-disk state" default -- and NOT the declarer's own read-failure token: the row's subject is the plugin the user named, whose manifest is fine, and the brace states a fact about the row's subject. The `cause:` trailer names which record could not be read and why (not declared by its marketplace, an unusable declaration, the marketplace manifest's load error, or an own manifest that is present but cannot be read), never an absolute path. The first remedy is `uninstall <unreadable-plugin>@<marketplace>` on the record the cause names: the target of an uninstall is never indexed, so that command passes the guard, and the guard then passes for everything else. When the record should stay, repair its own manifest or its marketplace (`marketplace update`); when the marketplace is stale, remove it (`marketplace remove`). Severity: `error`. No reload-hint.
+
+<!-- catalog-state: refused-declarer-unreadable -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper v1.0.0 (failed) {unreadable}
+    cause: cannot read the dependencies of other@official: not declared by its marketplace
+```
+
+### Success with `--prune` (PRUNE-01..04 / D-05-01 / D-05-02 / D-05-11)
+
+Triggered when `uninstall <plugin>@<marketplace> --prune` removes the named plugin and the scope holds dependency-installed records that nothing remaining declares. The sweep is WHOLE-SCOPE and runs to a fixpoint (D-05-01 / D-05-02): after the named plugin goes, every record whose provenance is `dependency` and which no remaining installed record -- a disabled one included (PRUNE-03 / D-05-04) -- declares is removed, then the test repeats, so a dependency orphaned by removing another dependency goes too, and so does an orphan an earlier plain uninstall or a reload left behind. A plugin the user installed by name is never pruned, whatever declares it (PRUNE-02): the candidate set is filtered on the record's provenance before any declaration is read. Every removal happens inside the ONE locked state transaction that removed the named plugin, with one save. Each pruned plugin renders an ordinary `uninstalled` row under its own marketplace header carrying the `dependency pruned` reason (D-05-11): same glyph, `info` severity and reload hint as the named plugin's row, and the brace says why a plugin the user did not name went. The named plugin's block comes first with its row first; each other marketplace that lost a member gets its own block in the order the sweep reached it, and rows within a block are in removal order (dependents before their dependencies). Cardinality stays `single` -- the user named ONE plugin and the pruned rows are that uninstall's consequence -- so no tally line appears. When `--prune` was passed and nothing qualified, the report is byte-identical to the plain `success` state above (D-05-12): no second token, no marker.
+
+<!-- catalog-state: success-prune -->
+
+```text
+● official [user]
+  ○ helper v1.0.0 (uninstalled)
+  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned}
+
+● community [user]
+  ○ tooling v3.0.0 (uninstalled) {dependency pruned}
+
+/reload to pick up changes
+```
+
+### Success with `--prune --keep-data` (D-05-09)
+
+`--keep-data` is a disposition for the whole command: every plugin the command removes keeps its persistent data directory, the named plugin and each pruned member alike. The named plugin's row carries `{data kept}` exactly as in `success-keep-data`; each pruned row carries `{dependency pruned, data kept}` in that order -- why the plugin went, then what was kept. Everything else is the `success-prune` state above.
+
+<!-- catalog-state: success-prune-keep-data -->
+
+```text
+● official [user]
+  ○ helper v1.0.0 (uninstalled) {data kept}
+  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned, data kept}
+
+/reload to pick up changes
+```
+
+### Partial failure -- a pruned member could not be removed (D-05-13)
+
+Triggered when one of the records the sweep selected fails to unstage. Each removal is its own committed step: the named plugin's removal and every other member's removal STAND, nothing is rolled back, and the state is saved exactly once with the failed member's record still present (NFR-3) -- shrunk to the artifacts still on disk when the cascade dropped some before failing, or intact when foreign content refused the unstage. That member is still an installed plugin that still declares its own dependencies, so the sweep keeps every dependency only it holds; those records render no row, exactly as the guard would refuse them if named directly (PRUNE-03). The failed member renders its own `failed` row with the cascade's reason and a `cause:` trailer, at `warning` severity: the command WAS carried out and this one plugin fell short, so the block computes `warning` and the summary line reads `A plugin operation needs attention.` (host label `Warning:`). The successful rows keep their `info` severity and the reload hint still trails the report, because artifacts did leave disk. The remedy for the failed member is to retry `uninstall <member>` once the cause is cleared.
+
+<!-- catalog-state: prune-partial-failure -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ○ helper v1.0.0 (uninstalled)
+  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned}
+
+● community [user]
+  ⊘ tooling v3.0.0 (failed) {source mismatch}
+    cause: Agents unstage refused: foreign content
+
+/reload to pick up changes
+```
+
+______________________________________________________________________
+
+## `/claude:plugin prune`
+
+The standalone command sweeps orphaned dependency installs in one scope. Actual removals use `(uninstalled) {dependency pruned}` with a version and the usual `/reload` hint. `--dry-run` uses `(will uninstall) {dependency pruned}` without a version or reload hint. Both choose candidates in dependent-before-dependency order; marketplace blocks follow that order even when the same marketplace appears again later. A preview does not reserve its candidates. Concurrent changes can alter the later actual result, and a failed member remains installed while independent removals can succeed.
+
+### One orphan removed
+
+<!-- catalog-state: actual-one-orphan -->
+
+```text
+● official [user]
+  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned}
+
+/reload to pick up changes
+```
+
+### Removal committed but lock release failed
+
+The state save and removal have committed. Prune completes post-commit cleanup and reports the lock-release failure in a separate scope-wide warning. Both notifications request `/reload`.
+
+<!-- catalog-state: committed-warning -->
+
+```text
+Prune committed; finalization needs attention.
+
+Prune committed in user scope.
+  cause: lock release failed after save
+
+/reload to pick up changes
+```
+
+### The second orphan's cleanup fails
+
+The state save removed both records. Cleanup removed `a`'s data, but left `b`'s data. The warning belongs to `b`; `a` remains a clean committed removal. Retrying prune cannot select `b` because its install record is gone.
+
+<!-- catalog-state: second-member-cleanup-warning -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ○ a v1.0.0 (uninstalled) {dependency pruned}
+
+● official [user]
+  ○ b v1.0.0 (uninstalled) {dependency pruned}
+    cause: second cleanup failed
+
+/reload to pick up changes
+```
+
+### Interleaved marketplace fixpoint chain removed
+
+<!-- catalog-state: actual-interleaved-chain -->
+
+```text
+● official [user]
+  ○ helper v1.0.0 (uninstalled) {dependency pruned}
+
+● community [user]
+  ○ tooling v3.0.0 (uninstalled) {dependency pruned}
+
+● official [user]
+  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned}
+
+/reload to pick up changes
+```
+
+### One orphan previewed
+
+<!-- catalog-state: pending-one-orphan -->
+
+```text
+● official [user]
+  ○ shared-lib (will uninstall) {dependency pruned}
+```
+
+### Interleaved marketplace fixpoint chain previewed
+
+<!-- catalog-state: pending-interleaved-chain -->
+
+```text
+● official [user]
+  ○ helper (will uninstall) {dependency pruned}
+
+● community [user]
+  ○ tooling (will uninstall) {dependency pruned}
+
+● official [user]
+  ○ shared-lib (will uninstall) {dependency pruned}
+```
+
+### No orphaned dependency installs
+
+Both `prune` and `prune --dry-run` use this normal informational result when the selected scope has no orphaned dependency installs. Nothing failed or changed, so there is no reload hint.
+
+<!-- catalog-state: empty-user-scope -->
+
+```text
+Nothing to prune in user scope: no orphaned dependency installs were found.
+```
+
+### One member fails while an independent orphan is removed
+
+<!-- catalog-state: member-failure-independent-success -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ⊘ helper v1.0.0 (failed) {source mismatch}
+    cause: Agents unstage refused: foreign content
+
+● community [user]
+  ○ tooling v3.0.0 (uninstalled) {dependency pruned}
+
+/reload to pick up changes
+```
+
+The failed member stays installed. The successful removal stands, and its reload hint remains necessary.
+
+### Unreadable declarer refuses the sweep
+
+<!-- catalog-state: unreadable-declarer -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ other (failed) {unreadable}
+    cause: cannot read the dependencies of other@official: not declared by its marketplace
+```
+
+The failure names the declarer and a redacted cause. The command removes nothing and emits no reload hint.
+
+### Malformed state refuses the sweep or preview
+
+Both `prune` and `prune --dry-run` report this command-scoped failure. The state path is redacted, and there is no reload hint.
+
+<!-- catalog-state: malformed-state -->
+
+```text
+A plugin operation has failed.
+
+● (prune) [user]
+  ⊘ (prune) (failed) {unreadable}
+    cause: state.json at state.json is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2) -> Expected property name or '}' in JSON at position 1 (line 1 column 2)
+```
+
+### State lock held
+
+The command reports the lock failure and leaves the scope unchanged. The lock path is redacted, and there is no reload hint.
+
+<!-- catalog-state: lock-held -->
+
+```text
+A plugin operation has failed.
+
+● (prune) [user]
+  ⊘ (prune) (failed) {lock held}
+    cause: Another pi-claude-marketplace operation is in progress for user scope (.state-lock). Retry after it completes. -> Lock file is already being held
+```
+
+### Prune rollback needs manual recovery
+
+If rollback finds a changed path, prune keeps the current file and the original in a recovery backup. A missing directory artifact also stays absent and requires manual restoration from that backup. The backup's `manifest.json` maps each numbered entry to a permitted root and a relative target. Inspect that manifest before retrying. This also applies to shared metadata: the scope state lock does not cover independent writers of `mcp.json` or the agents index, so prune does not replace a changed whole document during rollback. A backup can require a manual merge even when the change came from prune. The command reports each restore failure with a redacted cause and gives the backup directory name. It does not suggest `/reload` because the removal did not commit.
+
+<!-- catalog-state: rollback-partial -->
+
+```text
+A plugin operation has failed.
+
+● (prune) [project]
+  ⊘ (prune) (failed) {rollback partial}
+    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed
+    [skills] (rollback failed)
+      cause: Prune rollback found an occupied artifact at mp-orphan-skill.
+```
+
+### Shared metadata changed during rollback
+
+The current `mcp.json` remains available, and the original bytes remain in the numbered recovery backup. An independent writer can edit this file between any two prune operations, including while rollback checks it.
+
+<!-- catalog-state: rollback-mcp-changed -->
+
+```text
+A plugin operation has failed.
+
+● (prune) [project]
+  ⊘ (prune) (failed) {rollback partial}
+    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed
+    [mcp] (rollback failed)
+      cause: Prune rollback found an occupied metadata path at mcp.json.
+```
+
+### Rollback and lock release both fail
+
+The rollback child remains visible when lock release adds an outer error. The cause line also reports the lock-release failure.
+
+<!-- catalog-state: rollback-partial-release-failed -->
+
+```text
+A plugin operation has failed.
+
+● (prune) [project]
+  ⊘ (prune) (failed) {rollback partial}
+    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. (lock release also failed: lock release failed) -> Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed
+    [mcp] (rollback failed)
+      cause: Prune rollback found an occupied metadata path at mcp.json.
 ```
 
 ______________________________________________________________________
@@ -1390,6 +1946,59 @@ The SAME partially-upgradable candidate skipped by a BULK `update @<marketplace>
 
 A targeted `update <plugin>@<marketplace>` against a DISABLED record that is ALREADY degraded and whose candidate re-resolves `partially-available`. `preflightUpdate` derives the candidate gate's partial argument from the record as well as the caller flag (the same record-derived stance the enable branch takes, ENBL-07 / D-69-01), so the candidate is admitted with no flag typed and the D-UPD short-circuit refreshes the record: `version`, `resolvedSource`, `resolvedSha` and the `compatibility` block are rewritten inside a state guard so a later `enable` reads the current pin. Nothing is materialized -- every `resources.*` array stays empty and the record stays disabled -- which is why the strict gate's do-not-materialize-an-unconsented-degrade rule does not apply here. WR-01: a disabled record that is still CLEAN is NOT admitted this way; it renders the `(partially-upgradable)` decline row instead, because flipping a clean record to degraded is a consent the user has not given. WR-02: the row does NOT claim `up-to-date`. This arm is reachable only when the version MOVED (an equal version short-circuits to the `unchanged` row before the disabled branch), so the reason names why nothing was materialized instead of denying the re-pin. The version slot is empty for the same reason: the record no longer holds the pre-update version. `--partial` stays admissible and reaches the same short-circuit. Severity `info` -- `already disabled` is in the benign closed set, so no summary line. Single cardinality, so no trailing tally. No reload-hint (no Pi-visible resource changed).
 
+### Held by a dependent's declared range (UPDT-02 / D-10-09 / D-10-11)
+
+<!-- catalog-state: update-held-by-dependents -->
+
+```text
+A plugin operation needs attention.
+
+● mp [user]
+  ⊘ shared-lib v1.0.0 (skipped) {dependents constrain}
+    cause: the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp" (currently disabled)
+```
+
+The constraint gate `preparePluginUpdate` now composes (D-10-02/D-10-03) inverts every OTHER installed record's declarations against the target's key (D-10-04) and intersects the ranges it finds through `intersectDependencyRanges` (D-03-02.1). Here two declarers -- `alpha@mp` and a currently-disabled `beta@mp` -- declare disjoint ranges for `shared-lib`, so no version satisfies both and the update is skipped rather than moved out of range. The 62-member closed set gains exactly one token for this: `{dependents constrain}` names the CONDITION, and the cause line names the holders in `localeCompare` key order, marking the disabled one (D-10-11) -- the same split `dependency cycle` and `dependents unsatisfied` established, because the token is a one-to-three-word literal that cannot interpolate an identifier. Every installed record constrains, enabled or disabled (D-10-06); provenance never changes the verdict (D-10-08). Severity is `warning` on every surface, including the autoupdate cascade -- a deliberate departure from the absent-companion `info` split, because a constraint hold persists across every future run until the user changes a declaration (D-10-12). `cause?: Error` is new on `PluginSkippedMessage`, the first `skipped` variant to interpolate; every other `skipped` producer omits it and stays byte-frozen. Single cardinality, so no trailing tally. No reload-hint (nothing changed on disk).
+
+### Held by the post-fetch guard (UPDT-01 / UPDT-02 / D-10-01 stage two)
+
+<!-- catalog-state: update-held-out-of-range -->
+
+```text
+A plugin operation needs attention.
+
+● mp [user]
+  ⊘ shared-lib v1.0.0 (skipped) {dependents constrain}
+    cause: version 2.0.0 falls outside what the combined range admits (<=1.5.0) -- required by "alpha@mp"
+```
+
+Stage one's tag probe found no satisfying tag, so the candidate resolves exactly as it does today and `preparePluginUpdate` re-checks the derived version against the SAME intersected range `admitResolvedVersion` (`update-constraint-gate.ts`) already computed. Here the fetched `2.0.0` falls outside `<=1.5.0`, so the update is held -- naming ONLY `alpha@mp`, the holder whose OWN declared range rejects `2.0.0`; a second, satisfied holder is absent from the line, which is the whole point of the state (naming a holder the fetched version DOES satisfy would send the user to the wrong plugin). The same `{dependents constrain}` token carries this arm too (D-10-10: one token, four arms now, distinguished on the cause line). A verdict carrying a `pin` never reaches this check -- the tag was already selected FROM the range. Single cardinality, so no trailing tally. No reload-hint (nothing changed on disk).
+
+### A path-source update falls back to the marketplace's current copy (D-10-14 / D-10-15)
+
+<!-- catalog-state: update-current-copy -->
+
+```text
+● mp [user]
+  ● formatter v1.0.0 → v1.5.0 (updated) {dependency current copy}
+
+/reload to pick up changes
+```
+
+`formatter` is a constrained PATH-source dependency whose marketplace clone carries no release tag satisfying its dependents' combined range (UPDT-01). Rather than holding the update, `preparePluginUpdate` falls back to the marketplace's CURRENT copy and lets stage two decide (D-10-14) -- the arm that makes stage two earn its place: the install-side arm that always accepts is deliberately NOT ported here, because knowingly moving an in-range plugin to an out-of-range version is exactly what UPDT-01 forbids. Here the fallback landed IN range, so the update proceeds and the success row reuses the existing `{dependency current copy}` token (D-10-15) -- no catalog amendment, same fact, same phrase. The token is FIRST in the brace, ahead of orphan-rewake and malformed-kind tokens, and it moves no severity channel: the update was carried out in full. Single cardinality, so no trailing tally. Reload-hint fires because a resource transition landed.
+
+### The ceiling version, still constrained (D-10-13)
+
+<!-- catalog-state: update-up-to-date-constrained -->
+
+```text
+● mp [user]
+  ⊘ shared-lib (skipped) {up-to-date}
+    cause: already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"
+```
+
+`shared-lib` is already at the highest version its installed dependents jointly admit. The row keeps its existing `{up-to-date}` brace unchanged -- no second reason token and no catalog churn -- and discloses the effective range and its holders on the cause line, composed by the SAME `describeConstraint` composer stage two's held arm uses. The `already-resolved` clause shown here is earned by a pin: the tag search ran and selected the highest satisfying release. An admitting arm that established no ceiling -- no tag matched, the listing could not be read, or the entry source has no tag listing either probe reads -- discloses the range alone instead (`constrained to the combined range (<=1.5.0) -- required by "alpha@mp"`), because claiming a ceiling no search found would be untrue. This is what lets the user tell "nothing newer exists" from "nothing newer is allowed": an unconstrained up-to-date plugin renders the brace-less bytes above with no cause line, byte-identical to before. Severity stays `info` -- an up-to-date result is benign whether or not something constrains it. No reload-hint (nothing changed on disk).
+
 ### Failure -- marketplace not added, explicit scope (ATTR-02 / SCOPE-01)
 
 Triggered when `update @<marketplace>` names a marketplace that is NOT added in the requested `--scope`, or when `update <plugin>@<marketplace>` names one absent from BOTH scopes. SCOPE-01: the PLUGIN form with the marketplace present only in the OTHER scope renders the `update-not-installed-cross-scope` row instead -- nothing is installed at the requested scope, so the plugin is the subject. ATTR-02 makes the attribution form-INDEPENDENT: BOTH the `<plugin>@<mp>` and `@<mp>` forms flow through `enumerateMarketplaceTarget` and emit the standalone `MarketplaceNotAddedMessage` variant (`{marketplace not added}` on the marketplace subject) BEFORE any cascade row exists -- replacing the former raw `Error` (M10) / `MarketplaceNotFoundError` (M11) that escaped to a synthetic `(failed) {not found}` row. No raw throw escapes the orchestrator for the marketplace-existence case. The `[scope]` bracket carries the REQUESTED scope: the operator infers the other scope (SCOPE-01; resolved Open Question #1 -- the requested-scope bracket, no other-scope phrase). The cascade path (`updateSinglePlugin` / `preflightUpdate`) keeps its non-throwing concurrent-removal outcome and is unaffected (Pitfall 3 / A3). Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.
@@ -1488,6 +2097,8 @@ ______________________________________________________________________
 
 Multi-marketplace + multi-plugin cascade. Each marketplace header carries its own state-change status (`added` / `skipped` is not a marketplace status in v2 -- use `updated` for "already added" or omit the marketplace from the payload; `failed` for an unreachable source). Plugin rows indent two spaces underneath.
 
+A plugin the imported settings name that is already recorded as another plugin's dependency is promoted rather than skipped (D-04-07), and its row is the standalone promotion row without the version slot: `● dep (installed) {already installed, dependency promoted}`. The brace is the same on both surfaces, so a promotion reads as one thing whichever command performed it. The row raises the reload-hint trailer only when the promotion re-materialized a disabled record, as the standalone row does; a record whose artifacts were already on disk contributes no trailer.
+
 ### Fresh import (mixed outcomes across both scopes)
 
 <!-- catalog-state: fresh-mixed-both-scopes -->
@@ -1575,6 +2186,25 @@ Import: 4 successes
 ```
 
 Per-scope marketplace blocks. OUT-03/D-04: two `added` marketplace rows plus two `installed` plugin rows yield `4 successes`. Reload-hint fires. Severity: info.
+
+### A dependency cascade fails during import (RESV-06)
+
+<!-- catalog-state: dependency-cascade-failed -->
+
+```text
+A plugin operation has failed.
+
+● mp [user] (added)
+  ● before (installed)
+  ⊘ hello (failed) {dependency failed}
+    cause: Dependency "missing@mp" is not declared by its marketplace.
+
+Import: 1 failure, 2 successes
+
+/reload to pick up changes
+```
+
+`hello@mp` declares a dependency the marketplace does not declare, so its install cascade fails before `hello`'s own ledger runs. `installOnePlannedPlugin` drives exactly one orchestrated outcome per planned plugin (it does not install the dependency separately), so the two-row standalone cascade form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row import can render: `hello`'s own row carries `{dependency failed}` and the failing dependency's cause line, exactly as the "Load-time install failed by a dependency" state under [`## reconcile-applied-cascade`](#reconcile-applied-cascade) renders it. `dispatchFailedOutcome` narrows on `instanceof DependencyCascadeError` before its generic fallthrough, so a cascade failure never renders the unrelated `{not in manifest}` token the fallthrough carries for every other unclassified throw. Every other plugin in the batch is unaffected and keeps installing (D-115-08 continuation); the trailing tally counts the marketplace add and `before`'s install as successes and `hello`'s row as the one failure. Severity: `error`; reload-hint fires (`before` materialized).
 
 ______________________________________________________________________
 
@@ -1768,7 +2398,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin marketplace info <name>`
 
-Read-only detail surface. Renders the marketplace header at column 0 carrying the `<autoupdate>` or `<no autoupdate>` marker, followed by per-attribute lines (`github:`, `url:`, or `path:`; optional `last_updated:` for git-backed sources github + url per D-76-10; optional `description:` when `marketplace.json` carries one). INFO-01 + INFO-03 + INFO-04 + INFO-07 + MURL-05 lock the full state set below.
+Read-only detail surface. Renders the marketplace header at column 0 carrying the `<autoupdate>` or `<no autoupdate>` marker, followed by per-attribute lines (`github:`, `url:`, or `path:`; optional `last_updated:` for git-backed sources github + url per D-76-10; optional `description:` when `marketplace.json` carries one; `allowed_marketplaces:` for a nonempty parsed allowlist). INFO-01 + INFO-03 + INFO-04 + INFO-07 + MURL-05 lock the full state set below.
 
 Severity routing: every success state is `info` (no second arg to `ctx.ui.notify`); the two `{marketplace not added}` failure states and the `{invalid manifest}` manifest-failure state route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
@@ -1783,6 +2413,19 @@ Triggered by `marketplace info <name> [--scope ...]` against a github-sourced ma
 github: anthropics/claude-plugins-official#main
 last_updated: 2026-06-03T00:00:00Z
 description: Official Claude plugin marketplace.
+```
+
+### Success -- nonempty allowed marketplaces
+
+Triggered when the parsed `allowCrossMarketplaceDependenciesOn` array is nonempty. The `allowed_marketplaces:` line follows `description:` when present, retains source order, and uses compact JSON array notation. A present empty array and an absent field both omit the line; duplicate and empty-string entries in a nonempty array remain visible. Control and bidirectional characters in entries are escaped for display only. Severity `info`.
+
+<!-- catalog-state: marketplace-info-allowed-marketplaces -->
+
+```text
+● policy-mp [user] <no autoupdate>
+path: /home/user/marketplaces/policy-mp
+description: Policy marketplace.
+allowed_marketplaces: ["tools","team"]
 ```
 
 ### Success -- github source, minimal (no ref, no lastUpdatedAt, no description)
@@ -1899,7 +2542,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin info <plugin>@<marketplace>`
 
-Read-only detail surface (Phase 44). Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`, `workflows`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05). Phase 44 / INFO-02 + INFO-05 + INFO-07 lock the full state set below.
+Read-only detail surface. Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`, `workflows`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05), itself followed by the same optional `dependencies:` line on the cold git-source row (D-01-32). INFO-02 + INFO-05 + INFO-07 lock the full state set below.
 
 Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed / state-only-disabled-with-components) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{marketplace not added}` missing-marketplace, `{marketplace not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
@@ -1978,6 +2621,22 @@ The plugin ships a workflow script that the command installs and that the host w
     skills: commit-summary
     workflows: commit-commands:changelog, commit-commands:greet
     note: workflow script "greet.js" in "workflows" would be installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared
+```
+
+### Success -- installed single scope with dependency constraints
+
+Same as above, but each dependency carries the constraint its manifest declared, in one parenthetical after the address (D-01-30). A version range renders bare, because a range is self-evidently a version. A sha renders labelled and short-formed to seven characters, because a 40-hex string is not. When an element declares both, the version comes first and a comma separates them inside the one parenthetical. An element that declares neither renders the bare address, as the state above shows. The line is ordered by dependency name, not by the rendered string (D-01-04). Severity `info`.
+
+<!-- catalog-state: installed-single-scope-with-dependency-constraints -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    agents: review-bot
+    commands: c1, c2
+    skills: commit-summary
+    dependencies: both@utils-mp (^2.0.0, sha def5678), helper@utils-mp (^1.0.0), pinned@utils-mp (sha abc1234)
 ```
 
 ### Success -- installed from the installation record (INFO-09)
@@ -2129,6 +2788,20 @@ Triggered by `plugin info <plugin>@<marketplace>` against a not-installed git-so
   ◌ git-helper v0.5.0 (remote)
     Git-source helper plugin; not yet fetched.
     components: not resolved
+```
+
+### Success -- remote single scope with dependencies (D-01-32)
+
+The same not-installed git-source plugin as the state above, whose marketplace ENTRY declares `dependencies`. The clone is cold, so the plugin's own `plugin.json` cannot be read without a fetch, and NFR-5 forbids the fetch; the entry's list is therefore the source (D-01-32). The `dependencies:` line renders LAST, after the `components: not resolved` marker, so its position matches the resolved arm. Only this cold-clone row carries the line: a `(remote)` row that reports a fetch or read failure, and every `(unavailable)` / `(partially-available)` row, renders no dependency line. Severity `info`.
+
+<!-- catalog-state: remote-single-scope-with-dependencies -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ◌ git-helper v0.5.0 (remote)
+    Git-source helper plugin; not yet fetched.
+    components: not resolved
+    dependencies: helper@community-mp
 ```
 
 ### Disabled inventory row (D-54-01 / ENBL-04 / ENBL-17)
@@ -2564,6 +3237,122 @@ The load-time counterpart of the standalone install-disabled row: the user hand-
 Reconcile: 1 success
 ```
 
+### Load-time disable, declared dependency unsatisfied (LOAD-01)
+
+The load-time dependency check disabled a plugin whose declared dependency has no record in the scope. The row reuses the realized `(disabled)` transition token -- the disable DID happen -- and carries `{dependency unsatisfied}`, the closed-set marker mirroring upstream's `dependency-unsatisfied` error code. The remedy names both parties and therefore cannot ride the token (a reason is 1-3 lowercase words, and the set is a literal tuple), so it rides the `cause:` trailer, the one channel in this grammar that interpolates an identifier. Each party is checked against the dependency token rule before it is quoted. A plugin or marketplace name its own marketplace chose reaches the state record with nothing but `assertSafeName` behind it, which admits quotes, commas and bidi controls, so a key that fails the rule is dropped and the sentence says `the declared dependency` or `this plugin` in its place. The row's own subject still names the held-down plugin, so the remedy stays actionable. This is the only `(disabled)` row that carries a cause line; the toggle disable and the `{installs disabled}` row above both omit it and stay byte-frozen. Severity is `warning`, not `info`: the disable was carried out in full, but the desired state -- the plugin loading -- was not reached. The disable is a CONSEQUENCE the config does not express, so it is never written back to `claude-plugins.json`; the record carries a `dependencyDisabled` marker instead, re-derived on every pass. A later pass that finds the dependency installed and enabled lifts the disable and the plugin returns to an ordinary `(installed)` row. The trailing tally counts the row as one warning; no reload-hint.
+
+<!-- catalog-state: reconcile-dependency-unsatisfied -->
+
+```text
+A plugin operation needs attention.
+
+● mp [project]
+  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}
+    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"
+
+Reconcile: 1 warning
+```
+
+### Load-time disable, declared dependency recorded but disabled (LOAD-01)
+
+The second of the three shapes the load-time check reports. The dependency IS recorded in the scope, but its own record is disabled, so it materialized nothing for the dependent to load against. The token is the same `{dependency unsatisfied}` the missing-dependency row carries -- the dependency is not usable at all in both cases -- and only the remedy differs: it says enable rather than install, because an install remedy for a plugin that is already recorded would be false. Everything else about the row matches the state above: the realized `(disabled)` token, the `cause:` trailer as the only channel that may name both parties, `warning` severity, no write-back to `claude-plugins.json`, and a lift on the first pass that finds the dependency enabled again. The trailing tally counts the row as one warning.
+
+<!-- catalog-state: reconcile-dependency-disabled -->
+
+```text
+A plugin operation needs attention.
+
+● mp [project]
+  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}
+    cause: Enable "secrets-vault@mp" or uninstall "deploy-kit@mp"
+
+Reconcile: 1 warning
+```
+
+### Load-time disable, declared dependency version unsatisfied (LOAD-01)
+
+The third shape. The dependency is recorded AND enabled, and its recorded version falls outside the range the dependent declared. This row carries the second closed-set token, `{dependency version unsatisfied}`, mirroring upstream's second error code `dependency-version-unsatisfied`. The split is deliberate: the two remedies differ in kind -- one says install or enable a thing that is not usable, the other says move an existing thing's version -- so one token for both would make a grep for either fact return the other. The range on the cause line is the CANONICAL fold of every constraint the dependent declared for that dependency, not the declared text: a `^2.0.0` renders as `>=2.0.0 <3.0.0-0`, and several declarations of one dependency render as the single range they intersect to. The range is bounded by the project renderer, so a pathological declared range ends with its `... (+N chars)` overflow marker instead of flooding the row. Severity, tally, write-back and lift behave exactly as on the two rows above.
+
+<!-- catalog-state: reconcile-dependency-version-unsatisfied -->
+
+```text
+A plugin operation needs attention.
+
+● mp [project]
+  ◍ deploy-kit v1.0.0 (disabled) {dependency version unsatisfied}
+    cause: Update "secrets-vault@mp" to satisfy >=2.0.0 <3.0.0-0, or uninstall "deploy-kit@mp"
+
+Reconcile: 1 warning
+```
+
+### Load-time install failed by a dependency (RESV-06)
+
+The load-time counterpart of the standalone dependency-cascade `{dependency failed}` row. The user declared `hello@mp` in `claude-plugins.json` and reloaded; `hello` declares a dependency the marketplace does not declare, so the cascade fails before `hello`'s own ledger runs. Reconcile drives exactly one orchestrated outcome for `hello@mp` (it does not install the dependency separately), so the two-row standalone form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row reconcile can render: the requesting plugin's own row carries `{dependency failed}` and the failing dependency's own cause line, sourced from the SAME `DependencyCascadeError` the standalone cascade's dependency row carries (`orchestrators/plugin/install-cascade.messaging.ts::cascadeFailureCause`). Every reason the closed-set dependency-cascade vocabulary can classify a cascade failure with (`{dependency cycle}`, `{dependency marketplace not added}`, `{no matching version}`, `{version conflict}`, ...) reaches this surface the same way; only `{dependency failed}` is shown here. A plugin's own (non-dependency) failure is unaffected and keeps its ordinary reason (e.g. `{not in manifest}`, `{source missing}`) with no cause line. The trailing tally counts the row as one failure. Severity: `error`; no reload-hint.
+
+<!-- catalog-state: reconcile-install-dependency-failed -->
+
+```text
+A plugin operation has failed.
+
+● mp [project]
+  ⊘ hello (failed) {dependency failed}
+    cause: Dependency "missing@mp" is not declared by its marketplace.
+
+Reconcile: 1 failure
+```
+
+### Reload installed a missing declared dependency (MISS-01)
+
+An explicit `/reload` (never session start, D-09-13) installs a declared dependency the scope lacks through the install cascade, with provenance `dependency`. One `(installed) {dependency installed}` row renders per materialized member, under the member's own marketplace block, with its bare name -- the block header carries the marketplace half of the key, so a cross-marketplace member files under its own marketplace (D-09-09). No cause line rides the row, and `info` answers who declares it: the reload, on the dependent's behalf. The root member's row also carries the ledger's `{orphan rewake}` signal (still `info`) and its `{malformed skill}` / `{malformed command}` signals (raising it to `warning`), and any member that fell back to its current copy carries `{dependency current copy}` after `{dependency installed}`. The dependent the install satisfied comes back up in the same reload as an ordinary `(installed)` row (D-09-07). Nothing is written to `claude-plugins.json` (D-04-02). A member the cascade found already installed renders no row (D-09-11).
+
+<!-- catalog-state: reconcile-dependency-installed -->
+
+```text
+● mp [project]
+  ● secrets-vault v1.0.0 (installed) {dependency installed}
+  ● deploy-kit v1.0.0 (installed)
+
+Reconcile: 2 successes
+```
+
+### Reload could not install a missing declared dependency (MISS-02)
+
+The install cascade for a missing declared dependency fails, so the failing dependency reports on its OWN row through the same `plugin-install-failed` outcome and `classifyOrchestratorThrow` path the config-install row uses (D-09-10): a closure or constraint failure the cascade wraps as `DependencyCascadeError` renders `{dependency failed}` with the redacted specific reason on the cause line (`is not declared by its marketplace`, `requires marketplace "mp", which is not added`, `has no release tag satisfying`, ...), and only a failure of the dependency's own ledger keeps its specific token (`{not in manifest}`, `{network unreachable}`, ...). No marketplace is added or cloned to satisfy a declaration (D-03-08). The dependent gets the LOAD-01 `(disabled) {dependency unsatisfied}` row with the install remedy from the re-derived check, or no row at all when it was already down. Nothing is half-materialized (D-03-07, NFR-3); the reload completes; and the install is retried on the next `/reload` while the declaration stays unsatisfied, each attempt reporting the failure row alone once the dependent is down (D-09-14). Severity: `error`; the trailing tally counts one failure and one warning; no reload-hint.
+
+<!-- catalog-state: reconcile-dependency-install-failed -->
+
+```text
+A plugin operation has failed.
+
+● mp [project]
+  ⊘ secrets-vault (failed) {dependency failed}
+    cause: Dependency "crypto-core@mp" is not declared by its marketplace.
+  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}
+    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"
+
+Reconcile: 1 failure, 1 warning
+```
+
+### Reload refused a foreign missing dependency
+
+The original declaration from `a@alpha` needs `b@beta`. The `alpha` marketplace does not list `beta` in `allowCrossMarketplaceDependenciesOn`, so the dependency install fails before B's cascade starts. The failed row names the first eligible original declarer and the policy root. The dependent keeps its existing `{dependency unsatisfied}` disable row. Install B by name or change the list in `alpha`'s `marketplace.json`, then run `/reload` again. No marketplace is added and no dependency is partly installed. Severity: `error`; no reload hint.
+
+<!-- catalog-state: reconcile-dependency-cross-marketplace -->
+
+```text
+A plugin operation has failed.
+
+● alpha [project]
+  ◍ a v1.0.0 (disabled) {dependency unsatisfied}
+    cause: Install "b@beta" or uninstall "a@alpha"
+
+● beta [project]
+  ⊘ b (failed) {cross-marketplace}
+    cause: Dependency "b@beta", declared by "a@alpha", is from marketplace "beta", which root marketplace "alpha" does not allow. Install "b@beta" manually first, or add "beta" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".
+
+Reconcile: 1 failure, 1 warning
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace remove <name>`
@@ -2720,6 +3509,20 @@ A plugin operation needs attention.
 
 LIFE-06 / D-98-13: the refreshed `marketplace.json` no longer lists an installed record's entry, so the shared update preflight stamps `partition: "skipped"` with `reasons: ["not in manifest"]` and `cascadeAutoupdates` passes that outcome through untouched (only a THROW is caught and converted). The cascade row carries NO version token, and the omission is deliberate: `outcomeToCascadePluginMessage`'s `skipped` arm forwards name, scope and reasons only, while the single-plugin `update` surface renders the SAME skip as `⊘ hello v1.0.0 (skipped) {not in manifest}`. Both forms are byte-pinned -- the cascade one in `tests/orchestrators/marketplace/update.test.ts`, the version-carrying one in `tests/orchestrators/plugin/update-flow.test.ts` -- so adding a version here would move a locked contract rather than correct a rendering bug. `not in manifest` is failure-class and not idempotent, so `skipSeverity` stamps the row `warning` and the cascade prepends the `A plugin operation needs attention.` summary line. The marketplace header keeps `(updated)`: a `skipped` outcome is not `unchanged`, so it leaves the all-unchanged no-op gate (UXG-05) exactly as the disabled re-pin above does. The record is left untouched -- a skipped plugin is a fixed point for the cascade, so a repeated `marketplace update` renders byte-identically. No reload-hint: a `skipped` plugin row materialized nothing (SNM-33 / D-22-01).
 
+### Autoupdate-on cascade -- a plugin held by its dependents' declared range (D-10-12)
+
+<!-- catalog-state: autoupdate-held-by-dependents -->
+
+```text
+A plugin operation needs attention.
+
+● auto-mp [user] (updated)
+  ⊘ shared-lib (skipped) {dependents constrain}
+    cause: the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp"
+```
+
+A background autoupdate reaches the same constraint gate a manual `update` does, so a held plugin renders the SAME token and the SAME cause line through the shared `constraintCauseFor` carrier -- `orchestrators/marketplace/update.messaging.ts` reads it off `../plugin/update-row.ts`, the leaf with no back-edges both cascades already share, never importing the constraint gate itself. Severity is `warning` here too (D-10-12): a deliberate departure from the `(updated)` partition's info-for-autoupdate split (WR-01), because an absent soft-dep companion is something the user could not act on anyway, while a constraint hold persists across every future run until the user changes a declaration -- a background run that reported it at `info` would hide the one fact that explains why the plugin never moves. Both severity sites reach `warning` through `skipSeverity`'s default alone, with no bespoke branch, and the held token must never join `IDEMPOTENT_REASONS`. No reload-hint (nothing changed on disk).
+
 ### Autoupdate-off manifest refresh -- changed
 
 <!-- catalog-state: manifest-refresh-changed -->
@@ -2842,6 +3645,22 @@ D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from t
 ```
 
 Fresh enable -- a previously-disabled plugin is re-materialized. The marketplace header is the bare always-marketplace-header form (`mp.status === undefined`, no details -- byte-identical to the install command's header; the former `(added)` token leaked from reusing the install-cascade header shape and was dropped per UAT-04); plugin row = `PluginInstalledMessage` (status: `"installed"`, the existing state-change token). Severity `info`; reload-hint fires per SNM-33 (the plugin row is a state-change transition).
+
+### Enable cascade -- a declared dependency is re-enabled through its own record (EDEP-01 / EDEP-03)
+
+`enable <plugin>` resolves the plugin's declared dependency closure transitively in the same scope (D-08-03), reusing the install cascade's post-order walk and row conventions (RESV-01 / RESV-06): a member renders by its full `<plugin>@<marketplace>` key because it may resolve from a marketplace other than the header's, rows sort through the project's canonical name-then-scope comparator so the root takes its alphabetical place among the members, and one `notifyWithContext` call carries the whole block.
+
+<!-- catalog-state: enable-cascade -->
+
+```text
+● official [user]
+  ● formatter@tools v2.1.0 (installed) {dependency enabled}
+  ● helper v1.0.0 (installed)
+
+/reload to pick up changes
+```
+
+`helper` declares `formatter@tools`; both records are disabled. `formatter`'s record is re-materialized through the SAME `runInstallLedger` re-enable machinery `helper`'s own row already used (`pinVersionOverride` + `allowExistingRecord: true`), so its artifacts return to disk without the config file gaining a NEW key for it (D-04-02: the config still names only the plugins the user asked for by name). Where the config already declares `formatter` with `enabled: false` -- what disabling it directly writes -- this standalone command overwrites that entry to `true` instead of leaving it stale for the next reload to act on (CR-01/CR-06); a config entry the scope does not mention at all stays that way. The member row carries the new `{dependency enabled}` token (D-08-02) -- an `installed` row, not a skip, because the record changed and something was materialized. Severity `info` on both rows; the reload-hint fires per SNM-33. A closure member already enabled renders `(skipped) {already enabled}` instead (the existing idempotent-skip token, reused rather than duplicated per D-08-03's discretion); a member the scope records nothing for renders `(skipped) {not installed}` at `warning` (the enable was carried out but fell short) and does not refuse the root's own enable; the next reload holds the root down as `dependencyDisabled` until the missing dependency is installed (LOAD-01 owns reporting it). A root that declares no dependencies renders exactly the `enable-fresh` state above, byte for byte.
 
 ### Partial enable -- component kinds dropped (ENBL-07)
 
@@ -3037,6 +3856,20 @@ Severity `warning` here, with the summary line: the disable WAS carried out and 
 ```
 
 Idempotent no-op -- the plugin is already disabled (the state record carries `enabled: false`). Plugin row = `PluginSkippedMessage` carrying `reasons: ["already disabled"]`; `already disabled` is in `BENIGN_REASONS`, so the cascade routes to `info` severity. No reload-hint.
+
+### Refused -- an enabled plugin still declares it (EDEP-02)
+
+<!-- catalog-state: disable-refused-dependents -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ shared-lib (failed) {dependents remain}
+    cause: Disable helper@official first, then shared-lib@official.
+```
+
+Triggered when `disable <plugin>@<marketplace>` names a plugin that another installed AND ENABLED plugin in the SAME scope still declares as a dependency. Unlike `uninstall` (LOAD-03 / D-06-06), the disable is REFUSED -- nothing is unstaged, `tx.save` is never called, and state.json's mtime is unchanged. The declarer set is the scope's own (D-05-05): only installed records whose OWN record is currently enabled count (`persistence/state-io.ts::isRecordedButDisabled` narrows `buildScopeDeclarationIndex`'s D-05-04 disabled-declarers-included index down to the ENABLED ones), because a disabled declarer holds its declaration (D-05-04) but is not active, so the condition this guard asks about -- an ENABLED installed plugin still needs this one -- is false for it. A declarer one scope over never blocks (D-05-05): only the target scope's own state is consulted. The row carries the new `{dependents remain}` reason and `error` severity with no reload-hint -- the operation was NOT carried out, which is what keeps this token out of the `dependents unsatisfied` group (that token's subject is a removal that WENT THROUGH, on a success row). The `cause:` trailer is a plain-English instruction naming the target and the sorted dependents and stating the order (D-08-01): `disable` accepts exactly one `<plugin>@<marketplace>` target, so upstream's chained-command template is not available here. Two or more dependents are named sorted and comma-joined (`Disable alpha@official, zeta@official first, then shared-lib@official.`); an unrenderable name (T-08-06: a plugin name may carry a quote, comma, space or bidi control per `domain/name.ts::assertSafeName`) collapses the list to a count (`Disable 2 other plugins first, then shared-lib@official.`) rather than let a hostile name forge the sentence. A record whose declarations cannot be established refuses with `{unreadable}` instead, fail-closed exactly as the uninstall guard does (D-05-07) -- the cause line names the declarer and never an absolute path. A disabled declarer, an other-scope declarer, or no declarer at all leaves the disable proceeding exactly as the `disable-fresh` state above, byte for byte.
 
 ### Marketplace not added
 

@@ -262,6 +262,7 @@ function pluginRecord(seed: RecordSeed): PluginRecord {
       workflows: [],
     },
     enabled: seed.enabled ?? true,
+    provenance: "explicit",
     installedAt: RECORDED_AT,
     updatedAt: RECORDED_AT,
   };
@@ -438,7 +439,7 @@ describe("applyBackfillForScopeIsolated", () => {
     const { cwd, locations } = await createHermeticProjectScope(t, "stale-stamp");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {}),
@@ -473,7 +474,7 @@ describe("applyBackfillForScopeIsolated", () => {
     const { cwd, locations } = await createHermeticProjectScope(t, "absent-stamp");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {}),
       },
@@ -509,7 +510,7 @@ describe("applyBackfillForScopeIsolated", () => {
       hello: { skill: "clean", command: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -551,7 +552,7 @@ describe("applyBackfillForScopeIsolated", () => {
       hello: { skill: "clean" },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -598,7 +599,7 @@ describe("applyBackfillForScopeIsolated", () => {
     // Every recorded plugin is already fully installed, so the scan has
     // nothing to promote and the stamp is not worth a new state.json.
     const snapshot: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -641,7 +642,7 @@ describe("applyBackfillForScopeIsolated", () => {
     // so the scan runs, the self-locking re-materialize finds no record to
     // replace, and the stamp is what brings state.json back.
     const snapshot: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -669,7 +670,7 @@ describe("applyBackfillForScopeIsolated", () => {
     // assert
     assert.deepStrictEqual(outcomes, []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
@@ -685,7 +686,7 @@ describe("applyBackfillForScopeIsolated", () => {
       hello: { skill: "clean", command: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -736,7 +737,7 @@ describe("applyBackfillForScopeIsolated", () => {
     const { cwd, locations } = await createHermeticProjectScope(t, "lock-held");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {}),
@@ -808,7 +809,7 @@ describe("applyBackfillForScopeIsolated", () => {
       hello: { skill: "clean", workflow: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -862,7 +863,7 @@ describe("applyBackfillForScopeIsolated", () => {
       hello: { skill: "clean", workflow: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -922,7 +923,7 @@ describe("applyBackfillForScopeIsolated", () => {
       world: { skill: "clean", workflow: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -979,7 +980,7 @@ describe("applyBackfillForScopeIsolated", () => {
       world: { skill: "clean", workflow: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1085,7 +1086,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     });
     const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1125,7 +1126,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1147,6 +1148,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               workflows: [],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: RECORDED_AT,
             updatedAt: REMATERIALIZED_AT,
           },
@@ -1167,7 +1169,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     });
     const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1207,7 +1209,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1229,6 +1231,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               workflows: [],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: RECORDED_AT,
             updatedAt: REMATERIALIZED_AT,
           },
@@ -1258,7 +1261,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     });
     const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1318,7 +1321,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1341,6 +1344,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
             },
             hookEntries: [{ event: "PreToolUse", matcher: "" }],
             enabled: true,
+            provenance: "explicit",
             installedAt: RECORDED_AT,
             updatedAt: REMATERIALIZED_AT,
           },
@@ -1401,7 +1405,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     });
     const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1442,7 +1446,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1464,6 +1468,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               workflows: [],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: RECORDED_AT,
             updatedAt: REMATERIALIZED_AT,
           },
@@ -1482,7 +1487,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       hello: { skill: "clean" },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1530,7 +1535,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       hello: { skill: "clean", workflow: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1582,7 +1587,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     // kinds that drop the one recorded kind: longer, but not a superset.
     await mkdir(path.join(pluginRoot, "agents"), { recursive: true });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1627,7 +1632,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       hello: { skill: "clean", command: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1697,7 +1702,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       hello: { skill: "clean", command: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1758,7 +1763,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       hello: { skill: "clean", workflow: true },
     });
     const snapshot: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1816,7 +1821,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       hello: { skill: "clean", command: true, lsp: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1866,7 +1871,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     // disabled is never handed to the re-materialize -- even though the
     // re-materialize's own fresh read would find it enabled and promotable.
     const snapshot: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1881,7 +1886,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     const stored: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1927,7 +1932,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     });
     const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1967,7 +1972,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -1989,6 +1994,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               workflows: [],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: RECORDED_AT,
             updatedAt: REMATERIALIZED_AT,
           },
@@ -2016,7 +2022,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       hello: { skill: "clean", command: true, lsp: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -2075,7 +2081,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     });
     const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -2118,11 +2124,12 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     ]);
     assert.deepStrictEqual(await savedWorkflowEntries(locations), ["hello:greet.json"]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
           hello: {
+            provenance: "explicit",
             version: "1.0.0",
             resolvedSource: pluginRoot,
             compatibility: {
@@ -2170,7 +2177,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       hello: { skill: "clean", command: true, lsp: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -2230,7 +2237,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       { hello: "acolomba/some-plugin", world: "https://example.com/some-plugin.git" },
     );
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -2284,7 +2291,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       hello: { skill: "clean", command: true },
     });
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -2340,7 +2347,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     // would write, so the cross-plugin conflict fails the re-materialize with
     // an error the reinstall primitive cannot pre-narrow.
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -2395,7 +2402,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       hello: { skill: "clean", command: true },
     });
     const snapshot: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -2411,7 +2418,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     // The snapshot still carries the record; the on-disk state the
     // self-locking re-materialize re-reads no longer does.
     const afterConcurrentUninstall: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {}),
@@ -2446,7 +2453,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     const { cwd, locations } = await createHermeticProjectScope(t, "entry-absent");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -2491,7 +2498,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     });
     await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
@@ -2547,7 +2554,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     // `bad` is inserted first so the corrupt manifest is scanned before the
     // healthy sibling under the other marketplace.
     const seeded: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         bad: marketplaceRecord(cwd, "bad", "bad-src", bad.manifestPath, bad.marketplaceRoot, {
@@ -2602,7 +2609,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
         bad: marketplaceRecord(cwd, "bad", "bad-src", bad.manifestPath, bad.marketplaceRoot, {
@@ -2632,6 +2639,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               workflows: [],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: RECORDED_AT,
             updatedAt: REMATERIALIZED_AT,
           },

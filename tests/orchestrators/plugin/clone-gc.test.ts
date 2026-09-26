@@ -39,6 +39,7 @@ function pluginRecord({
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -302,6 +303,51 @@ test("rejects a symlinked clone entry before touching its external target", asyn
   );
   assert.deepStrictEqual(await cloneEntries(locations), ["linked-clone"]);
   assert.strictEqual(await readFile(externalSentinel, "utf8"), "external");
+});
+
+test("TAGS-01/T-07-02: a tag-materialized path-source directory survives the sweep when its record carries resolvedSha", async (t) => {
+  // arrange: a path-source member pinned to a marketplace release tag, keyed
+  // and materialized exactly like a git-source pin -- `resolvedSha` is the
+  // ONLY field the sweep's live-key predicate reads.
+  const locations = await freshLocations(t);
+  await seedState(locations, {
+    acme: marketplace(locations, "acme", {
+      formatter: pluginRecord({
+        resolvedSource: path.join(locations.pluginClonesDir, "formatter-tag-live"),
+        resolvedSha: SHA_ALPHA,
+      }),
+    }),
+  });
+  await seedCloneDirectories(locations, ["formatter-tag-live"]);
+
+  // act
+  const leaks = await garbageCollectPluginClones(locations);
+
+  // assert
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await cloneEntries(locations), ["formatter-tag-live"]);
+});
+
+test("TAGS-01/T-07-02: the same tag-materialized directory is swept when its record carries no resolvedSha", async (t) => {
+  // arrange: the guard has teeth -- identical shape to the case above, minus
+  // the ONE field that protects it, so a record that omitted it would have
+  // its files deleted by the next unrelated sweep.
+  const locations = await freshLocations(t);
+  await seedState(locations, {
+    acme: marketplace(locations, "acme", {
+      formatter: pluginRecord({
+        resolvedSource: path.join(locations.pluginClonesDir, "formatter-tag-live"),
+      }),
+    }),
+  });
+  await seedCloneDirectories(locations, ["formatter-tag-live"]);
+
+  // act
+  const leaks = await garbageCollectPluginClones(locations);
+
+  // assert
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await cloneEntries(locations), []);
 });
 
 test("records removal leaks in cache order and continues deleting later clones", async (t) => {

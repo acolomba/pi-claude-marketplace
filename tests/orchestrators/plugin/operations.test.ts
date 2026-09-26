@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { createHook } from "node:async_hooks";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import https from "node:https";
 import path from "node:path";
 import test from "node:test";
 
+import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
 import {
@@ -14,8 +16,10 @@ import {
 import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  createDependencyInstallOperation,
   createEnableOperation,
   createInstallOperation,
+  createPruneOperation,
   createReinstallOperation,
   createUninstallOperation,
   fetchPlugins,
@@ -42,6 +46,7 @@ import type {
   ToolInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { TestContext } from "node:test";
 
 interface NotifyRecord {
@@ -233,6 +238,60 @@ async function seedWarmPinnedPlugin(opts: {
   );
 }
 
+async function seedOrphanForPrune(scope: Scope, cwd: string): Promise<ExtensionState> {
+  const locations = locationsFor(scope, cwd);
+  const marketplaceRoot = path.join(locations.extensionRoot, "sources", "mp");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "orphan");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ name: "mp", plugins: [{ name: "orphan", source: "./plugins/orphan" }] }),
+  );
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "orphan", version: "1.0.0" }),
+  );
+  const skillPath = path.join(locations.skillsTargetDir, "orphan-skill", "SKILL.md");
+  await mkdir(path.dirname(skillPath), { recursive: true });
+  await writeFile(skillPath, "---\nname: orphan-skill\n---\nbody\n");
+  const state: ExtensionState = {
+    schemaVersion: 3,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope,
+        source: pathSource("./mp"),
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {
+          orphan: {
+            version: "1.0.0",
+            resolvedSource: pluginRoot,
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              workflows: [],
+              skills: ["orphan-skill"],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            provenance: "dependency",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+  await saveState(locations.extensionRoot, state);
+  return state;
+}
+
 test("constructs the install operation without using its owners or starting asynchronous work", (t) => {
   // arrange
   const hooksRouting = mock<InstallHooksRouting>({ exactParams: true, name: "hooks routing" });
@@ -268,6 +327,30 @@ test("constructs the install operation without using its owners or starting asyn
 // operation against the real phase ledger and the real state lock, so the
 // production bindings this module holds are the ones under test.
 // ─────────────────────────────────────────────────────────────────────────────
+
+test("constructs the dependency-install operation without using its owners or starting asynchronous work", (t) => {
+  // arrange
+  const hooksRouting = mock<InstallHooksRouting>({ exactParams: true, name: "hooks routing" });
+  const completionCache = mock<CompletionCache>({ exactParams: true, name: "completion cache" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const installMissingDependency = createDependencyInstallOperation(hooksRouting, completionCache);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof installMissingDependency, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(hooksRouting);
+  verify(completionCache);
+});
 
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async (t) => {
   // arrange
@@ -342,6 +425,7 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
     },
     hookEntries: [{ event: "PreToolUse", matcher: "" }],
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   });
@@ -420,6 +504,128 @@ test("constructs the uninstall operation without using its owners or starting as
   assert.deepStrictEqual(startedResourceTypes, []);
   verify(hooksRouting);
   verify(completionCache);
+});
+
+test("constructs the prune operation without using its owners or starting asynchronous work", (t) => {
+  // arrange
+  const hooksRouting = mock<UninstallHooksRouting>({ exactParams: true, name: "hooks routing" });
+  const completionCache = mock<CompletionCache>({ exactParams: true, name: "completion cache" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const prunePlugin = createPruneOperation(hooksRouting, completionCache);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof prunePlugin, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(hooksRouting);
+  verify(completionCache);
+});
+
+test("the composed prune operation removes an orphan in the default user scope", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "prune-operation-user-");
+  const seeded = await seedOrphanForPrune("user", cwd);
+  const locations = locationsFor("user", cwd);
+  const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  const completionCache = createCompletionCache();
+  const lockSpy = t.mock.method(lockfile, "lock");
+  t.mock.method(https, "request", (): never => {
+    throw new Error("prune must not invoke the git transport");
+  });
+  const fetchSpy = t.mock.method(globalThis, "fetch", () => {
+    throw new Error("prune must stay offline");
+  });
+  const { ctx, pi, notifications } = makeCtx();
+
+  // act
+  const prunePlugin = createPruneOperation(hooksRouting, completionCache);
+  const stateAfterConstruction = await readFile(locations.stateJsonPath, "utf8");
+  const locksAfterConstruction = lockSpy.mock.callCount();
+  await prunePlugin({ ctx, pi, cwd });
+
+  // assert
+  assert.strictEqual(stateAfterConstruction, stateBefore);
+  assert.strictEqual(locksAfterConstruction, 0);
+  assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+    ...seeded,
+    marketplaces: { mp: { ...seeded.marketplaces.mp, plugins: {} } },
+  });
+  assert.strictEqual(
+    await pathExists(path.join(locations.skillsTargetDir, "orphan-skill", "SKILL.md")),
+    false,
+  );
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [user]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.strictEqual(lockSpy.mock.callCount(), 1);
+  assert.strictEqual(fetchSpy.mock.callCount(), 0);
+});
+
+test("the composed prune operation removes only the selected project orphan", async (t) => {
+  // arrange
+  const {
+    cwd,
+    runtime,
+    hooksRouting,
+    locations: project,
+  } = await installHooksDeclaringPlugin(t, "prune-operation-project-");
+  await seedOrphanForPrune("user", cwd);
+  const user = locationsFor("user", cwd);
+  const userBefore = await readFile(user.stateJsonPath, "utf8");
+  const installed = await loadState(project.extensionRoot);
+  const record = installed.marketplaces["mp"]?.plugins["p1"];
+  assert.ok(record);
+  installed.marketplaces["mp"]!.plugins["p1"] = { ...record, provenance: "dependency" };
+  await saveState(project.extensionRoot, installed);
+  const completionCache = createCompletionCache();
+  const cacheDropSpy = t.mock.method(completionCache, "dropMarketplaceCache");
+  const lockSpy = t.mock.method(lockfile, "lock");
+  t.mock.method(https, "request", (): never => {
+    throw new Error("prune must not invoke the git transport");
+  });
+  const fetchSpy = t.mock.method(globalThis, "fetch", () => {
+    throw new Error("prune must stay offline");
+  });
+  const { ctx, pi, notifications } = makeCtx();
+
+  // act
+  const prunePlugin = createPruneOperation(hooksRouting, completionCache);
+  await prunePlugin({ ctx, pi, cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(await loadState(project.extensionRoot), {
+    ...installed,
+    marketplaces: { mp: { ...installed.marketplaces.mp, plugins: {} } },
+  });
+  assert.strictEqual(await readFile(user.stateJsonPath, "utf8"), userBefore);
+  assert.strictEqual(
+    await pathExists(path.join(user.skillsTargetDir, "orphan-skill", "SKILL.md")),
+    true,
+  );
+  assert.strictEqual(await pathExists(path.join(project.hooksDir, "p1", "hooks.json")), false);
+  assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project]\n  ○ p1 v0.0.1 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.strictEqual(cacheDropSpy.mock.callCount(), 1);
+  assert.strictEqual(lockSpy.mock.callCount(), 1);
+  assert.strictEqual(fetchSpy.mock.callCount(), 0);
 });
 
 test("constructs the reinstall operation without using its owners or starting asynchronous work", (t) => {
@@ -544,6 +750,7 @@ test("setPluginEnabled(false) unstages the artifacts, flips durable state and dr
     },
     hookEntries: [{ event: "PreToolUse", matcher: "" }],
     enabled: false,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   });
@@ -665,6 +872,7 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
     },
     hookEntries: [{ event: "PreToolUse", matcher: "" }],
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   });

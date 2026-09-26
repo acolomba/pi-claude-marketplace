@@ -34,6 +34,7 @@ function oldRecord(overrides: Partial<PluginInstallRecord> = {}): PluginInstallR
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: EMPTY_RESOURCES,
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-02T00:00:00.000Z",
     ...overrides,
@@ -141,6 +142,7 @@ test("records an installed replacement and returns its exact outcome", () => {
     installable: installable(),
     handles: handles({ populated: true }),
     hookEntries: undefined,
+    isGitSource: true,
     placedWorkflowNames: [],
   });
 
@@ -174,6 +176,83 @@ test("records an installed replacement and returns its exact outcome", () => {
   assert.strictEqual(recorded.installedAt, previous.installedAt);
 });
 
+test("LOAD-02: a reinstall of a held-down record drops the dependency marker", () => {
+  // arrange
+  const previous = oldRecord({ enabled: false, dependencyDisabled: true });
+  const state = stateWith(previous);
+
+  // act
+  recordReinstallOutcome({
+    partition: "reinstalled",
+    name: "plugin",
+    marketplace: "market",
+    scope: "project",
+    state,
+    oldRecord: previous,
+    installable: installable(),
+    handles: handles({ populated: true }),
+    hookEntries: undefined,
+    isGitSource: true,
+    placedWorkflowNames: [],
+  });
+
+  // assert -- a key-presence check: the rebuilt literal never names the field,
+  // and a key left behind set to false would read as a record the load-time
+  // check is still responsible for.
+  const recorded = state.marketplaces.market?.plugins.plugin;
+  assert.ok(recorded);
+  assert.strictEqual(recorded.enabled, true);
+  assert.strictEqual(Object.hasOwn(recorded, "dependencyDisabled"), false);
+});
+
+test("carries dependency provenance forward on reinstall", () => {
+  // arrange
+  const previous = oldRecord({ provenance: "dependency" });
+  const state = stateWith(previous);
+
+  // act
+  recordReinstallOutcome({
+    partition: "reinstalled",
+    name: "plugin",
+    marketplace: "market",
+    scope: "project",
+    state,
+    oldRecord: previous,
+    installable: installable(),
+    handles: handles({ populated: true }),
+    hookEntries: undefined,
+    isGitSource: true,
+    placedWorkflowNames: [],
+  });
+
+  // assert
+  const recorded = state.marketplaces.market?.plugins.plugin;
+  assert.ok(recorded);
+  assert.match(recorded.updatedAt, /^\d{4}-\d{2}-\d{2}T/u);
+  assert.deepStrictEqual(recorded, {
+    version: "1.2.3",
+    resolvedSource: "/new/plugin",
+    compatibility: {
+      installable: true,
+      notes: [],
+      supported: ["skills", "commands", "agents", "mcp"],
+      unsupported: [],
+    },
+    resources: {
+      workflows: [],
+      skills: ["skill"],
+      prompts: ["command"],
+      agents: ["agent"],
+      mcpServers: ["server"],
+      hooks: [],
+    },
+    enabled: true,
+    provenance: "dependency",
+    installedAt: previous.installedAt,
+    updatedAt: recorded.updatedAt,
+  });
+});
+
 test("WLIF-06: stamps staleWorkflowCommand when the replace step retires a workflow the old record carried", () => {
   // arrange -- the old record carries a workflow the reinstall did not replace,
   // so its generated command stays registered against nothing until a reload.
@@ -193,6 +272,7 @@ test("WLIF-06: stamps staleWorkflowCommand when the replace step retires a workf
     installable: installable(),
     handles: handles({ populated: true }),
     hookEntries: undefined,
+    isGitSource: false,
     placedWorkflowNames: [],
   });
 
@@ -220,6 +300,7 @@ test("records partial compatibility, sha, hooks, and degradation exactly", () =>
     installable: installable("partially-available"),
     handles: handles({ degraded: true }),
     hookEntries: [{ event: "SessionStart" }],
+    isGitSource: true,
     placedWorkflowNames: [],
   });
 
@@ -251,6 +332,36 @@ test("records partial compatibility, sha, hooks, and degradation exactly", () =>
   assert.deepStrictEqual(recorded.hookEntries, [{ event: "SessionStart" }]);
 });
 
+test("WR-01: a non-git source's reinstall drops a stale resolvedSha instead of carrying it forward", () => {
+  // arrange: the old record carries a tag-pin sha from a prior `path`-source
+  // install/update, but this reinstall re-resolves through the marketplace's
+  // current checkout (isGitSource: false) -- there is no pin to reaffirm.
+  const previous = oldRecord({ resolvedSha: "abc123" });
+  const state = stateWith(previous);
+
+  // act
+  recordReinstallOutcome({
+    partition: "reinstalled",
+    name: "plugin",
+    marketplace: "market",
+    scope: "project",
+    state,
+    oldRecord: previous,
+    installable: installable(),
+    handles: handles({ populated: true }),
+    hookEntries: undefined,
+    isGitSource: false,
+    placedWorkflowNames: [],
+  });
+
+  // assert: the OLD sha must not survive onto a record whose resolvedSource
+  // no longer sits at the commit it named.
+  const recorded = state.marketplaces.market?.plugins.plugin;
+  assert.ok(recorded);
+  assert.strictEqual(recorded.resolvedSha, undefined);
+  assert.strictEqual(Object.hasOwn(recorded, "resolvedSha"), false);
+});
+
 test("rejects record mutation after concurrent removal", () => {
   // arrange
   const previous = oldRecord();
@@ -270,6 +381,7 @@ test("rejects record mutation after concurrent removal", () => {
         installable: installable(),
         handles: handles(),
         hookEntries: undefined,
+        isGitSource: true,
         placedWorkflowNames: [],
       }),
     /concurrently removed/u,

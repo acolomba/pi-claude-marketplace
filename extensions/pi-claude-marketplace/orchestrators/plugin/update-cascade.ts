@@ -13,7 +13,7 @@ import {
 } from "../../shared/notify-context.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 
-import { updatedRowFromOutcome } from "./update-row.ts";
+import { constraintCauseFor, updatedRowFromOutcome } from "./update-row.ts";
 import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
 import type { DirectRenderableOutcome } from "./update-swap.ts";
@@ -53,6 +53,11 @@ function cascadeSkipSeverity(
     return cardinality === "single" ? "warning" : "info";
   }
 
+  // D-10-12: the held-update token relies on this default to reach `warning`
+  // on both cascades and must never be added to `IDEMPOTENT_REASONS` -- a
+  // deliberate divergence from the `(updated)` partition's info-for-
+  // autoupdate split, because a constraint hold persists across every future
+  // run until the user changes a declaration.
   return skipSeverity(reasons);
 }
 
@@ -79,6 +84,7 @@ function projectSkippedOutcome(
     };
   }
 
+  const cause = constraintCauseFor(outcome);
   return {
     status: "skipped",
     name: outcome.name,
@@ -87,6 +93,7 @@ function projectSkippedOutcome(
     reasons: outcome.reasons,
     severity: cascadeSkipSeverity(outcome.reasons, cardinality),
     needsReload: false,
+    ...(cause !== undefined && { cause }),
   };
 }
 
@@ -110,7 +117,13 @@ function outcomeToCascadePluginMessage(
         updated: successSeverity,
         partiallyInstalled: successSeverity,
       });
-    case "unchanged":
+    case "unchanged": {
+      // D-10-13: the ceiling disclosure -- the effective range and its
+      // holders -- rides the SAME cause-line carrier the `skipped` arm
+      // reads; `undefined` for an unconstrained up-to-date plugin, so its
+      // row stays byte-identical (NREG-01).
+      const cause = constraintCauseFor(outcome);
+
       return {
         status: "skipped",
         name: outcome.name,
@@ -118,7 +131,10 @@ function outcomeToCascadePluginMessage(
         reasons: ["up-to-date"],
         severity: "info",
         needsReload: false,
+        ...(cause !== undefined && { cause }),
       };
+    }
+
     case "skipped":
       return projectSkippedOutcome(target, outcome, cardinality);
     case "failed":

@@ -1448,52 +1448,68 @@ Claude Code's own official behavior
 is the one worth matching per this project's stated `/claude:plugin`
 alignment goal.
 
-**Claude Code's actual behavior:** `claude plugin uninstall <plugin>
-[--scope] [--keep-data] [--prune] [-y]`. There is no `--delete-data` flag.
-Default is delete, but only when the plugin has no other scope installation
-to fall back on: "By default, uninstalling from the last remaining scope
-also deletes the plugin's `${CLAUDE_PLUGIN_DATA}` directory. Use
-`--keep-data` to preserve it." Deletion is scope-aware and silent -- no
-confirmation prompt for data specifically (`-y`/`--yes` gates a different,
-unrelated `--prune` dependency-removal confirmation).
+**Claude Code's actual behavior**, read off the installed CLI v2.1.236 on
+2026-09-09 rather than from docs prose:
+`claude plugin uninstall|remove [options] <plugin>`.
 
-**Our behavior today:** `orchestrators/plugin/uninstall.ts:635` -- `await
-rm(dataDir, { recursive: true, force: true })` -- runs unconditionally on
-every uninstall, with no flag, no scope check, and no way to opt out.
-Confirmed by direct read, not inferred. The contents of
-`${CLAUDE_PLUGIN_DATA}` are lost on uninstall even when the plugin remains
-installed in the other scope.
+| Flag | Description |
+|---|---|
+| `--keep-data` | Preserve the plugin's persistent data directory (`~/.claude/plugins/data/{id}/`) |
+| `--prune` | Also remove auto-installed dependencies that are no longer needed (requires `-y` in non-interactive contexts) |
+| `-s, --scope <scope>` | `user`, `project`, or `local` |
+| `-y, --yes` | Skip the `--prune` confirmation prompt (required when stdin or stdout is not a TTY) |
 
-**Two call sites, one fix needed in both:** `uninstallPlugin()`
-(`orchestrators/plugin/uninstall.ts`) is called from the interactive
-`/claude:plugin uninstall` command AND from
-`orchestrators/reconcile/apply.ts`'s `applyPluginUninstalls()`, which fires
-non-interactively from `resources_discover`/`session_start` whenever a
-plugin is dropped from `claude-plugins.json`. Both paths need the same
-scope-aware rule; the reconcile path was never going to be interactive
-under Claude Code's own model either (their default is a scope-state
-check, not a prompt), so no special-casing is needed between the two call
-sites.
+There is no `--delete-data`. `-y` gates the `--prune` confirmation
+specifically and has nothing to do with data deletion. The required mutex
+pair this item was first framed against is the competitor's model, not
+upstream's, and is the wrong one to copy.
+
+**Our behavior today:** `orchestrators/plugin/uninstall.ts:429` -- `await
+rm(dataDir, { recursive: true, force: true })` -- runs on every uninstall,
+with no flag and no way to opt out. Confirmed by direct read, not inferred.
+
+**Corrected 2026-09-09: the cross-scope check this entry prescribed solves
+upstream's problem, not ours.** Upstream's data directory is global -- one
+`~/.claude/plugins/data/{id}/` backs every scope -- so upstream has to ask
+whether another scope still needs the directory before deleting it. Ours is
+already partitioned per scope: `dataRoot` is
+`<scopeRoot>/pi-claude-marketplace/data` (`persistence/locations.ts:165`).
+A user-scope uninstall cannot reach project-scope data, so the cross-scope
+data-loss case this entry used to describe cannot happen here. The
+other-scope presence check is removed from the direction below, and the
+reason is recorded here so it is not re-added from the same upstream
+sentence. The item is cheaper than it was filed: the whole fix is the flag.
+
+**The silent-delete claim is only half true.** The original text said
+deletion is "scope-aware and silent -- no confirmation prompt for data
+specifically". That describes the CLI. Upstream's interactive `/plugin`
+interface shows the data directory size and prompts before deleting it. The
+CLI deletes by default with no prompt.
+
+**Resolution, decided 2026-09-09: match the CLI -- delete silently, with
+`--keep-data` as the opt-out.** `uninstallPlugin()`
+(`orchestrators/plugin/uninstall.ts`) has two callers: the interactive
+`/claude:plugin uninstall` command, and `orchestrators/reconcile/apply.ts`'s
+`applyPluginUninstalls()`, which fires non-interactively from
+`resources_discover` / `session_start` whenever a plugin is dropped from
+`claude-plugins.json`. The reconcile path has no command line, so it can
+carry no flag. A promptless default is the only behavior both call sites
+can share. Prompt-with-size would give one operation two behaviors
+depending on which entry point reached it.
 
 Direction for later: add an optional `--keep-data` flag to the interactive
-command -- no `--delete-data`, matching upstream exactly; inventing one
-would add a flag Claude Code doesn't have. Before deleting, check whether
-the plugin is still installed in the other scope using the existing
-`otherScope()` + `locationsFor()` + `loadState()` seam
-(`orchestrators/plugin/shared.ts:216`, already reused by
-`reinstall.ts`/`update.ts`/`list.ts` for the identical "is this plugin
-present in the other scope" question -- "ONE extra `loadState` of the
-other scope" is the documented cost there). Delete only when this is the
-last remaining scope AND `--keep-data` was not passed; the
-reconcile-triggered path applies the identical rule with no flag to
-consult, since there is no command line to put one on. A GC sweep for
-orphaned `--keep-data`-retained data directories is out of scope here --
-keeping is opt-in under this model, not a default-driven accumulation
-path, so it is a reasonable separate follow-on item, not a blocker.
+command, matching upstream exactly. Do not add a delete flag; upstream has
+none, and inventing one would copy the competitor's model instead. Delete
+the data directory unless `--keep-data` was passed. No cross-scope check:
+our data directories are already per scope, so there is nothing another
+scope could still need. A GC sweep for orphaned `--keep-data`-retained data
+directories is out of scope here -- keeping is opt-in under this model, not
+a default-driven accumulation path, so it is a reasonable separate
+follow-on item, not a blocker.
 
 Code seams: `orchestrators/plugin/uninstall.ts` (the unconditional `rm()`
-call, line 635), `orchestrators/plugin/shared.ts` (`otherScope()`, the
-existing cross-scope-presence pattern to reuse), `orchestrators/reconcile/apply.ts`
+call, line 429), `persistence/locations.ts` (`dataRoot`, which establishes
+the per-scope partition), `orchestrators/reconcile/apply.ts`
 (`applyPluginUninstalls()`, the non-interactive call site),
 `edge/handlers/plugin/uninstall.ts` (new `--keep-data` flag parsing),
 `edge/args.ts` / `edge/flag-catalog.ts` (flag registration, drift-gated).
@@ -2935,6 +2951,85 @@ Code seams: `eslint.config.js` (the Sonar way block, currently scoped to
 rules), `.planning/codebase/CONVENTIONS.md` (the "Sonar way on `extensions/`
 only" bullet, which states the scope this item would change).
 
+## PMAN-01: a bare `<pluginRoot>/plugin.json` is never read
+
+Surfaced 2026-09-09 while correcting [UDISP-01]. Verified by source read,
+against the installed Claude Code CLI v2.1.236, and against the four
+plugins named below, each fetched at the sha its `marketplace.json` entry
+pins.
+
+**The gap:** Claude Code accepts both
+`<pluginRoot>/.claude-plugin/plugin.json` and a bare
+`<pluginRoot>/plugin.json`. We only ever build the wrapped path, at two
+independent hardcoded call sites -- `domain/resolver.ts:627`
+(`readManifest()`) and `orchestrators/plugin/shared.ts:921`
+(`resolvePluginVersion()` tier 1). On a stat miss `readManifest` returns
+`{ ok: true, manifest: null }`, so an absent manifest is deliberately
+non-fatal. Bare-manifest plugins therefore install fine. We silently ignore
+a manifest that is there.
+
+**Who ships it:** four plugins in the official Anthropic marketplace ship
+the bare form today.
+
+| Plugin | Repository | Declared skills |
+|---|---|---|
+| `ui5` | `github.com/UI5/plugins-coding-agents` | `["./skills/"]` |
+| `ui5-modernization` | `github.com/UI5/plugins-coding-agents` | `["./skills/"]` |
+| `ui5-typescript-conversion` | `github.com/UI5/plugins-coding-agents` | `["./skills/"]` |
+| `ui-theme-designer` | `github.com/SAP/ui-theme-designer-plugins-for-coding-agents` | `["./skills/ui-theme-designer-help", "./skills/ui-theme-designer-design-tokens"]` |
+
+The three UI5 plugins ship theirs at `plugins/<name>/plugin.json`. None of
+the four declares commands, agents, `mcpServers`, hooks, or any unsupported
+kind.
+
+**Severity: no component is dropped today.** Three independent reasons.
+
+1. `collectStrictComponentKind` (`domain/resolver.ts:1051`) probes
+   `<pluginRoot>/skills` and adds it additively and unconditionally, so the
+   convention path already yields the same set the declarations name.
+   Checked against the git trees: `ui5` has 8 skill directories under
+   `skills/`, and `ui-theme-designer` has exactly the 2 it names.
+2. The declared versions do not land either. All four are git-subdir
+   sources with a pinned sha, and `deriveInstallVersion`
+   (`orchestrators/plugin/install.ts:640`) makes a resolved sha replace the
+   whole three-tier ladder, so `plugin.json`'s `version` is unreachable for
+   them by design.
+3. The manifest `description` is not consumed anywhere in `extensions/`.
+
+So this is a parity gap with no in-the-wild victim in the official
+marketplace today.
+
+**The obvious fix carries a regression trap, and that is why this entry is
+worth reading.** The resolver dedups component paths by raw relative-path
+string (`addComponentPath`, `domain/resolver.ts:1001`), so `"./skills/"`
+and `"skills"` are two distinct keys. A naive fallback yields
+`componentPaths.skills = ["./skills/", "skills"]` and enumerates one
+directory twice. The skills bridge dedups by generated name, first wins, so
+nothing breaks -- but `ui5` would emit 8 spurious "ignoring duplicate"
+warnings per install and `ui-theme-designer` 2. That is an output
+regression on exactly the plugins the fix is for.
+
+Direction for later: try the two paths in order at BOTH call sites --
+`.claude-plugin/plugin.json` first, then bare `plugin.json` -- and add a
+normalized dedup key so `"./skills/"` and `"skills"` collapse to one. Keep
+the miss non-fatal. A malformed bare `plugin.json` must still route to the
+existing `malformed plugin.json: ...` reason rather than being silently
+skipped.
+
+An absent `plugin.json` needs no change and is not part of this item.
+Upstream accepts absence too: `learn-with-coursera` and `amd-skills`
+install, and their skills are discovered by directory convention. Our
+`manifest: null` behavior already matches.
+
+Code seams: `domain/resolver.ts` (`readManifest` line 627, the wrapped path
+that needs the ordered fallback; `addComponentPath` line 1001, the
+raw-string dedup key that needs normalizing; `collectStrictComponentKind`
+line 1051, the additive convention probe that masks the gap today),
+`orchestrators/plugin/shared.ts` (`resolvePluginVersion()` tier 1, line
+921, the second hardcoded wrapped path), `orchestrators/plugin/install.ts`
+(`deriveInstallVersion` line 640 -- evidence that the version tier is
+unreachable for these four, so no change is needed there).
+
 ## NEGCTL-01: the direct-coverage negative control cannot capture its child's stderr on Node 26 — CLOSED
 
 Closed 2026-09-14 in test-backlog Phase 1. The failure was isolated to the
@@ -3285,3 +3380,213 @@ without declaring the engine as a dependency, which is out of scope (a 0.x
 package with ~50 releases since May 2026 and no exported contract). The
 scratch-engine route above (WSTOR-01) is the only recorded way to reach the
 package's source from a test.
+## ~~ENBL-DEP-01: a cascade enables a disabled, already-installed dependency~~ -- CLOSED
+
+**CLOSED 2026-09-21** by v1.20 Phase 8 (EDEP-01, EDEP-03), plans 08-01 and
+08-03. Both halves of the operator rule now hold: a plugin asked for by
+name (Phase 4) OR by another plugin's dependency declaration (this phase)
+becomes enabled, with nothing left for the user to remember to do.
+
+Walking the "Scope when picked up" list against what actually closed it:
+
+- **"the cascade's RESV-05 arm enables the disabled member through the
+  existing enable branch instead of skipping it"** -- closed on BOTH call
+  sites. 08-01's `enable <plugin>` resolves its own declared dependency
+  closure and re-materializes every installed-and-disabled member through
+  its record (`orchestrators/plugin/enable-disable.ts::buildEnableCascadeMemberPhase`).
+  08-03's `install <plugin>` cascade does the same for an already-installed,
+  disabled member it meets mid-closure
+  (`orchestrators/plugin/install-cascade.ts::buildReEnableMemberPhase`,
+  `partitionAlreadyInstalled`) -- RESV-05's general (enabled) case is
+  otherwise untouched.
+- **"retire the `dependency disabled` skip row (a catalog removal: fixture,
+  both contract constants, length lock, both enumeration pins)"** -- closed
+  by 08-03: the token is gone from `REASONS`, `notify-reasons.ts`'s
+  `CommandPrivateReason`, the closed-set length lock, and both enumeration
+  pins (`compat-01-no-expansion.test.ts`, `notification-types.test.ts`);
+  `docs/output-catalog.md`'s `dependency-cascade-disabled-skip` state is
+  replaced by `install-cascade-dependency-enabled`, and its fixture swapped
+  to match.
+- **"rewrite the `plugin-enablement.md` divergence paragraph"** -- closed by
+  08-03: the "A plugin required by another active plugin is not enabled on
+  its behalf" divergence is gone from `docs/plugin-enablement.md`; the new
+  "A dependency's own enablement" section states the current behavior for
+  both call sites, and `docs/dependency-resolution.md`'s already-installed
+  section states the same for install's side, gated by
+  `tests/architecture/dependency-doc-agreement.test.ts` driving the real
+  composer against both.
+- **"a decision record superseding the Phase 3 policy"** -- D-08-02 (the
+  `{dependency enabled}` token) and this phase's `<threat_model>` entries
+  (T-08-10..13) are that record; RESV-05's own module comment in
+  `install-cascade.ts` is updated in place to state the narrowed invariant.
+
+`DEPS-STATUS-01` stays open. It is a different report surfaced by the same
+review, about a plugin's OWN status reflecting a partially-supported
+dependency -- not about enablement, and not upstream parity. Nothing in
+this closure pulls it in.
+
+## DEPS-STATUS-01: dependency status propagates to the dependent
+
+Surfaced in the same review. Operator statement: a fully supported plugin
+that depends on a partially supported plugin is itself partially supported
+because of its dependency, and that extends to its status token and reasons
+on `list` / `info` / install rows. Today a plugin's status is computed from
+its own record alone. Needs: a walk from a record to its declared
+dependencies' records at render time (network-free, NFR-5), a reason naming
+which dependency degrades it, and the catalog rows that follow. Interacts
+with `--partial` consent on the promotion arm (WR-03 in `04-REVIEW.md`).
+
+## ~~PRUNE-CMD-01: standalone `/claude:plugin prune` with `--dry-run`~~ -- CLOSED
+
+Closed 2026-09-23 by Phase 12. The delivered `prune` command removes orphaned
+dependency installs without uninstalling a named plugin. Its `--dry-run` flag
+shows the current candidates without removing them. Pi has no confirmation
+prompt or `-y` flag (D-02-05).
+
+D-12-03 drops the proposed `{orphaned}` marker on `list` and `info`. The preview
+command supplies the orphan inventory, and Claude Code shows no marker on those
+surfaces. The marker is not a separate backlog item.
+
+## PRUNE-GUARD-MR-01: `marketplace remove` bypasses the dependents guard
+
+Surfaced while planning the v1.20 prune work (2026-09-16). `marketplace
+remove` unstages every plugin under the marketplace through
+`cascadeUnstagePlugin` directly and never reaches `uninstallPlugin`, so it
+carries no dependents guard: a plugin in ANOTHER marketplace that depends on
+one of the removed plugins is left dangling. PRUNE-05 names `uninstall`, so
+this is a recorded decision, not an omission -- and the bypass is the
+documented exit for the two-stale-records scenario (D-05-07), which any change
+here must keep open. That scenario is less pressing than it was, because the
+deadlock it worked around (two plugins each refusing the other's uninstall)
+was itself removed with the refusal.
+
+**Re-triaged in Phase 6 on 2026-09-18 (LOAD-03 / D-06-07), still OPEN.** The
+gap is real and unchanged: `marketplace remove` still strands dependents in
+other marketplaces without consulting the declaration index. What changed is
+the outcome, not the gap. The dependents are now REPORTED at the next load --
+the load-time check disables each of them with its own remedy row -- instead
+of being prevented by a refusal. The original scope is no longer reachable:
+the `dependents remain` row and the refusal it belonged to are retired.
+
+Scope when picked up, restated: this is now a reporting question, not a guard
+question. Should `marketplace remove` name the dependents it is about to
+strand on its own row, given that the next reload reports them anyway with a
+full remedy? The trade is one emission that tells the user immediately against
+one that states the same fact twice across two commands -- the same trade
+LOAD-03 already settled for the reconcile-driven uninstall, which deliberately
+carries no dependents brace for exactly this reason. Refusing the removal is
+NOT on the table: it would re-introduce the deadlock this phase removed.
+
+## PENDING-VERDICT-01: `pending` previews an enable the next reload will undo
+
+Surfaced by the Phase 6 load-time dependency check (2026-09-18), recorded by
+all three of its implementation plans and by none of their file scopes.
+`orchestrators/reconcile/pending.ts` calls `planReconcile` with three
+arguments, so it takes the optional verdict parameter's frozen empty default
+(D-06-10) and plans as though nothing were held down. `/claude:plugin pending`
+therefore previews `will enable` for a plugin whose declared dependency is
+unsatisfied, and the reload it is previewing disables that plugin instead. The
+preview is wrong in exactly the situation the check exists to report.
+
+Scope when picked up: decide whether the preview computes a satisfaction
+verdict of its own. It can -- `buildScopeSatisfactionVerdict` is offline and
+reads only the scope's own records and cached manifests, so NFR-5 holds -- at
+the cost of the declaration walk on a read-only command. If it does, the
+preview also needs a row for the disable it would then foresee, which is a
+closed-set question, not just a wiring one. Doing nothing is defensible if the
+preview is read as "what the config says", but it is not what the row claims.
+
+## STALE-DECLARER-01: one unreadable declarer aborts the whole scope's dependency check
+
+Surfaced by the Phase 6 code review (`06-REVIEW.md` WR-03, 2026-09-19) and
+re-declined on the same reasoning across both fix iterations. In
+`orchestrators/plugin/dependency-index.ts::readRecordDeclarations`, a record
+whose plugin `lookupDeclaredPlugin` can no longer resolve in its marketplace
+manifest -- for example, a plugin dropped from `marketplace.json` after it was
+installed -- is treated as `kind: "absent"`, an unreadable declarer.
+`buildScopeDeclarationDetail` returns on the FIRST record that hits this, so
+one stale record turns off the LOAD-01 load-time check for every other plugin
+in the scope and renders `⊘ <plugin> (failed) {unreadable}` at error severity
+on every reload, for a condition that has nothing to do with that plugin.
+
+Left unfixed because the remedy is not scoped to LOAD-01:
+`readRecordDeclarations` is the same function `buildScopeDeclarationIndex`
+calls for `uninstall`'s dependents guard (Phase 5, D-05-07's fail-closed
+posture). Loosening the abort-on-first-unreadable behavior here would silently
+change what counts as a "declarer" for that guard too, letting an uninstall
+proceed past a dependent it should have blocked. Two existing tests pin the
+current behavior as intentional for that reason.
+
+Scope when picked up: decide whether the fail-closed unit should stay the
+whole scope, or narrow to per-record (skip the one unreadable declarer and
+keep checking the rest, only surfacing `{unreadable}` for that plugin's own
+row). Any change must be evaluated against both call sites --
+`buildScopeDeclarationDetail` (LOAD-01) and `buildScopeDeclarationIndex`
+(uninstall's dependents guard) -- and the two tests that currently encode
+D-05-07 as intentional will need to move with it, not just be deleted.
+
+## MISS-MPADD-01: marketplace add and post-install activation do not resolve missing dependencies
+
+Surfaced by Phase 9's upstream check (D-09-15, 2026-09-22). Upstream runs its
+missing-dependency resolver on `marketplace add` and again after an install
+completes, so a plugin that gained a satisfiable declaration through either
+path resolves it right away. Here, neither `marketplace add`, `bootstrap.ts`
+nor `autoupdate.ts` reaches `applyReconcile`, so nothing installs a missing
+dependency until the next `/reload` completes the closure instead.
+
+Scope when picked up: run the load-time verdict and the dependency-install
+step for one scope from each of those call sites, the same step `/reload`
+already drives.
+
+## RECON-REPLAN-01: the toggles are re-planned only after a dependency install
+
+Surfaced by Phase 9's D-09-07 design (2026-09-22). The reload's toggle buckets
+are re-planned from a fresh read pass only when the dependency-install step
+itself installed or found something (D-09-07). A config-driven uninstall of a
+dependency in the SAME pass is invisible to the round-1 read-pass verdict, so
+the dependent it should hold down is only caught one reload late.
+
+Scope when picked up: re-plan the toggle buckets after any mutating bucket,
+not only the dependency-install step, and measure the added read-pass cost on
+a steady-state reload before shipping it.
+
+## TEST-TMPLEAK-01: clone-cache tests leak their mkdtemp fixtures into /tmp
+
+Surfaced during Phase 9's code review (2026-09-22): the host `/tmp` tmpfs hit
+100% inodes with ~29.8k `clone-cache*`, `clone-cache-marketplace-*` and
+`clone-cache-nongit-*` directories dated across several days of `npm test`
+runs. `tests/orchestrators/plugin/clone-cache.test.ts` creates them with
+`mkdtemp(path.join(tmpdir(), ...))` and never removes them; every run of the
+suite on this machine leaves hundreds behind. The orchestrator removed the
+ones older than two hours to unblock the run.
+
+Scope when picked up: add the `rm(dir, { recursive: true, force: true })`
+teardown the sibling fixtures already use (a `finally` per case or a
+`t.after`), then grep the tree for other `mkdtemp` sites with no matching
+removal.
+
+
+## TEST-PHANTOMMP-01: fixtures hand-build marketplace records that exist only in state
+
+Surfaced while fixing a Phase 10 regression (2026-09-22). Several tests assign
+a second marketplace straight into `state.marketplaces[...]` with a
+`manifestPath` / `marketplaceRoot` pointing at a directory the test never
+creates. Nothing read those paths, so the fixtures passed — until Phase 10's
+constraint gate made `buildScopeDeclarationDetail` walk every installed record
+in the scope before candidate resolution, at which point the unreadable
+manifest made the walk refuse closed (D-10-05) and held an unrelated plugin's
+update. `update-flow.test.ts`'s PDEF-01 case was fixed in `afa96ed2` by
+seeding a real `other-mp/marketplace.json`.
+
+Two more carry the same shape and pass today only because their verbs never
+reach that walk: `tests/orchestrators/plugin/reinstall-flow.test.ts:882` and
+`tests/orchestrators/plugin/install-flow.test.ts:785` (the
+`conflictingMarketplaceRecord` helper, used by PI-6, PDEF-01 and RESV-06).
+They are latent, not broken — the next phase that puts a scope-wide
+declaration read in front of install or reinstall will turn both red for a
+reason that has nothing to do with that phase.
+
+Scope when picked up: give both fixtures a loadable on-disk manifest the way
+`afa96ed2` did, and consider a shared seeding helper so a record and its
+manifest cannot be created apart. `uninstall.test.ts::seedDeclaringScope`
+already writes both and is the model.

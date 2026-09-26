@@ -18,7 +18,8 @@
 // RSTA-01 / RSTA-04 / RSTA-05 / RSTA-06 / D-80-04: a git source (url /
 // git-subdir / github) is classified from its fs-only clone/mirror
 // presence via `makePresenceProbe`. A COLD clone renders `(remote)` +
-// `components: not resolved`; a WARM one resolves fs-only via the
+// `components: not resolved`, plus the entry-declared `dependencies:` line
+// when the entry declares one (D-01-32); a WARM one resolves fs-only via the
 // three-way resolver against the on-disk tree (available /
 // partially-available / unavailable) and enumerates components from
 // that warm `pluginRoot`. Reading the warm clone is fs-only -- never a
@@ -36,7 +37,13 @@ import {
   type DroppedHook,
   type HookConfigParseResult,
 } from "../../domain/components/hooks.ts";
+import {
+  isRenderableDependencyToken,
+  parseDeclaredDependencies,
+  type DeclaredDependency,
+} from "../../domain/dependencies.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
+import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import {
@@ -148,6 +155,8 @@ export interface GetPluginInfoOptions {
 export interface PluginInfoReader {
   readonly readTextFile: (filePath: string) => Promise<string>;
   readonly listDirectory: (directoryPath: string) => Promise<readonly Dirent[]>;
+  /** Follows symlinks; true only for a regular file. */
+  readonly isRegularFile: (filePath: string) => Promise<boolean>;
 }
 
 /**
@@ -335,27 +344,275 @@ async function discoverComponentNames(
   return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 }
 
+/** D-01-30: a resolved sha renders short-formed to its first seven characters. */
+const SHORT_SHA_LENGTH = 7;
+
+/** A dependency whose marketplace is settled, so it has a renderable address. */
+interface AddressedDependency extends DeclaredDependency {
+  readonly marketplace: string;
+}
+
 /**
- * Resolve a manifest entry's `dependencies` field into a sorted
- * `readonly string[]` for the renderer. The schema keeps this field
- * opaque (`Type.Unknown()`); the renderer surfaces dependencies as
- * `<plugin>@<marketplace>` strings when the manifest provides them in
- * that form. When the field is an array of strings, sort
- * alphabetically (deterministic byte form across manifest authoring
- * orders); any other shape returns `undefined` so the renderer omits
- * the `dependencies:` line.
+ * D-01-02 / D-01-03: an element that declared no marketplace resolves in the
+ * DECLARING plugin's own marketplace, which is the real resolution target.
+ * A bare string that carried an address was already split into a name and a
+ * marketplace by the parser, so it keeps what it declared.
  */
-function normalizeDependencies(raw: unknown): readonly string[] | undefined {
-  if (!Array.isArray(raw)) {
+function withDeclaringMarketplace(
+  dependency: DeclaredDependency,
+  declaringMarketplace: string,
+): AddressedDependency | undefined {
+  const marketplace = dependency.marketplace ?? declaringMarketplace;
+  return isRenderableDependencyToken(marketplace) ? { ...dependency, marketplace } : undefined;
+}
+
+/**
+ * D-01-31: elements resolving to the same `<name>@<marketplace>` collapse to
+ * one, the LAST declaration winning, and the discarded one is not surfaced.
+ * The insertion order of the surviving keys is the first declaration's, which
+ * is what keeps the D-01-04 name-tie ordering stable.
+ *
+ * This is the right rule WITHIN one manifest and the wrong one ACROSS
+ * manifests, where ranges accumulate and intersect instead.
+ */
+function collapseByAddress(
+  dependencies: readonly AddressedDependency[],
+): readonly AddressedDependency[] {
+  const byAddress = new Map<string, AddressedDependency>();
+  for (const dependency of dependencies) {
+    byAddress.set(`${dependency.name}@${dependency.marketplace}`, dependency);
+  }
+
+  return [...byAddress.values()];
+}
+
+/**
+ * D-01-30: the address, followed by the constraint parenthetical when the
+ * element declared one. A version range renders BARE (it is self-evidently a
+ * version); a sha renders LABELLED and short-formed. Both present share ONE
+ * parenthetical, version first.
+ */
+function renderDependency(dependency: AddressedDependency): string {
+  const address = `${dependency.name}@${dependency.marketplace}`;
+  const constraints: string[] = [];
+  if (dependency.version !== undefined) {
+    constraints.push(dependency.version);
+  }
+
+  if (dependency.sha !== undefined) {
+    constraints.push(`sha ${dependency.sha.slice(0, SHORT_SHA_LENGTH)}`);
+  }
+
+  return constraints.length === 0 ? address : `${address} (${constraints.join(", ")})`;
+}
+
+/**
+ * Render a manifest entry's `dependencies` field into the pre-sorted
+ * `readonly string[]` the renderer's precondition requires (DEPS-01,
+ * DEPS-02). The schema keeps the field opaque (`Type.Unknown()`), so
+ * `parseDeclaredDependencies` owns every question about which elements are
+ * usable; this adds only the four caller-side rules -- the marketplace
+ * fill-in, the last-wins collapse, the ordering, and the byte form.
+ *
+ * D-01-04: the sort key is the dependency NAME, not the rendered display
+ * string, so identity ordering survives a change to the render form. The sort
+ * is stable, so two entries sharing a name keep their post-collapse
+ * declaration order.
+ *
+ * An empty array declares nothing; undefined rejects the entire declaration,
+ * including an unrenderable marketplace supplied by the caller.
+ */
+function renderDependencyList(
+  raw: unknown,
+  declaringMarketplace: string,
+): readonly string[] | undefined {
+  const declaration = parseDeclaredDependencies(raw);
+  if (!declaration.ok) {
     return undefined;
   }
 
-  const strings = raw.filter((d): d is string => typeof d === "string");
-  if (strings.length === 0) {
+  const declared: AddressedDependency[] = [];
+  for (const dependency of declaration.dependencies) {
+    const addressed = withDeclaringMarketplace(dependency, declaringMarketplace);
+    if (addressed === undefined) {
+      return undefined;
+    }
+
+    declared.push(addressed);
+  }
+
+  return [...collapseByAddress(declared)]
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+    .map(renderDependency);
+}
+
+/**
+ * D-01-32: the raw `dependencies` value the plugin's OWN manifest declares, or
+ * the fact that no manifest could be read at all. The value stays `unknown`
+ * because the manifest schema keeps the field opaque -- every question about
+ * which elements are usable belongs to `parseDeclaredDependencies`, exactly as
+ * it does for the marketplace entry's copy of the same field.
+ */
+type OwnManifestRead =
+  { readonly kind: "readable"; readonly dependencies: unknown } | { readonly kind: "not-readable" };
+
+const OWN_MANIFEST_NOT_READABLE: OwnManifestRead = { kind: "not-readable" };
+
+/**
+ * D-01-32 / NFR-5: the plugin root `readOwnManifestDependencies` may open, or
+ * `undefined` where no root is readable WITHOUT a network call.
+ *
+ * A path source derives its root through `derivePluginRootForInfo`, whose
+ * `assertPathInside` re-check IS the NFR-10 containment guarantee for the read.
+ * That function THROWS on a refusal, and this call site sits at BLOCK level --
+ * above the row builders whose outer try/catch normally absorbs it -- so the
+ * failure is caught HERE and reported as "no root". A path containment refuses
+ * is a path this surface may not read, which is precisely the condition the
+ * marketplace-entry fallback covers.
+ *
+ * The catch is deliberately TOTAL rather than `PathContainmentError`-only:
+ * `assertPathInside` also lstats each component, so a source string the OS
+ * rejects outright (an interior NUL byte) throws a plain `TypeError` from the
+ * syscall layer instead. Neither failure may escape a read-only block, and
+ * neither is this function's to CLASSIFY -- the row builders reach the same
+ * derivation a moment later behind their own catch and render the closed-set
+ * `{unreadable}` brace the surface already pins. All that is decided here is
+ * whether a manifest can be opened.
+ *
+ * A git source goes through the fs-only `makePresenceProbe`, and ONLY its
+ * `materialized` arm yields a root: `not-cached`, `escapes` and
+ * `missing-subdir` each mean there is no local tree this surface may read. The
+ * materializing fetch probe is NEVER reached from here, not even when
+ * `--fetch` was passed -- "readable" never means fetching (D-01-32), NFR-5
+ * forbids `info` touching the network, and this file is pinned BY NAME in the
+ * no-orchestrator-network gate. The consequence is deliberate and worth
+ * stating: on a cold `--fetch` run the dependency list comes from the entry
+ * even though the row builders materialize a clone moments later.
+ *
+ * A probe throw -- a mirror that exists but whose `.git/HEAD` is corrupt or
+ * concurrently rewritten -- folds to `undefined` rather than propagating, the
+ * same degrade `probeManifestEntry` applies to the same failure. One broken
+ * mirror must not fail a whole read-only block.
+ */
+async function resolveInfoPluginRootFsOnly(
+  marketplaceRoot: string,
+  source: ParsedSource,
+  locations: ScopedLocations,
+): Promise<string | undefined> {
+  if (isLocallyResolvable(source)) {
+    try {
+      return await derivePluginRootForInfo(marketplaceRoot, source);
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (!isGitSource(source)) {
     return undefined;
   }
 
-  return [...strings].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  try {
+    const presence = await makePresenceProbe(locations)(source);
+    return presence.kind === "materialized" ? presence.pluginRoot : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** One manifest candidate as this surface sees it. Nothing here throws. */
+type ManifestCandidateRead =
+  | { readonly kind: "absent" }
+  | { readonly kind: "text"; readonly raw: string }
+  | { readonly kind: "unusable" };
+
+/**
+ * Read ONE manifest candidate under the tolerant fs-only contract this file
+ * already follows for `hooks.json`: nothing propagates, and the caller decides
+ * what a failure means.
+ *
+ * Non-files, ENOENT and ENOTDIR mean absence. Stat precedes the read so a
+ * device or FIFO cannot supply bytes or block the command. Other failures
+ * stop the candidate walk, as required by the shared manifest policy.
+ */
+async function readManifestCandidate(
+  reader: PluginInfoReader,
+  absPath: string,
+): Promise<ManifestCandidateRead> {
+  try {
+    if (!(await reader.isRegularFile(absPath))) {
+      return { kind: "absent" };
+    }
+
+    return { kind: "text", raw: await reader.readTextFile(absPath) };
+  } catch (err) {
+    const code = isErrnoException(err) ? err.code : undefined;
+    return code === "ENOENT" || code === "ENOTDIR" ? { kind: "absent" } : { kind: "unusable" };
+  }
+}
+
+/**
+ * Parse one manifest candidate's bytes into the `dependencies` value it
+ * declares. A parse throw, or a payload that is not a JSON object, is a
+ * present-but-unusable manifest and reads as not-readable -- never as a
+ * manifest declaring nothing.
+ */
+function parseOwnManifest(raw: string): OwnManifestRead {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return OWN_MANIFEST_NOT_READABLE;
+  }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return OWN_MANIFEST_NOT_READABLE;
+  }
+
+  return {
+    kind: "readable",
+    dependencies: "dependencies" in parsed ? parsed.dependencies : undefined,
+  };
+}
+
+/**
+ * D-01-32: the `dependencies` value the plugin's OWN manifest declares, read
+ * from the first `MANIFEST_CANDIDATES` location that exists under
+ * `pluginRoot`. This is the THIRD reader of that shared ordering, alongside
+ * `domain/plugin-resolver.ts::readManifest` and
+ * `orchestrators/plugin/shared.ts::resolvePluginVersion` tier 1; it keeps its
+ * own I/O and its own error contract, and shares only the ordering (D-01-06).
+ *
+ * D-01-07: the walk falls through on ABSENCE ONLY. The first candidate that
+ * exists is this plugin's manifest, and a candidate that exists but cannot be
+ * used ends the walk as not-readable rather than handing off to its sibling.
+ *
+ * Upstream treats `plugin.json` as authoritative and the marketplace entry as a
+ * mirror that can go stale. We render the authoritative source and stay SILENT
+ * about a disagreement; upstream logs one, and we deliberately do not.
+ *
+ * The warm/cold render-symmetry exception this creates is scoped to the
+ * `dependencies` field ONLY (D-01-32, which supersedes the earlier entry-only
+ * rule). Do not generalize it: `defaultEnabled` and every other manifest-side
+ * claim on the read surfaces stay entry-sourced, and
+ * `entryDeclaresInstallDisabled`'s one-parameter containment argument in
+ * `domain/unsupported-components.ts` is untouched.
+ *
+ * NFR-5: reads `<pluginRoot>/<candidate>` only, no network.
+ */
+async function readOwnManifestDependencies(
+  reader: PluginInfoReader,
+  pluginRoot: string,
+): Promise<OwnManifestRead> {
+  for (const candidate of MANIFEST_CANDIDATES) {
+    const read = await readManifestCandidate(reader, path.join(pluginRoot, candidate));
+    if (read.kind === "absent") {
+      continue;
+    }
+
+    return read.kind === "text" ? parseOwnManifest(read.raw) : OWN_MANIFEST_NOT_READABLE;
+  }
+
+  return OWN_MANIFEST_NOT_READABLE;
 }
 
 /**
@@ -981,14 +1238,56 @@ async function buildBlock(args: {
   const entry = lookup.entry;
   const manifestVersion = entry.version;
   const description = entry.description;
-  const dependencies = normalizeDependencies((entry as Record<string, unknown>).dependencies);
-
   // INFO-05 source-kind gate. `parsedSource` is threaded into both row
   // builders so the not-installable arms can enumerate components from
   // disk against the resolver's not-installable variant when the source
   // is path-resolvable; non-path sources still emit
-  // `componentsResolved: false`.
+  // `componentsResolved: false`. Computed BEFORE the dependency value
+  // because the D-01-32 read below is source-kind-dependent.
   const parsedSource = parsePluginSource((entry as Record<string, unknown>).source);
+
+  if (isUnsupportedEntrySource(entry.source)) {
+    return invalidManifestBlock({
+      marketplace,
+      scope,
+      marketplaceDetails,
+      entry,
+      installed,
+      reason: "unsupported source",
+    });
+  }
+
+  // D-01-32: the plugin's OWN `plugin.json` outranks the marketplace entry for
+  // `dependencies` whenever it is readable without a network call; the entry is
+  // the fallback when it is not. A readable manifest is AUTHORITATIVE even
+  // where it declares nothing -- an absent `dependencies` key means the plugin
+  // declares no dependencies, not that the entry's list should reappear behind
+  // it. This supersedes the earlier entry-only rule for this field alone.
+  const ownPluginRoot = await resolveInfoPluginRootFsOnly(
+    mpRecord.marketplaceRoot,
+    parsedSource,
+    locations,
+  );
+  const ownManifest =
+    ownPluginRoot === undefined
+      ? OWN_MANIFEST_NOT_READABLE
+      : await readOwnManifestDependencies(reader, ownPluginRoot);
+  const dependencyList = renderDependencyList(
+    ownManifest.kind === "readable" ? ownManifest.dependencies : entry.dependencies,
+    marketplace,
+  );
+  if (dependencyList === undefined) {
+    return invalidManifestBlock({
+      marketplace,
+      scope,
+      marketplaceDetails,
+      entry,
+      installed,
+      reason: "invalid manifest",
+    });
+  }
+
+  const dependencies = dependencyList.length === 0 ? undefined : dependencyList;
 
   // (c) Installed bucket.
   if (installed !== undefined) {
@@ -1041,6 +1340,46 @@ async function buildBlock(args: {
     scope,
     marketplaceDetails,
     applyInstallDisabledRowShape(row, entry, declaredEnabled),
+  );
+}
+
+/** Recognizes the stub used for an invalid marketplace entry. */
+function isUnsupportedEntrySource(source: unknown): boolean {
+  return (
+    typeof source === "object" &&
+    source !== null &&
+    "source" in source &&
+    source.source === "unsupported"
+  );
+}
+
+/**
+ * Reports a rejected manifest while preserving the recorded install state.
+ */
+function invalidManifestBlock(args: {
+  marketplace: string;
+  scope: Scope;
+  marketplaceDetails: { readonly autoupdate: boolean };
+  entry: MarketplaceManifest["plugins"][number];
+  installed: MarketplaceRecord["plugins"][string] | undefined;
+  reason: "invalid manifest" | "unsupported source";
+}): InfoBlock {
+  const { marketplace, scope, marketplaceDetails, entry, installed } = args;
+  const version = installed === undefined ? entry.version : installed.version;
+  const row: PluginInfoRow = {
+    status: installed === undefined ? "unavailable" : derivePersistedInstalledStatus(installed),
+    name: entry.name,
+    ...(version !== undefined && { version }),
+    ...(entry.description !== undefined && { description: entry.description }),
+    reasons: [args.reason],
+    componentsResolved: false,
+  };
+  return wrapBlock(
+    marketplace,
+    scope,
+    marketplaceDetails,
+    installed === undefined ? row : applyDisabledRowShape(row, installed),
+    installed === undefined ? undefined : skipReasonFor(installed, false),
   );
 }
 
@@ -1718,6 +2057,7 @@ async function buildInstalledGitRow(opts: {
     if (presence.kind === "materialized") {
       const resolved = await resolveStrict(entry, {
         marketplaceRoot: mpRecord.marketplaceRoot,
+        readFileText: (filePath) => reader.readTextFile(filePath),
         resolveGitPluginRoot: probe,
       });
       if (resolved.state === "installable") {
@@ -1821,7 +2161,10 @@ async function buildInstalledRow(opts: {
   }
 
   try {
-    const resolved = await resolveStrict(entry, { marketplaceRoot: mpRecord.marketplaceRoot });
+    const resolved = await resolveStrict(entry, {
+      marketplaceRoot: mpRecord.marketplaceRoot,
+      readFileText: (filePath) => reader.readTextFile(filePath),
+    });
     if (resolved.state === "installable") {
       const composed = await composeResolvedComponents(
         reader,
@@ -1954,7 +2297,10 @@ async function buildNotInstalledPathRow(
  * `componentsResolved: false` renders the existing `components: not resolved`
  * marker (D-80-04 preserves that wording). The entry is still a valid install
  * target (install performs the fetch); `(remote)` replaces the manifest-only
- * `(available)` over-claim.
+ * `(available)` over-claim. `dependencies` is the entry-declared list
+ * (D-01-32): the plugin's own `plugin.json` is not readable without a fetch,
+ * NFR-5 forbids one, so the entry is the only offline source, and the row
+ * carries the list so the `dependencies:` line renders after the marker.
  */
 function buildRemoteNotInstalledRow(
   pluginName: string,
@@ -2041,6 +2387,7 @@ async function buildGitNotInstalledRow(opts: {
   const pluginRoot = presence.pluginRoot;
   const ctx: ResolveContext = {
     marketplaceRoot: mpRecord.marketplaceRoot,
+    readFileText: (filePath) => reader.readTextFile(filePath),
     resolveGitPluginRoot: probe,
   };
   try {
@@ -2191,7 +2538,10 @@ async function buildNotInstalledRow(opts: {
 
   let resolved;
   try {
-    resolved = await resolveStrict(entry, { marketplaceRoot: mpRecord.marketplaceRoot });
+    resolved = await resolveStrict(entry, {
+      marketplaceRoot: mpRecord.marketplaceRoot,
+      readFileText: (filePath) => reader.readTextFile(filePath),
+    });
   } catch (err) {
     // Probe throw -> classify the underlying failure via the same
     // `narrowProbeError` ladder used by `list.ts`. Hardcoding

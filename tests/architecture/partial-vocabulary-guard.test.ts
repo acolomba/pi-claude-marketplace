@@ -153,6 +153,38 @@ function collectGuardedSources(): ReadonlyMap<string, string> {
 const EXT_SOURCES = collectExtensionSources();
 const GUARDED_SOURCES = collectGuardedSources();
 
+/** Masks only upstream's source sentinel, never a plugin-status homonym. */
+function maskUpstreamSourceSentinel(file: string, content: string): string {
+  if (
+    file === "extensions/pi-claude-marketplace/domain/manifest.ts" ||
+    file === "tests/domain/manifest.test.ts"
+  ) {
+    return content.replace('source: { source: "unsupported" }', "source: UPSTREAM_SENTINEL");
+  }
+
+  if (file === "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts") {
+    return content.replace('source.source === "unsupported"', "IS_UPSTREAM_SENTINEL");
+  }
+
+  return content;
+}
+
+const STATUS_GUARDED_SOURCES = new Map(
+  [...GUARDED_SOURCES].map(([file, content]) => [file, maskUpstreamSourceSentinel(file, content)]),
+);
+
+test("D-75-01 guard: the upstream source mask preserves a retired status literal in the same file", () => {
+  // arrange
+  const file = "extensions/pi-claude-marketplace/domain/manifest.ts";
+  const content = 'source: { source: "unsupported" }, status: "unsupported"';
+
+  // act
+  const masked = maskUpstreamSourceSentinel(file, content);
+
+  // assert
+  assert.equal(masked, 'source: UPSTREAM_SENTINEL, status: "unsupported"');
+});
+
 /** Files (repo-relative) in `sources` whose content contains `needle`. */
 function filesContaining(needle: string, sources: ReadonlyMap<string, string>): string[] {
   const hits: string[] = [];
@@ -322,7 +354,8 @@ const ABSENT_FLAGS = ["--force", "--unsupported"];
 // The quoted status literals (verdict + force-state family). The standalone
 // `"unsupported"` uses a closing quote immediately after `unsupported`, so it
 // does NOT match the OUT-of-scope `"unsupported source"` / `"unsupported hooks"`
-// reason tokens (which have an interior space).
+// reason tokens (which have an interior space). The upstream marketplace source
+// sentinel is a separate homonym, masked only at its two exact use sites.
 const ABSENT_STATUS_LITERALS = [
   '"unsupported"',
   '"force-installed"',
@@ -376,7 +409,7 @@ const ABSENT_TOKENS = [
 
 for (const token of ABSENT_TOKENS) {
   test(`D-75-01 guard: absent everywhere (code + docs + unit tests) -- ${token}`, () => {
-    const hits = unwaivedHits(token, GUARDED_SOURCES);
+    const hits = unwaivedHits(token, STATUS_GUARDED_SOURCES);
     assert.strictEqual(
       hits.length,
       0,

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 
+import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
   buildReconcileAppliedCascade,
   buildReconcilePendingNotification,
@@ -11,6 +12,7 @@ import {
   resolvePendingForceInstalls,
   type PendingInstallCandidate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts";
+import { DependencyCascadeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import type {
@@ -39,6 +41,8 @@ function reconcilePlan(scope: Scope, actions: PlannedActions = {}): ReconcilePla
     pluginsToUninstall: [...(actions.pluginsToUninstall ?? [])],
     pluginsToEnable: [...(actions.pluginsToEnable ?? [])],
     pluginsToDisable: [...(actions.pluginsToDisable ?? [])],
+    pluginsToDependencyDisable: [...(actions.pluginsToDependencyDisable ?? [])],
+    pluginsToDependencyInstall: [...(actions.pluginsToDependencyInstall ?? [])],
     sourceMismatches: [...(actions.sourceMismatches ?? [])],
   };
 }
@@ -259,6 +263,37 @@ function appliedOutcomeRows(): AppliedOutcomeRows {
                 name: "cr",
                 version: "1.0.0",
                 severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "plugin-dependency-disabled": {
+      outcome: {
+        kind: "plugin-dependency-disabled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        version: "1.0.0",
+        reasons: ["dependency unsatisfied"],
+        cause: new Error('Install "vault@mp" or uninstall "cr@mp"'),
+      },
+      expected: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "cr",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Install "vault@mp" or uninstall "cr@mp"'),
+                severity: "warning",
                 needsReload: true,
               },
             ],
@@ -799,6 +834,167 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
+  test("D-09-09: names a reload-installed dependency on its install row", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        version: "1.0.0",
+        dependencies: [],
+        dependencyInstalled: true,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert -- no cause key: the register's success rows carry none.
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "secrets-vault",
+              version: "1.0.0",
+              dependencies: [],
+              reasons: ["dependency installed"],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("TAGS-02: names a dependency that fell back to its current copy on its install row", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        version: "1.0.0",
+        dependencies: [],
+        dependencyInstalled: true,
+        dependencyCurrentCopy: true,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "secrets-vault",
+              version: "1.0.0",
+              dependencies: [],
+              reasons: ["dependency installed", "dependency current copy"],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-09-09: an outcome without the flag renders byte-identically to today", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        version: "1.0.0",
+        dependencies: [],
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert -- no reasons brace (NREG-01).
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "cr",
+              version: "1.0.0",
+              dependencies: [],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-09-09: orders dependency installed before orphan rewake, then degraded kinds", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        version: "1.0.0",
+        dependencies: [],
+        dependencyInstalled: true,
+        orphanRewake: true,
+        degradedKinds: ["skill"],
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "secrets-vault",
+              version: "1.0.0",
+              dependencies: [],
+              reasons: ["dependency installed", "orphan rewake", "malformed skill"],
+              severity: "warning",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("projects a re-enable that dropped component kinds as a partially-installed row", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [
@@ -1272,6 +1468,126 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
+  test("D-05-16: carries the refusal cause on a plugin-uninstall-failed row that names one", () => {
+    // arrange
+    const cause = new UninstallRefusedError(
+      "unreadable",
+      "cannot read the dependencies of keeper@mp: not declared by its marketplace",
+    );
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-uninstall-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "orphan",
+        reason: "unreadable",
+        cause,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "failed",
+              name: "orphan",
+              reasons: ["unreadable"],
+              cause,
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-05-16: renders no cause child on a plugin-install-failed row", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        reason: "permission denied",
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "failed",
+              name: "cr",
+              reasons: ["permission denied"],
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("RESV-06: carries the dependency-cascade cause on a plugin-install-failed row that names one", () => {
+    // arrange
+    const cause = new DependencyCascadeError(
+      'Dependency "missing@mp" is not declared by its marketplace.',
+      "missing@mp",
+    );
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "dependency failed",
+        cause,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "failed",
+              name: "hello",
+              reasons: ["dependency failed"],
+              cause,
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("omits the version slot from an uninstall row whose outcome carries no version", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [
@@ -1560,6 +1876,43 @@ describe("buildReconcilePendingNotification", () => {
       actions: { pluginsToEnable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
       expectedRow: { status: "will enable", name: "cr" },
     },
+    {
+      // WR-02: the held-down bucket previews the same action the
+      // config-driven disable bucket does, so the projection gives it the
+      // same token rather than a new one.
+      bucket: "pluginsToDependencyDisable",
+      actions: {
+        pluginsToDependencyDisable: [
+          {
+            scope: "project",
+            plugin: "cr",
+            marketplace: "mp",
+            dependency: "dep@mp",
+            kind: "missing",
+          },
+        ],
+      },
+      expectedRow: { status: "will disable", name: "cr" },
+    },
+    {
+      // D-09-12: the dependency-install bucket previews the same action the
+      // config-driven install bucket does, so the projection gives it the
+      // same token rather than a new one.
+      bucket: "pluginsToDependencyInstall",
+      actions: {
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "cr",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "dependent@mp",
+            declarers: ["dependent@mp"],
+          },
+        ],
+      },
+      expectedRow: { status: "will install", name: "cr" },
+    },
   ] satisfies readonly {
     bucket: string;
     actions: PlannedActions;
@@ -1578,6 +1931,39 @@ describe("buildReconcilePendingNotification", () => {
       });
     });
   }
+
+  test("D-09-12: previews a dependency install as a bare will-install row", () => {
+    // arrange -- a bucket entry never matches a `resolvePendingForceInstalls`
+    // key, so the row carries no `partial` modifier.
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "secrets-vault",
+            marketplace: "mp",
+            ranges: ["^2.0.0"],
+            requiredBy: "deploy-kit@mp",
+            declarers: ["deploy-kit@mp"],
+          },
+        ],
+      }),
+    ];
+
+    // act
+    const pending = buildReconcilePendingNotification(plans);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [{ status: "will install", name: "secrets-vault" }],
+        },
+      ],
+    });
+  });
 
   for (const { cause, mismatch, subject, reasons, children } of [
     {
@@ -1937,6 +2323,41 @@ describe("isReconcilePlanListEmpty", () => {
     {
       bucket: "a planned disable",
       actions: { pluginsToDisable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
+    },
+    {
+      // WR-02: the load-time held-down bucket is an action the next reload
+      // performs, so a scope carrying only this bucket must not report as a
+      // steady state.
+      bucket: "a planned dependency disable",
+      actions: {
+        pluginsToDependencyDisable: [
+          {
+            scope: "project",
+            plugin: "cr",
+            marketplace: "mp",
+            dependency: "dep@mp",
+            kind: "missing",
+          },
+        ],
+      },
+    },
+    {
+      // MISS-01 / D-09-12: the dependency-install bucket is an action the
+      // next reload performs, so a scope carrying only this bucket must not
+      // report as a steady state.
+      bucket: "a planned dependency install",
+      actions: {
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "cr",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "dependent@mp",
+            declarers: ["dependent@mp"],
+          },
+        ],
+      },
     },
     {
       bucket: "a source mismatch",

@@ -272,6 +272,11 @@ type SharedTopicReason = IdempotentReason | UnsupportedReason | FailureReason | 
 type CommandPrivateReason =
   | "not found"
   | "not installed"
+  // DATA-01 / WR-06: uninstall's data-disposition marker, stamped by the
+  // preserving branch of the one command that offers the opt-out. Owned by that
+  // verb, so it is named here for the proof rather than promoted to a shared
+  // topic group.
+  | "data kept"
   // SCOPE-01 / D-01: the cross-scope qualifier the lifecycle verbs join to
   // `not installed` on an absent-target row. Owned by those verbs' own
   // absent-target composer alongside `not installed`, so it is named here for
@@ -279,13 +284,99 @@ type CommandPrivateReason =
   // structural markers below it, this pair IS a `ContentReason`.
   | "marketplace in user scope"
   | "marketplace in project scope"
+  // RESV-02..06: the dependency-cascade vocabulary, owned by
+  // `orchestrators/plugin/install-cascade.messaging.ts`. Every one of them
+  // describes the install cascade's relationship to ONE closure member, so they
+  // are named here for the proof rather than promoted to a shared topic group.
+  // All seven are `ContentReason`s -- each rides the row of the dependency (or,
+  // for `dependency failed`, the requesting plugin) it is a fact about.
+  | "no matching version"
+  | "version conflict"
+  | "constraint too complex"
+  | "invalid version constraint"
+  | "dependency marketplace not added"
+  // D-11-06: the root marketplace's policy refuses this dependency edge.
+  | "cross-marketplace"
+  | "dependency cycle"
+  | "dependency failed"
+  // TAGS-02 / D-07-03: no marketplace tag satisfied the path-source
+  // dependency's constraint, so the marketplace's CURRENT copy installed
+  // instead of failing. Rides an `installed` row because the install
+  // succeeded -- it is not an idempotent reason (a copy installed, which is
+  // not a no-op) and not a failure reason (nothing failed). The constraint
+  // itself is checked at load by the LOAD-01 check, not here.
+  //
+  // D-07-03 locks this reason's severity at `info`, a deliberate divergence
+  // from Claude Code's own `warning` for the same fallback: the install
+  // itself always succeeds, and the load-time check is what actually flags
+  // and disables a dependent once the fallback copy is genuinely out of
+  // range. `companionSeverity` (not this reason) still raises the row to
+  // `warning` when the member's own soft-dep companion is unloaded, so a
+  // real degradation is never masked. Do not raise this reason's severity to
+  // match `warning` without recording a decision that supersedes D-07-03.
+  | "dependency current copy"
+  // D-08-02: install's already-installed arm and enable's own cascade member
+  // row both stamp this when a disabled, already-installed dependency is
+  // re-materialized through its record. Owned by
+  // `orchestrators/plugin/enable-disable.messaging.ts` (EDEP-01's cascade
+  // member row) and shared by `install-cascade.messaging.ts`'s
+  // already-installed arm (EDEP-03).
+  | "dependency enabled"
+  // D-04-07: install's marker for a recorded dependency the user then named.
+  // The record changed hands and nothing was materialized, so it joins
+  // `already installed` on an `installed` row rather than a skipped one -- a
+  // promotion mutates state, which is why it is not an idempotent reason.
+  | "dependency promoted"
   | "plugins remain"
+  // D-05-11 / PRUNE-04: uninstall's prune marker, owned by
+  // `orchestrators/plugin/uninstall.messaging.ts`. The row's plugin was
+  // recorded as another plugin's dependency and `--prune` removed it once
+  // nothing installed declared it. NOT idempotent: a record left the state.
+  | "dependency pruned"
+  // LOAD-01: the load-time check's marker, owned by
+  // `orchestrators/reconcile/reconcile.messaging.ts`. The row's plugin declares
+  // a dependency the scope does not satisfy, so the check disabled it; the
+  // remedy naming both parties rides the cause line. NOT idempotent: the record
+  // changed state, and the user did not ask for it.
+  | "dependency unsatisfied"
+  // LOAD-01: the same check's marker on its version arm, owned by the same
+  // module. The dependency is recorded and enabled, and the row's cause line
+  // carries the range the recorded version missed. NOT idempotent, for the same
+  // reason its neighbour is not.
+  | "dependency version unsatisfied"
+  // LOAD-03 / D-06-06: uninstall's consequence marker, owned by
+  // `orchestrators/plugin/uninstall.messaging.ts`. Other installed plugins in
+  // the scope still declared the plugin this command removed, and the removal
+  // went through; the keys of those plugins ride the cause line. NOT
+  // idempotent: a record left the state. It is the one member of this group
+  // that rides a SUCCESS row -- the command was carried out in full, and the
+  // consequence it names is reported at the next load, at warning, by the
+  // check that owns `dependency unsatisfied`.
+  | "dependents unsatisfied"
   | "stale clone"
   | "duplicate name"
   | "marketplace not added"
   | "marketplace not added to user scope"
   | "marketplace not added to project scope"
   | "orphan rewake"
+  // EDEP-02: disable's refusal marker, owned by
+  // `orchestrators/plugin/enable-disable.ts`. An installed and ENABLED
+  // plugin in the same scope still declares the target, so the disable is
+  // refused and nothing is written; the dependent keys ride the cause line.
+  // It is the one member of this group that rides a `failed` row -- the
+  // command was NOT carried out, unlike its `dependents unsatisfied`
+  // neighbour above.
+  | "dependents remain"
+  // MISS-01 / D-09-09: reload's marker for a missing declared dependency the
+  // dependency-install step materialized, owned by
+  // `orchestrators/reconcile/notify.ts`. The row's plugin was never named by
+  // the user; it exists to satisfy a declaration. NOT idempotent: a record
+  // was materialized, and it is not a failure -- the install succeeded.
+  | "dependency installed"
+  // UPDT-02 / D-10-09: the update-preflight constraint gate's marker for a
+  // plugin held to versions its installed dependents jointly admit. NOT
+  // idempotent: the update the user asked for was not carried out.
+  | "dependents constrain"
   // WLIF-06: the retired-workflow-command marker. Five verbs stamp it. The
   // three that RE-MATERIALIZE (enable / reinstall / update) take a
   // previous-minus-current difference through `retiresWorkflowCommand`; the two

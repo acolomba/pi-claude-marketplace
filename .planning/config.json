@@ -1,11 +1,20 @@
 {
   "model_profile": "adaptive",
+  "model_profile_overrides": {
+    "codex": {
+      "opus": "gpt-6-astra"
+    }
+  },
   "model_overrides": {
     "gsd-code-reviewer": "opus"
   },
   "dynamic_routing": {
     "enabled": true,
-    "tier_models": { "light": "haiku", "standard": "sonnet", "heavy": "opus" },
+    "tier_models": {
+      "light": "haiku",
+      "standard": "sonnet",
+      "heavy": "opus"
+    },
     "escalate_on_failure": true,
     "max_escalations": 2
   },
@@ -21,7 +30,7 @@
   "firecrawl": false,
   "exa_search": false,
   "git": {
-    "branching_strategy": "milestone",
+    "branching_strategy": "none",
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
     "milestone_branch_template": "features/{milestone}",
     "quick_branch_template": null,

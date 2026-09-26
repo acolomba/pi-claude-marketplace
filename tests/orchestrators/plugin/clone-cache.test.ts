@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -11,9 +11,14 @@ import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
-import { githubSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import {
+  githubSource,
+  pathSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { DEFAULT_GIT_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
   canonicalCloneUrl,
+  materializeMarketplaceTagClone,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
   resolveGitPluginRootWithSubdir,
@@ -1567,4 +1572,253 @@ void test("PURL-03/07: clone-cache re-exports preserve canonical and subdirector
   // assert
   assert.equal(canonicalUrl, "https://example.com/repo.git");
   assert.equal(exportedSubdirResolver.name, "resolveGitSubdirRoot");
+});
+
+/** `.git/HEAD` and `.git/index` bytes, for a before/after untouched-clone proof. */
+async function gitStateSnapshot(
+  root: string,
+): Promise<{ head: Buffer; index: Buffer | undefined }> {
+  const head = await readFile(path.join(root, ".git", "HEAD"));
+  let index: Buffer | undefined;
+  try {
+    index = await readFile(path.join(root, ".git", "index"));
+  } catch {
+    index = undefined;
+  }
+
+  return { head, index };
+}
+
+void test("materializeMarketplaceTagClone: materializes the tag's tree without mutating the marketplace clone's own git state", async () => {
+  // arrange
+  const locations = await freshLocations();
+  const marketplaceRoot = await buildMarketplaceCheckout({
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  const before = await gitStateSnapshot(marketplaceRoot);
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+
+  // act
+  const result = await materializeMarketplaceTagClone({
+    locations,
+    marketplaceRoot,
+    marketplaceSource: GITHUB_REPO_URL,
+    marketplaceName: "marketplace",
+    pathSource: pathSource("./plugins/foo"),
+    tagOid,
+  });
+
+  // assert
+  assert.equal(result.kind, "materialized");
+  if (result.kind === "materialized") {
+    assert.equal(result.resolvedSha, tagOid);
+    const pluginJson: unknown = JSON.parse(
+      await readFile(path.join(result.pluginRoot, ".claude-plugin", "plugin.json"), "utf8"),
+    );
+    assert.deepEqual(pluginJson, { name: "foo" });
+  }
+
+  const after = await gitStateSnapshot(marketplaceRoot);
+  assert.deepEqual(after, before);
+});
+
+void test("materializeMarketplaceTagClone: a warm-cache key skips re-copy and re-checkout entirely", async () => {
+  // arrange
+  const locations = await freshLocations();
+  const marketplaceRoot = await buildMarketplaceCheckout({
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const key = pluginCloneKey(GITHUB_REPO_URL, tagOid);
+  const dest = await locations.pluginCloneDir(key);
+  await mkdir(dest, { recursive: true });
+  await mkdir(path.join(dest, "plugins", "foo", ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(dest, "plugins", "foo", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "sentinel" }),
+  );
+
+  // act
+  const result = await materializeMarketplaceTagClone({
+    locations,
+    marketplaceRoot,
+    marketplaceSource: GITHUB_REPO_URL,
+    marketplaceName: "marketplace",
+    pathSource: pathSource("./plugins/foo"),
+    tagOid,
+  });
+
+  // assert: the sentinel content proves the warm key was never overwritten.
+  assert.equal(result.kind, "materialized");
+  if (result.kind === "materialized") {
+    const pluginJson: unknown = JSON.parse(
+      await readFile(path.join(result.pluginRoot, ".claude-plugin", "plugin.json"), "utf8"),
+    );
+    assert.deepEqual(pluginJson, { name: "sentinel" });
+  }
+
+  assert.deepEqual(await stagingEntries(locations), []);
+});
+
+void test("materializeMarketplaceTagClone: a failed checkout cleans staging and rethrows with the leak suffix appended (MA-9)", async () => {
+  // arrange
+  const locations = await freshLocations();
+  const marketplaceRoot = await buildMarketplaceCheckout({
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const checkoutError = new Error("checkout failed");
+  const gitOps: GitOps = {
+    ...DEFAULT_GIT_OPS,
+    checkout: () => Promise.reject(checkoutError),
+  };
+
+  // act & assert
+  await assert.rejects(
+    materializeMarketplaceTagClone({
+      locations,
+      marketplaceRoot,
+      marketplaceSource: GITHUB_REPO_URL,
+      marketplaceName: "marketplace",
+      pathSource: pathSource("./plugins/foo"),
+      tagOid,
+      gitOps,
+    }),
+    (err: unknown) => err === checkoutError,
+  );
+  assert.deepEqual(await stagingEntries(locations), []);
+});
+
+void test("materializeMarketplaceTagClone: an unreadable marketplace gitdir cleans staging instead of leaking it", async () => {
+  // arrange: the marketplace root's `.git` is gone by the time the copy runs
+  // (WR-04's exact shape -- missing or unreadable), so the `cp` into staging
+  // throws before any checkout is attempted.
+  const locations = await freshLocations();
+  const marketplaceRoot = await buildMarketplaceCheckout({
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  await rm(path.join(marketplaceRoot, ".git"), { recursive: true, force: true });
+
+  // act & assert
+  await assert.rejects(
+    materializeMarketplaceTagClone({
+      locations,
+      marketplaceRoot,
+      marketplaceSource: GITHUB_REPO_URL,
+      marketplaceName: "marketplace",
+      pathSource: pathSource("./plugins/foo"),
+      tagOid,
+    }),
+    { code: "ENOENT" },
+  );
+  assert.deepEqual(await stagingEntries(locations), []);
+});
+
+void test("materializeMarketplaceTagClone: a checkout failure that also fails to clean up staging carries the leak annotation (MA-9)", async () => {
+  // arrange
+  const locations = await freshLocations();
+  const marketplaceRoot = await buildMarketplaceCheckout({
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const checkoutError = new Error("checkout failed");
+  let stagingParent = "";
+  const gitOps: GitOps = {
+    ...DEFAULT_GIT_OPS,
+    checkout: async (options) => {
+      stagingParent = path.dirname(options.dir);
+      // Deny write on the staging dir's parent so cleanupStaging's own `rm`
+      // fails too, forcing appendLeakToError's leak branch instead of its
+      // pass-through branch.
+      await chmod(stagingParent, 0o500);
+      throw checkoutError;
+    },
+  };
+
+  // act
+  let materializeError: unknown;
+  try {
+    await materializeMarketplaceTagClone({
+      locations,
+      marketplaceRoot,
+      marketplaceSource: GITHUB_REPO_URL,
+      marketplaceName: "marketplace",
+      pathSource: pathSource("./plugins/foo"),
+      tagOid,
+      gitOps,
+    });
+  } catch (error) {
+    materializeError = error;
+  } finally {
+    await chmod(stagingParent, 0o700);
+  }
+
+  // assert
+  assert.ok(materializeError instanceof Error);
+  assert.match(
+    materializeError.message,
+    /^checkout failed \(additionally: failed to clean up marketplace tag clone staging at .*: EACCES/,
+  );
+  assert.strictEqual(materializeError.cause, checkoutError);
+});
+
+void test("materializeMarketplaceTagClone: no directory at the path source's relative path resolves the missing-subdir arm (D-07-08)", async () => {
+  // arrange
+  const locations = await freshLocations();
+  const marketplaceRoot = await buildMarketplaceCheckout({
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+
+  // act
+  const result = await materializeMarketplaceTagClone({
+    locations,
+    marketplaceRoot,
+    marketplaceSource: GITHUB_REPO_URL,
+    marketplaceName: "marketplace",
+    pathSource: pathSource("./plugins/missing"),
+    tagOid,
+  });
+
+  // assert
+  assert.equal(result.kind, "missing-subdir");
+  // WR-07: the detail must name the source kind the user actually used
+  // (`path`), not `git-subdir` -- a kind this install never touched.
+  assert.ok(result.kind === "missing-subdir");
+  assert.match(result.detail, /^path path "/u);
+  assert.doesNotMatch(result.detail, /git-subdir/u);
+});
+
+void test("materializeMarketplaceTagClone: a marketplace checkout with no discoverable origin remote still derives a key (RESEARCH A2)", async () => {
+  // arrange: no `originUrl`, so `deriveMarketplaceUrl` finds no origin remote.
+  const locations = await freshLocations();
+  const marketplaceRoot = await buildMarketplaceCheckout({ plugins: [] });
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+
+  // act
+  const result = await materializeMarketplaceTagClone({
+    locations,
+    marketplaceRoot,
+    marketplaceSource: marketplaceRoot,
+    marketplaceName: "marketplace",
+    pathSource: pathSource("./plugins/foo"),
+    tagOid,
+  });
+
+  // assert: materialization still succeeds off the name-keyed fallback.
+  assert.equal(result.kind, "materialized");
 });

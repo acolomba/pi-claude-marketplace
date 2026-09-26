@@ -365,5 +365,247 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // LOAD-01: the load-time dependency check disabled a plugin whose declared
+    // dependency has no record in the scope. The token names the condition and
+    // the cause line carries the remedy, which names both parties.
+    "reconcile-dependency-unsatisfied": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Install "secrets-vault@mp" or uninstall "deploy-kit@mp"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LOAD-01: the same check, on the arm where the dependency IS recorded but
+    // its own record is disabled. Same token, because the dependency is not
+    // usable at all; the remedy says enable rather than install.
+    "reconcile-dependency-disabled": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Enable "secrets-vault@mp" or uninstall "deploy-kit@mp"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LOAD-01: the same check, on the arm where the dependency is recorded and
+    // enabled at a version outside the declared range. The second token, and a
+    // remedy that names the canonical folded range.
+    "reconcile-dependency-version-unsatisfied": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency version unsatisfied"],
+                cause: new Error(
+                  'Update "secrets-vault@mp" to satisfy >=2.0.0 <3.0.0-0, or uninstall "deploy-kit@mp"',
+                ),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-06: the load-time counterpart of the standalone dependency-cascade
+    // {dependency failed} row. Reconcile drives ONE orchestrated outcome per
+    // declared plugin, so the requesting plugin's own row carries both the
+    // {dependency failed} token and the failing dependency's own cause line.
+    "reconcile-install-dependency-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "hello",
+                reasons: ["dependency failed"],
+                cause: new Error('Dependency "missing@mp" is not declared by its marketplace.'),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // MISS-01 / D-09-09: `/reload` installed a missing declared dependency
+    // through the install cascade. The materialized member's row carries
+    // `{dependency installed}`; the dependent that declared it comes back up
+    // in the same reload as an ordinary `(installed)` row (D-09-07).
+    "reconcile-dependency-installed": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "installed",
+                name: "secrets-vault",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["dependency installed"],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "installed",
+                name: "deploy-kit",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // MISS-02 / D-09-10: `/reload` could not install a missing declared
+    // dependency. The dependency's own `(failed)` row reuses the standalone
+    // cascade's `{dependency failed}` token and cause line; the dependent
+    // stays held by the LOAD-01 `{dependency unsatisfied}` row with the
+    // install remedy.
+    "reconcile-dependency-install-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "secrets-vault",
+                reasons: ["dependency failed"],
+                cause: new Error('Dependency "crypto-core@mp" is not declared by its marketplace.'),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Install "secrets-vault@mp" or uninstall "deploy-kit@mp"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "reconcile-dependency-cross-marketplace": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "alpha",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "a",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Install "b@beta" or uninstall "a@alpha"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "beta",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "b",
+                reasons: ["cross-marketplace"],
+                cause: new Error(
+                  'Dependency "b@beta", declared by "a@alpha", is from marketplace "beta", which root marketplace "alpha" does not allow. Install "b@beta" manually first, or add "beta" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

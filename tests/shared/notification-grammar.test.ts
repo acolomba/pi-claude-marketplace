@@ -32,8 +32,11 @@ import {
   renderUninstalledRow,
   renderVersion,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { shouldEmitReloadHint } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
 
 import type {
+  MarketplaceNotificationMessage,
+  PluginInfoMessage,
   PluginNotificationMessage,
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
@@ -299,6 +302,30 @@ for (const { plugin, expected } of ROW_CASES) {
   });
 }
 
+test("pending uninstall stays bare while prune preview adds its reason without a reload", () => {
+  const bare: MarketplaceNotificationMessage = {
+    name: "official",
+    scope: "user",
+    plugins: [{ status: "will uninstall", name: "shared-lib" }],
+  };
+  const prunePreview: MarketplaceNotificationMessage = {
+    name: "official",
+    scope: "user",
+    plugins: [{ status: "will uninstall", name: "shared-lib", reasons: ["dependency pruned"] }],
+  };
+
+  assert.equal(
+    composeMarketplaceBlock(bare, bothLoadedProbe()),
+    "● official [user]\n  ○ shared-lib (will uninstall)",
+  );
+  assert.equal(
+    composeMarketplaceBlock(prunePreview, bothLoadedProbe()),
+    "● official [user]\n  ○ shared-lib (will uninstall) {dependency pruned}",
+  );
+  assert.equal(shouldEmitReloadHint({ marketplaces: [bare] }), false);
+  assert.equal(shouldEmitReloadHint({ kind: "cascade", marketplaces: [prunePreview] }), false);
+});
+
 test("composes descriptions, hints, causes, leaks, and rollback failures in order", () => {
   // arrange
   const cause = new ManualRecoveryError("outer", ["/tmp/leak"], { cause: new Error("inner") });
@@ -329,6 +356,86 @@ test("composes descriptions, hints, causes, leaks, and rollback failures in orde
     "      cause: rollback",
     "    [commands] (rollback failed)",
   ]);
+});
+
+test("renders the remedy cause trailer on a disabled row that carries one", () => {
+  // arrange
+  const plugin = {
+    status: "disabled",
+    name: "alpha",
+    reasons: ["dependency unsatisfied"],
+    cause: new Error('Install "vault@mp" or uninstall "alpha@mp"'),
+  };
+
+  // act
+  const lines = composePluginLinesWith(
+    plugin as never,
+    bothLoadedProbe(),
+    "user",
+    () => "◍ alpha (disabled) {dependency unsatisfied}",
+  );
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ◍ alpha (disabled) {dependency unsatisfied}",
+    '    cause: Install "vault@mp" or uninstall "alpha@mp"',
+  ]);
+});
+
+test("renders no trailer on a disabled row that carries no cause", () => {
+  // arrange
+  const plugin = { status: "disabled", name: "alpha" };
+
+  // act
+  const lines = composePluginLinesWith(
+    plugin as never,
+    bothLoadedProbe(),
+    "user",
+    () => "◍ alpha (disabled)",
+  );
+
+  // assert
+  assert.deepStrictEqual(lines, ["  ◍ alpha (disabled)"]);
+});
+
+test("renders the held-update cause trailer on a skipped row that carries one", () => {
+  // arrange
+  const plugin = {
+    status: "skipped",
+    name: "alpha",
+    reasons: ["dependents constrain"],
+    cause: new Error('the declared ranges admit no version in common -- required by "beta@mp"'),
+  };
+
+  // act
+  const lines = composePluginLinesWith(
+    plugin as never,
+    bothLoadedProbe(),
+    "user",
+    () => "⊘ alpha (skipped) {dependents constrain}",
+  );
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ⊘ alpha (skipped) {dependents constrain}",
+    '    cause: the declared ranges admit no version in common -- required by "beta@mp"',
+  ]);
+});
+
+test("composes exactly one line for a skipped row with no cause", () => {
+  // arrange
+  const plugin = { status: "skipped", name: "alpha", reasons: ["up-to-date"] };
+
+  // act
+  const lines = composePluginLinesWith(
+    plugin as never,
+    bothLoadedProbe(),
+    "user",
+    () => "⊘ alpha (skipped) {up-to-date}",
+  );
+
+  // assert
+  assert.deepStrictEqual(lines, ["  ⊘ alpha (skipped) {up-to-date}"]);
 });
 
 for (const { plugin, trailer } of [
@@ -420,6 +527,38 @@ for (const { source, expectedSource } of [
   });
 }
 
+test("marketplace info escapes hostile allowlist values on one line without mutation", () => {
+  // arrange
+  const allowedMarketplaces = [
+    'quote"slash\\',
+    "line\nfeed",
+    "c1\u0085",
+    "separators\u2028\u2029",
+    "bidi\u061c\u200e\u200f\u202a\u202e\u2066\u2069",
+    "café",
+    "",
+  ];
+  const before = [...allowedMarketplaces];
+  const message = {
+    kind: "marketplace-info" as const,
+    name: "policy",
+    scope: "user" as const,
+    details: { autoupdate: false },
+    source: { sourceKind: "path" as const, absPath: "/policy" },
+    allowedMarketplaces,
+  };
+
+  // act
+  const rendered = renderMarketplaceInfo(message, bothLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    '● policy [user] <no autoupdate>\npath: /policy\nallowed_marketplaces: ["quote\\"slash\\\\","line\\nfeed","c1\\u0085","separators\\u2028\\u2029","bidi\\u061c\\u200e\\u200f\\u202a\\u202e\\u2066\\u2069","café",""]',
+  );
+  assert.deepEqual(allowedMarketplaces, before);
+});
+
 test("marketplace info cascades preserve zero and many shapes and order", () => {
   // arrange
   const first = {
@@ -481,6 +620,51 @@ for (const [status, glyph] of [
     );
   });
 }
+
+test("renders the entry-declared dependencies line after the unresolved marker (D-01-32)", () => {
+  // arrange
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "remote",
+      name: "alpha",
+      componentsResolved: false,
+      dependencies: ["helper@mp"],
+    },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message, bothLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    "● official [user] <no autoupdate>\n  ◌ alpha (remote)\n    components: not resolved\n    dependencies: helper@mp",
+  );
+});
+
+test("renders no dependencies line for an unresolved row whose list is empty", () => {
+  // arrange
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: { status: "remote", name: "alpha", componentsResolved: false, dependencies: [] },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message, bothLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    "● official [user] <no autoupdate>\n  ◌ alpha (remote)\n    components: not resolved",
+  );
+});
 
 test("renders resolved plugin components and wraps descriptions without ellipsis", () => {
   // arrange
@@ -961,6 +1145,24 @@ for (const { name, row, expected } of [
         "user",
       ),
     expected: "○ alpha [project] v1.0.0 (uninstalled)",
+  },
+  {
+    name: "renderUninstalledRow renders the data disposition of a realized removal",
+    row: () =>
+      renderUninstalledRow(
+        {
+          status: "uninstalled",
+          name: "alpha",
+          scope: "project",
+          version: "1.0.0",
+          reasons: ["data kept"],
+          severity: "info",
+          needsReload: true,
+        },
+        bothLoadedProbe(),
+        "user",
+      ),
+    expected: "○ alpha [project] v1.0.0 (uninstalled) {data kept}",
   },
   {
     name: "renderAvailableRow renders an entry-derived reason",

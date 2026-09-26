@@ -12,6 +12,9 @@ import {
   emptyReconcilePlan,
   plannedSourceMismatchSubject,
   type ApplyReconcileOptions,
+  type DependencyDisableStamp,
+  type PlannedDependencyDisable,
+  type PlannedDependencyInstall,
   type PlannedMarketplaceAdd,
   type PlannedMarketplaceRemove,
   type PlannedPluginDisable,
@@ -29,6 +32,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { UninstallPluginOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionAPI,
@@ -46,6 +50,11 @@ const extensionApi = mock<ExtensionAPI>({
 const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
 const completionCache = createCompletionCache();
 const gitOps = mock<GitOps>({ exactParams: true, name: "Git operations type evidence" });
+const uninstallPlugin = mock<UninstallPluginOperation>({
+  exactParams: true,
+  name: "uninstall operation type evidence",
+});
+const dependencyDisableStamp: DependencyDisableStamp = () => Promise.resolve();
 
 const plannedMarketplaceAdd = {
   scope: "project",
@@ -79,6 +88,21 @@ const plannedPluginDisable = {
   plugin: "linter",
   marketplace: "official",
 } satisfies PlannedPluginDisable;
+const plannedDependencyDisable = {
+  scope: "project",
+  plugin: "deploy-kit",
+  marketplace: "official",
+  dependency: "secrets-vault@official",
+  kind: "missing",
+} satisfies PlannedDependencyDisable;
+const plannedDependencyInstall = {
+  scope: "project",
+  plugin: "secrets-vault",
+  marketplace: "official",
+  ranges: ["^2.0.0"],
+  requiredBy: "deploy-kit@official",
+  declarers: ["deploy-kit@official"],
+} satisfies PlannedDependencyInstall;
 const sourceMismatch = {
   scope: "project",
   cause: "source-mismatch",
@@ -118,6 +142,8 @@ void ({
   pluginsToUninstall: [plannedPluginUninstall],
   pluginsToEnable: [plannedPluginEnable],
   pluginsToDisable: [plannedPluginDisable],
+  pluginsToDependencyDisable: [plannedDependencyDisable],
+  pluginsToDependencyInstall: [plannedDependencyInstall],
   sourceMismatches: [sourceMismatch, unknownStoredSource, danglingReference, malformedPluginKey],
 } satisfies ReconcilePlan);
 
@@ -136,6 +162,48 @@ void ({
   scope: "project",
   gitOps,
   hooksRouting,
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  uninstallPlugin,
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  stampDependencyDisabled: dependencyDisableStamp,
+} satisfies ApplyReconcileOptions);
+// D-09-13: the host's resources_discover reason.
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  reason: "reload",
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  reason: "startup",
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  // @ts-expect-error reason is closed to the host's own "startup" | "reload" set
+  reason: "manual",
 } satisfies ApplyReconcileOptions);
 
 const extensionState = {
@@ -232,6 +300,38 @@ void ({
 } satisfies PlannedPluginDisable);
 void ({
   scope: "project",
+  plugin: "deploy-kit",
+  marketplace: "official",
+  kind: "missing",
+  // @ts-expect-error a dependency disable always names the declaration it could not satisfy
+} satisfies PlannedDependencyDisable);
+void ({
+  scope: "project",
+  plugin: "deploy-kit",
+  marketplace: "official",
+  dependency: "secrets-vault@official",
+  // @ts-expect-error unsatisfied declarations use a closed three-member vocabulary
+  kind: "unreadable",
+} satisfies PlannedDependencyDisable);
+void ({
+  scope: "project",
+  plugin: "secrets-vault",
+  marketplace: "official",
+  ranges: [],
+  requiredBy: "deploy-kit@official",
+  // @ts-expect-error a missing install must carry every eligible original declarer
+} satisfies PlannedDependencyInstall);
+void ({
+  scope: "project",
+  plugin: "secrets-vault",
+  marketplace: "official",
+  ranges: [],
+  requiredBy: "deploy-kit@official",
+  // @ts-expect-error declarers is a list of plugin keys, not one key
+  declarers: "deploy-kit@official",
+} satisfies PlannedDependencyInstall);
+void ({
+  scope: "project",
   cause: "source-mismatch",
   marketplace: "official",
   declaredSource: "https://github.com/example/official.git",
@@ -284,6 +384,8 @@ void ({
   pluginsToUninstall: [],
   pluginsToEnable: [],
   pluginsToDisable: [],
+  pluginsToDependencyDisable: [],
+  pluginsToDependencyInstall: [],
   // @ts-expect-error reconcile plans always expose their mismatch bucket
 } satisfies ReconcilePlan);
 void ({
@@ -310,6 +412,15 @@ void ({
   hooksRouting,
   gitOps: undefined,
   // @ts-expect-error exact optional properties reject explicitly undefined Git operations
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  uninstallPlugin: undefined,
+  // @ts-expect-error exact optional properties reject an explicitly undefined uninstall operation
 } satisfies ApplyReconcileOptions);
 void ({
   plan: undefined,
@@ -409,6 +520,8 @@ describe("emptyReconcilePlan", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
       sourceMismatches: [],
     });
     assert.deepStrictEqual(Object.keys(plan), [
@@ -419,6 +532,8 @@ describe("emptyReconcilePlan", () => {
       "pluginsToUninstall",
       "pluginsToEnable",
       "pluginsToDisable",
+      "pluginsToDependencyDisable",
+      "pluginsToDependencyInstall",
       "sourceMismatches",
     ]);
   });
@@ -439,6 +554,8 @@ describe("emptyReconcilePlan", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
       sourceMismatches: [],
     });
   });
@@ -460,6 +577,8 @@ describe("emptyReconcilePlan", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
       sourceMismatches: [],
     });
     assert.deepStrictEqual(secondPlan, {
@@ -470,6 +589,8 @@ describe("emptyReconcilePlan", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
       sourceMismatches: [],
     });
     assert.notStrictEqual(firstPlan, secondPlan);

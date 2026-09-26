@@ -25,14 +25,27 @@
 
 import path from "node:path";
 
-import { PluginShapeError, StateLockHeldError } from "../../shared/errors.ts";
+import { isRenderablePluginKey } from "../../domain/dependencies.ts";
+import { renderConstraintRange } from "../../domain/dependency-range.ts";
+import {
+  DependencyCascadeError,
+  PluginShapeError,
+  StateLockHeldError,
+} from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
+import {
+  DEPENDENCY_UNSATISFIED_ROW_REASONS,
+  DEPENDENCY_VERSION_UNSATISFIED_ROW_REASONS,
+} from "./reconcile.messaging.ts";
+
+import type { UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
+import type { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 export interface OutcomeBase {
   readonly scope: Scope;
@@ -100,6 +113,23 @@ export interface PluginInstalledOutcome
   readonly version?: string;
   readonly dependencies: readonly Dependency[];
   /**
+   * MISS-01 / D-09-09: present only when the reload's dependency-install step
+   * materialized this row's plugin to satisfy a declaration (`provenance:
+   * "dependency"`); omitted otherwise (NREG-01). The reconcile projection
+   * reads it to push the `dependency installed` token -- `notify.ts` composes
+   * no vocabulary of its own.
+   */
+  readonly dependencyInstalled?: true;
+  /**
+   * TAGS-02: present only when this row's member fell back to its
+   * current copy (`CascadeMemberOutcome.fellBackToCurrentCopy`) because no
+   * release tag satisfied the closure's constraints; omitted otherwise
+   * (NREG-01). Mirrors the standalone cascade's own `{dependency current
+   * copy}` marker (`install-cascade.messaging.ts`) so the reload row names
+   * the same fact.
+   */
+  readonly dependencyCurrentCopy?: true;
+  /**
    * S2 / PR #51: orchestrated-mode `InstallPluginOutcome.postCommitWarnings`
    * propagated through to the reconcile cascade caller. Mirrors the
    * `import/execute.ts::installOnePlannedPlugin` pattern -- post-commit hygiene warnings
@@ -156,6 +186,23 @@ export interface PluginBackfilledOutcome
 export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-install-failed";
   readonly reason: Reason;
+  /**
+   * RESV-06: set ONLY when the failure is attributable to a DEPENDENCY
+   * (`reason === "dependency failed"`) -- the projection surfaces it as the
+   * row's cause-chain trailer, mirroring `plugin-uninstall-failed.cause`
+   * (D-05-16). Every other failed install leaves it unset.
+   *
+   * Redacted at the apply.ts push site (T-55-02-02 / T-53-02-02): the
+   * closure/constraint arms build their message from `name@marketplace` keys
+   * and version constraints (never a path), but a dependency's own ledger
+   * failure can carry one anywhere in its cause chain. `apply.ts`'s
+   * `redactedDependencyCascadeError` rebuilds the value's message AND its
+   * full nested cause chain (via `shared/redact-absolute-paths.ts`'s
+   * `redactCauseChain`) with every link redacted, since the renderer's
+   * depth-5 `causeChainTrailer` walker (`shared/errors.ts`) does not redact
+   * on its own.
+   */
+  readonly cause?: DependencyCascadeError;
 }
 
 /** Plugin uninstall success outcome. */
@@ -168,6 +215,25 @@ export interface PluginUninstalledOutcome extends PluginOutcomeBase {
 export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-uninstall-failed";
   readonly reason: Reason;
+  /**
+   * D-05-16: set ONLY for a REFUSED uninstall, which since D-06-06 means
+   * exactly one thing -- some other record's declarations could not be
+   * established (D-05-07). The projection surfaces it as the row's cause-chain
+   * trailer, so a config-driven uninstall reports the same `cause:` line the
+   * typed command does, naming which record could not be read. Every other
+   * failed uninstall leaves it unset.
+   *
+   * The field OUTLIVED the dependents refusal it was introduced beside: a
+   * target other plugins still declare is now removed rather than refused, and
+   * the fail-closed unreadable refusal it also served still happens, so the
+   * carriage is live rather than dead.
+   *
+   * No `redactAbsolutePaths` pass is applied here, on purpose: the refusal's
+   * message is composed from `name@marketplace` keys, field paths and text the
+   * declaration-index leaf already redacted, and it chains no `cause` behind
+   * it, so there is no path left for the depth-5 cause-chain walker to print.
+   */
+  readonly cause?: UninstallRefusedError;
 }
 
 /**
@@ -237,6 +303,143 @@ export interface PluginDisabledOutcome extends PluginOutcomeBase {
    * foreign file are both still on disk.
    */
   readonly postCommitWarnings?: readonly string[];
+}
+
+/**
+ * LOAD-01: the load-time check disabled this plugin, because a dependency it
+ * declares is not satisfied in the same scope.
+ *
+ * It is a separate arm from `plugin-disabled` rather than three more optional
+ * fields on it, because the two report different facts. A toggle disable
+ * carried out what the user declared and reaches the desired state; this one
+ * carried out a consequence the user did not ask for and leaves the desired
+ * state unreached, so it renders at warning severity with a remedy the toggle
+ * row has nothing to say about.
+ *
+ * `dependency`, `unsatisfied` and `range` are the remedy's inputs. The
+ * discriminant is named `unsatisfied` because `kind` already discriminates the
+ * outcome union itself.
+ */
+export interface PluginDependencyDisabledOutcome extends PluginOutcomeBase {
+  readonly kind: "plugin-dependency-disabled";
+  readonly version?: string;
+  /**
+   * The row's brace, stamped by the producer rather than named in the renderer
+   * (`notify.ts` maps an arm to a row and composes no vocabulary of its own).
+   */
+  readonly reasons: readonly ContentReason[];
+  /**
+   * The remedy, naming the dependency and the dependent. It is built here, at
+   * production time, for the same reason `plugin-uninstall-failed` carries its
+   * refusal: the row renders a sentence the orchestrator composed, and the
+   * renderer composes none.
+   *
+   * T-06-01: every key the message interpolates is cleared by `remedyParty`
+   * first, and it chains NO nested cause, so the renderer's chain walk -- which
+   * does not redact on its own -- has no raw message behind it to print.
+   */
+  readonly cause: Error;
+}
+
+/**
+ * One party of a remedy sentence: the key in quotes when it is renderable, and
+ * the caller's key-less noun phrase when it is not.
+ *
+ * T-06-02: both keys reach the sentence from a STATE record, so neither is
+ * token-validated by arrival alone. The dependent is
+ * `${plugin}@${marketplace}` of the recorded declarer. The dependency is the
+ * declared name -- token-validated -- joined to a marketplace that is the
+ * declaration's own only when the declaration named one; a declaration that
+ * named none inherits the DECLARING RECORD's marketplace name
+ * (`dependency-index.ts::readRecordDeclarations`), which is bounded only by
+ * `assertSafeName`. `assertSafeName` admits `"`, `,`, spaces and bidi
+ * controls, so an unchecked key could close a quote and forge the rest of the
+ * line, which the cause-chain renderer neither redacts nor escapes.
+ */
+function remedyParty(key: string, keyless: string): string {
+  return isRenderablePluginKey(key) ? `"${key}"` : keyless;
+}
+
+/**
+ * The remedy sentence for one unsatisfied declaration, in the three shapes
+ * LOAD-01 pins, transcribed from the upstream wording rather than paraphrased.
+ *
+ * Each party is quoted only after `remedyParty` clears it. The row's own
+ * subject already names the held-down plugin, so the key-less form stays
+ * actionable. T-06-05: a declared range is bounded by `renderConstraintRange`,
+ * never sliced by hand.
+ */
+function dependencyRemedy(held: {
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly dependency: string;
+  readonly kind: UnsatisfiedKind;
+  readonly range?: string;
+}): string {
+  const dependency = remedyParty(held.dependency, "the declared dependency");
+  const dependent = remedyParty(`${held.plugin}@${held.marketplace}`, "this plugin");
+  switch (held.kind) {
+    case "missing":
+      return `Install ${dependency} or uninstall ${dependent}`;
+    case "disabled":
+      return `Enable ${dependency} or uninstall ${dependent}`;
+    case "out-of-range":
+      // The verdict carries a range on this kind. One that arrives without it
+      // still names the remedy's two parties, rather than rendering an empty
+      // constraint the operator cannot act on.
+      return held.range === undefined
+        ? `Update ${dependency} or uninstall ${dependent}`
+        : `Update ${dependency} to satisfy ${renderConstraintRange(held.range)}, or uninstall ${dependent}`;
+  }
+}
+
+/**
+ * The row's brace for one unsatisfied kind.
+ *
+ * The version arm carries its own token because its remedy is a different kind
+ * of instruction -- move an existing plugin's version, rather than install or
+ * enable a missing one -- and the two upstream error codes it mirrors are
+ * likewise a pair. The missing and disabled arms share the first token: both
+ * name a dependency that is not usable at all.
+ */
+function dependencyRowReasons(kind: UnsatisfiedKind): readonly ContentReason[] {
+  return kind === "out-of-range"
+    ? DEPENDENCY_VERSION_UNSATISFIED_ROW_REASONS
+    : DEPENDENCY_UNSATISFIED_ROW_REASONS;
+}
+
+/**
+ * Build the load-time disable outcome for one held-down plugin.
+ *
+ * It lives beside the shape rather than inside the apply step, on the
+ * `dependenciesFromInstall` precedent: which optional fields a given
+ * unsatisfied kind carries is the arm's own contract, so the one place that
+ * fills them sits next to the interface that declares them.
+ *
+ * The parameter is the planned entry's shape structurally rather than by name:
+ * `types.ts` already imports this module for `PerEntryOutcome`, so naming
+ * `PlannedDependencyDisable` here would close an import cycle.
+ */
+export function dependencyDisabledOutcome(
+  held: {
+    readonly scope: Scope;
+    readonly marketplace: string;
+    readonly plugin: string;
+    readonly dependency: string;
+    readonly kind: UnsatisfiedKind;
+    readonly range?: string;
+  },
+  version: string | undefined,
+): PluginDependencyDisabledOutcome {
+  return {
+    kind: "plugin-dependency-disabled",
+    scope: held.scope,
+    marketplace: held.marketplace,
+    plugin: held.plugin,
+    ...(version !== undefined && { version }),
+    reasons: dependencyRowReasons(held.kind),
+    cause: new Error(dependencyRemedy(held)),
+  };
 }
 
 /** Plugin disable failure outcome. */
@@ -347,6 +550,7 @@ export type PerEntryOutcome =
   | PluginEnabledOutcome
   | PluginEnableFailedOutcome
   | PluginDisabledOutcome
+  | PluginDependencyDisabledOutcome
   | PluginDisableFailedOutcome
   | SourceMismatchOutcome
   | InvalidBlockOutcome;
@@ -372,10 +576,19 @@ export type PerEntryOutcome =
  * `importWarningReason("uninstallable")` so the cross-surface reason stays
  * identical for the same underlying failure.
  *
+ * RESV-06: a `DependencyCascadeError` is checked FIRST -- an install failure
+ * attributable to one of the plugin's dependencies otherwise falls through to
+ * `{unreadable}`, losing the closure/constraint arms' `name@marketplace`
+ * cause entirely.
+ *
  * Exported for direct unit-test exercise of the closed-set mapping
  * (the function is otherwise module-private).
  */
 export function classifyOrchestratorThrow(err: unknown): ContentReason {
+  if (err instanceof DependencyCascadeError) {
+    return "dependency failed";
+  }
+
   if (err instanceof StateLockHeldError) {
     return "lock held";
   }

@@ -47,6 +47,7 @@ import type {
   GitBackedSource,
   GitHubSource,
   GitSubdirSource,
+  PathSource,
   UrlSource,
 } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -606,4 +607,96 @@ export async function resolveGitPluginRootWithSubdir(
   }
 
   return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha };
+}
+
+/**
+ * D-07-01 / D-07-04: materialize a marketplace-local release tag's tree into
+ * `plugin-clones/<key>/`, without ever mutating the marketplace clone's own
+ * working tree, HEAD, or index.
+ *
+ * Construction (D-07-04, developer-confirmed): copy ONLY the marketplace's
+ * `.git` dir into an otherwise-empty staging dir, then check the tag out
+ * there. The tag is checked out inside a COPY's own gitdir, never against a
+ * `gitdir` naming the marketplace clone -- verified against the installed
+ * isomorphic-git source that a checkout writes `${gitdir}/index` regardless
+ * of `noUpdateHead`, which would silently desync the marketplace clone's own
+ * index. Copying `.git` alone (not the work tree) means every index read and
+ * write lands on the copy, the marketplace clone is never opened by any git
+ * API at all, AND the checkout is the only thing that ever writes into the
+ * work tree -- an untracked or gitignored file in the marketplace root
+ * cannot ride along, because the staging dir never had a work tree to copy
+ * one from.
+ *
+ * Keying: `pluginCloneKey(marketplaceUrl, tagOid)`, the SAME key shape a
+ * pinned git-source clone uses, so `clone-gc.ts::deriveLiveCloneKeys` needs no
+ * new logic to protect this directory. `marketplaceUrl` is derived through
+ * the EXISTING `deriveMarketplaceUrl` (reused, not reinvented); a marketplace
+ * checkout with no discoverable origin remote (RESEARCH assumption A2) still
+ * needs a derivable key, so the URL half falls back to the marketplace's own
+ * recorded name.
+ *
+ * Unlike `seedSameRepoPluginMirrors`' best-effort sweep, a materialization
+ * failure here PROPAGATES to the install -- there is no "install the current
+ * checkout instead" fallback in this arm; that is TAGS-02's job.
+ */
+export async function materializeMarketplaceTagClone(args: {
+  locations: ScopedLocations;
+  marketplaceRoot: string;
+  marketplaceSource: unknown;
+  marketplaceName: string;
+  pathSource: PathSource;
+  tagOid: string;
+  gitOps?: GitOps;
+}): Promise<GitPluginRootResult> {
+  const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
+  // D-08-12: this verb owns a staging lifecycle, so it is the composition root
+  // that constructs the removal operations its cleanup and promotion paths run
+  // through.
+  const removalOps = createRemovalOps();
+
+  const marketplaceUrl =
+    (await deriveMarketplaceUrl(args.marketplaceSource, args.marketplaceRoot)) ??
+    `marketplace-name:${args.marketplaceName}`;
+  const key = pluginCloneKey(marketplaceUrl, args.tagOid);
+  const dest = await args.locations.pluginCloneDir(key);
+
+  // A present key dir is a byte-equivalent warm cache (same key => same tag
+  // content): no re-copy, no re-checkout.
+  if (!(await pathExists(dest))) {
+    const staging = await args.locations.sourcesStagingDir(randomUUID());
+    // Copy ONLY the gitdir into an otherwise-empty staging dir. A checkout
+    // never removes untracked/ignored files from an existing work tree, so
+    // starting from a copy of the marketplace's live work tree would let
+    // anything not part of the tag's tree (untracked files, gitignored
+    // trees) ride along into the cache. Starting empty means the checkout
+    // below is the ONLY thing that writes into the work tree, and it writes
+    // exactly the tag's tree.
+    await mkdir(staging, { recursive: true });
+    try {
+      await cp(path.join(args.marketplaceRoot, ".git"), path.join(staging, ".git"), {
+        recursive: true,
+      });
+      // `force: true` -- the copied `.git`'s index already matches `tagOid`
+      // whenever the tag names the marketplace's current HEAD (the common
+      // case for a freshly-tagged release), so a non-forced checkout would
+      // see index === target tree and write nothing at all, leaving the
+      // empty staging dir empty. Forcing makes the checkout compare against
+      // the actual (empty) work tree instead of trusting the index.
+      await gitOps.checkout({ dir: staging, ref: args.tagOid, force: true });
+    } catch (err) {
+      const leak = await cleanupStaging(removalOps, staging, "marketplace tag clone staging");
+      throw appendLeakToError(err, leak);
+    }
+
+    await promoteStagingToClone(removalOps, staging, dest, "marketplace tag clone staging");
+  }
+
+  // WR-07: label the failure with the source kind the user actually used --
+  // this is the pinned-`path` arm, not a `git-subdir` source.
+  const rootResult = await resolveGitSubdirRoot(dest, args.pathSource.raw, "path");
+  if (rootResult.kind !== "materialized") {
+    return rootResult;
+  }
+
+  return { kind: "materialized", pluginRoot: rootResult.pluginRoot, resolvedSha: args.tagOid };
 }

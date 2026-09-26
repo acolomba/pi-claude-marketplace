@@ -181,7 +181,7 @@ const FIELD_DISCIPLINE: FieldDiscipline = {
     scope: "optional",
   },
   "will uninstall": {
-    reasons: "absent",
+    reasons: "optional",
     dependencies: "absent",
     version: "absent",
     scope: "optional",

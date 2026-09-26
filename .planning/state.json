@@ -1,46 +1,66 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "test-backlog",
+  "milestone": "v1.20 — transitive-dependencies",
   "phases": [
     {
       "number": "1",
-      "name": "Reliable Negative Controls",
+      "name": "Manifest read fidelity",
       "status": "complete"
     },
     {
       "number": "2",
-      "name": "Sonar Rules for Tests",
+      "name": "Uninstall data disposition and the uninstall option seam",
       "status": "complete"
     },
     {
       "number": "3",
-      "name": "Reachable Agent Collision Contract",
+      "name": "Dependency resolution",
       "status": "complete"
     },
     {
       "number": "4",
-      "name": "Strict Command Arguments",
+      "name": "Install provenance",
       "status": "complete"
     },
     {
       "number": "5",
-      "name": "Production Export Ownership",
+      "name": "Prune on uninstall",
       "status": "complete"
     },
     {
       "number": "6",
-      "name": "Unused Type Member Gate",
+      "name": "Load-time dependency check and allowed uninstall",
       "status": "complete"
     },
     {
       "number": "7",
-      "name": "Reliable Coverage Metrics",
+      "name": "Marketplace-repository tag resolution for path-source dependencies",
       "status": "complete"
     },
     {
       "number": "8",
-      "name": "Final Verification and Reconciliation",
+      "name": "Enablement parity for dependencies",
+      "status": "complete"
+    },
+    {
+      "number": "9",
+      "name": "Reload installs missing declared dependencies",
+      "status": "complete"
+    },
+    {
+      "number": "10",
+      "name": "Constraint-aware update",
+      "status": "complete"
+    },
+    {
+      "number": "11",
+      "name": "Cross-marketplace dependency allowlist",
+      "status": "complete"
+    },
+    {
+      "number": "12",
+      "name": "Standalone prune with dry-run",
       "status": "complete"
     }
   ],
@@ -49,5 +69,5 @@
     "label": "Show progress",
     "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-09-19T01:53:29.180Z"
+  "updated_at": "2026-09-24T18:03:41.241Z"
 }

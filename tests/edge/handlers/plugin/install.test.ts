@@ -627,7 +627,13 @@ test("records a plugin declaring itself off by default as disabled, because the 
   // arrange
   const workspace = await createHermeticWorkspace(t, "default-enabled");
   await seedBothScopes(workspace);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  // RESV-06: 2 companion probes, the count every other standalone install
+  // states. The install block takes one probe of its own before it composes its
+  // rows through the cascade composer, whichever arm produced the requesting
+  // plugin's row, and the renderer takes the second. WDEP-02: each probe now
+  // reads three times -- `pi-subagents`, `pi-mcp-adapter` and the workflow
+  // engine -- so the boundary expects 6.
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
     value: workspace.cwd,
     reads: 1,
   });

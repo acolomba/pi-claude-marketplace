@@ -9,7 +9,7 @@
       "mechanism": "A type-selection contract was drafted for this filter, submitted to the real contract engine against this tree, and refused: \"filter ...:68:37 selects over a type that does not discriminate on status\". PluginInfoCascadeMsg is PluginSkippedMessage, a single variant, so the selected-over type is not a union and discriminates nothing. The draft was withdrawn rather than reshaped. The filter itself was NOT dropped: every sibling render map in the family carries the same Extract<Msg, { status: K }> shape with an accepted entry, and dropping it here hands each arm the whole union the moment info gains a second cascade status -- a widening the as const satisfies pin cannot catch."
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:145:5",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:147:5",
       "owner": "enableRowDependencies.signals",
       "key": "partition",
       "decision": "Orchestrators repair: WR-01 refusal marker kept, with no source touched.",

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
@@ -10,6 +10,7 @@ import {
   applyPartialCascadeFold,
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
+  collectInstallReachableMarketplaces,
   absentTargetReasons,
   emitMarketplaceNotAdded,
   emitMarketplaceNotAddedSignal,
@@ -17,6 +18,7 @@ import {
   MarketplaceNotAddedSignal,
   missIsNotInstalled,
   maybeWritePluginConfigBack,
+  overwriteDisabledMemberEntries,
   removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
@@ -81,6 +83,7 @@ function makePluginRecord(opts: {
       workflows: [],
     },
     enabled: opts.enabled ?? true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-02T00:00:00.000Z",
   };
@@ -730,6 +733,57 @@ describe("resolveInstallMarketplaceSource", () => {
   });
 });
 
+describe("collectInstallReachableMarketplaces", () => {
+  test("D-03-08 a project-target install reaches both scopes' marketplaces", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      await saveScopedState(cwd, "user", { "user-only": {}, shared: {} });
+      const targetState: ExtensionState = {
+        schemaVersion: 1,
+        marketplaces: {
+          "project-only": makeMarketplaceRecord("project-only", "project", {}),
+          shared: makeMarketplaceRecord("shared", "project", {}),
+        },
+      };
+
+      // act
+      const reachable = await collectInstallReachableMarketplaces({
+        targetScope: "project",
+        cwd,
+        targetState,
+      });
+
+      // assert: the union, deduplicated -- this is the set the CMP-3-aware
+      // per-marketplace resolver can answer for, so it is the set the
+      // dependency guard may admit.
+      assert.deepStrictEqual([...reachable].sort(), ["project-only", "shared", "user-only"]);
+    });
+  });
+
+  test("CMP-4 a user-target install reaches its own scope only", async () => {
+    // arrange: the project scope records a marketplace the user scope does
+    // not. CMP-3 is a project -> user fallback and has no reverse arm, so a
+    // user-target install must not see it.
+    await withTempScopes(async ({ cwd }) => {
+      await saveScopedState(cwd, "project", { "project-only": {} });
+      const targetState: ExtensionState = {
+        schemaVersion: 1,
+        marketplaces: { "user-only": makeMarketplaceRecord("user-only", "user", {}) },
+      };
+
+      // act
+      const reachable = await collectInstallReachableMarketplaces({
+        targetScope: "user",
+        cwd,
+        targetState,
+      });
+
+      // assert
+      assert.deepStrictEqual([...reachable], ["user-only"]);
+    });
+  });
+});
+
 describe("cloneMarketplaceRecordForTargetScope", () => {
   test("clones metadata into the target scope with no plugin installs", () => {
     // arrange
@@ -1059,6 +1113,128 @@ describe("writeAdoptingConfigEntries", () => {
   });
 });
 
+describe("overwriteDisabledMemberEntries", () => {
+  test("overwrites an existing enabled: false entry for a discovered key", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configJsonPath, {
+        schemaVersion: 1,
+        plugins: { "b@mp": { enabled: false } },
+      });
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act
+      await overwriteDisabledMemberEntries({
+        locations,
+        state,
+        keys: ["b@mp"],
+        select: selectDeclaringConfigWriteTarget,
+        write: writeAdoptingConfigEntries,
+      });
+
+      // assert
+      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(cfg.plugins?.["b@mp"], { enabled: true });
+    });
+  });
+
+  test("leaves a key the config does not mention untouched -- no file is created", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act
+      await overwriteDisabledMemberEntries({
+        locations,
+        state,
+        keys: ["b@mp"],
+        select: selectDeclaringConfigWriteTarget,
+        write: writeAdoptingConfigEntries,
+      });
+
+      // assert
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+    });
+  });
+
+  test("leaves a key whose entry is already enabled untouched", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      const seeded: ScopeConfig = { schemaVersion: 1, plugins: { "b@mp": { enabled: true } } };
+      await writeConfig(locations.configJsonPath, seeded);
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act
+      await overwriteDisabledMemberEntries({
+        locations,
+        state,
+        keys: ["b@mp"],
+        select: selectDeclaringConfigWriteTarget,
+        write: writeAdoptingConfigEntries,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        JSON.parse(await readFile(locations.configJsonPath, "utf8")) as unknown,
+        seeded,
+      );
+    });
+  });
+
+  test("skips a key whose declaring file is unreadable", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
+      await writeFile(locations.configLocalJsonPath, "{");
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act & assert: does not throw, and the base file is never created
+      await overwriteDisabledMemberEntries({
+        locations,
+        state,
+        keys: ["b@mp"],
+        select: selectDeclaringConfigWriteTarget,
+        write: writeAdoptingConfigEntries,
+      });
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+    });
+  });
+
+  test("processes every key in the list", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configJsonPath, {
+        schemaVersion: 1,
+        plugins: { "b@mp": { enabled: false }, "c@mp": { enabled: false } },
+      });
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act
+      await overwriteDisabledMemberEntries({
+        locations,
+        state,
+        keys: ["b@mp", "c@mp"],
+        select: selectDeclaringConfigWriteTarget,
+        write: writeAdoptingConfigEntries,
+      });
+
+      // assert
+      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(cfg.plugins?.["b@mp"], { enabled: true });
+      assert.deepStrictEqual(cfg.plugins?.["c@mp"], { enabled: true });
+    });
+  });
+});
+
 describe("resolveInstalledPluginTarget", () => {
   test("returns an explicit scope without consulting stored state", async () => {
     // arrange
@@ -1346,6 +1522,29 @@ describe("resolvePluginVersion", () => {
     });
   });
 
+  for (const { label, manifest } of [
+    { label: "declares no version", manifest: "{}" },
+    { label: "is null", manifest: "null" },
+    { label: "is a bare string", manifest: '"2.0.0"' },
+  ]) {
+    test(`uses the marketplace entry when the manifest ${label}`, async () => {
+      // arrange
+      await withTempScopes(async ({ root }) => {
+        const pluginRoot = path.join(root, "alpha");
+        await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+        await writeFile(path.join(pluginRoot, ".claude-plugin", "plugin.json"), manifest);
+        const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+        const installable = makeMaterializablePlugin(pluginRoot);
+
+        // act
+        const version = await resolvePluginVersion(entry, installable);
+
+        // assert
+        assert.equal(version, "1.0.0");
+      });
+    });
+  }
+
   test("uses the marketplace entry when the manifest cannot be parsed", async () => {
     // arrange
     await withTempScopes(async ({ root }) => {
@@ -1363,6 +1562,43 @@ describe("resolvePluginVersion", () => {
     });
   });
 
+  test("uses the entry version when a symlink loop prevents probing the wrapped manifest", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      const wrapper = path.join(pluginRoot, ".claude-plugin");
+      await mkdir(pluginRoot, { recursive: true });
+      await symlink(wrapper, wrapper, "junction");
+      await writeFile(path.join(pluginRoot, "plugin.json"), '{"version":"9.9.9"}');
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(entry, installable);
+
+      // assert
+      assert.strictEqual(version, "1.0.0");
+    });
+  });
+
+  test("uses the bare manifest version when the wrapper is a regular file", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      await writeFile(path.join(pluginRoot, ".claude-plugin"), "not a directory");
+      await writeFile(path.join(pluginRoot, "plugin.json"), '{"version":"9.9.9"}');
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(entry, installable);
+
+      // assert
+      assert.strictEqual(version, "9.9.9");
+    });
+  });
+
   test("uses the content hash when neither declaration has a usable version", async () => {
     // arrange
     await withTempScopes(async ({ root }) => {
@@ -1376,6 +1612,64 @@ describe("resolvePluginVersion", () => {
 
       // assert
       assert.equal(version, "hash-e3b0c44298fc");
+    });
+  });
+
+  test("MANF-01 reads tier 1 from a manifest at the bare plugin.json path", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      await writeFile(path.join(pluginRoot, "plugin.json"), JSON.stringify({ version: "2.0.0" }));
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(entry, installable);
+
+      // assert
+      assert.equal(version, "2.0.0");
+    });
+  });
+
+  test("MANF-02 prefers the wrapped manifest version over a bare sibling", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ version: "2.0.0" }),
+      );
+      await writeFile(path.join(pluginRoot, "plugin.json"), JSON.stringify({ version: "9.9.9" }));
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(entry, installable);
+
+      // assert
+      assert.equal(version, "2.0.0");
+    });
+  });
+
+  // D-01-07: the walk falls through on ABSENCE ONLY, so an unparseable wrapped
+  // manifest drops to tier 2 rather than to its readable bare sibling.
+  test("D-01-07 falls to the marketplace entry when the wrapped manifest is unparseable", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "{");
+      await writeFile(path.join(pluginRoot, "plugin.json"), JSON.stringify({ version: "9.9.9" }));
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(entry, installable);
+
+      // assert
+      assert.equal(version, "1.0.0");
     });
   });
 });

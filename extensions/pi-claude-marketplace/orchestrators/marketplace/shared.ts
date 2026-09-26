@@ -155,7 +155,7 @@ export interface GitOps {
   /** D-14 step 2 (symbolic HEAD): force-set local branch ref to remote SHA. */
   forceUpdateRef(opts: { dir: string; ref: string; value: string }): Promise<void>;
   /** D-14 step 3: move HEAD to ref/SHA. */
-  checkout(opts: { dir: string; ref: string }): Promise<void>;
+  checkout(opts: { dir: string; ref: string; force?: boolean }): Promise<void>;
   /** Resolve a ref name to its SHA (used to read remote SHA after fetch). */
   resolveRef(opts: { dir: string; ref: string }): Promise<string>;
   /**

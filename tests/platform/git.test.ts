@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { readFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
 import * as git from "isomorphic-git";
@@ -12,8 +14,11 @@ import {
   currentBranch,
   fetch,
   forceUpdateRef,
+  listRemoteTags,
+  listTags,
   resolveRef,
   resolveRemoteRef,
+  resolveTagOid,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
@@ -26,6 +31,7 @@ import type * as GitPlatform from "../../extensions/pi-claude-marketplace/platfo
 import type {
   GitCredentials,
   OnAuthRequiredFn,
+  RemoteTag,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
 
@@ -55,8 +61,12 @@ const OID_MAIN = "1111111111111111111111111111111111111111";
 const OID_DEV = "2222222222222222222222222222222222222222";
 const OID_TAG = "3333333333333333333333333333333333333333";
 const OID_PEELED = "4444444444444444444444444444444444444444";
+const OID_LIGHTWEIGHT = "5555555555555555555555555555555555555555";
 const FLUSH = Buffer.from("0000", "utf8");
 const DELIM = Buffer.from("0001", "utf8");
+// Hand-authored rather than imported from the module under test: feeding the
+// module's own literal back in could not fail.
+const TAG_REF_PREFIX = "refs/tags/";
 
 const FULL_ADVERTISEMENT = [
   `${OID_MAIN} HEAD symref-target:refs/heads/main`,
@@ -142,6 +152,20 @@ function expectedListRefsBody(): Buffer {
     DELIM,
     packet("peel"),
     packet("symrefs"),
+    FLUSH,
+  ]);
+}
+
+/**
+ * The ls-refs command a tag listing sends: peeling on, no symrefs, and the
+ * server-side ref-prefix that makes the advertisement the `--tags` equivalent.
+ */
+function expectedListTagsBody(): Buffer {
+  return Buffer.concat([
+    packet("command=ls-refs\n"),
+    DELIM,
+    packet("peel"),
+    packet(`ref-prefix ${TAG_REF_PREFIX}`),
     FLUSH,
   ]);
 }
@@ -402,6 +426,15 @@ function expectedPublicRequests(): readonly [RecordedHttpRequest, RecordedHttpRe
   ];
 }
 
+/**
+ * The same two-request envelope a ref resolution sends, carrying the tag
+ * listing's own ls-refs command instead.
+ */
+function expectedTagRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
+  const [discovery, listRefs] = expectedPublicRequests();
+  return [discovery, { ...listRefs, body: expectedListTagsBody() }];
+}
+
 function expectedDiscoveryRequest(
   headers: Readonly<Record<string, string>> = {},
 ): RecordedHttpRequest {
@@ -493,6 +526,20 @@ describe("local Git operations", () => {
 
     // assert
     assert.strictEqual(await currentBranch({ dir: repository.dir }), "feature");
+  });
+
+  test("forwards force so a checkout into an empty work tree writes the target tree", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const staging = await mkdtemp(join(tmpdir(), "pi-cm-git-force-checkout-"));
+    t.after(() => rm(staging, { recursive: true, force: true }));
+    await cp(join(repository.dir, ".git"), join(staging, ".git"), { recursive: true });
+
+    // act
+    await checkout({ dir: staging, ref: repository.initialOid, force: true });
+
+    // assert
+    assert.strictEqual(fs.existsSync(join(staging, "README.md")), true);
   });
 });
 
@@ -760,8 +807,297 @@ describe("resolveRemoteRef", () => {
   });
 });
 
+describe("listRemoteTags", () => {
+  test("RESV-03: queries the tag namespace and returns every advertised tag in order", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, [
+      `${OID_LIGHTWEIGHT} refs/tags/v1.0.0`,
+      `${OID_MAIN} refs/tags/v1.1.0`,
+      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
+    ]);
+
+    // act
+    const tags = await listRemoteTags({ url: REMOTE_URL });
+
+    // assert
+    assert.deepStrictEqual(tags, [
+      { name: "v1.0.0", oid: OID_LIGHTWEIGHT },
+      { name: "v1.1.0", oid: OID_MAIN },
+      { name: "v2.0.0", oid: OID_PEELED },
+    ]);
+    assert.deepStrictEqual(requests, expectedTagRequests());
+  });
+
+  test("D-03-02.2: an entry naming an annotated tag's peel is not a second tag", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, [
+      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
+      `${OID_PEELED} refs/tags/v2.0.0^{}`,
+    ]);
+
+    // act
+    const tags = await listRemoteTags({ url: REMOTE_URL });
+
+    // assert
+    assert.deepStrictEqual(tags, [{ name: "v2.0.0", oid: OID_PEELED }]);
+    assert.deepStrictEqual(requests, expectedTagRequests());
+  });
+
+  test("a ref advertised outside the tag namespace is not returned as a tag", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, [
+      `${OID_MAIN} refs/heads/main`,
+      `${OID_DEV} refs/tags/v1.1.0`,
+    ]);
+
+    // act
+    const tags = await listRemoteTags({ url: REMOTE_URL });
+
+    // assert
+    assert.deepStrictEqual(tags, [{ name: "v1.1.0", oid: OID_DEV }]);
+    assert.deepStrictEqual(requests, expectedTagRequests());
+  });
+
+  test("a remote advertising no tags yields an empty list rather than throwing", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, []);
+
+    // act
+    const tags = await listRemoteTags({ url: REMOTE_URL });
+
+    // assert
+    assert.deepStrictEqual(tags, []);
+    assert.deepStrictEqual(requests, expectedTagRequests());
+  });
+
+  test("RESV-03: no credential callback answers a challenge when no bundle is supplied", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, [`${OID_MAIN} refs/tags/v1.0.0`], {
+      challengeOnce: true,
+    });
+
+    // act
+    const listing = listRemoteTags({ url: REMOTE_URL });
+
+    // assert
+    await assert.rejects(listing, { name: "HttpError", message: "HTTP Error: 401 Unauthorized" });
+    assert.deepStrictEqual(requests, [expectedTagRequests()[0]]);
+  });
+
+  test("RESV-03: the supplied credential bundle is what the tag query authenticates with", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(
+      t,
+      [`${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`],
+      { challengeOnce: true },
+    );
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [[HOST, { username: "user", password: "secret" }]],
+    });
+    const onAuthRequired: OnAuthRequiredFn = () => {
+      throw new Error("interactive auth is forbidden on a stored-credential hit");
+    };
+
+    // act
+    const tags = await listRemoteTags({
+      url: REMOTE_URL,
+      auth: { credentialOps: credentials.credentialOps, host: HOST, onAuthRequired },
+    });
+
+    // assert
+    assert.deepStrictEqual(tags, [{ name: "v2.0.0", oid: OID_PEELED }]);
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: HOST }],
+      approve: [],
+      reject: [],
+    });
+    assert.deepStrictEqual(requests, [
+      expectedTagRequests()[0],
+      {
+        ...expectedTagRequests()[0],
+        headers: {
+          "Git-Protocol": "version=2",
+          Authorization: "Basic dXNlcjpzZWNyZXQ=",
+        },
+      },
+      {
+        ...expectedTagRequests()[1],
+        headers: {
+          ...expectedTagRequests()[1].headers,
+          Authorization: "Basic dXNlcjpzZWNyZXQ=",
+        },
+      },
+    ]);
+  });
+});
+
+describe("listTags", () => {
+  test("lists tag names against a real local repository with no network call", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.tag({ fs, dir: repository.dir, ref: "v1.0.0", object: repository.initialOid });
+    const secondOid = await repository.commit(
+      [{ filepath: "second.txt", contents: "second\n" }],
+      "second",
+    );
+    await git.tag({ fs, dir: repository.dir, ref: "v2.0.0", object: secondOid });
+
+    // act
+    const tags = await listTags({ dir: repository.dir });
+
+    // assert
+    assert.deepStrictEqual([...tags].sort(), ["v1.0.0", "v2.0.0"]);
+  });
+
+  test("a repository with no tags yields an empty list", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+
+    // act
+    const tags = await listTags({ dir: repository.dir });
+
+    // assert
+    assert.deepStrictEqual(tags, []);
+  });
+});
+
+describe("resolveTagOid", () => {
+  test("a lightweight tag resolves to the commit it points at", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.tag({ fs, dir: repository.dir, ref: "v1.0.0", object: repository.initialOid });
+
+    // act
+    const oid = await resolveTagOid({ dir: repository.dir, name: "v1.0.0" });
+
+    // assert
+    assert.strictEqual(oid, repository.initialOid);
+  });
+
+  test("WR-01: a lightweight tag pointing at a blob resolves to undefined so the caller can drop it", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const blobOid = await git.writeBlob({
+      fs,
+      dir: repository.dir,
+      blob: new Uint8Array(Buffer.from("hello")),
+    });
+    await git.writeRef({
+      fs,
+      dir: repository.dir,
+      ref: "refs/tags/blob-tag",
+      value: blobOid,
+      force: true,
+    });
+
+    // act
+    const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag" });
+
+    // assert: a lightweight tag's target is not decided by the throw alone --
+    // a commit target still resolves, so a non-commit target must be checked
+    // and dropped the same way an annotated blob/tree tag is.
+    assert.strictEqual(oid, undefined);
+  });
+
+  test("an annotated tag resolves to the commit it points at, not the tag object's own oid", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.annotatedTag({
+      fs,
+      dir: repository.dir,
+      ref: "v2.0.0",
+      message: "release 2.0.0",
+      object: repository.initialOid,
+      tagger: {
+        name: "Git contract",
+        email: "git-contract@example.invalid",
+        timestamp: 1_700_000_100,
+        timezoneOffset: 0,
+      },
+    });
+    const tagObjectOid = await git.resolveRef({ fs, dir: repository.dir, ref: "refs/tags/v2.0.0" });
+    assert.notStrictEqual(tagObjectOid, repository.initialOid);
+
+    // act
+    const oid = await resolveTagOid({ dir: repository.dir, name: "v2.0.0" });
+
+    // assert
+    assert.strictEqual(oid, repository.initialOid);
+  });
+
+  test("WR-06: a tag pointing at neither a commit nor another tag resolves to undefined so the caller can drop it", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const blobOid = await git.writeBlob({
+      fs,
+      dir: repository.dir,
+      blob: new Uint8Array(Buffer.from("hello")),
+    });
+    await git.annotatedTag({
+      fs,
+      dir: repository.dir,
+      ref: "blob-tag",
+      message: "blob-tag",
+      object: blobOid,
+      tagger: {
+        name: "Git contract",
+        email: "git-contract@example.invalid",
+        timestamp: 1_700_000_200,
+        timezoneOffset: 0,
+      },
+    });
+
+    // act
+    const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag" });
+
+    // assert: WR-06 -- a non-commit tagged type is not a checkout-able
+    // candidate, so `undefined` signals it rather than handing back an oid
+    // that would break a later checkout.
+    assert.strictEqual(oid, undefined);
+  });
+
+  test("WR-06: a tag-of-tag chain longer than the peel bound resolves to undefined instead of looping forever", async (t) => {
+    // arrange: MAX_TAG_PEEL_HOPS + 1 nested annotated tags, each pointing at
+    // the previous tag's own object oid; only the innermost points at a
+    // commit. Fully resolving needs one more hop than the bound allows.
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    let pointsAt = repository.initialOid;
+    let outermostName = "";
+    for (let hop = 0; hop < 11; hop += 1) {
+      const name = `chain-${hop.toString()}`;
+      // Sequential by necessity: each tag must point at the previous one's
+      // resolved oid.
+      await git.annotatedTag({
+        fs,
+        dir: repository.dir,
+        ref: name,
+        message: name,
+        object: pointsAt,
+        tagger: {
+          name: "Git contract",
+          email: "git-contract@example.invalid",
+          timestamp: 1_700_000_300 + hop,
+          timezoneOffset: 0,
+        },
+      });
+      pointsAt = await git.resolveRef({ fs, dir: repository.dir, ref: `refs/tags/${name}` });
+      outermostName = name;
+    }
+
+    // act
+    const oid = await resolveTagOid({ dir: repository.dir, name: outermostName });
+
+    // assert: WR-06 -- hop exhaustion never reached a commit, so `undefined`
+    // signals that rather than handing back an intermediate tag-object oid a
+    // caller could mistake for a commit.
+    assert.strictEqual(oid, undefined);
+  });
+});
+
 describe("GitOps contract", () => {
   registerGitOpsContract(createProductionGitOps);
 });
 
 void ({ username: "user", password: "secret" } satisfies GitCredentials);
+void ({ name: "v1.0.0", oid: OID_MAIN } satisfies RemoteTag);

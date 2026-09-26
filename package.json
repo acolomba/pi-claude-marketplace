@@ -9,6 +9,7 @@
     "acorn": "^8.16.0",
     "isomorphic-git": "^1.41.8",
     "proper-lockfile": "^4.1.2",
+    "semver": "^7.8.5",
     "write-file-atomic": "^8.0.0"
   },
   "description": "Access Claude plugin marketplaces from Pi Coding Agent. Supports Claude commands, skills, agents, hooks, MCP servers, and workflows.",
@@ -18,6 +19,7 @@
     "@eslint/js": "^10.0.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/proper-lockfile": "^4.1.4",
+    "@types/semver": "^7.8.0",
     "@types/write-file-atomic": "^4.0.3",
     "eslint": "^10.4.0",
     "eslint-plugin-import-x": "^4.16.2",

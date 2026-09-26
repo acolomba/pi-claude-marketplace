@@ -542,7 +542,7 @@ convention, not the behaviour.
   rendered header bytes); swapping `renderInstalled`'s soft-dep predicates (all
   four `declaresAgents`×`declaresMcp` combinations are separate cases at
   `:1295–1355` with distinct marker braces); a second `ctx.ui.notify` emission
-  anywhere (`createNotificationBoundary(1, 2)` installs `times(1)` and fails at
+  anywhere (`createNotificationBoundary(1, 3)` installs `times(1)` and fails at
   the call site, which is the IL-2 sizing proof); dropping the
   `blockedMarketplaces` gate (`:699` asserts the exact call log); returning early
   from `executeScopedPlan` before the batched post-pass (`:1717`, `:1754`,

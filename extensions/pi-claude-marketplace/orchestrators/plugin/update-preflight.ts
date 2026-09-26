@@ -20,18 +20,22 @@ import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../a
 
 import {
   canonicalCloneUrl,
+  materializeMarketplaceTagClone,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
   resolveGitSubdirRoot,
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { resolvePluginVersion } from "./shared.ts";
+import { admitResolvedVersion, evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver-types.ts";
-import type { GitBackedSource } from "../../domain/source.ts";
+import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -41,7 +45,13 @@ import type {
   PluginUpdateFailedOutcome,
   PluginUpdateSkippedOutcome,
   PluginUpdateUnchangedOutcome,
+  UpdateConstraintDisclosure,
 } from "../types.ts";
+import type {
+  UpdateConstraintOptions,
+  UpdateConstraintVerdict,
+  UpdateTagPin,
+} from "./update-constraint-gate.ts";
 
 /** Target selected by the three public plugin-update invocation forms. */
 export type UpdatePluginsTarget =
@@ -82,6 +92,18 @@ export interface PreparedPluginUpdate {
   readonly fromVersion: string;
   readonly toVersion: string;
   readonly resolvedSha?: string;
+  /**
+   * D-10-17a: the constraint gate's disclosure, carried from the verdict this
+   * preflight already evaluated. REQUIRED-BUT-NULLABLE (never `constraint?:`),
+   * so `exactOptionalPropertyTypes` makes an omitting construction site a
+   * compile error. This slot has exactly ONE justified consumer --
+   * `update-swap.ts`'s `updated`-outcome literal -- because that literal is
+   * composed AFTER the swap and this is its only channel back to the
+   * preflight's verdict; the `unchanged` rows are built HERE, where the
+   * verdict is already in scope, so they read it directly and never this
+   * slot. A second consumer re-opens D-10-17a.
+   */
+  readonly constraint: UpdateConstraintDisclosure | undefined;
 }
 
 /** Inputs required to classify and prepare one installed plugin update. */
@@ -95,9 +117,29 @@ export interface PreparePluginUpdateOptions {
   readonly partial?: boolean;
   readonly ctx?: NotificationContext;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+  /**
+   * D-10-02 / D-10-19: the constraint gate is composed through this field,
+   * defaulted to the real `evaluateUpdateConstraint`. The field name is not
+   * one `tests/architecture/gate-targets.ts`'s network-free gate matches, and
+   * production omits it.
+   */
+  readonly constraintGate?: typeof evaluateUpdateConstraint;
+  /**
+   * D-10-17: materializes a `path`-source pin's marketplace-tag clone,
+   * defaulted to the real `materializeMarketplaceTagClone` so the path arm's
+   * pin materialization is testable without a real clone.
+   */
+  readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /**
+   * D-10-18: the run-scoped tag memos an update run allocates once and
+   * threads into every target's gate evaluation, so a repository or
+   * marketplace clone shared by several targets is listed once.
+   */
+  readonly constraintTagMemo?: Map<string, readonly RemoteTag[]>;
+  readonly constraintMarketplaceTagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
 }
 
@@ -231,11 +273,25 @@ function makeUpdateCloneProbe(
   };
 }
 
+/**
+ * A tag-pinned update records the version the TAG names, for both source
+ * kinds -- never a value derived from the resolved sha, and never the
+ * marketplace-entry / manifest fallback `resolvePluginVersion` reads. This is
+ * the ONLY way `deriveUpdateToVersion` can tell "pinned to a release tag"
+ * apart from "refreshed to the branch head" or "resolved a `path` source's
+ * current copy": a resolved sha is present either way, so the pin's own
+ * version has to travel alongside it rather than being re-derived from it.
+ */
 async function deriveUpdateToVersion(
   entry: PluginEntry,
   installable: MaterializablePlugin,
   resolvedSha: string | undefined,
+  pinnedVersion: string | undefined,
 ): Promise<string> {
+  if (pinnedVersion !== undefined) {
+    return pinnedVersion;
+  }
+
   const kind = parsePluginSource(entry.source).kind;
   if ((kind === "url" || kind === "git-subdir" || kind === "github") && resolvedSha !== undefined) {
     return shaVersion(resolvedSha);
@@ -252,40 +308,104 @@ function isPartialableUpdateShapeError(error: unknown): error is PartialableUpda
   );
 }
 
+/** What `resolveUpdateCandidate` reaches: a candidate (or skip verdict), plus a `path`-pin's own resolved sha. */
+interface UpdateCandidateResolution {
+  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome;
+  /**
+   * The commit a `path`-source pin materialized, when one did. The git arm's
+   * own resolved sha is unaffected -- it stays `clone.resolvedSha()`'s own
+   * capture, read by the caller exactly as before a pin existed.
+   */
+  readonly pathResolvedSha: string | undefined;
+}
+
 async function resolveUpdateCandidate(
   entry: PluginEntry,
-  marketplaceRoot: string,
+  marketplace: ExtensionState["marketplaces"][string],
   resolveGitPluginRoot: (source: GitBackedSource) => Promise<GitPluginRootResult>,
-  options: { readonly plugin: string; readonly fromVersion: string; readonly partial: boolean },
-): Promise<MaterializablePlugin | PluginUpdateSkippedOutcome> {
+  options: {
+    readonly plugin: string;
+    readonly fromVersion: string;
+    readonly partial: boolean;
+    readonly locations: ScopedLocations;
+    readonly pin?: UpdateTagPin;
+    readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
+  },
+): Promise<UpdateCandidateResolution> {
+  let pathResolvedSha: string | undefined;
   try {
-    const resolved = await resolveStrict(entry, { marketplaceRoot, resolveGitPluginRoot });
+    const resolved = await resolveStrict(entry, {
+      marketplaceRoot: marketplace.marketplaceRoot,
+      resolveGitPluginRoot: (gitSource) =>
+        // D-10-17: overriding `sha` is what routes the EXISTING probe down
+        // its already-pinned arm, exactly as an explicitly pinned entry
+        // source already does -- no second materialization path exists for
+        // a constrained update. `clone.resolvedSha()` (read by the caller
+        // after this call returns) already captures whatever this probe
+        // resolves to, pinned or not, so nothing here needs to intercept it.
+        resolveGitPluginRoot(
+          options.pin === undefined ? gitSource : { ...gitSource, sha: options.pin.oid },
+        ),
+      // D-07-06 / D-10-17: added ONLY when a pin is present, so an
+      // unconstrained update's resolver context has exactly the keys it has
+      // today (success criterion 3) -- neither field is set at all.
+      ...(options.pin !== undefined && {
+        pathPluginPin: options.pin.oid,
+        resolvePathPluginRoot: async (
+          pathSource: PathSource,
+          tagPin: string,
+        ): Promise<GitPluginRootResult> => {
+          const result = await (options.pathPinProbe ?? materializeMarketplaceTagClone)({
+            locations: options.locations,
+            marketplaceRoot: marketplace.marketplaceRoot,
+            marketplaceSource: marketplace.source,
+            marketplaceName: marketplace.name,
+            pathSource,
+            tagOid: tagPin,
+          });
+          if (result.kind === "materialized") {
+            pathResolvedSha = result.resolvedSha;
+          }
+
+          return result;
+        },
+      }),
+    });
     if (options.partial) {
       requirePartialInstallable(resolved, "update");
     } else {
       requireInstallable(resolved, "update");
     }
 
-    return resolved;
+    return { candidate: resolved, pathResolvedSha };
   } catch (error: unknown) {
     const networkReason = classifyGitTransportFailure(error);
     if (networkReason !== undefined) {
-      return skippedCandidate(options, [errorMessage(error)], [networkReason]);
+      return {
+        candidate: skippedCandidate(options, [errorMessage(error)], [networkReason]),
+        pathResolvedSha: undefined,
+      };
     }
 
     if (isPartialableUpdateShapeError(error)) {
       return {
-        ...skippedCandidate(
-          options,
-          [errorMessage(error)],
-          narrowUnsupportedKinds(error.shape.unsupportedKinds),
-        ),
-        partialUpgradable: true,
+        candidate: {
+          ...skippedCandidate(
+            options,
+            [errorMessage(error)],
+            narrowUnsupportedKinds(error.shape.unsupportedKinds),
+          ),
+          partialUpgradable: true,
+        },
+        pathResolvedSha: undefined,
       };
     }
 
     if (error instanceof PluginShapeError && error.shape.kind === "no-longer-installable") {
-      return skippedCandidate(options, [errorMessage(error)], ["no longer installable"]);
+      return {
+        candidate: skippedCandidate(options, [errorMessage(error)], ["no longer installable"]),
+        pathResolvedSha: undefined,
+      };
     }
 
     // Anything else is genuinely unexpected -- not a classified git-transport
@@ -296,7 +416,10 @@ async function resolveUpdateCandidate(
     hookDebugLog(
       `resolveUpdateCandidate: unclassified error for "${options.plugin}": ${errorMessage(error)}`,
     );
-    return skippedCandidate(options, [errorMessage(error)], ["no longer installable"]);
+    return {
+      candidate: skippedCandidate(options, [errorMessage(error)], ["no longer installable"]),
+      pathResolvedSha: undefined,
+    };
   }
 }
 
@@ -430,10 +553,10 @@ function disabledPinProjection(
   ]);
 }
 
-function nextDisabledPin(
-  preflight: PreparedPluginUpdate,
-  shaFallback: string | undefined,
-): { readonly compatibility: PluginStateRecord["compatibility"]; readonly projection: string } {
+function nextDisabledPin(preflight: PreparedPluginUpdate): {
+  readonly compatibility: PluginStateRecord["compatibility"];
+  readonly projection: string;
+} {
   const compatibility = {
     installable: preflight.installable.state === "installable",
     notes: [...preflight.installable.notes],
@@ -442,17 +565,20 @@ function nextDisabledPin(
   };
   return {
     compatibility,
+    // No `?? shaFallback`: a re-resolution that produced no pin PROJECTS no
+    // pin, so a record still carrying one reads as changed and gets it
+    // cleared.
     projection: disabledPinProjection(
       preflight.toVersion,
       preflight.installable.pluginRoot,
-      preflight.resolvedSha ?? shaFallback,
+      preflight.resolvedSha,
       compatibility,
     ),
   };
 }
 
 function disabledRefreshWouldWrite(preflight: PreparedPluginUpdate): boolean {
-  const next = nextDisabledPin(preflight, preflight.record.resolvedSha);
+  const next = nextDisabledPin(preflight);
   const current = disabledPinProjection(
     preflight.record.version,
     preflight.record.resolvedSource,
@@ -474,7 +600,7 @@ async function refreshDisabledRecord(
         return false;
       }
 
-      const next = nextDisabledPin(preflight, record.resolvedSha);
+      const next = nextDisabledPin(preflight);
       const current = disabledPinProjection(
         record.version,
         record.resolvedSource,
@@ -487,7 +613,12 @@ async function refreshDisabledRecord(
 
       record.version = preflight.toVersion;
       record.resolvedSource = preflight.installable.pluginRoot;
-      if (preflight.resolvedSha !== undefined) {
+      // WR-01: a re-resolution that produced no pin (a `path` source with no
+      // satisfying marketplace tag) must not leave the OLD `resolvedSha` on the
+      // record -- it would name a commit `resolvedSource` no longer sits at.
+      if (preflight.resolvedSha === undefined) {
+        delete record.resolvedSha;
+      } else {
         record.resolvedSha = preflight.resolvedSha;
       }
 
@@ -503,11 +634,19 @@ async function refreshDisabledRecord(
 async function refreshDisabledPluginUpdate(
   options: PreparePluginUpdateOptions,
   preflight: PreparedPluginUpdate,
+  // D-10-13 / D-10-17a: the disabled record refresh runs outside the scope
+  // where the gate verdict is local, so the caller passes its OWN
+  // `constraintFromVerdict(verdict)` result here -- never
+  // `preflight.constraint`, which would make the prepared slot a second
+  // consumer and re-open D-10-17a.
+  constraint: UpdateConstraintDisclosure | undefined,
 ): Promise<PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome> {
   const wrote = disabledRefreshWouldWrite(preflight)
     ? await refreshDisabledRecord(options, preflight)
     : false;
-  if (wrote && preflight.resolvedSha !== undefined) {
+  // The sweep runs whenever the record's commit identity MOVED -- including
+  // to nothing, which is when the old clone stops being referenced at all.
+  if (wrote && preflight.resolvedSha !== preflight.record.resolvedSha) {
     try {
       await options.cleanupClones(options.locations);
     } catch (err) {
@@ -526,6 +665,7 @@ async function refreshDisabledPluginUpdate(
       toVersion: preflight.toVersion,
       declaresAgents: false,
       declaresMcp: false,
+      constraint,
       declaresWorkflows: false,
     };
   }
@@ -538,6 +678,130 @@ async function refreshDisabledPluginUpdate(
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
+  };
+}
+
+/** What candidate resolution reaches once a pin (if any) has been threaded through it. */
+interface PinnedUpdateCandidateResolution {
+  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome;
+  readonly resolvedSha: string | undefined;
+  readonly pin: UpdateTagPin | undefined;
+}
+
+/**
+ * Wraps `resolveUpdateCandidate`, threading the gate verdict's own pin (D-10-17)
+ * into it. Every constraint-specific branch stays here, out of
+ * `preparePluginUpdate`, which is already close to ESLint's and fallow's
+ * cognitive-complexity cap (D-10-02).
+ */
+async function resolvePinnedUpdateCandidate(
+  entry: PluginEntry,
+  marketplace: ExtensionState["marketplaces"][string],
+  clone: UpdateCloneProbe,
+  verdict: UpdateConstraintVerdict,
+  base: {
+    readonly plugin: string;
+    readonly fromVersion: string;
+    readonly partial: boolean;
+    readonly locations: ScopedLocations;
+  },
+  pathPinProbe: typeof materializeMarketplaceTagClone | undefined,
+): Promise<PinnedUpdateCandidateResolution> {
+  // D-10-17: the `admits` arm's own pin -- a tag oid and the version it
+  // names -- threads into candidate resolution below; `unconstrained` and a
+  // no-satisfying-tag `admits` both carry no pin.
+  const pin = verdict.kind === "admits" ? verdict.pin : undefined;
+  const resolution = await resolveUpdateCandidate(entry, marketplace, clone.probe, {
+    ...base,
+    ...(pin !== undefined && { pin }),
+    ...(pathPinProbe !== undefined && { pathPinProbe }),
+  });
+  return {
+    candidate: resolution.candidate,
+    resolvedSha: clone.resolvedSha() ?? resolution.pathResolvedSha,
+    pin,
+  };
+}
+
+/**
+ * UPDT-01 / UPDT-02 / D-10-01 stage two: a verdict that admitted with NO
+ * pin (a no-tag repository, or a path source that fell back to the
+ * marketplace's current copy) has not yet been checked against the
+ * intersection -- the tag probe answered nothing. Re-checks the version
+ * that actually landed against the SAME range and returns a `skipped`
+ * outcome when it is held, or `undefined` to let the caller continue. A
+ * pinned verdict skips the check entirely: the tag was already selected
+ * FROM the range, so it would always pass. Kept out of
+ * `preparePluginUpdate`'s own body for the same cognitive-complexity reason
+ * as `resolvePinnedUpdateCandidate` above.
+ */
+function postFetchGuard(
+  verdict: UpdateConstraintVerdict,
+  toVersion: string,
+  base: { readonly plugin: string; readonly fromVersion: string },
+): PluginUpdateSkippedOutcome | undefined {
+  if (verdict.kind !== "admits" || verdict.pin !== undefined) {
+    return undefined;
+  }
+
+  const stageTwo = admitResolvedVersion(verdict, toVersion);
+  if (stageTwo.kind === "admitted") {
+    return undefined;
+  }
+
+  return skippedCandidate(base, [stageTwo.cause], ["dependents constrain"]);
+}
+
+/**
+ * AUTH-09: the ONE credential composition `preparePluginUpdate` shares
+ * between the constraint gate and the clone probe -- kept out of its own
+ * body for the same cognitive-complexity reason as the other extractions
+ * on this file.
+ */
+function buildUpdateAuth(options: PreparePluginUpdateOptions): {
+  readonly ctx?: NotificationContext;
+  readonly credentialOps: CredentialOps;
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  readonly authMemo?: Map<string, AuthAttemptResult>;
+} {
+  return {
+    ...(options.ctx !== undefined && { ctx: options.ctx }),
+    credentialOps: options.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+    ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
+    ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
+  };
+}
+
+/**
+ * The `admits` verdict's disclosure, ready for `PreparedPluginUpdate.constraint`
+ * (D-10-17a). `undefined` for an unconstrained or held verdict -- held never
+ * reaches this call, since `preparePluginUpdate` returns on it earlier, but
+ * the type still carries the arm.
+ */
+function constraintFromVerdict(
+  verdict: UpdateConstraintVerdict,
+): UpdateConstraintDisclosure | undefined {
+  return verdict.kind === "admits"
+    ? { disclosure: verdict.disclosure, fellBackToCurrentCopy: verdict.fellBackToCurrentCopy }
+    : undefined;
+}
+
+/**
+ * Builds the constraint gate's own options, threading the run-scoped tag
+ * memos in only when the caller supplied them (D-10-18) -- kept out of
+ * `preparePluginUpdate`'s own body for the same cognitive-complexity reason
+ * as `resolvePinnedUpdateCandidate` above.
+ */
+function constraintGateOptions(
+  options: PreparePluginUpdateOptions,
+  base: Omit<UpdateConstraintOptions, "marketplaceTagMemo" | "seam" | "tagMemo">,
+): UpdateConstraintOptions {
+  return {
+    ...base,
+    ...(options.constraintTagMemo !== undefined && { tagMemo: options.constraintTagMemo }),
+    ...(options.constraintMarketplaceTagMemo !== undefined && {
+      marketplaceTagMemo: options.constraintMarketplaceTagMemo,
+    }),
   };
 }
 
@@ -566,6 +830,35 @@ export async function preparePluginUpdate(
     return triaged;
   }
 
+  // AUTH-09: ONE credential composition in this function, shared by the
+  // constraint gate and the clone probe below.
+  const auth = buildUpdateAuth(options);
+
+  // D-10-03: the gate runs after triage (there must be a record and a
+  // manifest entry to constrain) and before candidate resolution (a held
+  // verdict must never reach the clone probe). Every other constraint branch
+  // stays inside the leaf -- `preparePluginUpdate` is already close to
+  // ESLint's cognitive-complexity cap.
+  const constraintGate = options.constraintGate ?? evaluateUpdateConstraint;
+  const verdict = await constraintGate(
+    constraintGateOptions(options, {
+      plugin: options.plugin,
+      marketplace: options.marketplace,
+      entry: triaged.entry,
+      marketplaceRoot: marketplace.marketplaceRoot,
+      state,
+      locations: options.locations,
+      auth,
+    }),
+  );
+  if (verdict.kind === "held") {
+    return skippedCandidate(
+      { plugin: options.plugin, fromVersion: triaged.record.version },
+      [verdict.cause],
+      ["dependents constrain"],
+    );
+  }
+
   const clone = makeUpdateCloneProbe(
     options.cloneCacheSeam ?? {
       resolvePluginPin,
@@ -573,29 +866,40 @@ export async function preparePluginUpdate(
       materializeOrRefreshPluginMirror,
     },
     options.locations,
-    {
-      ...(options.ctx !== undefined && { ctx: options.ctx }),
-      credentialOps: options.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-      ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
-      ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
-    },
+    auth,
   );
-  const candidate = await resolveUpdateCandidate(
+  const { candidate, resolvedSha, pin } = await resolvePinnedUpdateCandidate(
     triaged.entry,
-    marketplace.marketplaceRoot,
-    clone.probe,
+    marketplace,
+    clone,
+    verdict,
     {
       plugin: options.plugin,
       fromVersion: triaged.record.version,
       partial: options.partial === true || widensPartialGate(triaged.record),
+      locations: options.locations,
     },
+    options.pathPinProbe,
   );
   if ("partition" in candidate) {
     return candidate;
   }
 
-  const resolvedSha = clone.resolvedSha();
-  const toVersion = await deriveUpdateToVersion(triaged.entry, candidate, resolvedSha);
+  const toVersion = await deriveUpdateToVersion(
+    triaged.entry,
+    candidate,
+    resolvedSha,
+    pin?.version,
+  );
+
+  const stageTwoHold = postFetchGuard(verdict, toVersion, {
+    plugin: options.plugin,
+    fromVersion: triaged.record.version,
+  });
+  if (stageTwoHold !== undefined) {
+    return stageTwoHold;
+  }
+
   if (toVersion === triaged.record.version && !isRecordedButDisabled(triaged.record)) {
     return {
       partition: "unchanged",
@@ -604,6 +908,9 @@ export async function preparePluginUpdate(
       toVersion,
       declaresAgents: false,
       declaresMcp: false,
+      // D-10-13: the ceiling disclosure, read from the SAME `verdict` local
+      // this function already holds -- never routed through `prepared`.
+      constraint: constraintFromVerdict(verdict),
       declaresWorkflows: false,
     };
   }
@@ -615,10 +922,14 @@ export async function preparePluginUpdate(
     installable: candidate,
     fromVersion: triaged.record.version,
     toVersion,
+    // D-10-17a: the ONE consumer of this slot is `update-swap.ts`'s
+    // `updated`-outcome literal -- the prepared update is its only channel
+    // back to the verdict this preflight already evaluated.
+    constraint: constraintFromVerdict(verdict),
     ...(resolvedSha !== undefined && { resolvedSha }),
   };
   return isRecordedButDisabled(triaged.record)
-    ? refreshDisabledPluginUpdate(options, prepared)
+    ? refreshDisabledPluginUpdate(options, prepared, constraintFromVerdict(verdict))
     : prepared;
 }
 

@@ -104,7 +104,7 @@ import {
   requireInstallable,
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
-import { parsePluginSource } from "../../domain/source.ts";
+import { parsePluginSource, type PathSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
 import { ConcurrentInstallError, PluginShapeError } from "../../shared/errors.ts";
 import { type RemovalOps } from "../../shared/fs-utils.ts";
@@ -124,6 +124,7 @@ import {
 } from "../auth-host.ts";
 import { WorkflowsUnstageFailureError } from "../marketplace/shared.ts";
 
+import { materializeMarketplaceTagClone } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone, type InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import {
@@ -132,6 +133,7 @@ import {
   removePluginRecord,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
+  type LedgerDegradationSignals,
 } from "./shared.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -143,7 +145,7 @@ import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -164,9 +166,33 @@ export interface InstallLedgerOptions {
   readonly mapModel?: boolean;
   readonly partial?: boolean;
   readonly pinVersionOverride?: string;
+  /**
+   * RESV-03: the commit a constrained dependency's release tag resolved to.
+   *
+   * When set, the git-source resolve callback materializes THIS object id
+   * instead of whatever ref the marketplace entry names, which is what makes a
+   * version constraint SELECT a version rather than merely veto one. Only the
+   * install cascade sets it, only for a member whose accumulated constraint was
+   * a real range, and only ever to an id read off that source's own release
+   * tags -- the entry still decides which repository is read.
+   */
+  readonly sourcePinOverride?: string;
+  /**
+   * D-04-01: how THIS member got here -- `"explicit"` for the plugin the user
+   * named, `"dependency"` for a member its closure pulled in. The install
+   * cascade decides it per member; a caller that omits it (the enable branch,
+   * which re-materializes a KEPT record) leaves the recorded value in place.
+   */
+  readonly provenance?: PluginInstallRecord["provenance"];
   readonly allowExistingRecord?: boolean;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
   readonly cloneProbe?: typeof probeInstallClone;
+  /**
+   * D-07-06: materializes a `path` source at `sourcePinOverride`'s tag oid.
+   * Mirrors `cloneProbe` exactly -- a real default
+   * (`materializeMarketplaceTagClone`), not test-only surface.
+   */
+  readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
   /**
    * D-08-12: removal operations the three bridge phases perform their staging
    * cleanup through. Required with no default, and deliberately NOT constructed
@@ -476,7 +502,14 @@ async function preflightInstallResolve(
     marketplaceRoot: sourceMp.marketplaceRoot,
     resolveGitPluginRoot: async (gitSource) => {
       const clone = await (opts.cloneProbe ?? probeInstallClone)({
-        source: gitSource,
+        // RESV-03: a pinned dependency materializes the exact commit its
+        // release tag resolved to. Overriding `sha` is what routes the probe
+        // down its already-pinned arm, so no second materialization path
+        // exists for a constrained install.
+        source:
+          opts.sourcePinOverride === undefined
+            ? gitSource
+            : { ...gitSource, sha: opts.sourcePinOverride },
         locations,
         ...(opts.cloneCacheSeam !== undefined && { seam: opts.cloneCacheSeam }),
         auth: {
@@ -489,6 +522,29 @@ async function preflightInstallResolve(
       resolvedSha = clone.resolvedSha;
       return clone.result;
     },
+    // D-07-06 / D-07-07: a `path`-source member whose constraint selected a
+    // marketplace tag materializes that tag's tree the same way a git-backed
+    // member materializes its pinned commit. Added ONLY when a pin is
+    // present, so an unpinned `path` source stays byte-identical to today
+    // (neither field is set at all).
+    ...(opts.sourcePinOverride !== undefined && {
+      pathPluginPin: opts.sourcePinOverride,
+      resolvePathPluginRoot: async (pathSource: PathSource, pin: string) => {
+        const result = await (opts.pathPinProbe ?? materializeMarketplaceTagClone)({
+          locations,
+          marketplaceRoot: sourceMp.marketplaceRoot,
+          marketplaceSource: sourceMp.source,
+          marketplaceName: sourceMp.name,
+          pathSource,
+          tagOid: pin,
+        });
+        if (result.kind === "materialized") {
+          resolvedSha = result.resolvedSha;
+        }
+
+        return result;
+      },
+    }),
   });
   // D-65-03 / FORCE-01/03/05: `--partial` widens the gate to admit the
   // partially-available arm; the default gate still blocks it. Both gates
@@ -1048,7 +1104,10 @@ async function runInstallLedgerBody(
         // D-77-02 / PURL-09: persist the full 40-hex resolved commit sha for
         // git-source installs (reinstall pins its re-clone checkout to this
         // full sha; clone GC presence-checks it to derive live clone keys).
-        // Path / github-name installs omit it.
+        // WR-01 / TAGS-01: a `path`-source install ALSO carries a resolvedSha
+        // when its constraint pinned a marketplace tag (`resolvePathPluginRoot`
+        // above); an unconstrained `path` or a github-name install still omits
+        // it.
         ...(c.resolvedSha !== undefined && { resolvedSha: c.resolvedSha }),
         // D-100-01 / ENBL-10: describe the hooks the install materialized, so
         // a later `info` need not read the config back off disk. Omitted when
@@ -1091,6 +1150,27 @@ async function runInstallLedgerBody(
         // The disable branch sets it to false; the enable branch re-runs
         // statePhase (via runInstallLedger), which resets it to true here.
         enabled: true,
+        // LOAD-02: `dependencyDisabled` is DELIBERATELY not named here, and the
+        // omission is load-bearing. This literal REBUILDS the record rather
+        // than spreading it, so a field it does not name is dropped -- and that
+        // drop IS the clear of the load-time check's marker. The enable branch
+        // reaches this phase, so a dependent whose dependency became satisfied
+        // comes back live with no marker left claiming the check still holds it
+        // down. Do not "fix" this literal by carrying the field through from
+        // `existing`: a stale marker would make the planner read a live record
+        // as one it is still responsible for. The reverse asymmetry is
+        // deliberate too -- `clonePluginRecord` and `toDisabledRecord`
+        // (`persistence/state-io.ts`) both PRESERVE the marker, because a
+        // snapshot restored after a failed operation and a record a user then
+        // disables are not re-materializations, and losing it there would let
+        // a held-down record read as a disable the user asked for.
+        // D-04-01 / ENBL-02: a KEPT record's provenance rides through the
+        // enable branch, which hand-builds its options with
+        // `allowExistingRecord` and never names the field -- falling back
+        // through `existing` is what preserves it there. A fresh install
+        // takes the cascade's per-member decision; an install that reaches
+        // the ledger without one is a plugin the caller named.
+        provenance: existing?.provenance ?? opts.provenance ?? "explicit",
         // D-54-01 / ENBL-02: on re-materialization (allowExistingRecord),
         // PRESERVE the original installedAt -- the record was never
         // uninstalled, only disabled. Fresh installs stamp now.
@@ -1160,9 +1240,6 @@ export function installedPluginOutcome(
     summary.stagedCommandNames.length > 0 ||
     summary.stagedAgentNames.length > 0 ||
     summary.stagedMcpServerNames.length > 0;
-  const degradedKinds = Array.from(
-    new Set(summary.frontmatterDegradations.map((degradation) => degradation.kind)),
-  );
 
   return {
     status: "installed",
@@ -1176,6 +1253,27 @@ export function installedPluginOutcome(
     ...(summary.resolved.state === "partially-available" && {
       unsupported: [...summary.resolved.unsupported],
     }),
+    ...ledgerDegradationSignals(summary),
+  };
+}
+
+/**
+ * SURF-05 / WARN-01: the degradation signals a completed ledger run leaves on
+ * the root's own `(installed)` row -- `orphanRewake` from the resolver and one
+ * `degradedKinds` entry per component kind whose frontmatter did not parse.
+ * Every projection of a root summary spreads this one derivation
+ * (`installedPluginOutcome` here, the reload dependency-install outcome in
+ * `install-flow.ts`), so a signal added to it reaches each row without a
+ * per-projection edit. Both members are omitted when the run raised neither
+ * (NREG-01).
+ */
+export function ledgerDegradationSignals(
+  summary: InstallLedgerSummary,
+): Pick<LedgerDegradationSignals, "orphanRewake" | "degradedKinds"> {
+  const degradedKinds = Array.from(
+    new Set(summary.frontmatterDegradations.map((degradation) => degradation.kind)),
+  );
+  return {
     ...(summary.resolved.orphanRewake === true && { orphanRewake: true }),
     ...(degradedKinds.length > 0 && { degradedKinds }),
   };

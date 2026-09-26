@@ -232,7 +232,7 @@ attack"). The type half has two gaps.
   Add one case: declare `{ alias: { source: <dir whose manifest names it "actual"> } }`, run
   `applyReconcile` twice, and assert (a) the first cascade row reads `● actual [project] (added)`,
   (b) `Object.keys(state.marketplaces)` is `["actual"]`, (c) the second run emits nothing
-  (`createNotificationBoundary(1, 2)` then a second boundary sized `(0, 0)`, or one run per case).
+  (`createNotificationBoundary(1, 3)` then a second boundary sized `(0, 0)`, or one run per case).
   Part (c) is the CR-01 convergence proof — the perpetual re-add/re-remove churn the guard exists to
   prevent — and it is currently proved nowhere at the apply tier. Pair it with T-1 and the
   no-plugins restriction in P-1 becomes visible as soon as anyone adds a plugin to that fixture.

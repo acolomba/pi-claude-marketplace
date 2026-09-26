@@ -42,6 +42,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
+import lockfile from "proper-lockfile";
 import { It, mock, verify, when } from "strong-mock";
 
 import {
@@ -49,6 +50,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   registerClaudeMarketplaceTools,
   registerClaudePluginCommand,
@@ -84,6 +86,7 @@ import type {
   SessionStartEvent,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 import type {
   AutocompleteItem,
   AutocompleteProvider,
@@ -127,10 +130,11 @@ type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 };
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
-  "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
+  "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
+  "  prune [--scope user|project] [--dry-run]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
@@ -160,7 +164,7 @@ interface WrapperUnderTest {
 }
 
 const EXPECTED_COMMAND_DESCRIPTION =
-  "Manage Claude plugin marketplaces and plugins. Bootstrap, install, uninstall, list, import, " +
+  "Manage Claude plugin marketplaces and plugins. Bootstrap, install, uninstall, prune, list, import, " +
   "update, and reinstall plugins from configured marketplaces.";
 
 const OWN_COMMAND_LINE = "/claude:plugin install  alpha";
@@ -243,6 +247,60 @@ async function seedProjectMarketplace(root: string, marketplaceName: string): Pr
   await seedProjectMarketplaces(root, [marketplaceName]);
 }
 
+async function seedPrunableScope(scope: Scope, cwd: string): Promise<ExtensionState> {
+  const locations = locationsFor(scope, cwd);
+  const marketplaceRoot = path.join(locations.extensionRoot, "sources", "mp");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "orphan");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ name: "mp", plugins: [{ name: "orphan", source: "./plugins/orphan" }] }),
+  );
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "orphan", version: "1.0.0" }),
+  );
+  const skillPath = path.join(locations.skillsTargetDir, "orphan-skill", "SKILL.md");
+  await mkdir(path.dirname(skillPath), { recursive: true });
+  await writeFile(skillPath, "---\nname: orphan-skill\n---\nbody\n");
+  const state: ExtensionState = {
+    schemaVersion: 3,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope,
+        source: pathSource("./mp"),
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {
+          orphan: {
+            version: "1.0.0",
+            resolvedSource: pluginRoot,
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              workflows: [],
+              skills: ["orphan-skill"],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            provenance: "dependency",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+  await saveState(locations.extensionRoot, state);
+  return state;
+}
+
 /**
  * The injected dependency bag. The git operations are a memory-boundary fake and
  * the two orchestrator entrypoints refuse to run: no case here dispatches a
@@ -257,7 +315,7 @@ function createEdgeDeps(
   return {
     completionCache,
     gitOps: selectedGitOps,
-    pluginUpdate: (): Promise<PluginUpdateOutcome> => {
+    beginPluginUpdateRun: () => (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");
     },
     importClaudeSettings:
@@ -409,6 +467,102 @@ describe("registerClaudePluginCommand", () => {
     verifyBoundary();
     verifyRegistrar();
   });
+
+  for (const { commandLine, scope, untouchedScope } of [
+    { commandLine: "prune", scope: "user", untouchedScope: "project" },
+    { commandLine: "prune --scope project", scope: "project", untouchedScope: "user" },
+  ] as const) {
+    test(`registered ${commandLine} removes one orphan only from ${scope} scope`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, `prune-${scope}`);
+      const seeded = await seedPrunableScope(scope, cwd);
+      await seedPrunableScope(untouchedScope, cwd);
+      const selected = locationsFor(scope, cwd);
+      const untouched = locationsFor(untouchedScope, cwd);
+      const untouchedState = await readFile(untouched.stateJsonPath, "utf8");
+      const untouchedTree = await retryTree(untouched.scopeRoot);
+      const lockSpy = t.mock.method(lockfile, "lock");
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+        value: cwd,
+        reads: 1,
+      });
+      const { registration, verifyRegistrar } = registerCommandWithCache(
+        createCompletionCache(),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        undefined,
+        1,
+      );
+
+      // act
+      await registration.handler(commandLine, ctx);
+
+      // assert
+      assert.deepStrictEqual(await loadState(selected.extensionRoot), {
+        ...seeded,
+        marketplaces: { mp: { ...seeded.marketplaces.mp, plugins: {} } },
+      });
+      await assert.rejects(
+        readFile(path.join(selected.skillsTargetDir, "orphan-skill", "SKILL.md")),
+      );
+      assert.strictEqual(await readFile(untouched.stateJsonPath, "utf8"), untouchedState);
+      assert.deepStrictEqual(await retryTree(untouched.scopeRoot), untouchedTree);
+      assert.strictEqual(
+        await readFile(path.join(untouched.skillsTargetDir, "orphan-skill", "SKILL.md"), "utf8"),
+        "---\nname: orphan-skill\n---\nbody\n",
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `● mp [${scope}]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes`,
+        },
+      ]);
+      assert.strictEqual(lockSpy.mock.callCount(), 1);
+      verifyBoundary();
+      verifyRegistrar();
+    });
+  }
+
+  for (const { operand, diagnostic } of [
+    { operand: "orphan@mp", diagnostic: "Too many arguments." },
+    { operand: "--unknown", diagnostic: 'Unknown flag: "--unknown".' },
+    { operand: "--local", diagnostic: 'Unknown flag: "--local".' },
+    { operand: "--keep-data", diagnostic: 'Unknown flag: "--keep-data".' },
+    { operand: "--prune", diagnostic: 'Unknown flag: "--prune".' },
+    { operand: "-y", diagnostic: 'Unknown flag: "-y".' },
+  ] as const) {
+    test(`registered prune rejects ${operand} before reaching state`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "prune-rejected");
+      await seedPrunableScope("user", cwd);
+      await seedPrunableScope("project", cwd);
+      const user = locationsFor("user", cwd);
+      const project = locationsFor("project", cwd);
+      const userState = await readFile(user.stateJsonPath, "utf8");
+      const projectState = await readFile(project.stateJsonPath, "utf8");
+      const userTree = await retryTree(user.scopeRoot);
+      const projectTree = await retryTree(project.scopeRoot);
+      const lockSpy = t.mock.method(lockfile, "lock");
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const { registration, verifyRegistrar } = registerCommandUnderTest();
+
+      // act
+      await registration.handler(`prune ${operand}`, ctx);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `${diagnostic}\n\nUsage: /claude:plugin prune [--scope user|project] [--dry-run]`,
+          severity: "error",
+        },
+      ]);
+      assert.strictEqual(await readFile(user.stateJsonPath, "utf8"), userState);
+      assert.strictEqual(await readFile(project.stateJsonPath, "utf8"), projectState);
+      assert.deepStrictEqual(await retryTree(user.scopeRoot), userTree);
+      assert.deepStrictEqual(await retryTree(project.scopeRoot), projectTree);
+      assert.strictEqual(lockSpy.mock.callCount(), 0);
+      verifyBoundary();
+      verifyRegistrar();
+    });
+  }
 
   test("shares the supplied lifecycle routing owner with registered import execution", async (t) => {
     // arrange
@@ -599,7 +753,7 @@ describe("registerClaudePluginCommand", () => {
       { message: "● claude-plugins-official [user] <autoupdate>" },
     ]);
     assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         "claude-plugins-official": {
           addedFromCwd: cwd,
@@ -640,7 +794,7 @@ describe("registerClaudePluginCommand", () => {
     ]);
     assert.deepStrictEqual(projectTree, []);
     assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.deepStrictEqual(ownerRows, [{ name: "owner-fresh", status: "available" }]);
@@ -1528,7 +1682,14 @@ const COMMAND_ARGUMENT_CASES = [
   {
     verb: "uninstall",
     operand: "alpha@official",
-    usage: "uninstall <plugin>@<marketplace> [--scope user|project] [--local]",
+    usage:
+      "uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]",
+  },
+  {
+    verb: "prune",
+    operand: "",
+    usage: "prune [--scope user|project] [--dry-run]",
+    unknown: 'Unknown flag: "--bogus".',
   },
   {
     verb: "update",

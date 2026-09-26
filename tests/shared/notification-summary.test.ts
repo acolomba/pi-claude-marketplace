@@ -408,6 +408,7 @@ for (const message of [
   },
   { kind: "marketplace-not-added", name: "missing" },
   { kind: "reconcile-pending-empty" },
+  { kind: "prune-empty", scope: "user" },
   { kind: "reconcile-applied-cascade", marketplaces: [] },
 ] satisfies readonly NotificationMessage[]) {
   test(`${message.kind} is standalone and suppresses reload`, () => {
@@ -423,6 +424,23 @@ test("cascade messages are not standalone", () => {
 
   // act & assert
   assert.equal(isInfoKind(message), false);
+});
+
+test("a committed prune warning remains standalone and requests reload", () => {
+  // arrange
+  const message = {
+    kind: "prune-committed-warning",
+    scope: "user",
+    cause: new Error("release failed"),
+  } satisfies NotificationMessage;
+
+  // act & assert
+  assert.equal(isInfoKind(message), true);
+  assert.equal(shouldEmitReloadHint(message), true);
+  assert.deepStrictEqual(composeWithSummary(message, "body"), [
+    "Prune committed; finalization needs attention.\n\nbody",
+    "warning",
+  ]);
 });
 
 /*

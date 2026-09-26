@@ -59,6 +59,7 @@ function installedState(): ExtensionState {
               workflows: [],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: INSTALLED_AT,
             updatedAt: INSTALLED_AT,
           },
@@ -133,6 +134,7 @@ test("disables a freshly installed record after a clean five-kind cascade", asyn
       workflows: [],
     },
     enabled: false,
+    provenance: "explicit",
     installedAt: INSTALLED_AT,
     updatedAt: UPDATED_AT,
   });

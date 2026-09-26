@@ -1,16 +1,28 @@
 import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
 import { type InstallPluginOptions } from "../../orchestrators/plugin/install-flow.ts";
+import { PROMOTED_ROW_REASONS } from "../../orchestrators/plugin/install.messaging.ts";
 import { createInstallOperation } from "../../orchestrators/plugin/operations.ts";
-import { loadConfig } from "../../persistence/config-io.ts";
+import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
+  writePluginConfigEntry,
   type BatchedConfigPatch,
 } from "../../persistence/config-write-back.ts";
-import { locationsFor } from "../../persistence/locations.ts";
-import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
+import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
+import {
+  isRecordedButDisabled,
+  loadState as defaultLoadState,
+  type ExtensionState,
+  type PluginInstallRecord,
+} from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
-import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
+import {
+  ConcurrentInstallError,
+  DependencyCascadeError,
+  errorMessage,
+  PluginShapeError,
+} from "../../shared/errors.ts";
 import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -25,6 +37,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
+import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { IMPORT_CONTEXT, type ImportMsg } from "./execute.messaging.ts";
@@ -79,6 +92,24 @@ export interface PluginInstalledOutcome {
    */
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  /**
+   * D-04-07: the entry named a record that arrived as another plugin's
+   * dependency, and the install promoted it rather than installing anew, as
+   * its outcome reports. A promotion moves nothing on disk unless it
+   * re-materialized a disabled record, so this row's reload hint follows
+   * `resourcesChanged` where a fresh install's is unconditional. Omitted for a
+   * fresh install.
+   */
+  readonly promoted?: true;
+  /**
+   * D-04-07: the promoted record was disabled, so the promotion re-materialized
+   * it and enabled it, as the enable verb does. The post-pass then declares it
+   * with the enable path's own `enabled: true`: the disable verb left
+   * `{ enabled: false }` under the same key, and a bare key merged over that
+   * entry would keep the file asking the next reload to disable what this
+   * import enabled. Omitted otherwise.
+   */
+  readonly reenabled?: true;
   readonly declaresWorkflows: boolean;
 }
 
@@ -126,8 +157,25 @@ export interface UnexpectedPluginFailureOutcome {
   readonly plugin: string;
   readonly marketplace: string;
   readonly ref: string;
-  readonly reason: "unexpected-failure";
+  /**
+   * RESV-06: `"dependency-failed"` marks a `DependencyCascadeError` throw (a
+   * cascade closure/constraint/member failure), so the row renders
+   * `{dependency failed}` instead of the `{not in manifest}` token
+   * `"unexpected-failure"` carries.
+   */
+  readonly reason: "unexpected-failure" | "dependency-failed";
   readonly cause: string;
+  /**
+   * T-55-02-02 / T-53-02-02: the redacted, rebuilt onward cause chain beyond
+   * `cause`'s head, present only when the failure's `Error` itself carries
+   * one. `buildImportNotificationMarketplaces` threads it onto the rendered
+   * row's `Error.cause` so the notification grammar's cause-chain walker
+   * renders the chain exactly once, the way
+   * `orchestrators/reconcile/apply.ts::redactedDependencyCascadeError`
+   * rebuilds a dependency's own ledger failure. Omitted when `error` carries
+   * no onward cause (`exactOptionalPropertyTypes`).
+   */
+  readonly causeChain?: Error;
 }
 
 // Public readonly result shape. Internal mutation uses MutableImportResult.
@@ -381,6 +429,31 @@ function importWarningReason(reason: RenderedWarningReason): ContentReason {
 }
 
 /**
+ * WR-03: the row's cause as one Error. `UnexpectedPluginFailureOutcome.cause`
+ * carries the redacted head text, always populated; wrapping it in an Error
+ * lets the depth-5 cause-chain trailer emit a diagnostic line instead of
+ * discarding the message. T-55-02-02 / T-53-02-02: `causeChain` (when
+ * present) becomes that Error's OWN `.cause` rather than being re-embedded in
+ * the head text, so the trailer walker renders the onward chain exactly once
+ * instead of a second time over a pre-flattened string.
+ */
+function unexpectedFailureCause(outcome: UnexpectedPluginFailureOutcome): Error {
+  return outcome.causeChain === undefined
+    ? new Error(outcome.cause)
+    : new Error(outcome.cause, { cause: outcome.causeChain });
+}
+
+/** Maps an `UnexpectedPluginFailureOutcome.reason` onto its rendered token. */
+function unexpectedFailureReason(reason: UnexpectedPluginFailureOutcome["reason"]): ContentReason {
+  switch (reason) {
+    case "unexpected-failure":
+      return "not in manifest";
+    case "dependency-failed":
+      return "dependency failed";
+  }
+}
+
+/**
  * WDEP-02: `workflows` pushes LAST, so a cascade row that declares agents and
  * mcp renders the same two-marker brace whether or not it also declares
  * workflows.
@@ -457,9 +530,13 @@ function buildImportNotificationMarketplaces(
       status: "installed",
       name: o.plugin,
       dependencies: dependenciesFromInstalled(o),
+      // D-04-07: a promotion's brace is the standalone row's -- the record was
+      // here before, and this command promoted it.
+      ...(o.promoted === true && { reasons: PROMOTED_ROW_REASONS }),
       // D-03/D-06: realized install transition -> info, reloads Pi resources.
+      // A promotion (D-04-07) reloads only when it re-materialized the record.
       severity: "info",
-      needsReload: true,
+      needsReload: o.promoted !== true || o.resourcesChanged,
     };
     pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
   }
@@ -493,12 +570,8 @@ function buildImportNotificationMarketplaces(
     const row: PluginFailedMessage = {
       status: "failed",
       name: o.plugin,
-      reasons: ["not in manifest"] as const,
-      // WR-03: `UnexpectedPluginFailureOutcome.cause` carries the original
-      // failure as a string (`errorMessage(err)`); wrap it in an Error so the
-      // depth-5 cause-chain trailer emits a diagnostic line instead of
-      // discarding the message. `cause` is always populated on this outcome.
-      cause: new Error(o.cause),
+      reasons: [unexpectedFailureReason(o.reason)],
+      cause: unexpectedFailureCause(o),
       // D-03/D-06: an unexpected import failure -> error, no reload.
       severity: "error",
       needsReload: false,
@@ -748,11 +821,24 @@ type PlannedPluginBucket = "install-failed" | "installed" | "unexpected-failure"
  * CR-01: the returned bucket is what the caller discards, not what it acts on --
  * every consumer reads the populated `result` buckets instead. The declared
  * return type is the mechanism: see `PlannedPluginBucket`.
+ *
+ * @param promoting D-04-07: the recorded dependency this entry promotes, when
+ *   the scope's snapshot already recorded it as one. ENBL-07: a partially
+ *   installed record was accepted in that shape when the cascade wrote it, so
+ *   the settings that name it consent to the record as it stands, not to a new
+ *   degradation; the promotion's `--partial` gate reads that consent here.
+ *   Import never installs a fresh plugin partially, so the flag is set for no
+ *   other entry. The record also says whether the promotion enables it.
+ *   Whether the install promoted at all is read off its outcome, not this
+ *   record: the snapshot is taken once per scope, so a dependency an earlier
+ *   entry's cascade recorded in this same import has no record here and is
+ *   promoted at lock time.
  */
 async function installOnePlannedPlugin(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
   plugin: PlannedPlugin,
+  promoting?: PluginInstallRecord,
 ): Promise<PlannedPluginBucket> {
   const installPlugin = installPluginFn(opts.deps, opts.hooksRouting, opts.completionCache);
   let outcome: InstallPluginOutcome;
@@ -765,17 +851,18 @@ async function installOnePlannedPlugin(
       marketplace: plugin.ref.marketplace,
       plugin: plugin.ref.plugin,
       notifications: { mode: "orchestrated" },
+      ...(promoting !== undefined && !promoting.compatibility.installable && { partial: true }),
     });
   } catch (err) {
-    result.unexpectedPluginFailures.push({
-      kind: "plugin-failure",
-      scope: plugin.scope,
-      plugin: plugin.ref.plugin,
-      marketplace: plugin.ref.marketplace,
-      ref: refLabel(plugin),
-      reason: "unexpected-failure",
-      cause: errorMessage(err),
-    });
+    // The orchestrated install never re-throws by contract, so this is a
+    // defensive arm; it takes the same redacted head-plus-chain route as a
+    // returned failure so no path can leak through it either.
+    pushUnexpectedFailure(
+      result,
+      plugin,
+      "unexpected-failure",
+      err instanceof Error ? err : new Error(errorMessage(err)),
+    );
     return "unexpected-failure";
   }
 
@@ -807,6 +894,8 @@ async function installOnePlannedPlugin(
         resourcesChanged: outcome.resourcesChanged,
         declaresAgents: outcome.declaresAgents,
         declaresMcp: outcome.declaresMcp,
+        ...(outcome.promoted === true && { promoted: true }),
+        ...(promoting !== undefined && isRecordedButDisabled(promoting) && { reenabled: true }),
         declaresWorkflows: outcome.declaresWorkflows,
       });
       result.changedResources ||= outcome.resourcesChanged;
@@ -932,8 +1021,14 @@ async function executeScopedPlan(
       continue;
     }
 
+    // D-04-07: a record that arrived as another plugin's dependency is not a
+    // skip. The imported settings naming it IS the user asking for it by name,
+    // so it falls through to the install, whose orchestrated promotion arm
+    // flips the record to a direct install and returns `installed` with no
+    // resource change. Every other existing record is already what the
+    // settings ask for and is skipped here.
     const existingPlugin = state.marketplaces[plugin.ref.marketplace]?.plugins[plugin.ref.plugin];
-    if (existingPlugin !== undefined) {
+    if (existingPlugin !== undefined && existingPlugin.provenance !== "dependency") {
       result.skippedExistingPlugins.push({
         kind: "plugin-skip",
         scope: plugin.scope,
@@ -945,7 +1040,7 @@ async function executeScopedPlan(
       continue;
     }
 
-    await installOnePlannedPlugin(opts, result, plugin);
+    await installOnePlannedPlugin(opts, result, plugin, existingPlugin);
   }
 
   // WB-03: after all per-entry orchestrated-mode addMarketplace
@@ -984,8 +1079,11 @@ async function executeScopedPlan(
  * recorded-but-undeclared entries the reconcile planner would tear down.
  *
  * Target: import does NOT support `--local` (per RESEARCH project structure;
- * the flag is per-command and not on the import surface), so the post-pass
- * targets `locations.configJsonPath` unconditionally.
+ * the flag is per-command and not on the import surface), so the batch
+ * targets `locations.configJsonPath`. The one exception is a re-enabled
+ * promotion whose key the local file declares: its `{ enabled: true }` goes
+ * to the local file (`stampReenabledWhereLocalDeclares`) and the batch keeps
+ * the bare key.
  *
  * Source: verbatim `rawSource` from `scopePlan.marketplacesToEnsure` keyed by
  * marketplace name, preserving the `samePlannedSource` contract.
@@ -1026,9 +1124,10 @@ async function writeBatchedConfigForScope(
       }
 
       const current = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 as const };
+      const baseEnsure = await stampReenabledWhereLocalDeclares(locations, result, ensure);
       // WR-01: repairs apply ONLY when the key is absent from the loaded
       // config (already-declared entries are untouched -- byte stability).
-      const batch = mergeEnsureAndRepairs(ensure, repair, current);
+      const batch = mergeEnsureAndRepairs(baseEnsure, repair, current);
       if (isEmptyPatch(batch)) {
         // Everything already declared -- no write, mtime stable (RECON-05).
         return;
@@ -1053,6 +1152,50 @@ async function writeBatchedConfigForScope(
       `Failed to write ${scope} scope claude-plugins.json batched post-pass: ${errorMessage(err)}`,
     );
   }
+}
+
+/**
+ * D-04-07 / D-103-16: the enable path writes `{ enabled: true }` to the file
+ * that declares the key, and the disable verb's `{ enabled: false }` may live
+ * in the local file, whose entry shadows the base entry wholesale (CFG-02) --
+ * a stamp in the base file alone would leave the merged view disabled. So a
+ * re-enabled entry the local file declares is stamped there, through the
+ * single-entry writer (which adds no `marketplaces` key to a file that
+ * declares none), and its base patch drops to the bare key so the base
+ * declaration still exists. The local file is re-read per stamp so each write
+ * sees the one before it; an absent, invalid, or non-declaring local file
+ * leaves the base patch as built. Runs under the scope lock, before the base
+ * batch is written.
+ */
+async function stampReenabledWhereLocalDeclares(
+  locations: ScopedLocations,
+  result: MutableImportResult,
+  ensure: ImportConfigPatch,
+): Promise<ImportConfigPatch> {
+  const plugins = { ...ensure.plugins };
+  for (const installed of result.installedPlugins) {
+    if (installed.scope !== locations.scope || installed.reenabled !== true) {
+      continue;
+    }
+
+    const key = `${installed.plugin}@${installed.marketplace}`;
+    const localCfg = await loadConfig(locations.configLocalJsonPath);
+    if (localCfg.status !== "valid" || localCfg.config.plugins?.[key] === undefined) {
+      continue;
+    }
+
+    await writePluginConfigEntry(
+      localCfg.config,
+      locations.configLocalJsonPath,
+      locations.scopeRoot,
+      installed.plugin,
+      installed.marketplace,
+      { enabled: true },
+    );
+    plugins[key] = {};
+  }
+
+  return { ...ensure, plugins };
 }
 
 function buildBatchedPatchForScope(
@@ -1084,14 +1227,16 @@ function buildBatchedPatchForScope(
     marketplaces[added.marketplace] = { source: rawSource };
   }
 
-  const plugins: Record<string, Record<string, never>> = {};
+  const plugins: Record<string, Partial<PluginConfigEntry>> = {};
   for (const installed of result.installedPlugins) {
     if (installed.scope !== scopePlan.scope) {
       continue;
     }
 
     const key = `${installed.plugin}@${installed.marketplace}`;
-    plugins[key] = {};
+    // D-04-07: a promotion that enabled a disabled record declares it the way
+    // the enable path does; every other install declares the bare key.
+    plugins[key] = installed.reenabled === true ? { enabled: true } : {};
   }
 
   return {
@@ -1171,12 +1316,52 @@ function isEmptyPatch(batch: ImportConfigPatch): boolean {
 }
 
 /**
+ * Push ONE `UnexpectedPluginFailureOutcome`, rendering `error` exactly once:
+ * the head is `redactAbsolutePaths(errorMessage(error))` and the onward
+ * chain (when `error` carries one) is `redactCauseChain(error.cause)` --
+ * mirroring `orchestrators/reconcile/apply.ts::redactedDependencyCascadeError`.
+ * Keeping the head and the chain as separate fields, rather than a single
+ * pre-joined `head + trailer` string, is what lets
+ * `buildImportNotificationMarketplaces` rebuild ONE `Error` with a real
+ * `.cause` link for the notification grammar to walk, instead of the walker
+ * re-rendering an already-flattened trailer embedded in the head text.
+ */
+function pushUnexpectedFailure(
+  result: MutableImportResult,
+  plugin: PlannedPluginImport,
+  reason: UnexpectedPluginFailureOutcome["reason"],
+  error: Error,
+): void {
+  const causeChain = redactCauseChain(error.cause);
+  result.unexpectedPluginFailures.push({
+    kind: "plugin-failure",
+    scope: plugin.scope,
+    plugin: plugin.ref.plugin,
+    marketplace: plugin.ref.marketplace,
+    ref: refLabel(plugin),
+    reason,
+    cause: redactAbsolutePaths(errorMessage(error)),
+    ...(causeChain !== undefined && { causeChain }),
+  });
+}
+
+/**
  * Recover the semantic dispatch from the typed `Error` in the collapsed
  * `status: "failed"` outcome. `PluginShapeError.kind === "already-installed"`
  * and `ConcurrentInstallError` both route to the skip bucket;
  * `not-in-manifest` and `(no-)not-installable` route to the
- * unavailable / uninstallable warnings; everything else lands in
- * `unexpectedPluginFailures`.
+ * unavailable / uninstallable warnings, carrying the caller's pre-formatted
+ * `cause` text verbatim (`ImportWarningOutcome.cause` has no rendered
+ * cause-chain slot, so there is nothing to double-render there); a
+ * `DependencyCascadeError` (RESV-06) routes to `unexpectedPluginFailures`
+ * with `reason: "dependency-failed"`; everything else lands there with
+ * `reason: "unexpected-failure"`. Both `unexpectedPluginFailures` pushes go
+ * through `pushUnexpectedFailure`, which derives its head and cause chain
+ * from `error` directly rather than from the pre-formatted `cause` string.
+ *
+ * Mirrors the instanceof ladder in
+ * `orchestrators/reconcile/apply-outcomes.ts::classifyOrchestratorThrow`,
+ * which checks `DependencyCascadeError` first for the same reason.
  */
 function dispatchFailedOutcome(
   result: MutableImportResult,
@@ -1184,6 +1369,11 @@ function dispatchFailedOutcome(
   error: Error,
   cause: string,
 ): void {
+  if (error instanceof DependencyCascadeError) {
+    pushUnexpectedFailure(result, plugin, "dependency-failed", error);
+    return;
+  }
+
   if (error instanceof ConcurrentInstallError) {
     result.skippedExistingPlugins.push({
       kind: "plugin-skip",
@@ -1219,15 +1409,7 @@ function dispatchFailedOutcome(
     }
   }
 
-  result.unexpectedPluginFailures.push({
-    kind: "plugin-failure",
-    scope: plugin.scope,
-    plugin: plugin.ref.plugin,
-    marketplace: plugin.ref.marketplace,
-    ref: refLabel(plugin),
-    reason: "unexpected-failure",
-    cause,
-  });
+  pushUnexpectedFailure(result, plugin, "unexpected-failure", error);
 }
 
 /**

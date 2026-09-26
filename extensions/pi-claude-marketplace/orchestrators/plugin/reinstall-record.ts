@@ -37,6 +37,14 @@ export interface RecordReinstalledOutcomeInput extends ReinstallOutcomeTarget {
   readonly handles: ReinstallPreparedHandles;
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
   /**
+   * Whether the reinstalled entry is a git-backed source (url / git-subdir /
+   * github). Only a git source's reinstall re-pins to its OLD recorded sha
+   * (PURL-07); a `path` source re-resolves through the marketplace's current
+   * checkout instead, so carrying its old `resolvedSha` forward would name a
+   * commit the fresh `resolvedSource` no longer sits at.
+   */
+  readonly isGitSource: boolean;
+  /**
    * WLIF-01 / T-112-15: the envelope names the workflows commit REPORTED
    * placing, never the prepared staged names -- a commit can stage three and
    * place two, and a record that overstates what is on disk is what the next
@@ -153,9 +161,10 @@ function recordReinstalledOutcome(
   marketplace.plugins[input.name] = {
     version: input.oldRecord.version,
     resolvedSource: input.installable.pluginRoot,
-    ...(input.oldRecord.resolvedSha !== undefined && {
-      resolvedSha: input.oldRecord.resolvedSha,
-    }),
+    ...(input.isGitSource &&
+      input.oldRecord.resolvedSha !== undefined && {
+        resolvedSha: input.oldRecord.resolvedSha,
+      }),
     compatibility: {
       installable: input.installable.state === "installable",
       notes: [...input.installable.notes],
@@ -165,6 +174,20 @@ function recordReinstalledOutcome(
     resources,
     ...(input.hookEntries !== undefined && { hookEntries: [...input.hookEntries] }),
     enabled: true,
+    // LOAD-02: `dependencyDisabled` is DELIBERATELY not named here, exactly as
+    // it is not named at the install ledger's state phase. This literal rebuilds
+    // the record from `oldRecord` field by field, so the field's absence is what
+    // clears the load-time check's marker on a plugin that is live again. Do not
+    // carry it forward from `oldRecord`: a stale marker on a re-materialized
+    // record would read as a hold the check still owns. The rollback path is the
+    // deliberate opposite -- it restores a `clonePluginRecord` snapshot, which
+    // PRESERVES the marker, because a restore puts the record back as it was.
+    // D-04-01: a reinstall replaces the artifacts, not the reason the plugin
+    // is here -- the old record's provenance carries forward with installedAt.
+    // D-04-07 names `install` alone as the verb that promotes a dependency the
+    // user then asks for by name; `reinstall <dependency>` also names it and
+    // deliberately does NOT promote, so the ratchet's boundary is the verb.
+    provenance: input.oldRecord.provenance,
     installedAt: input.oldRecord.installedAt,
     updatedAt: new Date().toISOString(),
   };

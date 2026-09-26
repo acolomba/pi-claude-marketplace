@@ -50,6 +50,7 @@ const gitOps = {
 
 const pluginUpdate = (() =>
   Promise.resolve({
+    constraint: undefined,
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
@@ -58,6 +59,8 @@ const pluginUpdate = (() =>
     partition: "unchanged",
     toVersion: "1.0.0",
   })) satisfies PluginUpdateFn;
+
+const beginPluginUpdateRun = (): PluginUpdateFn => pluginUpdate;
 
 const IMPORT_RESULT = {
   addedMarketplaces: [],
@@ -78,32 +81,32 @@ const importClaudeSettings = (
 
 function proveEdgeDepsShape(completionCache: CompletionCache): void {
   // The optional-member proof: the bundle is complete without the import hook.
-  void ({ completionCache, gitOps, pluginUpdate } satisfies EdgeDeps);
+  void ({ beginPluginUpdateRun, completionCache, gitOps } satisfies EdgeDeps);
   void ({
+    beginPluginUpdateRun,
     completionCache,
     gitOps,
     importClaudeSettings,
-    pluginUpdate,
   } satisfies EdgeDeps);
 
   // @ts-expect-error the edge dependency bundle carries all required members
   void ({} satisfies EdgeDeps);
 
   void ({
+    beginPluginUpdateRun,
     completionCache,
-    pluginUpdate,
     // @ts-expect-error the edge dependency bundle always carries its git operations
   } satisfies EdgeDeps);
 
   void ({
     completionCache,
     gitOps,
-    // @ts-expect-error the edge dependency bundle always carries its plugin update seam
+    // @ts-expect-error the edge dependency bundle always carries its plugin update run factory
   } satisfies EdgeDeps);
 
   void ({
+    beginPluginUpdateRun,
     gitOps,
-    pluginUpdate,
     // @ts-expect-error the edge dependency bundle always carries its completion cache
   } satisfies EdgeDeps);
 
@@ -111,9 +114,9 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     Promise.resolve(IMPORT_RESULT);
 
   void ({
+    beginPluginUpdateRun,
     completionCache,
     gitOps,
-    pluginUpdate,
     // @ts-expect-error the import hook takes the import orchestrator's options bundle
     importClaudeSettings: importWithWrongParameter,
   } satisfies EdgeDeps);
@@ -122,9 +125,9 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     Promise.resolve("imported");
 
   void ({
+    beginPluginUpdateRun,
     completionCache,
     gitOps,
-    pluginUpdate,
     // @ts-expect-error the import hook resolves the import orchestrator's execution result
     importClaudeSettings: importWithWrongReturn,
   } satisfies EdgeDeps);
@@ -137,8 +140,8 @@ function proveEdgeDepsReadonly(deps: EdgeDeps, completionCache: CompletionCache)
   deps.completionCache = completionCache;
   // @ts-expect-error the injected git operations are readonly
   deps.gitOps = gitOps;
-  // @ts-expect-error the injected plugin update seam is readonly
-  deps.pluginUpdate = pluginUpdate;
+  // @ts-expect-error the injected plugin update run factory is readonly
+  deps.beginPluginUpdateRun = beginPluginUpdateRun;
   // @ts-expect-error the injected import hook is readonly
   deps.importClaudeSettings = importClaudeSettings;
 }

@@ -29,8 +29,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type {
+  ContentReason,
   MarketplaceStatus,
+  NotificationMessage,
   PluginStatus,
+  PluginWillUninstallMessage,
   Reason,
   StatusToken,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
@@ -79,6 +82,25 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "installs disabled": true,
   "marketplace in user scope": true,
   "marketplace in project scope": true,
+  "data kept": true,
+  "no matching version": true,
+  "version conflict": true,
+  "constraint too complex": true,
+  "invalid version constraint": true,
+  "dependency marketplace not added": true,
+  "dependency cycle": true,
+  "dependency failed": true,
+  "dependency promoted": true,
+  "dependency pruned": true,
+  "dependency unsatisfied": true,
+  "dependency version unsatisfied": true,
+  "dependents unsatisfied": true,
+  "dependency current copy": true,
+  "dependency enabled": true,
+  "dependents remain": true,
+  "dependency installed": true,
+  "dependents constrain": true,
+  "cross-marketplace": true,
   "stale workflow command": true,
   "requires pi-dynamic-workflows": true,
   "components now supported": true,
@@ -143,7 +165,25 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   skipped: true,
 };
 
-test("OUT-08: Reason is the closed 46-entry reason set", () => {
+// Standalone notifications have their own discriminator set. Scoped prune
+// results and committed warnings are members; the cascade's absent kind remains optional.
+const NOTIFICATION_KIND_ENROLLMENT: Record<
+  Exclude<NotificationMessage["kind"], undefined>,
+  true
+> = {
+  cascade: true,
+  "marketplace-info": true,
+  "plugin-info": true,
+  "marketplace-info-cascade": true,
+  "plugin-info-cascade": true,
+  "marketplace-not-added": true,
+  "reconcile-pending-empty": true,
+  "prune-empty": true,
+  "prune-committed-warning": true,
+  "reconcile-applied-cascade": true,
+};
+
+test("OUT-08: Reason is the closed 65-entry reason set", () => {
   // The set is append-only and its declared order is catalog-stable, so this
   // length is a tripwire: an additive drift has to be a deliberate bump made
   // here, in the same edit as the member. The MEMBERSHIP is pinned separately by
@@ -153,7 +193,7 @@ test("OUT-08: Reason is the closed 46-entry reason set", () => {
   // No changelog of past counts lives here. Git holds that history, a comment is
   // not a gate, and a count restated far from this assertion is a claim nothing
   // turns red for.
-  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 46);
+  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 65);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {
@@ -181,6 +221,10 @@ test("SNM-02: MarketplaceStatus is the closed 7-entry marketplace-status set", (
   assert.strictEqual(Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length, 7);
 });
 
+test("standalone notification kinds include scoped prune outcomes exactly", () => {
+  assert.strictEqual(Object.keys(NOTIFICATION_KIND_ENROLLMENT).length, 10);
+});
+
 /**
  * Discriminating controls for the four maps above. An exhaustive `Record` is
  * only a tripwire if it actually rejects both drift directions, and a count over
@@ -198,6 +242,23 @@ void (true satisfies IsExact<keyof typeof REASON_ENROLLMENT, Reason>);
 void (true satisfies IsExact<keyof typeof STATUS_TOKEN_ENROLLMENT, StatusToken>);
 void (true satisfies IsExact<keyof typeof PLUGIN_STATUS_ENROLLMENT, PluginStatus>);
 void (true satisfies IsExact<keyof typeof MARKETPLACE_STATUS_ENROLLMENT, MarketplaceStatus>);
+void (true satisfies IsExact<
+  keyof typeof NOTIFICATION_KIND_ENROLLMENT,
+  Exclude<NotificationMessage["kind"], undefined>
+>);
+
+// A preview may name why prune would remove a member. Ordinary pending
+// reconciliation must still be able to omit the reason entirely.
+void (true satisfies IsExact<
+  PluginWillUninstallMessage["reasons"],
+  readonly ContentReason[] | undefined
+>);
+void ({ status: "will uninstall", name: "shared-lib" } satisfies PluginWillUninstallMessage);
+void ({
+  status: "will uninstall",
+  name: "shared-lib",
+  reasons: ["dependency pruned"],
+} satisfies PluginWillUninstallMessage);
 
 // A member the union does not hold, and a member it holds that an enrollment map
 // would drop: both directions of the drift this file exists to catch.

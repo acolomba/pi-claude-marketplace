@@ -677,10 +677,14 @@ export function renderUninstalledRow(
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(uninstalled)",
-    // WLIF-06: the row's own `reasons`, threaded exactly as the `installed` /
-    // `updated` / `reinstalled` arms thread theirs. The three `false` arguments
-    // keep MSG-SD-3 structural: a removal row still cannot carry a soft-dep
-    // marker, whatever the removed record declared.
+    // WR-06 / LOAD-03 / WLIF-06: the row's own `reasons` -- uninstall's `data
+    // kept` disposition, its `dependents unsatisfied` consequence, and its
+    // `stale workflow command` marker -- threaded exactly as the `installed` /
+    // `updated` / `reinstalled` arms thread theirs. The field is optional, so a
+    // producer with nothing to report composes the brace-less row. All three
+    // soft-dep flags stay hard-coded false: MSG-SD-3 keeps `{requires pi-...}`
+    // markers off uninstall rows by construction (the variant has no
+    // `dependencies` field to read).
     composeReasons(p.reasons, false, false, false, probe),
   ]);
 }
@@ -837,6 +841,7 @@ function renderPendingRow(
     PluginNotificationMessage,
     { status: "will install" | "will uninstall" | "will enable" | "will disable" }
   >,
+  probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
   const bracket = renderScopeBracket(p.scope, mpScope);
@@ -849,7 +854,7 @@ function renderPendingRow(
         p.partial === true ? "(will partially install)" : "(will install)",
       ]);
     case "will uninstall":
-      return joinTokens([ICON_AVAILABLE, p.name, bracket, "(will uninstall)"]);
+      return pluginRow(ICON_AVAILABLE, p, mpScope, "(will uninstall)", probe);
     case "will enable":
       return joinTokens([ICON_INSTALLED, p.name, bracket, "(will enable)"]);
     case "will disable":
@@ -1007,7 +1012,7 @@ function renderPluginRow(
     case "will uninstall":
     case "will enable":
     case "will disable":
-      return renderPendingRow(p, mpScope);
+      return renderPendingRow(p, probe, mpScope);
     case "disabled":
       return renderDisabledRow(p, probe, mpScope);
   }
@@ -1138,6 +1143,14 @@ function composeMpInfoHeader(name: string, scope: Scope, details: MarketplaceDet
   return `${ICON_INSTALLED} ${name} [${scope}] ${marker}`;
 }
 
+/** Encode an info-only view; never alter the parsed policy used for matching. */
+function renderAllowedMarketplaces(names: readonly string[]): string {
+  return JSON.stringify(names).replace(
+    /[\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/g,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+}
+
 /**
  * INFO-01 / INFO-04: render a `MarketplaceInfoMessage` to its
  * single-string body. Composes:
@@ -1147,7 +1160,9 @@ function composeMpInfoHeader(name: string, scope: Scope, details: MarketplaceDet
  *   - optional `last_updated: <ISO8601>` (git-backed kinds github + url;
  *     never path per D-76-10),
  *   - optional `description: <text>` (single attribute line, NOT wrapped
- *     -- description wrapping is `plugin info`-only per INFO-02).
+ *     -- description wrapping is `plugin info`-only per INFO-02),
+ *   - `allowed_marketplaces:` for a nonempty parsed policy, escaped as one
+ *     compact JSON array without changing the parsed strings.
  *
  * Joins all lines with `\n`. `probe` is unused on info surfaces (info
  * messages do not emit soft-dep markers) but accepted for signature parity
@@ -1191,6 +1206,10 @@ export function renderMarketplaceInfo(
 
   if (message.description !== undefined) {
     lines.push(`description: ${message.description}`);
+  }
+
+  if (message.allowedMarketplaces !== undefined && message.allowedMarketplaces.length > 0) {
+    lines.push(`allowed_marketplaces: ${renderAllowedMarketplaces(message.allowedMarketplaces)}`);
   }
 
   return lines.join("\n");
@@ -1346,6 +1365,19 @@ function appendResolvedComponentLines(
     }
   }
 
+  appendDependenciesLine(lines, dependencies);
+}
+
+/**
+ * Appends the optional `    dependencies: <list>` line. Both `renderPluginInfo`
+ * arms end with this line, so it is LAST: after every per-kind line on the
+ * resolved arm and after the `components: not resolved` marker on the
+ * unresolved arm (INFO-02 / D-01-32).
+ */
+function appendDependenciesLine(
+  lines: string[],
+  dependencies: readonly string[] | undefined,
+): void {
   if (dependencies !== undefined && dependencies.length > 0) {
     lines.push(`    dependencies: ${dependencies.join(", ")}`);
   }
@@ -1415,8 +1447,8 @@ function notAddedReasonFor(message: MarketplaceNotAddedMessage): Reason {
  * description block wrapped via `wrapDescription(text, 4, 66)`; then
  * either per-kind component lists at 4-space indent + optional
  * `dependencies:` line (componentsResolved: true), or the single
- * marker line `    components: not resolved` (componentsResolved:
- * false).
+ * marker line `    components: not resolved` followed by the same
+ * optional `dependencies:` line (componentsResolved: false, D-01-32).
  *
  * Reasons brace via `composeReasons` with all declares-flags FALSE
  * -- info messages NEVER emit soft-dep markers.
@@ -1466,6 +1498,8 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
 
     case false:
       lines.push("    components: not resolved");
+      // D-01-32: the cold git-source `(remote)` row carries the entry-declared list.
+      appendDependenciesLine(lines, plugin.dependencies);
       break;
   }
 
@@ -1639,13 +1673,50 @@ export function composePluginLinesWith(
     lines.push(`    ${ENABLE_HINT_TRAILER}`);
   }
 
-  if (p.status === "failed" || p.status === "manual recovery") {
-    const trailer = renderIndentedCauseChain(p.cause, "    ");
+  // LOAD-01: the `disabled` status joins the two failure statuses here because
+  // the load-time dependency disable is the one realized transition whose row
+  // has to name a remedy, and the remedy interpolates two plugin identifiers.
+  // The branch above already pushes a 4-space-indented trailer onto a
+  // `(disabled)` row for the frozen enable hint, so a trailer on this row has
+  // precedent; what is new is that this one interpolates, which is exactly why
+  // it rides the cause chain rather than a fifth frozen trailer constant. Every
+  // other `(disabled)` producer omits `cause` and keeps its byte-frozen row.
+  //
+  // LOAD-03: `uninstalled` joins them for the same reason on the opposite side
+  // of the outcome. One uninstall row names surviving dependents. Standalone
+  // prune also uses this channel when a committed removal needs a warning
+  // about lock release or post-commit cleanup.
+  // Ordinary `uninstalled` rows
+  // omit `cause` and keep their byte-frozen form.
+  //
+  // UPDT-02 / D-10-11: `skipped` joins them here too, the first `skipped`
+  // partition to interpolate. A held update's row names the constraining
+  // plugins and marks which of them are currently disabled -- the same
+  // remedy shape as the `disabled` / `uninstalled` cause lines above. The
+  // slot lives on `PluginUpdateSkippedMessage`, so a producer that types its
+  // rows as `PluginSkippedMessage` has no `cause` to set and keeps its
+  // byte-frozen row. A producer that types its rows as the dispatcher union
+  // `PluginNotificationMessage` does reach the slot -- the union names this
+  // variant -- so the split narrows the base type, not every caller.
+  if (
+    p.status === "failed" ||
+    p.status === "manual recovery" ||
+    p.status === "disabled" ||
+    p.status === "uninstalled" ||
+    p.status === "skipped"
+  ) {
+    // `skipped` splits two ways here: the base row declares no `cause` slot
+    // at all, and only `PluginUpdateSkippedMessage` adds one. The membership
+    // test is what reads the slot off whichever arm carries it, and it is
+    // also the reason a `skipped` producer typed at the base cannot grow a
+    // trailer: it has no field to set.
+    const cause = "cause" in p ? p.cause : undefined;
+    const trailer = renderIndentedCauseChain(cause, "    ");
     if (trailer !== "") {
       lines.push(trailer);
     }
 
-    for (const leak of manualRecoveryLeaks(p.cause)) {
+    for (const leak of manualRecoveryLeaks(cause)) {
       lines.push(`    leaked: ${leak}`);
     }
   }

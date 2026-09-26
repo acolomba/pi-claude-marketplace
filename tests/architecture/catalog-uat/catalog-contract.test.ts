@@ -23,6 +23,7 @@ import { PLUGIN_INFO_FIXTURES } from "./fixtures/plugin-info.ts";
 import { PLUGIN_INSTALL_FIXTURES } from "./fixtures/plugin-install.ts";
 import { PLUGIN_LIST_FIXTURES } from "./fixtures/plugin-list.ts";
 import { PLUGIN_PENDING_FIXTURES } from "./fixtures/plugin-pending.ts";
+import { PLUGIN_PRUNE_FIXTURES } from "./fixtures/plugin-prune.ts";
 import { PLUGIN_REINSTALL_FIXTURES } from "./fixtures/plugin-reinstall.ts";
 import { PLUGIN_UNINSTALL_FIXTURES } from "./fixtures/plugin-uninstall.ts";
 import { PLUGIN_UPDATE_FIXTURES } from "./fixtures/plugin-update.ts";
@@ -33,15 +34,16 @@ import type { CatalogFixture, FixtureMap } from "./fixture-types.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
-const EXPECTED_MODULE_COUNT = 20;
-const EXPECTED_SECTION_COUNT = 20;
-const EXPECTED_STATE_COUNT = 205;
-const EXPECTED_UTF8_BYTES = 26_619;
+const EXPECTED_MODULE_COUNT = 21;
+const EXPECTED_SECTION_COUNT = 21;
+const EXPECTED_STATE_COUNT = 259;
+const EXPECTED_UTF8_BYTES = 38_914;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
   PLUGIN_INSTALL_FIXTURES,
   PLUGIN_UNINSTALL_FIXTURES,
+  PLUGIN_PRUNE_FIXTURES,
   PLUGIN_REINSTALL_FIXTURES,
   PLUGIN_UPDATE_FIXTURES,
   PLUGIN_FETCH_FIXTURES,
@@ -65,6 +67,7 @@ const FIXTURE_SECTION_ORDER = [
   "/claude:plugin list",
   "/claude:plugin install <plugin>@<marketplace>",
   "/claude:plugin uninstall <plugin>@<marketplace>",
+  "/claude:plugin prune",
   "/claude:plugin reinstall",
   "/claude:plugin update",
   "/claude:plugin fetch",
@@ -325,7 +328,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 205 exact documented states", async () => {
+test("catalog contract matches all 21 fixture modules to 259 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

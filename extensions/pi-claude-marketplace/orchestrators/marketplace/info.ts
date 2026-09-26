@@ -86,8 +86,9 @@ async function buildBlock(
     ...(record.lastUpdatedAt !== undefined && { lastUpdatedAt: record.lastUpdatedAt }),
   };
 
-  const parsed = (await loadMarketplaceManifest(record.manifestPath)) as Record<string, unknown>;
-  const description = typeof parsed.description === "string" ? parsed.description : undefined;
+  const parsed = await loadMarketplaceManifest(record.manifestPath);
+  const rawDescription = (parsed as Record<string, unknown>).description;
+  const description = typeof rawDescription === "string" ? rawDescription : undefined;
 
   return {
     kind: "marketplace-info",
@@ -96,6 +97,9 @@ async function buildBlock(
     details,
     source,
     ...(description !== undefined && { description }),
+    ...(parsed.allowCrossMarketplaceDependenciesOn !== undefined && {
+      allowedMarketplaces: parsed.allowCrossMarketplaceDependenciesOn,
+    }),
   };
 }
 

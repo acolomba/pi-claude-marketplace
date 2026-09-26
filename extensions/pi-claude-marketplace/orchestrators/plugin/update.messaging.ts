@@ -10,7 +10,7 @@ import {
   type PluginFailedMessage,
   type PluginPartiallyInstalledMessage,
   type PluginPartiallyUpgradableMessage,
-  type PluginSkippedMessage,
+  type PluginUpdateSkippedMessage,
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 
@@ -43,7 +43,7 @@ export type UpdateMsg =
   | PluginUpdatedMessage
   | PluginPartiallyInstalledMessage
   | PluginPartiallyUpgradableMessage
-  | PluginSkippedMessage
+  | PluginUpdateSkippedMessage
   | PluginFailedMessage;
 
 /**

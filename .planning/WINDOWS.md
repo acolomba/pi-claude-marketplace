@@ -2,8 +2,8 @@
 schema_version: 1
 open_count: 22
 waived_count: 27
-fixed_count: 35
-total_count: 84
+fixed_count: 37
+total_count: 86
 last_updated: 2026-09-22T13:20:31.198Z
 ---
 
@@ -99,6 +99,8 @@ last_updated: 2026-09-22T13:20:31.198Z
 | 82 | 116 | unmet-truth | extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts | 404 | [workflows-replay] one cause reaches the cascade under two different reason tokens depending on which layer catches it. A held state lock during a backfill re-materialize is reported to the user as 'unreadable', not 'lock held'. reinstallPlugin catches StateLockHeldError and routes it through handleSinglePluginFailure -> reasonsFromTypedError, which knows only PluginShapeError, ManualRecoveryError and errno codes, so it falls through narrowReason's last-resort return at reinstall.messaging.ts:404 to 'unreadable'. maybeBackfillPlugin's failed arm then prefers outcome.reasons[0] over classifyOrchestratorThrow, which DOES map StateLockHeldError to 'lock held' at apply-outcomes.ts:380. So applyBackfillForScopeIsolated's own WR-02 wrapper says 'lock held' while the re-materialize path says 'unreadable' for the same cause, both from the same closed ContentReason set. narrowReason's own comment for the already-disabled arm states the principle this breaks: falling through to unreadable makes the row claim the cascade could not read the plugin, which is false - nothing was unreadable, another operation held the lock, and the operator loses the one word that would tell them to retry. Found while building the ENBL-08 lock-collision twin; the test pins 'unreadable' as OBSERVED not endorsed, with the mechanism in its assert block, so it reddens loudly if someone fixes this. | fixed |  | 2026-09-10T15:14:27.879Z | 2026-09-21T15:04:50.412Z |
 | 83 | 117 | deviation | extensions/pi-claude-marketplace/domain/name.ts | 163 | [workflows-live-uat] a bridged plugin agent is unaddressable as a workflow agentType, so every workflow agent() call that names one silently degrades. generatedAgentName builds "pi-claude-marketplace-<plugin>-<agent>"; the host engine keys its registry on the frontmatter name (agent-registry.ts:117-133 at 3.13.0) and upstream Claude Code namespaces plugin agents as "<plugin>:<agent>". Measured 2026-09-22 driving code-modernization:modernize-harden-scan against a scoped legacy/demo slice: the engine logged [INFO] unknown agentType "code-modernization:security-auditor"; using default tools/model five times, once per finder, and completed. The bound tool allowlist (read,find,grep,bash), model and systemPromptMode: replace are all dropped with no warning to the user. The sibling generator in the same file, generatedWorkflowName at name.ts:171+, already uses the colon form, so the divergence is internal as well as upstream. | fixed |  | 2026-09-22T12:10:09.555Z | 2026-09-22T13:20:31.198Z |
 | 84 | 117 | unrun-verify | tests/live-uat/README.md |  | [workflows-live-uat] the bridge-to-engine path is proven end to end but workflow OUTPUT quality is not, and the blocker is the sandbox rather than the bridge. Measured 2026-09-22, engine 3.13.0, pi 0.85.1, tmp/pi-uat sandbox: code-modernization:modernize-harden-scan ran to status completed in 16.5s with all five Find-phase agents done, the staged envelope loaded from the user saved store, the Claude-authored script parsed unmodified, log()/dedup/refutation stages ran and the script return value came back as JSON. It returned zero findings because every subagent declined to call any tool -- each emitted "structured_output recovered from prose extraction (the model never called the tool)" and then asserted in prose that no filesystem was available, which is false: agent.ts:818 defaults to createCodingTools(cwd) when the invocation passes none. A one-agent negative control that only asked for one file name field failed identically with SCHEMA_NONCOMPLIANCE at 217 output tokens, so the cause is not code-modernization, the six envelopes or this bridge. Sandbox has only openai-codex authed; gpt-5.5 and gpt-5.6-terra both failed this way and gpt-5.3-codex-spark hung past 200s without writing a run record, so the openai-codex-responses API path cannot be isolated from the engine subagent layer here. Closing this needs a second provider (an Anthropic key in tmp/pi-uat/agent) and one re-run; until then the Verify phase and the adversarial second pass are unobserved. | open |  | 2026-09-22T12:10:21.345Z |  |
+| 85 | 01 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/info.ts |  | buildRemoteNotInstalledRow spreads a dependencies field the componentsResolved:false row shape does not carry, so the D-01-32 cold-git fallback renders nothing | fixed |  | 2026-09-13T19:27:02.848Z | 2026-09-17T16:14:30.946Z |
+| 86 | 09 | deviation | tests/orchestrators/plugin/install-flow.test.ts | 11732 | ESLint @typescript-eslint/require-await on marketplaceTagProbe (introduced by 09-03's 71dcea21); plan 09-04 defers the fix per Task 3's own instruction not to fix earlier-plan defects | fixed |  | 2026-09-22T07:47:54.363Z | 2026-09-22T08:03:16.136Z |
 
 ````json
 [
@@ -108,9 +110,9 @@ last_updated: 2026-09-22T13:20:31.198Z
     "phase": "86",
     "file": "extensions/pi-claude-marketplace/bridges/skills/stage.ts",
     "line": null,
-    "description": "SKILL-01 backstop: after /reload a degraded skill's /skill:<name> resolves and the model never auto-invokes it (disable-model-invocation) — needs a live Pi session, not exercised in unit tests",
+    "description": "SKILL-01 backstop: after /reload a degraded skill's /skill:<name> resolves and the model never auto-invokes it (disable-model-invocation) \u2014 needs a live Pi session, not exercised in unit tests",
     "status": "waived",
-    "reason": "SKILL-01 backstop needs a live Pi session — after `/reload`, a degraded skill's `/skill:<name>` resolves and the model never auto-invokes it. Not exercisable in unit tests, so it is outside this milestone's boundary.",
+    "reason": "SKILL-01 backstop needs a live Pi session \u2014 after `/reload`, a degraded skill's `/skill:<name>` resolves and the model never auto-invokes it. Not exercisable in unit tests, so it is outside this milestone's boundary.",
     "recorded_at": "2026-07-26T13:18:03.001Z",
     "resolved_at": "2026-09-12T16:13:08.655Z"
   },
@@ -218,7 +220,7 @@ last_updated: 2026-09-22T13:20:31.198Z
     "line": null,
     "description": "applyPlan's documented remove-before-add ordering is not discriminated by any input: swapping the two leaves the owner suite green, because the planner makes the removal and add buckets disjoint by name. The add-before-install and project-before-user orderings ARE discriminated and are pinned.",
     "status": "waived",
-    "reason": "`applyPlan`'s documented remove-before-add ordering is not discriminated by any input — the planner makes the buckets disjoint by name. The add-before-install and project-before-user orderings ARE discriminated and pinned.",
+    "reason": "`applyPlan`'s documented remove-before-add ordering is not discriminated by any input \u2014 the planner makes the buckets disjoint by name. The add-before-install and project-before-user orderings ARE discriminated and pinned.",
     "recorded_at": "2026-09-02T04:33:39.577Z",
     "resolved_at": "2026-09-12T16:13:11.296Z"
   },
@@ -444,7 +446,7 @@ last_updated: 2026-09-22T13:20:31.198Z
     "phase": "117",
     "file": ".planning/codebase/CONVENTIONS.md",
     "line": 151,
-    "description": "CONVENTIONS.md:151 claims barrels exist per bridge kind 'plus the aggregate bridges/index.ts'. Measured in 117-12: extensions/pi-claude-marketplace/bridges/ holds agents/, commands/, hooks/, mcp/, skills/ and README.md — there is no bridges/index.ts. The five per-kind barrels do exist. Documentation drift in a planning document, outside the source tree and outside this phase's scope (D-117-13 opened no production licence and this plan edits no source); recorded, not fixed.",
+    "description": "CONVENTIONS.md:151 claims barrels exist per bridge kind 'plus the aggregate bridges/index.ts'. Measured in 117-12: extensions/pi-claude-marketplace/bridges/ holds agents/, commands/, hooks/, mcp/, skills/ and README.md \u2014 there is no bridges/index.ts. The five per-kind barrels do exist. Documentation drift in a planning document, outside the source tree and outside this phase's scope (D-117-13 opened no production licence and this plan edits no source); recorded, not fixed.",
     "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-03T22:29:00.933Z",
@@ -999,7 +1001,7 @@ last_updated: 2026-09-22T13:20:31.198Z
     "phase": "117",
     "file": "tests/live-uat/stop-canary.mjs",
     "line": null,
-    "description": "[workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join(\"tmp\",\"pi-uat\")) — a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope.",
+    "description": "[workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join(\"tmp\",\"pi-uat\")) \u2014 a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope.",
     "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-09T20:11:19.722Z",
@@ -1138,6 +1140,31 @@ last_updated: 2026-09-22T13:20:31.198Z
     "recorded_at": "2026-09-22T12:10:21.345Z",
     "resolved_at": null,
     "milestone": null
+  },
+  {
+    "id": 85,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
+    "line": null,
+    "description": "buildRemoteNotInstalledRow spreads a dependencies field the componentsResolved:false row shape does not carry, so the D-01-32 cold-git fallback renders nothing",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-13T19:27:02.848Z",
+    "resolved_at": "2026-09-17T16:14:30.946Z"
+  },
+  {
+    "id": 86,
+    "kind": "deviation",
+    "phase": "09",
+    "file": "tests/orchestrators/plugin/install-flow.test.ts",
+    "line": 11732,
+    "description": "ESLint @typescript-eslint/require-await on marketplaceTagProbe (introduced by 09-03's 71dcea21); plan 09-04 defers the fix per Task 3's own instruction not to fix earlier-plan defects",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-22T07:47:54.363Z",
+    "resolved_at": "2026-09-22T08:03:16.136Z",
+    "milestone": "v1.20"
   }
 ]
 ````

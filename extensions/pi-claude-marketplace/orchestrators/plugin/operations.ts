@@ -19,7 +19,7 @@
 // nothing left for a caller to supply once the filesystem and status
 // capabilities are bound here.
 
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -29,8 +29,9 @@ import { createSetPluginEnabled } from "./enable-disable.ts";
 import { createFetchPlugins } from "./fetch.ts";
 import { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
 import { createGetPluginInfo } from "./info.ts";
-import { createInstallPlugin } from "./install-flow.ts";
+import { createInstallMissingDependency, createInstallPlugin } from "./install-flow.ts";
 import { runInstallLedger } from "./install-outcome.ts";
+import { createPrunePlugin } from "./prune.ts";
 import { createReinstallPlugin } from "./reinstall-flow.ts";
 import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
 import { selectDeclaringConfigWriteTarget, writeAdoptingConfigEntries } from "./shared.ts";
@@ -44,7 +45,12 @@ import type {
 import type { FetchStatus } from "./fetch.ts";
 import type { PluginInfoReader } from "./info.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
-import type { InstallTransaction } from "./install-flow.ts";
+import type {
+  InstallMissingDependencyOptions,
+  InstallMissingDependencyOutcome,
+  InstallTransaction,
+} from "./install-flow.ts";
+import type { PrunePluginOptions } from "./prune.ts";
 import type { ReinstallHooksRouting, ReinstallPluginFn } from "./reinstall-flow.ts";
 import type { UninstallHooksRouting, UninstallPluginOperation } from "./uninstall.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -87,6 +93,19 @@ export function createInstallOperation(
 }
 
 /**
+ * MISS-01: composes the reload-driven missing-dependency install operation
+ * from the SAME production transaction owner `createInstallOperation` binds,
+ * on that function's own pattern. Constructing the operation runs no work of
+ * its own -- only invoking the returned operation does.
+ */
+export function createDependencyInstallOperation(
+  hooksRouting: InstallHooksRouting,
+  completionCache: CompletionCache,
+): (opts: InstallMissingDependencyOptions) => Promise<InstallMissingDependencyOutcome> {
+  return createInstallMissingDependency(INSTALL_TRANSACTION, hooksRouting, completionCache);
+}
+
+/**
  * Composes the enable/disable operation from its production transaction owners
  * and the caller's routing owner. Constructing the operation runs no work of
  * its own -- only invoking the returned operation does.
@@ -112,6 +131,14 @@ export function createUninstallOperation(
   completionCache: CompletionCache,
 ): UninstallPluginOperation {
   return createUninstallPlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
+}
+
+/** Composes the standalone orphan sweep with uninstall's transaction owner. */
+export function createPruneOperation(
+  hooksRouting: UninstallHooksRouting,
+  completionCache: CompletionCache,
+): (options: PrunePluginOptions) => Promise<void> {
+  return createPrunePlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
 }
 
 /**
@@ -152,6 +179,7 @@ export const fetchPlugins = createFetchPlugins(NODE_FETCH_STATUS);
 // reads are UTF-8 and directory listings carry Node directory entries, because
 // info classifies component files by their entry kind.
 const NODE_PLUGIN_INFO_READER: PluginInfoReader = {
+  isRegularFile: async (filePath) => (await stat(filePath)).isFile(),
   readTextFile: (filePath) => readFile(filePath, "utf8"),
   listDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
 };

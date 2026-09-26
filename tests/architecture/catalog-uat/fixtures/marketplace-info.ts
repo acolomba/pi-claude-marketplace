@@ -23,6 +23,19 @@ export const MARKETPLACE_INFO_FIXTURES: FixtureMap = {
       },
     },
 
+    "marketplace-info-allowed-marketplaces": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "marketplace-info",
+        name: "policy-mp",
+        scope: "user",
+        details: { autoupdate: false },
+        source: { sourceKind: "path", absPath: "/home/user/marketplaces/policy-mp" },
+        description: "Policy marketplace.",
+        allowedMarketplaces: ["tools", "team"],
+      },
+    },
+
     "github-single-scope-minimal": {
       pi: piWithBothLoaded(),
       message: {

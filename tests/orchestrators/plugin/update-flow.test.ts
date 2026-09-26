@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chmodSync, writeFileSync } from "node:fs";
+import * as fs from "node:fs";
 import {
   chmod,
   cp,
@@ -14,8 +15,10 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
+import * as git from "isomorphic-git";
+import http from "isomorphic-git/http/node";
 import lockfile from "proper-lockfile";
 
 import {
@@ -76,6 +79,7 @@ import type {
   ToolInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
 
 function createUpdateOperations() {
   return createPluginUpdateOperations(
@@ -89,7 +93,7 @@ function updatePlugins(options: UpdatePluginsOptions): Promise<void> {
 }
 
 const updateSinglePlugin: PluginUpdateFn = (plugin, marketplace, scope) =>
-  createUpdateOperations().pluginUpdate(plugin, marketplace, scope);
+  createUpdateOperations().beginPluginUpdateRun()(plugin, marketplace, scope);
 
 const UPDATE_REMOTE_URLS = [
   "https://github.com/anthropics/test.git",
@@ -314,7 +318,7 @@ function observeStateTransition(
   return {
     fired: () => didFire,
     updatePlugins: operations.updatePlugins,
-    updateSinglePlugin: operations.pluginUpdate,
+    updateSinglePlugin: operations.beginPluginUpdateRun(),
   };
 }
 
@@ -344,7 +348,7 @@ function mutateAtFirstLockedLoad(mutate: (state: ExtensionState) => void): {
       },
     },
   );
-  return { fired: () => didFire, updateSinglePlugin: operations.pluginUpdate };
+  return { fired: () => didFire, updateSinglePlugin: operations.beginPluginUpdateRun() };
 }
 
 function makeCredentialOps(): ReturnType<typeof createCredentialOpsFake>["credentialOps"] {
@@ -446,6 +450,7 @@ async function seedGitUpdateMarketplace(opts: {
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
             enabled: true,
+            provenance: "explicit",
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
             resources: {
               skills: ["seeded-skill"],
@@ -486,6 +491,7 @@ function makePluginRecord(
       workflows: [],
     },
     enabled,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -1184,6 +1190,57 @@ test("updateSinglePlugin preserves a generated skill preload from its path sourc
   });
 });
 
+test("PROV-02/PROV-03: update never promotes a dependency record's provenance", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-provenance-"));
+    const previousCwd = process.cwd();
+    t.after(async () => {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    });
+    const locations = locationsFor("project", cwd);
+    await seedPathMarketplace({
+      cwd,
+      marketplaceRoot: path.join(cwd, "mp-src"),
+      marketplaceName: "mp",
+      manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+      installedVersions: { hello: "1.0.0" },
+    });
+    const seededState = await loadState(locations.extensionRoot);
+    const seededRecord = seededState.marketplaces.mp?.plugins.hello;
+    assert.ok(seededRecord !== undefined);
+    seededRecord.provenance = "dependency";
+    await saveState(locations.extensionRoot, seededState);
+    process.chdir(cwd);
+
+    // act
+    const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+    // assert
+    assert.equal(outcome.partition, "updated");
+    const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+    assert.ok(record !== undefined);
+    assert.deepStrictEqual(record, {
+      version: "1.0.1",
+      resolvedSource: path.join(cwd, "mp-src", "plugins", "hello"),
+      compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+      resources: {
+        skills: ["hello-tool"],
+        prompts: [],
+        agents: [],
+        mcpServers: [],
+        hooks: [],
+        workflows: [],
+      },
+      enabled: true,
+      provenance: "dependency",
+      installedAt: seededRecord.installedAt,
+      updatedAt: record.updatedAt,
+    });
+  });
+});
+
 test("PDEF-01: update preview detects an agent conflict from a later resolved directory", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-agent-dir-preview-");
@@ -1206,6 +1263,20 @@ test("PDEF-01: update preview detects an agent conflict from a later resolved di
         },
         installedVersions: { hello: "1.0.0" },
       });
+      // D-10-05: the update constraint gate walks every installed record's
+      // declarations, fail-closed, before candidate resolution. `other-mp`
+      // needs a real, loadable manifest listing `world` so the walk
+      // establishes it declares nothing and the update reaches the
+      // agent-conflict path this test is about.
+      await mkdir(path.join(cwd, "other-mp"), { recursive: true });
+      await writeFile(
+        path.join(cwd, "other-mp", "marketplace.json"),
+        JSON.stringify({
+          name: "other-mp",
+          plugins: [{ name: "world", source: "./plugins/world", version: "1.0.0" }],
+        }),
+      );
+
       const state = await loadState(locations.extensionRoot);
       state.marketplaces["other-mp"] = {
         name: "other-mp",
@@ -5994,7 +6065,7 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
         JSON.stringify(cascadeHooksJson),
       );
 
-      const cascadeOutcome = await operations.pluginUpdate("hello", "mp", "user");
+      const cascadeOutcome = await operations.beginPluginUpdateRun()("hello", "mp", "user");
 
       assert.equal(cascadeOutcome.partition, "updated");
       assert.equal(
@@ -6968,6 +7039,570 @@ test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedS
   });
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// D-10-18: the run-scoped tag memos `updatePluginsWith` and
+// `createPluginUpdateOperations` allocate once and thread into every
+// target's constraint-gate evaluation, so a repository or marketplace clone
+// shared by several constrained targets is listed once per run.
+//
+// The git arm's tag listing (`platform/git.ts::listRemoteTags`) reaches the
+// network through `isomorphic-git`'s own `http` transport object, not
+// through the `GitOps` seam `cloneCacheSeam` fakes -- the CLONE step and the
+// TAG-LISTING step are two separate git surfaces. `installTagListingTransport`
+// below is a trimmed copy of `tests/platform/git.test.ts`'s own protocol v2
+// wire fixture (info/refs GET negotiation, then a `git-upload-pack` POST
+// answering the ls-refs `command=ls-refs` request), pared down to what
+// listing a fixed tag set needs -- request counting, not response-body
+// assertions, which `tests/platform/git.test.ts` already owns.
+// ───────────────────────────────────────────────────────────────────────────
+
+function tagListingPacket(payload: string): Buffer {
+  const body = Buffer.from(payload, "utf8");
+  return Buffer.concat([
+    Buffer.from((body.length + 4).toString(16).padStart(4, "0"), "utf8"),
+    body,
+  ]);
+}
+
+const TAG_LISTING_FLUSH = Buffer.from("0000", "utf8");
+
+function tagListingAdvertisementBody(): Buffer {
+  return Buffer.concat([
+    tagListingPacket("# service=git-upload-pack\n"),
+    TAG_LISTING_FLUSH,
+    tagListingPacket("version 2\n"),
+    tagListingPacket("ls-refs\n"),
+    tagListingPacket("fetch\n"),
+    TAG_LISTING_FLUSH,
+  ]);
+}
+
+function tagListingRefsBody(refs: readonly string[]): Buffer {
+  return Buffer.concat([...refs.map((ref) => tagListingPacket(`${ref}\n`)), TAG_LISTING_FLUSH]);
+}
+
+function tagListingHttpResponse(
+  url: string,
+  statusCode: number,
+  contentType: string,
+  bytes: Buffer,
+): GitHttpResponse {
+  async function* body(): AsyncIterableIterator<Uint8Array> {
+    await Promise.resolve();
+    yield Uint8Array.from(bytes);
+  }
+
+  return {
+    url,
+    statusCode,
+    statusMessage: statusCode === 200 ? "OK" : "Error",
+    headers: { "content-type": contentType },
+    body: body(),
+  };
+}
+
+/**
+ * Installs a minimal git protocol v2 tag-listing transport for one remote
+ * URL, answering every `info/refs` negotiation and `git-upload-pack` ls-refs
+ * POST with the SAME fixed `refs` set, and counting the negotiations (one
+ * per `listRemoteTags` call) so a test can assert how many times the
+ * repository was actually queried. `options.failFirstInfoRefs` makes the
+ * FIRST `info/refs` negotiation answer 503 (proving a failed listing writes
+ * no memo entry, per D-10-18) before every later one succeeds.
+ */
+function installTagListingTransport(
+  t: TestContext,
+  remoteUrl: string,
+  refs: readonly string[],
+  options: { readonly failFirstInfoRefs?: boolean } = {},
+): { readonly infoRefsCalls: number[] } {
+  const calls: number[] = [];
+  const infoUrl = `${remoteUrl}/info/refs?service=git-upload-pack`;
+
+  t.mock.method(http, "request", (request: GitHttpRequest): Promise<GitHttpResponse> => {
+    if (request.url === infoUrl && request.method === "GET") {
+      calls.push(calls.length + 1);
+      if (options.failFirstInfoRefs === true && calls.length === 1) {
+        return Promise.resolve(
+          tagListingHttpResponse(request.url, 503, "text/plain", Buffer.alloc(0)),
+        );
+      }
+
+      return Promise.resolve(
+        tagListingHttpResponse(
+          request.url,
+          200,
+          "application/x-git-upload-pack-advertisement",
+          tagListingAdvertisementBody(),
+        ),
+      );
+    }
+
+    if (request.url === `${remoteUrl}/git-upload-pack` && request.method === "POST") {
+      return Promise.resolve(
+        tagListingHttpResponse(
+          request.url,
+          200,
+          "application/x-git-upload-pack-result",
+          tagListingRefsBody(refs),
+        ),
+      );
+    }
+
+    throw new Error(`unplanned Git HTTP request: ${request.method ?? "undefined"} ${request.url}`);
+  });
+
+  return { infoRefsCalls: calls };
+}
+
+/**
+ * Seeds a path-source marketplace "mp" declaring one dependent ("app",
+ * itself unconstrained) and two git-backed plugins from the SAME repository
+ * URL, each constrained by "app"'s own declared range. Both git plugins
+ * resolve through `seamWith(gitOps)`'s clone fake -- entirely separate from
+ * the tag-listing transport, which `installTagListingTransport` owns.
+ */
+async function seedConstrainedGitSiblings(
+  cwd: string,
+  cloneUrl: string,
+  fixtureRepoDir: string,
+): Promise<void> {
+  await mkdir(path.join(fixtureRepoDir, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(fixtureRepoDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "placeholder", version: "1.2.0" }),
+  );
+  const skillDir = path.join(fixtureRepoDir, "skills", "greet");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: greet\n---\n\nHello.\n");
+
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  const appRoot = path.join(marketplaceRoot, "plugins", "app");
+  await mkdir(path.join(appRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(appRoot, ".claude-plugin", "plugin.json"),
+    // D-01-32: "app"'s own manifest is readable, so it outranks the
+    // marketplace entry's `dependencies` field -- the declaration has to
+    // live HERE for the constraint walk to see it.
+    JSON.stringify({
+      name: "app",
+      version: "1.0.0",
+      dependencies: [
+        { name: "gitfoo", version: "^1.0.0" },
+        { name: "gitbar", version: "^1.0.0" },
+      ],
+    }),
+  );
+
+  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "mp",
+      plugins: [
+        { name: "app", source: "./plugins/app" },
+        { name: "gitfoo", source: { source: "url", url: cloneUrl } },
+        { name: "gitbar", source: { source: "url", url: cloneUrl } },
+      ],
+    }),
+  );
+
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: pathSource("./mp-src"),
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {
+          app: makePluginRecord("1.0.0"),
+          gitfoo: makePluginRecord("0.9.0"),
+          gitbar: makePluginRecord("0.9.0"),
+        },
+      },
+    },
+  });
+}
+
+test("D-10-18: one bulk run lists the same repository's tags once", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-constraint-memo-git-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedConstrainedGitSiblings(cwd, cloneUrl, fixtureRepoDir);
+      const { infoRefsCalls } = installTagListingTransport(t, `${cloneUrl}.git`, [
+        `${SHA_OLD} refs/tags/gitfoo--v1.2.0`,
+        `${SHA_NEW} refs/tags/gitbar--v1.2.0`,
+      ]);
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      // assert -- both gitfoo and gitbar are constrained by "app" and share
+      // one repository URL; the SAME memo across the whole bulk run means
+      // the second plugin's probe reuses the first's listing.
+      assert.strictEqual(infoRefsCalls.length, 1);
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      assert.strictEqual(after.marketplaces.mp?.plugins.gitfoo?.resolvedSha, SHA_OLD);
+      assert.strictEqual(after.marketplaces.mp?.plugins.gitbar?.resolvedSha, SHA_NEW);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-10-18: one bulk run resolves two path-source siblings from the same marketplace clone", async () => {
+  // arrange -- `isomorphic-git`'s own package exports are non-configurable
+  // (`t.mock.method` on it throws `Cannot redefine property`, unlike the
+  // mutable `isomorphic-git/http/node` transport object the git-arm cases
+  // above intercept), so a local `listTags` call count is not observable
+  // from this orchestration layer. What IS observable, and asserted below,
+  // is that BOTH path-source siblings correctly pin against the SAME
+  // marketplace clone's tags in one bulk run -- the memo's own "list once"
+  // behavior is already unit-tested directly against the local probe
+  // (`marketplace-tag-probe.test.ts`) and against the gate's own threading
+  // (`update-constraint-gate.test.ts`'s "D-10-18: one bulk run lists the
+  // same marketplace clone's tags once").
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-constraint-memo-path-"));
+    try {
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const appRoot = path.join(marketplaceRoot, "plugins", "app");
+      const pathfooRoot = path.join(marketplaceRoot, "plugins", "pathfoo");
+      const pathbarRoot = path.join(marketplaceRoot, "plugins", "pathbar");
+      for (const [root, name, deps] of [
+        [
+          appRoot,
+          "app",
+          [
+            { name: "pathfoo", version: "^1.0.0" },
+            { name: "pathbar", version: "^1.0.0" },
+          ],
+        ],
+        [pathfooRoot, "pathfoo", undefined],
+        [pathbarRoot, "pathbar", undefined],
+      ] as const) {
+        await mkdir(path.join(root, ".claude-plugin"), { recursive: true });
+        await writeFile(
+          path.join(root, ".claude-plugin", "plugin.json"),
+          JSON.stringify({
+            name,
+            version: "1.0.0",
+            ...(deps !== undefined && { dependencies: deps }),
+          }),
+        );
+      }
+
+      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+      await mkdir(path.dirname(manifestPath), { recursive: true });
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "mp",
+          plugins: [
+            { name: "app", source: "./plugins/app" },
+            { name: "pathfoo", source: "./plugins/pathfoo" },
+            { name: "pathbar", source: "./plugins/pathbar" },
+          ],
+        }),
+      );
+
+      // A real (initially tag-less) git repository, matching what a
+      // marketplace root actually is in production.
+      await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
+      await git.add({ fs, dir: marketplaceRoot, filepath: "." });
+      const oid = await git.commit({
+        fs,
+        dir: marketplaceRoot,
+        message: "seed marketplace",
+        author: { name: "test", email: "test@example.com" },
+      });
+      await git.tag({ fs, dir: marketplaceRoot, ref: "pathfoo--v1.2.0", object: oid });
+      await git.tag({ fs, dir: marketplaceRoot, ref: "pathbar--v1.2.0", object: oid });
+
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await saveState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./mp-src"),
+            addedFromCwd: cwd,
+            manifestPath,
+            marketplaceRoot,
+            plugins: {
+              app: makePluginRecord("1.0.0"),
+              pathfoo: makePluginRecord("0.9.0"),
+              pathbar: makePluginRecord("0.9.0"),
+            },
+          },
+        },
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      const after = await loadState(locations.extensionRoot);
+      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.version, "1.2.0");
+      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.resolvedSha, oid);
+      assert.strictEqual(after.marketplaces.mp?.plugins.pathbar?.version, "1.2.0");
+      assert.strictEqual(after.marketplaces.mp?.plugins.pathbar?.resolvedSha, oid);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-10-18: a failed listing is re-queried for the next plugin in the same run", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-constraint-memo-retry-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedConstrainedGitSiblings(cwd, cloneUrl, fixtureRepoDir);
+      const { infoRefsCalls } = installTagListingTransport(
+        t,
+        `${cloneUrl}.git`,
+        [`${SHA_OLD} refs/tags/gitfoo--v1.2.0`, `${SHA_NEW} refs/tags/gitbar--v1.2.0`],
+        { failFirstInfoRefs: true },
+      );
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      // assert -- the failed attempt wrote no memo entry, so the SECOND
+      // plugin re-queries and succeeds instead of inheriting the failure.
+      assert.strictEqual(infoRefsCalls.length, 2);
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      assert.strictEqual(after.marketplaces.mp?.plugins.gitfoo?.version, "0.9.0");
+      assert.strictEqual(after.marketplaces.mp?.plugins.gitfoo?.resolvedSha, undefined);
+      assert.strictEqual(after.marketplaces.mp?.plugins.gitbar?.resolvedSha, SHA_NEW);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-10-18: two updatePlugins runs through one binding do not share a memo", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-constraint-memo-fresh-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedConstrainedGitSiblings(cwd, cloneUrl, fixtureRepoDir);
+      const { infoRefsCalls } = installTagListingTransport(t, `${cloneUrl}.git`, [
+        `${SHA_OLD} refs/tags/gitfoo--v1.2.0`,
+        `${SHA_NEW} refs/tags/gitbar--v1.2.0`,
+      ]);
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+      // ONE binding for both runs, the shape production has: the binding
+      // lives for the whole extension load while each command is its own run.
+      const operations = createUpdateOperations();
+
+      // act -- two SEPARATE single-plugin runs.
+      await operations.updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gitfoo", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+      await operations.updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gitbar", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      // assert -- `updatePluginsWith` allocates the memo pair per call, so
+      // gitbar's probe re-queries instead of reading gitfoo's listing.
+      assert.strictEqual(infoRefsCalls.length, 2);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Seeds a path-source marketplace "mp" whose dependent "app" holds
+ * "pathfoo" to `^1.0.0`, in a real git repository carrying no release tag
+ * yet. Returns the commit a later `pathfoo--v<version>` tag can name.
+ */
+async function seedConstrainedPathTarget(
+  cwd: string,
+  installedVersion = "0.9.0",
+): Promise<{ readonly marketplaceRoot: string; readonly oid: string }> {
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  for (const [name, dependencies] of [
+    ["app", [{ name: "pathfoo", version: "^1.0.0" }]],
+    ["pathfoo", undefined],
+  ] as const) {
+    const root = path.join(marketplaceRoot, "plugins", name);
+    await mkdir(path.join(root, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name,
+        version: "1.0.0",
+        ...(dependencies !== undefined && { dependencies }),
+      }),
+    );
+  }
+
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "mp",
+      plugins: [
+        { name: "app", source: "./plugins/app" },
+        { name: "pathfoo", source: "./plugins/pathfoo" },
+      ],
+    }),
+  );
+
+  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
+  await git.add({ fs, dir: marketplaceRoot, filepath: "." });
+  const oid = await git.commit({
+    fs,
+    dir: marketplaceRoot,
+    message: "seed marketplace",
+    author: { name: "test", email: "test@example.com" },
+  });
+
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: pathSource("./mp-src"),
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: { app: makePluginRecord("1.0.0"), pathfoo: makePluginRecord(installedVersion) },
+      },
+    },
+  });
+  return { marketplaceRoot, oid };
+}
+
+test("D-10-13: an up-to-date constrained plugin discloses the range that admits it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-constraint-ceiling-"));
+    try {
+      // arrange -- "app" holds "pathfoo" to ^1.0.0, the marketplace clone
+      // carries no release tag, and the record already sits at the version
+      // the current copy resolves to.
+      await seedConstrainedPathTarget(cwd, "1.0.0");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "pathfoo", marketplace: "mp" },
+      });
+
+      // assert -- no tag search established a ceiling here, so the cause
+      // line names the range and its holder without claiming the version is
+      // the highest one admitted.
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ⊘ pathfoo (skipped) {up-to-date}",
+            '    cause: constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "app@mp"',
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-10-18: a tag published between two cascade runs is visible to the second", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-constraint-memo-lifetime-"));
+    const previousCwd = process.cwd();
+    try {
+      // arrange -- the cascade seam reads `process.cwd()`, and the
+      // marketplace clone carries no satisfying tag for "pathfoo" yet.
+      const { marketplaceRoot, oid } = await seedConstrainedPathTarget(cwd);
+      const locations = locationsFor("project", cwd);
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      );
+      process.chdir(cwd);
+
+      // act -- two cascade runs through ONE binding, with the release tag
+      // published between them.
+      await operations.beginPluginUpdateRun()("pathfoo", "mp", "project");
+      await git.tag({ fs, dir: marketplaceRoot, ref: "pathfoo--v1.2.0", object: oid });
+      await operations.beginPluginUpdateRun()("pathfoo", "mp", "project");
+
+      // assert -- run one listed no tag and fell back to the marketplace's
+      // current copy; run two pins the published tag. A memo bound to the
+      // binding rather than to the run would serve run one's tag-less
+      // listing again and leave the record at the fallback's 1.0.0.
+      const after = await loadState(locations.extensionRoot);
+      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.version, "1.2.0");
+      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.resolvedSha, oid);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("a disabled pin refresh swallows post-commit clone cleanup failure", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-disabled-clone-gc-fail-");
@@ -7596,6 +8231,7 @@ test("updateSinglePlugin keeps a recorded provider SHA offline without an auth c
       toVersion: "sha-111111111111",
       declaresAgents: false,
       declaresMcp: false,
+      constraint: undefined,
       declaresWorkflows: false,
     });
   });
@@ -9898,7 +10534,8 @@ test("owns plugin update flow composition", () => {
 
   // act and assert
   assert.strictEqual(typeof operations.updatePlugins, "function");
-  assert.strictEqual(typeof operations.pluginUpdate, "function");
+  assert.strictEqual(typeof operations.beginPluginUpdateRun, "function");
+  assert.strictEqual(typeof operations.beginPluginUpdateRun(), "function");
 });
 
 test("routes cascade-safe preflight outcomes through the flow owner", async () => {
@@ -9920,7 +10557,7 @@ test("routes cascade-safe preflight outcomes through the flow owner", async () =
       process.chdir(cwd);
 
       // act
-      const outcome = await operations.pluginUpdate("present", "mp", "project");
+      const outcome = await operations.beginPluginUpdateRun()("present", "mp", "project");
 
       // assert
       assert.strictEqual(outcome.partition, "skipped");

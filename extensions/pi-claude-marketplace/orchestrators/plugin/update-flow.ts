@@ -99,8 +99,10 @@ import type {
   UpdatePhase3FailedOutcome,
   UpdateRunOutcome,
 } from "./update-swap.ts";
+import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -163,6 +165,8 @@ function buildDirectThreePhaseArgs(
   cardinality: "single" | "plural",
   hooksRouting: UpdateHooksRouting,
   completionCache: CompletionCache,
+  constraintTagMemo: Map<string, readonly RemoteTag[]>,
+  constraintMarketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>,
 ): DirectThreePhaseArgs {
   return {
     plugin: target.plugin,
@@ -196,6 +200,12 @@ function buildDirectThreePhaseArgs(
     ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+    // D-10-18: one memo pair for the WHOLE bulk run, allocated once by
+    // `updatePluginsWith` and threaded into every target here -- never a
+    // per-target allocation, or a repository common to several targets
+    // would be listed once per target instead of once per run.
+    constraintTagMemo,
+    constraintMarketplaceTagMemo,
     cleanupClones: garbageCollectPluginClones,
     notifyPhaseFailure: (error, failures) => {
       notifyDirectFailure({
@@ -253,6 +263,13 @@ async function updatePluginsWith(
   }
 
   const syncCloneOnce = makeSyncCloneOnce(opts.gitOps ?? DEFAULT_GIT_OPS);
+  // D-10-18: one memo pair for this WHOLE bulk run, never exposed on
+  // `UpdatePluginsOptions` -- it is a run-internal bound, not a caller knob,
+  // and a caller-supplied memo would outlive the run and serve a stale
+  // listing. A fresh pair here is what keeps two separate `updatePlugins`
+  // calls from sharing one.
+  const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
+  const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
 
   // Pair each outcome with its target so the cascade renderer can group
   // by (scope, marketplace) per CMC-21 (per-scope rendering, no collapse).
@@ -291,7 +308,15 @@ async function updatePluginsWith(
     let outcome: UpdateRunOutcome;
     try {
       outcome = await runPluginUpdate(
-        buildDirectThreePhaseArgs(opts, t, cardinality, hooksRouting, completionCache),
+        buildDirectThreePhaseArgs(
+          opts,
+          t,
+          cardinality,
+          hooksRouting,
+          completionCache,
+          constraintTagMemo,
+          constraintMarketplaceTagMemo,
+        ),
       );
     } catch (err) {
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
@@ -506,6 +531,10 @@ async function updateSinglePluginWith(
   plugin: string,
   marketplace: string,
   scope: Scope,
+  constraintMemos: {
+    readonly tagMemo: Map<string, readonly RemoteTag[]>;
+    readonly marketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>;
+  },
 ): Promise<PluginUpdateOutcome> {
   // The cascade signature does not carry `cwd`; we default to process.cwd
   // because the cascade is invoked from a marketplace orchestrator that
@@ -534,6 +563,12 @@ async function updateSinglePluginWith(
       // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
       // directly) is unaffected; it sets `partial` from the user's `--partial` flag.
       partial: true,
+      // D-10-18: the SAME pair for every plugin of ONE autoupdate run, so a
+      // cascade over many plugins of one marketplace lists it once -- see
+      // `beginPluginUpdateRun` below for why the pair is allocated per run
+      // and not beside the binding.
+      constraintTagMemo: constraintMemos.tagMemo,
+      constraintMarketplaceTagMemo: constraintMemos.marketplaceTagMemo,
       cleanupClones: garbageCollectPluginClones,
     });
   } catch (err) {
@@ -958,7 +993,14 @@ export type UpdatePluginsFn = (options: UpdatePluginsOptions) => Promise<void>;
 /** The direct and cascade update operations owned by one extension lifecycle. */
 export interface PluginUpdateOperations {
   readonly updatePlugins: UpdatePluginsFn;
-  readonly pluginUpdate: PluginUpdateFn;
+  /**
+   * Allocates the autoupdate cascade's `PluginUpdateFn` for ONE run. The
+   * caller invokes this once per `marketplace update` command and drives
+   * every plugin of that command through the returned function, which is
+   * what bounds the D-10-18 tag memos to the run (see
+   * `createPluginUpdateOperations`).
+   */
+  readonly beginPluginUpdateRun: () => PluginUpdateFn;
 }
 
 /**
@@ -994,7 +1036,20 @@ export function createPluginUpdateOperations(
       : (args) => runPluginUpdate({ ...args, stateTransaction });
   const updatePlugins: UpdatePluginsFn = (options) =>
     updatePluginsWith(options, hooksRouting, completionCache, run, composeUpdateCascade);
-  const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) =>
-    updateSinglePluginWith(hooksRouting, completionCache, run, plugin, marketplace, scope);
-  return { updatePlugins, pluginUpdate };
+  // D-10-18: ONE memo pair per autoupdate run. `beginPluginUpdateRun`
+  // allocates the pair, so the pair's lifetime is the run's and a release tag
+  // pushed between two runs is visible to the second. The pair spans every
+  // plugin of one run, so a marketplace common to several of them is listed
+  // once and the cascade's warm-cache expectation for path sources holds.
+  const beginPluginUpdateRun = (): PluginUpdateFn => {
+    const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
+    const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
+    return (plugin, marketplace, scope) =>
+      updateSinglePluginWith(hooksRouting, completionCache, run, plugin, marketplace, scope, {
+        tagMemo: constraintTagMemo,
+        marketplaceTagMemo: constraintMarketplaceTagMemo,
+      });
+  };
+
+  return { updatePlugins, beginPluginUpdateRun };
 }
