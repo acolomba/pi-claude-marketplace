@@ -4,19 +4,19 @@ milestone: any-git-host
 milestone_name: Any Git Host
 current_phase: 1
 current_phase_name: Private repos on any git host
-current_plan: 2
+current_plan: 3
 total_plans_in_phase: 3
-status: Phase 1 plan 01 executed — ready to execute plan 02
-stopped_at: "Completed 01-01-PLAN.md; suite intentionally RED until plan 03"
-last_updated: "2026-09-26T03:27:21.646Z"
+status: Phase 1 plan 02 executed — ready to execute plan 03
+stopped_at: "Completed 01-02-PLAN.md; suite intentionally RED until plan 03"
+last_updated: "2026-09-26T03:55:42.004Z"
 last_activity: 2026-09-26
-last_activity_desc: "Executed 01-01: buildAuthForHost returns a bundle for every host, cause line re-aimed at the real failure identity"
-state_head: 3edfce6e77dcd58ed16c1409cab73dac5d941cf9
+last_activity_desc: "Executed 01-02: onAuth cancels a credential for a url on another host, proven at the factory and at the transport"
+state_head: 7780742f0c527cf8179e7c484e953e8c7fb963ea
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -38,36 +38,44 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 ## Current Position
 
 Phase: 1 — Private repos on any git host (in progress)
-Current Plan: 2
+Current Plan: 3
 Total Plans in Phase: 3
-Status: Plan 01 of 3 executed and summarized
-Last activity: 2026-09-26 — Executed 01-01 (4 commits, GAUTH-03/04/05)
+Status: Plans 01 and 02 of 3 executed and summarized
+Last activity: 2026-09-26 — Executed 01-02 (2 commits, GAUTH-06)
 
 Plan 01 landed wave 1: `buildAuthForHost` returns a `GitAuthBundle` for every https host, so
 `credentialOps.fill(host)` is reached off the two-host registry; `NO_PROVIDER_CAUSE` and
 `isAuthChallengeError` are retired and the `update.ts` cause attachment is re-aimed at
 `classifyGitTransportFailure` gated on `!hasDeviceFlowProvider(host)`.
 
-The unit suite is intentionally RED at the whole-suite level — 20 failures confined to the seven
-plugin and edge files plan 03 owns, with the exact case list recorded in `01-01-SUMMARY.md`. Every
-other gate (lint, format, typecheck, type-members, corresponding-tests, fallow, direct coverage on
-all three touched modules) is green. Next step is `/gsd-execute-phase 1` for plan 02, which adds the
-`onAuth` host-mismatch cancel (GAUTH-06) — the replacement for the cross-host cap plan 01 removed.
+Plan 02 landed wave 2, the mitigation for the surface wave 1 widened: `buildAuthCallbacks.onAuth`
+compares `new URL(url).host` against the bundle's bound `host` and returns `{ cancel: true }` on a
+difference, before `credentialOps.fill` is called, so a foreign URL causes no helper query at all
+(GAUTH-06, D-1-03). The `url` parameter is load-bearing and named accordingly. The refusal is
+proven twice — at the factory (`credentialOps.calls` empty) and at the transport
+(`UserCanceledError`, no `Authorization` header on any recorded request).
+
+The unit suite is intentionally RED at the whole-suite level — still exactly 20 failures, confined
+to the seven plugin and edge files plan 03 owns, with the case list recorded in `01-01-SUMMARY.md`.
+Plan 02 added none. Every other gate (lint, format, typecheck, type-members, corresponding-tests,
+fallow, direct coverage on the touched module) is green. Next step is `/gsd-execute-phase 1` for
+plan 03, which realigns the plugin and edge surfaces and takes `npm run check` green at the phase
+boundary.
 
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** 2 of 3 (phase 1)
+**Current Plan:** 3 of 3 (phase 1)
 
 ```
-Phase 1  [===       ]  in progress (1/3 plans)
+Phase 1  [======    ]  in progress (2/3 plans)
 Phase 2  [          ]  not started
 Phase 3  [          ]  not started
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | In progress (1/3 plans) |
+| 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | In progress (2/3 plans) |
 | 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Not started |
 | 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Not started |
 
@@ -102,6 +110,10 @@ Phase 3  [          ]  not started
 - **The `update.ts` guard reuses `classifyGitTransportFailure`** rather than a second hand-rolled
   duck-type: it already folds `HttpError` 401/403 and `UserCanceledError` into one reason, and the
   real failure on an empty helper is `UserCanceledError`, which the old guard could never match.
+- **`onAuth` compares `new URL(url).host` against the bundle's bound `host`** and cancels before
+  `credentialOps.fill` is called, so a URL on another host causes no helper query at all. The
+  `url` parameter is load-bearing and named `url`; `onAuthFailure` keeps its unused `_url`
+  because the credential it evicts has already been sent (GAUTH-06, D-1-03).
 
 ### Source-review facts carried into planning
 
@@ -132,7 +144,8 @@ Phase 3  [          ]  not started
   `tests/orchestrators/plugin/*` files. The named case list is in `01-01-SUMMARY.md`.
 - A live end-to-end clone of a private repo on a non-registry host, against the operator's own
   credential helper, is untested by design (cases run offline with no credentials) and needs human
-  UAT. Recorded as deliverable D4 in `01-01-SUMMARY.md`.
+  UAT. Recorded as deliverable D4 in `01-01-SUMMARY.md`, and as D5 in `01-02-SUMMARY.md` for the
+  host-mismatch refusal against a real remote.
 
 ### Blockers
 
@@ -140,7 +153,14 @@ None.
 
 ## Session Continuity
 
-**Stopped At:** Completed `01-01-PLAN.md` (4 commits, `96d8fe09`..`3edfce6e`); whole-suite RED by
-design until plan 03.
-**Resume File:** `.planning/workstreams/git-hosts/phases/01-private-repos-on-any-git-host/01-02-PLAN.md`
-**Next Action:** Execute plan 02 (`onAuth` host-mismatch cancel, GAUTH-06)
+**Last session:** 2026-09-26T03:55:41.954Z
+
+**Stopped At:** Completed `01-02-PLAN.md` (2 commits, `c55a7466`..`7780742f`); whole-suite RED by design until plan 03.
+**Resume File:** `.planning/workstreams/git-hosts/phases/01-private-repos-on-any-git-host/01-03-PLAN.md`
+**Next Action:** Execute plan 03 (plugin and edge surface realignment, `npm run check` green)
+
+## Performance Metrics
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P02 | 22min | 2 tasks | 3 files |

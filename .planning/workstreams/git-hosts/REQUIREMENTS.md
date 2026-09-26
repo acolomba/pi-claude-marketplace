@@ -32,7 +32,7 @@ helper is therefore invisible to this extension on every other host.
   unchanged and is what the phase asserts: a declined Device Flow on a registry host still
   renders a bare `{authentication required}` row and must NOT pick up the new stored-credential
   cause line — which is exactly what `hasDeviceFlowProvider` in the `update.ts` guard prevents.
-- [ ] **GAUTH-06**: A credential resolved for one host is never offered to a different host. When
+- [x] **GAUTH-06**: A credential resolved for one host is never offered to a different host. When
   `buildAuthCallbacks.onAuth` is invoked for a URL whose host differs from the bundle's bound
   `host`, it cancels instead of returning the filled credential.
 
@@ -108,7 +108,7 @@ repo's shared counter.
 | GAUTH-03 | Phase 1 | Complete |
 | GAUTH-04 | Phase 1 | Complete |
 | GAUTH-05 | Phase 1 | Complete |
-| GAUTH-06 | Phase 1 | Pending |
+| GAUTH-06 | Phase 1 | Complete |
 | MURL-08 | Phase 2 | Pending |
 | MURL-09 | Phase 2 | Pending |
 | MA-12 | Phase 3 | Pending |
