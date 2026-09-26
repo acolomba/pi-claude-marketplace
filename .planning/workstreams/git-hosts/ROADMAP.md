@@ -68,7 +68,9 @@ here. Decimal phases (1.1, 2.1) are urgent insertions only, marked `INSERTED`.
      `git credential approve` as the way to store one, instead of cloning authless and surfacing a
      bare structural 401.
   3. `github.com` and `gitlab.com` behave exactly as they do today — same Device Flow prompt, same
-     memoization, and `NO_PROVIDER_CAUSE` still surfaces wherever it still applies.
+     memoization, and the same bare `{authentication required}` row on a declined flow — it must
+     NOT pick up the new stored-credential cause line. (Restated after D-1-04 retired
+     `NO_PROVIDER_CAUSE`; the original wording named that symbol, which no longer exists.)
   4. A credential resolved for one host is never sent to another: `buildAuthCallbacks.onAuth`
      cancels when the URL it is handed has a different host than the bundle's bound `host`, making
      a parameter it currently ignores load-bearing. The guard is exercised directly, and
@@ -144,7 +146,15 @@ Plans:
      `npm run check` passes whole at the milestone's final HEAD: `test:coverage:unit` at 100%
      lines/functions/branches, `test:corresponding`, `lint:type-members`, `fallow`, and the
      `tests/architecture/` gates.
-  5. `PROJECT.md`'s D-79-03 row is amended. Its OUTCOME still holds — `add` and `install` show a
+  5. The marketplace **autoupdate cascade** is settled, either fixed or filed with its reason.
+     `orchestrators/plugin/update-preflight.ts::buildBundle` returns `undefined` when
+     `auth.ctx === undefined`, and `update-flow.ts::updateSinglePluginWith` — the `PluginUpdateFn`
+     the cascade invokes — never passes a `ctx`, so that path clones authless. This is
+     PRE-EXISTING and host-agnostic (it withholds auth from `github.com` identically), so it is
+     not a Phase 1 regression and Phase 1 correctly left it alone. But `ctx` exists only to build
+     the Device Flow's `notifyFn`, which the no-provider closure does not need, so the milestone's
+     "any git host" prose is broader than what the cascade delivers. Decide explicitly.
+  6. `PROJECT.md`'s D-79-03 row is amended. Its OUTCOME still holds — `add` and `install` show a
      bare `(failed) {authentication required}` row and only `update` carries a cause line, which
      is a recorded user checkpoint (2026-07-11) this milestone does not revisit. Its stated
      RATIONALE does not: the row reads "no `onAuth` callback registered at all for no-provider
