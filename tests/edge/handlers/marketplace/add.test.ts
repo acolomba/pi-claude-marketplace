@@ -91,6 +91,15 @@ import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/
 // compile error in this suite rather than a silently stale hand-copied type.
 type GitCloneCall = ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"][number];
 
+/**
+ * A recorded clone with its auth bundle reduced to the one comparable field.
+ * The bundle carries three closures, so a literal expectation cannot spell it;
+ * the bound host is what a wrong binding would get wrong.
+ */
+type DescribedCloneCall = Omit<GitCloneCall, "auth"> & {
+  readonly auth?: { readonly host: string };
+};
+
 /** Written out by hand; never read back off the module under test. */
 const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
 
@@ -112,12 +121,18 @@ const PROJECT_ADDED_ROW = "● seeded [project] (added)";
 const STAGED_CLONE_DIR = "<sources-staging>/<uuid>";
 const UUID_LEAF = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** The single clone a url source pinned to `main` produces, authless. */
-const ALPHA_CLONE: GitCloneCall = {
+/**
+ * The single clone a url source pinned to `main` produces. The provider
+ * registry does not claim `gitlab.example.com`, and the clone still carries a
+ * bundle bound to it, so a credential already in the user's helper is reachable
+ * (GAUTH-03).
+ */
+const ALPHA_CLONE: DescribedCloneCall = {
   dir: STAGED_CLONE_DIR,
   url: CLONE_URL,
   ref: "main",
   singleBranch: true,
+  auth: { host: "gitlab.example.com" },
 };
 
 interface ScopeFootprint {
@@ -212,12 +227,18 @@ function stagingRootFor(scope: Scope, cwd: string): string {
 
 /**
  * Substitute the stable token for a staging leaf that is a UUID under the
- * expected scope's staging root, so the whole recorder stays comparable and a
- * clone into the wrong scope root still fails on its directory.
+ * expected scope's staging root, and reduce the auth bundle to its bound host,
+ * so the whole recorder stays comparable and a clone into the wrong scope root
+ * or carrying a bundle bound to the wrong host still fails.
  */
-function describeClone(call: GitCloneCall, stagingRoot: string): GitCloneCall {
+function describeClone(call: GitCloneCall, stagingRoot: string): DescribedCloneCall {
   const staged = path.dirname(call.dir) === stagingRoot && UUID_LEAF.test(path.basename(call.dir));
-  return { ...call, dir: staged ? STAGED_CLONE_DIR : call.dir };
+  const { auth, ...dataCall } = call;
+  return {
+    ...dataCall,
+    dir: staged ? STAGED_CLONE_DIR : call.dir,
+    ...(auth === undefined ? {} : { auth: { host: auth.host } }),
+  };
 }
 
 /**

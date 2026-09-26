@@ -2879,8 +2879,8 @@ test("GAUTH-02 / MURL-01: a gitlab.com url add clones .git-suffixed WITH the Git
     assert.ok(cloneCall);
     // MURL-01: ensureGitSuffix restores the `.git` suffix on the wire URL.
     assert.equal(cloneCall.url, "https://gitlab.com/team/mp.git");
-    // GAUTH-02: gitlab.com is provider-registered -- the clone carries the
-    // GitLab auth bundle, not the no-provider authless path.
+    // GAUTH-02: the clone carries a bundle bound to gitlab.com, the host the
+    // registry claims for the GitLab provider.
     assert.ok(cloneCall.auth, "gitlab.com must attach the GitLab provider's auth bundle");
     assert.equal(cloneCall.auth.host, "gitlab.com");
   });
