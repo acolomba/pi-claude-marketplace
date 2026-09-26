@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 import ts from "typescript";
@@ -1857,13 +1857,15 @@ function contextFrom(given) {
  */
 export function createContractEvaluator({ contractsPath }) {
   const entries = loadEntries(contractsPath);
+  // Reported relative to the project root, which is a real path.
+  const realContractsPath = realpathSync(contractsPath);
 
   return (given) => {
     const context = contextFrom(given);
     return {
       decisions: entries.map((entry) => decisionFor(entry, context)),
       diagnostics: [
-        `contracts: ${entries.length} validated from ${projectPathOf(given.projectRoot, contractsPath)}`,
+        `contracts: ${entries.length} validated from ${projectPathOf(given.projectRoot, realContractsPath)}`,
       ],
     };
   };
