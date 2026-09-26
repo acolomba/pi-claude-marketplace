@@ -34,7 +34,7 @@ function installedRecord(resolvedSource: string): PluginStateRecord {
     version: "1.0.0",
     resolvedSource,
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { workflows: [], skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     enabled: true,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",

@@ -14,6 +14,20 @@ void ({ marketplaces: { alpha: {} }, mutated: true } satisfies MigrationResult);
 // @ts-expect-error MigrationResult contains only object-valued marketplace rows.
 void ({ marketplaces: { alpha: null }, mutated: true } satisfies MigrationResult);
 
+/**
+ * The same record as the fill leaves it: `provenance` set and the `workflows`
+ * inventory present. The pre-fill helper below is the INPUT shape; this is what
+ * `migrateLegacyMarketplaceRecords` is expected to answer with.
+ */
+function migratedPluginRecord(provenance: string, version = "1.0.0"): Record<string, unknown> {
+  return {
+    version,
+    enabled: true,
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    provenance,
+  };
+}
+
 /** A fresh plugin record in the pre-D-04-03 shape: every required field but `provenance`. */
 function pluginRecordWithoutProvenance(version = "1.0.0"): Record<string, unknown> {
   return {
@@ -80,6 +94,7 @@ test("normalizes a complete legacy marketplace in place", () => {
           agents: [],
           mcpServers: [],
           hooks: [],
+          workflows: [],
         },
         installedAt: "2026-01-02T03:04:05.000Z",
         updatedAt: "2026-02-03T04:05:06.000Z",
@@ -146,6 +161,7 @@ test("preserves optional fields when autoupdate scrubbing is closed", () => {
               agents: ["agents/plugin-two.json"],
               mcpServers: ["plugin-two-server"],
               hooks: ["hooks/plugin-two.json"],
+              workflows: [],
             },
             hookEntries: [{ event: "SessionStart", command: "./start.sh" }],
             enabled: false,
@@ -183,6 +199,7 @@ test("preserves optional fields when autoupdate scrubbing is closed", () => {
               agents: ["agents/plugin-two.json"],
               mcpServers: ["plugin-two-server"],
               hooks: ["hooks/plugin-two.json"],
+              workflows: [],
             },
             hookEntries: [{ event: "SessionStart", command: "./start.sh" }],
             enabled: false,
@@ -233,6 +250,7 @@ test("replays a normalized marketplace as an exact fixed point", () => {
           agents: ["agents/plugin-three.json"],
           mcpServers: [],
           hooks: [],
+          workflows: [],
         },
         enabled: true,
         provenance: "explicit",
@@ -270,6 +288,7 @@ test("replays a normalized marketplace as an exact fixed point", () => {
               agents: ["agents/plugin-three.json"],
               mcpServers: [],
               hooks: [],
+              workflows: [],
             },
             enabled: true,
             provenance: "explicit",
@@ -535,7 +554,7 @@ test("creates required resources when a legacy plugin omits the collection", () 
           "plugin-four": {
             version: "1.0.0",
             enabled: true,
-            resources: { agents: [], mcpServers: [], hooks: [] },
+            resources: { agents: [], mcpServers: [], hooks: [], workflows: [] },
             provenance: "explicit",
           },
         },
@@ -553,6 +572,93 @@ test("creates required resources when a legacy plugin omits the collection", () 
     schemaVersion: 1,
     marketplaces: expectedMigration.marketplaces,
   });
+});
+
+test("fills the workflows inventory on a legacy record that predates the field", () => {
+  // arrange
+  // WLIF-01: `resources.workflows` is required by `STATE_VALIDATOR.Check`, so a
+  // record written before the field existed must be filled BEFORE validation
+  // runs -- exactly as `agents`, `mcpServers` and `hooks` are. No schemaVersion
+  // bump: the `hooks` axis set that precedent.
+  const extensionRoot = path.join(path.sep, "extension-root");
+  const legacyState = {
+    schemaVersion: 1,
+    marketplaces: {
+      theta: {
+        name: "theta",
+        manifestPath: "/custom/theta/marketplace.json",
+        marketplaceRoot: "/custom/theta",
+        plugins: {
+          "plugin-six": {
+            version: "1.0.0",
+            enabled: true,
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+          },
+        },
+      },
+    },
+  };
+
+  // act
+  const migration = migrateLegacyMarketplaceRecords(legacyState, extensionRoot, true);
+
+  // assert
+  assert.strictEqual(migration.mutated, true);
+  assert.deepStrictEqual(legacyState.marketplaces.theta.plugins["plugin-six"].resources, {
+    skills: [],
+    prompts: [],
+    agents: [],
+    mcpServers: [],
+    hooks: [],
+    workflows: [],
+  });
+});
+
+test("leaves a record that already carries its workflows inventory untouched", () => {
+  // arrange
+  // The default-fill must be idempotent: a second load of an already-migrated
+  // state file must not report a mutation, or every load rewrites state.json.
+  const extensionRoot = path.join(path.sep, "extension-root");
+  const migratedState = {
+    schemaVersion: 2,
+    marketplaces: {
+      iota: {
+        name: "iota",
+        scope: "user",
+        source: { kind: "path", raw: "./iota", logical: "./iota" },
+        addedFromCwd: "/work",
+        manifestPath: "/custom/iota/marketplace.json",
+        marketplaceRoot: "/custom/iota",
+        plugins: {
+          "plugin-seven": {
+            version: "1.0.0",
+            enabled: true,
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: ["plugin-seven:build"],
+            },
+            // D-04-03: the record also carries its provenance, so `workflows`
+            // is the only axis this idempotence case leaves to the fill.
+            provenance: "explicit",
+          },
+        },
+      },
+    },
+  };
+
+  // act
+  const migration = migrateLegacyMarketplaceRecords(migratedState, extensionRoot, true);
+
+  // assert
+  assert.strictEqual(migration.mutated, false);
+  assert.deepStrictEqual(
+    migratedState.marketplaces.iota.plugins["plugin-seven"].resources.workflows,
+    ["plugin-seven:build"],
+  );
 });
 
 test("replaces a null resource collection with required empty arrays", () => {
@@ -585,7 +691,7 @@ test("replaces a null resource collection with required empty arrays", () => {
           "plugin-five": {
             version: "2.0.0",
             enabled: null,
-            resources: { agents: [], mcpServers: [], hooks: [] },
+            resources: { agents: [], mcpServers: [], hooks: [], workflows: [] },
             provenance: "explicit",
           },
         },
@@ -726,7 +832,14 @@ test("D-04-03: fills an absent provenance with explicit before validation", () =
           "plugin-one": {
             version: "1.0.0",
             enabled: true,
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
             provenance: "explicit",
           },
         },
@@ -760,13 +873,27 @@ test("D-04-03: leaves a present provenance untouched, including one the schema r
           "plugin-one": {
             version: "1.0.0",
             enabled: true,
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
             provenance: "dependency",
           },
           "plugin-two": {
             version: "1.0.0",
             enabled: true,
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
             provenance: "not-a-mode",
           },
         },
@@ -783,13 +910,27 @@ test("D-04-03: leaves a present provenance untouched, including one the schema r
           "plugin-one": {
             version: "1.0.0",
             enabled: true,
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
             provenance: "dependency",
           },
           "plugin-two": {
             version: "1.0.0",
             enabled: true,
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
             provenance: "not-a-mode",
           },
         },
@@ -841,8 +982,8 @@ test("D-04-03: fills every provenance-less record across marketplaces independen
         manifestPath: "/custom/alpha/marketplace.json",
         marketplaceRoot: "/custom/alpha",
         plugins: {
-          "plugin-one": { ...pluginRecordWithoutProvenance(), provenance: "explicit" },
-          "plugin-two": { ...pluginRecordWithoutProvenance(), provenance: "dependency" },
+          "plugin-one": migratedPluginRecord("explicit"),
+          "plugin-two": migratedPluginRecord("dependency"),
         },
       },
       beta: {
@@ -850,7 +991,7 @@ test("D-04-03: fills every provenance-less record across marketplaces independen
         manifestPath: "/custom/beta/marketplace.json",
         marketplaceRoot: "/custom/beta",
         plugins: {
-          "plugin-three": { ...pluginRecordWithoutProvenance(), provenance: "explicit" },
+          "plugin-three": migratedPluginRecord("explicit"),
         },
       },
     },
@@ -900,8 +1041,8 @@ test("D-04-03: reads every record of a multi-marketplace legacy document as expl
       manifestPath: "/custom/alpha/marketplace.json",
       marketplaceRoot: "/custom/alpha",
       plugins: {
-        "plugin-one": { ...pluginRecordWithoutProvenance("1.0.0"), provenance: "explicit" },
-        "plugin-two": { ...pluginRecordWithoutProvenance("1.1.0"), provenance: "explicit" },
+        "plugin-one": migratedPluginRecord("explicit", "1.0.0"),
+        "plugin-two": migratedPluginRecord("explicit", "1.1.0"),
       },
     },
     beta: {
@@ -909,8 +1050,8 @@ test("D-04-03: reads every record of a multi-marketplace legacy document as expl
       manifestPath: "/custom/beta/marketplace.json",
       marketplaceRoot: "/custom/beta",
       plugins: {
-        "plugin-three": { ...pluginRecordWithoutProvenance("2.0.0"), provenance: "explicit" },
-        "plugin-four": { ...pluginRecordWithoutProvenance("2.1.0"), provenance: "explicit" },
+        "plugin-three": migratedPluginRecord("explicit", "2.0.0"),
+        "plugin-four": migratedPluginRecord("explicit", "2.1.0"),
       },
     },
   };

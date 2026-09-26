@@ -9,3 +9,11 @@ max_depth = 1
 
 [features]
 hooks = true
+
+[mcp_servers.codegraph]
+command = "codegraph"
+args = ["serve", "--mcp"]
+
+[mcp_servers.fallow]
+command = "npx"
+args = ["--no", "fallow-mcp"]

@@ -41,11 +41,9 @@
 // before the scope value is ever consulted. The case states that measured
 // outcome rather than a rejection the module does not perform.
 //
-// This pair reads COMPLETE: `branches 11/11, functions 2/2, lines 75/75`. It
-// used to carry one uncovered branch, the `String(err)` arm of an inline
-// `err instanceof Error ? err.message : String(err)`. That expression is gone
-// from `import.ts`; the catch now calls the shared `errorMessage(err)`, so the
-// `unknown`-narrowing arm belongs to that helper's own pair and not to this one.
+// This pair reads COMPLETE: `branches 11/11, functions 2/2, lines 75/75`. The
+// catch calls the shared `errorMessage(err)`, so the `unknown`-narrowing arm
+// belongs to that helper's own pair and not to this one.
 //
 // Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
 // and a pair absent from it reads complete. This one is absent from it.
@@ -270,7 +268,7 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
 test("runs the real import workflow when the dependency object declares no delegate", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "no-delegate");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: cwd,
     reads: 1,
   });

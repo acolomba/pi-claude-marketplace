@@ -307,6 +307,7 @@ test("EDEP-03 the already-installed section names the reasons a re-enabled depen
     rootRow: ROOT_ROW,
     installed: [
       {
+        declaresWorkflows: false,
         key: DEPENDENCY_KEY,
         version: "1.0.0",
         declaresAgents: false,
@@ -316,7 +317,7 @@ test("EDEP-03 the already-installed section names the reasons a re-enabled depen
       },
     ],
     alreadyInstalled: [],
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    probe: { workflowEngineLoaded: false, piSubagentsLoaded: true, piMcpAdapterLoaded: true },
   });
   const reEnabled = rows.find(
     (row): row is Extract<CascadeMsg, { readonly status: "installed" }> =>
@@ -347,7 +348,7 @@ test("RESV-06 the already-installed section still names the reason a left-alone 
     rootRow: ROOT_ROW,
     installed: [],
     alreadyInstalled: [{ key: DEPENDENCY_KEY, version: "1.0.0" }],
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    probe: { workflowEngineLoaded: false, piSubagentsLoaded: true, piMcpAdapterLoaded: true },
   });
   const skipped = rows.find((row) => row.status === "skipped");
   assert.ok(skipped !== undefined, "a left-alone member still renders a skipped row");
@@ -373,6 +374,7 @@ test("DIVG-01 the resolution section names every reason the fallback row carries
     rootRow: ROOT_ROW,
     installed: [
       {
+        declaresWorkflows: false,
         key: DEPENDENCY_KEY,
         version: "1.0.0",
         declaresAgents: false,
@@ -382,7 +384,7 @@ test("DIVG-01 the resolution section names every reason the fallback row carries
       },
     ],
     alreadyInstalled: [],
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    probe: { workflowEngineLoaded: false, piSubagentsLoaded: true, piMcpAdapterLoaded: true },
   });
   const fallback = rows.find(
     (row): row is Extract<CascadeMsg, { readonly status: "installed" }> =>
@@ -460,7 +462,14 @@ test("UPDT-02: the document names every token the held update row stamps", async
             version: "1.0.0",
             resolvedSource: path.join(marketplaceRoot, "plugins", "shared-lib"),
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              workflows: [],
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
             enabled: true,
             provenance: "explicit",
             installedAt: "2026-01-01T00:00:00.000Z",

@@ -36,119 +36,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
 const EXPECTED_MODULE_COUNT = 21;
 const EXPECTED_SECTION_COUNT = 21;
-// D-01-22 / D-01-30: +1 state for plugin info's constraint parenthetical --
-// one `dependencies:` block carrying a version range alone, a sha alone, and
-// both together (190 -> 191).
-// WR-06 / DATA-01: +1 state for uninstall's `success-keep-data` row, the
-// preserving disposition's `{data kept}` brace (191 -> 192).
-// RESV-01..06: +12 states for the dependency cascade -- its success block, the
-// six constraint arms, the four closure arms, and a member whose own ledger
-// threw. Every one of them is a row the cascade renders and nothing else does
-// (192 -> 204).
-// RESV-05: +1 state for the cascade skip whose record is DISABLED -- the
-// `{already installed, dependency disabled}` brace and the warning it raises
-// (204 -> 205).
-// D-04-07: +1 state for the promotion of a recorded dependency the user then
-// installed by name -- the `installed` row carrying `{already installed,
-// dependency promoted}`, the one install outcome that changes a record
-// without materializing anything (205 -> 206).
-// D-05-07: +1 state for uninstall's fail-closed refusal -- the row that
-// carries a declarer's read-failure token when some other record's
-// declarations could not be established (206 -> 207).
-// PRUNE-01..04 / D-05-01 / D-05-09 / D-05-13: +3 states for `uninstall
-// --prune` -- the two-block sweep report with its `{dependency pruned}` rows,
-// the same under `--keep-data` with `{dependency pruned, data kept}`, and the
-// partial failure where one pruned member's warning row sits beside the
-// removals that stood (207 -> 210).
-// D-01-32: +1 state for the cold git-source `(remote)` row that carries the
-// entry-declared `dependencies:` line after the unresolved marker (210 -> 211).
-// RESV-06: +1 state for the load-time counterpart of the dependency-cascade
-// `{dependency failed}` row -- reconcile drives one outcome per declared
-// plugin, so the requesting plugin's own row carries both the token and the
-// failing dependency's cause line (211 -> 212).
-// RESV-06: +1 state for import's own dependency-cascade failure -- a
-// `DependencyCascadeError` now collapses onto the requesting plugin's row with
-// `{dependency failed}` instead of the unrelated `{not in manifest}` token the
-// unexpected-failure fallthrough carried before `dispatchFailedOutcome`
-// narrowed on it (212 -> 213).
-// LOAD-01: +1 state for the load-time dependency disable -- the `(disabled)`
-// row carrying `{dependency unsatisfied}` and the remedy naming both the
-// dependency and the dependent on its cause line. It is the only `(disabled)`
-// row with a cause trailer, and the only realized transition row that renders
-// at warning severity (213 -> 214).
-// LOAD-01: +2 states for the check's other two arms -- a dependency recorded
-// but disabled (same token, enable remedy) and a dependency recorded at a
-// version outside the declared range (the second token, update remedy carrying
-// the canonical folded range) (214 -> 216).
-// LOAD-03 / D-06-06: +1 state for the uninstall that went through while other
-// plugins still declared the target -- an `(uninstalled)` row carrying
-// `{dependents unsatisfied}` with the dependents on its cause line, the only
-// uninstall row with a cause trailer (216 -> 217).
-//
-// D-06-07 is the one RETIREMENT this narrative records: the two states that
-// documented uninstall's dependents refusal -- the standalone row and its
-// load-time counterpart -- are gone, because the refusal they documented no
-// longer happens. The load-time surface gains no replacement: the
-// reconcile-driven removal renders the ordinary bare `(uninstalled)` row that
-// `reconcile-applied-cascade` already documents, and the consequence for the
-// dependents is reported by `reconcile-dependency-unsatisfied`. The arithmetic
-// above is renumbered rather than annotated with the gap.
-// TAGS-02 / D-07-03: +1 state for the path-source dependency-cascade fallback
-// -- an `installed` row carrying `{dependency current copy}` when no
-// marketplace tag satisfied the constraint (217 -> 218).
-// EDEP-01 / EDEP-03: +1 state for the enable cascade's own multi-row block --
-// a declared dependency re-enabled through its own record, carrying the new
-// `{dependency enabled}` token on an `installed` row (218 -> 219).
-// EDEP-02: +1 state for the disable refusal -- an installed and ENABLED
-// plugin in the same scope still declares the target, so the disable is
-// refused with the new `{dependents remain}` token and a plain-English
-// cause line naming the dependents and the order (219 -> 220).
-//
-// EDEP-03 SWAPS one state for another rather than growing the count:
-// `dependency-cascade-disabled-skip` (the RESV-05 skip carrying
-// `{already installed, dependency disabled}`) leaves, and
-// `install-cascade-dependency-enabled` (an `installed` row carrying
-// `{already installed, dependency enabled}`) arrives in its place -- the
-// install cascade now turns a disabled already-installed dependency back on
-// through its own record instead of leaving it inert. One state out, one
-// state in, so the count holds at 220; the byte count moves because the
-// replacement state's fenced block differs from the one it replaced.
-// MISS-01 / D-09-09: +1 state for the reload dependency-install step --
-// `reconcile-dependency-installed`, the two-row `{dependency installed}` /
-// bare `(installed)` block a materialized missing dependency and its
-// satisfied dependent render together (220 -> 221).
-// MISS-02 / D-09-10: +1 state for the reload dependency-install failure --
-// `reconcile-dependency-install-failed`, the two-row `{dependency failed}` /
-// `{dependency unsatisfied}` block the failing dependency and its held
-// dependent render together (221 -> 222).
-// UPDT-02 / D-10-09: +1 state for the update-preflight constraint gate's
-// held row -- disjoint declared ranges hold the plugin's update, and the
-// cause line names both declarers in key order, marking the disabled one
-// (222 -> 223).
-// UPDT-01 / UPDT-02 / D-10-01: +1 state for stage two's post-fetch guard --
-// a no-tag repository's fetched version lands outside the combined range,
-// held naming only the rejecting dependent (223 -> 224).
-// D-10-14 / D-10-15: +1 state for the path-source current-copy fallback that
-// landed in range -- an `(updated)` row carrying `{dependency current copy}`
-// alone (224 -> 225).
-// D-10-13: +1 state for the ceiling disclosure -- an `{up-to-date}` row
-// whose cause line names the effective range and its holders (225 -> 226).
-// D-10-12: +1 state for the autoupdate cascade's held row -- the same token,
-// cause line and `warning` severity the manual cascade renders (226 -> 227).
-// #209 removes empty success tallies without changing the state count; the
-// catalog is 127 UTF-8 bytes shorter after the merge.
-// D-11-04: one nonempty marketplace-info policy state (227 -> 228).
-// D-11-06: one cross-marketplace dependency refusal (228 -> 229).
-// D-11-06: one reload refusal retaining the dependent-disable row (229 -> 230).
-// PRUNE-06 / PRUNE-07: seven standalone sweep states pin realized, pending,
-// scoped empty, independent member failure, and unreadable-declarer output.
-// CR-01: malformed state and held-lock failures add two command-scoped rows.
-// CR-02: a partial restore adds one command-scoped recovery row.
-// A committed prune with failed lock release adds one scope-wide warning.
-// Shared-metadata and combined lock-release failures add two recovery rows.
-// A second member's failed cleanup adds one warning attributed to that member.
-const EXPECTED_STATE_COUNT = 244;
-const EXPECTED_UTF8_BYTES = 35_900;
+const EXPECTED_STATE_COUNT = 259;
+const EXPECTED_UTF8_BYTES = 38_914;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -409,11 +298,11 @@ test("catalog contract rejects duplicate fixture tuples and empty sections", () 
 
   assert.throws(
     () => mergeFixtureMaps([one, one]),
-    /Duplicate catalog fixture tuple: section::state/u,
+    new Error("Duplicate catalog fixture tuple: section::state"),
   );
   assert.throws(
     () => mergeFixtureMaps([{ section: {} }]),
-    /Catalog fixture section must not be empty: section/u,
+    new Error("Catalog fixture section must not be empty: section"),
   );
 });
 
@@ -439,7 +328,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 21 fixture modules to 244 exact documented states", async () => {
+test("catalog contract matches all 21 fixture modules to 259 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

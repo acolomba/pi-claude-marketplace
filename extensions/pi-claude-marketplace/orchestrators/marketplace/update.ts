@@ -49,7 +49,7 @@
 //
 //  2. For each (scope, marketplaceName) pair:
 //  a. OUTER GUARD (wraps refresh + persist, NOT cascade):
-//  withStateGuard(locations, async (state) => {
+//  withLockedStateTransaction(locations, async (tx) => {
 //  record = state.marketplaces[name]
 //  if (record.source.kind === "github"):
 //  cloneAdvanced = false
@@ -115,7 +115,10 @@ import {
   type Plural,
   type Single,
 } from "../../shared/notify-context.ts";
-import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import {
+  withLockedStateTransaction,
+  type LockedStateTransactionDeps,
+} from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_CREDENTIAL_OPS,
   NO_PROVIDER_CAUSE,
@@ -183,6 +186,15 @@ export interface UpdateMarketplaceOptions {
    * inside the orchestrator's onAuthRequired closure.
    */
   readonly deviceFlowHttp?: DeviceFlowHttp;
+  /**
+   * D-12-style injection seam for the locked-state transaction around the
+   * refresh. Tests inject a `loadState` that omits the target record, which
+   * is the only deterministic way to reach the in-lock disappearance arm: the
+   * pre-guard probe reads the real file and finds the record, while the
+   * in-lock load does not. Zero runtime cost in production: the value is
+   * forwarded unchanged.
+   */
+  readonly stateTransaction?: LockedStateTransactionDeps;
 }
 
 export interface UpdateAllMarketplacesOptions {
@@ -236,6 +248,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
     credentialOps,
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
+    ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
   });
 }
 
@@ -301,6 +314,7 @@ interface RefreshOneArgs {
   readonly pi: ToolInventory;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
+  readonly stateTransaction?: LockedStateTransactionDeps;
 }
 
 /**
@@ -517,31 +531,37 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
   // pure reducer over loadConfig, which never throws).
   const { merged } = await loadMergedScopeConfig(locations);
   const autoupdate = merged.marketplaces[name]?.entry.autoupdate ?? false;
-  return withStateGuard(locations, async (state) => {
-    const record = state.marketplaces[name];
-    if (record === undefined) {
-      // TOCTOU race: the marketplace was removed between
-      // `resolveScopeOrNotifyNotAdded`'s pre-guard `loadState` and this guard's
-      // fresh `loadState`. The pre-guard already proved existence and the
-      // missing-marketplace precondition is handled there (routed to the
-      // standalone `{marketplace not added}` variant); reaching here means a concurrent
-      // removal in that window. Return undefined so the caller skips the
-      // cascade and emits NOTHING further -- no raw MarketplaceNotFoundError
-      // escapes (which `refreshOneMarketplace`'s catch would misattribute as the
-      // lying `{network unreachable}` default, the exact ATTR-10/NFR-5 class this
-      // change closes). Mirrors runRemoveLockBody's silent-return in remove.ts
-      // at the same withLockedStateTransaction boundary; that path also
-      // saves the unmodified state (a harmless re-write of the same content).
-      return undefined;
-    }
+  return withLockedStateTransaction(
+    locations,
+    async (tx) => {
+      const record = tx.state.marketplaces[name];
+      if (record === undefined) {
+        // TOCTOU race: the marketplace was removed between
+        // `resolveScopeOrNotifyNotAdded`'s pre-guard `loadState` and this guard's
+        // fresh `loadState`. The pre-guard already proved existence and the
+        // missing-marketplace precondition is handled there (routed to the
+        // standalone `{marketplace not added}` variant); reaching here means a concurrent
+        // removal in that window. Return undefined so the caller skips the
+        // cascade and emits NOTHING further -- no raw MarketplaceNotFoundError
+        // escapes (which `refreshOneMarketplace`'s catch would misattribute as the
+        // lying `{network unreachable}` default, the exact ATTR-10/NFR-5 class this
+        // change closes). Mirrors runRemoveLockBody's silent-return in remove.ts
+        // at the same withLockedStateTransaction boundary; that path also
+        // saves the unmodified state (a harmless re-write of the same content).
+        await tx.save();
+        return undefined;
+      }
 
-    const changed = await refreshRecord(record, args);
-    return {
-      autoupdate,
-      plugins: Object.keys(record.plugins),
-      changed,
-    };
-  });
+      const changed = await refreshRecord(record, args);
+      await tx.save();
+      return {
+        autoupdate,
+        plugins: Object.keys(record.plugins),
+        changed,
+      };
+    },
+    args.stateTransaction,
+  );
 }
 
 async function cascadeAutoupdates(
@@ -584,6 +604,7 @@ async function cascadeAutoupdates(
         // producer site honest.
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         // Carry the raw `err` so the cascade mapper
         // (outcomeToCascadePluginMessage) can attach it to
         // PluginFailedMessage.cause for the 4-space-indent cause-chain

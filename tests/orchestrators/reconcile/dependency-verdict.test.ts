@@ -39,7 +39,7 @@ function pluginRecord(seed: RecordSeed = {}): PluginRecord {
     version: seed.version ?? "1.0.0",
     resolvedSource: path.join(SCOPE_ROOT, "plugins", "x"),
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { workflows: [], skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     enabled: seed.enabled ?? true,
     ...(seed.dependencyDisabled !== undefined && {
       dependencyDisabled: seed.dependencyDisabled,

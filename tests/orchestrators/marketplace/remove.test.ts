@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -99,7 +109,7 @@ function notificationBoundary(expectedCalls: 0 | 1): NotificationBoundary {
       .once();
     when(() => pi.getAllTools())
       .thenReturn([])
-      .times(2);
+      .times(3);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         calls.push(severity === undefined ? { message } : { message, severity });
@@ -133,6 +143,7 @@ function pluginRecord(resources: Partial<PluginRecord["resources"]> = {}): Plugi
       mcpServers: resources.mcpServers ?? [],
       prompts: resources.prompts ?? [],
       skills: resources.skills ?? [],
+      workflows: resources.workflows ?? [],
     },
     enabled: true,
     provenance: "explicit",
@@ -142,7 +153,7 @@ function pluginRecord(resources: Partial<PluginRecord["resources"]> = {}): Plugi
 }
 
 function emptyDropped(): CascadeDropped {
-  return { agents: [], commands: [], hooks: [], mcpServers: [], skills: [] };
+  return { agents: [], commands: [], hooks: [], mcpServers: [], skills: [], workflows: [] };
 }
 
 function marketplaceState(args: {
@@ -183,10 +194,37 @@ async function seedMarketplace(
 async function projectCase(
   testContext: TestContext,
 ): Promise<{ cwd: string; locations: ScopedLocations }> {
+  // WPTH-04: `workflowsSavedDir` is rooted at `os.homedir()` and honors no
+  // override, so a cascade unlinking a recorded envelope would reach the real
+  // user's saved workflows unless HOME is relocated before the bundle is built.
+  // `createHermeticEnvironment` relocates HOME (and PI_CODING_AGENT_DIR) and
+  // registers their restore, which is what keeps that reach contained here.
   const { cwd } = await createHermeticEnvironment(testContext, "marketplace-remove-");
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   return { cwd, locations };
+}
+
+/**
+ * Write one saved workflow envelope at its recorded name. Composed with
+ * `path.join` rather than the asynchronous `locations.workflowArtifactPath`, so
+ * a forgotten `await` cannot yield a leaf named after a promise.
+ */
+async function seedWorkflowEnvelope(
+  locations: ScopedLocations,
+  generatedName: string,
+): Promise<string> {
+  const target = path.join(locations.workflowsSavedDir, `${generatedName}.json`);
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await writeFile(
+    target,
+    JSON.stringify({
+      name: generatedName,
+      description: "greets",
+      script: 'export const meta = { name: "greet", description: "greets" };\n',
+    }),
+  );
+  return target;
 }
 
 async function dualScopeCase(testContext: TestContext): Promise<{
@@ -225,6 +263,37 @@ function assertFailedOutcome(
   });
   assert.strictEqual(outcome.error.message, expected.cause);
 }
+
+test("reports a bare-form missing marketplace searched across both scopes without mutating project state", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await projectCase(testContext);
+  const notification = notificationBoundary(1);
+  const invalidations: InvalidationCall[] = [];
+
+  // act
+  const outcome = await removeMarketplace({
+    completionCache: recordingCompletionCache(invalidations),
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: "absent",
+    cwd,
+  });
+
+  // assert
+  assert.strictEqual(outcome, undefined);
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message: "A marketplace operation has failed.\n\n⊘ absent (failed) {marketplace not added}",
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+    schemaVersion: 3,
+    marketplaces: {},
+  });
+  assert.deepStrictEqual(invalidations, []);
+  notification.verifyInteractions();
+});
 
 test("reports an explicit-scope missing marketplace without mutating project state", async (testContext) => {
   // arrange
@@ -1259,6 +1328,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
           hooks: [],
           mcpServers: [],
           skills: ["skill-a"],
+          workflows: [],
         },
         cause: betaFailure,
       });
@@ -1337,6 +1407,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
               mcpServers: ["mcp-a", "mcp-b"],
               prompts: ["command-b"],
               skills: ["skill-b"],
+              workflows: [],
             },
             enabled: true,
             provenance: "explicit",
@@ -1372,6 +1443,141 @@ test("keeps exact partial state and silent cleanup residue before retry converge
   assert.strictEqual(await pathExists(cloneDir), false);
   firstNotification.verifyInteractions();
   retryNotification.verifyInteractions();
+});
+
+test("subtracts a dropped workflow envelope from the persisted row and leaves hooks alone", async (testContext) => {
+  // arrange -- the per-plugin fold in this loop is hand-rolled and reads
+  // `outcome.dropped` structurally, so a six-axis argument satisfies it with no
+  // compile error. This case fails when the workflows filter line is absent.
+  //
+  // Its hooks half is the other direction: this filter omits the hooks axis and
+  // that omission predates this work (CASCADEAX-01 in .planning/BACKLOG.md), so
+  // the record is asserted to STILL name the hook the cascade dropped.
+  const { cwd, locations } = await projectCase(testContext);
+  const marketplace = "workflow-partial";
+  await seedMarketplace(locations, {
+    cwd,
+    name: marketplace,
+    source: pathSource("./workflow-partial"),
+    plugins: {
+      beta: pluginRecord({
+        hooks: ["beta"],
+        skills: ["beta-skill"],
+        workflows: ["beta:greet", "beta:farewell"],
+      }),
+    },
+  });
+  const cascade: typeof cascadeUnstagePlugin = () =>
+    Promise.resolve({
+      ok: false,
+      dropped: {
+        agents: [],
+        commands: [],
+        hooks: ["beta"],
+        mcpServers: [],
+        skills: ["beta-skill"],
+        workflows: ["beta:greet"],
+      },
+      cause: Object.assign(new Error("mcp write denied"), { code: "EACCES" }),
+    });
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeMarketplace({
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: marketplace,
+    scope: "project",
+    cwd,
+    cascade,
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  const persisted = await loadState(locations.extensionRoot);
+  const resources = persisted.marketplaces[marketplace]?.plugins["beta"]?.resources;
+  assert.ok(resources, "expected the failed plugin row to survive");
+  assert.deepStrictEqual(resources.workflows, ["beta:farewell"]);
+  assert.deepStrictEqual(resources.skills, []);
+  assert.deepStrictEqual(resources.hooks, ["beta"]);
+  notification.verifyInteractions();
+});
+
+test("WLIF-03: a cascade removal takes every plugin's workflow envelope off disk", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await projectCase(testContext);
+  const marketplace = "workflow-cascade";
+  await seedMarketplace(locations, {
+    cwd,
+    name: marketplace,
+    source: pathSource("./workflow-cascade"),
+    plugins: {
+      alpha: pluginRecord({ workflows: ["alpha:greet"] }),
+      beta: pluginRecord({ workflows: ["beta:greet"] }),
+    },
+  });
+  const alphaEnvelope = await seedWorkflowEnvelope(locations, "alpha:greet");
+  const betaEnvelope = await seedWorkflowEnvelope(locations, "beta:greet");
+  await stat(alphaEnvelope);
+  await stat(betaEnvelope);
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeMarketplace({
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: marketplace,
+    scope: "project",
+    cwd,
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  await assert.rejects(() => stat(alphaEnvelope), { code: "ENOENT" });
+  await assert.rejects(() => stat(betaEnvelope), { code: "ENOENT" });
+  assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), []);
+  notification.verifyInteractions();
+});
+
+test("WLIF-03: one plugin's cascade failure strands only its own envelope", async (testContext) => {
+  // arrange -- beta's skill name carries a separator, so its cascade throws on
+  // the FIRST arm and never reaches its workflows arm. alpha's cascade is
+  // unaffected, and a hand-saved file the user owns shares the directory.
+  const { cwd, locations } = await projectCase(testContext);
+  const marketplace = "workflow-adjacency";
+  await seedMarketplace(locations, {
+    cwd,
+    name: marketplace,
+    source: pathSource("./workflow-adjacency"),
+    plugins: {
+      alpha: pluginRecord({ workflows: ["alpha:greet"] }),
+      beta: pluginRecord({ skills: ["../escape"], workflows: ["beta:greet"] }),
+    },
+  });
+  const alphaEnvelope = await seedWorkflowEnvelope(locations, "alpha:greet");
+  const betaEnvelope = await seedWorkflowEnvelope(locations, "beta:greet");
+  const userOwned = path.join(locations.workflowsSavedDir, "my-own.json");
+  await writeFile(userOwned, '{"name":"my-own"}');
+  const userOwnedBytes = await readFile(userOwned, "utf8");
+  await stat(alphaEnvelope);
+  await stat(betaEnvelope);
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeMarketplace({
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: marketplace,
+    scope: "project",
+    cwd,
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  await assert.rejects(() => stat(alphaEnvelope), { code: "ENOENT" });
+  await stat(betaEnvelope);
+  assert.strictEqual(await readFile(userOwned, "utf8"), userOwnedBytes);
+  notification.verifyInteractions();
 });
 
 test("returns every orchestrated partial row and preserves agent-conflict resources", async (testContext) => {

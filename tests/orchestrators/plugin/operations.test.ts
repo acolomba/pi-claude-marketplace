@@ -70,8 +70,8 @@ interface FetchBoundary {
  * The fetch command's notification boundary. fetch is handed the whole
  * `ExtensionContext` / `ExtensionAPI` rather than the two narrow read contracts
  * `makeCtx` builds, so the members it may reach are stated as expectations and
- * verified after the call: one cascade emission and the single soft-dependency
- * probe, which reads the tool list twice.
+ * verified after the call: one cascade emission and the soft-dependency probe,
+ * which reads the tool list three times -- pi-subagents, mcp adapter, workflow engine.
  */
 function makeFetchBoundary(): FetchBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "fetch context" });
@@ -83,7 +83,7 @@ function makeFetchBoundary(): FetchBoundary {
     .once();
   when(() => pi.getAllTools())
     .thenReturn([])
-    .twice();
+    .times(3);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push(severity === undefined ? { message } : { message, severity });
@@ -272,6 +272,7 @@ async function seedOrphanForPrune(scope: Scope, cwd: string): Promise<ExtensionS
             resolvedSource: pluginRoot,
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
             resources: {
+              workflows: [],
               skills: ["orphan-skill"],
               prompts: [],
               agents: [],
@@ -391,6 +392,7 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
     resourcesChanged: false,
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 
   // Confirm install succeeded (no "failed" / "unavailable" notification).
@@ -413,7 +415,14 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
     version: "0.0.1",
     resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
     compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["p1"] },
+    resources: {
+      skills: [],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+      hooks: ["p1"],
+      workflows: [],
+    },
     hookEntries: [{ event: "PreToolUse", matcher: "" }],
     enabled: true,
     provenance: "explicit",
@@ -731,7 +740,14 @@ test("setPluginEnabled(false) unstages the artifacts, flips durable state and dr
     version: "0.0.1",
     resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
     compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["p1"] },
+    resources: {
+      skills: [],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+      hooks: ["p1"],
+      workflows: [],
+    },
     hookEntries: [{ event: "PreToolUse", matcher: "" }],
     enabled: false,
     provenance: "explicit",
@@ -836,6 +852,7 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
     stagedMcpServerNames: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 
   // The whole record is pinned: D-68-02 forbids an upgrade, so `version` and
@@ -845,7 +862,14 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
     version: "0.0.1",
     resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
     compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["p1"] },
+    resources: {
+      skills: [],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+      hooks: ["p1"],
+      workflows: [],
+    },
     hookEntries: [{ event: "PreToolUse", matcher: "" }],
     enabled: true,
     provenance: "explicit",

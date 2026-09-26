@@ -179,6 +179,7 @@ function appliedOutcomeRows(): AppliedOutcomeRows {
                 name: "cr",
                 version: "1.0.0",
                 dependencies: ["mcp"],
+                reasons: ["components now supported"],
                 severity: "info",
                 needsReload: true,
               },
@@ -1178,6 +1179,85 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
+  test("WDEP-02: declares the workflows dependency LAST on a re-enable that staged all three kinds", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-enabled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        version: "1.0.0",
+        stagedAgents: true,
+        stagedMcpServers: true,
+        stagedWorkflows: true,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "cr",
+              version: "1.0.0",
+              dependencies: ["agents", "mcp", "workflows"],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("WDEP-02: a re-enable that staged no workflow declares no host-engine dependency", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-enabled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        version: "1.0.0",
+        stagedAgents: true,
+        stagedWorkflows: false,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "cr",
+              version: "1.0.0",
+              dependencies: ["agents"],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("carries every re-enable degradation signal and dependency on one partially-installed row", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [
@@ -1251,7 +1331,7 @@ describe("buildReconcileAppliedCascade", () => {
               name: "cr",
               version: "1.0.0",
               dependencies: [],
-              reasons: ["lsp"],
+              reasons: ["components now supported", "lsp"],
               severity: "info",
               needsReload: true,
             },
@@ -1290,7 +1370,7 @@ describe("buildReconcileAppliedCascade", () => {
               status: "partially-installed",
               name: "cr",
               dependencies: [],
-              reasons: [],
+              reasons: ["components now supported"],
               severity: "info",
               needsReload: true,
             },
@@ -1330,7 +1410,7 @@ describe("buildReconcileAppliedCascade", () => {
               status: "installed",
               name: "cr",
               dependencies: [],
-              reasons: ["orphan rewake"],
+              reasons: ["components now supported", "orphan rewake"],
               severity: "info",
               needsReload: true,
             },
@@ -1373,7 +1453,12 @@ describe("buildReconcileAppliedCascade", () => {
               name: "cr",
               version: "1.0.0",
               dependencies: [],
-              reasons: ["orphan rewake", "malformed command", "unsupported component"],
+              reasons: [
+                "components now supported",
+                "orphan rewake",
+                "malformed command",
+                "unsupported component",
+              ],
               severity: "warning",
               needsReload: true,
             },
@@ -1606,7 +1691,7 @@ describe("buildReconcileAppliedCascade", () => {
               status: "partially-installed",
               name: "promoted",
               dependencies: [],
-              reasons: ["lsp"],
+              reasons: ["components now supported", "lsp"],
               severity: "info",
               needsReload: true,
             },

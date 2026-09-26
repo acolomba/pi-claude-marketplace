@@ -82,7 +82,14 @@ async function seedScope(
         version: "1.0.0",
         resolvedSource: pluginRoot,
         compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-        resources: { skills: [skill], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        resources: {
+          workflows: [],
+          skills: [skill],
+          prompts: [],
+          agents: [],
+          mcpServers: [],
+          hooks: [],
+        },
         enabled: seed.enabled ?? true,
         provenance: seed.provenance ?? "explicit",
         installedAt: "2026-01-01T00:00:00.000Z",
@@ -150,7 +157,14 @@ async function seedRecord(scope: Scope, cwd: string, manifestText: string): Prom
             version: "1.0.0",
             resolvedSource: "/unused",
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              workflows: [],
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
             enabled: true,
             provenance: "dependency",
             installedAt: "2026-01-01T00:00:00.000Z",
@@ -498,7 +512,14 @@ test("a failed member keeps its dependent chain while an independent orphan comm
         plugin === "a"
           ? Promise.resolve({
               ok: false,
-              dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+              dropped: {
+                skills: [],
+                commands: [],
+                agents: [],
+                hooks: [],
+                mcpServers: [],
+                workflows: [],
+              },
               cause,
             })
           : REAL_UNINSTALL_TRANSACTION.cascadeUnstagePlugin(plugin, marketplace, target, record),
@@ -1343,7 +1364,14 @@ test("a post-save failure preserves the original cause when every member failed"
       cascadeUnstagePlugin: () =>
         Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+          dropped: {
+            skills: [],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: [],
+            workflows: [],
+          },
           cause,
         }),
       withLockedStateTransaction: (target, run) =>

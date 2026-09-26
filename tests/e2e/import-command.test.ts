@@ -124,6 +124,7 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
           declaresAgents: false,
           declaresMcp: false,
           constraint: undefined,
+          declaresWorkflows: false,
         }),
     },
     hooksRouting,
@@ -167,7 +168,7 @@ test("/claude:plugin import imports enabled Claude settings across both scopes",
     assert.ok(projectState.marketplaces["github-marketplace"]?.plugins["github-plugin"]);
 
     const userSkill = await readFile(
-      path.join(locationsFor("user", cwd).skillsTargetDir, "local-plugin:local-skill", "SKILL.md"),
+      path.join(locationsFor("user", cwd).skillsTargetDir, "local-plugin-local-skill", "SKILL.md"),
       "utf8",
     );
     assert.match(userSkill, /Local plugin skill/);

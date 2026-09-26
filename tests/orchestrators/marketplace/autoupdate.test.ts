@@ -47,7 +47,7 @@ function notificationBoundary(expectation: NotificationExpectation): {
     .once();
   when(() => pi.getAllTools())
     .thenReturn([])
-    .twice();
+    .times(3);
   if ("message" in expectation) {
     if (expectation.severity === undefined) {
       when(() => {
@@ -162,7 +162,14 @@ for (const scenario of oneRowInvocationCases) {
         provenance: "explicit",
         installedAt: "2026-01-01T00:00:00.000Z",
         resolvedSource: "/fixture/plugins/example",
-        resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+        resources: {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: [],
+          skills: [],
+          workflows: [],
+        },
         updatedAt: "2026-01-01T00:00:00.000Z",
         version: "1.0.0",
       };

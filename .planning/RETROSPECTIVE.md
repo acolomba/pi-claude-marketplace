@@ -2,6 +2,44 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: workflows-replay -- Workflow Bridge Replay onto main
+
+**Completed:** 2026-09-21 on `features/workflow` (workstream `workflows`; unmerged, no npm release yet)
+**Phases:** 9 (109-117) | **Plans:** 39 | **Tasks:** 83 | **Requirements:** 46/46 | **Tests:** 7,178 unit + 36 integration, 0 failures at close | **Audit:** tech_debt (no blockers; 9/9 phases, integration clean, 4/4 flows) -- debt cleared or carried before the archive
+
+### What Was Built
+- The `workflows` bridge, replayed phase by phase onto a main that had admitted `workflows` as an *unsupported* kind and deleted the test architecture the spike was written against. The 36 requirements, phase records and spike evidence carried over; the wiring and every test were rewritten against the owner-test convention.
+- Every lifecycle verb owns its workflow envelopes -- install's sixth ledger phase, cascade unstage across four removal verbs, reinstall re-materialization, update's two-write inventory, enable/disable, `info`/`list` -- and the host engine is the third soft dependency, with a written-down contract for the one bridge that installs executable code.
+- The three original gaps closed: install-time gate warnings that name the refusing engine check and cannot block; load-time convergence, exactly once, with a marker that says why commands appeared; and the degrade-or-die claim measured against a real engine 3.10.1 -- which refuted the source read.
+
+### What Worked
+- **Replaying instead of merging.** A dry-run merge conflicted in 85 files and main had rewritten the orchestrators far more than the spike touched them. Re-deriving the wiring against the current tree, with the requirements and evidence held constant, produced a bridge that fits main rather than a merge that argues with it.
+- **Measuring a source-read claim against the real thing.** Phase 117 existed to measure one claim and found it false: a recoverable `agent()` failure resolves to `null`, only the non-recoverable class rejects. Every document was restated at the grade that holds, and the census of "measured vs read" claims is now itself a graded artifact.
+- **Writing the debt up as decisions before working it.** Twelve ledger entries became eleven questions with options, costs and a recommendation each. The close then followed the recommended order and every entry got a disposition with a named carrier, instead of a work queue being partially drained and abandoned.
+- **Re-verifying after a merge, not carrying forward.** Three merges of main renamed or split nearly every file phases 114-117 pointed at. Re-deriving each phase from its criteria found that 114-116 were pure layout churn -- and that 117 had a real regression the digest alone would never have distinguished from churn.
+
+### What Was Inefficient
+- **A merge from main silently dropped a branch-side test and left its header comment describing a lock the surviving test no longer holds.** The ENBL-08 lock-collision twin went missing at #202 because the entry point it drove stopped being exported; nothing reddened. Found only because the close went looking for the test the ledger cited.
+- **The same merge renumbered the ledger (+27) and updated STATE.md and OPEN-QUESTIONS.md but not the archived verification that cited an id as a graded must-have.** D-117-07 had already fixed this failure once (phase-number reuse); it recurred by a mechanism the fix did not anticipate. A bare ledger id is a position, not a name -- now twice-measured.
+- **The pre-close audit counted six closed deferred items as open** because they said `status: closed` and the parser knows only `resolved`. Fourth milestone in a row where the audit's signal ratio needed a manual fix before the numbers meant anything.
+- **`covered_files` staled four phases three times over** (a docs quick task, the messaging-guide rewrite, the main merges). The rule is carried as VSTALE-01 rather than decided inside the close, because changing it touches every phase report and can flip completion state.
+- **The write guard consumed its single-use sentinel and still blocked the roadmap rewrite, twice.** The hook appears to run more than once per Write; the reorganized roadmap was written through the shell instead.
+
+### Patterns Established
+- **A ledger entry's carrier is named in its waive reason.** Every waived `[workflows-replay]` entry names the `BACKLOG.md` item that carries it, so the ledger and the backlog cross-reference in both directions and an archived milestone cannot lose a decision.
+- **Threat Flags are always present, "None" when empty.** An absent section is indistinguishable from a scan that never ran; the convention now lives in `AGENTS.md`, because the executor template that omits it is not ours to edit.
+- **Dated corrections stack; they do not overwrite.** The archived `105-VERIFICATION.md` carries a 2026-09-09 correction and a 2026-09-21 correction of that correction, each quoting the retired citation. The history of what the record claimed is part of the record.
+
+### Key Lessons
+1. **After a merge from main, verify the tests a criterion names exist by name, not that the file exists.** Main-side restructures remove branch-side cases without a red run; the digest says "stale", not "dropped".
+2. **Numeric positions in a shared, append-only ledger rot under merges as well as under phase-number reuse.** Cite the `[milestone]` prefix and `recorded_at`; treat the id as a lookup key valid today.
+3. **A `tech_debt` grade with no blockers is a fork, and clearing it is a milestone-sized close.** This one took a session of its own: four fixes, eight carriers, four re-verifications and one regression found. That is what "no accepted debt" costs, and it was worth paying once the debt was written up as decisions.
+4. **Run the pre-close audit before the last docs commit, not after.** Its parser vocabulary (`resolved`, not `closed`) is fixed; write to it the first time.
+
+### Cost Observations
+- Model mix: adaptive profile -- opus researcher, planner, executors and code reviewer; sonnet plan checker, verifier and integration checker
+- Phases: 9 over 6 days of execution (2026-09-04 -> 2026-09-09), then a debt-clearing close on 2026-09-10 and 2026-09-21; ~447 commits on the branch since 2026-09-03
+- Notable: the close's four parallel sonnet re-verifications took 6-7 minutes each and ~90-175k tokens apiece; the one gaps-only re-run took 2 minutes. The full `npm run check` chain is ~15 minutes and was run once, detached.
 ## Milestone: v1.20 transitive-dependencies
 
 **Completed:** 2026-09-24 (no npm release)

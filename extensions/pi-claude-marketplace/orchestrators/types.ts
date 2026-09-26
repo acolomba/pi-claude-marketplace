@@ -25,6 +25,18 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly version: string;
   readonly resourcesChanged: boolean;
   /**
+   * WLIF-06: the reinstall's new source did not re-place at least one workflow
+   * envelope the record named, so the command that envelope registered is still
+   * live for the session. The row composer turns this into the
+   * `{stale workflow command}` token and takes the info -> warning raise.
+   *
+   * Omitted when nothing was retired, so a clean reinstall's outcome shape --
+   * and its rendered bytes -- are unchanged (NREG-01). A boolean rather than
+   * the retired names: the remedy is the same reload whichever command it was,
+   * and the generated names never reach a rendered row.
+   */
+  readonly staleWorkflowCommand?: boolean;
+  /**
    * D-99-02c: the GENERATED NAMES the reinstall ledger staged. The `Names`
    * suffix keeps them spelled apart from the same-subject presence FLAGS on
    * `LedgerDegradationSignals` (`plugin/shared.ts`), which carry a count
@@ -39,10 +51,11 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * CMC-13: per-row soft-dep predicate inputs. `true` iff
    * the plugin's resolved manifest declared the kind AND it was actually
    * staged at reinstall time (the orchestrator already tracks
-   * `stagedAgentNames.length > 0` / `stagedMcpServerNames.length > 0`
-   * per-outcome; these flags surface them through the typed outcome so
-   * cascade rendering
-   * (`PluginCascadeRow.declaresAgents` / `.declaresMcp`) consumes the
+   * `stagedAgentNames.length > 0` / `stagedMcpServerNames.length > 0` /
+   * `resources.workflows.length > 0` per-outcome; these flags surface them
+   * through the typed outcome so cascade rendering
+   * (`PluginCascadeRow.declaresAgents` / `.declaresMcp` /
+   * `.declaresWorkflows`) consumes the
    * effective-state-at-render-time signal without re-deriving from the
    * staged-name arrays at the renderer site).
    *
@@ -60,6 +73,7 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    */
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  readonly declaresWorkflows: boolean;
   /**
    * WARN-01 / WR-04 / D-86-03: the component kinds whose SOURCE frontmatter
    * could not be parsed and which re-materialized in degraded form. The
@@ -163,7 +177,7 @@ export interface UpdateConstraintDisclosure {
  * `PluginFailedMessage.rollbackPartial[].phase` label, which also carries the
  * install path's `phase3a` / `phase3b` tokens.)
  */
-export type UpdatePhaseBridge = "skills" | "commands" | "agents" | "hooks" | "mcp";
+export type UpdatePhaseBridge = "skills" | "commands" | "agents" | "hooks" | "mcp" | "workflows";
 
 /**
  * CMC-17 / MSG-RP-1: per-phase rollback-partial child
@@ -185,6 +199,7 @@ export interface PluginUpdateBase {
    */
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  readonly declaresWorkflows: boolean;
 }
 
 /**
@@ -223,6 +238,23 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
   /**
+   * WLIF-06: the update's new version withdrew or renamed at least one workflow
+   * the record named, so the command that envelope registered is still live for
+   * the session -- the host exposes no unregister call. A FOURTH independent
+   * degradation axis on this partition, read by the shared leaf row composer,
+   * which turns it into the `{stale workflow command}` token and raises the row
+   * to `warning`: the update was carried out, but the desired state is not
+   * reached until the reload.
+   *
+   * The axis travels on the outcome rather than being computed at the row,
+   * because both update cascades share one row composer and neither of them
+   * holds the pre-update record the difference is taken against.
+   *
+   * Omitted when nothing was retired, so a clean update's outcome shape is
+   * unchanged (NREG-01).
+   */
+  readonly staleWorkflowCommand?: boolean;
+  /**
    * WR-01: the three inherited signals this verb spells elsewhere, pinned to
    * `never` so a producer cannot populate a second spelling of a fact the
    * outcome already carries. `never` still satisfies the inherited optional
@@ -235,11 +267,13 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    *    actionable.
    *  - `stagedAgents` / `stagedMcpServers` are the presence half of
    *    `stagedAgentNames` / `stagedMcpServerNames`, already reduced to the
-   *    required `declaresAgents` / `declaresMcp` predicates above.
+   *    required `declaresAgents` / `declaresMcp` predicates above. The
+   *    workflows counterpart rides `declaresWorkflows` for the same reason.
    */
   readonly unsupported?: never;
   readonly stagedAgents?: never;
   readonly stagedMcpServers?: never;
+  readonly stagedWorkflows?: never;
   /**
    * FSTAT-07 / D-66-04 / SEV-03 / D-69-01: the partial-degrade signal for a
    * `--partial` update whose candidate re-resolved `partially-available`. Present
@@ -393,8 +427,8 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
  * unreachable on the wrong partition, so the renderer cannot read
  * `outcome.fromVersion!` from a skipped outcome without a narrow.
  *
- * Each partition variant carries `declaresAgents` / `declaresMcp` via
- * the shared `PluginUpdateBase` base (CMC-13 required
+ * Each partition variant carries `declaresAgents` / `declaresMcp` /
+ * `declaresWorkflows` via the shared `PluginUpdateBase` base (CMC-13 required
  * booleans).
  */
 export type PluginUpdateOutcome =
@@ -438,11 +472,13 @@ export type PluginUpdateFn = (
  *
  * SNM-04 / D-15-02: the `"installed"` variant carries REQUIRED
  * `dependencies: readonly Dependency[]` (the closed-set
- * `"agents" | "mcp"` per SNM-04). The orchestrator derives the
+ * `"agents" | "mcp" | "workflows"` per SNM-04). The orchestrator derives the
  * array at the success-return site from
- * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`) and
- * `installCtx.stagedMcpServerNames.length > 0` (-> `"mcp"`); the
- * `declaresAgents`/`declaresMcp` predicates on `InstallPluginOutcome`
+ * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`),
+ * `installCtx.stagedMcpServerNames.length > 0` (-> `"mcp"`) and
+ * `installCtx.stagedWorkflowNames.length > 0` (-> `"workflows"`); the
+ * `declaresAgents`/`declaresMcp`/`declaresWorkflows` predicates on
+ * `InstallPluginOutcome`
  * remain (consumed by `orchestrators/import/execute.ts` for its
  * cascade-row composition) -- NFR-7's discriminated-outcome contract
  * is unchanged.
@@ -453,7 +489,7 @@ export type PluginUpdateFn = (
  * the same ledger run. Each field is omitted when empty, so a clean install's
  * outcome shape is unchanged (NREG-01).
  *
- * WR-03: the intersection EXCLUDES the two staged-count verdicts, and every
+ * WR-03: the intersection EXCLUDES the three staged-count verdicts, and every
  * field it keeps is populated below. WR-11: the type operator is an EXCLUSION,
  * so it cannot state that second half on its own -- a signal added to the shared
  * shape would widen this arm with a field nothing here writes. The key set is
@@ -461,11 +497,12 @@ export type PluginUpdateFn = (
  * signals installPlugin populates` in
  * `tests/architecture/compat-01-no-expansion.test.ts`, which stops compiling on
  * either a widening or a narrowing. Each field of the shared shape is optional,
- * so intersecting all five never made a missing one a compile error -- it only
- * advertised `stagedAgents` / `stagedMcpServers` that `installPlugin` never
- * writes, which a consumer reads as `undefined` and takes for "no agents
- * staged". Those two facts already ride the REQUIRED `declaresAgents` /
- * `declaresMcp` predicates below (consumed by `orchestrators/import/execute.ts`
+ * so intersecting all six never made a missing one a compile error -- it only
+ * advertised `stagedAgents` / `stagedMcpServers` / `stagedWorkflows` that
+ * `installPlugin` never writes, which a consumer reads as `undefined` and takes
+ * for "no agents staged". Those two facts already ride the REQUIRED `declaresAgents` /
+ * `declaresMcp` / `declaresWorkflows` predicates below (consumed by
+ * `orchestrators/import/execute.ts`
  * and the reconcile projection), so excluding the optional twins removes a
  * duplicate vocabulary rather than a signal. The dropped-component
  * `unsupported` kind list stays and is populated: an install admitted through
@@ -479,6 +516,7 @@ export type InstallPluginOutcome =
       readonly resourcesChanged: boolean;
       readonly declaresAgents: boolean;
       readonly declaresMcp: boolean;
+      readonly declaresWorkflows: boolean;
       /**
        * The resolved install version, as the standalone rows render it. An
        * orchestrated caller has no other way to fill the version slot its own
@@ -512,7 +550,7 @@ export type InstallPluginOutcome =
        * the COMPAT-01 key-set pin is undisturbed.
        */
       readonly promoted?: true;
-    } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers">)
+    } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers" | "stagedWorkflows">)
   | {
       /**
        * Collapsed failure shape. All failure variants (`already-installed`,

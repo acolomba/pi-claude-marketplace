@@ -281,6 +281,7 @@ async function seedPrunableScope(scope: Scope, cwd: string): Promise<ExtensionSt
             resolvedSource: pluginRoot,
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
             resources: {
+              workflows: [],
               skills: ["orphan-skill"],
               prompts: [],
               agents: [],
@@ -353,7 +354,7 @@ function registerCommandWithCache(
   if (expectedNotifications > 0) {
     when(() => pi.getAllTools())
       .thenReturn([])
-      .times(expectedNotifications * 2);
+      .times(expectedNotifications * 3);
   }
 
   registerClaudePluginCommand(
@@ -1235,7 +1236,7 @@ test("rebuilds completion rows through the cache that owns a successful register
 
   record.plugins["hello"] = buildInstalledPluginRecord(
     { version: "1.0.0", resolvedSource: pluginRoot },
-    { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
   ) as ExtensionState["marketplaces"][string]["plugins"][string];
   await saveState(extensionRoot, state);
   const resolver = makeLocationsResolver(cwd);
@@ -1334,7 +1335,7 @@ test("rebuilds completion rows through the cache that owns a successful register
 
   record.plugins["hello"] = buildInstalledPluginRecord(
     { version: "1.0.0", resolvedSource: pluginRoot },
-    { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
   ) as ExtensionState["marketplaces"][string]["plugins"][string];
   await saveState(extensionRoot, state);
   const resolver = makeLocationsResolver(cwd);

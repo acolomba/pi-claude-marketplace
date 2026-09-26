@@ -42,6 +42,7 @@ test("renders an autoupdate failure with cross-scope, version, and ordered reaso
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -62,6 +63,7 @@ test("renders a noautoupdate failure without an inherited scope or optional vers
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act

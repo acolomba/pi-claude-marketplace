@@ -56,6 +56,7 @@ function installedState(): ExtensionState {
               agents: ["agent-a", "agent-b"],
               hooks: ["plugin"],
               mcpServers: ["server-a", "server-b"],
+              workflows: [],
             },
             enabled: true,
             provenance: "explicit",
@@ -100,6 +101,7 @@ test("disables a freshly installed record after a clean five-kind cascade", asyn
         agents: ["agent-a", "agent-b"],
         hooks: ["plugin"],
         mcpServers: ["server-a", "server-b"],
+        workflows: [],
       },
     }),
   );
@@ -129,6 +131,7 @@ test("disables a freshly installed record after a clean five-kind cascade", asyn
       agents: ["agent-a", "agent-b"],
       hooks: ["plugin"],
       mcpServers: ["server-a", "server-b"],
+      workflows: [],
     },
     enabled: false,
     provenance: "explicit",
@@ -180,6 +183,7 @@ for (const row of [
           agents: ["agent-a"],
           hooks: row.hooks,
           mcpServers: ["server-a"],
+          workflows: [],
         },
         cause,
       }),
@@ -205,6 +209,7 @@ for (const row of [
       agents: ["agent-b"],
       hooks: row.expectedRemoveRoutes ? [] : ["plugin"],
       mcpServers: ["server-b"],
+      workflows: [],
     });
     assert.equal(state.marketplaces.marketplace?.plugins.plugin?.updatedAt, UPDATED_AT);
   });
@@ -231,7 +236,7 @@ test("drops cached hooks before rebuilding routes after the saved disable", asyn
     unstagePlugin: () =>
       Promise.resolve({
         ok: true,
-        dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+        dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
       }),
   });
 
@@ -256,7 +261,7 @@ test("keeps a successful install successful when post-save route removal throws"
     unstagePlugin: () =>
       Promise.resolve({
         ok: true,
-        dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+        dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
       }),
   });
 
@@ -273,7 +278,7 @@ test("composes the fresh disabled row with the author reason first", async () =>
   const cascade = composeOwner(owner, () =>
     Promise.resolve({
       ok: true,
-      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
     }),
   );
 
@@ -303,7 +308,7 @@ test("composes the degraded disabled row with exact reason order and warning sev
   const cascade = composeOwner(owner, () =>
     Promise.resolve({
       ok: true,
-      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
     }),
   );
 

@@ -1080,69 +1080,17 @@ Code seams: `shared/notify.ts` (message shapes), `platform/pi-api.ts`
 (re-exports `ExtensionContext`), `edge/router.ts` (the `/claude:plugin`
 command entry point every handler's `ctx` flows through).
 
-## ~~WFLW-01: `workflows` component kind is unrecognized (silent gap)~~ -- CLOSED
+<!--
+Pruned 2026-09-09: shipped under workflows-detection and workflows-replay, one
+half each -- the mechanical fix under workflows-detection (PR #154, 2026-08-29),
+and the bridge itself under workflows-replay, which re-landed it on this branch.
+- "`workflows` component kind -- mechanical fix shipped, bridge planned"
+  -> closed by WFLW-01..04, WBRG-01..04, WNAM-01..06, WPTH-01..05,
+  WLIF-01..06, WDEP-01..04, WVAL-01..03 and WDOC-01..03 (the bridge modules
+  under bridges/workflows/, the admission module domain/workflow-script.ts,
+  and the published contract docs/workflows-compatibility.md).
+-->
 
-**CLOSED 2026-08-29** by `872b2d34` ("feat: detect unsupported workflow
-components", #154). Found stale on 2026-09-07 during a backlog triage sweep.
-`.planning/BACKLOG.md` was edited after the fix landed -- `9abdf9e4` ("docs:
-file upstream review findings to backlog", #160, 2026-09-01) -- without closing
-this entry or [DFEN-01], so both read as open work and were sized for future
-milestones.
-
-The fix went past the mechanical one this entry proposed. Four parts, each
-verified by source read:
-
-- `workflows` joined `UNSUPPORTED_COMPONENT_KINDS` (`domain/resolver.ts:388`).
-  That is the half this entry asked for, and it restores the closed-set
-  guarantee the T-02-25 warning is about.
-- A conventional-path probe was added alongside it:
-  `workflows: [{ relativePath: "workflows", kind: "dir" }]`
-  (`domain/resolver.ts:403`). A bare `<pluginRoot>/workflows/` directory now
-  demotes the plugin even when the manifest never declares the field. This
-  entry did not ask for that half.
-- The reason is its own token rather than the generic
-  `{unsupported component}`. `"workflows"` sits in the closed `REASONS` set
-  (`shared/notify.ts:237`, D-106-04 / WDET-04) with a matching `kindToReason`
-  arm (`shared/probe-classifiers.ts:216`).
-- The schema field landed at `domain/components/plugin.ts:45`.
-
-Still out of scope, exactly as this entry scoped it: a real bridge that
-translates a Claude workflow script into a Pi-native equivalent. No known Pi
-analog exists.
-
-Original report follows.
-
-Surfaced 2026-08-13 auditing Claude Code's official plugin-marketplace and
-plugins-reference docs (`code.claude.com/docs/en/plugins-reference`) against
-our own resolver. Claude Code's manifest schema has shipped a `workflows`
-field (`string|array`, "Custom workflow script files or directories,
-replaces default `workflows/`") as a first-class component kind alongside
-skills/commands/agents/hooks -- confirmed via direct fetch of the live docs,
-not inferred.
-
-`domain/resolver.ts` carries two closed component-kind lists:
-`SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents", "hooks"]` and
-`UNSUPPORTED_COMPONENT_KINDS = ["lspServers", "monitors", "themes",
-"outputStyles", "channels", "userConfig", "settings"]`. `workflows` is in
-neither. The code carries its own warning directly above the unsupported
-list (T-02-25): "The list is closed. A new kind upstream that's neither in
-SUPPORTED_COMPONENT_KINDS nor in this list would be silently ignored.
-Re-audit when Claude Code adds new component kinds." That is exactly what
-happened -- a plugin declaring `workflows` today gets no degradation, no
-reason token, and no signal at all, unlike `monitors`/`themes`/etc., which
-are all correctly tracked and correctly demote the plugin to
-`partially-available`.
-
-Direction for later: add `workflows` to `UNSUPPORTED_COMPONENT_KINDS` (the
-mechanical fix that restores the closed-set guarantee and produces a
-`{unsupported workflows}` reason) as the immediate fix; a real bridge that
-translates a Claude workflow script into a Pi-native equivalent is a
-separate, larger question with no known Pi analog yet.
-
-Code seams: `domain/resolver.ts` (`SUPPORTED_COMPONENT_KINDS`,
-`UNSUPPORTED_COMPONENT_KINDS`, `UNSUPPORTED_COMPONENT_CONVENTIONS`),
-`domain/components/plugin.ts` (`UNSUPPORTED_COMPONENT_FIELDS` schema),
-`shared/notify.ts` / `docs/output-catalog.md` (the closed REASONS set).
 
 ## PSRC-01: two real Claude Code plugin-source kinds unresolved (`npm`, `archive`)
 
@@ -2829,6 +2777,90 @@ BLOCKERs -- per-pair coverage is not evidence of assertion strength.
 Code seams: named per-finding throughout the corpus; the two synthesis
 documents carry `file:line` for every claim.
 
+## NAMEFOLD-01: generated-name collision checks compare bytes, filesystems fold
+
+Surfaced by the Phase 110 code review (WR-07, 2026-09-05). Every generated
+resource name in this extension becomes a path basename, and every collision
+gate compares names as exact strings:
+
+| gate | file | becomes on disk |
+| --- | --- | --- |
+| `assertNoAgentCollisions` | `bridges/agents/convert.ts` | `<scopeRoot>/agents/<name>.md` |
+| `assertNoCommandCollisions` | `bridges/commands/stage.ts` | prompt file per command |
+| `assertNoWorkflowNameCollisions` | `domain/workflow-script.ts` | `<savedDir>/<name>.json` (engine, `dist/workflow-saved.js`) |
+
+Two names that differ only by ASCII case, or only by Unicode normalization form,
+pass every one of these gates and then name the SAME file on a case-insensitive
+volume (APFS/HFS+ default, NTFS) or a normalizing one. One artifact silently
+overwrites the other -- the misnaming the collision gates exist to prevent,
+arriving through a door none of them watches.
+
+The review proposed folding the key (`name.normalize("NFC").toLowerCase()`) in
+the workflows gate. That was declined for the workflows gate alone, for two
+reasons worth preserving here:
+
+- **It would make one gate disagree with its four siblings.** The exposure is
+  identical for agents, commands and skills; fixing one leaves a rule that reads
+  as arbitrary at the other four.
+- **Folding refuses installs that work.** On a case-sensitive volume -- Linux,
+  which is the only platform CI runs -- `acme:Ship` and `acme:ship` are two
+  distinct working files. A fold turns that into a hard install failure for the
+  whole plugin. **This reason holds only for the case and normalization
+  variants. It is false for the lone-surrogate variant recorded below**, which
+  collapses on every platform.
+
+So the real question is a policy one, and it is repo-wide: does this extension
+promise that an install portable across volumes, or does it promise that an
+install valid on THIS volume succeeds? Candidate directions:
+
+- fold on every gate, accepting the Linux-side refusals (portable-by-default)
+- warn rather than refuse on a fold-only clash, keeping the install (matches the
+  workflow milestone's own never-turn-a-reading-into-a-refusal anchor)
+- probe the target volume's behavior and fold only when it actually folds
+- do nothing and document the exposure
+
+`tests/domain/workflow-script.test.ts` currently pins the NFC/NFD pair as
+explicitly NOT colliding, so whichever direction wins has a test to retitle.
+`.planning/WINDOWS.md` is the other document this touches.
+
+### Amended 2026-09-05: a third variant, which is not a policy question
+
+The Phase 110 iteration-2 review (WR-12) found a third way two distinct
+generated names name one file, and it does not belong to the policy question
+above: a name carrying a **lone surrogate**.
+
+A lone surrogate has no UTF-8 encoding, so Node substitutes U+FFFD when it turns
+the name into a path. Measured on Linux/ext4:
+
+```text
+writeFileSync(dir + "/acme:\uD800.json", "A");
+writeFileSync(dir + "/acme:\uDC00.json", "B");
+readdirSync(dir) -> [ "acme:<U+FFFD>.json" ]   // one entry
+readFileSync(a)  -> "B"                        // A silently overwritten
+```
+
+Two facts separate this from the case and normalization variants:
+
+- **The collapse is at the encoding layer, not the volume layer.** It happens on
+  every platform, so the "on Linux they are two distinct working files" reason
+  recorded above does not apply. Nothing is refused that would otherwise work.
+- **Nothing accepts such a name downstream.** The host engine screens only
+  `\p{Cc}` and `\p{Cf}`, so `isSafeSavedWorkflowName` admits it and
+  `sourcePath` writes `${name}.json` -- meaning the engine's own save/load pair
+  loses one of the two as well.
+
+**Closed for the workflows gate.** `domain/name.ts::generatedWorkflowName` now
+refuses a generated name matching `/\p{Cs}/u`, with the pair of lone-surrogate
+rows and a well-formed-astral acceptance row pinned in `tests/domain/name.test.ts`.
+The screen is documented at its site as the one place this gate deliberately
+exceeds the engine.
+
+**Still open for the sibling gates.** `assertNoAgentCollisions` and
+`assertNoCommandCollisions` compare exact strings over names that also become
+path basenames, and `assertSafeName` has no surrogate screen, so agents and
+commands keep this exposure. Whether it is worth a shared screen is the part of
+this entry that remains a decision.
+
 <!--
 Pruned 2026-09-07: HKPS-01 shipped as quick task 260907-qqo (commits
 e901432b, ed0bf623, ae06d27f). `PowerShell(...)` if-field rules now compile
@@ -3094,6 +3126,260 @@ Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
   renderer carve-out removed).
 -->
 
+## CASCADEAX-01: the cascade `dropped` fold reads its axes structurally, so a new kind is silently ignored
+
+Surfaced by the Phase 112 research (2026-09-05), while measuring the blast radius
+of widening `UnstageOutcome.dropped` with a `workflows` axis.
+
+Widening the type produces 12 `tsc` errors — **none of them at the two sites that
+matter**:
+
+| site | file | why the compiler stays quiet |
+| --- | --- | --- |
+| `applyPartialCascadeFold` | `orchestrators/plugin/shared.ts:1188` | reads `dropped` structurally rather than by exhaustive destructuring |
+| hand-rolled duplicate | `orchestrators/marketplace/remove.ts:325-335` | same shape, independently written |
+
+Both therefore keep compiling and silently omit the new axis from the fold. This
+is the same defect class this project has already shipped repeatedly: adding a
+member to a closed set compiles clean at every derivation site that reads the set
+structurally instead of exhaustively.
+
+**Separately and pre-existing:** `remove.ts`'s filter is four-axis and already
+omits the `hooks` axis — a divergence that predates the workflows work entirely.
+Phase 112 adds only `workflows` and files this rather than fixing it, per
+CLAUDE.md's surgical-changes rule.
+
+**The durable fix** is not to add one more axis. It is to make the fold
+exhaustive so the compiler leads on the next kind — an exhaustive destructure, a
+`Record<UnstageAxis, …>` keyed on the union, or an `assertNever` arm. Any of the
+three converts a future silent omission into a build error. Doing this while
+touching `remove.ts` for an unrelated reason is the cheapest moment.
+
+## WARN-01: a failed install discards every bridge's prepare warnings
+
+Surfaced by the Phase 112 code review, iteration 2 (WR-04). Not workflows-specific
+and not repairable inside a workflows phase, which is why it is filed here rather
+than as a phase criterion.
+
+`InstallCtx.bridgeWarnings` has exactly one consumer, `collectPostCommitWarnings`,
+which the install orchestrator calls only after the ledger has returned and the
+state record has been committed. The array is not a member of
+`InstallLedgerSummary`, and the failure arm composes its `PluginFailedMessage`
+from the thrown error and the rollback partials. So when any bridge phase throws,
+`runPhases` unwinds and the whole context — including every warning pushed into it
+by the phases that already succeeded — is discarded.
+
+Reinstall has the same shape from the other direction: `bridgeWarnings` is
+composed only after `replaceAll` returned, so a throw there loses the same
+warnings.
+
+What the user loses is the prepare's observations about the SOURCE — refused
+scripts, unreadable files, skipped directories, agents-index corruptions,
+duplicate-name skips. Those describe why the install may be worth retrying, and a
+failed run is exactly when they are worth reading. The loss is bounded: the
+observations are properties of the source, so a retry re-derives them.
+
+The narrow per-bridge fix (catch the commit and `appendLeaks(err, warnings)`) was
+considered and rejected. It routes discovery warnings through a carrier whose
+documented meaning is a manual-cleanup hint, and applying it to one bridge makes
+that bridge inconsistent with the other five for a defect all six share.
+
+**The durable fix** is a channel: either give `InstallLedgerSummary` a warnings
+member the failure arm can read, or have `runPhases` surface the context's
+accumulated warnings alongside its `RollbackPartial[]`. Either converts a
+discarded array into a rendered one for every bridge at once.
+
+## WFLOW-01: the `info` surface reads every candidate workflow script body, uncapped
+
+Raised by the Phase 113 code review as IN-02 and deliberately not fixed there.
+
+`discoverPluginWorkflows` must read each candidate script's body, because a
+workflow's command name lives in its `meta.name` rather than its filename. The
+read-only `info` surface consumes that same discovery pass, so `info` on a
+workflow-bearing plugin reads every `.js` under every declared workflows
+directory, with no size ceiling and no cap on the number of files. A plugin
+shipping a large generated script makes a read-only command do proportional IO.
+
+**Why it was not fixed in place.** `info` and the install-time stage share ONE
+discovery pass -- that sharing is deliberate and documented in
+`bridges/workflows/types.ts` and the discovery module header. So a size ceiling
+added for `info` also applies to `install`, which would begin refusing large but
+perfectly well-formed third-party scripts. That is a product decision, not a
+cleanup: it needs a ceiling number nobody has chosen, and "too large to inspect"
+is a new user-visible string requiring both tense tables, a paired catalog
+fixture, and a UAT case. The review itself hedged ("if a bound is wanted").
+
+**What a scoped item must decide.**
+
+1. The ceiling: bytes per script, and whether a file count per directory is also
+   needed.
+2. Whether `install` shares the ceiling or only `info` does. If they diverge,
+   the shared-discovery-pass claim in `types.ts` stops being true and the header
+   must change with it.
+3. The refusal wording in both tenses, plus its catalog states.
+
+**Not urgent.** The read is bounded by what the plugin author shipped, and a
+plugin that large is already pathological. It is filed so the uncapped read is
+a recorded decision rather than an oversight.
+
+Closed 2026-09-21 on the workflows branch: the ceiling is Claude Code's own.
+Its plugin-workflow loader (2.1.267 binary) skips a script above 524,288 bytes
+with a warning, so discovery now `lstat`s each candidate and skips one above
+that size before reading it, on `install` and `info` alike, with both tense
+phrases and a per-file line. `WORKFLOW_SCRIPT_MAX_BYTES` in
+`domain/workflow-script.ts` is the one declaration.
+
+## RCSEAM-01: `applyReconcile`'s three uncaught per-entry loops cannot be tested
+
+Residue of the WINDOWS id 9 waiver (decided 2026-09-02). The exposure itself was
+reviewed and accepted; this item records only the actionable half.
+
+`applyPlan` in `orchestrators/reconcile/apply.ts` drives three per-entry loops --
+marketplace add, plugin install, plugin toggle -- with no per-entry catch. The
+arms were removed under the unreachable-code rule, because `addMarketplace`,
+`installPlugin` and `setPluginEnabled` each answer with a typed outcome for every
+throw they can meet. That claim rests on an internal contract, and no test can
+check it: all three orchestrators are STATIC imports, and `ApplyReconcileOptions`
+exposes no injection seam, so `tests/orchestrators/reconcile/apply.test.ts`
+physically cannot plant a throwing collaborator. Contrast the two loops that kept
+their catch, which ARE covered, because `raceStateFromRead` gives the test a way
+to force the throw.
+
+**What a scoped item would decide.** Whether the three orchestrators become
+injected collaborators on `ApplyReconcileOptions`, and if so how that squares
+with D-115-03 and CONVENTIONS.md, which forbid a test-only DI seam. A seam that
+is genuinely part of the function's public interface (the pattern
+`makeMockGitOps` / `makeMockCredentialOps` already follow) satisfies both; a
+`_setXForTest`-style hole does not.
+
+**Not a live defect.** No input reaches the removed arms today, which is why
+restoring them is not the answer either -- they would be branches no test can
+enter, breaking the 100% direct-branch-coverage requirement that pairs
+`apply.ts` with its owner suite.
+
+## VSTALE-01: state one `covered_files` rule for VERIFICATION.md and apply it to every phase
+
+Carried from the workflows-replay close (WINDOWS #66, #80; OPEN-QUESTIONS Q1).
+
+A phase's `VERIFICATION.md` lists the files its conclusions depend on and stores
+a digest over them; any later edit to a listed file flips the phase to `stale`.
+Both failure directions were observed on this milestone:
+
+- **Too broad** (#66): a list naming a file a later pass rewrites makes its
+  phase permanently un-completable. Phase 114 went stale from a docs quick task,
+  again from the messaging-guide rewrite, and phases 114-117 went stale together
+  when main was merged in -- none of those edits changed what the phases graded.
+- **Too narrow** (#80): the inclusion rule was picked per phase. Phase 114 listed
+  its CONTEXT, REVIEW and REVIEW-FIX files while omitting PATTERNS, RESEARCH,
+  SECURITY, VALIDATION and `deferred-items.md`; the one that moved during the
+  quick task was never seen, and the one that DID trip the signal was caught by
+  luck of inclusion.
+
+**Why it is a decision, not a fix.** Any rule change alters what `stale` means
+for every phase in the workstream, and phase completion is computed from it.
+Picking a rule per phase is what produced the inconsistency.
+
+**Recommendation.** Cover what a criterion actually grades, plus the phase's
+own PLAN and SUMMARY files. Exclude CONTEXT, RESEARCH, PATTERNS, REVIEW and the
+sibling SECURITY / VALIDATION artifacts -- no criterion grades them. Do it as
+its own task: it touches every phase's report and can flip completion state on
+the spot. The four `stale` phases at this milestone's close were re-derived
+rather than re-listed, so the rule question is still open.
+
+## WLREC-01: does the succeeded-arm record the right workflow names on a staging-cleanup leak?
+
+Carried from the workflows-replay close (WINDOWS #79; OPEN-QUESTIONS Q2).
+
+`orchestrators/plugin/update.ts` sets `resources.workflows` from the prepare's
+`stagedNames` when the commit succeeded, and from the commit-reported
+`placedNames` otherwise, on the rationale "on a commit that ran, what it staged
+is the truth." A staging-cleanup leak is a recorded failure over a commit that
+fully succeeded -- and the comment directly above that line reasons about that
+exact case: envelopes left in `.previous/` rather than at their targets, a false
+`{stale workflow command}` stamp on the next update, phantom `info` rows. So the
+arm whose premise is "the commit ran, therefore the intent is the truth" is the
+arm that handles the case where the commit ran and the placement did not
+survive.
+
+Surfaced while writing the WLIF-02 architecture gate, which could not be written
+to the property as originally promised.
+
+**To settle it:** drive the leak path against a real tree and observe what the
+record carries. Do not decide it from the source; the source is what disagrees
+with itself.
+
+## RLHINT-01: the messaging guide's reload-hint mechanism claim is stale
+
+Carried from the workflows-replay close (WINDOWS #74; OPEN-QUESTIONS Q3).
+
+`docs/messaging-style-guide.md` describes the `Run /reload` trailer as emitted
+on a status-set test plus a cascade kind. `shouldEmitReloadHint`
+(`shared/notify.ts`) instead OR-reduces a caller-stamped per-row `needsReload`,
+with a kind-level short-circuit for info surfaces and
+`reconcile-applied-cascade`; its own comment says "no status-token or
+cascade-kind inference." `needsReload` occurs 34 times in `notify.ts` and once
+in the guide.
+
+**To settle it:** measure the `needsReload` plumbing across every producer that
+stamps it, then restate the guide at the grade that holds. A doc pin
+(`tests/architecture/messaging-guide-doc-pins.test.ts`) should bind the restated
+sentence to the source the way the variant names are bound.
+
+## PCERR-01: `PathContainmentError` interpolates the untrusted path raw
+
+Carried from the workflows-replay close (WINDOWS #64; OPEN-QUESTIONS Q6).
+
+`shared/path-containment.ts` interpolates the untrusted resolved child path into
+its message, so escaping a caller's label cannot close the forgery. Five bridges
+share the class and there are 58 measured `assertPathInside` call sites.
+
+**Scope before touching.** This is the widest blast radius of anything carried
+from the milestone: every caller's error text, every test that pins one, and
+the redaction pass (`redactAbsolutePaths`) that some surfaces already apply
+downstream. A scoped item decides whether the path belongs in the message at
+all, or only in a structured field the renderer redacts.
+
+## WSTOR-01: the W1/W2/W3 storage assertions were never driven against a live engine
+
+Carried from the workflows-replay close (WINDOWS #72; OPEN-QUESTIONS Q7).
+
+The storage assertions in the archived phase-105 verification were never driven
+against a live engine, and their driver
+(`tests/live-uat/workflow-storage-canary.mjs`) was never re-landed on this
+branch. The storage half of the host-engine contract rests on a source read;
+the `agent()` failure half was measured at 3.10.1 and refuted the source read.
+
+**To settle it:** re-land the driver and run it the way the `agent()` failure
+canary was run -- a disposable `npm install --prefix` scratch engine plus
+`PI_WORKFLOW_ENGINE_ROOT`, with the negative control.
+
+Closed 2026-09-21 on the workflows branch: `tests/live-uat/workflow-storage-canary.mjs`
+landed and was driven against engine 3.13.0 in both scopes (W0-W5 all PASS),
+with `--invert`, a missing engine and an out-of-sandbox agent directory each
+exiting 1. The transcript is in `tests/live-uat/README.md`; the compatibility
+doc's storage claims carry the `runtime-measured at 3.13.0` grade.
+
+## WPIN-01: machine-check the engine internals the compatibility doc cites
+
+Carried from the workflows-replay REQUIREMENTS.md at archive (it was a deferred
+Future Requirement there) and folds in WINDOWS #61 (OPEN-QUESTIONS Q8).
+
+`docs/workflows-compatibility.md` cites 15 exact line ranges inside
+`@quintinshaw/pi-dynamic-workflows` 3.10.1, which this repo does not vendor, and
+instructs a human to re-read the vendored `DETERMINISM_BLOCKLIST` and the
+envelope/storage internals on every engine bump. No gate can detect that an
+upgrade moved them.
+
+Re-read by hand once, 2026-09-21, against 3.13.0: the admission checks, the
+blocklist, the name validator, `workflow-paths.ts` and the registration path
+are byte-identical, and the doc now says so per claim. The machine-check is
+still open; the storage canary (WSTOR-01) covers the layout half at run time.
+
+**What a scoped item decides.** How to make the re-read machine-checkable
+without declaring the engine as a dependency, which is out of scope (a 0.x
+package with ~50 releases since May 2026 and no exported contract). The
+scratch-engine route above (WSTOR-01) is the only recorded way to reach the
+package's source from a test.
 ## ~~ENBL-DEP-01: a cascade enables a disabled, already-installed dependency~~ -- CLOSED
 
 **CLOSED 2026-09-21** by v1.20 Phase 8 (EDEP-01, EDEP-03), plans 08-01 and

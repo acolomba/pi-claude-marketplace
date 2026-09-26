@@ -209,8 +209,9 @@ describe("convertAgent", () => {
         generatedName: "pi-claude-marketplace-acme-reviewer",
         sourcePath: "/plugins/acme/agents/reviewer.md",
         fileContent: `---
-name: pi-claude-marketplace-acme-reviewer
+name: acme:reviewer
 description: Reviews files
+aliases: pi-claude-marketplace-acme-reviewer
 ${expectedMapping}systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
@@ -263,12 +264,13 @@ Review files.
       generatedName: "pi-claude-marketplace-spec-tree-changes-reviewer",
       sourcePath: "/plugins/spec-tree/agents/changes-reviewer.md",
       fileContent: `---
-name: pi-claude-marketplace-spec-tree-changes-reviewer
+name: spec-tree:changes-reviewer
 description: Reviews changes
+aliases: pi-claude-marketplace-spec-tree-changes-reviewer
 model: anthropic/claude-sonnet-4-6
 tools: bash,read
 thinking: high
-skills: spec-tree:review-changes
+skills: spec-tree-review-changes
 skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
@@ -289,14 +291,8 @@ provenance:
     - agent-level \`hooks\` is not converted -- dropped (Claude Code ignores it for plugin agents too; plugin-level hooks/hooks.json still installs).
 ---
 
-## Pi coding agent skill legend
-
-These instructions reference Claude skills by their original names. In this Pi session:
-
-- \`spec-tree:review-changes\` → skill \`spec-tree:review-changes\` (available on demand)
-
 Review /plugins/spec-tree and /data/spec-tree for /workspace.
-Use spec-tree:review-changes.
+Use /skill:spec-tree-review-changes.
 Keep \${CLAUDE_SKILL_DIR} literal.
 `,
       sourceHash: "converted-hash",
@@ -315,7 +311,7 @@ Keep \${CLAUDE_SKILL_DIR} literal.
       pluginName: "spec-tree",
       pluginRoot: "/plugins/spec-tree",
       pluginDataDir: "/data/spec-tree",
-      knownSkills: ["spec-tree:review-changes"],
+      knownSkills: ["spec-tree-review-changes"],
       discovered: {
         sourceName: "changes-reviewer",
         generatedName: "pi-claude-marketplace-spec-tree-changes-reviewer",
@@ -354,8 +350,9 @@ Keep \${CLAUDE_SKILL_DIR} literal.
       generatedName: "pi-claude-marketplace-acme-reviewer",
       sourcePath: "/plugins/acme/agents/reviewer.md",
       fileContent: `---
-name: pi-claude-marketplace-acme-reviewer
+name: acme:reviewer
 description: Reviews files
+aliases: pi-claude-marketplace-acme-reviewer
 tools: read
 systemPromptMode: replace
 inheritProjectContext: true
@@ -561,7 +558,7 @@ Review files.
       'unknown skill reference "phantom" -- dropped',
       "`allowed-tools` is a slash-command field, not an agent frontmatter field -- dropped (Claude Code ignores it on agents too). Declare `tools:` in the source agent instead.",
       "agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). " +
-        'To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-acme-reviewer"].tools ' +
+        'To grant this agent MCP tools, set subagents.agentOverrides["acme:reviewer"].tools ' +
         "(e.g. read,bash,mcp:<server>) in Pi settings.",
     ];
 
@@ -804,7 +801,7 @@ Review files.
       pluginName: "spec-tree",
       pluginRoot: "/plugins/spec-tree",
       pluginDataDir: "/data/spec-tree",
-      knownSkills: ["spec-tree:review-changes"],
+      knownSkills: ["spec-tree-review-changes"],
       discovered: {
         sourceName: "reviewer",
         generatedName: "pi-claude-marketplace-spec-tree-reviewer",
@@ -830,21 +827,24 @@ Review files.
     assert.deepStrictEqual(agent.droppedTools, []);
   });
 
-  test("deduplicates body tokens in first-occurrence order, including fenced code", () => {
+  test("rewrites repeated references and fenced examples without a legend", () => {
     // arrange
-    const expectedLegend = `## Pi coding agent skill legend
-
-These instructions reference Claude skills by their original names. In this Pi session:
-
-- \`spec-tree:review-changes\` → skill \`spec-tree:review-changes\` (available on demand)
-- \`spec-tree:other\` → skill \`spec-tree:other\` (available on demand)`;
+    const expectedBody =
+      "Use /skill:spec-tree-review-changes twice: /skill:spec-tree-review-changes.\n" +
+      "Run /spec-tree:review.\n" +
+      "```\npi skill /skill:spec-tree-other\n```\n";
 
     // act
     const agent = convertAgent({
       pluginName: "spec-tree",
       pluginRoot: "/plugins/spec-tree",
       pluginDataDir: "/data/spec-tree",
-      knownSkills: ["spec-tree:review-changes", "spec-tree:other"],
+      knownSkills: ["spec-tree-review-changes", "spec-tree-other"],
+      referenceNames: {
+        skills: ["spec-tree-review-changes", "spec-tree-other"],
+        commands: ["spec-tree:review"],
+        workflows: [],
+      },
       discovered: {
         sourceName: "reviewer",
         generatedName: "pi-claude-marketplace-spec-tree-reviewer",
@@ -853,6 +853,7 @@ These instructions reference Claude skills by their original names. In this Pi s
         raw: { description: "Reviews files", tools: "Read" },
         body:
           "Use spec-tree:review-changes twice: spec-tree:review-changes.\n" +
+          "Run /spec-tree:review.\n" +
           "```\npi skill spec-tree:other\n```\n",
       },
       sourceHash: "converted-hash",
@@ -860,20 +861,19 @@ These instructions reference Claude skills by their original names. In this Pi s
     });
 
     // assert
-    assert.match(
-      agent.fileContent,
-      new RegExp(expectedLegend.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-    );
+    assert.strictEqual(agent.fileContent.endsWith(expectedBody), true);
+    assert.strictEqual(agent.fileContent.includes("Pi coding agent skill legend"), false);
     assert.deepStrictEqual(agent.warnings, []);
   });
 
   test("preserves the CSV tools and bare skills byte contract", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: d
+aliases: pi-claude-marketplace-acme-bot
 tools: read,bash
-skills: acme:knowledge
+skills: acme-knowledge
 skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
@@ -897,7 +897,7 @@ Body.
       pluginName: "acme",
       pluginRoot: "/root",
       pluginDataDir: "/data",
-      knownSkills: ["acme:knowledge"],
+      knownSkills: ["acme-knowledge"],
       discovered: {
         sourceName: "bot",
         generatedName: "pi-claude-marketplace-acme-bot",
@@ -922,8 +922,9 @@ Body.
   test("preserves the inline-array tools byte contract", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: d
+aliases: pi-claude-marketplace-acme-bot
 tools: read,bash
 systemPromptMode: replace
 inheritProjectContext: true
@@ -966,8 +967,9 @@ Body.
   test("preserves dropped frontmatter fields in generated bytes", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: d
+aliases: pi-claude-marketplace-acme-bot
 tools: read
 systemPromptMode: replace
 inheritProjectContext: true
@@ -1013,8 +1015,9 @@ Body content.
   test("preserves omitted-tools bytes: no allowlist and inherited skills", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: d
+aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -1056,8 +1059,9 @@ Body content.
   test("preserves omitted-tools disallow bytes: excludeTools narrows the default set", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: d
+aliases: pi-claude-marketplace-acme-bot
 excludeTools: edit
 systemPromptMode: replace
 inheritProjectContext: true
@@ -1102,8 +1106,9 @@ Body content.
   test("preserves omitted-tools disallowed-Skill bytes: no excludeTools and no warnings", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: d
+aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
@@ -1145,8 +1150,9 @@ Body content.
   test("preserves omitted-tools unmapped-disallow bytes: warns and keeps the default set", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: d
+aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -1189,8 +1195,9 @@ Body content.
   test("preserves omitted-tools dedupe bytes: repeated disallow names collapse in excludeTools", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: d
+aliases: pi-claude-marketplace-acme-bot
 excludeTools: edit,write
 systemPromptMode: replace
 inheritProjectContext: true
@@ -1234,8 +1241,9 @@ Body content.
   test("preserves dropped allowed-tools and mcpServers guidance bytes (#179)", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: d
+aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -1250,7 +1258,7 @@ provenance:
   droppedTools: []
   warnings:
     - \`allowed-tools\` is a slash-command field, not an agent frontmatter field -- dropped (Claude Code ignores it on agents too). Declare \`tools:\` in the source agent instead.
-    - agent-level \`mcpServers\` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-acme-bot"].tools (e.g. read,bash,mcp:<server>) in Pi settings.
+    - agent-level \`mcpServers\` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["acme:bot"].tools (e.g. read,bash,mcp:<server>) in Pi settings.
 ---
 
 Body content.
@@ -1281,8 +1289,9 @@ Body content.
   test("preserves disallowed-tool filtering bytes", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: d
+aliases: pi-claude-marketplace-acme-bot
 tools: read,bash
 systemPromptMode: replace
 inheritProjectContext: true
@@ -1325,8 +1334,9 @@ Body content.
   test("preserves description-fallback bytes", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: Imported Claude Code plugin agent bot from plugin acme.
+aliases: pi-claude-marketplace-acme-bot
 tools: read
 systemPromptMode: replace
 inheritProjectContext: true
@@ -1370,10 +1380,11 @@ Body content.
   test("preserves a token-free CRLF body's final carriage return", () => {
     // arrange
     const expectedFileContent = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: d
+aliases: pi-claude-marketplace-acme-bot
 tools: read,bash
-skills: acme:knowledge
+skills: acme-knowledge
 skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
@@ -1396,7 +1407,7 @@ Body.\r
       pluginName: "acme",
       pluginRoot: "/root",
       pluginDataDir: "/data",
-      knownSkills: ["acme:knowledge"],
+      knownSkills: ["acme-knowledge"],
       discovered: {
         sourceName: "bot",
         generatedName: "pi-claude-marketplace-acme-bot",

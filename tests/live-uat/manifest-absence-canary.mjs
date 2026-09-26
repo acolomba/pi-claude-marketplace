@@ -5,24 +5,26 @@
 // graph is its intended shape, not a defect.
 // fallow-ignore-file unused-file -- standalone operator-run UAT driver: an engineer invokes it from the command line and no module ever imports it, so being unreachable from the import graph is its intended shape, not a defect.
 //
-// Two `duplicates.ignoredClones` entries in `.fallowrc.json` are retained
+// One `duplicates.ignoredClones` entry in `.fallowrc.json` is retained
 // against this file and `stop-canary.mjs`. Fallow types `ignoredClones` as
 // `string[]`, so the per-clone justification the conventions require cannot
 // live in the JSON and lives here instead:
 //   - `dup:cc950b18:2` -- the `main().then(exit 0, exit 1)` process epilogue
 //     at the foot of both drivers.
-//   - `dup:6d8c002d:2` -- the module preamble that resolves `execFileAsync`,
-//     `HERE`, `REPO_ROOT` and `EXTENSION_ENTRY`.
-// Both are retained for the same reason: each driver must stay independently
-// runnable as `node tests/live-uat/<file>.mjs` with nothing imported from a
-// sibling. Extracting a shared helper module would create exactly the import
-// edge that the standalone-driver shape exists to avoid, and would make the
-// two canaries fail together on one bad edit. The duplicated text is 23 lines
-// of boilerplate -- a process-exit epilogue and four path constants -- with no
-// assertion logic in it, so the copies cannot drift in a way that changes what
-// either canary proves. Line numbers are deliberately omitted; run
-// `fallow dupes --trace dup:<fingerprint>` with the entries temporarily
-// cleared to locate them.
+// It is retained because each driver must stay independently runnable as
+// `node tests/live-uat/<file>.mjs` with nothing imported from a sibling.
+// Extracting a shared helper module would create exactly the import edge
+// that the standalone-driver shape exists to avoid, and would make the two
+// canaries fail together on one bad edit. The duplicated text is 13 lines of
+// boilerplate -- a process-exit epilogue -- with no assertion logic in it, so
+// the copies cannot drift in a way that changes what either canary proves.
+// Line numbers are deliberately omitted; run `fallow dupes --trace
+// dup:<fingerprint>` with the entry temporarily cleared to locate it.
+//
+// Both drivers import `../pi-runtime.ts` on purpose, because every Pi launch
+// in the repository resolves the CLI through that one module. The
+// no-sibling-import rule above covers `tests/live-uat/` siblings and still
+// holds.
 //
 // Live runtime UAT for the manifest-independent installed-plugin surface: a
 // scripted canary that drives the REAL extension against a REAL on-disk Pi
@@ -66,19 +68,17 @@
 // tmp/pi-uat sandbox, so the install/uninstall churn never touches a
 // developer's real Pi state dir.
 
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 
 import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-
-const execFileAsync = promisify(execFile);
+import { resolvePiRuntime } from "../pi-runtime.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "../..");
@@ -94,6 +94,11 @@ const PI_DRIVE_TIMEOUT_MS = 120_000;
 // imported so the harness pins the user-visible string as an independent
 // contract: notify and this canary must agree or the canary fails loud.
 const NOT_IN_MANIFEST = "not in manifest";
+
+// The only agent-state root this canary will install into. Resolved off the
+// repository rather than `process.cwd()`, so which directory the containment
+// check below protects does not depend on where the driver was invoked.
+const SANDBOX_ROOT = path.resolve(REPO_ROOT, "tmp", "pi-uat");
 
 /**
  * Thrown (not process.exit) by the routing helpers so main()'s `finally`
@@ -138,18 +143,23 @@ async function assertPreconditions() {
       "Run: PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/agent node tests/live-uat/manifest-absence-canary.mjs",
     );
   }
-  // Refuse to churn installs outside the disposable sandbox.
-  if (!agentDir.includes(path.join("tmp", "pi-uat"))) {
+  // Refuse to churn installs outside the disposable sandbox. Containment is
+  // decided on the RESOLVED path, never on the raw string: a value that merely
+  // CARRIES the `tmp/pi-uat` segment can still name a directory outside it
+  // (`.../tmp/pi-uat/../../.pi/agent` does, and it exists), and a sibling such
+  // as `tmp/pi-uat-backup` is not a child, which is what the separator pins.
+  const resolvedAgentDir = path.resolve(agentDir);
+  if (resolvedAgentDir !== SANDBOX_ROOT && !resolvedAgentDir.startsWith(SANDBOX_ROOT + path.sep)) {
     liveRuntimeRequired(
-      `PI_CODING_AGENT_DIR (${agentDir}) is not the tmp/pi-uat sandbox.`,
+      `PI_CODING_AGENT_DIR (${agentDir} -> ${resolvedAgentDir}) is not inside ${SANDBOX_ROOT}.`,
       "Refusing to install the canary outside the disposable sandbox.",
     );
   }
-  if (!existsSync(agentDir)) {
-    liveRuntimeRequired(`PI_CODING_AGENT_DIR (${agentDir}) does not exist.`);
+  if (!existsSync(resolvedAgentDir)) {
+    liveRuntimeRequired(`PI_CODING_AGENT_DIR (${agentDir} -> ${resolvedAgentDir}) does not exist.`);
   }
-  pass(`sandbox ${agentDir}`);
-  return agentDir;
+  pass(`sandbox ${resolvedAgentDir}`);
+  return resolvedAgentDir;
 }
 
 // ---------------------------------------------------------------------------
@@ -606,12 +616,15 @@ async function flowB(ext) {
  * is not something reconcile is meant to restore.
  */
 async function flowC() {
-  let versionOut;
+  let pi;
   try {
-    const { stdout } = await execFileAsync("pi", ["--version"], { timeout: 30_000 });
-    versionOut = stdout.trim();
+    pi = resolvePiRuntime(REPO_ROOT);
   } catch (err) {
-    return { ok: false, reason: "`pi` CLI is not on PATH.", detail: String(err?.message ?? err) };
+    return {
+      ok: false,
+      reason: "The repository's Pi package could not be resolved. Run `npm ci`.",
+      detail: String(err?.message ?? err),
+    };
   }
 
   const args = [
@@ -630,7 +643,7 @@ async function flowC() {
   ];
 
   const run = await new Promise((resolve) => {
-    const child = spawn("pi", args, {
+    const child = spawn(process.execPath, [pi.cliPath, ...args], {
       cwd: REPO_ROOT,
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env },
@@ -670,11 +683,11 @@ async function flowC() {
   if (run.code !== 0) {
     return {
       ok: false,
-      reason: `pi ${versionOut} exited ${run.code} (no configured provider in the sandbox is the usual cause).`,
+      reason: `pi ${pi.version} exited ${run.code} (no configured provider in the sandbox is the usual cause).`,
       detail: combined.slice(0, 2000),
     };
   }
-  return { ok: true, version: versionOut };
+  return { ok: true, version: pi.version, cliPath: pi.cliPath };
 }
 
 // ---------------------------------------------------------------------------
@@ -714,7 +727,7 @@ async function main() {
     cSummary = await flowC();
     if (cSummary.ok) {
       pass(
-        `C (NFR-2): pi ${cSummary.version} loaded the extension and settled without an extension error`,
+        `C (NFR-2): pi ${cSummary.version} (${cSummary.cliPath}) loaded the extension and settled without an extension error`,
       );
     }
   } finally {

@@ -263,10 +263,10 @@ describe("narrowUnsupportedKinds", () => {
     assert.deepStrictEqual(reasons, expectedReasons);
   });
 
-  test("classifies workflows as the dedicated workflows reason", () => {
+  test("WINV-03: a stray workflows kind in a legacy record falls through to unsupported component", () => {
     // arrange
     const kinds = ["workflows"];
-    const expectedReasons = ["workflows"] satisfies readonly UnsupportedReason[];
+    const expectedReasons = ["unsupported component"] satisfies readonly UnsupportedReason[];
 
     // act
     const reasons = narrowUnsupportedKinds(kinds);

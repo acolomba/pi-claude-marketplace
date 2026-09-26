@@ -63,9 +63,9 @@
 //   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
 //     never -- `notifyUsageError` writes straight to the channel;
 //   * a delegating command that MATERIALISES reads `ctx.ui` once, `ctx.cwd`
-//     once, and `pi.getAllTools()` FOUR times;
+//     once, and `pi.getAllTools()` SIX times;
 //   * a delegating command that is refused by the install gate, or that lands
-//     disabled, reads `pi.getAllTools()` TWICE.
+//     disabled, reads `pi.getAllTools()` THREE times.
 // The count is a property of the emission the workflow reaches, not of the
 // module, so it is stated per row rather than shared.
 //
@@ -355,7 +355,7 @@ const ALPHA_USER_RECORD: InstallRecordProjection = {
   enabled: true,
   installable: true,
   unsupported: [],
-  skills: ["alpha:tool"],
+  skills: ["alpha-tool"],
   agents: ["pi-claude-marketplace-alpha-scout"],
 };
 
@@ -379,7 +379,7 @@ const DEGRADED_USER_RECORD: InstallRecordProjection = {
   enabled: true,
   installable: false,
   unsupported: ["themes"],
-  skills: ["degraded:tool"],
+  skills: ["degraded-tool"],
   agents: ["pi-claude-marketplace-degraded-scout"],
 };
 
@@ -398,21 +398,21 @@ for (const { args, expectedFootprint, label, summary, toolProbes } of [
     args: "degraded@mp",
     label: "matrix-neither",
     summary: "neither downstream flag",
-    toolProbes: 2,
+    toolProbes: 3,
     expectedFootprint: NOTHING_MATERIALIZED,
   },
   {
     args: `degraded@mp ${MAP_MODEL_FLAG}`,
     label: "matrix-map-model",
     summary: "the model-mapping flag alone",
-    toolProbes: 2,
+    toolProbes: 3,
     expectedFootprint: NOTHING_MATERIALIZED,
   },
   {
     args: `degraded@mp ${PARTIAL_FLAG}`,
     label: "matrix-partial",
     summary: "the gate-widening flag alone",
-    toolProbes: 4,
+    toolProbes: 6,
     expectedFootprint: {
       project: EMPTY_SCOPE,
       user: {
@@ -427,7 +427,7 @@ for (const { args, expectedFootprint, label, summary, toolProbes } of [
     args: `degraded@mp ${PARTIAL_FLAG} ${MAP_MODEL_FLAG}`,
     label: "matrix-both",
     summary: "both downstream flags",
-    toolProbes: 4,
+    toolProbes: 6,
     expectedFootprint: {
       project: EMPTY_SCOPE,
       user: {
@@ -522,7 +522,7 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -570,7 +570,7 @@ for (const { args, expectedAgents, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -597,7 +597,7 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -627,12 +627,13 @@ test("records a plugin declaring itself off by default as disabled, because the 
   // arrange
   const workspace = await createHermeticWorkspace(t, "default-enabled");
   await seedBothScopes(workspace);
-  // RESV-06: 4 `getAllTools()` reads, the count every other standalone install
-  // states. The install block takes one companion probe of its own before it
-  // composes its rows through the cascade composer, whichever arm produced the
-  // requesting plugin's row, and the renderer takes the second; each probe
-  // reads twice.
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+  // RESV-06: 2 companion probes, the count every other standalone install
+  // states. The install block takes one probe of its own before it composes its
+  // rows through the cascade composer, whichever arm produced the requesting
+  // plugin's row, and the renderer takes the second. WDEP-02: each probe now
+  // reads three times -- `pi-subagents`, `pi-mcp-adapter` and the workflow
+  // engine -- so the boundary expects 6.
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -652,7 +653,7 @@ test("records a plugin declaring itself off by default as disabled, because the 
           enabled: false,
           installable: true,
           unsupported: [],
-          skills: ["optout:tool"],
+          skills: ["optout-tool"],
           agents: ["pi-claude-marketplace-optout-scout"],
         },
       ],

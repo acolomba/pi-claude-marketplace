@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Pi Coding Agent 0.86.1 is now required. This version supports workflow child tools with the current `@quintinshaw/pi-dynamic-workflows` engine.
+- A plugin that ships workflow scripts now installs them as workflows the Pi workflow engine can load. (#205)
+  - The extension reports and skips a workflow script it cannot read, one with no usable metadata, one with no literal `meta.name`, or one over 512 KiB. It installs the rest of the plugin. Claude Code skips the same scripts.
+  - Only `.js` files are workflow scripts, as in Claude Code. The `workflows` manifest field can name a single `.js` file as well as a directory.
+  - Installed plugin Markdown that names a sibling workflow as `plugin:workflow` gets the workflow's installed command name, the same way it does for sibling skills and commands.
+  - The extension now depends on `acorn` to read the metadata that a workflow script declares.
+  - Release waits for `pi-dynamic-workflows` fixes [#232](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/232), [#233](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/233), and [#234](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/234).
 - A plugin can declare the other plugins it needs, and `install` now installs them with it. See [Dependency resolution](docs/dependency-resolution.md). (#198)
   - A dependency resolves from the marketplace it names, or from the declaring plugin's marketplace. Version constraints follow the semver range syntax. A cycle stops. An already-installed dependency is not reinstalled. When one dependency fails, the whole install rolls back and the message names the dependency and the reason.
   - Each install record now says whether you asked for the plugin by name or another plugin pulled it in. A direct install stays direct when a later install declares it. Records from older versions are upgraded silently.
@@ -14,6 +21,20 @@
   - `update` and `autoupdate` now keep a plugin inside the version ranges its dependents declare. Each picks the highest version those ranges allow, and holds the update with a row naming the holders when none exists.
 - Internal: the GSD discuss phase now loads a Claude Code compatibility research skill before it generates questions, so phase decisions cite verified upstream behavior instead of assumption. `AGENTS.md` and `PROJECT.md` now state the upstream-parity rule and the two things that license a divergence, and both record the hook bridge that their component list had been omitting. (#210)
   - Internal: the marketplace-remove test that covers the in-lock concurrent disappearance now injects the state load instead of racing a real filesystem writer, so the branch is covered on every run rather than only when the race lands. It was the intermittent cause of sub-100% coverage runs in CI.
+- Internal: the tests, the live-UAT canaries, and `scripts/pi.sh` now run the Pi version that `package-lock.json` pins. They run it from `node_modules` and no longer use the `pi` on `PATH`. Run `npm ci` first.
+  - `scripts/pi.sh` installs pinned versions of pi-mcp-adapter, pi-subagents, and @quintinshaw/pi-dynamic-workflows into a private npm prefix outside the checkout (`PI_CM_RUNTIME_PREFIX`). It no longer installs them into the global npm root.
+- Internal: `npm run check` now passes on macOS. It already passed on Linux.
+  - Tests and the unused-type-member gate now use the resolved path of the temporary directory. On macOS that directory is a symlink, so the paths the tests built did not match the paths the code reported.
+  - Tests that expect a Linux error code or a case-sensitive file system now accept the macOS result.
+  - Some tests used `fs.watch` to make a change in the middle of an operation. macOS reports file events late, so the change arrived after the operation. These tests now make the change through the state I/O, the functions that read and save `state.json`. The marketplace update, the plugin update operations, and the reinstall target selection accept an optional replacement for those functions. Production callers do not pass it.
+
+## [0.19.2] - 2026-09-24
+
+- Installed plugin skills now complete and run through `/plugin:skill` aliases in interactive Pi sessions. Commands take priority when an alias has the same name. Skill and command references in installed plugin Markdown use their actual Pi names, including Windows command names. Agent mapping notes are no longer needed. (#215)
+
+## [0.19.1] - 2026-09-24
+
+- Plugin skills now install with Pi-valid hyphenated names on every platform. Skill and agent references to Claude's `plugin:skill` names resolve to those installed names. This fixes #211 and corrects the name mapping in both READMEs. Thanks to @CharonRyui. (#214)
 
 ## [0.19.0] - 2026-09-22
 

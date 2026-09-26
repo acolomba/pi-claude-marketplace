@@ -66,6 +66,7 @@ function resolvedFor(
       skills: [],
       commands: [...commandPaths],
       agents: [],
+      workflows: [],
     },
     mcpServers: {},
     defaultEnabled: true,
@@ -156,11 +157,42 @@ test("stages recursive commands with exact names, records, substitutions, and pr
   assert.strictEqual(statusBytes, expectedStatus);
 });
 
+test("rewrites skill and command references in staged command Markdown", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-cross-references-");
+  const pluginRoot = await createPluginRoot(t, "commands-cross-references-source-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  await mkdir(commandsRoot, { recursive: true });
+  await writeFile(
+    path.join(commandsRoot, "review.md"),
+    "---\ndescription: Review\n---\nUse acme:helper, then /acme:review.\n",
+  );
+
+  // act
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data"),
+    resolved: resolvedFor(pluginRoot),
+    referenceNames: { skills: ["acme-helper"], commands: ["acme:review"], workflows: [] },
+  });
+  assert.strictEqual(prepared.kind, "staged");
+  const content = await readFile(path.join(prepared.stagingRoot, "acme:review.md"), "utf8");
+
+  // assert
+  assert.strictEqual(
+    content,
+    "---\ndescription: Review\n---\nUse /skill:acme-helper, then /acme:review.\n",
+  );
+});
+
 test("stages a source led by a byte-order mark without the marker or a duplicated fence", async (t) => {
   // arrange
   // FMBOM-01: a marker raises no gate-1 throw, so no CMD-01 degrade fires and
-  // the marker would ride into the staged prompt, where a peer at the
-  // `>=0.80.5` floor drops the whole block at load time. The assertion reads
+  // the marker would ride into the staged prompt, where Pi's loader drops
+  // the whole block at load time. The assertion reads
   // the COMMITTED bytes, not a parse result: the installed peer tolerates a
   // leading marker in its own parser, so a parse-only check would pass without
   // the strip.

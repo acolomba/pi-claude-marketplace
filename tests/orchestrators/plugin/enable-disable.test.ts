@@ -87,6 +87,7 @@ function transactionFailingAfterHookDrop(cause: Error): EnableDisableTransaction
           hooks: [plugin],
           mcpServers: [],
           skills: [],
+          workflows: [],
         },
         cause,
       };
@@ -249,13 +250,28 @@ async function writeUserState(
     agents: string[];
     mcpServers: string[];
     hooks: string[];
+    workflows: string[];
   };
   if (opts.disabled) {
-    resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+    resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] };
   } else if (opts.hooksOnly === true) {
-    resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [opts.pluginName] };
+    resources = {
+      skills: [],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+      hooks: [opts.pluginName],
+      workflows: [],
+    };
   } else {
-    resources = { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] };
+    resources = {
+      skills: ["s1"],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+      hooks: [],
+      workflows: [],
+    };
   }
 
   const unsupported = opts.unsupported ?? [];
@@ -420,6 +436,12 @@ async function seedRealDisabledMarketplace(
     /** Give the plugin real MCP server declarations for companion/cascade cases. */
     mcpServers?: Record<string, unknown>;
     /**
+     * WLIF-03: give the plugin a runnable workflow script so an enable
+     * materializes one envelope under the host engine's saved directory, which
+     * is what a later disable has to take back off disk.
+     */
+    withWorkflow?: boolean;
+    /**
      * DFEN-07: spread `defaultEnabled` onto the plugin's MARKETPLACE ENTRY.
      * The entry is the side that WINS the resolution (`resolveDefaultEnabled`
      * consults it before `plugin.json`), so a fixture that declared the field
@@ -492,6 +514,16 @@ async function seedRealDisabledMarketplace(
     );
   }
 
+  if (opts.withWorkflow === true) {
+    // A NAMED meta export -- a default-export body classifies as skipped and
+    // stages nothing, so a case built on it would pass having removed nothing.
+    await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, "workflows", "greet.js"),
+      'export const meta = { name: "greet", description: "greets" };\n',
+    );
+  }
+
   const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
   await writeFile(
     manifestPath,
@@ -558,7 +590,14 @@ async function seedRealDisabledMarketplace(
             version: opts.version,
             resolvedSource: pluginRoot,
             compatibility,
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
             enabled: false,
             provenance: "explicit",
             installedAt: "2026-01-01T00:00:00.000Z",
@@ -929,6 +968,7 @@ test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's reso
                 agents: string[];
                 mcpServers: string[];
                 hooks: string[];
+                workflows: string[];
               };
               compatibility: { installable: boolean };
               installedAt: string;
@@ -948,7 +988,7 @@ test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's reso
     // and `updatedAt` and nothing else.
     assert.deepEqual(
       rec.resources,
-      { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
       "ENBL-18: disable retains the record's inventory verbatim",
     );
     // ENBL-02: the explicit disabled marker must be written -- without this
@@ -959,7 +999,7 @@ test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's reso
 });
 
 // ENBL-13 / ENBL-18 / D-100-04: artifact removal stays symmetric across all
-// five kinds -- cascadeUnstagePlugin still unstages hooks via removeHookConfig,
+// six kinds -- cascadeUnstagePlugin still unstages hooks via removeHookConfig,
 // so hooks.json is gone from disk. What the record keeps is the DESCRIPTION of
 // what was installed, not the artifact: `resources.hooks` survives the disable
 // so `info` can still report the plugin's contents while it is disabled, and
@@ -1027,6 +1067,7 @@ test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but r
                 agents: string[];
                 mcpServers: string[];
                 hooks: string[];
+                workflows: string[];
               };
               compatibility: { installable: boolean };
             }
@@ -1037,7 +1078,7 @@ test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but r
     const rec = state.marketplaces.mp!.plugins.foo!;
     assert.deepEqual(
       rec.resources,
-      { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["foo"] },
+      { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["foo"], workflows: [] },
       "ENBL-18: the hooks-only inventory survives the disable verbatim",
     );
     // ENBL-13 / D-100-04: the artifact itself is gone.
@@ -1240,6 +1281,586 @@ for (const { failure, label } of [
     });
   });
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// WLIF-03: disable takes the workflow envelope off disk and KEEPS its name
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WLIF-03: disable removes the workflow envelope while the record keeps naming it", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "claude-plugins-official",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      withWorkflow: true,
+    });
+    const args = {
+      pi: makePi(),
+      cwd,
+      marketplace: "claude-plugins-official",
+      plugin: "foo-plugin",
+      scope: "user" as const,
+    };
+    const locations = locationsFor("user", cwd);
+    const envelopePath = path.join(locations.workflowsSavedDir, "foo-plugin:greet.json");
+
+    // act -- the enable materializes the envelope, the disable takes it back
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const recordAfterEnable = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<
+        string,
+        { plugins: Record<string, { enabled: boolean; resources: { workflows: string[] } }> }
+      >;
+    };
+    assert.deepStrictEqual(
+      recordAfterEnable.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"]?.resources
+        .workflows,
+      ["foo-plugin:greet"],
+      "precondition: the enable must actually record an envelope",
+    );
+    await stat(envelopePath);
+
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+
+    // assert -- ENBL-18: a disabled record keeps its DESCRIPTION of the
+    // installation, not its artifacts. The retained name is what the next
+    // enable reads to displace its own envelopes aside rather than hitting the
+    // occupancy refusal.
+    await assert.rejects(() => stat(envelopePath), { code: "ENOENT" });
+    const after = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<
+        string,
+        { plugins: Record<string, { enabled: boolean; resources: { workflows: string[] } }> }
+      >;
+    };
+    const record = after.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"];
+    assert.equal(record?.enabled, false);
+    assert.deepStrictEqual(record?.resources.workflows, ["foo-plugin:greet"]);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WLIF-05: what a re-enable's materialization actually places
+//
+// Every case here drives a full disable/enable round trip, because the set
+// difference that matters -- recorded names the next enable does NOT re-place
+// -- only exists once a real disable has left a populated inventory behind. A
+// hand-seeded record cannot produce it.
+//
+// `locationsFor` is called INSIDE the `withHermeticHome` closure: the helper
+// sets `process.env.HOME`, which is what the workflow home derivation reads, so
+// a call outside would point `workflowsSavedDir` at the developer's real home.
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Directory entries, or `[]` when the directory was never created. */
+async function workflowEntriesOf(directory: string): Promise<string[]> {
+  try {
+    return (await readdir(directory)).sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Replace the plugin's WHOLE workflow script set in the marketplace clone.
+ *
+ * Replacing rather than adding is the point: a source that WITHDREW a script
+ * is the shape that makes the difference between the recorded inventory and
+ * the newly staged set non-empty, and an additive helper cannot express it.
+ *
+ * The default body carries a NAMED `meta` export -- a default-export body
+ * classifies as skipped and stages zero envelopes, so a case built on the
+ * default would pass having placed nothing.
+ */
+async function rewriteWorkflowScripts(
+  mpRoot: string,
+  pluginName: string,
+  scripts: readonly { sourceName: string; metaName?: string }[],
+): Promise<void> {
+  const workflowsDir = path.join(mpRoot, "plugins", pluginName, "workflows");
+  await rm(workflowsDir, { force: true, recursive: true });
+  await mkdir(workflowsDir, { recursive: true });
+  for (const script of scripts) {
+    const name = script.metaName ?? script.sourceName;
+    await writeFile(
+      path.join(workflowsDir, `${script.sourceName}.js`),
+      `export const meta = { name: "${name}", description: "does ${name}" };\n`,
+    );
+  }
+}
+
+/** The persisted workflow inventory for the fixture's one plugin. */
+async function recordedWorkflowNames(statePath: string): Promise<readonly string[] | undefined> {
+  const parsed = JSON.parse(await readFile(statePath, "utf8")) as {
+    marketplaces: Record<
+      string,
+      { plugins: Record<string, { resources: { workflows: string[] } }> }
+    >;
+  };
+  return parsed.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"]?.resources.workflows;
+}
+
+/**
+ * Seed the disabled record, write the plugin's initial script set, and hand
+ * back everything the cases below act on. `scripts: []` leaves the plugin
+ * without a workflows directory at all, which is the empty-inventory shape.
+ */
+async function seedWorkflowRoundTrip(
+  home: string,
+  cwd: string,
+  scripts: readonly { sourceName: string; metaName?: string }[],
+): Promise<{
+  args: { pi: ToolInventory; cwd: string; marketplace: string; plugin: string; scope: "user" };
+  statePath: string;
+  mpRoot: string;
+  savedDir: string;
+}> {
+  const { statePath, mpRoot } = await seedRealDisabledMarketplace(home, {
+    marketplaceName: "claude-plugins-official",
+    pluginName: "foo-plugin",
+    version: "1.2.3",
+  });
+  if (scripts.length > 0) {
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", scripts);
+  }
+
+  return {
+    args: {
+      pi: makePi(),
+      cwd,
+      marketplace: "claude-plugins-official",
+      plugin: "foo-plugin",
+      scope: "user" as const,
+    },
+    statePath,
+    mpRoot,
+    savedDir: locationsFor("user", cwd).workflowsSavedDir,
+  };
+}
+
+test("WLIF-05: an enable over a shrunken source re-places only the surviving workflow", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- two workflows recorded by a real enable, then taken off disk
+    // by a real disable, then the author withdraws one of them.
+    const { args, statePath, mpRoot, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    assert.deepStrictEqual(
+      await recordedWorkflowNames(statePath),
+      ["foo-plugin:greet", "foo-plugin:wave"],
+      "precondition: the first enable must record both envelopes",
+    );
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "greet" }]);
+
+    // act
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+
+    // assert -- the withdrawn name is gone from BOTH the record and the disk.
+    // The record alone would not distinguish a name that was dropped from one
+    // whose envelope was left behind.
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), ["foo-plugin:greet"]);
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), ["foo-plugin:greet.json"]);
+  });
+});
+
+test("WLIF-05: an enable over a renamed workflow re-places only the new name", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { args, statePath, mpRoot, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    // A rename moves BOTH the script file and the exported name, which is what
+    // an author renaming a command does. The generated name follows the `meta`
+    // export, so moving only the file would leave the name unchanged.
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "hail" }]);
+
+    // act
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+
+    // assert -- a rename retires the old command exactly as a deletion does.
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), ["foo-plugin:hail"]);
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), ["foo-plugin:hail.json"]);
+  });
+});
+
+test("WLIF-05: a plugin declaring no workflows enables and disables placing none", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- no workflows directory at all, so the record's inventory and
+    // the source's declaration are BOTH empty. Neither verb may error and
+    // neither may write an envelope.
+    const { args, statePath, savedDir } = await seedWorkflowRoundTrip(home, cwd, []);
+
+    // act
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const afterEnable = await recordedWorkflowNames(statePath);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+
+    // assert -- an EMPTY array, not an absent key: the record composition
+    // cannot omit the axis, so a missing key would mean the ledger never
+    // reported on it rather than reporting nothing on it.
+    assert.deepStrictEqual(afterEnable, []);
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), []);
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), []);
+  });
+});
+
+test("WLIF-05: a disable takes every recorded envelope off disk", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { args, statePath, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), [
+      "foo-plugin:greet.json",
+      "foo-plugin:wave.json",
+    ]);
+
+    // act
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+
+    // assert -- EVERY name the record holds, not just the first. The removal
+    // itself runs through the shared cascade primitive, whose per-kind dropped
+    // axis is pinned in `tests/orchestrators/marketplace/shared.test.ts`; what
+    // this case adds is that the disable VERB reaches it for the whole set.
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), []);
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), [
+      "foo-plugin:greet",
+      "foo-plugin:wave",
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WLIF-06: the reload remedy for a command whose envelope is gone
+// ---------------------------------------------------------------------------
+
+/** The single row a standalone enable/disable emits, minus its trailer. */
+function soleRow(notifications: readonly NotifyRecord[]): NotifyRecord {
+  assert.equal(notifications.length, 1, "IL-2: exactly one notify() per invocation");
+  const only = notifications[0];
+  assert.ok(only !== undefined);
+  return only;
+}
+
+test("WLIF-06: a disable that took an envelope off disk names the reload remedy", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- a real enable so the record holds a real inventory and the
+    // envelopes are really on disk. A hand-seeded disabled record cannot reach
+    // this state: its `resources` arrays are empty.
+    const { args } = await seedWorkflowRoundTrip(home, cwd, [{ sourceName: "greet" }]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: false });
+
+    // assert -- the host cannot unregister `foo-plugin:greet`, so the command
+    // is still runnable and the row says so. Severity is the middle band: the
+    // disable WAS carried out.
+    assert.deepStrictEqual(soleRow(notifications), {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● claude-plugins-official [user]\n" +
+        "  ◍ foo-plugin v1.2.3 (disabled) {stale workflow command}\n\n" +
+        "/reload to pick up changes",
+      severity: "warning",
+    });
+  });
+});
+
+test("WLIF-06: a disable that retired nothing renders the row it always rendered", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the same verb over a plugin declaring no workflow at all.
+    const { args } = await seedWorkflowRoundTrip(home, cwd, []);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: false });
+
+    // assert -- brace-less and info, byte-for-byte what this row rendered
+    // before the token existed. The absent key is what preserves the bytes; a
+    // present-and-empty `reasons` would render the same but is a different
+    // shape, so the severity assertion is the one that would catch it.
+    assert.deepStrictEqual(soleRow(notifications), {
+      message:
+        "● claude-plugins-official [user]\n" +
+        "  ◍ foo-plugin v1.2.3 (disabled)\n\n" +
+        "/reload to pick up changes",
+    });
+  });
+});
+
+test("WLIF-06: an enable whose source dropped a workflow names the retired command", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- round trip, then the author withdraws one of the two.
+    const { args, mpRoot } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "greet" }]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: true });
+
+    // assert -- `foo-plugin:wave` was in the pre-enable record and is not in
+    // what the ledger re-placed, so its command is registered over nothing.
+    // WDEP-02: this enable also staged a workflow into a session with no host
+    // engine, so the marker composes after the content token.
+    assert.deepStrictEqual(soleRow(notifications), {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● claude-plugins-official [user]\n" +
+        "  ● foo-plugin v1.2.3 (installed) " +
+        "{stale workflow command, requires pi-dynamic-workflows}\n\n" +
+        "/reload to pick up changes",
+      severity: "warning",
+    });
+  });
+});
+
+test("WLIF-06: a renamed workflow retires a command exactly as a deletion does", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the generated name follows the `meta` export, so moving BOTH
+    // the file and the export is what makes this a rename rather than a no-op.
+    const { args, mpRoot } = await seedWorkflowRoundTrip(home, cwd, [{ sourceName: "greet" }]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "hail" }]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: true });
+
+    // assert -- one name left, one name arrived, and the LEFT one is what the
+    // token is about. Set difference is what makes the two cases identical.
+    assert.equal(soleRow(notifications).severity, "warning");
+    assert.match(
+      soleRow(notifications).message,
+      /\{stale workflow command, requires pi-dynamic-workflows\}/u,
+    );
+  });
+});
+
+test("WLIF-06: a name in both the recorded and the staged set retires nothing", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- an unchanged tree across the round trip. Every recorded name
+    // is re-placed, so the difference is empty and this is the ordinary
+    // re-place rather than a retirement.
+    const { args } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: true });
+
+    // assert -- SEV-01 / WDEP-02: this enable staged workflows into a session
+    // with no host workflow engine, so the desired state is not reached, the row
+    // is stamped `warning`, and the brace names WHY. The `stale workflow
+    // command` token is absent because the difference is empty.
+    assert.deepStrictEqual(soleRow(notifications), {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● claude-plugins-official [user]\n" +
+        "  ● foo-plugin v1.2.3 (installed) {requires pi-dynamic-workflows}\n\n" +
+        "/reload to pick up changes",
+      severity: "warning",
+    });
+  });
+});
+
+test("WLIF-06: three retired names stamp exactly one token", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- four recorded, one survives.
+    const { args, mpRoot } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+      { sourceName: "nod" },
+      { sourceName: "bow" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "greet" }]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: true });
+
+    // assert -- one row, one brace, one token. The row states that a command
+    // lingers and names the remedy; the remedy is the same reload whether one
+    // or three commands linger, so repeating the token would add no fact.
+    const message = soleRow(notifications).message;
+    assert.equal(message.split("stale workflow command").length - 1, 1);
+    assert.match(
+      message,
+      /\(installed\) \{stale workflow command, requires pi-dynamic-workflows\}/u,
+    );
+  });
+});
+
+test("WLIF-06: a partial disable cascade names the envelopes it DID remove", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- two envelopes on disk, then the second one's target path is
+    // replaced by a directory so its unlink fails with a non-ENOENT error while
+    // the first is removed cleanly. The cascade therefore drops one and then
+    // throws, which is the arm this case exists for.
+    const { args, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const blocked = path.join(savedDir, "foo-plugin:wave.json");
+    await rm(blocked, { force: true });
+    await mkdir(blocked, { recursive: true });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: false });
+
+    // assert -- the row names BOTH facts. Reporting only the failure would tell
+    // the operator nothing changed, while `foo-plugin:greet` is off disk and
+    // its command is still registered. The failure reason comes first and the
+    // stale-command token joins it at the tail; severity stays `error` because
+    // the disable itself was not carried out.
+    const row = soleRow(notifications);
+    assert.equal(row.severity, "error");
+    assert.match(row.message, /\(failed\) \{unreadable, stale workflow command\}/u);
+  });
+});
+
+test("WLIF-06: the reconcile projection carries no token after a retiring disable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { args } = await seedWorkflowRoundTrip(home, cwd, [{ sourceName: "greet" }]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ...args,
+      ctx,
+      enable: false,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert -- the whole projection, by equality rather than by absence of one
+    // key, so a token added under any other spelling turns this red too. A
+    // reload is what CLEARS a lingering command, so the path that runs ON a
+    // reload must have no way to claim the remedy.
+    assert.equal(notifications.length, 0);
+    assert.deepStrictEqual(outcome, { status: "disabled", name: "foo-plugin", version: "1.2.3" });
+  });
+});
+
+test("WLIF-06: the reconcile projection carries no token after a retiring enable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the SYMMETRIC case. `enable` is the fifth stamp site and the
+    // one that rides the module-private sentinel, so type-level exclusion from
+    // the exported union is the whole argument that it cannot leak; an argument
+    // with no case behind it is what this pins shut.
+    const { args, mpRoot } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "greet" }]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ...args,
+      ctx,
+      enable: true,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.equal(notifications.length, 0);
+    assert.deepStrictEqual(outcome, {
+      status: "enabled",
+      name: "foo-plugin",
+      version: "1.2.3",
+      stagedWorkflows: true,
+    });
+  });
+});
+
+test("WLIF-05: two enables over an unchanged tree report the same names in file order", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the SCRIPT FILE names and the GENERATED names sort in opposite
+    // directions, so a producer that re-sorted by generated name would report
+    // `[alpha, zulu]` and one preserving the discovery pass's sorted file-name
+    // order reports the reverse. A fixture whose two orders agree cannot tell
+    // them apart.
+    const { args, statePath, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "a-second", metaName: "zulu" },
+      { sourceName: "z-first", metaName: "alpha" },
+    ]);
+
+    // act -- a full round trip, then a second enable over the SAME tree.
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const first = await recordedWorkflowNames(statePath);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+
+    // assert
+    assert.deepStrictEqual(first, ["foo-plugin:zulu", "foo-plugin:alpha"]);
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), first);
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), [
+      "foo-plugin:alpha.json",
+      "foo-plugin:zulu.json",
+    ]);
+  });
+});
+
+test("WLIF-05: an enable refuses a target held by a file the record does not name", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the saved directory is shared with the user's own hand-saved
+    // workflows, so a target the record never named is FOREIGN by construction.
+    const { args, statePath, mpRoot, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    const foreignPath = path.join(savedDir, "foo-plugin:wave.json");
+    const foreignBytes = '{"name":"foo-plugin:wave","description":"hand written","script":"//\\n"}';
+    await mkdir(savedDir, { recursive: true });
+    await writeFile(foreignPath, foreignBytes);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: true });
+
+    // assert -- the enable failed as a whole, and the planted file is still
+    // exactly the user's bytes. The ownership pre-check runs over the whole
+    // target set before the first rename, so nothing was placed beside it.
+    assert.strictEqual(await readFile(foreignPath, "utf8"), foreignBytes);
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), ["foo-plugin:wave.json"]);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]?.message ?? "", /\(failed\)/);
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), ["foo-plugin:greet"]);
+  });
+});
 
 // ──────────────────────────────────────────────────────────────────────────
 // ENBL-19: enable does not self-conflict against the retained inventory
@@ -1669,6 +2290,7 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
                 agents: string[];
                 mcpServers: string[];
                 hooks: string[];
+                workflows: string[];
               };
             }
           >;
@@ -3555,7 +4177,7 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
     assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(
       (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.foo?.resources,
-      { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
+      { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [], workflows: [] },
     );
     assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
     await assert.rejects(stat(path.join(locations.hooksDir, "foo", "hooks.json")), /ENOENT/);
@@ -3637,7 +4259,7 @@ test("a partial disable preserves its committed fold when route publication fail
     assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(
       (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.foo?.resources,
-      { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
+      { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [], workflows: [] },
     );
     await assert.rejects(stat(hooksJsonPath), /ENOENT/);
     assert.deepStrictEqual(
@@ -3813,9 +4435,10 @@ test("standalone enable exposes ordered rollback partials and retries without du
       hooks: ["foo"],
       mcpServers: ["server"],
       prompts: [],
-      skills: ["foo:s1"],
+      skills: ["foo-s1"],
+      workflows: [],
     });
-    assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["foo:s1"]);
+    assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["foo-s1"]);
     assert.deepStrictEqual(
       runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
       ["echo hook"],
@@ -3935,7 +4558,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
     assert.deepStrictEqual(afterEnable, {
       enabled: true,
       merged: { declaredEnabled: true, source: "base" },
-      skills: ["foo:s1"],
+      skills: ["foo-s1"],
       version: "1.0.0",
     });
     assert.deepStrictEqual(declaringConfig, {
@@ -3948,7 +4571,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
     assert.deepStrictEqual(afterUpdate, {
       enabled: true,
       merged: { declaredEnabled: true, source: "base" },
-      skills: ["foo:s1"],
+      skills: ["foo-s1"],
       version: "2.0.0",
     });
     assert.deepStrictEqual(afterReinstall, afterUpdate);
@@ -4074,7 +4697,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     assert.deepStrictEqual(afterEnable, {
       enabled: true,
       merged: { declaredEnabled: true, source: "local" },
-      skills: ["foo:s1"],
+      skills: ["foo-s1"],
       version: "1.0.0",
     });
     assert.deepStrictEqual(declaringConfig, {
@@ -4092,7 +4715,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     assert.deepStrictEqual(afterUpdate, {
       enabled: true,
       merged: { declaredEnabled: true, source: "local" },
-      skills: ["foo:s1"],
+      skills: ["foo-s1"],
       version: "2.0.0",
     });
     assert.deepStrictEqual(
@@ -4135,6 +4758,7 @@ function edepCascadeRecord(opts: {
     agents: string[];
     mcpServers: string[];
     hooks: string[];
+    workflows: string[];
   };
   enabled: boolean;
   provenance: "explicit";
@@ -4145,7 +4769,7 @@ function edepCascadeRecord(opts: {
     version: opts.version,
     resolvedSource: opts.resolvedSource,
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: opts.enabled,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -4461,7 +5085,7 @@ async function seedEdepGraph(
 
   const statePath = path.join(extRoot, "state.json");
   const state = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {
       official: {
         name: "official",
@@ -5109,7 +5733,14 @@ test("EDEP-01: a rollback partial on the idempotent-root path threads into the f
         if (plugin === "b") {
           return {
             ok: false,
-            dropped: { skills: ["s1"], commands: [], agents: [], hooks: [], mcpServers: [] },
+            dropped: {
+              skills: ["s1"],
+              commands: [],
+              agents: [],
+              hooks: [],
+              mcpServers: [],
+              workflows: [],
+            },
             cause: unstageFailure,
           };
         }
@@ -5233,7 +5864,7 @@ test("CR-05: a member ledger failure unwinds every member this command already t
     // ran -- the on-disk footprint and the exact row bytes are the only
     // observables that prove it did (CR-05).
     await assert.rejects(
-      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1")),
+      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b-s1")),
       { code: "ENOENT" },
       "b's staged skill is off disk again",
     );
@@ -5343,7 +5974,7 @@ test("CR-05: a member's undo tolerates the record vanishing from the snapshot be
     // state.json is byte-for-byte the seed either way. With no record left
     // to read, the guard CANNOT unstage "b" -- its skill stays on disk,
     // which is the guard tolerating rather than crashing, not cleaning up.
-    await stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1"));
+    await stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b-s1"));
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
@@ -5542,7 +6173,7 @@ test("CR-03: a root ledger failure AFTER a member materialized unwinds the membe
     // proof the unwind ran, since this path never saves and state.json is
     // byte-for-byte the seed either way (CR-05 precedent).
     await assert.rejects(
-      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1")),
+      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b-s1")),
       { code: "ENOENT" },
       "b's staged skill is off disk again",
     );
@@ -5600,12 +6231,12 @@ test("WR-08: a config-write throw after the merged ledger commits unwinds the me
 
     // assert: both "b"'s and "a"'s staged skills are off disk again.
     await assert.rejects(
-      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1")),
+      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b-s1")),
       { code: "ENOENT" },
       "b's staged skill is off disk again",
     );
     await assert.rejects(
-      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "a:s1")),
+      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "a-s1")),
       { code: "ENOENT" },
       "a's staged skill is off disk again",
     );
@@ -5646,7 +6277,14 @@ test("CR-05: a member's undo folds a partial unstage failure and rethrows it as 
         if (plugin === "b") {
           return {
             ok: false,
-            dropped: { skills: ["s1"], commands: [], agents: [], hooks: [], mcpServers: [] },
+            dropped: {
+              skills: ["s1"],
+              commands: [],
+              agents: [],
+              hooks: [],
+              mcpServers: [],
+              workflows: [],
+            },
             cause: unstageFailure,
           };
         }
@@ -5676,7 +6314,7 @@ test("CR-05: a member's undo folds a partial unstage failure and rethrows it as 
     // reported as a rollback partial (WR-01) rather than swallowed. The
     // mocked `cascadeUnstagePlugin` never touches disk, so "b"'s staged
     // skill is the real, observable remainder the fold claims (CR-05).
-    await stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1"));
+    await stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b-s1"));
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
@@ -5724,7 +6362,14 @@ test("CR-05: a member's undo whose unstage failure carries no cause still rethro
         if (plugin === "b") {
           return {
             ok: false,
-            dropped: { skills: ["s1"], commands: [], agents: [], hooks: [], mcpServers: [] },
+            dropped: {
+              skills: ["s1"],
+              commands: [],
+              agents: [],
+              hooks: [],
+              mcpServers: [],
+              workflows: [],
+            },
           };
         }
 
@@ -5749,7 +6394,7 @@ test("CR-05: a member's undo whose unstage failure carries no cause still rethro
     });
 
     // assert
-    await stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1"));
+    await stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b-s1"));
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,

@@ -57,6 +57,7 @@ import {
   writeAdoptingConfigEntries,
   type LedgerDegradationSignals,
 } from "./shared.ts";
+import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type {
@@ -706,9 +707,9 @@ function unwrapCascade(
  * author shipped, and the install row's resource count gives the user no
  * baseline to notice the shortfall. The caller renders the standalone half
  * through `./shared.ts::surfaceDiscoveryWarnings`, which update and
- * reinstall also call (D-141-05). Only the skills and commands bridges feed
- * that array; the agents bridge mixes three kinds of warning onto one result
- * field and rides the hygiene channel instead.
+ * reinstall also call (D-141-05). The skills, commands and workflows bridges
+ * feed that array; the agents bridge mixes three kinds of warning onto one
+ * result field and rides the hygiene channel instead.
  */
 async function collectPostCommitWarnings(
   installCtx: InstallLedgerSummary,
@@ -781,6 +782,24 @@ async function collectPostCommitWarnings(
     push(w);
   }
 
+  // WLIF-01: sweep workflow staging trees a previous run abandoned. Installing
+  // is what creates them, so the install side has to sweep or a machine that
+  // never uninstalls never would. Debug-logged only (D-19-01): no row is
+  // pushed, because a cleanup the user did not ask for does not narrate itself.
+  try {
+    const leaks = await garbageCollectWorkflowsStaging(installCtx.locations);
+    if (leaks.length > 0) {
+      hookDebugLog(
+        `install: workflows staging GC left ${leaks.length.toString()} tree(s) for ${plugin}@${marketplace}: ${leaks.join("; ")}`,
+      );
+    }
+  } catch (err) {
+    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    hookDebugLog(
+      `install: workflows staging GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
+    );
+  }
+
   return warnings;
 }
 
@@ -813,9 +832,11 @@ function composeInstalledRow(installCtx: InstallLedgerSummary, probe: SoftDepSta
   const { plugin } = installCtx;
   const declaresAgents = installCtx.stagedAgentNames.length > 0;
   const declaresMcp = installCtx.stagedMcpServerNames.length > 0;
+  const declaresWorkflows = installCtx.stagedWorkflowNames.length > 0;
 
   // The renderer emits the per-row soft-dep markers (`{requires
-  // pi-subagents}`, `{requires pi-mcp}`) from this list automatically.
+  // pi-subagents}`, `{requires pi-mcp}`, `{requires pi-dynamic-workflows}`)
+  // from this list automatically.
   const dependencies: Dependency[] = [];
   if (declaresAgents) {
     dependencies.push("agents");
@@ -823,6 +844,14 @@ function composeInstalledRow(installCtx: InstallLedgerSummary, probe: SoftDepSta
 
   if (declaresMcp) {
     dependencies.push("mcp");
+  }
+
+  // WDEP-02: a staged workflow declares the host engine. The envelope is
+  // written whether or not the engine is loaded -- the marker reports that
+  // nothing runs it yet, and the engine's own session_start storage scan picks
+  // it up on the next reload with no reinstall (WDEP-03).
+  if (declaresWorkflows) {
+    dependencies.push("workflows");
   }
 
   // SURF-05 / D-63-08: `{orphan rewake}` fires once per plugin regardless of
@@ -841,7 +870,7 @@ function composeInstalledRow(installCtx: InstallLedgerSummary, probe: SoftDepSta
   const severity =
     installCtx.frontmatterDegradations.length > 0
       ? "warning"
-      : companionSeverity({ declaresAgents, declaresMcp }, probe);
+      : companionSeverity({ declaresAgents, declaresMcp, declaresWorkflows }, probe);
 
   // IN-02 / IN-04: `version` passes straight through. Row-level `scope` is
   // OMITTED -- it always equals the marketplace block's scope here, and
@@ -930,6 +959,7 @@ interface PromotionOutcome {
   readonly version: string;
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  readonly declaresWorkflows: boolean;
   readonly materialized: readonly HydratableMember[];
 }
 
@@ -985,6 +1015,7 @@ async function promoteDependencyRecord(args: PromotionArgs): Promise<PromotionOu
       version: record.version,
       declaresAgents: record.resources.agents.length > 0,
       declaresMcp: record.resources.mcpServers.length > 0,
+      declaresWorkflows: record.resources.workflows.length > 0,
       materialized: [],
     };
   }
@@ -995,6 +1026,7 @@ async function promoteDependencyRecord(args: PromotionArgs): Promise<PromotionOu
     version: summary.version,
     declaresAgents: summary.stagedAgentNames.length > 0,
     declaresMcp: summary.stagedMcpServerNames.length > 0,
+    declaresWorkflows: summary.stagedWorkflowNames.length > 0,
     materialized: [
       {
         key: `${plugin}@${marketplace}`,
@@ -1162,6 +1194,7 @@ function promotedRowOutcome(args: {
     resourcesChanged: enabled,
     declaresAgents: promotion.declaresAgents,
     declaresMcp: promotion.declaresMcp,
+    declaresWorkflows: promotion.declaresWorkflows,
     promoted: true,
   };
   if (!orchestrated) {

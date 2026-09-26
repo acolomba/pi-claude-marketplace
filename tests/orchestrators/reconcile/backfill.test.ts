@@ -12,7 +12,7 @@
 // with no promised call: an unpromised `notify` or `getAllTools` call throws.
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
@@ -124,6 +124,8 @@ interface PluginTree {
   readonly lsp?: boolean;
   /** hooks.json whose kept handler carries a rewake field without `asyncRewake: true`. */
   readonly orphanRewakeHooks?: boolean;
+  /** A runnable workflow script, so a re-materialize would place an envelope. */
+  readonly workflow?: boolean;
 }
 
 async function writePluginTree(
@@ -154,6 +156,18 @@ async function writePluginTree(
     await writeFile(path.join(commandDir, "deploy.md"), "# deploy\n\nbody\n");
   }
 
+  if (tree.workflow === true) {
+    const workflowsDir = path.join(pluginRoot, "workflows");
+    await mkdir(workflowsDir, { recursive: true });
+    // A NAMED `meta` export: a default-export body classifies as skipped and
+    // stages nothing, so a case relying on it would prove nothing about
+    // whether a re-materialize ran.
+    await writeFile(
+      path.join(workflowsDir, "greet.js"),
+      'export const meta = { name: "greet", description: "greets" };\n',
+    );
+  }
+
   if (tree.lsp === true) {
     await writeFile(
       path.join(pluginRoot, ".lsp.json"),
@@ -180,12 +194,21 @@ async function writePluginTree(
   return pluginRoot;
 }
 
-/** Lay down the plugin trees and the cached marketplace manifest that declares them. */
+/**
+ * Lay down the plugin trees and the cached marketplace manifest that declares
+ * them.
+ *
+ * `sources` overrides the manifest entry's `source` for the named plugins.
+ * Every entry is a relative path source by default, which is the only shape
+ * that resolves offline; a case pinning the git-source bound (NFR-5) supplies
+ * an `owner/repo` shorthand or an `https://` URL here instead.
+ */
 async function writeMarketplaceSource(
   cwd: string,
   directory: string,
   marketplace: string,
   trees: Readonly<Record<string, PluginTree>>,
+  sources?: Readonly<Record<string, string>>,
 ): Promise<{ readonly marketplaceRoot: string; readonly manifestPath: string }> {
   const marketplaceRoot = path.join(cwd, directory);
   for (const [plugin, tree] of Object.entries(trees)) {
@@ -202,7 +225,7 @@ async function writeMarketplaceSource(
       plugins: Object.keys(trees).map((plugin) => ({
         name: plugin,
         version: "1.0.0",
-        source: `./plugins/${plugin}`,
+        source: sources?.[plugin] ?? `./plugins/${plugin}`,
       })),
     }),
   );
@@ -236,6 +259,7 @@ function pluginRecord(seed: RecordSeed): PluginRecord {
       agents: [],
       mcpServers: [],
       hooks: [],
+      workflows: [],
     },
     enabled: seed.enabled ?? true,
     provenance: "explicit",
@@ -308,6 +332,58 @@ function readResultFor(state: ExtensionState, stateExisted: boolean): ScopeReadR
   return { plan: undefined, invalidOutcomes: [], state, stateExisted };
 }
 
+/**
+ * Envelope file names under the host engine's saved workflows directory, or
+ * `[]` when the directory was never created. That directory lives under the
+ * hermetic HOME rather than under the scope root, so the scope-tree inventory
+ * the other cases assert cannot see it.
+ */
+async function savedWorkflowEntries(locations: ScopedLocations): Promise<string[]> {
+  try {
+    return (await readdir(locations.workflowsSavedDir)).sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Every axis a rewrite of state.json could move. Byte equality alone is
+ * satisfied by an atomic rewrite of identical content, which is a write; the
+ * inode catches exactly that rename, and the nanosecond mtime catches a
+ * truncating rewrite that reused the inode. One frozen object so a single
+ * deep equality reports all three.
+ */
+async function stateSnapshot(target: string): Promise<{
+  readonly bytes: string;
+  readonly inode: bigint;
+  readonly mtimeNs: bigint;
+}> {
+  const [bytes, metadata] = await Promise.all([
+    readFile(target, "utf8"),
+    stat(target, { bigint: true }),
+  ]);
+  return Object.freeze({ bytes, inode: metadata.ino, mtimeNs: metadata.mtimeNs });
+}
+
+/**
+ * Hold the scope's cross-process state lock for the length of one case, the way
+ * a second Pi process would. `withScopeLock` takes this same lock BEFORE it
+ * loads state or reads any record, so an operation that reaches for the
+ * re-materialize under a held lock fails at the lock rather than on anything it
+ * would have decided afterwards. Callers release it inside the case body rather
+ * than in an `after` hook, so it can never race the hook that removes the scope
+ * root it lives under.
+ */
+function holdScopeLock(locations: ScopedLocations): Promise<() => Promise<void>> {
+  return lockfile.lock(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+    retries: 0,
+    stale: 10_000,
+    update: 2_000,
+  });
+}
+
 /** A seeded scope that has been read but not re-materialized. */
 function seededScopeTree(): readonly string[] {
   return ["pi-claude-marketplace/", "pi-claude-marketplace/state.json"];
@@ -323,8 +399,8 @@ function fullyPromotedScopeTree(): readonly string[] {
     "pi-claude-marketplace/resources/prompts/",
     "pi-claude-marketplace/resources/prompts/hello:deploy.md",
     "pi-claude-marketplace/resources/skills/",
-    "pi-claude-marketplace/resources/skills/hello:tool/",
-    "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
+    "pi-claude-marketplace/resources/skills/hello-tool/",
+    "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
     "pi-claude-marketplace/skills-staging/",
     "pi-claude-marketplace/state.json",
   ];
@@ -427,7 +503,7 @@ describe("applyBackfillForScopeIsolated", () => {
     verifyBoundary();
   });
 
-  test("RECON-05: leaves state.json byte-identical when the recorded stamp already matches", async (t) => {
+  test("RECON-05: leaves state.json unchanged in bytes, inode and mtime when the recorded stamp already matches", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "gate-closed");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -448,7 +524,7 @@ describe("applyBackfillForScopeIsolated", () => {
       },
     };
     await seedState(locations, seeded);
-    const seededBytes = await readFile(locations.stateJsonPath, "utf8");
+    const seededSnapshot = await stateSnapshot(locations.stateJsonPath);
     const { ctx, pi, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
@@ -463,13 +539,13 @@ describe("applyBackfillForScopeIsolated", () => {
 
     // assert
     assert.deepStrictEqual(outcomes, []);
-    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), seededBytes);
+    assert.deepStrictEqual(await stateSnapshot(locations.stateJsonPath), seededSnapshot);
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
 
-  test("D-68-03: stamps a gate-open scope that records no partially-installed plugin", async (t) => {
+  test("D-68-03 / WCONV-02: stamps a gate-open scope whose scanned record did not grow", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "nothing-to-promote");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -668,13 +744,7 @@ describe("applyBackfillForScopeIsolated", () => {
       },
     };
     await seedState(locations, seeded);
-    const release = await lockfile.lock(locations.extensionRoot, {
-      lockfilePath: locations.stateLockFile,
-      realpath: false,
-      retries: 0,
-      stale: 10_000,
-      update: 2_000,
-    });
+    const release = await holdScopeLock(locations);
     const { ctx, pi, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [
@@ -706,6 +776,256 @@ describe("applyBackfillForScopeIsolated", () => {
       },
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  // ENBL-08 / D-116-03: the pair below measures "a disabled record is never
+  // scanned" rather than inferring it from a missing row. The manifest the
+  // record resolves through is made unparseable, which turns any read of it
+  // into a throw the scan cannot swallow: a scanned record surfaces a
+  // plugin-scoped failure row AND holds the version gate open, so a landed
+  // stamp beside an empty outcome array is a positive observation that the
+  // read never happened.
+  //
+  // Both records are seeded `installable: false` because that is the only
+  // population whose unresolvable manifest is observable. `installable: true` is
+  // in the scan population too (WCONV-01), but `resolveRecordedPluginOffline`
+  // answers a benign `undefined` for a clean record it cannot resolve -- so a
+  // clean record here would leave an empty outcome array and a landed stamp
+  // whether it was scanned or not, and the pair would be measuring nothing.
+  // Disabled-ness is orthogonal to installability (ENBL-05), so the degraded seed
+  // narrows nothing about the filter under test.
+  //
+  // The limit, stated rather than glossed: the observable is the marketplace
+  // MANIFEST READ, which is the first statement of the offline re-resolve. It
+  // is one step downstream of "the resolver was never called" -- a future
+  // change that read the manifest before the disabled filter would keep this
+  // pair honest about the read while no longer bounding the resolve.
+  test("ENBL-08 / D-116-03: leaves a disabled record's poisoned manifest unread, so the stamp lands", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "disabled-unread-manifest");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["themes"],
+            enabled: false,
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    // The poison is laid AFTER the seed so the record still names a manifest
+    // path that exists; only its contents are unreadable. The manifest cache
+    // cannot mask it either -- a stat failure there is a pure miss and the
+    // loader's error propagates verbatim.
+    await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- both halves. The empty array alone would be an absence; the
+    // landed stamp is what makes it a measurement, because a record that WAS
+    // scanned would have thrown, pushed a failure row and held the gate open.
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("ENBL-08 / D-116-03: reads the same poisoned manifest when the record is enabled, and holds the gate open", async (t) => {
+    // arrange -- the twin of the case above in every respect but the disabled
+    // flag, so the poison is proved VISIBLE rather than assumed. Without this
+    // half the measured zero could be measuring an inert fixture.
+    const { cwd, locations } = await createHermeticProjectScope(t, "enabled-unread-manifest");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["themes"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- the read happened: a failure row, and the stamp withheld so the
+    // scope retries next load.
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "unparseable",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  // WCONV-01 / SC-4: the pair below is the convergence half of the same fixture.
+  // A record recorded `installable: true` carries no shortfall, so a marketplace
+  // manifest it cannot read is a reason to promote nothing, not a failure to
+  // report: no row, and the gate closes. These two cases pin that answer AND pin
+  // that the silence is scoped to that population rather than blanket -- a
+  // degraded sibling under the SAME poisoned manifest still fails loudly and
+  // still holds the gate open (SF-02).
+  test("WCONV-01: converges over a clean record whose manifest cannot be read, emitting nothing", async (t) => {
+    // arrange -- a scope whose marketplace source went unreadable under it. Two
+    // clean records, so a per-record surface would be visible as two rows.
+    const { cwd, locations } = await createHermeticProjectScope(t, "clean-unreadable-manifest");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+      world: { skill: "clean", workflow: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+          world: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "world"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- no rows, and the stamp LANDED. The landed stamp is the half that
+    // carries convergence: the gate is closed, so this load is the last one that
+    // reads the dead manifest rather than the first of an unbounded series.
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("SF-02 / WCONV-01: still fails a degraded record under the same unreadable manifest", async (t) => {
+    // arrange -- the discriminator. One clean record and one partially-installed
+    // record share a poisoned manifest. If the fix silenced the resolve throw for
+    // both populations this would emit zero rows and stamp; if it silenced
+    // neither it would emit two.
+    const { cwd, locations } = await createHermeticProjectScope(t, "mixed-unreadable-manifest");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+      world: { skill: "clean", workflow: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+          world: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "world"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["themes"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- exactly one row, for the record that had a pending shortfall, and
+    // the stamp withheld so that record retries (SF-02 unchanged).
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "world",
+        reason: "unparseable",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -820,11 +1140,12 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               unsupported: [],
             },
             resources: {
-              skills: ["hello:tool"],
+              skills: ["hello-tool"],
               prompts: ["hello:deploy"],
               agents: [],
               mcpServers: [],
               hooks: [],
+              workflows: [],
             },
             enabled: true,
             provenance: "explicit",
@@ -902,11 +1223,12 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               unsupported: ["lspServers"],
             },
             resources: {
-              skills: ["hello:tool"],
+              skills: ["hello-tool"],
               prompts: [],
               agents: [],
               mcpServers: [],
               hooks: [],
+              workflows: [],
             },
             enabled: true,
             provenance: "explicit",
@@ -921,8 +1243,8 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       "pi-claude-marketplace/",
       "pi-claude-marketplace/resources/",
       "pi-claude-marketplace/resources/skills/",
-      "pi-claude-marketplace/resources/skills/hello:tool/",
-      "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
+      "pi-claude-marketplace/resources/skills/hello-tool/",
+      "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);
@@ -1013,11 +1335,12 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               unsupported: [],
             },
             resources: {
-              skills: ["hello:tool"],
+              skills: ["hello-tool"],
               prompts: ["hello:deploy"],
               agents: [],
               mcpServers: [],
               hooks: ["hello"],
+              workflows: [],
             },
             hookEntries: [{ event: "PreToolUse", matcher: "" }],
             enabled: true,
@@ -1039,8 +1362,8 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       "pi-claude-marketplace/resources/prompts/",
       "pi-claude-marketplace/resources/prompts/hello:deploy.md",
       "pi-claude-marketplace/resources/skills/",
-      "pi-claude-marketplace/resources/skills/hello:tool/",
-      "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
+      "pi-claude-marketplace/resources/skills/hello-tool/",
+      "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);
@@ -1137,11 +1460,12 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               unsupported: [],
             },
             resources: {
-              skills: ["hello:tool"],
+              skills: ["hello-tool"],
               prompts: ["hello:deploy"],
               agents: [],
               mcpServers: [],
               hooks: [],
+              workflows: [],
             },
             enabled: true,
             provenance: "explicit",
@@ -1191,6 +1515,58 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
 
     // assert
     assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("RECON-05: places no workflow envelope for a record whose supported set did not grow", async (t) => {
+    // arrange -- the record already claims `workflows`, and the source still
+    // ships exactly the one script it claimed, so the set did not grow. This is
+    // the SECOND of the two structures that keep a reload from rewriting
+    // executable code: the first is an empty plan bucket, this is the gate the
+    // backfill applies to the records the plan never reaches.
+    const { cwd, locations } = await createHermeticProjectScope(t, "workflows-no-growth");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills", "workflows"],
+            unsupported: ["themes"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act -- the gate is deliberately left OPEN (a stale stamp), so the scan
+    // does run and the skip is the growth test's doing, not the version test's.
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- the engine's saved directory is the one place a workflow
+    // re-materialize would show, and it sits OUTSIDE the scope root that the
+    // sibling cases' tree inventory covers, so it is asserted on its own.
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
       ...seeded,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
@@ -1369,6 +1745,75 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     verifyBoundary();
   });
 
+  test("RECON-04: does not re-materialize behind a disable the same load already applied", async (t) => {
+    // arrange -- the shape the apply pass leaves when it disables a plugin: the
+    // scan's snapshot PREDATES that pass, so it still reports the record
+    // enabled, and the growth test still says the set grew.
+    //
+    // What the dedupe protects is single-emit (RECON-04): no second row for a
+    // plugin this load already transitioned, and no redundant re-materialize
+    // over it. It is NOT the last line of defence against re-enabling a disabled
+    // record -- `runLockedReinstall` re-reads fresh state under its own lock and
+    // refuses a disabled record with `already disabled`
+    // (`reinstall.ts` isRecordedButDisabled branch), which is precisely the
+    // cross-process shape this fixture simulates. `backfill.ts` says the same
+    // beside its own ENBL-08 filter.
+    const { cwd, locations } = await createHermeticProjectScope(t, "disable-already-touched");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+    });
+    const snapshot: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, snapshot);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [
+      { kind: "plugin-disabled", scope: "project", marketplace: "mp", plugin: "hello" },
+    ];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(snapshot, true),
+      outcomes,
+    );
+
+    // assert -- no second row and no envelope: the plugin the user just
+    // disabled stays inert.
+    assert.deepStrictEqual(outcomes, [
+      { kind: "plugin-disabled", scope: "project", marketplace: "mp", plugin: "hello" },
+    ]);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...snapshot,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  // ENBL-08: the cases below measure the filter against a fully LIVE fixture --
+  // a readable manifest and a real strict-superset growth -- which the
+  // poisoned-manifest pair cannot do, because poisoning the manifest denies the
+  // growth test its input. Everything up to the re-materialize therefore runs,
+  // and the filter is the only thing that can stop the scan short of it. The
+  // enabled control promotes the same fixture, so the disabled case's silence
+  // is a fact about the filter rather than about a fixture nothing would have
+  // promoted.
   test("ENBL-08: skips a disabled record whose supported set grew", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "disabled-partial");
@@ -1403,7 +1848,8 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       outcomes,
     );
 
-    // assert
+    // assert -- silence and a landed stamp. The D-116-03 pair above is what
+    // proves the record was never READ; this case pins the row-level outcome.
     assert.deepStrictEqual(outcomes, []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
       ...seeded,
@@ -1540,11 +1986,12 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               unsupported: ["lspServers"],
             },
             resources: {
-              skills: ["hello:tool"],
+              skills: ["hello-tool"],
               prompts: ["hello:deploy"],
               agents: [],
               mcpServers: [],
               hooks: [],
+              workflows: [],
             },
             enabled: true,
             provenance: "explicit",
@@ -1556,6 +2003,284 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), fullyPromotedScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  // The re-materialize takes the per-scope state lock itself
+  // (`runLockedReinstall`), so a concurrent process holding it fails the
+  // reinstall at the lock rather than on anything it would have read. That
+  // failure is caught INSIDE `reinstallPlugin` and returned as a `failed`
+  // outcome, and the failed arm prefers the outcome's own pre-narrowed reason
+  // over `classifyOrchestratorThrow`. Both layers must therefore agree on the
+  // token: the wrapper one layer up already says `lock held` for the same error
+  // (WR-02 above), and a row that said `unreadable` would claim the cascade
+  // could not read a plugin that nothing had trouble reading.
+  test("ENBL-08: reports a held scope lock on the re-materialize as `lock held` and holds the gate open", async (t) => {
+    // arrange -- the enabled control's fixture, under a lock another process holds.
+    const { cwd, locations } = await createHermeticProjectScope(t, "enabled-lock-held");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true, lsp: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["lspServers"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const release = await holdScopeLock(locations);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+    await release();
+
+    // assert -- one plugin-scoped failure row under the lock's own token, and
+    // no state.json row: a failed scan skips the stamp write instead of
+    // colliding with the lock a second time, so the gate stays open for the
+    // next load and the record is left exactly as seeded.
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "lock held",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("WCONV-01: promotes a cleanly-installed record whose supported set grew", async (t) => {
+    // arrange -- the shape a plugin leaves behind when it declares a component
+    // kind the extension did not support at install time: the kind is simply
+    // absent from BOTH halves of `compatibility`, so the record reads exactly
+    // like a clean install and only the growth test can see the boundary move.
+    const { cwd, locations } = await createHermeticProjectScope(t, "clean-growth");
+    t.mock.timers.enable({ apis: ["Date"], now: new Date(REMATERIALIZED_AT) });
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+    });
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot,
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- one promotion row, the grown set persisted with the workflow
+    // command named, and the envelope in the host engine's saved directory:
+    // the commands exist after this load with nothing run by the user.
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-backfilled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        version: "1.0.0",
+        dependencies: ["workflows"],
+        installable: true,
+        unsupported: [],
+      },
+    ]);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), ["hello:greet.json"]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: {
+            provenance: "explicit",
+            version: "1.0.0",
+            resolvedSource: pluginRoot,
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["skills", "workflows"],
+              unsupported: [],
+            },
+            resources: {
+              skills: ["hello-tool"],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: ["hello:greet"],
+            },
+            enabled: true,
+            // D-68-02: the promotion re-materializes at the recorded version, so
+            // both the version and the original install time survive it.
+            installedAt: RECORDED_AT,
+            updatedAt: REMATERIALIZED_AT,
+          },
+        }),
+      },
+    });
+    // NFR-5: the whole promotion ran off the cached manifest and the local
+    // clone, so the counting fake saw no remote at all.
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("WCONV-01: declines to degrade a clean record whose re-resolve is partially-available", async (t) => {
+    // arrange -- growth and degradation in the same re-resolve. The record is
+    // recorded CLEAN (`installable: true`, empty unsupported); the tree it
+    // re-resolves against adds a supported `commands` kind AND an unsupported
+    // `lspServers` one, so the supported set strictly grows while the resolve
+    // answers `partially-available`.
+    //
+    // Promoting it would unstage whatever dropped out of the supported set and
+    // persist `installable: false`, degrading a clean record on a reload the user
+    // did not initiate. `docs/output-catalog.md` states the project's stance on
+    // that transition for the update path; this case pins the same stance here.
+    const { cwd, locations } = await createHermeticProjectScope(t, "clean-degrade-declined");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true, lsp: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- a benign skip, not a failure: no row, the record untouched (still
+    // clean, still naming only `skills`), nothing unstaged, and the gate free to
+    // close. The declined transition is the one the sibling case above PERFORMS
+    // when the same growth resolves `installable`, so this is not the growth test
+    // declining.
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("NFR-5: skips a git-source record whose supported set grew, and reaches no remote", async (t) => {
+    // arrange -- both git-shaped sources the resolver classifies away from
+    // `path`: the `owner/repo` shorthand and an `https://` URL. The scan
+    // re-resolves with no clone-cache resolver, so each answers `unavailable`
+    // and never reaches the re-materialize. Both trees are seeded and both
+    // records seeded at a set that WOULD grow, so a case that passes here
+    // cannot be passing because the growth test skipped them.
+    const { cwd, locations } = await createHermeticProjectScope(t, "git-source");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(
+      cwd,
+      "mp-src",
+      "mp",
+      {
+        hello: { skill: "clean", workflow: true },
+        world: { skill: "clean", workflow: true },
+      },
+      { hello: "acolomba/some-plugin", world: "https://example.com/some-plugin.git" },
+    );
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+          world: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "world"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- a benign skip, not a failure: an unresolvable source leaves the
+    // version gate free to close. The empty clone list is the NFR-5 half -- a
+    // reload the user did not initiate reaches no remote, and the counting fake
+    // would have recorded the attempt if one had been made.
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     verifyBoundary();
   });
 
@@ -1631,7 +2356,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
             installable: true,
             supported: ["skills"],
             unsupported: [],
-            skills: ["hello:tool"],
+            skills: ["hello-tool"],
           }),
           hello: pluginRecord({
             pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
@@ -1906,11 +2631,12 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               unsupported: [],
             },
             resources: {
-              skills: ["bravo:tool"],
+              skills: ["bravo-tool"],
               prompts: ["bravo:deploy"],
               agents: [],
               mcpServers: [],
               hooks: [],
+              workflows: [],
             },
             enabled: true,
             provenance: "explicit",
@@ -1928,8 +2654,8 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       "pi-claude-marketplace/resources/prompts/",
       "pi-claude-marketplace/resources/prompts/bravo:deploy.md",
       "pi-claude-marketplace/resources/skills/",
-      "pi-claude-marketplace/resources/skills/bravo:tool/",
-      "pi-claude-marketplace/resources/skills/bravo:tool/SKILL.md",
+      "pi-claude-marketplace/resources/skills/bravo-tool/",
+      "pi-claude-marketplace/resources/skills/bravo-tool/SKILL.md",
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);

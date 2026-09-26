@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -9,6 +10,7 @@ import {
   stat,
   symlink,
   unlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
@@ -47,6 +49,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
@@ -194,6 +197,7 @@ function makePluginRecord(
       agents: resources.agents ?? [],
       mcpServers: resources.mcpServers ?? [],
       hooks: resources.hooks ?? [],
+      workflows: resources.workflows ?? [],
     },
     enabled: true,
     provenance,
@@ -206,7 +210,7 @@ function cascadeFailure(cause: Error): typeof cascadeUnstagePlugin {
   return () =>
     Promise.resolve({
       ok: false,
-      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
       cause,
     });
 }
@@ -218,6 +222,28 @@ async function seedState(extensionRoot: string, state: ExtensionState): Promise<
 
 async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
   return withHermeticEnvironment("uninstall-", fn);
+}
+
+/**
+ * Write one saved workflow envelope at its recorded name. The path is composed
+ * with `path.join` rather than the asynchronous `locations.workflowArtifactPath`
+ * so a forgotten `await` cannot yield a leaf named after a promise.
+ */
+async function seedWorkflowEnvelope(
+  locations: ReturnType<typeof locationsFor>,
+  generatedName: string,
+): Promise<string> {
+  const target = path.join(locations.workflowsSavedDir, `${generatedName}.json`);
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await writeFile(
+    target,
+    JSON.stringify({
+      name: generatedName,
+      description: "greets",
+      script: 'export const meta = { name: "greet", description: "greets" };\n',
+    }),
+  );
+  return target;
 }
 
 /** Build a minimum-viable owned agent file (basename prefix + body marker). */
@@ -238,6 +264,8 @@ async function seedFullPlugin(
   agentFile: string;
   hooksFile: string;
   mcpJson: string;
+  workflowName: string;
+  workflowEnvelope: string;
 }> {
   await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -298,6 +326,11 @@ async function seedFullPlugin(
     }),
   );
 
+  // workflow: <workflowsSavedDir>/<plugin>:<name>.json -- outside every scope
+  // root, so only the cascade's recorded-name removal will ever find it.
+  const workflowName = `${plugin}:greet`;
+  const workflowEnvelope = await seedWorkflowEnvelope(locations, workflowName);
+
   // Seed state record referencing each resource.
   await seedState(locations.extensionRoot, {
     schemaVersion: 1,
@@ -320,13 +353,14 @@ async function seedFullPlugin(
             agents: [agentName],
             mcpServers: [mcpServerName],
             hooks: [plugin],
+            workflows: [workflowName],
           }),
         },
       },
     },
   });
 
-  return { skillDir, commandFile, agentFile, hooksFile, mcpJson };
+  return { skillDir, commandFile, agentFile, hooksFile, mcpJson, workflowName, workflowEnvelope };
 }
 
 // PU-1 + PU-8 (success path, hint emitted) ---------------------------
@@ -364,10 +398,10 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
       // D-16-11 effective-state rule. Reload-hint is emitted by notify()
       // per D-16-12 (uninstalled is in the state-changing variant set).
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined); // success
+      assert.equal(notifications[0]?.severity, "warning"); // success
       assert.equal(
         notifications[0]?.message,
-        "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
       );
       assert.doesNotMatch(notifications[0]?.message ?? "", /Plugin uninstall:/);
     } finally {
@@ -410,10 +444,20 @@ for (const scope of ["user", "project"] as const) {
         tree: ["nested/", "nested/session.bin"],
         sessionBytes: Buffer.from([0, 7, 255, 10]),
       },
-      expectedReasonBrace: " {data kept}",
+      // WLIF-06: `seedFullPlugin` ships a workflow, so every arm's removal
+      // retires a command that stays registered until a reload.
+      expectedReasonBrace: " {data kept, stale workflow command}",
     },
-    { keepData: false, expectedDataTree: null, expectedReasonBrace: "" },
-    { keepData: undefined, expectedDataTree: null, expectedReasonBrace: "" },
+    {
+      keepData: false,
+      expectedDataTree: null,
+      expectedReasonBrace: " {stale workflow command}",
+    },
+    {
+      keepData: undefined,
+      expectedDataTree: null,
+      expectedReasonBrace: " {stale workflow command}",
+    },
   ] satisfies readonly {
     keepData: boolean | undefined;
     expectedDataTree: DataTree | null;
@@ -493,7 +537,11 @@ for (const scope of ["user", "project"] as const) {
           assert.deepStrictEqual(await readDataTree(dataDir), expectedDataTree);
           assert.deepStrictEqual(notifications, [
             {
-              message: `● mp [${scope}]\n  ○ hello v0.0.1 (uninstalled)${expectedReasonBrace}\n\n/reload to pick up changes`,
+              message:
+                "A plugin operation needs attention.\n" +
+                `\n● mp [${scope}]\n  ○ hello v0.0.1 (uninstalled)${expectedReasonBrace}\n` +
+                "\n/reload to pick up changes",
+              severity: "warning",
             },
           ]);
         } finally {
@@ -503,6 +551,149 @@ for (const scope of ["user", "project"] as const) {
     });
   }
 }
+
+test("WLIF-03: a successful uninstall takes the plugin's workflow envelope off disk", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-workflows-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
+      // Precondition: without it a fixture that stages nothing makes the
+      // absence assertion below pass having removed nothing.
+      assert.equal(await pathExists(seeded.workflowEnvelope), true, "envelope present before");
+      const { ctx, pi, notifications } = makeCtx();
+
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(notifications[0]?.severity, "warning");
+      await assert.rejects(() => stat(seeded.workflowEnvelope), { code: "ENOENT" });
+      assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-06: an uninstall that took an envelope off disk names the reload remedy", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wlif06-"));
+    try {
+      // arrange -- `seedFullPlugin` records one workflow and puts its envelope
+      // on disk, so the cascade really reports a removal.
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert -- the envelope is gone and the command it registered is not,
+      // because the host exposes no unregister call. The token and the reload
+      // trailer state different facts and both are on the screen.
+      assert.equal(await pathExists(seeded.workflowEnvelope), false);
+      assert.equal(notifications.length, 1);
+      assert.deepStrictEqual(notifications[0], {
+        message:
+          "A plugin operation needs attention.\n\n" +
+          "● mp [project]\n" +
+          "  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-06: an uninstall that retired nothing renders the row it always rendered", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wlif06-empty-"));
+    try {
+      // arrange -- the same verb over a record naming no workflow. The gate is
+      // what the cascade REPORTED dropping, so an empty inventory drops
+      // nothing and there is nothing to report.
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined);
+      record.resources.workflows = [];
+      await seedState(locations.extensionRoot, state);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert -- brace-less and info: the absent `reasons` key is what
+      // preserves these bytes, and the severity is what a present-and-empty
+      // key would not change but a wrongly-gated token would.
+      assert.equal(notifications.length, 1);
+      assert.deepStrictEqual(notifications[0], {
+        message: "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-03: uninstalling a plugin with an empty workflow inventory touches no saved file", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-workflows-empty-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedGitPlugin(locations, "mp", { solo: "keySolo" }, cwd);
+      // Overwrite the seeded record with one naming no workflows, while a
+      // foreign envelope stays in the shared directory.
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces["mp"]?.plugins["solo"];
+      assert.ok(record);
+      record.resources.workflows = [];
+      await seedState(locations.extensionRoot, state);
+      const foreign = await seedWorkflowEnvelope(locations, "someone-else:greet");
+      const before = await readdir(locations.workflowsSavedDir);
+      assert.deepStrictEqual(before.sort(), ["solo:greet.json", "someone-else:greet.json"]);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "solo",
+      });
+
+      assert.equal(notifications[0]?.severity, undefined);
+      assert.deepStrictEqual((await readdir(locations.workflowsSavedDir)).sort(), before.sort());
+      await stat(foreign);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 // PU-2 (state commit BEFORE data-dir cleanup; cleanup leaks SWALLOWED
 // per D-19-01 -- the rm() still runs; only the user-visible warning surface
@@ -560,10 +751,10 @@ test("PU-2: pluginDataDir rm failure leaves state record removed; cleanup leak S
       // failed) but the warning surface is gone; the rm() call inside
       // uninstall.ts's try/catch swallowed the error silently.
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(notifications[0]?.severity, "warning");
       assert.equal(
         notifications[0]?.message,
-        "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
       );
       // Defense-in-depth: the dropped warning content (the leaked
       // dataDir path) MUST NOT appear in any notification.
@@ -1016,7 +1207,14 @@ test("PU-8 (b): V2 per-variant reload-hint -- emitted on uninstalled even with z
       const stubCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: true,
-          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+          dropped: {
+            skills: [],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: [],
+            workflows: [],
+          },
         });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -1182,7 +1380,14 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
       const stubCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: true,
-          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+          dropped: {
+            skills: [],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: [],
+            workflows: [],
+          },
         });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -1285,6 +1490,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
             agents: [],
             hooks: ["hello"],
             mcpServers: [],
+            workflows: [],
           },
           cause: err,
         });
@@ -1372,6 +1578,86 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
   });
 });
 
+test("WLIF-06: a partial uninstall cascade that took an envelope off disk names the reload remedy", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wlif06-failed-"));
+    try {
+      // arrange -- the partial-cascade shape above with one workflow among the
+      // artifacts the cascade REPORTED dropping before it threw. A command is
+      // then registered over a removed envelope AND the uninstall did not
+      // finish, so the row owes both facts; the case above, whose cascade drops
+      // no workflow, is the negative control that keeps the token gated.
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord({ skills: ["skill1"], workflows: ["mp:greet"] }) },
+          },
+        },
+      });
+
+      const stubCascade: typeof cascadeUnstagePlugin = () => {
+        const err = Object.assign(new Error("EACCES on agent unlink"), { code: "EACCES" });
+        return Promise.resolve({
+          ok: false,
+          dropped: {
+            skills: ["skill1"],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: [],
+            workflows: ["mp:greet"],
+          },
+          cause: err,
+        });
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+      });
+
+      // assert -- the token joins the failure reason at the tail rather than
+      // replacing it, in the same last position every other stamping verb gives
+      // it. Severity stays `error`: the uninstall was not carried out, which
+      // outranks the warning band the token carries alone.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.ok(
+        (notifications[0]?.message ?? "").startsWith(
+          "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed) {permission denied, stale workflow command}\n",
+        ),
+        `WLIF-06: expected the tail token on the failure row; got "${notifications[0]?.message ?? ""}"`,
+      );
+      // The reload trailer is still structurally absent: the token is about a
+      // command that is already registered, not about something to pick up.
+      assert.equal(
+        (notifications[0]?.message ?? "").includes("/reload to pick up changes"),
+        false,
+        "WLIF-06: a failed uninstall must not emit the reload-hint trailer",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof AgentsUnstageFailureError", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-tr03-ag5-"));
@@ -1418,6 +1704,7 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
             agents: [],
             hooks: [],
             mcpServers: [],
+            workflows: [],
           },
           cause: err,
         });
@@ -1629,7 +1916,14 @@ test("cascade failure without a cause uses the exported fallback error", async (
       const noCauseCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+          dropped: {
+            skills: [],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: [],
+            workflows: [],
+          },
         });
       const { ctx, pi, notifications } = makeCtx();
 
@@ -1974,7 +2268,7 @@ test("RECON-03 uninstall standalone-default mode -- omitted notifications option
       assert.equal(notifications.length, 1);
       assert.equal(
         notifications[0]?.message,
-        "● mp [project]\n  ○ byte-hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ○ byte-hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2435,12 +2729,15 @@ async function seedGitPlugin(
   marketplace: string,
   plugins: Record<string, string>, // pluginName -> cloneKey
   cwd: string,
-): Promise<void> {
+): Promise<Record<string, string>> {
   await mkdir(locations.extensionRoot, { recursive: true });
 
   const pluginRecords: Record<string, PluginRecord> = {};
+  const envelopes: Record<string, string> = {};
   for (const [pluginName, cloneKey] of Object.entries(plugins)) {
-    const record = makePluginRecord();
+    const workflowName = `${pluginName}:greet`;
+    envelopes[pluginName] = await seedWorkflowEnvelope(locations, workflowName);
+    const record = makePluginRecord({ workflows: [workflowName] });
     record.resolvedSource = path.join(locations.pluginClonesDir, cloneKey);
     record.resolvedSha = GIT_SHA_A;
     pluginRecords[pluginName] = record;
@@ -2473,6 +2770,8 @@ async function seedGitPlugin(
       },
     },
   });
+
+  return envelopes;
 }
 
 test("preservation bypasses the data path while retiring routes, caches and the last clone", async () => {
@@ -2556,8 +2855,13 @@ test("preservation bypasses the data path while retiring routes, caches and the 
       assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
       assert.deepStrictEqual(notifications, [
         {
+          // WLIF-06: the seeded plugin ships a workflow, so the removal retires
+          // a command that stays registered until a reload.
           message:
-            "● mp [project]\n  ○ solo v0.0.1 (uninstalled) {data kept}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n" +
+            "\n● mp [project]\n  ○ solo v0.0.1 (uninstalled) {data kept, stale workflow command}\n" +
+            "\n/reload to pick up changes",
+          severity: "warning",
         },
       ]);
     } finally {
@@ -2587,7 +2891,7 @@ test("uninstalling the last referencer of a git clone deletes its plugin-clones 
 
       // Success row emitted, no error.
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(notifications[0]?.severity, "warning");
       // Last referencer removed -> clone dir garbage-collected.
       assert.equal(
         await pathExists(cloneDir),
@@ -2677,7 +2981,7 @@ test("a GC rm leak does not fail the uninstall (leak swallowed per D-19-01)", as
 
       // Uninstall still reports success (leak is not user-facing).
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(notifications[0]?.severity, "warning");
       const errors = notifications.filter((n) => n.severity === "error");
       assert.equal(errors.length, 0, "GC leak must not surface as an error notification");
     } finally {
@@ -2834,10 +3138,10 @@ test("D-19-01: a clone-GC throw (plugin-clones path is a FILE) is swallowed -- t
       const after = await loadState(locations.extensionRoot);
       assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false);
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(notifications[0]?.severity, "warning");
       assert.equal(
         notifications[0]?.message,
-        "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2856,8 +3160,16 @@ test("D-19-01: a clone-GC throw (plugin-clones path is a FILE) is swallowed -- t
 // gone. D-98-12 chose per-kind isolation over fixture economy: a regression
 // in one bridge arm turns exactly one case red and names the arm.
 
-/** The `(uninstalled)` row bytes, identical to the form PU-1 pins. The
- *  resource-kind mix does not change the row, so every case shares it. */
+/** The `(uninstalled)` row bytes for a `seedFullPlugin` fixture. The
+ *  resource-kind mix does not change the row -- but the fixture seeds a
+ *  workflow, so every one of these removals retires a command the host cannot
+ *  unregister and the row carries the WLIF-06 token at `warning`. */
+const LIFE_04_UNINSTALLED_ROW_STALE =
+  "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes";
+
+/** The same row for a record naming NO workflow: nothing was retired, so the
+ *  brace and the severity raise are both absent and the bytes are the legacy
+ *  form. The pair is what shows the token is gated, not unconditional. */
 const LIFE_04_UNINSTALLED_ROW =
   "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes";
 
@@ -2888,7 +3200,7 @@ test("LIFE-04: manifest-absent uninstall removes the skill directory", async () 
       const after = await loadState(locations.extensionRoot);
       assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false, "record removed");
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.message, LIFE_04_UNINSTALLED_ROW);
+      assert.equal(notifications[0]?.message, LIFE_04_UNINSTALLED_ROW_STALE);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2917,7 +3229,7 @@ test("LIFE-04: manifest-absent uninstall removes the command file", async () => 
       const after = await loadState(locations.extensionRoot);
       assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false, "record removed");
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.message, LIFE_04_UNINSTALLED_ROW);
+      assert.equal(notifications[0]?.message, LIFE_04_UNINSTALLED_ROW_STALE);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2951,7 +3263,7 @@ test("LIFE-04: manifest-absent uninstall removes the agent file and its index ro
       const after = await loadState(locations.extensionRoot);
       assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false, "record removed");
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.message, LIFE_04_UNINSTALLED_ROW);
+      assert.equal(notifications[0]?.message, LIFE_04_UNINSTALLED_ROW_STALE);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2984,7 +3296,7 @@ test("LIFE-04: manifest-absent uninstall removes the staged hooks config", async
       const after = await loadState(locations.extensionRoot);
       assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false, "record removed");
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.message, LIFE_04_UNINSTALLED_ROW);
+      assert.equal(notifications[0]?.message, LIFE_04_UNINSTALLED_ROW_STALE);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3031,7 +3343,7 @@ test("LIFE-04: manifest-absent uninstall removes only the owned mcp.json server"
       const after = await loadState(locations.extensionRoot);
       assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false, "record removed");
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.message, LIFE_04_UNINSTALLED_ROW);
+      assert.equal(notifications[0]?.message, LIFE_04_UNINSTALLED_ROW_STALE);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3389,6 +3701,10 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         mcpServers: ["uni-server"],
         prompts: [],
         skills: [],
+        // The refusal lands on the hooks arm, which the cascade reaches BEFORE
+        // the workflows arm, so the envelope is untouched and the record still
+        // names it. The retry below is what removes both.
+        workflows: [seeded.workflowName],
       });
       assert.deepStrictEqual(firstSchedule, [
         `unstage:skill:uni-skill`,
@@ -3521,7 +3837,9 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
       ]);
       assert.deepStrictEqual(notifications.slice(1), [
         {
-          message: "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
+          severity: "warning",
         },
       ]);
       assert.equal(firstStateBytes, stateBytes);
@@ -3768,7 +4086,9 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
       ]);
       assert.deepStrictEqual(notifications.slice(1), [
         {
-          message: "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
+          severity: "warning",
         },
       ]);
       assert.equal(firstStateBytes, stateBytes);
@@ -4182,7 +4502,9 @@ test("retry proof: uninstall: a refused cache drop leaves the cache file and the
       assert.equal(second, undefined);
       assert.deepStrictEqual(firstNotifications, [
         {
-          message: "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
+          severity: "warning",
         },
       ]);
       assert.deepStrictEqual(notifications.slice(1), [
@@ -4361,7 +4683,9 @@ test("retry proof: uninstall: a refused clone reclaim orphans the last-reference
       assert.equal(second, undefined);
       assert.deepStrictEqual(firstNotifications, [
         {
-          message: "● mp [project]\n  ○ solo v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n  ○ solo v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
+          severity: "warning",
         },
       ]);
       assert.deepStrictEqual(notifications.slice(1), [
@@ -5970,6 +6294,7 @@ function cascadeFailingFor(
     return Promise.resolve({
       ok: false,
       dropped: {
+        workflows: [],
         skills: dropped.skills ?? [],
         commands: dropped.commands ?? [],
         agents: dropped.agents ?? [],
@@ -6172,6 +6497,140 @@ test("D-05-13: a pruned member whose cascade reports no cause renders the fallba
         },
       ]);
       assert.deepStrictEqual(await recordedInventory(locations), { "d1@mp": ["mp-d1-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WLIF-01: the removal-side staging sweep, beside the clone collector.
+//
+// Workflow staging trees live under the home directory rather than under any
+// scope root, so nothing else in the post-uninstall cleanup reaches them. The
+// sweep is never user-facing: a failure or a leak is only debug-logged, so
+// cases assert on disk state, on the notification staying exactly what it
+// would have been, and on what `hookDebugLog` recorded.
+
+test("WLIF-01: uninstalling removes an abandoned staging tree and spares a live one", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-staging-sweep-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const abandoned = path.join(locations.workflowsStagingDir, "abandoned");
+      await mkdir(abandoned, { recursive: true });
+      await writeFile(path.join(abandoned, "hello_greet.json"), "{}\n");
+      // Two days back: comfortably past the sweeper's one-day abandonment bound.
+      const backdated = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      await utimes(abandoned, backdated, backdated);
+      await mkdir(path.join(locations.workflowsStagingDir, "in-flight"), { recursive: true });
+      const { ctx, pi } = makeCtx();
+      const logged = captureDebugLog(t);
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual((await readdir(locations.workflowsStagingDir)).sort(), ["in-flight"]);
+      assert.deepStrictEqual(logged, [], "a clean sweep with no leaks logs nothing");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-01: an uninstall succeeds unchanged when the staging sweep throws", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-staging-sweep-throws-"));
+    try {
+      // arrange -- a regular file where the staging directory belongs makes the
+      // sweeper's enumeration fail with an errno that is not ENOENT, which it
+      // rethrows into the cleanup block's swallow.
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
+      await rm(locations.workflowsStagingDir, { recursive: true, force: true });
+      await mkdir(locations.workflowsHomeDir, { recursive: true });
+      await writeFile(locations.workflowsStagingDir, "not a directory");
+      const { ctx, pi, notifications } = makeCtx();
+      const logged = captureDebugLog(t);
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert -- the swallow is the point: the sweep failure is invisible to
+      // the user, though it is debug-logged.
+      assert.equal(await pathExists(seeded.workflowEnvelope), false, "envelope removed");
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "warning");
+      assert.equal(
+        notifications[0]?.message,
+        "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
+      );
+      assert.equal(await readFile(locations.workflowsStagingDir, "utf8"), "not a directory");
+      assert.deepStrictEqual(logged, [
+        `[hooks] uninstall: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir '${locations.workflowsStagingDir}'`,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-01: uninstall debug-logs a leak when the staging sweep cannot remove an abandoned tree", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-staging-sweep-leak-"));
+    try {
+      // arrange -- the abandoned tree itself is otherwise perfectly sweepable;
+      // making its PARENT read-only denies the `rm()` the write permission it
+      // needs to unlink the entry, so the sweep records a leak instead of
+      // throwing (mirrors the clone-GC rm-leak case).
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const abandoned = path.join(locations.workflowsStagingDir, "abandoned");
+      await mkdir(abandoned, { recursive: true });
+      await writeFile(path.join(abandoned, "hello_greet.json"), "{}\n");
+      const backdated = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      await utimes(abandoned, backdated, backdated);
+      await chmod(locations.workflowsStagingDir, 0o500);
+      const { ctx, pi, notifications } = makeCtx();
+      const logged = captureDebugLog(t);
+
+      // act
+      try {
+        await uninstallWithFreshOwner({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        });
+      } finally {
+        await chmod(locations.workflowsStagingDir, 0o700);
+      }
+
+      // assert -- the leak never reaches the user-facing notification.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "warning");
+      assert.deepStrictEqual(logged, [
+        `[hooks] uninstall: workflows staging GC left 1 tree(s) for hello@mp: abandoned: EACCES: permission denied, rmdir '${abandoned}'`,
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

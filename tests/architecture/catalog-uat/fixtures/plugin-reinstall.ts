@@ -1,4 +1,4 @@
-import { piWithBothLoaded, piWithNothingLoaded } from "../mock-pi.ts";
+import { piWithAllLoaded, piWithBothLoaded, piWithNothingLoaded } from "../mock-pi.ts";
 
 import type { NotificationMessage } from "../../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { FixtureMap } from "../fixture-types.ts";
@@ -84,6 +84,36 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 dependencies: [],
                 reasons: ["malformed skill"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WLIF-06: the reinstall's source dropped or renamed a workflow the record
+    // named, so its envelope is gone and the command it registered is still
+    // live. Same token, same tail position and same info -> warning raise the
+    // uninstall, disable and update rows take.
+    "reinstall-stale-workflow-command": {
+      pi: piWithAllLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                severity: "warning",
+                needsReload: true,
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["stale workflow command"],
               },
             ],
           },

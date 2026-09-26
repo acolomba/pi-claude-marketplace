@@ -5,87 +5,23 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). `notification-types.ts` declares `Reason` as the SINGLE
- * source of catalog truth (OUT-08: the 61-entry membership AND order must stay
+ * source of catalog truth (OUT-08: its membership AND order must stay
  * byte-identical for catalog stability); this module reorganizes that closed set
  * into shared topic-grouped unions + a structural completeness proof WITHOUT
  * restating the vocabulary's order. The topic groups below are typed views over
  * the same closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 61-entry set.
+ * set.
  *
- * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
- * joined the set as the truthful marker for a dropped component kind that has
- * no carve-out of its own. OUT-01 / D-102-05 moved it from 38 to 39:
- * `"installs disabled"` joined as the marker for an install that landed
- * disabled because the plugin's own `defaultEnabled` declaration said so, and
- * brought the fourth topic group with it (D-102-06). `COMPAT-01` pins the
- * membership by enumeration and `notify-closed-set-locks.test.ts` pins the
- * length, so the two sentences above cannot drift from the vocabulary again
- * without a red test. CMP-4 / SCOPE-01 added two structural scope reasons (39 to 41).
- * SCOPE-01 / D-01 added two content scope reasons (41 to 43). WDET-04 /
- * D-106-04 appended the dedicated `workflows` reason (43 to 44). DATA-01 /
- * WR-06 added `data kept`, uninstall's data-disposition marker (44 to 45).
- * RESV-02..06 added the seven dependency-cascade reasons -- `no matching
- * version`, `version conflict`, `constraint too complex`, `invalid version
- * constraint`, `dependency marketplace not added`, `dependency cycle` and
- * `dependency failed` -- which are what let one cascade row name WHICH
- * dependency failed and WHY, instead of the requesting plugin alone (45 to 52).
- * RESV-05 added `dependency disabled`, which lifts a skipped-but-inert
- * dependency off the benign-skip default (52 to 53). D-04-07 added
- * `dependency promoted`, install's marker for a recorded dependency the user
- * then asked for by name -- a state change, which the refusal `already
- * installed` cannot report on its own (53 to 54). D-05-11
- * added `dependency pruned`, the marker `uninstall --prune` stamps on each
- * orphaned dependency record it swept out after the named plugin -- a removal
- * the user did not name, so it is a state change and joins the command-private
- * reasons, not the idempotent group (54 to 55). LOAD-01 added `dependency
- * unsatisfied`, the load-time check's marker for a recorded plugin it disabled
- * because a dependency it declares is not satisfied in the scope -- a state
- * change the user did not ask for, so it joins the command-private reasons and
- * not the idempotent group (55 to 56). LOAD-01 added `dependency version
- * unsatisfied`, the same check's marker for a dependency that IS recorded and
- * enabled at a version outside the declared range -- a second token rather than
- * a second use of the first, because the two remedies differ in kind and a grep
- * for either must not return the other (56 to 57). LOAD-03 added `dependents
- * unsatisfied`, uninstall's marker for a removal that went through while other
- * installed plugins still declared the target -- a state change reported on the
- * success row, so it joins the command-private reasons and not the idempotent
- * group (57 to 58), and D-06-07 RETIRED uninstall's refusal marker in the same
- * edit, because the refusal it named no longer happens: the two cancel, which
- * is why the count ends this phase where the sentence before it left off.
- * TAGS-02 / D-07-03 added `dependency current copy`, install-cascade's marker
- * for a path-source member whose marketplace clone carried no tag satisfying
- * its constraint: the install proceeds with the marketplace's CURRENT copy
- * instead of failing (58 to 59). It joins the command-private reasons rather
- * than the idempotent group because it is not a no-op -- a copy installed --
- * and it is not a failure reason because the install succeeded; the
- * constraint itself is left for the LOAD-01 load-time check to enforce.
- * D-08-02 added `dependency enabled`, the marker for turning on an
- * already-installed, disabled dependency through its record -- the install
- * cascade's already-installed arm and the enable cascade's own member row
- * both stamp it on an `installed` row, because the record changed and
- * `already installed` alone reports a no-op (59 to 60). EDEP-02 added
- * `dependents remain`, disable's refusal marker for an installed and ENABLED
- * plugin in the same scope that still declares the target -- it rides a
- * `failed` row rather than a success row, which is what keeps it out of
- * `dependents unsatisfied`'s group: that token's subject is a removal that
- * WENT THROUGH, and this one's subject is an operation that did not happen
- * (60 to 61). EDEP-03 RETIRED `dependency disabled` -- RESV-05's own marker,
- * added earlier in this paragraph -- because install and enable now turn a
- * disabled already-installed dependency back on through its own record
- * instead of leaving it inert: `{already installed, dependency enabled}`
- * replaces `{already installed, dependency disabled}` (61 to 60). MISS-01 /
- * D-09-09 added `dependency installed`, the reload dependency-install
- * step's marker for a missing declared dependency it materialized -- an
- * undeclared plugin appearing with no stated reason is the row a user
- * cannot explain, so it rides only an `installed` row; it is neither
- * idempotent (a record was materialized) nor a failure (the install
- * succeeded), so it joins the command-private reasons (60 to 61). UPDT-02 /
- * D-10-09 added `dependents constrain`, the update-preflight constraint
- * gate's marker for a plugin held to versions its installed dependents
- * jointly admit -- not idempotent, because the update the user asked for was
- * not carried out (61 to 62). The arithmetic above is renumbered rather than
- * annotated with the gap, so the next member to join does not inherit one.
+ * The set is APPEND-ONLY: a new token joins at the tail, existing entries never
+ * move, and the declared order is catalog-stable because a rendered brace
+ * follows declaration order. `COMPAT-01` pins the membership by enumeration and
+ * `notify-closed-set-locks.test.ts` pins the length, so the vocabulary cannot
+ * drift unnoticed, and every member whose presence needs an argument carries its
+ * own decision ID beside its literal in `notification-types.ts`. No running
+ * count of the set lives in prose here: neither gate reads a comment, so a
+ * number written here would be the one claim about this set that nothing turns
+ * red for.
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -137,36 +73,44 @@ export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "
  * SEV-01: per-producer severity for an otherwise-successful install/update row,
  * classified from the plugin's DECLARED soft-dep companions and the host's
  * companion-loaded probe. A declared `agents` kind requires `pi-subagents`; a
- * declared `mcp` kind requires `pi-mcp-adapter`. When a declared companion is
- * unloaded the clean operation is silently degraded -> `warning`; otherwise
- * (companion present, or none declared) -> `info`. The caller passes the single
- * sanctioned `softDepStatus(pi)` probe (the same one the renderer uses for the
+ * declared `mcp` kind requires `pi-mcp-adapter`; a declared `workflows` kind
+ * requires the host workflow engine. When a declared companion is unloaded the
+ * clean operation is silently degraded -> `warning`; otherwise (companion
+ * present, or none declared) -> `info`. The caller passes the single sanctioned
+ * `softDepStatus(pi)` probe (the same one the renderer uses for the
  * `{requires pi-...}` marker), so the row bytes are unchanged -- only the
  * desired-state severity moves.
  */
 export function companionSeverity(
-  { declaresAgents, declaresMcp }: { declaresAgents: boolean; declaresMcp: boolean },
+  {
+    declaresAgents,
+    declaresMcp,
+    declaresWorkflows,
+  }: { declaresAgents: boolean; declaresMcp: boolean; declaresWorkflows: boolean },
   probe: SoftDepStatus,
 ): "info" | "warning" {
-  return (declaresAgents && !probe.piSubagentsLoaded) || (declaresMcp && !probe.piMcpAdapterLoaded)
+  return (declaresAgents && !probe.piSubagentsLoaded) ||
+    (declaresMcp && !probe.piMcpAdapterLoaded) ||
+    (declaresWorkflows && !probe.workflowEngineLoaded)
     ? "warning"
     : "info";
 }
 
 /**
  * D-09: unsupported-components / soft-dep reasons -- the topic group the user
- * named explicitly (hooks / LSP / workflows / companion-extension soft deps /
- * unsupported source / unsupported component / no-longer-installable).
+ * named explicitly (hooks / LSP / companion-extension soft deps / unsupported
+ * source / unsupported component / no-longer-installable).
  */
 type UnsupportedReason =
   | "unsupported hooks"
   | "lsp"
   | "requires pi-subagents"
   | "requires pi-mcp"
+  // WDEP-04: the host workflow engine soft-dep marker.
+  | "requires pi-dynamic-workflows"
   | "unsupported source"
   // D-90-05: the truthful marker for a dropped non-carve-out component kind.
   | "unsupported component"
-  | "workflows"
   | "no longer installable";
 
 /**
@@ -432,4 +376,21 @@ type CommandPrivateReason =
   // UPDT-02 / D-10-09: the update-preflight constraint gate's marker for a
   // plugin held to versions its installed dependents jointly admit. NOT
   // idempotent: the update the user asked for was not carried out.
-  | "dependents constrain";
+  | "dependents constrain"
+  // WLIF-06: the retired-workflow-command marker. Five verbs stamp it. The
+  // three that RE-MATERIALIZE (enable / reinstall / update) take a
+  // previous-minus-current difference through `retiresWorkflowCommand`; the two
+  // that only REMOVE (uninstall / disable) read what their cascade reported
+  // dropping. Enable and reinstall pass PLACED names; update passes its
+  // PREPARED names, which equal the placed ones there because that call site
+  // sits past the phase-3 failure guard -- a commit that placed any less took
+  // the failure exit instead. Named here for the proof rather than promoted to
+  // a shared topic group. Like the cross-scope pair above, it IS a
+  // `ContentReason`.
+  | "stale workflow command"
+  // WCONV-03: the load-time convergence marker. The reconcile backfill
+  // projection places it on both arms of a re-materialized record's row, so a
+  // user can attribute new commands to a reload they did not initiate. Owned by
+  // that one projection rather than shared across topic groups, so it is named
+  // here for the proof. Like its neighbour above, it IS a `ContentReason`.
+  | "components now supported";

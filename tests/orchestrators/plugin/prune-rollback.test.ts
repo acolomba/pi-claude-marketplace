@@ -33,6 +33,7 @@ function member(locations: ScopedLocations): IndexedRecord {
     resolvedSource: "/unused",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: {
+      workflows: [],
       skills: ["orphan-skill"],
       prompts: ["orphan-command"],
       agents: ["orphan-agent"],

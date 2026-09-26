@@ -108,7 +108,8 @@ function emitWithSummary(
  * line. The on-the-wire string is
  * `${message.message}\n\n${message.usage}` (SNM-13). The blank
  * line between message and Usage block is part of the user contract;
- * `tests/shared/notify-v2.test.ts` asserts it byte-for-byte.
+ * `tests/shared/notification-dispatch.test.ts` asserts it byte-for-byte
+ * (the SNM-13 case).
  */
 export function notifyUsageError(ctx: NotificationContext, message: UsageErrorMessage): void {
   ctx.ui.notify(`${message.message}\n\n${message.usage}`, "error");
@@ -241,7 +242,7 @@ function dispatchInfoMessage(
       // DIFF-01 SC #2: catalog-locked free-form advisory body line. Hard-coded
       // here so the byte form cannot drift from `docs/output-catalog.md`'s
       // `empty-steady-state` state.
-      body = "Pending: next reload will apply 0 actions.";
+      body = foldAdvisories("Pending: next reload will apply 0 actions.", message.advisories);
       break;
     case "prune-empty":
       body = `Nothing to prune in ${message.scope} scope: no orphaned dependency installs were found.`;
@@ -324,7 +325,9 @@ export function notify(
   // "(no marketplaces)" sentinel rather than the empty string; one blank
   // line between marketplace blocks.
   const blocks = message.marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
-  const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+  const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+  // WR-06: advisory body lines sit between the body and the tally.
+  const body = foldAdvisories(composed, message.advisories);
 
   // OUT-03 / OUT-04 / D-04: PLURAL cardinality makes the per-operation tally
   // eligible. The tally sits AFTER the body and BEFORE the reload-hint trailer.
@@ -365,6 +368,19 @@ export function makeRawNotifyFn(
   };
 }
 
+/**
+ * WR-06: append the message's advisory body lines as their own block, after the
+ * composed body and BEFORE the tally and the reload-hint fold.
+ *
+ * The single render site for both carriers. A message shape that declares the
+ * member gets the identical byte form whichever arm of a command produced it,
+ * because the arms differ only in what they hand this function as `body`.
+ */
+function foldAdvisories(body: string, advisories: readonly string[] | undefined): string {
+  const lines = advisories ?? [];
+  return lines.length === 0 ? body : `${body}\n\n${lines.join("\n")}`;
+}
+
 function emitCascadeWith(
   ctx: NotificationContext,
   pi: ToolInventory,
@@ -375,6 +391,10 @@ function emitCascadeWith(
     mpScope: Scope,
   ) => string,
   hint: string,
+  // WR-06: caller-composed advisory body lines. Only the plain cascade carrier
+  // declares them; the reconcile-applied carrier passes `undefined`, so the
+  // member stays on the two shapes that can actually produce one.
+  advisories: readonly string[] | undefined,
 ): void {
   const probe = softDepStatus(pi);
   const blocks = message.marketplaces.map((mp) => {
@@ -385,7 +405,11 @@ function emitCascadeWith(
 
     return lines.join("\n");
   });
-  const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+  const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+  // WR-06: advisory body lines sit between the body and the tally, exactly as
+  // they do on the central dispatch, so a command that can emit either arm
+  // renders the identical trailer from either one.
+  const body = foldAdvisories(composed, advisories);
   const withTally = foldTallyAndHint(body, composeTally(message), hint);
 
   emitWithSummary(ctx, message, withTally);
@@ -404,7 +428,7 @@ export function emitContextCascade(
 ): void {
   const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
 
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, hint);
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, hint, message.advisories);
 }
 
 /** Dispatch the never-silent zero-transition update result. */
@@ -444,5 +468,5 @@ export function emitReconcileAppliedContextCascade(
     mpScope: Scope,
   ) => string,
 ): void {
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, "");
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, "", undefined);
 }

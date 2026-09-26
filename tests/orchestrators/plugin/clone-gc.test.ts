@@ -37,7 +37,7 @@ function pluginRecord({
     resolvedSource,
     ...(resolvedSha === undefined ? {} : { resolvedSha }),
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: true,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",

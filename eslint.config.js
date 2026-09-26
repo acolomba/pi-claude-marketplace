@@ -386,7 +386,7 @@ export default tseslint.config(
     },
   },
   {
-    // These nine owners prove erased types with satisfies and @ts-expect-error.
+    // These ten owners prove erased types with satisfies and @ts-expect-error.
     // Runtime assertions would not test their contract; neighboring runtime owners
     // retain no-empty-test-file. Keep this list exact rather than exempting types.*.
     // `exec-result.test.ts` qualifies on the same ground as the rest: its whole
@@ -398,6 +398,7 @@ export default tseslint.config(
       "tests/bridges/hooks/exec-result.test.ts",
       "tests/bridges/mcp/types.test.ts",
       "tests/bridges/skills/types.test.ts",
+      "tests/bridges/workflows/types.test.ts",
       "tests/domain/resolver-types.test.ts",
       "tests/edge/types.test.ts",
       "tests/orchestrators/import/types.test.ts",

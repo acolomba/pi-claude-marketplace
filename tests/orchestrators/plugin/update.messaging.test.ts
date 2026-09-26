@@ -80,6 +80,7 @@ test("renders a bare updated transition with true optional omission", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -116,6 +117,7 @@ test("renders updated reasons before both missing companion markers", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -154,6 +156,7 @@ test("renders a partially-installed transition with ordered reasons and an MCP m
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -190,6 +193,7 @@ test("renders an actionable skipped row with a folded marketplace scope", () => 
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -224,6 +228,7 @@ test("preserves partial-update hint metadata while rendering its row body", () =
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -261,6 +266,7 @@ test("preserves failed causes and rollback partials while rendering the owned ro
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act

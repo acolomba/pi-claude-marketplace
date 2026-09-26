@@ -136,15 +136,16 @@ function replacementInput(pluginRoot = "/plugin"): ReplaceReinstalledPluginInput
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     },
     pluginDataDir: "/data",
     oldRecord: {
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     } as unknown as ReplaceReinstalledPluginInput["oldRecord"],
     agentsDirs: [],
+    workflowNames: [],
   };
 }
 
@@ -171,6 +172,20 @@ function fakeOperations(
     prepareStageCommands: operation("prepare commands", prepared("commands")),
     prepareStagePluginAgents: operation("prepare agents", prepared("agents")),
     prepareStageMcpServers: operation("prepare mcp", prepared("mcp")),
+    prepareStageWorkflows: operation("prepare workflows", prepared("workflows")),
+    // The commit reports the names it placed through `onPlaced`, the way the
+    // real bridge does on every path, and returns no staging-cleanup leak.
+    commitPreparedWorkflows: (_prepared: unknown, opts?: { onPlaced?: (n: string[]) => void }) => {
+      calls.push("commit workflows");
+      opts?.onPlaced?.(["plugin:flow"]);
+      return Promise.resolve(undefined);
+    },
+    abortPreparedWorkflows: operation("abort workflows", undefined),
+    unstagePluginWorkflows: operation("unplace workflows", {
+      removedNames: ["plugin:flow"],
+      warnings: [],
+      failed: [],
+    }),
     replacePreparedSkills: operation("replace skills"),
     replacePreparedCommands: operation("replace commands"),
     replacePreparedAgents: operation("replace agents"),
@@ -212,21 +227,29 @@ test("replaces, rolls back, and finalizes every bridge in atomic order", async (
     "prepare commands",
     "prepare agents",
     "prepare mcp",
+    "prepare workflows",
     "replace skills",
     "replace commands",
     "replace agents",
     "remove hooks",
     "replace mcp",
+    "commit workflows",
     "rollback mcp",
     "rollback agents",
     "rollback commands",
     "rollback skills",
+    "unplace workflows",
     "finalize skills",
     "finalize commands",
     "finalize agents",
     "finalize mcp",
   ]);
-  assert.deepStrictEqual(replacement.discoveryWarnings, ["skills warning", "commands warning"]);
+  assert.deepStrictEqual(replacement.placedWorkflowNames, ["plugin:flow"]);
+  assert.deepStrictEqual(replacement.discoveryWarnings, [
+    "skills warning",
+    "commands warning",
+    "workflows warning",
+  ]);
   assert.deepStrictEqual(replacement.bridgeWarnings, ["agents warning", "mcp warning"]);
   assert.deepStrictEqual(rollbackLeaks, [
     "mcp: mcp backup",
@@ -257,12 +280,81 @@ test("aborts prepared bridges and reports leaks when replacement fails", async (
       error.message === "replace denied" &&
       error.name === "ManualRecoveryError",
   );
-  assert.deepStrictEqual(calls.slice(-4), [
+  assert.deepStrictEqual(calls.slice(-5), [
+    "abort workflows",
     "abort mcp",
     "abort agents",
     "abort commands",
     "abort skills",
   ]);
+});
+
+test("carries the workflows commit's staging-cleanup leak as a bridge warning", async () => {
+  // arrange
+  const calls: string[] = [];
+  const operations = fakeOperations(calls, {
+    commitPreparedWorkflows: () => Promise.resolve("workflows staging leak"),
+  });
+
+  // act
+  const replacement = await REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(
+    replacementInput(),
+    operations,
+  );
+
+  // assert -- the leak joins the bridge warnings AFTER the sibling bridges'
+  // own, and a commit that reported nothing placed leaves nothing to unplace.
+  assert.deepStrictEqual(replacement.bridgeWarnings, [
+    "agents warning",
+    "mcp warning",
+    "workflows staging leak",
+  ]);
+  assert.deepStrictEqual(replacement.placedWorkflowNames, []);
+});
+
+test("records a workflows unplace refusal as a rollback leak instead of throwing", async () => {
+  // arrange -- the rollback runs inside a catch that is already unwinding, so
+  // the unstage's own throw must surface as a leak line, never as a new error.
+  const calls: string[] = [];
+  const operations = fakeOperations(calls, {
+    unstagePluginWorkflows: () => Promise.reject(new Error("envelope escapes the saved directory")),
+  });
+  const replacement = await REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(
+    replacementInput(),
+    operations,
+  );
+
+  // act
+  const rollbackLeaks = await REAL_REINSTALL_TRANSACTION.rollbackReinstalledPlugin(replacement);
+
+  // assert
+  assert.deepStrictEqual(rollbackLeaks.at(-1), "workflows: envelope escapes the saved directory");
+});
+
+test("names each envelope the workflows unplace could not remove", async () => {
+  // arrange
+  const calls: string[] = [];
+  const operations = fakeOperations(calls, {
+    unstagePluginWorkflows: () =>
+      Promise.resolve({
+        removedNames: [],
+        warnings: [],
+        failed: [{ name: "plugin:flow", reason: "EPERM: operation not permitted" }],
+      }),
+  });
+  const replacement = await REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(
+    replacementInput(),
+    operations,
+  );
+
+  // act
+  const rollbackLeaks = await REAL_REINSTALL_TRANSACTION.rollbackReinstalledPlugin(replacement);
+
+  // assert
+  assert.deepStrictEqual(
+    rollbackLeaks.at(-1),
+    "workflows: plugin:flow: EPERM: operation not permitted",
+  );
 });
 
 test("aborts partial preparation in reverse order", async () => {
@@ -329,10 +421,11 @@ test("rejects malformed hooks and compensates completed replacements", async () 
       REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin({ ...input, installable }, operations),
       /hooks\.json re-parse failed/u,
     );
-    assert.deepStrictEqual(calls.slice(-7), [
+    assert.deepStrictEqual(calls.slice(-8), [
       "rollback agents",
       "rollback commands",
       "rollback skills",
+      "abort workflows",
       "abort mcp",
       "abort agents",
       "abort commands",

@@ -108,6 +108,7 @@ async function seedLegacyAgentUpdate(t: TestContext, coexist: boolean) {
     skills: [],
     prompts: [],
     agents: ["pi-claude-marketplace-hello-reviewer"],
+    workflows: [],
     mcpServers: [],
     hooks: [],
   };
@@ -163,6 +164,7 @@ async function assertAgentsMigrated(params: {
     declaresAgents: true,
     declaresMcp: false,
     constraint: undefined,
+    declaresWorkflows: false,
   });
   const expectedAgents = [
     {
@@ -201,7 +203,7 @@ async function assertAgentsMigrated(params: {
     });
     assert.strictEqual(
       await readFile(targetPath, "utf8"),
-      `---\nname: ${agent.generatedName}\ndescription: ${agent.description}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${agentSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+      `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${agentSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
     );
   }
 
@@ -216,7 +218,14 @@ async function assertAgentsMigrated(params: {
     version: "2.0.0",
     resolvedSource: pluginRoot,
     compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: expectedNames, mcpServers: [], hooks: [] },
+    resources: {
+      skills: [],
+      prompts: [],
+      agents: expectedNames,
+      mcpServers: [],
+      hooks: [],
+      workflows: [],
+    },
     updatedAt: "2026-01-02T00:00:00.000Z",
   });
   if (!coexist) {
@@ -270,6 +279,7 @@ test("AGENT-01: update retries agent migration once the occupying target is free
       phaseFailures: [{ phase: "agents", msg: message }],
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     });
     assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
     assert.strictEqual(await readFile(newTarget, "utf8"), "Foreign new target.\n");
@@ -349,9 +359,9 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
       const record = state.marketplaces.mp?.plugins.hello;
       assert.strictEqual(record?.version, "2.0.0");
       assert.strictEqual(record?.compatibility.installable, true);
-      assert.deepStrictEqual(record?.resources.skills, ["hello:tool"]);
+      assert.deepStrictEqual(record?.resources.skills, ["hello-tool"]);
       assert.match(
-        await readFile(path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"), "utf8"),
+        await readFile(path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8"),
         /Body for hello 2\.0\.0\./,
       );
     } finally {
@@ -606,7 +616,7 @@ test("retains the intent ledger and old resource tree after a replacement failur
       });
       const locations = locationsFor("project", cwd);
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      const skillObstacle = path.join(locations.skillsTargetDir, "hello:tool");
+      const skillObstacle = path.join(locations.skillsTargetDir, "hello-tool");
       await writeFile(skillObstacle, "old-resource-tree");
       const preflight = await preparePluginUpdate({
         plugin: "hello",

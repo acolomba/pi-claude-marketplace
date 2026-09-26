@@ -9,6 +9,7 @@ import {
   readFile,
   readdir,
   readlink,
+  realpath,
   rm,
   stat,
   symlink,
@@ -36,7 +37,7 @@ import type { AgentsReplacement } from "../../../extensions/pi-claude-marketplac
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
 async function createStageTree(t: TestContext, prefix: string) {
-  const scopeRoot = await mkdtemp(path.join(tmpdir(), prefix));
+  const scopeRoot = await realpath(await mkdtemp(path.join(tmpdir(), prefix)));
   t.after(() => rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 }));
   const pluginRoot = path.join(scopeRoot, "plugin");
   const agentsSourceDir = path.join(pluginRoot, "agents");
@@ -107,7 +108,7 @@ describe("prepareStagePluginAgents", () => {
     });
     assert.strictEqual(
       await readFile(targetPath, "utf8"),
-      `---\nname: pi-claude-marketplace-acme-reviewer\ndescription: Reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${winnerPath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nFirst body.\n`,
+      `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${winnerPath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nFirst body.\n`,
     );
     assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
       schemaVersion: 1,
@@ -278,8 +279,9 @@ You are a bot. Read from \${CLAUDE_PLUGIN_ROOT}/data and \${CLAUDE_PROJECT_DIR}.
     );
     const botTargetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
     const expectedHelperBytes = `---
-name: pi-claude-marketplace-acme-acme-helper
+name: acme:acme-helper
 description: Helper agent
+aliases: pi-claude-marketplace-acme-acme-helper
 tools: read,grep
 systemPromptMode: replace
 inheritProjectContext: true
@@ -297,8 +299,9 @@ provenance:
 Helper body.
 `;
     const expectedBotBytes = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: A bot agent
+aliases: pi-claude-marketplace-acme-bot
 model: anthropic/claude-sonnet-4-6
 tools: read,bash,edit
 systemPromptMode: replace
@@ -401,8 +404,9 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
         "utf8",
       ),
       `---
-name: pi-claude-marketplace-acme-user-agent
+name: acme:user-agent
 description: User agent
+aliases: pi-claude-marketplace-acme-user-agent
 tools: read
 systemPromptMode: replace
 inheritProjectContext: true
@@ -515,10 +519,12 @@ mcpServers: echo
 Mixed body.
 `,
     );
-    const generatedName = "pi-claude-marketplace-acme-mixed";
+    // The override key is the agent's DECLARED name -- what pi-subagents
+    // resolves it by -- not the basename it is stored under.
+    const declaredName = "acme:mixed";
     const expectedWarnings = [
       "[mixed] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). " +
-        `To grant this agent MCP tools, set subagents.agentOverrides["${generatedName}"].tools ` +
+        `To grant this agent MCP tools, set subagents.agentOverrides["${declaredName}"].tools ` +
         "(e.g. read,bash,mcp:<server>) in Pi settings.",
       "[mixed] dropped fields: priority",
     ];
@@ -913,7 +919,7 @@ describe("commitPreparedAgents", () => {
       });
       assert.strictEqual(
         await readFile(newTarget, "utf8"),
-        `---\nname: pi-claude-marketplace-acme-acme-reviewer\ndescription: Prefixed reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nPrefixed body.\n`,
+        `---\nname: acme:acme-reviewer\ndescription: Prefixed reviewer\naliases: pi-claude-marketplace-acme-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nPrefixed body.\n`,
       );
       assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
         schemaVersion: 1,
@@ -922,7 +928,7 @@ describe("commitPreparedAgents", () => {
       if (coexist) {
         assert.strictEqual(
           await readFile(oldTarget, "utf8"),
-          `---\nname: pi-claude-marketplace-acme-reviewer\ndescription: Reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${shortSource}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nShort body.\n`,
+          `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${shortSource}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nShort body.\n`,
         );
       } else {
         assert.strictEqual(await exists(oldTarget), false);
@@ -1073,8 +1079,9 @@ You are a bot. Read from \${CLAUDE_PLUGIN_ROOT}/data and \${CLAUDE_PROJECT_DIR}.
     );
     const botTargetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
     const expectedHelperBytes = `---
-name: pi-claude-marketplace-acme-acme-helper
+name: acme:acme-helper
 description: Helper agent
+aliases: pi-claude-marketplace-acme-acme-helper
 tools: read,grep
 systemPromptMode: replace
 inheritProjectContext: true
@@ -1092,8 +1099,9 @@ provenance:
 Helper body.
 `;
     const expectedBotBytes = `---
-name: pi-claude-marketplace-acme-bot
+name: acme:bot
 description: A bot agent
+aliases: pi-claude-marketplace-acme-bot
 model: anthropic/claude-sonnet-4-6
 tools: read,bash,edit
 systemPromptMode: replace
@@ -1713,7 +1721,7 @@ describe("replacePreparedAgents", () => {
       });
       assert.strictEqual(
         await readFile(newTarget, "utf8"),
-        `---\nname: pi-claude-marketplace-acme-acme-reviewer\ndescription: Prefixed reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nPrefixed body.\n`,
+        `---\nname: acme:acme-reviewer\ndescription: Prefixed reviewer\naliases: pi-claude-marketplace-acme-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nPrefixed body.\n`,
       );
       assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
         schemaVersion: 1,
@@ -1722,7 +1730,7 @@ describe("replacePreparedAgents", () => {
       if (coexist) {
         assert.strictEqual(
           await readFile(oldTarget, "utf8"),
-          `---\nname: pi-claude-marketplace-acme-reviewer\ndescription: Reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${shortSource}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nShort body.\n`,
+          `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${shortSource}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nShort body.\n`,
         );
       } else {
         assert.strictEqual(await exists(oldTarget), false);
@@ -1928,8 +1936,9 @@ provenance:
 Previous.
 `;
     const currentBytes = `---
-name: pi-claude-marketplace-acme-current
+name: acme:current
 description: Current agent
+aliases: pi-claude-marketplace-acme-current
 tools: read
 systemPromptMode: replace
 inheritProjectContext: true
@@ -2522,8 +2531,9 @@ describe("finalizeAgentsReplacement", () => {
     const sourcePath = path.join(agentsSourceDir, "current.md");
     const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
     const expectedTargetBytes = `---
-name: pi-claude-marketplace-acme-current
+name: acme:current
 description: Current agent
+aliases: pi-claude-marketplace-acme-current
 tools: read
 systemPromptMode: replace
 inheritProjectContext: true

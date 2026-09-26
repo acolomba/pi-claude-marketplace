@@ -165,7 +165,6 @@ const unsupportedConventionScenarios = [
   { kind: "themes", relativePath: "themes", stat: "dir" },
   { kind: "outputStyles", relativePath: "output-styles", stat: "dir" },
   { kind: "settings", relativePath: "settings.json", stat: { contents: "{}" } },
-  { kind: "workflows", relativePath: "workflows", stat: "dir" },
 ] as const;
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -1786,6 +1785,121 @@ test("PR-4 implicit-by-convention populates componentPaths.skills when neither e
     assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, ["skills"]);
     assert.ok(resolvedPlugin.supported.includes("skills"));
   }
+});
+
+// WINV-01 / D-109-07: `workflows` is a supported path-bearing kind, so a
+// `workflows/` directory under the plugin root is discovered by the same
+// implicit-by-convention probe every other supported kind uses -- the kind
+// string IS the convention directory name, byte for byte.
+test("WINV-01 strict: implicit-by-convention workflows/ dir -> installable with componentPaths.workflows populated", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, {
+    [pathUnderMarketplace("./local")]: "dir",
+    [path.join(pathUnderMarketplace("./local"), "workflows")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes if not: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+
+  if (resolvedPlugin.state === "installable") {
+    assert.deepStrictEqual(
+      resolvedPlugin.componentPaths.workflows,
+      ["workflows"],
+      `componentPaths.workflows: ${JSON.stringify(resolvedPlugin.componentPaths.workflows)}`,
+    );
+    assert.ok(
+      resolvedPlugin.supported.includes("workflows"),
+      `supported: ${resolvedPlugin.supported.join(" / ")}`,
+    );
+  }
+});
+
+// WINV-01: a plugin carrying BOTH a `workflows/` directory and a
+// still-unsupported kind resolves `partially-available` on that other kind
+// ALONE. This is the proof behind the `workflow-plus-unsupported-rejection`
+// catalog state, whose brace names one token: `catalog-uat` pairs annotation
+// prose to rendered bytes only, so its renderer-level fixture carries no
+// plugin and cannot establish which kind drove the rejection.
+test("WINV-01 strict: workflows/ plus themes -> partially-available, unsupported names themes alone", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, {
+    [pathUnderMarketplace("./local")]: "dir",
+    [path.join(pathUnderMarketplace("./local"), "workflows")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", themes: { dark: {} } }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "partially-available",
+    `notes if not: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+
+  if (resolvedPlugin.state === "partially-available") {
+    assert.deepStrictEqual(resolvedPlugin.unsupported, ["themes"]);
+    assert.ok(
+      resolvedPlugin.supported.includes("workflows"),
+      `supported: ${resolvedPlugin.supported.join(" / ")}`,
+    );
+    assert.ok(
+      !resolvedPlugin.notes.some((n) => n.includes("workflows")),
+      `workflows must contribute no note; got: ${resolvedPlugin.notes.join(" / ")}`,
+    );
+  }
+});
+
+// WINV-01: admitting `workflows` to SUPPORTED_COMPONENT_PATH_KINDS routes a
+// declared `workflows` field through `validateComponentPath`, so a declaration
+// that is neither a string nor an array of strings -- an inline map in the
+// shape `mcpServers` accepts, say -- is a STRUCTURAL defect that resolves
+// `unavailable`, NOT an unsupported-kind degrade a user could `--partial`
+// past. Pinned because the harsher verdict rests entirely on the premise that
+// upstream's `workflows` field is path-bearing; if that premise is ever
+// falsified this test is the first thing that has to move.
+//
+// The premise carries an upstream citation. Claude Code 2.1.251's own plugin
+// manifest schema declares `workflows` as a union of a path string and an
+// array of path strings, describing both arms as "Path to a workflows
+// directory or .js file, relative to the plugin root", in a body written
+// identically to the `themes` and `outputStyles` definitions; the published
+// plugins reference at code.claude.com/docs/en/plugins-reference agrees. So
+// the harsher verdict this case pins rests on a confirmed premise rather than
+// an open one. `docs/workflows-compatibility.md` carries the same citation
+// and the two upstream divergences it exposes.
+test("WINV-01 strict: a non-string workflows declaration resolves unavailable", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, {
+    [pathUnderMarketplace("./local")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", workflows: { greet: { run: "greet.js" } } }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "unavailable",
+    `notes if not: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+  assert.ok(
+    resolvedPlugin.notes.some((n) => n.includes('component path for "workflows" is not a string')),
+    `expected the path-shape note; got: ${resolvedPlugin.notes.join(" / ")}`,
+  );
 });
 
 // D-07 corollary: entry declares "custom" AND implicit "skills/" exists ->
@@ -3415,7 +3529,7 @@ test("resolveStrict returns the complete installable true arm", async () => {
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: true,
   });
@@ -3441,7 +3555,7 @@ test("resolveStrict returns the complete partially-available true arm", async ()
     supported: [],
     unsupported: ["themes"],
     notes: ["contains themes"],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: true,
   });
@@ -3494,6 +3608,7 @@ test("resolveStrict preserves declared-first implicit-last ordering with first-w
       skills: ["entry-only", "shared", "manifest-only", "skills"],
       commands: [],
       agents: [],
+      workflows: [],
     },
     mcpServers: {},
     defaultEnabled: true,
@@ -3686,7 +3801,7 @@ test("resolveStrict reads a real manifest through the default file reader", asyn
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: false,
   });
@@ -3713,7 +3828,7 @@ test("resolveStrict falls through a non-directory wrapper to the bare manifest",
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: false,
   });
@@ -3867,7 +3982,7 @@ test("resolveStrict unwraps a standalone mcpServers document", async () => {
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: { srv: { command: "node" } },
     defaultEnabled: true,
   });
@@ -4083,11 +4198,13 @@ test("parallel strict resolution keep independent deterministic outcomes", async
       skills: ["skills"],
       commands: [],
       agents: [],
+      workflows: [],
     });
     assert.deepStrictEqual(declaredResolution.componentPaths, {
       skills: [],
       commands: ["first", "second"],
       agents: [],
+      workflows: [],
     });
   }
 });

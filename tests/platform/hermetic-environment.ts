@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -30,7 +30,9 @@ export async function enterHermeticEnvironment(prefix: string): Promise<{
   readonly environment: HermeticEnvironment;
   readonly restore: () => Promise<void>;
 }> {
-  const root = await mkdtemp(path.join(tmpdir(), prefix));
+  // Resolved so paths match what child processes and the filesystem report
+  // where the temp directory is a symlink (macOS: /var -> /private/var).
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), prefix)));
   const home = path.join(root, "home");
   const agentDir = path.join(home, ".pi", "agent");
   const cwd = path.join(root, "project");

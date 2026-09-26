@@ -10,8 +10,8 @@
  *
  * FMBOM-01: a marker at index 0 defeats every anchored `---` fence match --
  * the agents parser's `/^---\r?\n/`, the skills name rewrite's
- * `startsWith("---")`, and the frontmatter gate in Pi's own loader at the
- * `>=0.80.5` peer floor. Callers strip before parsing AND before writing the
+ * `startsWith("---")`, and the frontmatter gate in Pi's own loader on
+ * supported hosts. Callers strip before parsing AND before writing the
  * staged artifact, so the parsed bytes and the staged bytes agree.
  *
  * T-FMBOM-02: exactly ONE marker is removed -- never a loop, never a global

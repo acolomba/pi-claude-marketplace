@@ -25,7 +25,7 @@
 // a throw from `pi.getAllTools()` and degrade to "unloaded" -- so the call is
 // mandatory and the emission count is never relied on alone. Both counts are
 // measured against the module rather than inherited: a delegating case spends
-// two `getAllTools()` reads and one `ctx.cwd` read, a rejecting case spends
+// three `getAllTools()` reads and one `ctx.cwd` read, a rejecting case spends
 // neither.
 //
 // Both scopes are seeded in every case, rejecting ones included, so a workflow
@@ -257,7 +257,7 @@ function alphaManifestPath(workspace: HermeticWorkspace): string {
 
 /** Fresh empty inventory axes, so no two seeded records share an array. */
 function emptyResources(): SeededResources {
-  return { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+  return { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] };
 }
 
 /**
@@ -413,7 +413,7 @@ test("DATA-02: removes the project-scope record and its data when the reference 
   // arrange
   const workspace = await createHermeticWorkspace(t, "bare-reference");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -450,7 +450,7 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "keep-data-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -479,7 +479,7 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "prune-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -505,7 +505,7 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "prune-keep-data");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -548,7 +548,7 @@ test("FLAG-01 / D-05-10: a typed --prune reaches the sweep and removes the orpha
   // arrange
   const workspace = await createHermeticWorkspace(t, "prune-forwarded");
   await seedOrphanedDependency(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -568,7 +568,7 @@ test("FLAG-01 / D-05-10: the same command without --prune keeps the orphaned dep
   // arrange
   const workspace = await createHermeticWorkspace(t, "prune-omitted");
   await seedOrphanedDependency(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -600,7 +600,7 @@ for (const { expectedEffects, expectedNotification, scopeValue } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `keep-data-scope-${scopeValue}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -621,7 +621,7 @@ test("preservation leaves the scope-target flag selecting the override layer", a
   const workspace = await createHermeticWorkspace(t, "keep-data-write-target");
   await seedBothScopes(workspace);
   await seedInvalidOverrideLayer(workspace.projectRoot);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -736,7 +736,7 @@ for (const { expectedEffects, expectedNotification, scopeValue } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `scope-${scopeValue}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -762,7 +762,7 @@ for (const { args, placement } of [
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);
     await seedInvalidOverrideLayer(workspace.projectRoot);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -783,7 +783,7 @@ test("reads the base layer and removes the record when the scope-target flag is 
   const workspace = await createHermeticWorkspace(t, "scope-target-omitted");
   await seedBothScopes(workspace);
   await seedInvalidOverrideLayer(workspace.projectRoot);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -803,7 +803,7 @@ test("honors the scope flag and the scope-target flag together", async (t) => {
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
   await seedInvalidOverrideLayer(workspace.userRoot);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: workspace.cwd,
     reads: 1,
   });

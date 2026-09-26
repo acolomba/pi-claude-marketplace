@@ -39,6 +39,7 @@ test("renders a complete cross-scope uninstalled transition row", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -74,6 +75,7 @@ test("renders a failed uninstall row without leaking its cause into the row body
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -139,7 +141,11 @@ test("D-05-11: a pruned row renders through the uninstalled arm with its brace a
     severity: "info",
     needsReload: true,
   };
-  const probe: SoftDepStatus = { piSubagentsLoaded: false, piMcpAdapterLoaded: false };
+  const probe: SoftDepStatus = {
+    workflowEngineLoaded: false,
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+  };
 
   // act
   const rendered = UNINSTALL_CONTEXT.render.uninstalled(prunedRow, probe, "user");
@@ -160,6 +166,7 @@ test("D-02-01: composeUninstalledRow with no dependents and no kept data is the 
 
   // act
   const row = composeUninstalledRow({
+    staleWorkflowCommand: false,
     plugin: "helper",
     version: "1.0.0",
     keepData: false,
@@ -185,6 +192,7 @@ test("WR-06: composeUninstalledRow keeps the data disposition as the only brace 
 
   // act
   const row = composeUninstalledRow({
+    staleWorkflowCommand: false,
     plugin: "helper",
     version: "1.0.0",
     keepData: true,
@@ -198,6 +206,7 @@ test("WR-06: composeUninstalledRow keeps the data disposition as the only brace 
 test("LOAD-03: composeUninstalledRow names the dependents on the cause line and stays an info reload row", () => {
   // act
   const row = composeUninstalledRow({
+    staleWorkflowCommand: false,
     plugin: "helper",
     version: "1.0.0",
     keepData: false,
@@ -215,6 +224,7 @@ test("LOAD-03: composeUninstalledRow names the dependents on the cause line and 
 test("T-06-02: composeUninstalledRow counts the dependents when one key could close the cause's quote", () => {
   // act
   const row = composeUninstalledRow({
+    staleWorkflowCommand: false,
     plugin: "helper",
     version: "1.0.0",
     keepData: false,
@@ -230,6 +240,7 @@ test("T-06-02: composeUninstalledRow counts the dependents when one key could cl
 test("T-06-02: composeUninstalledRow counts a single unrenderable dependent in the singular", () => {
   // act
   const row = composeUninstalledRow({
+    staleWorkflowCommand: false,
     plugin: "helper",
     version: "1.0.0",
     keepData: false,
@@ -243,6 +254,7 @@ test("T-06-02: composeUninstalledRow counts a single unrenderable dependent in t
 test("LOAD-03 / D-05-09: composeUninstalledRow says what the removal means for others before the data disposition", () => {
   // act
   const row = composeUninstalledRow({
+    staleWorkflowCommand: false,
     plugin: "helper",
     version: "1.0.0",
     keepData: true,
@@ -257,12 +269,17 @@ test("LOAD-03 / D-05-09: composeUninstalledRow says what the removal means for o
 test("LOAD-03: a dependents row renders its brace and its 4-space cause trailer through the uninstalled arm", () => {
   // arrange
   const row = composeUninstalledRow({
+    staleWorkflowCommand: false,
     plugin: "helper",
     version: "1.0.0",
     keepData: true,
     dependents: ["alpha@official"],
   });
-  const probe: SoftDepStatus = { piSubagentsLoaded: false, piMcpAdapterLoaded: false };
+  const probe: SoftDepStatus = {
+    workflowEngineLoaded: false,
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+  };
 
   // act
   const rendered = UNINSTALL_CONTEXT.render.uninstalled(row, probe, "user");
@@ -274,6 +291,7 @@ test("LOAD-03: a dependents row renders its brace and its 4-space cause trailer 
 test("LOAD-03: composeUninstalledRow omits the version slot when the removed record carried none", () => {
   // act
   const row = composeUninstalledRow({
+    staleWorkflowCommand: false,
     plugin: "helper",
     keepData: false,
     dependents: ["alpha@official"],

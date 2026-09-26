@@ -32,7 +32,7 @@ function pluginRecord(overrides: PluginRecordOverrides = {}): PluginInstallRecor
     version: "1.0.0",
     resolvedSource: "/plugin",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
     enabled: true,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -79,6 +79,7 @@ test("composes a same-scope installed row with exact dependencies and descriptio
       mcpServers: ["alpha-server"],
       prompts: [],
       skills: [],
+      workflows: ["alpha:greet"],
     },
   });
 
@@ -96,7 +97,7 @@ test("composes a same-scope installed row with exact dependencies and descriptio
   assert.deepStrictEqual(row, {
     status: "installed",
     name: "alpha",
-    dependencies: ["agents", "mcp"],
+    dependencies: ["agents", "mcp", "workflows"],
     version: "1.0.0",
     description: "Alpha plugin.",
     severity: "info",

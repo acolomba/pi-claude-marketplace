@@ -167,7 +167,7 @@ for (const { expectedMessage, flags, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "delegates");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       reads: 1,
       value: workspace.cwd,
     });
@@ -281,7 +281,7 @@ for (const { name, autoupdate } of [
       '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
     await writeFile(locations.configJsonPath, sharedBytes);
     await writeFile(locations.configLocalJsonPath, localBytes);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });

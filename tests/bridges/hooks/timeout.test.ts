@@ -8,10 +8,10 @@
 // flat 600 s a background handler keeps; and degradation to that default for a
 // value the schema admits but this module cannot use.
 //
-// It deliberately does NOT pin the surrounding chain. The architecture tests in
-// `tests/architecture/hooks-exec.test.ts` and
-// `tests/architecture/hooks-async-rewake.test.ts` pin the net conversion factor
-// at each call site -- which is what would catch a second `* 1000` creeping in,
+// It deliberately does NOT pin the surrounding chain.
+// `tests/bridges/hooks/exec-timer.test.ts` pins the net conversion factor at the
+// one site that owns it: a resolved 1 s timeout arms the SIGTERM/SIGKILL pair at
+// 1_000 / 6_000 ms. That is what would catch a second `* 1000` creeping in,
 // though nothing greps for one. `tests/domain/components/hooks.test.ts` pins
 // that a handler carrying a quoted number survives schema validation and the
 // drop partition, which is what makes this module's non-number arms reachable.

@@ -1,9 +1,9 @@
 // orchestrators/reconcile/backfill.ts
 //
-// BFILL-01..03: the load-time backfill pass. A partially-installed record whose
+// BFILL-01..03 / WCONV-01: the load-time backfill pass. A recorded plugin whose
 // manifest entry has since grown its supported-component set is re-resolved
-// offline and re-materialized, so a plugin that was degraded at install time
-// becomes whole without the user running anything.
+// offline and re-materialized, so a plugin missing components this extension can
+// now support becomes whole without the user running anything.
 //
 // A concern with its own test file (tests/orchestrators/reconcile/backfill.test.ts)
 // and its own name is a module (FLOW-09).
@@ -33,7 +33,7 @@ import type { Scope } from "../../shared/types.ts";
 import type { ReinstallPluginFn } from "../plugin/reinstall-flow.ts";
 
 /**
- * BFILL-01 / BFILL-02 / D-68-03: the load-time backfill step. Runs as a sibling
+ * BFILL-01 / BFILL-02 / WCONV-01: the load-time backfill step. Runs as a sibling
  * inside applyReconcile's per-scope apply region with NO outer lock (CR-01):
  * the stamp `withStateGuard` takes its own per-scope lock and proper-lockfile is
  * not re-entrant.
@@ -49,13 +49,13 @@ import type { ReinstallPluginFn } from "../plugin/reinstall-flow.ts";
  *
  * WR-01: a config-present / state.json-absent scope DOES carry a snapshot (the
  * read pass loads DEFAULT_STATE), so `state` is defined even though no state.json
- * exists on disk. With zero partially-installed plugins to promote, the stamp write
+ * exists on disk. With no partially-installed plugin recorded, the stamp write
  * would CREATE an unsolicited state.json purely to record the version -- the same
  * WR-05 violation. That case is skipped silently below.
  *
  * Stamp-on-gate-open (D-68-03): whenever the gate opened AND a state.json already
  * exists (or there is real backfill work), the running version is stamped
- * UNCONDITIONALLY -- even with zero partially-installed plugins to promote -- so the
+ * UNCONDITIONALLY -- even when the scan promotes nothing -- so the
  * gate closes and does not reopen on the next load. The stamp is written via
  * withStateGuard -> saveState (the sole sanctioned state.json writer, SPLIT-02 /
  * NFR-1), never a bare atomicWriteJson.
@@ -87,13 +87,14 @@ async function applyBackfillForScope(
     return;
   }
 
-  // Gate OPEN. Scan every partially-installed plugin and re-materialize the ones
-  // whose supported set grew; promotion rows fold into `outcomes` (RECON-04).
+  // Gate OPEN. Scan every recorded plugin and re-materialize the ones whose
+  // supported set grew (WCONV-01); promotion rows fold into `outcomes` (RECON-04).
   const anyFailure = await scanForceInstalledBackfills(opts, scope, state, outcomes);
 
-  // SF-02: a partially-installed plugin was scanned but its backfill FAILED -- a
+  // SF-02: a scanned plugin's backfill FAILED -- a
   // genuine `failed` partition, OR a per-plugin manifest-I/O throw caught inside
-  // the scan; not a benign no-growth / concurrent-uninstall. Leave the version
+  // the scan for a record recorded `installable: false`; not a benign no-growth /
+  // concurrent-uninstall / unresolvable-clean-record. Leave the version
   // gate OPEN so the next load retries -- symmetric with the WR-01 self-heal (a
   // THROW from the stamp write also keeps the gate open). Skipping the stamp
   // leaves state.json untouched (RECON-05 mtime invariant preserved).
@@ -158,10 +159,29 @@ export async function runScopeIsolated(
 }
 
 /**
- * WR-01: true iff any recorded plugin in this scope is partially-installed
- * (compatibility.installable === false) -- the only kind the backfill scan can
- * promote. Decides whether a stamp write is worth bringing a state.json into
- * existence for: with none and no state.json on disk, the file stays absent.
+ * WR-01: true iff any recorded plugin in this scope is partially-installed --
+ * `compatibility.installable === false`, which is the definition. The
+ * identifier keeps a spelling of that verdict the rest of the codebase does not
+ * use, so read the field and not the name.
+ *
+ * It decides exactly one thing -- whether
+ * a stamp write is worth bringing a state.json into existence for: with none and
+ * no state.json on disk, the file stays absent.
+ *
+ * D-116-04: on the production path this predicate answers `false` and can answer
+ * nothing else. Its only caller consults it when `readResult.stateExisted ===
+ * false`, and `apply.ts` sets that flag from a `pathExists` probe taken BEFORE
+ * the lock; with the probe false, `with-state-guard.ts` hands back `loadState`'s
+ * ENOENT answer, whose `marketplaces` map is empty, so the loop below never runs
+ * a body. The single window in which it returns `true` is the TOCTOU gap where
+ * another process created state.json between that probe and the guard's
+ * `loadState` -- the records are then real and the stamp lands on a file that
+ * already exists, which is what WR-05 permits.
+ *
+ * So this is not a predicate held narrower than the scan's population on
+ * purpose: it is vacuous outside that window. Widening it to match the
+ * population would decide nothing extra that can exist, and would create the
+ * unsolicited state.json WR-05 forbids.
  */
 function hasForceInstalledPlugin(state: ExtensionState): boolean {
   for (const mp of Object.values(state.marketplaces)) {
@@ -176,32 +196,49 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
 }
 
 /**
- * BFILL-01 / D-68-03: scan the read-pass snapshot's partially-installed plugins
- * (compatibility.installable === false; clean/installed plugins have nothing to
- * backfill) and re-materialize each whose supported set grew. Iterates the
- * snapshot; reinstallPlugin self-locks and re-reads fresh state per plugin
- * (CR-01).
+ * BFILL-01 / WCONV-01: scan EVERY plugin in the read-pass snapshot and
+ * re-materialize each whose supported set grew -- a wider population than the
+ * name describes. Iterates the snapshot; reinstallPlugin self-locks and
+ * re-reads fresh state per plugin (CR-01).
  *
- * RECON-04 single-emit: the snapshot predates applyPlan, which may have re-materialized a
- * partially-installed plugin in the SAME load (e.g. a disable/enable that emits its
- * own transition row). Skip any plugin already represented in this scope's
- * accumulated outcomes so a single load can never emit two rows for one plugin
- * (nor clobber a just-applied transition with a redundant overwrite).
+ * WCONV-01 is what makes the population every record rather than only the
+ * degraded ones: a plugin declaring a component kind this extension did not
+ * support at install time records `installable: true` with that kind simply
+ * absent, so the record it leaves is indistinguishable from a clean one and the
+ * growth test is the only thing that can see the boundary move. D-68-03's two
+ * live halves still hold -- `supportedSetGrew`'s strict-superset test is the sole
+ * promotion gate, and the caller stamps the running version on a gate that
+ * opened even when the scan promoted nothing.
+ *
+ * The scan's real bound is the resolver's: NFR-5 keeps it offline, so
+ * `resolveRecordedPluginOffline` passes no clone-cache resolver and
+ * every `url` / `git-subdir` / `github` source resolves `unavailable` here. Only
+ * path-source records converge at load time.
+ *
+ * RECON-04 single-emit: the snapshot predates applyPlan, which may have
+ * re-materialized a recorded plugin in the SAME load (e.g. a disable/enable that
+ * emits its own transition row). Skip any plugin already represented in this
+ * scope's accumulated outcomes so a single load can never emit two rows for one
+ * plugin (nor clobber a just-applied transition with a redundant overwrite).
  *
  * SF-02: returns `true` iff at least one scanned plugin's backfill FAILED -- a
  * genuine `failed` partition surfaced by `maybeBackfillPlugin`, OR a THROW out of
  * `maybeBackfillPlugin` (e.g. a corrupt / permission-denied cached marketplace
- * manifest), not a benign no-growth / concurrent-uninstall -- so the caller can
- * keep the version gate OPEN and retry.
+ * manifest read for a record recorded `installable: false`), not a benign
+ * no-growth / concurrent-uninstall -- so the caller can keep the version gate
+ * OPEN and retry. A record recorded `installable: true` never reaches that arm:
+ * `resolveRecordedPluginOffline` answers `undefined` for a clean record it
+ * cannot resolve, so a dead marketplace source cannot hold the gate open once
+ * per recorded plugin, per load, without end (WCONV-01).
  *
  * Per-plugin fault isolation: each `maybeBackfillPlugin` call is wrapped in
- * try/catch. A throw from ONE plugin (SF-02 lets a manifest I/O error propagate)
- * is surfaced as a plugin-scoped `(failed)` row and flips `anyFailure`, then the
- * loop CONTINUES so healthy SIBLING plugins -- including ones under a different,
- * readable marketplace -- are still scanned and promoted. Without this guard a
- * single corrupt manifest would unwind the whole loop into the outer WR-01
- * wrapper's single generic `state.json (failed)` row and block every still-
- * unscanned sibling on every load.
+ * try/catch. A throw from ONE plugin (SF-02 lets a partially-installed record's
+ * manifest I/O error propagate) is surfaced as a plugin-scoped `(failed)` row and
+ * flips `anyFailure`, then the loop CONTINUES so healthy SIBLING plugins --
+ * including ones under a different, readable marketplace -- are still scanned and
+ * promoted. Without this guard a single corrupt manifest would unwind the whole
+ * loop into the outer WR-01 wrapper's single generic `state.json (failed)` row
+ * and block every still-unscanned sibling on every load.
  */
 async function scanForceInstalledBackfills(
   opts: ApplyReconcileOptions,
@@ -235,13 +272,17 @@ async function scanForceInstalledBackfills(
 }
 
 /**
- * Per-plugin fault isolation for one scanned record. Applies the D-68-03
- * partially-installed filter, the ENBL-08 disabled-record filter and the
- * RECON-04 already-touched dedupe (all three benign skips returning `false`), then runs
- * `maybeBackfillPlugin` inside a try/catch.
+ * Per-plugin fault isolation for one scanned record. Applies two filters -- the
+ * ENBL-08 disabled-record filter and the RECON-04 already-touched dedupe (both
+ * benign skips returning `false`) -- then runs `maybeBackfillPlugin` inside a
+ * try/catch. Neither reads availability: WCONV-01 puts the growth test in
+ * `maybeBackfillPlugin` as the sole promotion gate, so this function decides only
+ * whether the record is eligible to be looked at.
  *
  * SF-02 lets a genuine manifest I/O error (corrupt / permission-denied cached
- * manifest) propagate out of `maybeBackfillPlugin`. Without this guard that throw
+ * manifest) propagate out of `maybeBackfillPlugin` -- for a record recorded
+ * `installable: false`, the only population that reaches this catch (WCONV-01;
+ * see `resolveRecordedPluginOffline`). Without this guard that throw
  * unwinds the whole scan loop into the outer WR-01 wrapper, coercing the WHOLE
  * scope to a single generic `state.json (failed)` row and skipping promotion of
  * every still-unscanned SIBLING (including healthy ones under other marketplaces).
@@ -259,21 +300,15 @@ async function backfillOnePluginIsolated(
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
   const { scope, marketplace, plugin, record } = target;
-  // D-68-03: scan ONLY partially-installed plugins.
-  if (record.compatibility.installable) {
-    return false;
-  }
-
   // ENBL-08: never scan a record the user disabled. Promoting a disabled record
   // would restore that plugin's hooks, MCP servers and PATH entries at load time
   // with no command and no prompt. Reinstall also refuses a disabled record, so
   // this is not the only thing standing between the scan and that reversal --
   // it stays as the caller-side guard, so the scan does no pointless work and
-  // the promotion policy stays visible beside the scan's other filters.
-  // Availability and disabled-ness are orthogonal axes (ENBL-05),
-  // so the filter above does not cover this one. Read through the single
-  // predicate rather than the boolean, so this site cannot drift from the rule
-  // `persistence/state-io.ts` owns.
+  // the promotion policy stays visible beside the scan's other filter.
+  // Disabled-ness is its own axis (ENBL-05) and nothing else on this path reads
+  // it. Read through the single predicate rather than the boolean, so this site
+  // cannot drift from the rule `persistence/state-io.ts` owns.
   if (isRecordedButDisabled(record)) {
     return false;
   }
@@ -321,7 +356,7 @@ interface BackfillTarget {
 }
 
 /**
- * BFILL-01: re-resolve one partially-installed plugin offline (NFR-5) and, if its
+ * BFILL-01: re-resolve one recorded plugin offline (NFR-5) and, if its
  * supported set strictly grew (the boundary moved for THIS plugin -- D-68-03,
  * avoiding needless mtime churn), re-materialize it in place via the
  * partial-capable reinstall primitive at the SAME recorded version (no upgrade --
@@ -341,19 +376,38 @@ async function maybeBackfillPlugin(
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
   const { scope, marketplace, mp, plugin, record } = target;
-  const resolved = await resolveRecordedPluginOffline(mp, plugin);
+  const resolved = await resolveRecordedPluginOffline(mp, plugin, record);
   if (resolved === undefined || resolved.state === "unavailable") {
     // Unresolvable / structurally broken -- cannot backfill (NFR-5 cache-only;
     // a resolve failure is the truthful "skip" default, never a crash). A
-    // manifest-unreadable I/O throw never reaches here -- SF-02 lets it propagate
-    // out of resolveRecordedPluginOffline to the per-plugin catch in
-    // scanForceInstalledBackfills, which surfaces a plugin-scoped (failed) row and
+    // manifest-unreadable I/O throw reaches here as `undefined` only for a
+    // record already recorded `installable: true` (WCONV-01). For a
+    // partially-installed record SF-02 still lets it
+    // propagate out of resolveRecordedPluginOffline to the per-plugin catch in
+    // backfillOnePluginIsolated, which surfaces a plugin-scoped (failed) row and
     // keeps the gate open. A legitimately absent/invalid entry is benign, NOT a
     // failure, so this scan may still close the gate.
     return false;
   }
 
   if (!supportedSetGrew(record.compatibility.supported, resolved.supported)) {
+    return false;
+  }
+
+  // WCONV-01: growth is necessary but not sufficient. The supported set can grow
+  // while the UNSUPPORTED set also moves, so a record recorded `installable:
+  // true` can re-resolve `partially-available` with a strictly larger supported
+  // set. `requirePartialInstallable` admits that resolve (reinstall.ts), then
+  // `replaceAll` unstages every component that dropped out and `updateStateRecord`
+  // persists `installable: false` -- a clean record degraded, working artifacts
+  // removed, on a reload the user did not initiate and with no flag to consent
+  // through. The update path already refuses that transition by name: a clean
+  // record is not admitted to a degrading update without `--partial`, "because
+  // flipping a clean record to degraded is a consent the user has not given"
+  // (docs/output-catalog.md). Take the same stance here. A record already
+  // recorded `installable: false` was installed under that consent, so it keeps
+  // today's behaviour. Benign skip -- no row, and the gate may still close.
+  if (record.compatibility.installable && resolved.state !== "installable") {
     return false;
   }
 
@@ -415,8 +469,9 @@ async function maybeBackfillPlugin(
     installable: resolved.state === "installable",
     // SEV-05 / D-69-04: carry the re-resolved dropped-component kinds so the
     // `(partially-installed)` row composes a factual `{reasons}` brace through the
-    // shared `narrowUnsupportedKinds` seam. The `installable` arm projects to
-    // the brace-less `(installed)` row, so its unsupported set is empty.
+    // shared `narrowUnsupportedKinds` seam. The `installable` arm projects to the
+    // `(installed)` row, whose brace holds the convergence marker alone
+    // (WCONV-03), so its unsupported set is empty.
     unsupported: resolved.state === "partially-available" ? resolved.unsupported : [],
     // SURF-05 / WARN-01 / WR-04: the other two ledger signals, threaded exactly
     // as the install and enable arms thread them. The orphan-rewake fact rides
@@ -433,28 +488,53 @@ async function maybeBackfillPlugin(
 /**
  * BFILL-01 / NFR-5: re-resolve a recorded plugin from its cached marketplace
  * manifest with NO network (resolveStrict). Returns the resolved plugin, or
- * `undefined` ONLY when the entry is legitimately absent from the manifest or
- * fails the per-entry validator -- a benign "not backfillable this load".
+ * `undefined` when this record is not backfillable on this load -- a benign
+ * skip the caller reads as "nothing to promote".
  *
- * SF-02: a genuine I/O throw (manifest unreadable/corrupt) or a resolver throw
- * is NOT swallowed here. It propagates to the per-plugin catch in
- * `scanForceInstalledBackfills`, which surfaces a plugin-scoped `(failed)` row
- * AND keeps the version gate OPEN so the scan self-heals on the next load --
- * rather than being silently indistinguishable from a legitimately-absent entry
- * (which would wrongly close the gate). Per-plugin isolation there means the throw
- * does not unwind the scan past its healthy siblings.
+ * Two shapes answer `undefined`. The entry is legitimately absent from the
+ * manifest or fails the per-entry validator. Or -- WCONV-01 -- the resolve THREW
+ * for a record already recorded `compatibility.installable: true`.
+ *
+ * That second arm is the seam between the two populations this scan walks, and
+ * it is why the throw is classified HERE rather than at the outer catch. A
+ * record recorded `installable: false` names a shortfall it is still carrying,
+ * so a failure to re-resolve it IS a failed promotion: the throw propagates to
+ * the per-plugin catch in `backfillOnePluginIsolated`, which surfaces a
+ * plugin-scoped `(failed)` row and keeps the version gate OPEN so the next load
+ * retries (SF-02). A record recorded `installable: true` names no shortfall at
+ * all; WCONV-01 admits it only so the growth test can see a boundary move the
+ * record itself cannot show. An unresolvable manifest denies that test its
+ * input, which is a reason to promote nothing -- not a failure to report. Report
+ * one and a scope whose marketplace source was deleted puts a `(failed)` row on
+ * the cascade for EVERY recorded plugin under it, on EVERY load, with the gate
+ * held open by a condition no retry can clear (SC-4: a scan that materialized
+ * nothing stays silent).
+ *
+ * The cost, stated rather than glossed: a TRANSIENT resolve failure over a clean
+ * record loses this load's promotion and waits for the extension version to move
+ * again. That is the same bound the version gate imposes on every record the
+ * growth test declines.
  */
 async function resolveRecordedPluginOffline(
   mp: StateMarketplaceRecord,
   plugin: string,
+  record: StatePluginRecord,
 ): Promise<import("../../domain/resolver-types.ts").ResolvedPlugin | undefined> {
-  const manifest = await loadMarketplaceManifest(mp.manifestPath);
-  const entry = manifest.plugins.find((p) => p.name === plugin);
-  if (entry === undefined || !PLUGIN_ENTRY_VALIDATOR.Check(entry)) {
-    return undefined;
-  }
+  try {
+    const manifest = await loadMarketplaceManifest(mp.manifestPath);
+    const entry = manifest.plugins.find((p) => p.name === plugin);
+    if (entry === undefined || !PLUGIN_ENTRY_VALIDATOR.Check(entry)) {
+      return undefined;
+    }
 
-  return await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
+    return await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
+  } catch (err) {
+    if (record.compatibility.installable) {
+      return undefined;
+    }
+
+    throw err;
+  }
 }
 
 /**

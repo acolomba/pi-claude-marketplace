@@ -48,7 +48,7 @@ function installableResolution(name: string): ResolvedPlugin {
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: true,
   };
@@ -63,7 +63,7 @@ function partiallyAvailableResolution(name: string): ResolvedPlugin {
     supported: ["skills"],
     unsupported: ["lspServers"],
     notes: ["contains lspServers"],
-    componentPaths: { skills: ["skills/commit"], commands: [], agents: [] },
+    componentPaths: { skills: ["skills/commit"], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: true,
   };

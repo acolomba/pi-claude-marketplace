@@ -1,17 +1,21 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { mkdir } from "node:fs/promises";
 import test, { type TestContext } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { selectReinstallTargets } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts";
 import { MarketplaceNotAddedSignal } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
-import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type {
+  ExtensionState,
+  PluginInstallRecord,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 function pluginRecord(): PluginInstallRecord {
@@ -19,7 +23,7 @@ function pluginRecord(): PluginInstallRecord {
     version: "1.0.0",
     resolvedSource: "/plugin",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
     enabled: true,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -436,88 +440,29 @@ test("attributes a bare marketplace miss without a scope", async (testContext) =
 test("reports a marketplace removed after scope resolution", async (testContext) => {
   // arrange
   const cwd = await targetEnvironment(testContext);
-  const projectLocations = locationsFor("project", cwd);
-  const userLocations = locationsFor("user", cwd);
-  await Promise.all([
-    mkdir(projectLocations.extensionRoot, { recursive: true }),
-    mkdir(userLocations.extensionRoot, { recursive: true }),
-  ]);
-  await writeFile(
-    projectLocations.stateJsonPath,
-    JSON.stringify({
-      schemaVersion: 1,
-      marketplaces: {
-        selected: {
-          name: "selected",
-          scope: "project",
-          source: pathSource("./selected"),
-          addedFromCwd: cwd,
-          plugins: {},
-        },
-      },
-    }),
-    "utf8",
-  );
-  await writeFile(
-    userLocations.stateJsonPath,
-    JSON.stringify({ schemaVersion: 2, marketplaces: {}, padding: "x".repeat(16 * 1024 * 1024) }),
-    "utf8",
-  );
-  const removedStatePath = path.join(projectLocations.extensionRoot, "state-removed.json");
-  const quarantinedStatePath = path.join(projectLocations.extensionRoot, "state-migration.tmp");
-  await writeFile(removedStatePath, JSON.stringify({ schemaVersion: 2, marketplaces: {} }), "utf8");
-  const monitorSource = `
-    import { renameSync, watch } from "node:fs";
-    import path from "node:path";
-
-    const directory = process.env.REINSTALL_RACE_DIRECTORY;
-    const statePath = process.env.REINSTALL_RACE_STATE;
-    const removedPath = process.env.REINSTALL_RACE_REMOVED;
-    const quarantinedPath = process.env.REINSTALL_RACE_QUARANTINED;
-    if (!directory || !statePath || !removedPath || !quarantinedPath) {
-      throw new Error("missing reinstall race paths");
-    }
-
-    const timeout = setTimeout(() => process.exit(2), 5_000);
-    const watcher = watch(directory, (_event, filename) => {
-      if (filename === null || !filename.startsWith("state.json.")) return;
-      renameSync(path.join(directory, filename), quarantinedPath);
-      renameSync(removedPath, statePath);
-      clearTimeout(timeout);
-      watcher.close();
-      process.send?.("replaced", () => process.disconnect?.());
-    });
-    process.send?.("ready");
-  `;
-  const monitor = spawn(process.execPath, ["--input-type=module", "--eval", monitorSource], {
-    env: {
-      ...process.env,
-      REINSTALL_RACE_DIRECTORY: projectLocations.extensionRoot,
-      REINSTALL_RACE_QUARANTINED: quarantinedStatePath,
-      REINSTALL_RACE_REMOVED: removedStatePath,
-      REINSTALL_RACE_STATE: projectLocations.stateJsonPath,
-    },
-    stdio: ["ignore", "ignore", "pipe", "ipc"],
-  });
-  testContext.after(() => {
-    if (monitor.exitCode === null && monitor.signalCode === null) {
-      monitor.kill("SIGTERM");
-    }
-  });
-  await new Promise<void>((resolve, reject) => {
-    monitor.once("error", reject);
-    monitor.on("message", (message) => {
-      if (message === "ready") {
-        resolve();
+  await seedScope(cwd, "project", { selected: ["alpha"] });
+  const projectRoot = locationsFor("project", cwd).extensionRoot;
+  // The scope resolution reads the project state and finds the marketplace;
+  // the next project read, the target expansion, does not. That asymmetry IS
+  // the concurrent removal, expressed without racing a real writer.
+  const projectLoads: string[] = [];
+  const stateReader = async (extensionRoot: string): Promise<ExtensionState> => {
+    if (extensionRoot === projectRoot) {
+      projectLoads.push(extensionRoot);
+      if (projectLoads.length > 1) {
+        return { schemaVersion: 2, marketplaces: {} };
       }
-    });
-  });
+    }
+
+    return loadState(extensionRoot);
+  };
 
   // act & assert
   await assert.rejects(
     selectReinstallTargets({
       cwd,
       target: { kind: "marketplace", marketplace: "selected" },
+      loadState: stateReader,
     }),
     (error: unknown) => {
       assert.ok(error instanceof MarketplaceNotAddedSignal);
@@ -528,4 +473,5 @@ test("reports a marketplace removed after scope resolution", async (testContext)
       return true;
     },
   );
+  assert.deepStrictEqual(projectLoads, [projectRoot, projectRoot]);
 });

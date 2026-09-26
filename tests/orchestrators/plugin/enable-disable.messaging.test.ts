@@ -49,6 +49,7 @@ test("the disable context renders a complete bare disabled transition", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -85,6 +86,7 @@ test("the disable context renders a complete failed row without leaking its caus
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -119,6 +121,7 @@ test("the disable context renders a complete idempotent skipped row", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -161,6 +164,7 @@ test("the enable context renders a complete failed stale-gate row body", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -194,6 +198,7 @@ test("the enable context renders a complete bare installed transition", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -229,6 +234,7 @@ test("the enable context renders installed reasons before both missing companion
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -266,6 +272,7 @@ test("the enable context renders a partially-installed row with one missing comp
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -299,6 +306,7 @@ test("the enable context renders a complete idempotent skipped row with optional
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -666,6 +674,7 @@ test("the disable context renders the dependents-remain refusal reason", () => {
     cause,
   } as const satisfies DisableMsg;
   const probe: SoftDepStatus = {
+    workflowEngineLoaded: false,
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
   };

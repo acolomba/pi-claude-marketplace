@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, readFileSync, watch, writeFileSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import * as fs from "node:fs";
 import {
   chmod,
@@ -8,6 +8,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  realpath,
   rm,
   stat,
   writeFile,
@@ -66,6 +67,7 @@ import type {
   GitAuthBundle,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { UpdatePluginsFn } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import type {
   UpdateCloneCacheSeam,
   UpdatePluginsOptions,
@@ -257,6 +259,15 @@ interface NotifyRecord {
   severity?: string;
 }
 
+/**
+ * A case-owned temporary directory, by its resolved path, so it matches the
+ * paths that `process.cwd()` and the filesystem report where the temp
+ * directory is a symlink (macOS: /var -> /private/var).
+ */
+async function createCaseDir(prefix: string): Promise<string> {
+  return realpath(await mkdtemp(path.join(tmpdir(), prefix)));
+}
+
 function makeCtx(piOverrides?: { getAllTools?: () => readonly ToolInventoryItem[] }): {
   ctx: NotificationContext;
   pi: ToolInventory;
@@ -276,37 +287,68 @@ function makeCtx(piOverrides?: { getAllTools?: () => readonly ToolInventoryItem[
   return { ctx, pi, notifications };
 }
 
-function watchStateTransition(
-  locations: ReturnType<typeof locationsFor>,
+/**
+ * Runs `effect` once, right after the first state save whose saved state
+ * satisfies `predicate`, and binds update operations to that observed state
+ * I/O. The effect lands inside the save's lock, before the update's next step,
+ * so it needs no file watcher and no timing.
+ */
+function observeStateTransition(
   predicate: (state: ExtensionState) => boolean,
   effect: (state: ExtensionState) => void,
-): { readonly close: () => void; readonly fired: () => boolean } {
+): {
+  readonly fired: () => boolean;
+  readonly updatePlugins: UpdatePluginsFn;
+  readonly updateSinglePlugin: PluginUpdateFn;
+} {
   let didFire = false;
-  const stateName = path.basename(locations.stateJsonPath);
-  const watcher = watch(path.dirname(locations.stateJsonPath), (_event, filename) => {
-    if (didFire || filename !== stateName) {
-      return;
-    }
-
-    try {
-      const state = JSON.parse(readFileSync(locations.stateJsonPath, "utf8")) as ExtensionState;
-      if (!predicate(state)) {
-        return;
-      }
-
-      didFire = true;
-      effect(state);
-    } catch {
-      // Atomic replacement can briefly report the destination event before
-      // the final pathname is readable; the next event retries the observation.
-    }
-  });
-  return {
-    close: () => {
-      watcher.close();
+  const operations = createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+    {
+      saveState: async (extensionRoot, state) => {
+        await saveState(extensionRoot, state);
+        if (!didFire && predicate(state)) {
+          didFire = true;
+          effect(structuredClone(state));
+        }
+      },
     },
+  );
+  return {
     fired: () => didFire,
+    updatePlugins: operations.updatePlugins,
+    updateSinglePlugin: operations.beginPluginUpdateRun(),
   };
+}
+
+/**
+ * Plays a concurrent writer that edits the state after preflight: the first
+ * locked load (the intent-mark guard) applies `mutate`, persists the result,
+ * and hands the mutated state to the update.
+ */
+function mutateAtFirstLockedLoad(mutate: (state: ExtensionState) => void): {
+  readonly fired: () => boolean;
+  readonly updateSinglePlugin: PluginUpdateFn;
+} {
+  let didFire = false;
+  const operations = createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+    {
+      loadState: async (extensionRoot) => {
+        const state = await loadState(extensionRoot);
+        if (!didFire) {
+          didFire = true;
+          mutate(state);
+          await saveState(extensionRoot, state);
+        }
+
+        return state;
+      },
+    },
+  );
+  return { fired: () => didFire, updateSinglePlugin: operations.beginPluginUpdateRun() };
 }
 
 function makeCredentialOps(): ReturnType<typeof createCredentialOpsFake>["credentialOps"] {
@@ -416,6 +458,7 @@ async function seedGitUpdateMarketplace(opts: {
               agents: [],
               mcpServers: [],
               hooks: [],
+              workflows: [],
             },
             resolvedSource: oldCloneRoot,
             resolvedSha: opts.recordedSha,
@@ -445,6 +488,7 @@ function makePluginRecord(
       agents: resources.agents ?? [],
       mcpServers: resources.mcpServers ?? [],
       hooks: resources.hooks ?? [],
+      workflows: [],
     },
     enabled,
     provenance: "explicit",
@@ -713,7 +757,7 @@ async function rewriteManifest(
 
 test("PUP-1: a bare update against empty state reports its no-op headline", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-empty-"));
+    const cwd = await createCaseDir("update-pup1-empty-");
     try {
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({ ctx, pi, scope: "project", cwd, target: { kind: "all" } });
@@ -730,7 +774,7 @@ test("PUP-1: a bare update against empty state reports its no-op headline", asyn
 
 test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state mutation", async (testContext) => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup3-"));
+    const cwd = await createCaseDir("update-pup3-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -793,7 +837,7 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
 test("PUP-4: source overridden to unsupported npm -> outcome.partition='skipped' with 'is no longer installable'", async (testContext) => {
   await withHermeticHome(async () => {
     // arrange
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup4-"));
+    const cwd = await createCaseDir("update-pup4-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -851,7 +895,7 @@ test("PUP-4: source overridden to unsupported npm -> outcome.partition='skipped'
 
 test("PUP-5: refreshed manifest no longer lists entry -> outcome.partition='skipped' with 'not in manifest'", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup5-"));
+    const cwd = await createCaseDir("update-pup5-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -891,7 +935,7 @@ test("PUP-5: refreshed manifest no longer lists entry -> outcome.partition='skip
 
 test("PUP-5: an accepted empty recorded version is omitted from the failed row", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup5-empty-version-"));
+    const cwd = await createCaseDir("update-pup5-empty-version-");
     try {
       // arrange
       const seeded = await seedPathMarketplace({
@@ -956,7 +1000,7 @@ const MANIFEST_ABSENT_BULK_BODY = `${MANIFEST_ABSENT_UPDATE_BODY}\n\nPlugin upda
 
 test("LIFE-05: marketplace-bulk target renders `(skipped) {not in manifest}`, and a repeated update is byte-identical", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-life05-mp-"));
+    const cwd = await createCaseDir("update-life05-mp-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -1005,7 +1049,7 @@ test("LIFE-05: marketplace-bulk target renders `(skipped) {not in manifest}`, an
 
 test("LIFE-05: global-bulk target renders `(skipped) {not in manifest}` and writes NO state", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-life05-all-"));
+    const cwd = await createCaseDir("update-life05-all-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -1046,7 +1090,7 @@ test("LIFE-05: global-bulk target renders `(skipped) {not in manifest}` and writ
 
 test("updatePlugins preserves a generated skill preload in the staged agent", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-agent-skill-direct-"));
+    const cwd = await createCaseDir("update-agent-skill-direct-");
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -1088,8 +1132,8 @@ test("updatePlugins preserves a generated skill preload in the staged agent", as
         path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
         "utf8",
       );
-      assert.match(agent, /^skills: hello:tool$/m);
-      assert.match(agent, /^- `hello:tool` → skill `hello:tool` \(available on demand\)$/m);
+      assert.match(agent, /^skills: hello-tool$/m);
+      assert.match(agent, /^Use \/skill:hello-tool\.$/m);
       assert.deepEqual(notifications, [
         {
           message:
@@ -1113,7 +1157,7 @@ test("updatePlugins preserves a generated skill preload in the staged agent", as
 test("updateSinglePlugin preserves a generated skill preload from its path source", async (t) => {
   await withHermeticHome(async () => {
     // arrange
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-agent-skill-cascade-"));
+    const cwd = await createCaseDir("update-agent-skill-cascade-");
     const previousCwd = process.cwd();
     t.after(async () => {
       process.chdir(previousCwd);
@@ -1141,8 +1185,8 @@ test("updateSinglePlugin preserves a generated skill preload from its path sourc
       "utf8",
     );
     assert.equal(outcome.partition, "updated");
-    assert.match(agent, /^skills: hello:tool$/m);
-    assert.match(agent, /^- `hello:tool` → skill `hello:tool` \(available on demand\)$/m);
+    assert.match(agent, /^skills: hello-tool$/m);
+    assert.match(agent, /^Use \/skill:hello-tool\.$/m);
   });
 });
 
@@ -1181,7 +1225,14 @@ test("PROV-02/PROV-03: update never promotes a dependency record's provenance", 
       version: "1.0.1",
       resolvedSource: path.join(cwd, "mp-src", "plugins", "hello"),
       compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
-      resources: { skills: ["hello:tool"], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      resources: {
+        skills: ["hello-tool"],
+        prompts: [],
+        agents: [],
+        mcpServers: [],
+        hooks: [],
+        workflows: [],
+      },
       enabled: true,
       provenance: "dependency",
       installedAt: seededRecord.installedAt,
@@ -1192,7 +1243,7 @@ test("PROV-02/PROV-03: update never promotes a dependency record's provenance", 
 
 test("PDEF-01: update preview detects an agent conflict from a later resolved directory", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-agent-dir-preview-"));
+    const cwd = await createCaseDir("update-agent-dir-preview-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -1270,7 +1321,7 @@ test("PDEF-01: update preview detects an agent conflict from a later resolved di
 
 test("PDEF-01: update stages every agent directory and warns on a later duplicate", async (t) => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-agent-dirs-"));
+    const cwd = await createCaseDir("update-agent-dirs-");
     const previousCwd = process.cwd();
     t.after(async () => {
       process.chdir(previousCwd);
@@ -1341,7 +1392,7 @@ test("PDEF-01: update stages every agent directory and warns on a later duplicat
 
 test("PUP-2: two plugins in SAME github marketplace -> syncCloneOnce calls fetch/forceUpdateRef/checkout exactly once", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup2-"));
+    const cwd = await createCaseDir("update-pup2-");
     try {
       // Seed a github marketplace with two installed plugins. The fixture
       // provides a valid marketplace.json under the cloneDir; the resolver
@@ -1402,7 +1453,7 @@ test("PUP-2: two plugins in SAME github marketplace -> syncCloneOnce calls fetch
 
 test("NFR-5: path-source marketplace update calls zero gitOps primitives", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-nfr5-"));
+    const cwd = await createCaseDir("update-nfr5-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -1438,7 +1489,7 @@ test("NFR-5: path-source marketplace update calls zero gitOps primitives", async
 
 test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, partitions accordingly", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-mp-"));
+    const cwd = await createCaseDir("update-pup1-mp-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -1497,7 +1548,7 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
 
 test("UGRM-02: bulk @mp update with TWO realized transitions tallies `2 updated` (verb invariant, no plural-s)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-tally-2updated-"));
+    const cwd = await createCaseDir("update-tally-2updated-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -1546,7 +1597,7 @@ test("UGRM-02: bulk @mp update with TWO realized transitions tallies `2 updated`
 
 test("PUP-8: no plugin updated -> no reload hint", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup8-"));
+    const cwd = await createCaseDir("update-pup8-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -1581,7 +1632,7 @@ test("PUP-8: no plugin updated -> no reload hint", async () => {
 
 test("PUP-9 cascade: updateSinglePlugin on missing marketplace returns partition='skipped' (does NOT throw)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup9-casc-"));
+    const cwd = await createCaseDir("update-pup9-casc-");
     try {
       // No state seeded -- marketplace absent. The cascade-safe contract
       // says: capture into partition='failed' OR 'skipped' depending on
@@ -1608,7 +1659,7 @@ test("PUP-9 cascade vs direct: catastrophic resolver failure routes differently"
   // manifest at the marketplaceRoot) returns partition='failed' instead
   // of throwing. Direct path on the same input fires notifyError.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup9-route-"));
+    const cwd = await createCaseDir("update-pup9-route-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -1653,7 +1704,7 @@ test("PUP-9 cascade vs direct: catastrophic resolver failure routes differently"
 
 test("updateSinglePlugin classifies a missing manifest path as source missing", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-cascade-manifest-missing-"));
+    const cwd = await createCaseDir("update-cascade-manifest-missing-");
     const previousCwd = process.cwd();
     try {
       // arrange
@@ -1688,7 +1739,7 @@ test("updateSinglePlugin classifies a missing manifest path as source missing", 
 
 test("updateSinglePlugin classifies a manifest beneath a file as source missing", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-cascade-manifest-notdir-"));
+    const cwd = await createCaseDir("update-cascade-manifest-notdir-");
     const previousCwd = process.cwd();
     try {
       // arrange
@@ -1725,7 +1776,7 @@ test("updateSinglePlugin classifies a manifest beneath a file as source missing"
 
 test("updateSinglePlugin classifies an unreadable manifest as permission denied", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-cascade-manifest-denied-"));
+    const cwd = await createCaseDir("update-cascade-manifest-denied-");
     const previousCwd = process.cwd();
     let manifestPath: string | undefined;
     try {
@@ -1761,10 +1812,8 @@ test("updateSinglePlugin classifies an unreadable manifest as permission denied"
 
 test("updateSinglePlugin classifies a plugin removed after preflight as concurrently uninstalled", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-cascade-preflight-uninstalled-"));
+    const cwd = await createCaseDir("update-cascade-preflight-uninstalled-");
     const previousCwd = process.cwd();
-    let stagingWatch: ReturnType<typeof watch> | undefined;
-    let didMutate = false;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -1775,27 +1824,19 @@ test("updateSinglePlugin classifies a plugin removed after preflight as concurre
         manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
         installedVersions: { hello: "1.0.0" },
       });
-      await mkdir(locations.skillsStagingDir, { recursive: true });
-      stagingWatch = watch(locations.skillsStagingDir, () => {
-        if (didMutate) {
-          return;
-        }
-
-        didMutate = true;
-        const state = JSON.parse(readFileSync(locations.stateJsonPath, "utf8")) as ExtensionState;
+      const concurrentWriter = mutateAtFirstLockedLoad((state) => {
         const marketplace = state.marketplaces["mp"];
         assert.ok(marketplace !== undefined);
         delete marketplace.plugins["hello"];
-        writeFileSync(locations.stateJsonPath, JSON.stringify(state));
         chmodSync(locations.skillsStagingDir, 0o500);
       });
       process.chdir(cwd);
 
       // act
-      const outcome = await updateSinglePlugin("hello", "mp", "project");
+      const outcome = await concurrentWriter.updateSinglePlugin("hello", "mp", "project");
 
       // assert
-      assert.equal(didMutate, true);
+      assert.equal(concurrentWriter.fired(), true);
       assert.equal(outcome.partition, "failed");
       assert.deepEqual(outcome.reasons, ["concurrently uninstalled"]);
       assert.match(outcome.notes?.[0] ?? "", /concurrently uninstalled/);
@@ -1816,7 +1857,6 @@ test("updateSinglePlugin classifies a plugin removed after preflight as concurre
         undefined,
       );
     } finally {
-      stagingWatch?.close();
       process.chdir(previousCwd);
       const locations = locationsFor("project", cwd);
       await chmod(locations.skillsStagingDir, 0o700).catch(() => undefined);
@@ -1827,10 +1867,8 @@ test("updateSinglePlugin classifies a plugin removed after preflight as concurre
 
 test("updateSinglePlugin classifies a version changed after preflight as concurrently updated", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-cascade-preflight-updated-"));
+    const cwd = await createCaseDir("update-cascade-preflight-updated-");
     const previousCwd = process.cwd();
-    let stagingWatch: ReturnType<typeof watch> | undefined;
-    let didMutate = false;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -1846,26 +1884,18 @@ test("updateSinglePlugin classifies a version changed after preflight as concurr
       assert.ok(initialRecord !== undefined);
       initialRecord.resources.skills = [];
       await saveState(locations.extensionRoot, initialState);
-      await mkdir(locations.commandsStagingDir, { recursive: true });
-      stagingWatch = watch(locations.commandsStagingDir, () => {
-        if (didMutate) {
-          return;
-        }
-
-        didMutate = true;
-        const state = JSON.parse(readFileSync(locations.stateJsonPath, "utf8")) as ExtensionState;
+      const concurrentWriter = mutateAtFirstLockedLoad((state) => {
         const record = state.marketplaces["mp"]?.plugins["hello"];
         assert.ok(record !== undefined);
         record.version = "1.0.9";
-        writeFileSync(locations.stateJsonPath, JSON.stringify(state));
       });
       process.chdir(cwd);
 
       // act
-      const outcome = await updateSinglePlugin("hello", "mp", "project");
+      const outcome = await concurrentWriter.updateSinglePlugin("hello", "mp", "project");
 
       // assert
-      assert.equal(didMutate, true);
+      assert.equal(concurrentWriter.fired(), true);
       assert.equal(outcome.partition, "failed");
       assert.deepEqual(outcome.reasons, ["concurrently updated"]);
       assert.match(outcome.notes?.[0] ?? "", /concurrently updated/);
@@ -1874,7 +1904,6 @@ test("updateSinglePlugin classifies a version changed after preflight as concurr
         "1.0.9",
       );
     } finally {
-      stagingWatch?.close();
       process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1883,8 +1912,7 @@ test("updateSinglePlugin classifies a version changed after preflight as concurr
 
 test("a hooks source corrupted after intent marking becomes an ordered phase failure", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-hooks-reparse-race-"));
-    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    const cwd = await createCaseDir("update-hooks-reparse-race-");
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -1910,8 +1938,7 @@ test("a hooks source corrupted after intent marking becomes an ordered phase fai
         "hooks",
         "hooks.json",
       );
-      stateWatch = watchStateTransition(
-        locations,
+      const stateWatch = observeStateTransition(
         (state) =>
           state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
             "update-in-progress",
@@ -1923,7 +1950,7 @@ test("a hooks source corrupted after intent marking becomes an ordered phase fai
       const { ctx, pi, notifications } = makeCtx();
 
       // act
-      await updatePlugins({
+      await stateWatch.updatePlugins({
         ctx,
         pi,
         scope: "project",
@@ -1943,7 +1970,6 @@ test("a hooks source corrupted after intent marking becomes an ordered phase fai
       assert.equal(record?.version, "1.0.0");
       assert.equal(record?.compatibility.installable, false);
     } finally {
-      stateWatch?.close();
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -1951,8 +1977,7 @@ test("a hooks source corrupted after intent marking becomes an ordered phase fai
 
 test("a marketplace removed after intent marking is not recreated during finalize", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-finalize-marketplace-race-"));
-    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    const cwd = await createCaseDir("update-finalize-marketplace-race-");
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -1963,8 +1988,7 @@ test("a marketplace removed after intent marking is not recreated during finaliz
         manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
         installedVersions: { hello: "1.0.0" },
       });
-      stateWatch = watchStateTransition(
-        locations,
+      const stateWatch = observeStateTransition(
         (state) =>
           state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
             "update-in-progress",
@@ -1979,7 +2003,7 @@ test("a marketplace removed after intent marking is not recreated during finaliz
       const { ctx, pi, notifications } = makeCtx();
 
       // act
-      await updatePlugins({
+      await stateWatch.updatePlugins({
         ctx,
         pi,
         scope: "project",
@@ -1995,7 +2019,6 @@ test("a marketplace removed after intent marking is not recreated during finaliz
       assert.match(notifications[0]?.message ?? "", /Marketplace "mp" disappeared/);
       assert.deepEqual((await loadState(locations.extensionRoot)).marketplaces, {});
     } finally {
-      stateWatch?.close();
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -2003,8 +2026,7 @@ test("a marketplace removed after intent marking is not recreated during finaliz
 
 test("a plugin removed after intent marking is not recreated during finalize", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-finalize-plugin-race-"));
-    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    const cwd = await createCaseDir("update-finalize-plugin-race-");
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -2015,8 +2037,7 @@ test("a plugin removed after intent marking is not recreated during finalize", a
         manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
         installedVersions: { hello: "1.0.0" },
       });
-      stateWatch = watchStateTransition(
-        locations,
+      const stateWatch = observeStateTransition(
         (state) =>
           state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
             "update-in-progress",
@@ -2031,7 +2052,7 @@ test("a plugin removed after intent marking is not recreated during finalize", a
       const { ctx, pi, notifications } = makeCtx();
 
       // act
-      await updatePlugins({
+      await stateWatch.updatePlugins({
         ctx,
         pi,
         scope: "project",
@@ -2050,7 +2071,6 @@ test("a plugin removed after intent marking is not recreated during finalize", a
         undefined,
       );
     } finally {
-      stateWatch?.close();
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -2058,8 +2078,7 @@ test("a plugin removed after intent marking is not recreated during finalize", a
 
 test("a skills staging cleanup leak becomes a rollback partial and retry converges", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-skills-cleanup-leak-"));
-    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    const cwd = await createCaseDir("update-skills-cleanup-leak-");
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -2070,8 +2089,7 @@ test("a skills staging cleanup leak becomes a rollback partial and retry converg
         manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
         installedVersions: { hello: "1.0.0" },
       });
-      stateWatch = watchStateTransition(
-        locations,
+      const stateWatch = observeStateTransition(
         (state) =>
           state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
             "update-in-progress",
@@ -2083,7 +2101,7 @@ test("a skills staging cleanup leak becomes a rollback partial and retry converg
       const first = makeCtx();
 
       // act
-      await updatePlugins({
+      await stateWatch.updatePlugins({
         ctx: first.ctx,
         pi: first.pi,
         scope: "project",
@@ -2116,7 +2134,6 @@ test("a skills staging cleanup leak becomes a rollback partial and retry converg
         "1.0.1",
       );
     } finally {
-      stateWatch?.close();
       const locations = locationsFor("project", cwd);
       await chmod(locations.skillsStagingDir, 0o700).catch(() => undefined);
       await rm(cwd, { recursive: true, force: true });
@@ -2126,8 +2143,7 @@ test("a skills staging cleanup leak becomes a rollback partial and retry converg
 
 test("an agents staging cleanup leak becomes a rollback partial and retry converges", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-agents-cleanup-leak-"));
-    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    const cwd = await createCaseDir("update-agents-cleanup-leak-");
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -2140,8 +2156,7 @@ test("an agents staging cleanup leak becomes a rollback partial and retry conver
         },
         installedVersions: { hello: "1.0.0" },
       });
-      stateWatch = watchStateTransition(
-        locations,
+      const stateWatch = observeStateTransition(
         (state) =>
           state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
             "update-in-progress",
@@ -2153,7 +2168,7 @@ test("an agents staging cleanup leak becomes a rollback partial and retry conver
       const first = makeCtx();
 
       // act
-      await updatePlugins({
+      await stateWatch.updatePlugins({
         ctx: first.ctx,
         pi: first.pi,
         scope: "project",
@@ -2186,7 +2201,6 @@ test("an agents staging cleanup leak becomes a rollback partial and retry conver
         "1.0.1",
       );
     } finally {
-      stateWatch?.close();
       const locations = locationsFor("project", cwd);
       await chmod(locations.agentsStagingDir, 0o700).catch(() => undefined);
       await rm(cwd, { recursive: true, force: true });
@@ -2216,9 +2230,8 @@ for (const cleanupCase of [
 ] as const) {
   test(`a ${cleanupCase.artifact} commit cleanup failure retains an exact structured descriptor`, async () => {
     await withHermeticHome(async () => {
-      const cwd = await mkdtemp(path.join(tmpdir(), `update-${cleanupCase.artifact}-context-`));
+      const cwd = await createCaseDir(`update-${cleanupCase.artifact}-context-`);
       const previousCwd = process.cwd();
-      let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
       const locations = locationsFor("project", cwd);
       const stagingRoot = cleanupCase.stagingRoot(locations);
       try {
@@ -2230,8 +2243,7 @@ for (const cleanupCase of [
           manifestPlugins: { hello: cleanupCase.manifest },
           installedVersions: { hello: "1.0.0" },
         });
-        stateWatch = watchStateTransition(
-          locations,
+        const stateWatch = observeStateTransition(
           (state) =>
             state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
               "update-in-progress",
@@ -2243,7 +2255,7 @@ for (const cleanupCase of [
         process.chdir(cwd);
 
         // act
-        const outcome = await updateSinglePlugin("hello", "mp", "project");
+        const outcome = await stateWatch.updateSinglePlugin("hello", "mp", "project");
 
         // assert
         assert.equal(outcome.partition, "failed");
@@ -2269,7 +2281,6 @@ for (const cleanupCase of [
         assert.equal(Object.isFrozen(cleanupFailure), true);
         assert.equal(Object.isFrozen(phaseFailure.cleanupFailures), true);
       } finally {
-        stateWatch?.close();
         process.chdir(previousCwd);
         await chmod(stagingRoot, 0o700).catch(() => undefined);
         await rm(cwd, { recursive: true, force: true });
@@ -2280,8 +2291,7 @@ for (const cleanupCase of [
 
 test("an MCP commit permission failure becomes a rollback partial and retry converges", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-mcp-commit-denied-"));
-    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    const cwd = await createCaseDir("update-mcp-commit-denied-");
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -2292,8 +2302,7 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
         manifestPlugins: { hello: { version: "1.0.1", hasSkill: true, hasMcp: true } },
         installedVersions: { hello: "1.0.0" },
       });
-      stateWatch = watchStateTransition(
-        locations,
+      const stateWatch = observeStateTransition(
         (state) =>
           state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
             "update-in-progress",
@@ -2305,7 +2314,7 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
       const first = makeCtx();
 
       // act
-      await updatePlugins({
+      await stateWatch.updatePlugins({
         ctx: first.ctx,
         pi: first.pi,
         scope: "project",
@@ -2335,7 +2344,6 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
         "1.0.1",
       );
     } finally {
-      stateWatch?.close();
       const locations = locationsFor("project", cwd);
       await chmod(path.dirname(locations.mcpJsonPath), 0o700).catch(() => undefined);
       await rm(cwd, { recursive: true, force: true });
@@ -2355,7 +2363,7 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
   // contract is that ANY commit-time throw lands in failures[]. We use
   // the file-vs-dir filesystem collision as one reliable trigger.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup6-fail-"));
+    const cwd = await createCaseDir("update-pup6-fail-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -2373,9 +2381,9 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       // at rename time: a *FILE* at the path the bridge wants to rename
       // *into*. The bridge skills target shape is
       // `<skillsTargetDir>/<generatedName>/` -- so we pre-create
-      // `<skillsTargetDir>/hello:tool` as a FILE.
+      // `<skillsTargetDir>/hello-tool` as a FILE.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "hello:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
       const completionCache = createCompletionCache();
@@ -2479,7 +2487,7 @@ test("WR-01: bulk update where an up-to-date plugin precedes a phase-3a failure 
   // invocation. The `abortedByFailure`
   // flag now suppresses that headline.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-abort-"));
+    const cwd = await createCaseDir("update-wr01-abort-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -2499,10 +2507,10 @@ test("WR-01: bulk update where an up-to-date plugin precedes a phase-3a failure 
 
       // Force the phase-3a failure for `zzz` only: pre-create its skill TARGET
       // as a FILE so the bridge's `rename(stagingDir -> target)` returns ENOTDIR
-      // (the PUP-6 mechanism). The generated skill name is `<plugin>:<skillDir>`
-      // = `zzz:tool`. `aaa` has no obstacle, so it cleanly partitions unchanged.
+      // (the PUP-6 mechanism). The generated skill name is `<plugin>-<skillDir>`
+      // = `zzz-tool`. `aaa` has no obstacle, so it cleanly partitions unchanged.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "zzz:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "zzz-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -2540,7 +2548,7 @@ test("WR-01: a CLEANLY-UPDATED predecessor before a phase-3a abort stays visible
   // the committed `aaa (updated)` row so a successful predecessor update never
   // vanishes behind the failure.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-abort-committed-"));
+    const cwd = await createCaseDir("update-wr01-abort-committed-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -2559,10 +2567,10 @@ test("WR-01: a CLEANLY-UPDATED predecessor before a phase-3a abort stays visible
       });
 
       // Force the phase-3a failure for `zzz` only: pre-create its skill TARGET
-      // (`zzz:tool`) as a FILE so the bridge's `rename(staging -> target)`
-      // returns ENOTDIR. `aaa`'s target (`aaa:tool`) is unobstructed.
+      // (`zzz-tool`) as a FILE so the bridge's `rename(staging -> target)`
+      // returns ENOTDIR. `aaa`'s target (`aaa-tool`) is unobstructed.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "zzz:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "zzz-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -2600,7 +2608,7 @@ test("WR-01: a CLEANLY-UPDATED predecessor before a phase-3a abort stays visible
 
 test("WR-04: successful update populates stagedAgentNames + stagedMcpServerNames on outcome", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr04-"));
+    const cwd = await createCaseDir("update-wr04-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -2644,7 +2652,7 @@ test("WR-04: successful update populates stagedAgentNames + stagedMcpServerNames
         !rec.compatibility.notes.includes("update-in-progress"),
         "intent-mark marker must NOT leak into the all-success state",
       );
-      assert.deepEqual([...rec.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...rec.resources.skills], ["hello-tool"]);
       assert.deepEqual([...rec.resources.agents], ["pi-claude-marketplace-hello-bot"]);
       assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
 
@@ -2659,7 +2667,7 @@ test("WR-04: successful update populates stagedAgentNames + stagedMcpServerNames
 
 test("SEV-03 / D-69-01: autoupdate cascade (updateSinglePlugin) TAKES the partial path -- a `partially-available` candidate degrades to partition='updated' carrying unsupportedKinds (NOT skipped)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-partial-"));
+    const cwd = await createCaseDir("update-sev03-partial-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -2701,7 +2709,7 @@ test("SEV-03 / D-69-01: autoupdate cascade (updateSinglePlugin) TAKES the partia
 test("SEV-03 / FORCE-05: autoupdate cascade does NOT bypass a hard failure -- an npm-source (`unavailable`) candidate still returns partition='skipped' {no longer installable}", async () => {
   await withHermeticHome(async () => {
     // arrange
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-unavail-"));
+    const cwd = await createCaseDir("update-sev03-unavail-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -2745,7 +2753,7 @@ test("SEV-03 / FORCE-05: autoupdate cascade does NOT bypass a hard failure -- an
 
 test("XSURF-03 / SEV-04: the manual `update` path (no --partial) of a partially-upgradable candidate declines with `(partially-upgradable) {lsp}` + the --partial trailer at warning", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-manual-"));
+    const cwd = await createCaseDir("update-sev03-manual-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -2787,7 +2795,7 @@ test("XSURF-03 / SEV-04: the manual `update` path (no --partial) of a partially-
 
 test("SEV-03 / D-69-01: prior-state read -- a previously-CLEAN plugin (persisted unsupported empty) degraded by the autoupdate cascade carries newlyDegraded=true", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-newly-"));
+    const cwd = await createCaseDir("update-sev03-newly-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -2824,7 +2832,7 @@ test("SEV-03 / D-69-01: prior-state read -- a previously-CLEAN plugin (persisted
 
 test("SEV-03 / D-69-01: prior-state read -- an ALREADY partially-installed plugin (persisted unsupported non-empty) degraded again carries newlyDegraded=false", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-already-"));
+    const cwd = await createCaseDir("update-sev03-already-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -2870,7 +2878,7 @@ test("SEV-03 / D-69-01: prior-state read -- an ALREADY partially-installed plugi
 
 test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not installed)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-pl-noinstall-"));
+    const cwd = await createCaseDir("update-pup1-pl-noinstall-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -2914,7 +2922,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
 // plugin.
 test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partition='failed' (not in manifest)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-pl-nomanifest-"));
+    const cwd = await createCaseDir("update-pup1-pl-nomanifest-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -2957,7 +2965,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
 // the orchestrator.
 test("ATTR-02 @<mp>: unknown marketplace with explicit scope -> standalone {marketplace not added} [scope] bracket", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-attr02-nomp-mp-"));
+    const cwd = await createCaseDir("update-attr02-nomp-mp-");
     try {
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -2987,7 +2995,7 @@ test("ATTR-02 @<mp>: unknown marketplace with explicit scope -> standalone {mark
 // form (both flow through enumerateMarketplaceTarget).
 test("ATTR-02 <plugin>@<mp>: unknown marketplace with explicit scope -> standalone {marketplace not added} [scope] bracket", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-attr02-nomp-pl-"));
+    const cwd = await createCaseDir("update-attr02-nomp-pl-");
     try {
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -3015,7 +3023,7 @@ test("ATTR-02 <plugin>@<mp>: unknown marketplace with explicit scope -> standalo
 // form; no requested scope to report).
 test("ATTR-02 @<mp> bare: unknown marketplace absent from both scopes -> standalone {marketplace not added}, no bracket", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-attr02-nomp-bare-"));
+    const cwd = await createCaseDir("update-attr02-nomp-bare-");
     try {
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -3043,7 +3051,7 @@ test("ATTR-02 @<mp> bare: unknown marketplace absent from both scopes -> standal
 // ("not added in the scope you asked for"; the operator infers the other scope).
 test("SCOPE-01 @<mp>: marketplace present only in other scope -> scope-qualified not-added row [requestedScope]", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-scope01-other-"));
+    const cwd = await createCaseDir("update-scope01-other-");
     try {
       // Seed the marketplace in PROJECT (seedPathMarketplace uses project).
       await seedPathMarketplace({
@@ -3089,7 +3097,7 @@ test("SCOPE-01 @<mp>: marketplace present only in other scope -> scope-qualified
 // target means the operation was NOT carried out, so the row is `error`.
 test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skipped) {not installed, marketplace in project scope}", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-scope01-plugin-other-"));
+    const cwd = await createCaseDir("update-scope01-plugin-other-");
     try {
       // Seed the marketplace in PROJECT; ask for USER explicitly.
       await seedPathMarketplace({
@@ -3126,7 +3134,7 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skippe
 // searches both scopes and finds nothing, so the fallback fires to locate the marketplace scope.
 test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback resolution; partition='skipped'", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-noscope-fallback-"));
+    const cwd = await createCaseDir("update-pup1-noscope-fallback-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -3165,7 +3173,7 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
 
 test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins returns early", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-syncfail-"));
+    const cwd = await createCaseDir("update-syncfail-");
     try {
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
@@ -3217,7 +3225,7 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
 
 test("syncClone-fail: a non-Error injected rejection is normalized at the direct boundary", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-sync-non-error-"));
+    const cwd = await createCaseDir("update-sync-non-error-");
     try {
       // arrange
       await seedGithubMarketplaceForSync(cwd);
@@ -3354,7 +3362,7 @@ for (const { title, makeFailure, reason } of [
 ] as const) {
   test(title, async () => {
     await withHermeticHome(async () => {
-      const cwd = await mkdtemp(path.join(tmpdir(), "update-sync-reason-"));
+      const cwd = await createCaseDir("update-sync-reason-");
       try {
         // arrange
         await seedGithubMarketplaceForSync(cwd);
@@ -3400,7 +3408,7 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
   // unreachable: MARKETPLACE_VALIDATOR uses the same PLUGIN_ENTRY_SCHEMA, so
   // any entry that passes MARKETPLACE_VALIDATOR also passes PLUGIN_ENTRY_VALIDATOR.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-manifest-fail-"));
+    const cwd = await createCaseDir("update-manifest-fail-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -3442,15 +3450,15 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
   });
 });
 
-// ─── prepareUpdateHandles catch + abortPartialHandles (lines 461-486) ─────────
+// ─── prepareUpdateHandles catch + abortHandles ───────────────────────────────
 
-test("prepare-handles-fail: MCP collision aborts partial handles without keyword-spoofing rollback", async () => {
-  // prepareStageMcpServers is the LAST bridge called inside prepareUpdateHandles.
-  // When it throws (McpServerCollisionError from assertNoMcpCollisions), the
-  // catch at lines 461-462 fires: abortPartialHandles is called with all
-  // three already-populated handles (skills, commands, agents), exercising
-  // the abortPartialHandles body (lines 467-486). The throw propagates to
-  // runThreePhaseUpdate -> updateSinglePlugin cascade catch -> partition='failed'.
+test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed", async () => {
+  // prepareStageMcpServers throws McpServerCollisionError (from
+  // assertNoMcpCollisions) with three handles already populated -- skills,
+  // commands and agents -- and none for mcp or the workflows prepare that
+  // would have run next. abortPartialHandles fires with those three handles.
+  // The throw propagates to runThreePhaseUpdate -> updateSinglePlugin cascade
+  // catch -> partition='failed'.
   //
   // Setup: seed <cwd>/.pi/mcp.json with "rollback-server" owned by a DIFFERENT
   // plugin. Then seed hello@mp with version 1.0.1 declaring the same server.
@@ -3459,7 +3467,7 @@ test("prepare-handles-fail: MCP collision aborts partial handles without keyword
   // the scoped mcp.json, finds "rollback-server" in `theirs`,
   // and throws McpServerCollisionError.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-prepare-mcp-fail-"));
+    const cwd = await createCaseDir("update-prepare-mcp-fail-");
     try {
       const marketplaceRoot = path.join(cwd, "mp-src");
       await seedPathMarketplace({
@@ -3527,7 +3535,7 @@ test("prepare-handles-fail: MCP collision aborts partial handles without keyword
 
 test("bare-form both-scopes: changed plugins render marketplace groups in presentation order", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-bare-both-"));
+    const cwd = await createCaseDir("update-bare-both-");
     try {
       // Seed project scope with plugin alpha.
       await seedPathMarketplace({
@@ -3614,7 +3622,7 @@ test("bare-form both-scopes: changed plugins render marketplace groups in presen
 
 test("successful update finalizes routes before dropping only its captured cache target", async (testContext) => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-captured-cache-"));
+    const cwd = await createCaseDir("update-captured-cache-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -3716,7 +3724,7 @@ test("dropCache-fail: captured cache failure stays silent after successful updat
   // dropMarketplaceCache. The catch block in dropPluginCompletionCache keeps
   // this post-commit hygiene failure silent without changing the outcome.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-dropcache-"));
+    const cwd = await createCaseDir("update-dropcache-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -3766,7 +3774,7 @@ test("dropCache-fail: captured cache failure stays silent after successful updat
 
 test("a later marketplace removed during an earlier refresh aborts before its own sync", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-later-marketplace-gone-"));
+    const cwd = await createCaseDir("update-later-marketplace-gone-");
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -3840,7 +3848,7 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
   // absent -> returns partition='skipped' (notes: marketplace not found).
   // No unhandled throw; no error notification.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-mp-gone-"));
+    const cwd = await createCaseDir("update-swap-mp-gone-");
     try {
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
@@ -3914,7 +3922,7 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
   // plugins -> returns partition='skipped' (notes: "not installed"). D-01:
   // the absent target flips that skip to an error row (severity-only).
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-plugin-gone-"));
+    const cwd = await createCaseDir("update-swap-plugin-gone-");
     try {
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
@@ -4003,7 +4011,7 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
   // fromVersion==0.0.10 matches state.version==0.0.10 -> no ST-9 error.
   // The update proceeds successfully.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-ver-advanced-"));
+    const cwd = await createCaseDir("update-swap-ver-advanced-");
     try {
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
@@ -4092,7 +4100,7 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
   // force skills commit failure too, ensuring the phase3aFailures array has
   // multiple entries and the recovery hint includes the command failure.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-phase3a-cmd-"));
+    const cwd = await createCaseDir("update-phase3a-cmd-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4107,7 +4115,7 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
 
       // Obstacle 1: pre-create skills target as a FILE so commitPreparedSkills throws.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "hello:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       // Obstacle 2: pre-create the command target path as a DIRECTORY so
       // commitPreparedCommands rename(file -> dir) fails with EISDIR.
@@ -4168,7 +4176,7 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
   // Also pre-create the skills obstacle so the test also verifies that
   // phase 3a continues across multiple bridge failures (D-03 discipline).
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-phase3a-agents-"));
+    const cwd = await createCaseDir("update-phase3a-agents-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4183,7 +4191,7 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
 
       // Pre-create the skills target as a FILE to force skills commit failure.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "hello:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       // Pre-create the agent target path as a DIRECTORY to force agents commit
       // failure. The generated agent name for "bot" in plugin "hello" is
@@ -4247,7 +4255,7 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
 
 test("TR-04 matrix: skills-fails-others-succeed", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-tr04-skills-"));
+    const cwd = await createCaseDir("update-tr04-skills-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4268,7 +4276,7 @@ test("TR-04 matrix: skills-fails-others-succeed", async () => {
 
       // Force skills commit failure only (PUP-6 shape).
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "hello:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -4304,7 +4312,7 @@ test("TR-04 matrix: skills-fails-others-succeed", async () => {
 
 test("TR-04 matrix: commands-fails-others-succeed", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-tr04-commands-"));
+    const cwd = await createCaseDir("update-tr04-commands-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4348,7 +4356,7 @@ test("TR-04 matrix: commands-fails-others-succeed", async () => {
       assert.equal(rec.version, "1.0.0");
       assert.equal(rec.compatibility.installable, false);
       assert.ok(rec.compatibility.notes.includes("update-in-progress"));
-      assert.deepEqual([...rec.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...rec.resources.skills], ["hello-tool"]);
       assert.deepEqual([...rec.resources.prompts], []);
       assert.deepEqual([...rec.resources.agents], ["pi-claude-marketplace-hello-bot"]);
       assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
@@ -4360,7 +4368,7 @@ test("TR-04 matrix: commands-fails-others-succeed", async () => {
 
 test("TR-04 matrix: agents-fails-others-succeed", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-tr04-agents-"));
+    const cwd = await createCaseDir("update-tr04-agents-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4404,7 +4412,7 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
       assert.equal(rec.version, "1.0.0");
       assert.equal(rec.compatibility.installable, false);
       assert.ok(rec.compatibility.notes.includes("update-in-progress"));
-      assert.deepEqual([...rec.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...rec.resources.skills], ["hello-tool"]);
       assert.deepEqual([...rec.resources.prompts], ["hello:deploy"]);
       assert.deepEqual([...rec.resources.agents], []);
       assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
@@ -4441,7 +4449,7 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
 
 test("TR-04 retry: partial-success-state-converges-to-new-version", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-tr04-retry-"));
+    const cwd = await createCaseDir("update-tr04-retry-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4456,7 +4464,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
       // skills only. Intent-mark survives, version stays at 1.0.0,
       // resources.skills stays at pre-update empty.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "hello:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -4483,7 +4491,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
 
       // Between calls: clear the obstacle so the second commit's rename
       // can succeed cleanly.
-      await rm(path.join(locations.skillsTargetDir, "hello:tool"), { force: true });
+      await rm(path.join(locations.skillsTargetDir, "hello-tool"), { force: true });
 
       // Call 2: fresh notification recorder so we assert only the
       // second run's notifications.
@@ -4514,7 +4522,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
         !rec2.compatibility.notes.includes("update-in-progress"),
         "intent-mark must NOT survive a successful retry",
       );
-      assert.deepEqual([...rec2.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...rec2.resources.skills], ["hello-tool"]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4527,7 +4535,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
 
 test("WB-01 / A7: CHANGED update with ABSENT entry writes the implicit declaration", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wb01-write-"));
+    const cwd = await createCaseDir("update-wb01-write-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4564,7 +4572,7 @@ test("WB-01 / A7: CHANGED update with ABSENT entry writes the implicit declarati
 
 test("WB-01 / A7: changed update with a DIFFERENT existing entry writes back (preserves D-09 unknown keys)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wb01-diff-"));
+    const cwd = await createCaseDir("update-wb01-diff-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4618,7 +4626,7 @@ test("WB-01 / A7: changed update with a DIFFERENT existing entry writes back (pr
 
 test("WB-01: up-to-date update does NOT write the config (RECON-05 fixed-point preserved)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wb01-uptodate-"));
+    const cwd = await createCaseDir("update-wb01-uptodate-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4660,7 +4668,7 @@ test("WB-01: up-to-date update does NOT write the config (RECON-05 fixed-point p
 
 test("WB-01: --local update targets the local file; base file untouched", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wb01-local-"));
+    const cwd = await createCaseDir("update-wb01-local-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4714,7 +4722,7 @@ test("WR-02 / NFR-3: an already-current disabled record does not take the scope 
   // The first update settles the record; the second one has nothing to write,
   // so it must complete against a HELD lock.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr02-lockfree-"));
+    const cwd = await createCaseDir("update-wr02-lockfree-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4788,7 +4796,7 @@ test("WR-08 / NFR-3: the lock-free skip survives multi-element compatibility lis
   // the test pass while hiding the dependency, and the round trip through
   // state.json is the property that actually has to hold.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr08-order-"));
+    const cwd = await createCaseDir("update-wr08-order-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -4869,7 +4877,7 @@ test("WR-08 / NFR-3: the lock-free skip survives multi-element compatibility lis
 
 test("D-UPD: update on a disabled plugin refreshes version pin BUT keeps resources empty (no re-materialization)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-d-upd-"));
+    const cwd = await createCaseDir("update-d-upd-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -4948,7 +4956,7 @@ test("D-UPD: update on a disabled plugin refreshes version pin BUT keeps resourc
  */
 test("DFEN-07 / D-103-10: update against a flipped defaultEnabled moves the version, not the enablement", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-dfen07-flip-"));
+    const cwd = await createCaseDir("update-dfen07-flip-");
     try {
       const locations = locationsFor("project", cwd);
       const { manifestPath } = await seedPathMarketplace({
@@ -5061,7 +5069,7 @@ test("DFEN-07 / D-103-10: update against a flipped defaultEnabled moves the vers
  */
 test("DFEN-08: a declared-true entry and a silent entry render identical update rows", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-dfen08-parity-"));
+    const cwd = await createCaseDir("update-dfen08-parity-");
     try {
       const locations = locationsFor("project", cwd);
       const { manifestPath } = await seedPathMarketplace({
@@ -5235,7 +5243,7 @@ function assertResourcesEmpty(record: PluginRecord, why: string): void {
 
 test("WR-04: a targeted update with NO partial flag reaches the disabled-record short-circuit and refreshes the pin", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr04-noflag-"));
+    const cwd = await createCaseDir("update-wr04-noflag-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -5294,7 +5302,7 @@ test("WR-04: a targeted update with NO partial flag reaches the disabled-record 
 
 test("WR-01: a CLEAN disabled record whose candidate would newly degrade keeps the decline row and its record", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-clean-disabled-"));
+    const cwd = await createCaseDir("update-wr01-clean-disabled-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -5353,7 +5361,7 @@ test("WR-01: a CLEAN disabled record whose candidate would newly degrade keeps t
 
 test("WR-01: an explicit --partial on the same clean disabled record consents to the degrade and re-pins it", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-consented-"));
+    const cwd = await createCaseDir("update-wr01-consented-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -5394,7 +5402,7 @@ test("WR-01: an explicit --partial on the same clean disabled record consents to
 
 test("ENBL-09: the disabled-record refresh derives compatibility.installable from the resolution -- degraded stays degraded", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-enbl09-degraded-"));
+    const cwd = await createCaseDir("update-enbl09-degraded-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -5445,7 +5453,7 @@ test("ENBL-09: the disabled-record refresh derives compatibility.installable fro
 
 test("ENBL-09 counter-case: a candidate that resolves fully supported promotes the refreshed record's availability", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-enbl09-promoted-"));
+    const cwd = await createCaseDir("update-enbl09-promoted-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -5488,7 +5496,7 @@ test("ENBL-09 counter-case: a candidate that resolves fully supported promotes t
 
 test("ENBL-09: update --partial on a disabled PARTIAL refreshes the pin and stages nothing (--partial is required to reach the short-circuit)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-enbl09-shortcircuit-"));
+    const cwd = await createCaseDir("update-enbl09-shortcircuit-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -5523,10 +5531,10 @@ test("ENBL-09: update --partial on a disabled PARTIAL refreshes the pin and stag
       );
 
       // The defect this guards is re-staging on disk, so assert on disk: the
-      // supported `skills/tool` component would materialize as `hello:tool`
+      // supported `skills/tool` component would materialize as `hello-tool`
       // had the three-phase body run.
       assert.equal(
-        await pathExists(path.join(locations.skillsTargetDir, "hello:tool")),
+        await pathExists(path.join(locations.skillsTargetDir, "hello-tool")),
         false,
         "no skill staged for a disabled record",
       );
@@ -5549,7 +5557,7 @@ test("ENBL-09: update --partial on a disabled PARTIAL refreshes the pin and stag
 
 test("ENBL-09: update --partial on a disabled PARTIAL is idempotent -- two identical calls leave the record unchanged", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-enbl09-idempotent-"));
+    const cwd = await createCaseDir("update-enbl09-idempotent-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -5582,6 +5590,7 @@ test("ENBL-09: update --partial on a disabled PARTIAL is idempotent -- two ident
             agents: [...r.resources.agents],
             mcpServers: [...r.resources.mcpServers],
             hooks: [...r.resources.hooks],
+            workflows: [],
           },
         };
       };
@@ -5665,7 +5674,7 @@ test("ENBL-09: update --partial on a disabled PARTIAL is idempotent -- two ident
 
 test("D-99-05a: a disabled record whose source moved under an unchanged version is refreshed", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-d9905a-moved-"));
+    const cwd = await createCaseDir("update-d9905a-moved-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -5717,7 +5726,7 @@ test("D-99-05a: a disabled record whose source moved under an unchanged version 
 
 test("D-99-05a: a disabled record with nothing to move performs NO write", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-d9905a-noop-"));
+    const cwd = await createCaseDir("update-d9905a-noop-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -5780,7 +5789,7 @@ test("D-99-05a: a disabled record with nothing to move performs NO write", async
 
 test("D-99-05a: an unsupported kind gained under an unchanged version degrades the refreshed record", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-d9905a-drift-"));
+    const cwd = await createCaseDir("update-d9905a-drift-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -5839,7 +5848,7 @@ test("D-99-05a: an unsupported kind gained under an unchanged version degrades t
 
 test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version promotes the refreshed record", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-d9905a-promote-"));
+    const cwd = await createCaseDir("update-d9905a-promote-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -5894,7 +5903,7 @@ for (const { title, local } of [
 ] as const) {
   test(`S5: update success + invalid ${title} write-back names only its basename`, async () => {
     await withHermeticHome(async () => {
-      const cwd = await mkdtemp(path.join(tmpdir(), "update-s5-"));
+      const cwd = await createCaseDir("update-s5-");
       try {
         // arrange
         const locations = locationsFor("project", cwd);
@@ -5948,7 +5957,7 @@ for (const { title, local } of [
 
 test("WR-03: one update owner refreshes direct and cascade routes without leaking to a peer runtime", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr03-"));
+    const cwd = await createCaseDir("update-wr03-");
     try {
       const runtime = createHooksRuntime();
       const hooksRouting = createHooksRouting(runtime, { readHooksJson });
@@ -6077,7 +6086,7 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
 
 test("LIFE-01 (update): version A->B (both ship hooks) overwrites <hooksDir>/<plugin>/hooks.json atomically with version B's content", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-overwrite-"));
+    const cwd = await createCaseDir("update-life01-overwrite-");
     try {
       const locations = locationsFor("project", cwd);
 
@@ -6144,7 +6153,7 @@ test("LIFE-01 (update): version A->B (both ship hooks) overwrites <hooksDir>/<pl
 
 test("LIFE-01 (update): version A (with hooks) -> version B (no hooks) removes the stale hooks file", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-remove-"));
+    const cwd = await createCaseDir("update-life01-remove-");
     try {
       const locations = locationsFor("project", cwd);
 
@@ -6220,7 +6229,7 @@ test("LIFE-01 (update): version A (with hooks) -> version B (no hooks) removes t
 
 test("LIFE-01 (update): version A (no hooks) -> version B (with hooks) writes the new hooks.json", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-add-"));
+    const cwd = await createCaseDir("update-life01-add-");
     try {
       const locations = locationsFor("project", cwd);
 
@@ -6301,7 +6310,7 @@ async function makeCandidateUnsupported(
 
 test("FORCE-02: --partial on a candidate that became partially available degrades (skill materializes, version bumps)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-force02-"));
+    const cwd = await createCaseDir("update-force02-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -6329,8 +6338,8 @@ test("FORCE-02: --partial on a candidate that became partially available degrade
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined);
       assert.equal(record.version, "1.1.0");
-      assert.deepEqual([...record.resources.skills], ["hello:tool"]);
-      const skillTarget = path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md");
+      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+      const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
       assert.ok(
         (await readFile(skillTarget, "utf8")).length > 0,
         "supported skill must materialize",
@@ -6358,7 +6367,7 @@ test("FORCE-02: --partial on a candidate that became partially available degrade
 
 test("XSURF-03 / FORCE-03: without --partial the partially-upgradable candidate declines `(partially-upgradable)` + the --partial trailer at warning", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-force03-"));
+    const cwd = await createCaseDir("update-force03-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -6408,7 +6417,7 @@ test("XSURF-03 / FORCE-03: without --partial the partially-upgradable candidate 
 // here vs FORCE-03) proves it holds.
 test("XSURF-03 / SEV-04: bulk update skipping a partially-upgradable candidate -> info (untargeted decline)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev04-bulk-"));
+    const cwd = await createCaseDir("update-sev04-bulk-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -6458,7 +6467,7 @@ test("XSURF-03 / SEV-04: bulk update skipping a partially-upgradable candidate -
 
 test("FORCE-04: the partial-degrade update path emits no warning severity and no `Warning:` summary", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-force04-"));
+    const cwd = await createCaseDir("update-force04-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -6500,7 +6509,7 @@ test("FORCE-04: the partial-degrade update path emits no warning severity and no
 test("FORCE-05: --partial cannot bypass an unavailable (non-path source) candidate", async () => {
   await withHermeticHome(async () => {
     // arrange
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-force05-unavail-"));
+    const cwd = await createCaseDir("update-force05-unavail-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -6546,7 +6555,7 @@ test("FORCE-05: --partial cannot bypass an unavailable (non-path source) candida
 
 test("FORCE-05: --partial cannot bypass a missing marketplace", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-force05-nomp-"));
+    const cwd = await createCaseDir("update-force05-nomp-");
     try {
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -6581,7 +6590,7 @@ test("UGRM-02 / SEV-01: bulk @mp update of a plugin with an UNLOADED declared co
   // transition as `1 updated`, AND the warning-severity row counts as `1
   // warning` in the INDEPENDENT warnings category -> `1 warning, 1 updated`.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-tally-warn-"));
+    const cwd = await createCaseDir("update-tally-warn-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -6622,7 +6631,7 @@ test("UGRM-02 / FSTAT-07: bulk @mp --partial counts a partially-installed degrad
   // realized-transition count is 2. The never-silent `nothing to update`
   // headline must be ABSENT -- a partially-installed degrade IS a realized update.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-tally-partial-2updated-"));
+    const cwd = await createCaseDir("update-tally-partial-2updated-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -6793,7 +6802,7 @@ async function seedGitPluginMarketplace(opts: {
 
 test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded -> swap; resolvedSha + shaVersion updated, old clone GC'd, new clone present", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-pinned-swap-"));
+    const cwd = await createCaseDir("update-git-pinned-swap-");
     try {
       const cloneUrl = "https://example.com/org/repo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
@@ -6846,9 +6855,8 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
 
 test("a post-commit clone cleanup failure preserves the successful update", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-clone-gc-fail-"));
+    const cwd = await createCaseDir("update-clone-gc-fail-");
     let oldCloneRoot: string | undefined;
-    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
     try {
       // arrange
       const cloneUrl = "https://example.com/org/repo";
@@ -6863,8 +6871,7 @@ test("a post-commit clone cleanup failure preserves the successful update", asyn
       oldCloneRoot = seeded.oldCloneRoot;
       assert.ok(oldCloneRoot !== undefined);
       const locations = locationsFor("project", cwd);
-      stateWatch = watchStateTransition(
-        locations,
+      const stateWatch = observeStateTransition(
         (state) => state.marketplaces["mp"]?.plugins["gp"]?.resolvedSha === SHA_NEW,
         () => {
           chmodSync(locations.pluginClonesDir, 0o000);
@@ -6874,7 +6881,7 @@ test("a post-commit clone cleanup failure preserves the successful update", asyn
       const { ctx, pi, notifications } = makeCtx();
 
       // act
-      await updatePlugins({
+      await stateWatch.updatePlugins({
         ctx,
         pi,
         scope: "project",
@@ -6891,7 +6898,6 @@ test("a post-commit clone cleanup failure preserves the successful update", asyn
       assert.equal(notifications.length, 1);
       assert.equal(await pathExists(oldCloneRoot), true);
     } finally {
-      stateWatch?.close();
       const locations = locationsFor("project", cwd);
       await chmod(locations.pluginClonesDir, 0o700).catch(() => undefined);
       await rm(cwd, { recursive: true, force: true });
@@ -6901,7 +6907,7 @@ test("a post-commit clone cleanup failure preserves the successful update", asyn
 
 test("PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded -> outcome (unchanged), no swap, clone dirs untouched", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-pinned-unchanged-"));
+    const cwd = await createCaseDir("update-git-pinned-unchanged-");
     try {
       const cloneUrl = "https://example.com/org/repo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -6957,7 +6963,7 @@ test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedS
   // commit while `reinstall` still pins its re-clone to the OLD one -- a silent
   // revert of the update. The two fields must agree after the refresh.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-disabled-refresh-"));
+    const cwd = await createCaseDir("update-git-disabled-refresh-");
     try {
       const cloneUrl = "https://example.com/org/repo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
@@ -6980,7 +6986,14 @@ test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedS
       seededState.marketplaces["mp"]!.plugins["gp"] = {
         ...seededRecord,
         enabled: false,
-        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        resources: {
+          skills: [],
+          prompts: [],
+          agents: [],
+          mcpServers: [],
+          hooks: [],
+          workflows: [],
+        },
       };
       await saveState(locations.extensionRoot, seededState);
 
@@ -7592,9 +7605,8 @@ test("D-10-18: a tag published between two cascade runs is visible to the second
 
 test("a disabled pin refresh swallows post-commit clone cleanup failure", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-disabled-clone-gc-fail-"));
+    const cwd = await createCaseDir("update-disabled-clone-gc-fail-");
     let oldCloneRoot: string | undefined;
-    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
     try {
       // arrange
       const cloneUrl = "https://example.com/org/repo";
@@ -7611,8 +7623,7 @@ test("a disabled pin refresh swallows post-commit clone cleanup failure", async 
       assert.ok(oldCloneRoot !== undefined);
       const locations = locationsFor("project", cwd);
       await markGitPluginDisabled(locations);
-      stateWatch = watchStateTransition(
-        locations,
+      const stateWatch = observeStateTransition(
         (state) => state.marketplaces["mp"]?.plugins["gp"]?.resolvedSha === SHA_NEW,
         () => {
           chmodSync(locations.pluginClonesDir, 0o000);
@@ -7622,7 +7633,7 @@ test("a disabled pin refresh swallows post-commit clone cleanup failure", async 
       const { ctx, pi, notifications } = makeCtx();
 
       // act
-      await updatePlugins({
+      await stateWatch.updatePlugins({
         ctx,
         pi,
         scope: "project",
@@ -7640,7 +7651,6 @@ test("a disabled pin refresh swallows post-commit clone cleanup failure", async 
       assert.equal(notifications.length, 1);
       assert.equal(await pathExists(oldCloneRoot), true);
     } finally {
-      stateWatch?.close();
       const locations = locationsFor("project", cwd);
       await chmod(locations.pluginClonesDir, 0o700).catch(() => undefined);
       await rm(cwd, { recursive: true, force: true });
@@ -7650,7 +7660,7 @@ test("a disabled pin refresh swallows post-commit clone cleanup failure", async 
 
 test("MIRR-01/MIRR-03 unpinned update: refreshes the mirror in place and re-anchors the record to the bare mirror key with the HEAD sha", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-unpinned-swap-"));
+    const cwd = await createCaseDir("update-git-unpinned-swap-");
     try {
       const cloneUrl = "https://example.com/org/repo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
@@ -7724,7 +7734,7 @@ test("MIRR-01/MIRR-03 unpinned update: refreshes the mirror in place and re-anch
 
 test("PURL-06 / D-78-01 shared clone NOT GC'd: two git plugins share the old url+sha -> updating one keeps the old clone (the second still references it)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-shared-clone-"));
+    const cwd = await createCaseDir("update-git-shared-clone-");
     try {
       const cloneUrl = "https://example.com/org/repo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
@@ -7778,7 +7788,7 @@ test("PURL-06 / D-78-01 shared clone NOT GC'd: two git plugins share the old url
 
 test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -> fails clean; plugin stays on recorded sha, existing REASONS token, no new token", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-vanished-"));
+    const cwd = await createCaseDir("update-git-vanished-");
     try {
       const cloneUrl = "https://example.com/org/repo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -7901,7 +7911,7 @@ async function seedGitSubdirMarketplace(opts: {
 
 test("PURL-03 pinned git-subdir update: the new clone's subdir anchors the pluginRoot and the ref hint threads into the clone seam", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-subdir-pinned-"));
+    const cwd = await createCaseDir("update-git-subdir-pinned-");
     try {
       const cloneUrl = "https://example.com/org/monorepo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -7954,7 +7964,7 @@ test("PURL-03 pinned git-subdir update: the new clone's subdir anchors the plugi
 
 test("PURL-03 pinned git-subdir update whose declared path is ABSENT in the new clone declines {no longer installable}; plugin stays on its recorded sha", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-subdir-missing-"));
+    const cwd = await createCaseDir("update-git-subdir-missing-");
     try {
       const cloneUrl = "https://example.com/org/monorepo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -8000,7 +8010,7 @@ test("PURL-03 pinned git-subdir update whose declared path is ABSENT in the new 
 
 test("MIRR-01 unpinned git-subdir update: the refreshed mirror's subdir anchors the pluginRoot and the record re-anchors to the mirror HEAD sha", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-subdir-unpinned-"));
+    const cwd = await createCaseDir("update-git-subdir-unpinned-");
     try {
       const cloneUrl = "https://example.com/org/monorepo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -8048,7 +8058,7 @@ test("MIRR-01 unpinned git-subdir update: the refreshed mirror's subdir anchors 
 
 test("MIRR-01 unpinned git-subdir update whose declared path is ABSENT in the refreshed mirror declines {no longer installable}", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-subdir-unpinned-missing-"));
+    const cwd = await createCaseDir("update-git-subdir-unpinned-missing-");
     try {
       const cloneUrl = "https://example.com/org/monorepo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -8097,7 +8107,7 @@ test("MIRR-01 unpinned git-subdir update whose declared path is ABSENT in the re
 
 test("plugin update authentication: a pinned provider update threads auth to the clone", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-auth-provider-"));
+    const cwd = await createCaseDir("update-auth-provider-");
     try {
       // arrange
       await seedGitUpdateMarketplace({
@@ -8147,7 +8157,7 @@ test("plugin update authentication: a pinned provider update threads auth to the
 
 test("plugin update authentication: an unpinned provider update threads auth to the mirror", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-auth-mirror-"));
+    const cwd = await createCaseDir("update-auth-mirror-");
     try {
       // arrange
       await seedGitUpdateMarketplace({
@@ -8195,7 +8205,7 @@ test("plugin update authentication: an unpinned provider update threads auth to 
 test("updateSinglePlugin keeps a recorded provider SHA offline without an auth context", async (t) => {
   await withHermeticHome(async () => {
     // arrange
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-auth-cascade-warm-"));
+    const cwd = await createCaseDir("update-auth-cascade-warm-");
     const previousCwd = process.cwd();
     t.after(async () => {
       process.chdir(previousCwd);
@@ -8222,13 +8232,14 @@ test("updateSinglePlugin keeps a recorded provider SHA offline without an auth c
       declaresAgents: false,
       declaresMcp: false,
       constraint: undefined,
+      declaresWorkflows: false,
     });
   });
 });
 
 test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError classifies as {authentication required}, not {no longer installable}", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-usercanceled-"));
+    const cwd = await createCaseDir("update-git-usercanceled-");
     try {
       const cloneUrl = "https://example.com/org/repo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -8298,7 +8309,7 @@ test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError cla
 
 test("SUB-02: project-scope update substitutes ${CLAUDE_PROJECT_DIR} to the install cwd in skill, command, and agent files; keeps ${CLAUDE_SKILL_DIR} literal in command and agent", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-sub02-proj-"));
+    const cwd = await createCaseDir("update-sub02-proj-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -8342,7 +8353,7 @@ test("SUB-02: project-scope update substitutes ${CLAUDE_PROJECT_DIR} to the inst
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
       const skillBody = await readFile(
-        path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"),
+        path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
         "utf8",
       );
       assert.ok(
@@ -8400,7 +8411,7 @@ test("SUB-02: project-scope update substitutes ${CLAUDE_PROJECT_DIR} to the inst
 
 test("MENV-04: project-scope update re-derives ${CLAUDE_PLUGIN_ROOT} in mcp.json when the plugin root changes", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-menv04-proj-"));
+    const cwd = await createCaseDir("update-menv04-proj-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -8499,7 +8510,7 @@ const UNPARSEABLE_FRONTMATTER = "---\nname: [unterminated\n---\n\n# Bad\nBody.\n
 
 test("WR-12: an update whose new source skill will not parse names the kind on the `(updated)` row and takes the warning raise", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr12-skill-"));
+    const cwd = await createCaseDir("update-wr12-skill-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -8549,7 +8560,7 @@ test("WR-12: an update whose new source skill will not parse names the kind on t
 
 test("WR-12: an update whose new source command will not parse names the command kind on the row", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr12-command-"));
+    const cwd = await createCaseDir("update-wr12-command-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -8595,7 +8606,7 @@ test("WR-12: an update that degrades BOTH kinds emits both reasons in the canoni
   // verb-local kinds-to-reasons map: the helper owns the canonical emit order,
   // so a local map would produce the right tokens in the wrong order.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr12-both-"));
+    const cwd = await createCaseDir("update-wr12-both-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -8641,7 +8652,7 @@ test("WR-01 / SURF-05: an update that materializes an orphan-rewake handler name
   // inheritance's own claim false. The token names itself and moves NO severity
   // channel: the update was carried out in full.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-orphan-"));
+    const cwd = await createCaseDir("update-wr01-orphan-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -8700,7 +8711,7 @@ test("CR-01: a --partial update that drops a kind AND degrades a component names
   // `list` renders one command later, which is the contradiction WR-12 exists
   // to close.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-cr01-both-axes-"));
+    const cwd = await createCaseDir("update-cr01-both-axes-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -8750,7 +8761,7 @@ test("CR-01: a --partial update that drops a kind AND degrades a component names
 
 test("NREG-01: a clean update row is byte-identical to before -- no brace, no raise", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr12-clean-"));
+    const cwd = await createCaseDir("update-wr12-clean-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -8796,7 +8807,7 @@ test("WR-05: a bare-form update whose scope state is unreadable fails on the syn
   // `@mp` / `pl@mp` forms take. A truncated state.json is the cheapest real
   // producer: loadState parses eagerly and throws out of enumerateTargets.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-bare-enumfail-"));
+    const cwd = await createCaseDir("update-bare-enumfail-");
     try {
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
@@ -8828,7 +8839,7 @@ test("WR-05: a bare-form update whose scope state is unreadable fails on the syn
 
 test("a marketplace target with unreadable state reports its marketplace identity", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-marketplace-enumfail-"));
+    const cwd = await createCaseDir("update-marketplace-enumfail-");
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -8858,7 +8869,7 @@ test("a marketplace target with unreadable state reports its marketplace identit
 
 test("a plugin target with unreadable state reports its plugin identity", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-plugin-enumfail-"));
+    const cwd = await createCaseDir("update-plugin-enumfail-");
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -8892,7 +8903,7 @@ test("D-03 fail-continue: a hooks write that cannot land is aggregated, not thro
   // A leftover DIRECTORY at that exact path makes the rename fail with EISDIR
   // while every other bridge commits normally -- the fail-continue contract.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-phase3a-hooks-"));
+    const cwd = await createCaseDir("update-phase3a-hooks-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -8939,7 +8950,7 @@ test("D-03 fail-continue: a hooks write that cannot land is aggregated, not thro
       assert.equal(record.compatibility.installable, false);
       assert.ok(record.compatibility.notes.includes("update-in-progress"));
       // Fail-continue: the skills bridge committed even though hooks did not.
-      assert.deepEqual([...record.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
       // The hooks inventory keeps its pre-update value, matching the disk.
       assert.deepEqual([...record.resources.hooks], []);
     } finally {
@@ -8974,13 +8985,20 @@ async function markGitPluginDisabled(locations: ReturnType<typeof locationsFor>)
   const record = state.marketplaces["mp"]?.plugins["gp"];
   assert.ok(record !== undefined);
   record.enabled = false;
-  record.resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+  record.resources = {
+    skills: [],
+    prompts: [],
+    agents: [],
+    mcpServers: [],
+    hooks: [],
+    workflows: [],
+  };
   await saveState(locations.extensionRoot, state);
 }
 
 test("ST-9: a version that advanced under an in-flight update aborts on the intent-mark", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-st9-advanced-"));
+    const cwd = await createCaseDir("update-st9-advanced-");
     try {
       const cloneUrl = "https://example.com/org/repo";
       const locations = locationsFor("project", cwd);
@@ -9040,7 +9058,7 @@ test("ST-9: a version that advanced under an in-flight update aborts on the inte
 
 test("ST-9: a record uninstalled under an in-flight update aborts instead of resurrecting it", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-st9-uninstalled-"));
+    const cwd = await createCaseDir("update-st9-uninstalled-");
     try {
       const cloneUrl = "https://example.com/org/repo";
       const locations = locationsFor("project", cwd);
@@ -9094,7 +9112,7 @@ test("ST-9: a record uninstalled under an in-flight update aborts instead of res
 
 test("a marketplace removed under an in-flight update is not resurrected", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-marketplace-race-"));
+    const cwd = await createCaseDir("update-marketplace-race-");
     try {
       // arrange
       const cloneUrl = "https://example.com/org/repo";
@@ -9139,7 +9157,7 @@ test("a marketplace removed under an in-flight update is not resurrected", async
 
 test("a disabled update does not recreate a concurrently removed marketplace", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-disabled-marketplace-race-"));
+    const cwd = await createCaseDir("update-disabled-marketplace-race-");
     try {
       // arrange
       const cloneUrl = "https://example.com/org/repo";
@@ -9184,7 +9202,7 @@ test("a disabled update does not recreate a concurrently removed marketplace", a
 
 test("a disabled update does not recreate a concurrently removed plugin", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-disabled-plugin-race-"));
+    const cwd = await createCaseDir("update-disabled-plugin-race-");
     try {
       // arrange
       const cloneUrl = "https://example.com/org/repo";
@@ -9234,7 +9252,7 @@ test("a disabled update does not recreate a concurrently removed plugin", async 
 
 test("a disabled update accepts a concurrent writer that already stored the next pin", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-disabled-next-pin-race-"));
+    const cwd = await createCaseDir("update-disabled-next-pin-race-");
     try {
       // arrange
       const cloneUrl = "https://example.com/org/repo";
@@ -9301,7 +9319,7 @@ test("a disabled update accepts a concurrent writer that already stored the next
 
 /**
  * Seed a D-07 collision inside ONE componentPaths.skills entry of the plugin
- * tree: `hello-foo/` and `foo/` both elide to the generated name `hello:foo`
+ * tree: `hello-foo/` and `foo/` both elide to the generated name `hello-foo`
  * (D-141-04), so discovery keeps the localeCompare-first source and reports
  * the loser.
  */
@@ -9315,7 +9333,7 @@ async function seedCollidingSkills(marketplaceRoot: string, pluginName = "hello"
 
 test("D-141-03: a standalone updatePlugins run surfaces the skills discovery warning after the row", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-discwarn-"));
+    const cwd = await createCaseDir("update-discwarn-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -9327,7 +9345,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
       // The collision lives in the NEW version's tree, so the swap reaches it.
       await seedCollidingSkills(seeded.marketplaceRoot);
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 6);
       await updatePlugins({
         ctx,
         pi,
@@ -9343,7 +9361,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
         },
         {
           message:
-            'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -9356,7 +9374,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
 
 test("D-141-03: an updateSinglePlugin cascade emits no notification and carries both halves on notes", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-discwarn-casc-"));
+    const cwd = await createCaseDir("update-discwarn-casc-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -9390,7 +9408,7 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
       );
 
       // The agents half must NOT reach a standalone run's notifications.
-      const cwd2 = await mkdtemp(path.join(tmpdir(), "update-discwarn-std-"));
+      const cwd2 = await createCaseDir("update-discwarn-std-");
       try {
         const seeded2 = await seedPathMarketplace({
           cwd: cwd2,
@@ -9417,7 +9435,7 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
           },
           {
             message:
-              'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
+              'Plugin "hello" updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
             severity: "warning",
           },
         ]);
@@ -9432,7 +9450,7 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
 
 test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-discwarn-bulk-"));
+    const cwd = await createCaseDir("update-discwarn-bulk-");
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -9447,7 +9465,7 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
       await seedCollidingSkills(seeded.marketplaceRoot, "hello");
       await seedCollidingSkills(seeded.marketplaceRoot, "world");
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 4);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 6);
       await updatePlugins({
         ctx,
         pi,
@@ -9463,12 +9481,12 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
         },
         {
           message:
-            'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
         {
           message:
-            'Plugin "world" updated; 1 declared component was skipped.\n\nskill source "world-foo" in "skills" elides to generated name "world:foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" updated; 1 declared component has a note.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -9481,7 +9499,7 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
 
 test("NREG-01: a clean update outcome omits the notes key entirely", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-nreg-"));
+    const cwd = await createCaseDir("update-nreg-");
     try {
       await seedPathMarketplace({
         cwd,
@@ -9510,6 +9528,1003 @@ test("NREG-01: a clean update outcome omits the notes key entirely", async () =>
   });
 });
 
+// ─── WLIF-02: workflows as the update's sixth bridge ─────────────────────────
+//
+// `locationsFor` is called INSIDE the `withHermeticHome` closure in every case
+// below: the helper sets `process.env.HOME`, which is what the workflow home
+// derivation reads. Workflow envelopes are the only artifacts this extension
+// writes outside every scope root, so a call outside the closure would point
+// `workflowsSavedDir` at the developer's real home and leak a write the test
+// never cleans.
+
+/**
+ * Write `<pluginRoot>/workflows/<sourceName>.js` for each entry, REPLACING
+ * whatever set was there.
+ *
+ * The replacement is the point. Every behavior worth covering here is about the
+ * script set DIFFERING between the from-version tree and the to-version tree,
+ * so one helper seeds both: call it before the install, then again with the new
+ * set before the update.
+ *
+ * The default body carries a NAMED `meta` export on purpose. A body without one
+ * classifies as SKIPPED and writes zero envelopes, so a case relying on the
+ * default would pass for the wrong reason.
+ */
+async function writeWorkflowScripts(
+  marketplaceRoot: string,
+  pluginName: string,
+  workflows: readonly { sourceName: string; body?: string }[],
+): Promise<void> {
+  const workflowsDir = path.join(marketplaceRoot, "plugins", pluginName, "workflows");
+  await rm(workflowsDir, { force: true, recursive: true });
+  if (workflows.length === 0) {
+    return;
+  }
+
+  await mkdir(workflowsDir, { recursive: true });
+  for (const workflow of workflows) {
+    await writeFile(
+      path.join(workflowsDir, `${workflow.sourceName}.js`),
+      workflow.body ??
+        `export const meta = { name: "${workflow.sourceName}", description: "does ${workflow.sourceName}" };\n`,
+    );
+  }
+}
+
+/** Directory entries, or `[]` when the directory was never created. */
+async function entriesOf(directory: string): Promise<string[]> {
+  try {
+    return (await readdir(directory)).sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Seed a workflow-bearing plugin at `version` and INSTALL it, so the pre-update
+ * record names envelopes that are actually on disk.
+ *
+ * Installed for real rather than hand-seeded: `previousWorkflowNames` exists to
+ * reach the bridge's displace-and-restore path, and a record naming envelopes
+ * nothing ever wrote would send that path down its ENOENT-tolerant arm and
+ * prove nothing.
+ */
+async function seedInstalledWorkflowPlugin(opts: {
+  readonly cwd: string;
+  readonly version: string;
+  readonly workflows: readonly { sourceName: string; body?: string }[];
+}): Promise<{ readonly marketplaceRoot: string; readonly manifestPath: string }> {
+  const marketplaceRoot = path.join(opts.cwd, "mp-src");
+  const { manifestPath } = await seedPathMarketplace({
+    cwd: opts.cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    // SNM-34: the plugin's own `plugin.json` carries no version, so the
+    // manifest entry is what reaches the record and a `rewriteManifest` bump
+    // actually moves it. With the version mirrored into `plugin.json` the
+    // update resolves as `unchanged` and never prepares anything.
+    manifestPlugins: {
+      hello: { version: opts.version, hasSkill: true, omitPluginJsonVersion: true },
+    },
+  });
+  await writeWorkflowScripts(marketplaceRoot, "hello", opts.workflows);
+  const seed = makeCtx();
+  const installPlugin = createInstallOperation(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  );
+  await installPlugin({
+    ctx: seed.ctx,
+    pi: seed.pi,
+    scope: "project",
+    cwd: opts.cwd,
+    marketplace: "mp",
+    plugin: "hello",
+  });
+  return { marketplaceRoot, manifestPath };
+}
+
+test("WLIF-02: an abort after the workflows prepare leaves no workflows staging tree", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-abort-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange -- version B adds a second workflow, so the prepare has a tree
+      // to write before the intent mark refuses.
+      const locations = locationsFor("project", cwd);
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "wave" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+
+      // The version bump lands at the intent mark's locked load, so the ST-9
+      // check fires there -- after every handle, workflows included, exists.
+      const concurrentWriter = mutateAtFirstLockedLoad((state) => {
+        const record = state.marketplaces["mp"]?.plugins["hello"];
+        assert.ok(record !== undefined);
+        record.version = "9.9.9";
+      });
+      process.chdir(cwd);
+
+      // act
+      const outcome = await concurrentWriter.updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(concurrentWriter.fired(), true);
+      assert.equal(outcome.partition, "failed");
+      assert.deepEqual(outcome.reasons, ["concurrently updated"]);
+      assert.deepEqual(
+        await entriesOf(locations.workflowsStagingDir),
+        [],
+        "the workflows handle must unwind on the abort path, not linger as a staging tree",
+      );
+      // The from-version envelope is untouched: the prepare wrote only into
+      // staging, so an abort before the commit cannot have moved it.
+      assert.deepEqual(await entriesOf(locations.workflowsSavedDir), ["hello:greet.json"]);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-02: a plugin with no workflows and an empty inventory stages nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-noop-");
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- WPTH-05: the noop short-circuit must not bring the host
+      // engine's storage root into existence for a plugin that ships no
+      // workflows, so the assertion is on the directories, not on a name list.
+      assert.equal(
+        await pathExists(locations.workflowsStagingDir),
+        false,
+        "no admitted workflow and no recorded name means no staging tree",
+      );
+      assert.equal(await pathExists(locations.workflowsSavedDir), false);
+      assert.deepEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources
+          .workflows,
+        [],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-02: a workflow version B cannot admit reaches the standalone diagnostic channel", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-warn-direct-");
+    try {
+      // arrange -- version B adds a script with no `meta` export at all, which
+      // the decision layer skips.
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "broken", body: "export default function run() {}\n" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      // The session exposes the host workflow engine, so the verb's own row
+      // stays `info` and the severity filter below isolates the diagnostic.
+      const { ctx, pi, notifications } = makeCtx({
+        getAllTools: () => [{ name: "workflow_control" }],
+      });
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- the same channel the skills and commands discovery warnings
+      // reach, in the install tense, after the verb's own row.
+      const diagnostics = notifications.filter((n) => n.severity === "warning");
+      assert.equal(diagnostics.length, 1, JSON.stringify(notifications));
+      assert.match(
+        diagnostics[0]?.message ?? "",
+        /Plugin "hello" updated; 1 declared component has a note\./,
+      );
+      assert.match(diagnostics[0]?.message ?? "", /workflow script "broken\.js"/);
+      assert.match(diagnostics[0]?.message ?? "", /was not installed/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-02: the same workflow warning rides the cascade outcome's notes", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-warn-cascade-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "broken", body: "export default function run() {}\n" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(outcome.partition, "updated");
+      assert.equal(
+        (outcome.notes ?? []).some(
+          (note) =>
+            note.includes('workflow script "broken.js"') && note.includes("was not installed"),
+        ),
+        true,
+        JSON.stringify(outcome.notes),
+      );
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** The envelope the saved directory holds for `generatedName`. */
+async function readEnvelope(savedDir: string, generatedName: string): Promise<unknown> {
+  return JSON.parse(await readFile(path.join(savedDir, `${generatedName}.json`), "utf8"));
+}
+
+test("WLIF-02: an update that adds a workflow writes its envelope and records the placed name", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-added-");
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "wave" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(await entriesOf(locations.workflowsSavedDir), [
+        "hello:greet.json",
+        "hello:wave.json",
+      ]);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepEqual(record?.resources.workflows, ["hello:greet", "hello:wave"]);
+      assert.equal(record?.version, "2.10.0");
+      assert.deepEqual(
+        await entriesOf(locations.workflowsStagingDir),
+        [],
+        "a committed staging tree is cleaned up, not retained",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-02: a workflow the new version withdrew loses its envelope and its recorded name", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-withdrawn-");
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }, { sourceName: "wave" }],
+      });
+      assert.deepEqual(await entriesOf(locations.workflowsSavedDir), [
+        "hello:greet.json",
+        "hello:wave.json",
+      ]);
+      await writeWorkflowScripts(marketplaceRoot, "hello", [{ sourceName: "greet" }]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(await entriesOf(locations.workflowsSavedDir), ["hello:greet.json"]);
+      assert.deepEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources
+          .workflows,
+        ["hello:greet"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-02: a workflow the new version renamed lands under the new name with the new bytes", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-renamed-");
+    try {
+      // arrange -- ONE source file whose declared `meta.name` moves, which is
+      // what a rename looks like from the record's side.
+      const locations = locationsFor("project", cwd);
+      const versionBSource =
+        'export const meta = { name: "salute", description: "greets formally" };\n';
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet", body: versionBSource },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- the byte-content check is the one that catches a commit that
+      // recorded the new name over the old version's script.
+      assert.deepEqual(await entriesOf(locations.workflowsSavedDir), ["hello:salute.json"]);
+      assert.deepEqual(await readEnvelope(locations.workflowsSavedDir, "hello:salute"), {
+        name: "hello:salute",
+        description: "greets formally",
+        script: versionBSource,
+      });
+      assert.deepEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources
+          .workflows,
+        ["hello:salute"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-06: an update that withdrew a workflow names the reload remedy", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-stale-");
+    try {
+      // arrange -- the same withdrawal shape as the WLIF-02 case above, read
+      // here through the RENDERED row rather than through the record.
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }, { sourceName: "wave" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [{ sourceName: "greet" }]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- `hello:wave` is in the pre-update record and not in what this
+      // re-stage placed, so its command is registered over nothing until the
+      // reload the trailer names. Severity `warning`: the update WAS applied.
+      // WDEP-02: the update also declares workflows into a session with no host
+      // engine, so the marker composes after the content token.
+      const row = notifications.at(-1);
+      assert.ok(row !== undefined);
+      assert.equal(row.severity, "warning");
+      assert.match(
+        row.message,
+        /\(updated\) \{stale workflow command, requires pi-dynamic-workflows\}/u,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-06: an update that re-placed every recorded workflow stamps nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-stale-none-");
+    try {
+      // arrange -- the SAME verb over a tree whose workflow set did not change.
+      // Every recorded name is in the staged set, so the difference is empty
+      // and this is the ordinary re-place. The session exposes the host
+      // workflow engine, so the only axis left that could raise the row is the
+      // retirement this case is about.
+      const { manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const { ctx, pi, notifications } = makeCtx({
+        getAllTools: () => [{ name: "workflow_control" }],
+      });
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- no brace, no severity raise: the bytes this row rendered
+      // before the token existed.
+      const row = notifications.at(-1);
+      assert.ok(row !== undefined);
+      assert.equal(row.severity, undefined);
+      assert.doesNotMatch(row.message, /stale workflow command/u);
+      assert.match(row.message, /\(updated\)\n/u);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CR-02: the intent-mark window widens the recorded inventory to the union", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-union-");
+    let unionDuringWindow: string[] | undefined;
+    try {
+      // arrange -- version B keeps `greet`, withdraws `wave`, adds `zap`, so the
+      // union is a strict superset of BOTH the recorded set and the staged set.
+      const locations = locationsFor("project", cwd);
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }, { sourceName: "wave" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "zap" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      // Read off the PERSISTED file at the moment the intent mark lands: the
+      // union has to be observable to a second process mid-commit, which a
+      // return value could never demonstrate.
+      const stateWatch = observeStateTransition(
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        (state) => {
+          unionDuringWindow = [
+            ...(state.marketplaces["mp"]?.plugins["hello"]?.resources.workflows ?? []),
+          ];
+        },
+      );
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await stateWatch.updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      assert.deepEqual(unionDuringWindow, ["hello:greet", "hello:wave", "hello:zap"]);
+      // ...and the finalize window narrows it back to what the commit staged.
+      assert.deepEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources
+          .workflows,
+        ["hello:greet", "hello:zap"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-01: a workflows staging-cleanup leak is a recorded failure over a committed record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-leak-");
+    const previousCwd = process.cwd();
+    let stagingDirLocked: string | undefined;
+    try {
+      // arrange -- every sibling bridge has something to write, so a workflows
+      // failure that rolled one of them back would be visible.
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.0",
+            hasSkill: true,
+            hasCommand: true,
+            hasAgent: true,
+            hasMcp: true,
+            omitPluginJsonVersion: true,
+          },
+        },
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "wave" },
+      ]);
+      const seed = makeCtx();
+      const installPlugin = createInstallOperation(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      );
+      await installPlugin({
+        ctx: seed.ctx,
+        pi: seed.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "zap" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const before = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(before !== undefined);
+
+      // The intent mark runs after every prepare and before the first commit,
+      // so sealing the staging PARENT there leaves the renames working and
+      // fails only the post-commit `rm` of the staging root.
+      const stateWatch = observeStateTransition(
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        () => {
+          chmodSync(locations.workflowsStagingDir, 0o500);
+          stagingDirLocked = locations.workflowsStagingDir;
+        },
+      );
+      process.chdir(cwd);
+
+      // act
+      const outcome = await stateWatch.updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      assert.equal(outcome.partition, "failed");
+      const workflowFailure = (outcome.phaseFailures ?? []).find((f) => f.phase === "workflows");
+      assert.ok(workflowFailure !== undefined, JSON.stringify(outcome.phaseFailures));
+      assert.match(workflowFailure.msg, /workflows staging cleanup leak/);
+
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      // WR-01: the leak is a failure of the CLEANUP, not of the commit -- every
+      // envelope reached its target and `hello:wave` was retired -- so the
+      // record is what the commit staged. Keying this off the failure set
+      // instead would re-add `hello:wave`, whose envelope now sits in the
+      // leaked `.previous/` tree rather than at its target, and the record
+      // would name a file that is not there.
+      assert.deepEqual(record?.resources.workflows, ["hello:greet", "hello:zap"]);
+      assert.equal(
+        await pathExists(path.join(locations.workflowsSavedDir, "hello:wave.json")),
+        false,
+        "the retired envelope is gone from the saved directory, so naming it would be false",
+      );
+      // SC#2: a workflows failure never rolls back a sibling's inventory. Each
+      // sibling declares the same components in both versions, so every one of
+      // these arrays is non-empty and unchanged from the install.
+      assert.deepEqual(record?.resources.skills, before.resources.skills);
+      assert.deepEqual(record?.resources.prompts, before.resources.prompts);
+      assert.deepEqual(record?.resources.agents, before.resources.agents);
+      assert.deepEqual(record?.resources.mcpServers, before.resources.mcpServers);
+      assert.equal(before.resources.skills.length > 0, true);
+      assert.equal(before.resources.prompts.length > 0, true);
+      assert.equal(before.resources.agents.length > 0, true);
+      assert.equal(before.resources.mcpServers.length > 0, true);
+      // All-or-nothing: the aggregate is non-empty, so no version bump.
+      assert.equal(record?.version, "1.0.0");
+    } finally {
+      if (stagingDirLocked !== undefined) {
+        await chmod(stagingDirLocked, 0o700);
+      }
+
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CR-01: a phase-3 leak reaches the user with its path intact", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-leak-redact-");
+    const previousCwd = process.cwd();
+    let stagingDirLocked: string | undefined;
+    try {
+      // arrange -- every sibling bridge has something to write, so a workflows
+      // failure that rolled one of them back would be visible.
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.0",
+            hasSkill: true,
+            hasCommand: true,
+            hasAgent: true,
+            hasMcp: true,
+            omitPluginJsonVersion: true,
+          },
+        },
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "wave" },
+      ]);
+      const seed = makeCtx();
+      const installPlugin = createInstallOperation(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      );
+      await installPlugin({
+        ctx: seed.ctx,
+        pi: seed.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "zap" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const before = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(before !== undefined);
+
+      // The intent mark runs after every prepare and before the first commit,
+      // so sealing the staging PARENT there leaves the renames working and
+      // fails only the post-commit `rm` of the staging root.
+      const stateWatch = observeStateTransition(
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        () => {
+          chmodSync(locations.workflowsStagingDir, 0o500);
+          stagingDirLocked = locations.workflowsStagingDir;
+        },
+      );
+      process.chdir(cwd);
+
+      // act -- the DIRECT entrypoint, which is the arm that notifies.
+      const { ctx, pi, notifications } = makeCtx();
+      await stateWatch.updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      const row = notifications.at(-1);
+      assert.ok(row !== undefined);
+      // CR-01: the phase-3 composer restates nothing. The leak text is a
+      // manual-recovery instruction -- the tree it names is the one an operator
+      // has to go and remove -- so the composer hands it to the renderer
+      // verbatim, absolute path included, and the renderer walks the whole
+      // `.cause` chain the same way.
+      assert.match(row.message, /failed to clean up workflows staging directory/u);
+      assert.equal(
+        row.message.includes(locations.workflowsStagingDir),
+        true,
+        "the leak names the tree an operator has to remove, in full",
+      );
+    } finally {
+      if (stagingDirLocked !== undefined) {
+        await chmod(stagingDirLocked, 0o700);
+      }
+
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** The envelope body version A of `hello:greet` carries. */
+const GREET_VERSION_A_SOURCE =
+  'export const meta = { name: "greet", description: "does greet" };\n';
+
+/**
+ * WR-03: the deterministic workflows-failure vehicle every case below drives.
+ *
+ * Version A installs `greet`. Version B adds `wave`, and a FOREIGN envelope is
+ * planted at version B's `hello:wave` target -- a name the pre-update record
+ * does not hold. The bridge's ownership pre-check runs over the whole target
+ * set BEFORE the first rename, so the commit refuses by class and provably
+ * places nothing, which is what lets the same vehicle pin the record narrowing
+ * as well as the failure's identity.
+ *
+ * Planted on the filesystem rather than simulated by patching a module: this
+ * repository exposes no test-only seams and a gate counts them.
+ */
+async function seedRefusedWorkflowUpdate(cwd: string): Promise<{
+  readonly locations: ReturnType<typeof locationsFor>;
+  readonly foreignPath: string;
+  readonly foreignBytes: string;
+}> {
+  const locations = locationsFor("project", cwd);
+  const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+    cwd,
+    version: "1.0.0",
+    workflows: [{ sourceName: "greet", body: GREET_VERSION_A_SOURCE }],
+  });
+  await writeWorkflowScripts(marketplaceRoot, "hello", [
+    { sourceName: "greet", body: GREET_VERSION_A_SOURCE },
+    { sourceName: "wave" },
+  ]);
+  await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+  const foreignPath = path.join(locations.workflowsSavedDir, "hello:wave.json");
+  const foreignBytes = '{"name":"hello:wave","script":"// hand-saved by the user\\n"}';
+  await writeFile(foreignPath, foreignBytes, "utf8");
+  return { locations, foreignPath, foreignBytes };
+}
+
+test("CR-03: a refused workflows commit leaves the foreign file and restores the previous envelope", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-refused-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const { locations, foreignPath, foreignBytes } = await seedRefusedWorkflowUpdate(cwd);
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      assert.equal(
+        await readFile(foreignPath, "utf8"),
+        foreignBytes,
+        "the refusal must leave the user's own saved workflow byte-for-byte",
+      );
+      // The plugin's own previous envelope was displaced and put back.
+      assert.deepEqual(await readEnvelope(locations.workflowsSavedDir, "hello:greet"), {
+        name: "hello:greet",
+        description: "does greet",
+        script: GREET_VERSION_A_SOURCE,
+      });
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CR-01: the intent-mark union omits a name whose target holds foreign content", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-foreign-union-");
+    const previousCwd = process.cwd();
+    let unionDuringWindow: string[] | undefined;
+    try {
+      // arrange -- the same refusal vehicle, read at the ONE moment that
+      // matters for this invariant: what a crash would leave on disk.
+      const { foreignPath, foreignBytes } = await seedRefusedWorkflowUpdate(cwd);
+      const stateWatch = observeStateTransition(
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        (state) => {
+          unionDuringWindow = [
+            ...(state.marketplaces["mp"]?.plugins["hello"]?.resources.workflows ?? []),
+          ];
+        },
+      );
+      process.chdir(cwd);
+
+      // act
+      await stateWatch.updateSinglePlugin("hello", "mp", "project");
+
+      // assert -- the PERSISTED record during the intent-mark window, not the
+      // narrowed one finalize writes afterwards. `hello:wave` names the user's
+      // own file, and the record is the only ownership claim an unstage reads:
+      // a name that lands here survives a crash in this window with nothing
+      // left to re-narrow it, and the next uninstall unlinks it by fiat.
+      assert.equal(stateWatch.fired(), true);
+      assert.deepEqual(unionDuringWindow, ["hello:greet"]);
+      // `hello:greet` proves the omission is the ownership probe and not a
+      // union that stopped widening: it is the plugin's own previous name, so
+      // its occupied target is owned and stays recorded.
+      assert.equal(await readFile(foreignPath, "utf8"), foreignBytes);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── WR-03: one reachability case per widened `workflows` failure slot ────────
+//
+// Three closed sets already carry a `workflows` member that this verb could not
+// produce. Each case below drives a REAL workflows failure through the update
+// verb and observes ONE of them, on a value the production code produced. A
+// single end-to-end case would prove only the slot it happens to touch and
+// leave the other two inferred, which is the state these cases exist to end.
+
+test("WR-03: a workflows failure reaches the update ledger's failed-phase set", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-slot-ledger-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const { locations } = await seedRefusedWorkflowUpdate(cwd);
+      process.chdir(cwd);
+
+      // act
+      await updateSinglePlugin("hello", "mp", "project");
+
+      // assert -- the PERSISTED record is the observation. The finalize window
+      // builds its failed-phase set by filtering the reported phases through
+      // the ledger's own phase tuple, so a tuple without the `workflows` member
+      // would drop this failure, take the success arm, and record the PREPARED
+      // pair ["hello:greet", "hello:wave"] -- naming the foreign file. The
+      // pre-update inventory alone is what the failure arm produces, and only
+      // the failure arm can produce it.
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepEqual(record?.resources.workflows, ["hello:greet"]);
+      // The other bridges still committed and still wrote their own inventories,
+      // so the narrowing above is the per-phase gate firing rather than a whole
+      // finalize that never ran.
+      assert.equal((record?.resources.skills ?? []).length > 0, true);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-03: a workflows failure reaches the update outcome's per-phase failure list", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-slot-outcome-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      await seedRefusedWorkflowUpdate(cwd);
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert -- the RETURNED outcome is the observation. `phaseFailures` is
+      // typed by the shared orchestrator vocabulary, so a `workflows` entry
+      // arriving here is that union's member being produced rather than
+      // declared.
+      assert.equal(outcome.partition, "failed");
+      const phases = (outcome.phaseFailures ?? []).map((failure) => failure.phase);
+      assert.deepEqual(phases, ["workflows"], JSON.stringify(outcome.phaseFailures));
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-03: a workflows failure reaches the rendered rollback-partial row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-workflows-slot-row-");
+    try {
+      // arrange
+      await seedRefusedWorkflowUpdate(cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- the RENDERED bytes are the observation. The direct path hands
+      // the renderer the typed per-phase failures verbatim, so the phase member
+      // on the shared failure interface is what puts this line on screen.
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(body, /\{rollback partial\}/, `no aggregate row in:\n${body}`);
+      assert.match(
+        body,
+        /\[workflows\] \(rollback failed\)/,
+        `the failing bridge must be named on its own child row in:\n${body}`,
+      );
+      assert.match(
+        body,
+        /plugin-uninstall \+ plugin-install for "hello"\./,
+        `a phase-3 aggregate must carry the recovery hint in:\n${body}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("owns plugin update flow composition", () => {
   // arrange
   const operations = createPluginUpdateOperations(
@@ -9526,7 +10541,7 @@ test("owns plugin update flow composition", () => {
 test("routes cascade-safe preflight outcomes through the flow owner", async () => {
   await withHermeticHome(async () => {
     // arrange
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-flow-preflight-"));
+    const cwd = await createCaseDir("update-flow-preflight-");
     const previousCwd = process.cwd();
     try {
       await seedPathMarketplace({
@@ -9558,7 +10573,7 @@ test("routes cascade-safe preflight outcomes through the flow owner", async () =
 test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification", async () => {
   await withHermeticHome(async () => {
     // arrange
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-flow-success-"));
+    const cwd = await createCaseDir("update-flow-success-");
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplace({
@@ -9576,7 +10591,7 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
         },
         installedVersions: { hello: "1.0.0" },
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 4);
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 6);
       const operations = createPluginUpdateOperations(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
@@ -9596,14 +10611,14 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
       const record = state.marketplaces.mp?.plugins.hello;
       assert.ok(record !== undefined);
       assert.strictEqual(record.version, "1.0.1");
-      assert.deepStrictEqual(record.resources.skills, ["hello:tool"]);
+      assert.deepStrictEqual(record.resources.skills, ["hello-tool"]);
       assert.deepStrictEqual(record.resources.prompts, ["hello:deploy"]);
       assert.deepStrictEqual(record.resources.agents, ["pi-claude-marketplace-hello-bot"]);
       assert.deepStrictEqual(record.resources.mcpServers, ["server1"]);
       assert.strictEqual(record.compatibility.installable, true);
       assert.strictEqual(record.compatibility.notes.includes("update-in-progress"), false);
       assert.ok(
-        (await readFile(path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"), "utf8"))
+        (await readFile(path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8"))
           .length > 0,
       );
       assert.deepStrictEqual(notifications, [

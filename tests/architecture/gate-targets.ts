@@ -619,6 +619,35 @@ export const EVIDENCE_RECORD_TARGETS = [
 export const FINDING_DISPOSITIONS_REL: (typeof EVIDENCE_RECORD_TARGETS)[number] =
   ".planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-FINDING-DISPOSITIONS.md";
 
+/** WDEP-05: the workflows bridge, whose commit path must never call a probe. */
+export const WORKFLOWS_BRIDGE_TARGETS = [
+  "extensions/pi-claude-marketplace/bridges/workflows",
+  "extensions/pi-claude-marketplace/bridges/workflows/discover.ts",
+  "extensions/pi-claude-marketplace/bridges/workflows/index.ts",
+  "extensions/pi-claude-marketplace/bridges/workflows/stage.ts",
+  "extensions/pi-claude-marketplace/bridges/workflows/types.ts",
+  "extensions/pi-claude-marketplace/bridges/workflows/unstage.ts",
+] as const;
+
+/** WPTH-06: the staging-tree scan that must never write. */
+export const WORKFLOWS_STAGING_SCAN_TARGETS = [
+  "extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts",
+] as const;
+
+/** WNAM-06 / WVAL-02: the module the workflows doc-pin and single-parse gates read. */
+export const WORKFLOWS_SCRIPT_TARGETS = [
+  "extensions/pi-claude-marketplace/domain/workflow-script.ts",
+] as const;
+
+/** WDEP-04 / SNM-06: the `Dependency[]` derivation sites the marker-coverage gate drives. */
+export const WORKFLOWS_MARKER_COVERAGE_TARGETS = [
+  "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
+  "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts",
+] as const;
+
 /**
  * D-07-19 / GGAT-04: every export the repository publishes that no production
  * consumer reads, keyed by the file that publishes it.

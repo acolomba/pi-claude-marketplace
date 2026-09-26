@@ -82,7 +82,6 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "installs disabled": true,
   "marketplace in user scope": true,
   "marketplace in project scope": true,
-  workflows: true,
   "data kept": true,
   "no matching version": true,
   "version conflict": true,
@@ -102,6 +101,9 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "dependency installed": true,
   "dependents constrain": true,
   "cross-marketplace": true,
+  "stale workflow command": true,
+  "requires pi-dynamic-workflows": true,
+  "components now supported": true,
 };
 
 const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
@@ -181,100 +183,17 @@ const NOTIFICATION_KIND_ENROLLMENT: Record<
   "reconcile-applied-cascade": true,
 };
 
-test("OUT-08: Reason is the closed 63-entry reason set", () => {
-  // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
-  // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
-  // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
-  // CLASS-01 / D-86-01: +2 for the per-kind `malformed skill` / `malformed
-  // command` failure-class members (35 -> 37).
-  // D-90-05: +1 for the `unsupported component` member -- the truthful marker
-  // for a dropped non-carve-out component kind (37 -> 38).
-  // OUT-01 / DFEN-04: +1 for the `installs disabled` member -- the marker for an
-  // install that landed disabled on the plugin's own declaration (38 -> 39).
-  // CMP-4 / SCOPE-01: +1 for `marketplace not added to user scope` -- the SECOND
-  // structural marketplace-absent marker, replacing `marketplace not added` on the row when
-  // the container was found in the scope the command did not target (39 -> 40),
-  // +1 for its project-target sibling `marketplace not added to project scope`
-  // (40 -> 41).
-  // SCOPE-01 / D-01: +2 for the `marketplace in user scope` /
-  // `marketplace in project scope` CONTENT pair -- the cross-scope qualifier an
-  // absent-target lifecycle row joins to `not installed` so the
-  // container-is-one-scope-over miss stops rendering byte-identically to the
-  // container-is-here miss (41 -> 43).
-  // WDET-04 / D-106-04: +1 for the dedicated final `workflows` member
-  // (43 -> 44).
-  // DATA-01 / WR-06: +1 for `data kept`, uninstall's data-disposition marker --
-  // the token that separates the preserving branch from the destructive default
-  // (44 -> 45).
-  // RESV-02..06: +7 for the dependency-cascade vocabulary -- `no matching
-  // version`, `version conflict`, `constraint too complex`, `invalid version
-  // constraint`, `dependency marketplace not added`, `dependency cycle` and
-  // `dependency failed`. They are what let one cascade row name WHICH
-  // dependency failed and WHY, instead of the requesting plugin alone
-  // (45 -> 52).
-  // RESV-05: +1 for `dependency disabled` -- the marker that lifts a skipped
-  // dependency off the benign-skip default when its record is disabled and it
-  // therefore materialized nothing for the requesting plugin to install
-  // against (52 -> 53). EDEP-03 later RETIRES this member (see below).
-  // D-04-07: +1 for `dependency promoted` -- install's marker for a recorded
-  // dependency the user then asked for by name. The record changes hands and
-  // nothing is materialized; `already installed` alone is the refusal's brace
-  // and cannot report a state change (53 -> 54).
-  // D-05-11 / PRUNE-04: +1 for `dependency pruned` -- the marker `uninstall
-  // --prune` stamps on each orphaned dependency record it removed after the
-  // named plugin. An ordinary `uninstalled` row whose brace says why a plugin
-  // the user did not name went (54 -> 55).
-  // LOAD-01: +1 for `dependency unsatisfied` -- the load-time check's marker
-  // for a recorded plugin it disabled because a dependency it declares is not
-  // satisfied in the scope. It names the CONDITION; the remedy naming both
-  // parties rides the row's cause line, which no closed-set token could carry
-  // (55 -> 56).
-  // LOAD-01: +1 for `dependency version unsatisfied` -- the same check's marker
-  // for a dependency that IS recorded and enabled at a version outside the
-  // declared range. It mirrors upstream's second error code, and the split is
-  // what keeps the two remedies apart: one says install or enable the missing
-  // thing, the other says move an existing thing's version (56 -> 57).
-  // LOAD-03 / D-06-06: +1 for `dependents unsatisfied` -- uninstall's marker
-  // for a removal that went through while other installed plugins still
-  // declared the target. It rides the SUCCESS row and names a consequence the
-  // next load reports (57 -> 58).
+test("OUT-08: Reason is the closed 65-entry reason set", () => {
+  // The set is append-only and its declared order is catalog-stable, so this
+  // length is a tripwire: an additive drift has to be a deliberate bump made
+  // here, in the same edit as the member. The MEMBERSHIP is pinned separately by
+  // enumeration in `compat-01-no-expansion.test.ts`, and each member's own
+  // rationale lives beside its literal in `notification-types.ts`.
   //
-  // D-06-07 is the one RETIREMENT this narrative records rather than an
-  // addition: uninstall's refusal marker joined the set at 55 and left it
-  // again here, because the refusal it named no longer happens. The count is
-  // unchanged across this phase's last two edits for that reason, and the
-  // running arithmetic above is renumbered rather than annotated, so a reader
-  // adding the next member does not inherit a gap.
-  // TAGS-02 / D-07-03: +1 for `dependency current copy` -- the marker for a
-  // path-source dependency that installed the marketplace's current copy
-  // because no tag satisfied its constraint (58 -> 59).
-  // D-08-02: +1 for `dependency enabled` -- install's already-installed arm
-  // and enable's own cascade member row both stamp it when a disabled,
-  // already-installed dependency is re-materialized through its record
-  // (59 -> 60).
-  // EDEP-02: +1 for `dependents remain` -- disable's refusal marker for an
-  // installed and ENABLED plugin in the same scope that still declares the
-  // target. It rides a `failed` row, unlike its `dependents unsatisfied`
-  // neighbour, whose subject is a removal that WENT THROUGH (60 -> 61).
-  //
-  // EDEP-03 is the second RETIREMENT this narrative records: `dependency
-  // disabled` joined the set at 53 and leaves it here, because install and
-  // enable now turn a disabled already-installed dependency back on through
-  // its own record instead of leaving it inert -- `{already installed,
-  // dependency enabled}` replaces `{already installed, dependency disabled}`.
-  // The running arithmetic above is renumbered rather than annotated, so a
-  // reader adding the next member does not inherit a gap (61 -> 60).
-  // MISS-01 / D-09-09: +1 for `dependency installed` -- the reload
-  // dependency-install step's marker for a missing declared dependency it
-  // materialized. The row's plugin was never named by the user, so a bare
-  // `(installed)` would be unexplained; the install succeeded, so it is
-  // neither idempotent nor a failure reason (60 -> 61).
-  // UPDT-02 / D-10-09: +1 for `dependents constrain` -- the update-preflight
-  // constraint gate's marker for a plugin held to versions its installed
-  // dependents jointly admit. NOT idempotent: the update the user asked for
-  // was not carried out (61 -> 62).
-  // D-11-06: +1 for the root marketplace's cross-marketplace refusal (62 -> 63).
-  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 63);
+  // No changelog of past counts lives here. Git holds that history, a comment is
+  // not a gate, and a count restated far from this assertion is a claim nothing
+  // turns red for.
+  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 65);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {
@@ -344,4 +263,4 @@ void ({
 // A member the union does not hold, and a member it holds that an enrollment map
 // would drop: both directions of the drift this file exists to catch.
 void (false satisfies IsExact<Reason | "not a reason", Reason>);
-void (false satisfies IsExact<Exclude<Reason, "workflows">, Reason>);
+void (false satisfies IsExact<Exclude<Reason, "components now supported">, Reason>);

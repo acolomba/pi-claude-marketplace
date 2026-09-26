@@ -8,6 +8,7 @@ import {
 import {
   ManualRecoveryError,
   PluginShapeError,
+  StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
@@ -23,6 +24,7 @@ const EMPTY_RESOURCES: PluginInstallRecord["resources"] = {
   mcpServers: [],
   prompts: [],
   skills: [],
+  workflows: [],
 };
 
 function oldRecord(overrides: Partial<PluginInstallRecord> = {}): PluginInstallRecord {
@@ -65,7 +67,7 @@ function installable(state: MaterializablePlugin["state"] = "installable"): Mate
     supported: state === "installable" ? ["skills", "commands", "agents", "mcp"] : ["skills"],
     unsupported: state === "installable" ? [] : ["commands"],
     notes: state === "installable" ? [] : ["commands unavailable"],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: true,
     ...(state === "partially-available" && { hooksConfigPath: "hooks/hooks.json" }),
@@ -141,6 +143,7 @@ test("records an installed replacement and returns its exact outcome", () => {
     handles: handles({ populated: true }),
     hookEntries: undefined,
     isGitSource: true,
+    placedWorkflowNames: [],
   });
 
   // assert
@@ -154,6 +157,7 @@ test("records an installed replacement and returns its exact outcome", () => {
     stagedMcpServerNames: ["server"],
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
     resourcesChanged: true,
   });
   const recorded = state.marketplaces.market?.plugins.plugin;
@@ -165,6 +169,7 @@ test("records an installed replacement and returns its exact outcome", () => {
     agents: ["agent"],
     mcpServers: ["server"],
     hooks: [],
+    workflows: [],
   });
   assert.strictEqual(recorded.resolvedSha, undefined);
   assert.strictEqual(recorded.hookEntries, undefined);
@@ -188,6 +193,7 @@ test("LOAD-02: a reinstall of a held-down record drops the dependency marker", (
     handles: handles({ populated: true }),
     hookEntries: undefined,
     isGitSource: true,
+    placedWorkflowNames: [],
   });
 
   // assert -- a key-presence check: the rebuilt literal never names the field,
@@ -216,6 +222,7 @@ test("carries dependency provenance forward on reinstall", () => {
     handles: handles({ populated: true }),
     hookEntries: undefined,
     isGitSource: true,
+    placedWorkflowNames: [],
   });
 
   // assert
@@ -232,6 +239,7 @@ test("carries dependency provenance forward on reinstall", () => {
       unsupported: [],
     },
     resources: {
+      workflows: [],
       skills: ["skill"],
       prompts: ["command"],
       agents: ["agent"],
@@ -243,6 +251,37 @@ test("carries dependency provenance forward on reinstall", () => {
     installedAt: previous.installedAt,
     updatedAt: recorded.updatedAt,
   });
+});
+
+test("WLIF-06: stamps staleWorkflowCommand when the replace step retires a workflow the old record carried", () => {
+  // arrange -- the old record carries a workflow the reinstall did not replace,
+  // so its generated command stays registered against nothing until a reload.
+  const previous = oldRecord({
+    resources: { ...EMPTY_RESOURCES, workflows: ["plugin:greet"] },
+  });
+  const state = stateWith(previous);
+
+  // act
+  const outcome = recordReinstallOutcome({
+    partition: "reinstalled",
+    name: "plugin",
+    marketplace: "market",
+    scope: "project",
+    state,
+    oldRecord: previous,
+    installable: installable(),
+    handles: handles({ populated: true }),
+    hookEntries: undefined,
+    isGitSource: false,
+    placedWorkflowNames: [],
+  });
+
+  // assert
+  assert.strictEqual(outcome.partition, "reinstalled");
+  assert.strictEqual(
+    outcome.partition === "reinstalled" ? outcome.staleWorkflowCommand : undefined,
+    true,
+  );
 });
 
 test("records partial compatibility, sha, hooks, and degradation exactly", () => {
@@ -262,6 +301,7 @@ test("records partial compatibility, sha, hooks, and degradation exactly", () =>
     handles: handles({ degraded: true }),
     hookEntries: [{ event: "SessionStart" }],
     isGitSource: true,
+    placedWorkflowNames: [],
   });
 
   // assert
@@ -275,6 +315,7 @@ test("records partial compatibility, sha, hooks, and degradation exactly", () =>
     stagedMcpServerNames: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     resourcesChanged: false,
     degradedKinds: ["skill", "command"],
   });
@@ -310,6 +351,7 @@ test("WR-01: a non-git source's reinstall drops a stale resolvedSha instead of c
     handles: handles({ populated: true }),
     hookEntries: undefined,
     isGitSource: false,
+    placedWorkflowNames: [],
   });
 
   // assert: the OLD sha must not survive onto a record whose resolvedSource
@@ -340,6 +382,7 @@ test("rejects record mutation after concurrent removal", () => {
         handles: handles(),
         hookEntries: undefined,
         isGitSource: true,
+        placedWorkflowNames: [],
       }),
     /concurrently removed/u,
   );
@@ -357,6 +400,7 @@ test("composes ordinary, typed, errno, and manual-recovery failures", () => {
     partialable: false,
   });
   const manual = new ManualRecoveryError("rollback failed", ["skills: /leak"]);
+  const lockHeld = new StateLockHeldError("user", "/tmp/scope/.state-lock");
 
   // act
   const outcome = recordReinstallOutcome({
@@ -373,6 +417,7 @@ test("composes ordinary, typed, errno, and manual-recovery failures", () => {
   assert.deepStrictEqual(reinstallReasonsFromError(missing), ["source missing"]);
   assert.deepStrictEqual(reinstallReasonsFromError(shape), ["source mismatch"]);
   assert.deepStrictEqual(reinstallReasonsFromError(manual), ["rollback partial"]);
+  assert.deepStrictEqual(reinstallReasonsFromError(lockHeld), ["lock held"]);
   assert.deepStrictEqual(outcome, {
     partition: "failed",
     name: "plugin",

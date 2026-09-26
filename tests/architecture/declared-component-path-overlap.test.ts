@@ -126,7 +126,7 @@ test("MANF-03 a declared skills parent over eight skill dirs warns not at all", 
 
   // assert
   assert.deepStrictEqual(discovery, {
-    generatedNames: skillNames.map((skillName) => `ui5:${skillName}`),
+    generatedNames: skillNames.map((skillName) => `ui5-${skillName}`),
     warnings: [],
   });
 });
@@ -146,7 +146,7 @@ test("MANF-03 declared skill subdirs under a shipped skills parent warn not at a
 
   // assert
   assert.deepStrictEqual(discovery, {
-    generatedNames: ["ui-theme-designer:help", "ui-theme-designer:design-tokens"],
+    generatedNames: ["ui-theme-designer-help", "ui-theme-designer-design-tokens"],
     warnings: [],
   });
 });
@@ -165,7 +165,7 @@ test("MANF-03 an undeclared sibling skill survives the overlap fix", async (t) =
 
   // assert
   assert.deepStrictEqual(discovery, {
-    generatedNames: ["acme:declared", "acme:undeclared"],
+    generatedNames: ["acme-declared", "acme-undeclared"],
     warnings: [],
   });
 });

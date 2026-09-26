@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, test, type TestContext } from "node:test";
+import { describe, test } from "node:test";
 
 import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
+import { captureDebugLog } from "./debug-log-capture.ts";
 
 import type {
   AuthAttemptResult,
@@ -12,30 +13,6 @@ import type {
 
 const HOST = "git.example.invalid";
 const REMOTE_URL = `https://${HOST}/owner/repo.git`;
-
-/**
- * Captures what `hookDebugLog` emits for the duration of one case.
- *
- * `hookDebugLog` writes to `console.error` only while
- * `PI_CLAUDE_MARKETPLACE_DEBUG` is set, so the variable is set here and
- * restored to its prior value (including absence) afterwards.
- */
-function captureDebugLog(t: TestContext): string[] {
-  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-  const logged: string[] = [];
-  t.after(() => {
-    if (previousDebug === undefined) {
-      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-    } else {
-      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
-    }
-  });
-  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
-  t.mock.method(console, "error", (...args: unknown[]) => {
-    logged.push(args.map(String).join(" "));
-  });
-  return logged;
-}
 
 describe("buildAuthCallbacks", () => {
   test("returns a stored credential without requesting interactive auth", async () => {

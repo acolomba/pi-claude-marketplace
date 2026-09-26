@@ -51,7 +51,7 @@ const installableExample = {
   supported: [],
   unsupported: [],
   notes: [],
-  componentPaths: { skills: [], commands: [], agents: [] },
+  componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
   mcpServers: {},
   defaultEnabled: true,
 } satisfies ResolvedPlugin;

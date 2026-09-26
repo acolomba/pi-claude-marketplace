@@ -11,8 +11,8 @@
 // NOT runPhases -- the heterogeneous-undo flow D-02 precedent):
 //
 //  (prepare): sequential bridge prepare* into tmp (skills -> commands
-//  -> agents -> mcp). Any throw triggers abort of already-prepared handles
-//  + structured cleanup-failure descriptors.
+//  -> agents -> mcp -> workflows). Any throw triggers abort of
+//  already-prepared handles + structured cleanup-failure descriptors.
 //
 //  (state-guard swap with old-resource snapshot): inside
 //  `withStateGuard` re-read the plugin record, ST-9 stale-version check,
@@ -21,9 +21,9 @@
 //
 //  Phase 3a (physical replace, aggregate failures, continue across bridges):
 //  call each bridge's commitPrepared* in skills -> commands -> agents -> mcp
-//  order. D-03 specifies CONTINUE across bridge failures (not fail-fast)
-//  so the partial-replace state is fully observed. Failures aggregate
-//  into Phase3Failure[].
+//  -> workflows order. D-03 specifies CONTINUE across bridge failures (not
+//  fail-fast) so the partial-replace state is fully observed. Failures
+//  aggregate into Phase3Failure[].
 //
 //  Phase 3b (compose recovery hint or success): if any failures, wrap in
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
@@ -106,6 +106,7 @@ import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
 /** Runs one prepared update target for the update flow. */
@@ -592,6 +593,7 @@ async function updateSinglePluginWith(
       // the soft-dep marker (MSG-SD-3), so the value is `false`.
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     };
     return { ...base, reasons: reasonsFromTypedError(err) };
   }
@@ -1018,19 +1020,22 @@ async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> 
   return swapPluginUpdate(args, preflight);
 }
 
-/** Binds update enumeration, preflight, swap, cascade, and lifecycle routing once. */
+/**
+ * Binds update enumeration, preflight, swap, cascade, and lifecycle routing once.
+ * `stateTransaction` replaces the state I/O of every locked save the update
+ * makes; production callers omit it.
+ */
 export function createPluginUpdateOperations(
   hooksRouting: UpdateHooksRouting,
   completionCache: CompletionCache,
+  stateTransaction?: LockedStateTransactionDeps,
 ): PluginUpdateOperations {
+  const run: typeof runPluginUpdate =
+    stateTransaction === undefined
+      ? runPluginUpdate
+      : (args) => runPluginUpdate({ ...args, stateTransaction });
   const updatePlugins: UpdatePluginsFn = (options) =>
-    updatePluginsWith(
-      options,
-      hooksRouting,
-      completionCache,
-      runPluginUpdate,
-      composeUpdateCascade,
-    );
+    updatePluginsWith(options, hooksRouting, completionCache, run, composeUpdateCascade);
   // D-10-18: ONE memo pair per autoupdate run. `beginPluginUpdateRun`
   // allocates the pair, so the pair's lifetime is the run's and a release tag
   // pushed between two runs is visible to the second. The pair spans every
@@ -1040,15 +1045,10 @@ export function createPluginUpdateOperations(
     const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
     const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
     return (plugin, marketplace, scope) =>
-      updateSinglePluginWith(
-        hooksRouting,
-        completionCache,
-        runPluginUpdate,
-        plugin,
-        marketplace,
-        scope,
-        { tagMemo: constraintTagMemo, marketplaceTagMemo: constraintMarketplaceTagMemo },
-      );
+      updateSinglePluginWith(hooksRouting, completionCache, run, plugin, marketplace, scope, {
+        tagMemo: constraintTagMemo,
+        marketplaceTagMemo: constraintMarketplaceTagMemo,
+      });
   };
 
   return { updatePlugins, beginPluginUpdateRun };

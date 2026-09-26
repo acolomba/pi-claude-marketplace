@@ -10,9 +10,10 @@
 //     express.
 //
 //   - cascadeUnstagePlugin (D-02, D-03): per-plugin hand-rolled
-//     try/catch envelope that composes the 5 bridge unstage*
-//     primitives in PU-1 order (skills → commands → agents → hooks → mcp).
-//     Reused by plugin uninstall -- preserve the public signature.
+//     try/catch envelope that composes the 6 bridge unstage*
+//     primitives in PU-1 order (skills → commands → agents → hooks
+//     → mcp → workflows). Reused by plugin uninstall -- preserve the
+//     public signature.
 //
 //   - resolveScopeFromState (MR-1): cross-scope ambiguity funnel.
 //     Throws MarketplaceNotFoundError or MarketplaceAmbiguousScopeError
@@ -33,6 +34,7 @@ import { unstagePluginCommands } from "../../bridges/commands/index.ts";
 import { removeHookConfig } from "../../bridges/hooks/index.ts";
 import { unstageMcpServers } from "../../bridges/mcp/index.ts";
 import { unstagePluginSkills } from "../../bridges/skills/index.ts";
+import { unstagePluginWorkflows } from "../../bridges/workflows/index.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
@@ -48,6 +50,7 @@ import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
+import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
@@ -72,6 +75,29 @@ export class AgentsUnstageFailureError extends Error {
     super(message);
     this.name = "AgentsUnstageFailureError";
     this.failedAgents = failedAgents;
+  }
+}
+
+/**
+ * WLIF-03: a workflows unstage that could not remove every recorded name.
+ *
+ * Sits beside `AgentsUnstageFailureError` because this module is the one
+ * marketplace file a plugin ledger may import from, and the cascade needs the
+ * same class.
+ *
+ * Unlike its sibling next door, the payload is a FROZEN DEFENSIVE COPY. The
+ * names identify EXECUTABLE files left on disk, and the error crosses the
+ * ledger boundary into a renderer that reads it long after the bridge
+ * returned; a frozen copy is the only way the field is provably the same list
+ * at read time as at throw time. This follows `WorkflowNameCollisionError`
+ * rather than the no-copy sibling.
+ */
+export class WorkflowsUnstageFailureError extends Error {
+  readonly failedWorkflows: readonly UnstageWorkflowFailure[];
+  constructor(message: string, failedWorkflows: readonly UnstageWorkflowFailure[]) {
+    super(message);
+    this.name = "WorkflowsUnstageFailureError";
+    this.failedWorkflows = Object.freeze([...failedWorkflows]);
   }
 }
 
@@ -270,7 +296,7 @@ export async function refreshGitHubClone(
 }
 
 /**
- * D-02, D-03: result of one plugin's cascade through the 4 bridges.
+ * D-02, D-03: result of one plugin's cascade through the 6 bridges.
  * Discriminated implicitly by `ok` -- on success `cause` is absent;
  * on failure `cause` carries the FIRST throw (D-03 fail-fast). Names
  * already dropped before the throw are still reported in `dropped`
@@ -278,12 +304,13 @@ export async function refreshGitHubClone(
  * committed.
  */
 export interface UnstageOutcome {
-  /** True when all FIVE bridges' unstage* calls returned cleanly. */
+  /** True when all SIX bridges' unstage* calls returned cleanly. */
   readonly ok: boolean;
   /**
-   * Names actually removed across all five bridges. Empty when nothing was
+   * Names actually removed across all six bridges. Empty when nothing was
    * staged. LIFE-01 / D-63-01: `hooks` lands between `agents` and
-   * `mcpServers` (declaration order matches cascade order).
+   * `mcpServers`; WLIF-03: `workflows` lands last (declaration order matches
+   * cascade order).
    */
   readonly dropped: {
     readonly skills: readonly string[];
@@ -291,6 +318,7 @@ export interface UnstageOutcome {
     readonly agents: readonly string[];
     readonly hooks: readonly string[];
     readonly mcpServers: readonly string[];
+    readonly workflows: readonly string[];
   };
   /** Set on failure: the FIRST throw, wrapped to Error if needed (D-03 fail-fast). */
   readonly cause?: Error;
@@ -298,7 +326,7 @@ export interface UnstageOutcome {
 
 /**
  * D-02: hand-rolled per-plugin cascade. PU-1 order (skills → commands →
- * agents → MCP). D-03 fail-fast: the FIRST bridge throw halts THIS
+ * agents → hooks → MCP → workflows). D-03 fail-fast: the FIRST bridge throw halts THIS
  * plugin and the plugin lands in failedPlugins[] in the caller; already
  * unstaged resources stay unstaged (bridges are idempotent). Plugin
  * uninstall reuses this primitive -- preserve the signature.
@@ -308,6 +336,10 @@ export interface UnstageOutcome {
  * The cascade primitive opts into strict semantics by throwing when
  * failed.length > 0, so the per-plugin try/catch lands the plugin in
  * failedPlugins[].
+ *
+ * WLIF-03: the workflows bridge takes the same strict opt-in for the same
+ * reason -- it accumulates per-name failures rather than throwing, and the
+ * names it could not remove identify executable files left on disk.
  */
 export async function cascadeUnstagePlugin(
   plugin: string,
@@ -321,6 +353,7 @@ export async function cascadeUnstagePlugin(
     agents: [] as string[],
     hooks: [] as string[],
     mcpServers: [] as string[],
+    workflows: [] as string[],
   };
 
   try {
@@ -373,6 +406,29 @@ export async function cascadeUnstagePlugin(
     });
     dropped.mcpServers = [...mcpResult.removedNames];
 
+    // WLIF-03: 6th cascade slot, after mcp so no existing ordering shifts. The
+    // names come from the RECORD, never from a re-derivation off the plugin
+    // source: the source may have changed since the install, and the envelope
+    // on disk is the one the record names. Envelopes live outside every scope
+    // root, so nothing else will ever find them.
+    const workflowsResult = await unstagePluginWorkflows({
+      locations,
+      previousWorkflowNames: installedPlugin.resources.workflows,
+    });
+    dropped.workflows = [...workflowsResult.removedNames];
+
+    if (workflowsResult.failed.length > 0) {
+      // Mirrors the agents guard above: the bridge accumulates per-name
+      // failures rather than throwing, so the cascade opts into strict
+      // semantics here. The `; `-joined text is the user-visible surface; the
+      // structured array is what a consumer reads without re-parsing prose.
+      const reasons = workflowsResult.failed.map((f) => `${f.name}: ${f.reason}`).join("; ");
+      throw new WorkflowsUnstageFailureError(
+        `Failed to remove ${workflowsResult.failed.length} workflow(s): ${reasons}`,
+        workflowsResult.failed,
+      );
+    }
+
     return Object.freeze({
       ok: true,
       dropped: Object.freeze({
@@ -381,6 +437,7 @@ export async function cascadeUnstagePlugin(
         agents: Object.freeze([...dropped.agents]),
         hooks: Object.freeze([...dropped.hooks]),
         mcpServers: Object.freeze([...dropped.mcpServers]),
+        workflows: Object.freeze([...dropped.workflows]),
       }),
     });
   } catch (err) {
@@ -392,6 +449,7 @@ export async function cascadeUnstagePlugin(
         agents: Object.freeze([...dropped.agents]),
         hooks: Object.freeze([...dropped.hooks]),
         mcpServers: Object.freeze([...dropped.mcpServers]),
+        workflows: Object.freeze([...dropped.workflows]),
       }),
       cause: err instanceof Error ? err : new Error(String(err)),
     });

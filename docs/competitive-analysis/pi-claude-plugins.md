@@ -94,7 +94,7 @@ The second is a defect in their acquisition path that sends the confusion back t
 
 The third consequence matters most. In a small ecosystem, the project that describes the category most clearly claims the category name, not the project that ships the most code. Their package description reads: "Pi extension that exposes Claude marketplace plugin skills from `~/.claude/plugins/marketplaces` into the current pi session." That sentence states exactly what the product does. Ours reads: "Access Claude plugin marketplaces from Pi Coding Agent." That describes a category instead of a behavior, and their product can claim it too without a lie.
 
-The fix costs writing time. Our description must say that we install plugins from Claude marketplaces without a Claude Code installation, and that we translate five component kinds. Both statements are true today. Both separate us from them in one line. Neither appears anywhere a search result shows.
+The fix costs writing time. Our description must say that we install plugins from Claude marketplaces without a Claude Code installation, and that we translate six component kinds. Both statements are true today. Both separate us from them in one line. Neither appears anywhere a search result shows.
 
 ## Positioning analysis
 
@@ -112,13 +112,13 @@ Ours, cast the same way:
 
 ### Message architecture
 
-| Level             | pi-claude-plugins                                       | pi-claude-marketplace                                                   |
-| ----------------- | ------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Category          | Claude Code passthrough                                 | Claude marketplace client for Pi                                        |
-| Differentiator    | No ceremony, no state, one source of truth              | Fidelity of translation, and independence from Claude Code              |
-| Value proposition | Your Claude skills appear in Pi, with nothing to manage | Install a Claude plugin and have every supported component work         |
-| Proof points      | 221 lines, three files, no writes, no dependencies      | Five component kinds, enforced offline guarantees, a byte-exact catalog |
-| Requires          | A Claude Code installation with plugins enabled         | Nothing beyond Pi                                                       |
+| Level             | pi-claude-plugins                                       | pi-claude-marketplace                                                  |
+| ----------------- | ------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Category          | Claude Code passthrough                                 | Claude marketplace client for Pi                                       |
+| Differentiator    | No ceremony, no state, one source of truth              | Fidelity of translation, and independence from Claude Code             |
+| Value proposition | Your Claude skills appear in Pi, with nothing to manage | Install a Claude plugin and have every supported component work        |
+| Proof points      | 221 lines, three files, no writes, no dependencies      | Six component kinds, enforced offline guarantees, a byte-exact catalog |
+| Requires          | A Claude Code installation with plugins enabled         | Nothing beyond Pi                                                      |
 
 ### Why the framing difference matters
 
@@ -255,13 +255,13 @@ The whole product is 221 lines of straightforward TypeScript with no runtime dep
 
 ### Nothing to recover
 
-They have no transactions, because they have no writes. There is no partial install, no orphaned artifact, no lock contention, and no rollback that can itself fail. Our five-phase ledger, state lock, and reconcile pass exist to solve problems they do not have.
+They have no transactions, because they have no writes. There is no partial install, no orphaned artifact, no lock contention, and no rollback that can itself fail. Our seven-phase ledger, state lock, and reconcile pass exist to solve problems they do not have.
 
 ## What we have that they do not
 
-### Three of the five component kinds
+### Four of the six component kinds
 
-They translate skills and commands. Agents, MCP servers, and hooks are absent, and their README states all three as limitations. We translate all five. Take a user whose plugin ships an agent or an MCP server. Their extension appears to work and quietly delivers a fraction of the plugin.
+They translate skills and commands. Agents, MCP servers, hooks, and workflows are absent; their README states the first three as limitations. We translate all six. Take a user whose plugin ships an agent or an MCP server. Their extension appears to work and quietly delivers a fraction of the plugin.
 
 ### Independence from Claude Code
 
@@ -321,7 +321,7 @@ Their README is honest. It lists what does not work and explains the plugin key 
 
 ### Their weaknesses
 
-Three of five component kinds are missing, and the failure is quiet. A plugin whose value sits in an agent or an MCP server appears to install and delivers a fraction of itself, with no diagnostic.
+Four of six component kinds are missing, and the failure is quiet. A plugin whose value sits in an agent or an MCP server appears to install and delivers a fraction of itself, with no diagnostic.
 
 The product cannot work alone. It is a view onto Claude Code, so it inherits Claude Code as a hard requirement and delivers nothing without it.
 
@@ -333,7 +333,7 @@ Finally, the maintenance signals are weak. Seven commits over four months, one o
 
 ### Our strengths
 
-We translate five component kinds to their two. The three they miss are the ones that make a plugin do work rather than supply text. We work without Claude Code, which makes Pi a host rather than a mirror. We acquire, install, update, and roll back under a transaction, and our load path catches its own failures rather than passes them up to Pi.
+We translate six component kinds to their two. The four they miss are the ones that make a plugin do work rather than supply text. We work without Claude Code, which makes Pi a host rather than a mirror. We acquire, install, update, and roll back under a transaction, and our load path catches its own failures rather than passes them up to Pi.
 
 Our reach is larger on every measure. We took seven times the downloads over a shorter life. We hold seventeen stars to one, and two merged pull requests from outside humans against none.
 
@@ -347,7 +347,7 @@ We also hold duplicate enablement state with no reconciliation against Claude Co
 
 The clearest opening is the product mode they invented and we lack. A mirror or link mode exposes Claude's installed plugins in place, with no staged copies and no recorded state. It serves the dual-host user we currently force to choose. Our `import` orchestrator already reads Claude's settings files in both scopes, with `CLAUDE_CONFIG_DIR` support. The discovery half therefore exists, and only the projection half is missing. This work removes their advantage and keeps ours.
 
-The second opening is positioning, and it costs writing time. Our package description names a category that their product can also claim. Two facts separate us in one line: we install without Claude Code, and we translate five component kinds. That line belongs at the exact point where a user compares two similar names in a search result.
+The second opening is positioning, and it costs writing time. Our package description names a category that their product can also claim. Two facts separate us in one line: we install without Claude Code, and we translate six component kinds. That line belongs at the exact point where a user compares two similar names in a search result.
 
 The third is smaller and worth the effort anyway. Their weakest real behavior, quiet delivery of two component kinds of five, is invisible to the user. A short comparison page in our documentation states which components each approach carries. Users who choose correctly do not file confused issues against us.
 

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { renameSync, watch } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -302,7 +301,7 @@ function makePluginRecord(): ExtensionState["marketplaces"][string]["plugins"][s
     version: "0.0.1",
     resolvedSource: "/tmp",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: true,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -1419,6 +1418,7 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
         declaresAgents: false,
         declaresMcp: false,
         constraint: undefined,
+        declaresWorkflows: false,
       });
     };
 
@@ -1475,6 +1475,7 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
         declaresAgents: false,
         declaresMcp: false,
         constraint: undefined,
+        declaresWorkflows: false,
       });
     };
 
@@ -1542,6 +1543,7 @@ test("LIFE-06: cascade mapper carries a preflight `not in manifest` skip through
         reasons: ["not in manifest"],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       });
 
     // act
@@ -1797,6 +1799,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
           declaresAgents: false,
           declaresMcp: false,
           constraint: undefined,
+          declaresWorkflows: false,
         });
       }
 
@@ -1809,6 +1812,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
           declaresAgents: false,
           declaresMcp: false,
           constraint: undefined,
+          declaresWorkflows: false,
         });
       }
 
@@ -1820,6 +1824,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
           reasons: [],
           declaresAgents: false,
           declaresMcp: false,
+          declaresWorkflows: false,
         });
       }
 
@@ -1829,6 +1834,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
         notes: [],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       });
     };
 
@@ -1903,6 +1909,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
         declaresAgents: false,
         declaresMcp: false,
         constraint: undefined,
+        declaresWorkflows: false,
       });
 
     // act
@@ -1952,6 +1959,7 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
         declaresAgents: false,
         declaresMcp: false,
         constraint: undefined,
+        declaresWorkflows: false,
       });
     // act
     await updateMarketplace({
@@ -2011,6 +2019,7 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
         declaresAgents: false,
         declaresMcp: false,
         constraint: undefined,
+        declaresWorkflows: false,
       });
     // act
     await updateMarketplace({
@@ -2137,6 +2146,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
         declaresAgents: false,
         declaresMcp: false,
         constraint: undefined,
+        declaresWorkflows: false,
       };
     };
 
@@ -2264,6 +2274,7 @@ test("a newly degraded autoupdate cascade emits its partial row and warning enve
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
         constraint: undefined,
       });
@@ -2579,6 +2590,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
         declaresAgents: false,
         declaresMcp: false,
         constraint: undefined,
+        declaresWorkflows: false,
       });
     };
 
@@ -3214,6 +3226,7 @@ test("WR-12: the autoupdate cascade row is byte-identical to the standalone upda
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         degradedKinds: ["skill"],
         constraint: undefined,
       });
@@ -3417,26 +3430,23 @@ test("silently retains a failed changed-target cache cleanup and preserves later
   });
 });
 
-test("silently stops when the marketplace vanishes after preflight", async (testContext) => {
+test("silently stops when the marketplace vanishes after preflight", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const marketplaceRoot = path.join(cwd, "marketplace");
     await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
     await seedPathMarketplace({ cwd, name: "vanishing-mp", marketplaceRoot });
     const locations = locationsFor("project", cwd);
-    const replacementPath = path.join(locations.extensionRoot, "replacement-state.json");
-    await writeFile(replacementPath, '{\n  "schemaVersion": 2,\n  "marketplaces": {}\n}\n');
-    const stateLockName = path.basename(locations.stateLockFile);
-    let replaced = false;
-    const watcher = watch(locations.extensionRoot, (_event, filename) => {
-      if (!replaced && filename === stateLockName) {
-        replaced = true;
-        renameSync(replacementPath, locations.stateJsonPath);
-      }
-    });
-    testContext.after(() => {
-      watcher.close();
-    });
+    // The pre-guard probe reads the real state file and finds the record; the
+    // injected in-lock load does not. That asymmetry IS the concurrent
+    // removal, expressed without racing a real writer.
+    let inLockLoads = 0;
+    const stateTransaction = {
+      loadState: async (): Promise<ExtensionState> => {
+        inLockLoads += 1;
+        return await Promise.resolve({ schemaVersion: 2 as const, marketplaces: {} });
+      },
+    };
     const { ctx, pi, notifications } = makeCtx();
     const git = makeForbiddenGitOps();
 
@@ -3449,10 +3459,11 @@ test("silently stops when the marketplace vanishes after preflight", async (test
       scope: "project",
       cwd,
       gitOps: git.gitOps,
+      stateTransaction,
     });
 
     // assert
-    assert.strictEqual(replaced, true);
+    assert.strictEqual(inLockLoads, 1);
     assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
       schemaVersion: 3,

@@ -60,6 +60,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act
@@ -87,6 +88,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act
@@ -110,6 +112,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act
@@ -132,6 +135,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act
@@ -155,6 +159,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act
@@ -179,6 +184,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act
@@ -643,7 +649,11 @@ describe("composePromotedRow", () => {
       scope: "user",
       needsReload: false,
     });
-    const probe = { piSubagentsLoaded: false, piMcpAdapterLoaded: false } satisfies SoftDepStatus;
+    const probe = {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: false,
+    } satisfies SoftDepStatus;
 
     // act
     const rendered = INSTALL_CONTEXT.render.installed(row, probe, "user");

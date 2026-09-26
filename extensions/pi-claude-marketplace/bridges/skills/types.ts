@@ -11,6 +11,7 @@
 // so orchestrators can populate state.json without re-discovering skills.
 
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /** A skill enumerated by `discoverPluginSkills` (one entry per source skill dir). */
@@ -25,6 +26,7 @@ export interface DiscoveredSkill {
 
 /** Input bundle for `prepareStageSkills`. */
 export interface StageSkillsInput {
+  readonly referenceNames?: InstalledReferenceNames | undefined;
   readonly locations: ScopedLocations;
   readonly pluginName: string;
   readonly pluginRoot: string;
@@ -36,6 +38,15 @@ export interface StageSkillsInput {
    * staged content. Empty / absent on fresh installs.
    */
   readonly previousSkillNames?: readonly string[];
+  /**
+   * SKTK-01: the generated workflow names this plugin will stage, so a skill
+   * that tells the model to run a sibling workflow by its upstream spelling
+   * (`acme:acme-audit`) is retargeted onto the installed name (`acme:audit`)
+   * the same way a sibling-skill reference is. Required, like `cwd`: a
+   * workflow-bearing plugin whose caller forgot to thread these would install
+   * skills that name a command the session does not have.
+   */
+  readonly knownWorkflowNames: readonly string[];
   /**
    * Install cwd (the project root for project-scope installs), substituted for
    * `${CLAUDE_PROJECT_DIR}` in skill content (SUB-02). Required so a

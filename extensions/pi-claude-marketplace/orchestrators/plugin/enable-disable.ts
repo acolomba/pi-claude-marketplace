@@ -98,6 +98,7 @@ import {
   enableRowDependencies,
   overwriteDisabledMemberEntries,
   resolveCrossScopePluginTarget,
+  retiresWorkflowCommand,
   type selectDeclaringConfigWriteTarget,
   type CrossScopePluginResolution,
   type DeclaringConfigWriteTarget,
@@ -256,6 +257,25 @@ type SetEnabledOutcome =
       kind: "fresh";
       addRoutesAfterSave?: EnableRouteEffect;
       version?: string;
+      /**
+       * WLIF-06: at least one workflow the record named is not on disk any more
+       * while the command it registered is still live for the session. Both
+       * branches reach this arm and both set it from their own operand -- enable
+       * from the pre-enable inventory minus what the ledger re-placed, disable
+       * from what the cascade reported dropping.
+       *
+       * Absent means nothing was retired on this arm, which is also the state of
+       * the config-write-back arm: it stages nothing and removes nothing, so a
+       * plain write-back has no retirement to report and its row keeps the bytes
+       * it always rendered.
+       *
+       * Deliberately module-private and deliberately NOT a member of the
+       * exported `EnableDisablePluginOutcome`: the load-time reconcile caller
+       * consumes that union, and a lingering command is a fact about the running
+       * host that a reload is what clears -- so the path that runs ON a reload
+       * must have no way to claim it.
+       */
+      staleWorkflowCommand?: boolean;
     } & EnableDegradationSignals)
   | { kind: "invalid-config" }
   /**
@@ -271,7 +291,17 @@ type SetEnabledOutcome =
       recordedVersion?: string;
       rollbackPartials?: readonly RollbackPartial[];
     }
-  | { kind: "disable-failed"; cause: Error; recordedVersion?: string };
+  | {
+      kind: "disable-failed";
+      cause: Error;
+      recordedVersion?: string;
+      /**
+       * WLIF-06: envelopes the partial cascade removed BEFORE it threw. The
+       * failure row names both facts -- why the disable did not finish, and that
+       * the commands behind the envelopes it did remove are still registered.
+       */
+      staleWorkflowCommand?: boolean;
+    };
 
 /**
  * CR-03: the ledger call + `SetEnabledOutcome` "fresh" arm construction
@@ -385,6 +415,19 @@ async function materializeEnableRoot(
     // declaration verdict, nothing more.
     ...(summary.stagedAgentNames.length > 0 && { stagedAgents: true }),
     ...(summary.stagedMcpServerNames.length > 0 && { stagedMcpServers: true }),
+    ...(summary.stagedWorkflowNames.length > 0 && { stagedWorkflows: true }),
+    // WLIF-05 / WLIF-06: the retirement gate, computed here because this is
+    // the only place both operands exist. `installed` is the PRE-enable record
+    // -- captured before the ledger rewrote it, which is why it is a parameter
+    // -- and `summary.stagedWorkflowNames` is what this run re-placed. A
+    // source that dropped or renamed a workflow while the plugin was disabled
+    // leaves the old generated name in the difference.
+    //
+    // Spread only when something was retired, so a clean re-enable's sentinel
+    // shape, and the row derived from it, are unchanged (NREG-01).
+    ...(retiresWorkflowCommand(installed.resources.workflows, summary.stagedWorkflowNames) && {
+      staleWorkflowCommand: true,
+    }),
   };
 }
 
@@ -1468,6 +1511,12 @@ async function runDisableBranch(
         kind: "disable-failed",
         cause: cascade.cause,
         recordedVersion,
+        // WLIF-06: a cascade that removed two envelopes and then failed on a
+        // third leaves three commands registered. Reporting none of them would
+        // tell the operator nothing changed, which is the opposite of what
+        // happened, so the partial arm reads the SAME reported-removal operand
+        // the clean arm reads.
+        ...(cascade.dropped.workflows.length > 0 && { staleWorkflowCommand: true }),
       },
       saveShrunken: true,
       removeRoutesAfterSave: cascade.dropped.hooks.length > 0,
@@ -1475,9 +1524,10 @@ async function runDisableBranch(
   }
 
   // SET enabled: false; BUMP updatedAt; PRESERVE everything else.
-  // ENBL-13 / D-100-04 / COMPONENT_KINDS 5-tuple: artifact removal stays
-  // symmetric across all five kinds -- the cascade above physically unstages
-  // hooks via removeHookConfig alongside skills, commands, agents and mcp.
+  // ENBL-13 / D-100-04: artifact removal stays symmetric across all six
+  // kinds -- the cascade above physically unstages hooks via removeHookConfig
+  // and workflows via unstagePluginWorkflows alongside skills, commands,
+  // agents and mcp.
   // ENBL-18 / D-100-10: what the record retains is its DESCRIPTION of the
   // installation, not the artifacts. The record answers "what does this plugin
   // contain", which stays true while the plugin is disabled and stays
@@ -1496,7 +1546,15 @@ async function runDisableBranch(
   // lockstep so subsequent dispatch events bypass the now-disabled plugin
   // without requiring /reload (NFR-2). Mirrors the uninstall.ts invariant.
   return {
-    outcome: { kind: "fresh", version: recordedVersion },
+    outcome: {
+      kind: "fresh",
+      version: recordedVersion,
+      // WLIF-06: what the cascade REPORTED removing, never the length of
+      // `installed.resources.workflows` -- ENBL-18 deliberately keeps that array
+      // populated across a disable, so its length says what the plugin contains
+      // and not what just came off disk.
+      ...(cascade.dropped.workflows.length > 0 && { staleWorkflowCommand: true }),
+    },
     saveShrunken: false,
     removeRoutesAfterSave: true,
     disabled,
@@ -1784,7 +1842,7 @@ async function emitUnresolvedTarget(args: {
   readonly enable: boolean;
   readonly orchestrated: boolean;
   readonly resolution: Exclude<CrossScopePluginResolution, { kind: "resolved" }>;
-}): Promise<EnableDisablePluginOutcome | undefined> {
+}): Promise<EnableDisablePluginOutcome> {
   const { ctx, pi, cwd, marketplace, plugin, enable, orchestrated, resolution } = args;
 
   const notInstalledAt = await missIsNotInstalled({ cwd, marketplace, resolution });
@@ -1798,23 +1856,22 @@ async function emitUnresolvedTarget(args: {
     });
   }
 
-  if (orchestrated) {
-    return { status: "skipped", name: plugin, reason: "not installed" };
+  if (!orchestrated) {
+    dispatchOutcome({
+      ctx,
+      pi,
+      marketplace,
+      scope: notInstalledAt,
+      plugin,
+      enable,
+      // Only the `invalid-config` arm reads this, and `not-recorded` is not it.
+      configBasename: "",
+      outcome: { kind: "not-recorded", notInstalledAt },
+      cascadeRows: [],
+    });
   }
 
-  dispatchOutcome({
-    ctx,
-    pi,
-    marketplace,
-    scope: notInstalledAt,
-    plugin,
-    enable,
-    // Only the `invalid-config` arm reads this, and `not-recorded` is not it.
-    configBasename: "",
-    outcome: { kind: "not-recorded", notInstalledAt },
-    cascadeRows: [],
-  });
-  return undefined;
+  return { status: "skipped", name: plugin, reason: "not installed" };
 }
 
 /** The idempotent-root branch's result: the outcome to return, plus the cascade rows for the standalone renderer. */
@@ -1989,26 +2046,42 @@ async function runFreshEnableCascadeWithRoot(args: {
  * compile error so the cascade always materialises a row (closes S6's fourth
  * loop).
  *
- * WR-01: what the overload proves and what it does not. It removes the
- * `undefined` arm AT THE CALL SITE, which is what makes a consumer's
- * absent-outcome guard a compile error. It does NOT prove the body honours it:
- * TypeScript checks an overload signature against the implementation only
- * loosely, and a narrower overload return is accepted with no diagnostic even
- * when the implementation demonstrably returns the excluded value on that path.
- * The narrowing is therefore an ASSERTION about this module, relocated from the
- * consumer to the producer's signature -- not a proof. Every orchestrated arm
- * below does return a defined outcome today, and the reconcile owner suite
- * drives this entrypoint in orchestrated mode across its whole outcome matrix
- * and asserts the complete cascade, so a regression on an exercised path fails
- * there. An arm the matrix does not reach is not covered by either.
+ * WR-01: the overload is backed by a compile-time check, not by an assertion.
+ * The body lives in `runSetEnabledOutcome`, whose DECLARED return type is
+ * `Promise<EnableDisablePluginOutcome>`, so TypeScript checks every return
+ * statement and the fall-off-the-end path in it: an arm that yielded `undefined`
+ * is a compile error there. A narrower overload return alone would not give that
+ * -- TypeScript checks an overload signature against the implementation only
+ * loosely, and accepts a narrowed return with no diagnostic even when the
+ * implementation demonstrably returns the excluded value. This entrypoint is the
+ * thin mode switch that reintroduces `undefined` for the standalone arm and for
+ * that arm only, so the narrow overload can never outrun the body.
  */
 async function setPluginEnabledWithTransaction(
   transaction: EnableDisableTransaction,
   hooksRouting: EnableDisableHooksRouting,
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
-  const { ctx, pi, cwd, marketplace, plugin, enable } = opts;
   const orchestrated = opts.notifications?.mode === "orchestrated";
+  const outcome = await runSetEnabledOutcome(transaction, hooksRouting, opts, orchestrated);
+
+  return orchestrated ? outcome : undefined;
+}
+
+/**
+ * The whole enable/disable body, always answering with a typed
+ * `EnableDisablePluginOutcome`. Standalone mode emits its notify() rows on the
+ * way through and its outcome is discarded by the entrypoint above; the declared
+ * return type is what proves the orchestrated arms never yield `undefined`
+ * (WR-01).
+ */
+async function runSetEnabledOutcome(
+  transaction: EnableDisableTransaction,
+  hooksRouting: EnableDisableHooksRouting,
+  opts: EnableDisablePluginOptions,
+  orchestrated: boolean,
+): Promise<EnableDisablePluginOutcome> {
+  const { ctx, pi, cwd, marketplace, plugin, enable } = opts;
 
   // C1: `resolveCrossScopePluginTarget` calls `loadState`, which throws on a
   // corrupt/unparseable state.json in either scope. The throw must NOT escape
@@ -2249,57 +2322,55 @@ async function setPluginEnabledWithTransaction(
     );
   } catch (err) {
     const cause = err instanceof Error ? err : new Error(errorMessage(err));
-    if (orchestrated) {
-      return {
-        status: "failed",
-        reason: classifyTransactionThrow(cause),
-        error: cause,
-        cause: errorMessage(cause),
-      };
+    if (!orchestrated) {
+      // D-04: the `failed` row's bytes are identical across both verbs; emit it
+      // through the active verb's CommandContext for naming consistency.
+      // EDEP-01: an `EnableRefusedError` (cycle / unreadable declarer) is the
+      // one transaction throw this catch classifies for standalone mode -- its
+      // reason names the fact the cause line states. Every other transaction
+      // throw keeps the pre-existing brace-less `(failed)` row.
+      emitEnableDisableFailedRow({
+        ctx,
+        pi,
+        enable,
+        marketplace,
+        scope,
+        row: {
+          status: "failed",
+          name: plugin,
+          reasons: cause instanceof EnableRefusedError ? [cause.reason] : ([] as const),
+          cause,
+          // D-03/D-06: a transaction-throw enable/disable failure -> error, no
+          // reload.
+          severity: "error",
+          needsReload: false,
+        },
+      });
     }
 
-    // D-04: the `failed` row's bytes are identical across both verbs; emit it
-    // through the active verb's CommandContext for naming consistency.
-    // EDEP-01: an `EnableRefusedError` (cycle / unreadable declarer) is the
-    // one transaction throw this catch classifies for standalone mode -- its
-    // reason names the fact the cause line states. Every other transaction
-    // throw keeps the pre-existing brace-less `(failed)` row.
-    emitEnableDisableFailedRow({
+    return {
+      status: "failed",
+      reason: classifyTransactionThrow(cause),
+      error: cause,
+      cause: errorMessage(cause),
+    };
+  }
+
+  if (!orchestrated) {
+    dispatchOutcome({
       ctx,
       pi,
-      enable,
       marketplace,
       scope,
-      row: {
-        status: "failed",
-        name: plugin,
-        reasons: cause instanceof EnableRefusedError ? [cause.reason] : ([] as const),
-        cause,
-        // D-03/D-06: a transaction-throw enable/disable failure -> error, no
-        // reload.
-        severity: "error",
-        needsReload: false,
-      },
+      plugin,
+      enable,
+      configBasename,
+      outcome,
+      cascadeRows: enableCascadeRows,
     });
-    return undefined;
   }
 
-  if (orchestrated) {
-    return outcomeToTypedResult({ plugin, enable, outcome, configBasename });
-  }
-
-  dispatchOutcome({
-    ctx,
-    pi,
-    marketplace,
-    scope,
-    plugin,
-    enable,
-    configBasename,
-    outcome,
-    cascadeRows: enableCascadeRows,
-  });
-  return undefined;
+  return outcomeToTypedResult({ plugin, enable, outcome, configBasename });
 }
 
 /** Bind enable/disable orchestration to one required semantic transaction owner. */
@@ -2363,39 +2434,39 @@ function emitResolutionFailure(args: {
   cause: Error;
   enable: boolean;
   orchestrated: boolean;
-}): EnableDisablePluginOutcome | undefined {
+}): EnableDisablePluginOutcome {
   const { ctx, pi, marketplace, plugin, requestedScope, cause, enable, orchestrated } = args;
   const sanitized = sanitizeStateLoadError(cause);
   const reason = classifyTransactionThrow(sanitized);
-  if (orchestrated) {
-    return {
-      status: "failed",
-      reason,
-      error: sanitized,
-      cause: errorMessage(sanitized),
-    };
+  const outcome: EnableDisablePluginOutcome = {
+    status: "failed",
+    reason,
+    error: sanitized,
+    cause: errorMessage(sanitized),
+  };
+  if (!orchestrated) {
+    const scope: Scope = requestedScope ?? "user";
+    // D-04: the `failed` row's bytes are identical across both verbs; emit it
+    // through the active verb's CommandContext for naming consistency.
+    emitEnableDisableFailedRow({
+      ctx,
+      pi,
+      enable,
+      marketplace,
+      scope,
+      row: {
+        status: "failed",
+        name: plugin,
+        reasons: [reason],
+        cause: sanitized,
+        // D-03/D-06: a pre-lock resolution failure -> error, no reload.
+        severity: "error",
+        needsReload: false,
+      },
+    });
   }
 
-  const scope: Scope = requestedScope ?? "user";
-  // D-04: the `failed` row's bytes are identical across both verbs; emit it
-  // through the active verb's CommandContext for naming consistency.
-  emitEnableDisableFailedRow({
-    ctx,
-    pi,
-    enable,
-    marketplace,
-    scope,
-    row: {
-      status: "failed",
-      name: plugin,
-      reasons: [reason],
-      cause: sanitized,
-      // D-03/D-06: a pre-lock resolution failure -> error, no reload.
-      severity: "error",
-      needsReload: false,
-    },
-  });
-  return undefined;
+  return outcome;
 }
 
 /**
@@ -2475,6 +2546,13 @@ function freshOutcomeToTypedResult(
   enable: boolean,
   outcome: Extract<SetEnabledOutcome, { kind: "fresh" }>,
 ): EnableDisablePluginOutcome {
+  // WLIF-06: `outcome.staleWorkflowCommand` is deliberately NOT forwarded, on
+  // either arm. The exported union is what the load-time reconcile caller
+  // consumes, and a reload is exactly what CLEARS a lingering command -- a row
+  // rendered from the reload path claiming the reload remedy would contradict
+  // itself. Keeping the fact off this union is what makes that structural rather
+  // than a convention a later edit could forget; read this omission as the
+  // decision it is, not as an oversight.
   const version = outcome.version !== undefined && { version: outcome.version };
   if (!enable) {
     return { status: "disabled", name: plugin, ...version };
@@ -2491,6 +2569,7 @@ function freshOutcomeToTypedResult(
       outcome.degradedKinds.length > 0 && { degradedKinds: outcome.degradedKinds }),
     ...(outcome.stagedAgents === true && { stagedAgents: true }),
     ...(outcome.stagedMcpServers === true && { stagedMcpServers: true }),
+    ...(outcome.stagedWorkflows === true && { stagedWorkflows: true }),
   };
 }
 
@@ -2665,7 +2744,7 @@ function dispatchOutcome(args: {
  */
 function freshEnableRow(
   plugin: string,
-  outcome: EnableDegradationSignals & { version?: string },
+  outcome: EnableDegradationSignals & { version?: string; staleWorkflowCommand?: boolean },
   probe: SoftDepStatus,
 ): EnableMsg {
   const unsupported = outcome.unsupported ?? [];
@@ -2674,17 +2753,26 @@ function freshEnableRow(
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...malformed,
   ];
+  // WLIF-06: the tail token, in the same position the update composer gives it,
+  // so a reader scanning a column of rows meets it in the same place whichever
+  // verb produced them. One token per plugin however many names were retired.
+  const stale: readonly ContentReason[] =
+    outcome.staleWorkflowCommand === true ? (["stale workflow command"] as const) : [];
   // SEV-01: the enable row derives the SAME dependency list `install-flow.ts` derives
   // for the same ledger run, so the `{requires pi-...}` markers fire on a
   // re-enable exactly as on an install.
   const dependencies = enableRowDependencies(outcome);
+  // SEV-01 / WLIF-06: a retired command is the THIRD raise, and it composes with
+  // the other two the same way they compose with each other -- the stronger
+  // wins, so none can silently replace another.
   const severity =
-    malformed.length > 0
+    malformed.length > 0 || stale.length > 0
       ? "warning"
       : companionSeverity(
           {
             declaresAgents: outcome.stagedAgents === true,
             declaresMcp: outcome.stagedMcpServers === true,
+            declaresWorkflows: outcome.stagedWorkflows === true,
           },
           probe,
         );
@@ -2694,18 +2782,19 @@ function freshEnableRow(
       name: plugin,
       dependencies,
       ...(outcome.version !== undefined && { version: outcome.version }),
-      reasons: [...reasons, ...narrowUnsupportedKinds(unsupported)],
+      reasons: [...reasons, ...narrowUnsupportedKinds(unsupported), ...stale],
       severity,
       needsReload: true,
     };
   }
 
+  const cleanFormReasons: readonly ContentReason[] = [...reasons, ...stale];
   return {
     status: "installed",
     name: plugin,
     dependencies,
     ...(outcome.version !== undefined && { version: outcome.version }),
-    ...(reasons.length > 0 && { reasons }),
+    ...(cleanFormReasons.length > 0 && { reasons: cleanFormReasons }),
     // D-03/D-06: a realized re-enable re-materializes artifacts -> reloads Pi
     // resources.
     severity,
@@ -2816,7 +2905,15 @@ function composeOutcomeRow(args: {
       return {
         status: "failed",
         name: plugin,
-        reasons: narrowDisableFailure(outcome.cause),
+        // WLIF-06: the stale-command token joins the failure reason at the tail
+        // rather than replacing it. The two state different facts -- why the
+        // disable stopped, and what its partial progress left registered -- and
+        // a reader needs both. Severity stays `error`: the disable was NOT
+        // carried out, which outranks the warning band the token carries alone.
+        reasons: [
+          ...narrowDisableFailure(outcome.cause),
+          ...(outcome.staleWorkflowCommand === true ? (["stale workflow command"] as const) : []),
+        ],
         ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
         cause: outcome.cause,
         // D-03/D-06: a failed disable -> error, no reload.
@@ -2844,7 +2941,17 @@ function composeOutcomeRow(args: {
             status: "disabled",
             name: plugin,
             ...(outcome.version !== undefined && { version: outcome.version }),
-            severity: "info",
+            // WLIF-06: the disable took the envelopes off disk, so the commands
+            // they registered stay live until a reload. `PluginDisabledMessage`
+            // already admits `reasons`; an unaffected disable keeps the key
+            // absent and renders the brace-less row it always rendered.
+            ...(outcome.staleWorkflowCommand === true && {
+              reasons: ["stale workflow command"] satisfies readonly ContentReason[],
+            }),
+            // The transition happened, so `info` -- unless a retired command
+            // lingers, which is the middle band of the severity model: carried
+            // out, but short of the desired state until the reload.
+            severity: outcome.staleWorkflowCommand === true ? "warning" : "info",
             needsReload: true,
           };
   }

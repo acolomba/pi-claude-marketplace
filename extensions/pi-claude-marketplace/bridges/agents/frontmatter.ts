@@ -433,21 +433,12 @@ export type GeneratedToolsFields =
 export type GeneratedFrontmatterFields = {
   readonly name: string;
   readonly description: string;
+  readonly aliases?: readonly string[];
   readonly model?: string;
   readonly thinking?: string;
   readonly skills: readonly string[];
   readonly inheritSkills: boolean;
 } & GeneratedToolsFields;
-
-/**
- * AGSK-04: one skill legend entry. `token` is the `<plugin>:<skill>`
- * reference exactly as it appears in the body; `generatedName` is the Pi
- * skill name it maps to.
- */
-export interface SkillLegendEntry {
-  readonly token: string;
-  readonly generatedName: string;
-}
 
 /**
  * Provenance fields rendered under a single `provenance` frontmatter
@@ -480,11 +471,11 @@ export interface GeneratedProvenanceFields {
  * before overwrite/delete.
  *
  *   <generated frontmatter, including provenance>\n  (ends "---\n")
- *   <skill legend>          (AGSK-04, only when legend entries exist)
  *   <body>
  *
  * AG-8 / D-84-04 / T-d8i-01 deterministic field order: name, description,
- * model, tools (only when an explicit allowlist exists), excludeTools
+ * aliases (only when non-empty), model, tools (only when an explicit
+ * allowlist exists), excludeTools
  * (only when tools is absent and disallowed names mapped, #179), thinking,
  * skills, skillPath (only when skills is
  * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
@@ -493,18 +484,13 @@ export interface GeneratedProvenanceFields {
  * droppedTools, warnings -- each list field inline `[]` when empty or a
  * `    - item` block when non-empty).
  *
- * AGSK-04 / D-82-04: when `legend` is non-empty, the legend block renders
- * immediately after the frontmatter and before the body prose. When
- * `legend` is undefined or empty the assembly is byte-for-byte the
- * no-legend layout (reference-gated byte identity).
  */
 export function emitGeneratedAgentFile(input: {
   frontmatter: GeneratedFrontmatterFields;
   provenance: GeneratedProvenanceFields;
   body: string;
-  legend?: readonly SkillLegendEntry[];
 }): string {
-  const { frontmatter, provenance, body, legend } = input;
+  const { frontmatter, provenance, body } = input;
 
   // Frontmatter block in deterministic order. systemPromptMode /
   // inheritProjectContext are extension-side defaults and intentionally
@@ -515,6 +501,13 @@ export function emitGeneratedAgentFile(input: {
     `name: ${frontmatter.name}`,
     `description: ${emitYamlScalar(frontmatter.description)}`,
   ];
+  if (frontmatter.aliases !== undefined && frontmatter.aliases.length > 0) {
+    // AG-1a: the file's own basename, which is the name this bridge declared
+    // before the agentType split. pi-subagents resolves an alias to the same
+    // agent, so a session that already addresses the flat name keeps working.
+    lines.push(`aliases: ${frontmatter.aliases.join(",")}`);
+  }
+
   if (frontmatter.model !== undefined) {
     lines.push(`model: ${frontmatter.model}`);
   }
@@ -575,47 +568,13 @@ export function emitGeneratedAgentFile(input: {
 
   // Body: ensure exactly one leading blank line and a trailing newline so
   // the generated file has deterministic separators around the frontmatter
-  // (and, when present, the skill legend).
+  // and the body.
   const bodyWithLeadingBlank = body.startsWith("\n") ? body : "\n" + body;
   const bodyFinal = bodyWithLeadingBlank.endsWith("\n")
     ? bodyWithLeadingBlank
     : bodyWithLeadingBlank + "\n";
 
-  // AGSK-04: legend renders between the frontmatter and the body.
-  // renderSkillLegend returns "" when there are no entries, keeping this
-  // expression byte-identical to the no-legend assembly. The body's leading
-  // blank line (normalized above) supplies the blank line after the closing
-  // frontmatter delimiter (no legend) or after the last legend entry.
-  return generatedFrontmatter + renderSkillLegend(legend) + bodyFinal;
-}
-
-/**
- * AGSK-04 / D-82-05 legend block: locked heading, one intro sentence, one
- * `- \`token\` \u2192 skill \`name\` (annotation)` line per entry. Leading
- * "\n" pairs with the frontmatter's closing `---\n` delimiter to give one
- * blank line before the heading; the blank line after the last entry comes
- * from the body's normalized leading blank line.
- *
- * AGSK-04 / D-83.1-03 / D-84-01: every entry renders the single annotation
- * "available on demand" -- extension-contributed skills survive --no-skills
- * in child sessions, so the skill catalog is present regardless of
- * inheritSkills.
- */
-function renderSkillLegend(legend: readonly SkillLegendEntry[] | undefined): string {
-  if (legend === undefined || legend.length === 0) {
-    return "";
-  }
-
-  const entryLines = legend.map(
-    (entry) => `- \`${entry.token}\` \u2192 skill \`${entry.generatedName}\` (available on demand)`,
-  );
-
-  return (
-    "\n## Pi coding agent skill legend\n\n" +
-    "These instructions reference Claude skills by their original names. In this Pi session:\n\n" +
-    entryLines.join("\n") +
-    "\n"
-  );
+  return generatedFrontmatter + bodyFinal;
 }
 
 /**

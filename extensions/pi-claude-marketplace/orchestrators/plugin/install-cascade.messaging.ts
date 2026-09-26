@@ -113,6 +113,7 @@ export interface CascadeInstalledRow {
   readonly version: string;
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  readonly declaresWorkflows: boolean;
   /**
    * TAGS-02: whether this member installed the marketplace's current copy
    * because no tag satisfied its constraint, rather than a pin.
@@ -184,6 +185,7 @@ function stagedDependencies(member: CascadeInstalledRow): readonly Dependency[] 
   return [
     ...(member.declaresAgents ? (["agents"] as const) : []),
     ...(member.declaresMcp ? (["mcp"] as const) : []),
+    ...(member.declaresWorkflows ? (["workflows"] as const) : []),
   ];
 }
 
@@ -237,7 +239,11 @@ export function composeCascadeMemberRows(args: {
         reasons: ["already installed", "dependency enabled"] as const,
       }),
       severity: companionSeverity(
-        { declaresAgents: member.declaresAgents, declaresMcp: member.declaresMcp },
+        {
+          declaresAgents: member.declaresAgents,
+          declaresMcp: member.declaresMcp,
+          declaresWorkflows: member.declaresWorkflows,
+        },
         args.probe,
       ),
       needsReload: true,

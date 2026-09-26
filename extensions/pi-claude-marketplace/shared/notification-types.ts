@@ -55,7 +55,6 @@ export type Reason =
   | "installs disabled"
   | "marketplace in user scope"
   | "marketplace in project scope"
-  | "workflows"
   // DATA-01 / WR-06: the uninstall row's disposition marker. Uninstall destroys
   // the plugin's data directory by default, and without a marker the two
   // dispositions render the same row: the operator who typed `--keep-data`
@@ -188,7 +187,51 @@ export type Reason =
   | "dependents constrain"
   // D-11-06: the root marketplace disallows a new cross-marketplace edge.
   // The cause names the policy root and both available remedies.
-  | "cross-marketplace";
+  | "cross-marketplace"
+  // WLIF-06: a workflow command the just-finished verb RETIRED -- its envelope
+  // is off disk, but the host exposes no unregister call, so the command that
+  // envelope registered stays live and runnable for the rest of the session.
+  // Until a reload, the plugin's command surface and its artifacts disagree,
+  // and this token is what says so. A CONTENT reason: its subject is the PLUGIN
+  // the row is about, so it JOINS that row's other reasons rather than
+  // replacing any of them, and stays inside `ContentReason`.
+  //
+  // It is NOT the `/reload to pick up changes` trailer, and the two deliberately
+  // coexist on one row stating different facts. That trailer is about NEW things
+  // a reload will pick up; this token is about a REMOVED thing a reload will
+  // drop. Reusing the trailer would report the second as if it were the first.
+  //
+  // It stays OFF the exported enable/disable outcome union, which is what
+  // structurally prevents the load-time reconcile projection from stamping it: a
+  // reload is what CLEARS this condition, so a row rendered from the reload path
+  // claiming the remedy would contradict itself. The four user-typed retiring
+  // verbs (uninstall / disable / reinstall / update) own it on their own rows;
+  // `enable` reaches it through a module-private outcome sentinel instead.
+  | "stale workflow command"
+  // WDEP-04: the plugin staged at least one workflow, and the host workflow
+  // engine `@quintinshaw/pi-dynamic-workflows` is not loaded in this session.
+  // The third soft-dep marker, appended by `softDepMarkers` after the agents
+  // and mcp markers; it is never caller-placed into `reasons[]`.
+  //
+  // The `dynamic` is load-bearing: the unscoped short form is the npm name of
+  // `@nicknisi/pi-workflows`, a DIFFERENT engine, so dropping it would name the
+  // wrong package to install.
+  //
+  // WDEP-02 / WDEP-03: the envelopes are written whether or not the engine is
+  // loaded, so this token reports that nothing runs them YET -- not that the
+  // install fell short. Installing the engine and reloading is enough; no
+  // reinstall is needed.
+  | "requires pi-dynamic-workflows"
+  // WCONV-03: the load-time convergence marker. The extension now supports
+  // components this plugin declares, which is why the record was re-materialized
+  // on a reload the user did not initiate. Caller-placed by the reconcile
+  // backfill projection (`orchestrators/reconcile/notify.ts`), never derived by
+  // the renderer.
+  //
+  // It names no component kind on purpose: the load-time scan promotes ANY
+  // record whose supported set strictly grew, so a token reading "workflows
+  // arrived" would be a false statement about most of the rows it rides.
+  | "components now supported";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
@@ -338,6 +381,22 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
   readonly name: string;
   readonly version?: string;
   readonly scope?: Scope;
+  /**
+   * WLIF-06: `reasons` is OPTIONAL here on the same terms it is optional on
+   * `PluginInstalledMessage` / `PluginUpdatedMessage` / `PluginReinstalledMessage`
+   * / `PluginDisabledMessage`. It admits the `stale workflow command` token --
+   * the removal took a workflow envelope off disk, and the command that envelope
+   * registered stays live until a reload.
+   *
+   * That is the only fact a realized removal has left to state. Absent `reasons`
+   * renders the legacy brace-less row byte-for-byte: `composeReasons` returns
+   * `""` for an undefined list and `joinTokens` collapses the empty slot.
+   *
+   * MSG-SD-3 is untouched -- the render arm still passes all three
+   * soft-dependency arguments hard-coded `false`, so an `(uninstalled)` row
+   * cannot emit `{requires pi-subagents}` / `{requires pi-mcp}` /
+   * `{requires pi-dynamic-workflows}` whatever the removed record declared.
+   */
   readonly reasons?: readonly ContentReason[];
   /**
    * LOAD-03: the `name@marketplace` keys of the plugins that still declared
@@ -717,6 +776,16 @@ export interface CascadeNotificationMessage {
   readonly label?: string;
   readonly cardinality?: "single" | "plural";
   readonly tally?: { readonly verb: string; readonly count: number };
+  /**
+   * WR-06: free-text advisory body lines, rendered after the cascade body and
+   * before the tally. Supplied ALREADY ORDERED by the caller and rendered
+   * verbatim -- these are not rows and carry no closed-set token, so nothing
+   * here is sorted, severity-mapped or reason-narrowed on the way out. The
+   * pending-empty variant declares the same member and the same render site
+   * composes both, which is what keeps the two arms of a command that can emit
+   * either one byte-identical.
+   */
+  readonly advisories?: readonly string[];
 }
 
 /** Marketplace information message. */
@@ -770,6 +839,23 @@ export interface PluginInfoRowBase {
   readonly scope?: Scope;
   readonly description?: string;
   readonly reasons?: readonly ContentReason[];
+  /**
+   * WR-09: free-text advisory lines about individual component FILES, rendered
+   * one per entry after the component block.
+   *
+   * NOT a closed-set reason, and never carries one. A `ContentReason` is a
+   * token about the plugin as a whole and rides the row's brace; each of these
+   * sentences is about one file inside it and states what WOULD happen to that
+   * file. A row carrying them is still an ordinary successful read, so the
+   * severity is unchanged.
+   *
+   * PRECONDITION: the composer supplies these already ordered and already
+   * reduced. An absolute path inside one of them would disclose the resolved
+   * home directory (NFR-9) AND make the row's bytes vary by machine, so the
+   * composition site maps every entry through `redactAbsolutePaths`; the
+   * renderer does neither on its behalf.
+   */
+  readonly notes?: readonly string[];
 }
 
 /**
@@ -784,6 +870,12 @@ export interface PluginInfoComponentsResolved {
     readonly hooks?: readonly HookSummaryEntry[];
     readonly mcp?: readonly string[];
     readonly skills?: readonly string[];
+    /**
+     * WFLW-04: carries the generated `<plugin>:<name>` of every ADMITTED
+     * script -- the one arm an envelope is written for, so this surface
+     * agrees with what install puts on disk.
+     */
+    readonly workflows?: readonly string[];
   };
   readonly dependencies?: readonly string[];
 }
@@ -816,6 +908,14 @@ export interface PluginInfoCascadeMessage {
 /** Empty reconcile-pending advisory. */
 export interface ReconcilePendingEmptyMessage {
   readonly kind: "reconcile-pending-empty";
+  /**
+   * WR-06: the same free-text advisory body lines the cascade arm declares, on
+   * the same terms -- caller-ordered, rendered verbatim, no token, no row. The
+   * steady-state user is the one most likely to be carrying a retained staging
+   * tree, so an advisory the cascade arm alone could carry would miss exactly
+   * the reader it exists for.
+   */
+  readonly advisories?: readonly string[];
 }
 
 /** Scoped informational result for a standalone orphan sweep. */

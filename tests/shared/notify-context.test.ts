@@ -147,7 +147,7 @@ function createHarness(notification: NotificationRecord): Harness {
   when(() => ctx.ui).thenReturn(ui);
   when(() => pi.getAllTools())
     .thenReturn([])
-    .twice();
+    .times(3);
   if (notification.severity === undefined) {
     when(() => {
       ui.notify(notification.message);
@@ -203,6 +203,39 @@ test("an empty plural cascade emits only its sentinel", (t) => {
   verify(harness.ui);
 });
 
+test("WR-06: folds caller-supplied advisory lines before the tally", (t) => {
+  // arrange
+  // One row, so a tally actually renders: an empty result suppresses the
+  // success line entirely (#209), which would leave nothing to fold before.
+  const harness = createHarness({
+    message:
+      "● official [user]\n  controlled available alpha [user]\n\nfirst advisory\nsecond advisory\n\nPlugin inspect: 1 success",
+  });
+  const controlled = createControlledContext(t, "Plugin inspect");
+  const rows: readonly MarketplaceRows<ControlledMessage>[] = [
+    { name: "official", scope: "user", plugins: [availableRow("alpha")] },
+  ];
+
+  // act
+  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, undefined, "plural", [
+    "first advisory",
+    "second advisory",
+  ]);
+
+  // assert
+  assert.deepStrictEqual(controlled.calls, [
+    {
+      status: "available",
+      name: "alpha",
+      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false },
+      scope: "user",
+    },
+  ]);
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
+});
+
 test("a one-row plural cascade retains its one-success tally", (t) => {
   // arrange
   const harness = createHarness({
@@ -221,7 +254,7 @@ test("a one-row plural cascade retains its one-success tally", (t) => {
     {
       status: "available",
       name: "alpha",
-      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false },
       scope: "user",
     },
   ]);
@@ -248,7 +281,11 @@ test("a single cascade dispatches its row without a plural tally", (t) => {
     {
       status: "available",
       name: "alpha",
-      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      probe: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
       scope: "user",
     },
   ]);
@@ -289,19 +326,31 @@ test("plural marketplaces dispatch equal-status rows separately in input order",
     {
       status: "available",
       name: "alpha",
-      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      probe: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
       scope: "user",
     },
     {
       status: "available",
       name: "beta",
-      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      probe: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
       scope: "user",
     },
     {
       status: "disabled",
       name: "gamma",
-      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      probe: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
       scope: "project",
     },
   ]);
@@ -345,7 +394,11 @@ for (const { count, expectedMessage } of [
       {
         status: "available",
         name: "alpha",
-        probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+        probe: {
+          piSubagentsLoaded: false,
+          piMcpAdapterLoaded: false,
+          workflowEngineLoaded: false,
+        },
         scope: "project",
       },
     ]);
@@ -389,7 +442,11 @@ test("the no-op update wrapper dispatches surviving rows before its headline", (
     {
       status: "disabled",
       name: "alpha",
-      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      probe: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
       scope: "user",
     },
   ]);
@@ -442,7 +499,11 @@ test("a missing render arm reports its named row before the adjacent present arm
     {
       status: "available",
       name: "neighbor",
-      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      probe: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
       scope: "user",
     },
   ]);
@@ -486,7 +547,11 @@ test("a frozen unnamed missing-arm row still precedes the adjacent present arm",
     {
       status: "available",
       name: "neighbor",
-      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      probe: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
       scope: "user",
     },
   ]);
@@ -515,7 +580,11 @@ test("the reconcile wrapper dispatches rows with its label and plural cardinalit
     {
       status: "available",
       name: "alpha",
-      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      probe: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
       scope: "user",
     },
   ]);

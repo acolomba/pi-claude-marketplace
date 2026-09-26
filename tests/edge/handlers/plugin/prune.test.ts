@@ -30,7 +30,7 @@ async function assertBothScopesUnchanged(cwd: string): Promise<void> {
 
 test("defaults to the user scope with no target", async () => {
   await withHermeticEnvironment("prune-handler-user-", async ({ cwd }) => {
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });
@@ -48,7 +48,7 @@ test("defaults to the user scope with no target", async () => {
 
 test("selects the project scope", async () => {
   await withHermeticEnvironment("prune-handler-project-", async ({ cwd }) => {
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });
@@ -67,7 +67,7 @@ test("selects the project scope", async () => {
 for (const args of ["--dry-run --scope project", "--scope project --dry-run"]) {
   test(`previews the project scope with ${args}`, async () => {
     await withHermeticEnvironment("prune-handler-preview-", async ({ cwd }) => {
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2, {
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3, {
         value: cwd,
         reads: 1,
       });
@@ -87,7 +87,7 @@ for (const args of ["--dry-run --scope project", "--scope project --dry-run"]) {
 
 test("duplicate --dry-run previews once without writing", async () => {
   await withHermeticEnvironment("prune-handler-duplicate-", async ({ cwd }) => {
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });

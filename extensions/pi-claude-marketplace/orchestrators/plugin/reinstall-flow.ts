@@ -756,6 +756,8 @@ async function runLockedReinstall(
       pluginDataDir,
       oldRecord: oldSnapshot,
       agentsDirs: generated.agentsDirs,
+      referenceNames: generated,
+      workflowNames: generated.workflows,
     },
     transaction.replaceOperations,
   );
@@ -782,6 +784,7 @@ async function runLockedReinstall(
       // `resolvedSha` on that record would name a commit the fresh
       // `resolvedSource` no longer sits at.
       isGitSource: sourceKind === "url" || sourceKind === "git-subdir" || sourceKind === "github",
+      placedWorkflowNames: replacement.placedWorkflowNames,
     });
 
     // WB-01 / A7: deep-equal short-circuit preserves RECON-05

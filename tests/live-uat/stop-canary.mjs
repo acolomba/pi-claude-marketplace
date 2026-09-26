@@ -5,24 +5,26 @@
 // graph is its intended shape, not a defect.
 // fallow-ignore-file unused-file -- standalone operator-run UAT driver: an engineer invokes it from the command line and no module ever imports it, so being unreachable from the import graph is its intended shape, not a defect.
 //
-// Two `duplicates.ignoredClones` entries in `.fallowrc.json` are retained
-// against this file and `manifest-absence-canary.mjs`. Fallow types `ignoredClones` as
-// `string[]`, so the per-clone justification the conventions require cannot
-// live in the JSON and lives here instead:
+// One `duplicates.ignoredClones` entry in `.fallowrc.json` is retained
+// against this file and `manifest-absence-canary.mjs`. Fallow types
+// `ignoredClones` as `string[]`, so the per-clone justification the
+// conventions require cannot live in the JSON and lives here instead:
 //   - `dup:cc950b18:2` -- the `main().then(exit 0, exit 1)` process epilogue
 //     at the foot of both drivers.
-//   - `dup:6d8c002d:2` -- the module preamble that resolves `execFileAsync`,
-//     `HERE`, `REPO_ROOT` and `EXTENSION_ENTRY`.
-// Both are retained for the same reason: each driver must stay independently
-// runnable as `node tests/live-uat/<file>.mjs` with nothing imported from a
-// sibling. Extracting a shared helper module would create exactly the import
-// edge that the standalone-driver shape exists to avoid, and would make the
-// two canaries fail together on one bad edit. The duplicated text is 23 lines
-// of boilerplate -- a process-exit epilogue and four path constants -- with no
-// assertion logic in it, so the copies cannot drift in a way that changes what
-// either canary proves. Line numbers are deliberately omitted; run
-// `fallow dupes --trace dup:<fingerprint>` with the entries temporarily
-// cleared to locate them.
+// It is retained because each driver must stay independently runnable as
+// `node tests/live-uat/<file>.mjs` with nothing imported from a sibling.
+// Extracting a shared helper module would create exactly the import edge
+// that the standalone-driver shape exists to avoid, and would make the two
+// canaries fail together on one bad edit. The duplicated text is 13 lines of
+// boilerplate -- a process-exit epilogue -- with no assertion logic in it, so
+// the copies cannot drift in a way that changes what either canary proves.
+// Line numbers are deliberately omitted; run `fallow dupes --trace
+// dup:<fingerprint>` with the entry temporarily cleared to locate it.
+//
+// Both drivers import `../pi-runtime.ts` on purpose, because every Pi launch
+// in the repository resolves the CLI through that one module. The
+// no-sibling-import rule above covers `tests/live-uat/` siblings and still
+// holds.
 //
 // Live runtime UAT (D-88-03b item 4): a scripted "ralph-wiggum" canary that
 // drives a REAL Pi session against an always-blocking Stop hook to prove, on
@@ -57,19 +59,17 @@
 // Containment (T-88-08): refuses to run unless PI_CODING_AGENT_DIR points at
 // the tmp/pi-uat sandbox, so the UAT never touches a developer's real Pi dir.
 
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 
 import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-
-const execFileAsync = promisify(execFile);
+import { resolvePiRuntime } from "../pi-runtime.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "../..");
@@ -84,6 +84,11 @@ const CAP_WARNING = "Stop hook override cap reached.";
 const MARKETPLACE_NAME = "stop-canary-mkt";
 const PLUGIN_NAME = "ralph-loop";
 const PI_DRIVE_TIMEOUT_MS = 120_000;
+
+// T-88-08: the only agent-state root this canary will churn installs against.
+// Anchored on the repository rather than on `process.cwd()`, so which directory
+// the refusal below protects does not depend on where the driver was invoked.
+const SANDBOX_ROOT = path.resolve(REPO_ROOT, "tmp", "pi-uat");
 
 // Thrown (not process.exit) by the routing helpers so main()'s `finally`
 // always uninstalls the canary from the shared sandbox before the process
@@ -155,7 +160,7 @@ function pass(msg) {
   console.log(`[stop-canary] PASS: ${msg}`);
 }
 
-/** Parse a `pi --version` string like "0.80.10" into [major, minor, patch]. */
+/** Parse a package version string like "0.86.1" into [major, minor, patch]. */
 function parseVersion(raw) {
   const m = raw.trim().match(/(\d+)\.(\d+)\.(\d+)/);
   if (m === null) {
@@ -190,34 +195,38 @@ async function assertPreconditions() {
   }
   // T-88-08: refuse to run against a non-sandbox agent dir so the always-block
   // canary and its install/uninstall churn never touch a real Pi state dir.
-  if (!agentDir.includes(path.join("tmp", "pi-uat"))) {
+  //
+  // The comparison is containment on RESOLVED paths, never a test on the raw
+  // string. A value that merely CARRIES the `tmp/pi-uat` segment is not inside
+  // the sandbox: `.../tmp/pi-uat/../../.pi/agent` carries it, survives
+  // `existsSync`, and names a real Pi state dir. The trailing separator matters
+  // for the same reason -- a sibling `tmp/pi-uat-backup` is not a child.
+  const resolved = path.resolve(agentDir);
+  if (resolved !== SANDBOX_ROOT && !resolved.startsWith(SANDBOX_ROOT + path.sep)) {
     liveRuntimeRequired(
-      `PI_CODING_AGENT_DIR (${agentDir}) is not the tmp/pi-uat sandbox.`,
+      `PI_CODING_AGENT_DIR (${agentDir} -> ${resolved}) is not inside ${SANDBOX_ROOT}.`,
       "Refusing to install the always-block canary outside the disposable sandbox.",
     );
   }
-  if (!existsSync(agentDir)) {
-    liveRuntimeRequired(`PI_CODING_AGENT_DIR (${agentDir}) does not exist.`);
+  if (!existsSync(resolved)) {
+    liveRuntimeRequired(`PI_CODING_AGENT_DIR (${agentDir} -> ${resolved}) does not exist.`);
   }
 
-  let versionOut;
+  let pi;
   try {
-    const { stdout } = await execFileAsync("pi", ["--version"], { timeout: 30_000 });
-    versionOut = stdout;
+    pi = resolvePiRuntime(REPO_ROOT);
   } catch (err) {
     liveRuntimeRequired(
-      "`pi` CLI is not on PATH (or `pi --version` failed).",
+      "The repository's Pi package could not be resolved. Run `npm ci`.",
       String(err?.message ?? err),
     );
   }
-  const version = parseVersion(versionOut);
-  if (version === undefined || !meetsFloor(version, [0, 80, 5])) {
-    liveRuntimeRequired(
-      `pi ${versionOut.trim()} is below the required >= 0.80.5 (agent_settled fire-point).`,
-    );
+  const version = parseVersion(pi.version);
+  if (version === undefined || !meetsFloor(version, [0, 86, 1])) {
+    liveRuntimeRequired(`pi ${pi.version} is below the required >= 0.86.1 package peer floor.`);
   }
-  pass(`live pi ${versionOut.trim()} >= 0.80.5, sandbox ${agentDir}`);
-  return agentDir;
+  pass(`live pi ${pi.version} (${pi.cliPath}) >= 0.86.1, sandbox ${resolved}`);
+  return pi;
 }
 
 /**
@@ -356,7 +365,7 @@ async function uninstallCanary(command, ctx) {
 }
 
 /** Spawn a real `pi -p` turn; the always-block hook drives re-entry until the cap. */
-async function drivePiTurn() {
+async function drivePiTurn(pi) {
   // `--offline` is load-bearing: the sandbox carries a github-source
   // marketplace with autoupdate, and a load-time reconcile would otherwise
   // block on a network fetch (and the model call still reaches the provider --
@@ -385,7 +394,7 @@ async function drivePiTurn() {
   // non-interactive lifecycle once the initial request (plus the started
   // re-entry turn) is drained.
   return await new Promise((resolve) => {
-    const child = spawn("pi", args, {
+    const child = spawn(process.execPath, [pi.cliPath, ...args], {
       cwd: REPO_ROOT,
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env },
@@ -416,7 +425,7 @@ async function drivePiTurn() {
 }
 
 async function main() {
-  await assertPreconditions();
+  const pi = await assertPreconditions();
 
   const root = await mkdtemp(path.join(tmpdir(), "stop-canary-"));
   const markerFile = path.join(root, "block-markers.log");
@@ -428,7 +437,7 @@ async function main() {
     await buildCanaryMarketplace(root, markerFile);
     ({ command, ctx } = await installCanary(root));
 
-    const run = await drivePiTurn();
+    const run = await drivePiTurn(pi);
 
     let markerContent = "";
     try {

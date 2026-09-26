@@ -31,7 +31,14 @@ function pluginRecord(provenance: "explicit" | "dependency", skill: string) {
     version: "1.0.0",
     resolvedSource: "/unused",
     compatibility: { installable: true as const, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [skill], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: {
+      skills: [skill],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+      hooks: [],
+      workflows: [],
+    },
     enabled: true,
     provenance,
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -185,6 +192,7 @@ function registeredCommand(cwd: string) {
       gitOps: git.gitOps,
       beginPluginUpdateRun: () => () =>
         Promise.resolve({
+          declaresWorkflows: false,
           partition: "unchanged",
           name: "unused",
           fromVersion: "1.0.0",

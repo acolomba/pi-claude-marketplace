@@ -240,8 +240,8 @@ async function readPassForScope(
       // Pure -- no I/O.
       const plan = planReconcile(outcome.merged, state, scope, verdict);
       // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
-      // read its stamp + scan its partially-installed plugins. planReconcile is pure,
-      // so the snapshot is the unmutated read-pass state.
+      // read its stamp + scan every plugin it records (WCONV-01). planReconcile is
+      // pure, so the snapshot is the unmutated read-pass state.
       return { plan, invalidOutcomes: [], state, stateExisted: stateExists, verdict };
     },
     { loadState: reader.loadState },
@@ -843,6 +843,7 @@ function degradationFromEnable(
     ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
     ...(result.stagedAgents === true && { stagedAgents: true }),
     ...(result.stagedMcpServers === true && { stagedMcpServers: true }),
+    ...(result.stagedWorkflows === true && { stagedWorkflows: true }),
   };
 }
 

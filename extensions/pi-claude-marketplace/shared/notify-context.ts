@@ -136,11 +136,18 @@ export type MarketplaceRows<Msg> = WithPlugins<MarketplaceNotificationMessage, M
  * tally when plural cardinality makes it eligible. An empty default result
  * suppresses the success line.
  *
- * RLD-05 / D-07: `kind` defaults to the plain `"cascade"` arm. The
+ * RLD-05 / D-07: `kind` is `"cascade" | undefined` rather than optional. The
  * `/claude:plugin disable` command does not thread a distinguishing kind --
  * its fresh `(disabled)` row stamps `needsReload: true` directly, so the
  * `/reload to pick up changes` trailer fires via the RLD-02 OR-reduce of the
- * per-row stamps, not via a cascade-kind straddle.
+ * per-row stamps, not via a cascade-kind straddle. Every call site states
+ * `kind` and `cardinality` explicitly so a transposed or omitted argument is a
+ * compile error at the call site rather than a silently-defaulted cascade.
+ *
+ * WR-06: `advisories` stays a trailing OPTIONAL parameter rather than joining
+ * `kind` / `cardinality` in a bag -- it is the only field a caller may omit
+ * entirely, and the two required fields ahead of it are unambiguous by
+ * position once neither can default.
  */
 export function notifyWithContext<
   Status extends string,
@@ -152,6 +159,7 @@ export function notifyWithContext<
   rows: readonly MarketplaceRows<Msg>[],
   kind: "cascade" | undefined,
   cardinality: "single" | "plural",
+  advisories?: readonly string[],
 ): void {
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
   // render map omits is a compile error there); the cascade envelope consumes
@@ -168,11 +176,15 @@ export function notifyWithContext<
   // (OUT-03) is eligible IFF `cardinality === "plural"`; an empty default result
   // suppresses the success line. `label` is its prefix; single callers get no tally.
   // These fields feed only the tally composer and never affect body or severity.
+  // WR-06: free-text advisory body lines the command composed itself. The
+  // renderer folds them in after the body and before the tally; a command that
+  // omits them renders exactly what it rendered without them.
   const message: CascadeNotificationMessage = {
     ...(kind === undefined ? {} : { kind }),
     marketplaces,
     label: context.Messaging.label,
     cardinality,
+    ...(advisories !== undefined && { advisories }),
   };
 
   emitContextCascade(ctx, pi, message, (row, probe, mpScope) =>

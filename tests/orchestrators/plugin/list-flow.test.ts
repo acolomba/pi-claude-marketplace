@@ -33,6 +33,7 @@ import test from "node:test";
 
 import * as git from "isomorphic-git";
 import { mock, verify, when } from "strong-mock";
+import { Type } from "typebox";
 
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -57,6 +58,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
 type ListPluginsWithoutConnections = Omit<ListPluginsOptions, "ctx" | "pi">;
 void ({ cwd: "/workspace", scope: "user" } satisfies ListPluginsWithoutConnections);
@@ -73,7 +75,23 @@ type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
   readonly notify: (message: string, severity?: NotificationSeverity) => void;
 };
 
-function makeCtx(options: { readonly recordTally?: boolean } = {}): {
+function toolInfo(name: string): ToolInfo {
+  return {
+    name,
+    description: `test tool ${name}`,
+    parameters: Type.Object({}),
+    sourceInfo: {
+      origin: "top-level",
+      path: `/test/tools/${name}.ts`,
+      scope: "temporary",
+      source: "test",
+    },
+  } satisfies ToolInfo;
+}
+
+function makeCtx(
+  options: { readonly toolNames?: readonly string[]; readonly recordTally?: boolean } = {},
+): {
   ctx: ExtensionContext;
   pi: ExtensionAPI;
   notifications: NotifyRecord[];
@@ -87,8 +105,8 @@ function makeCtx(options: { readonly recordTally?: boolean } = {}): {
     .thenReturn(ui)
     .once();
   when(() => pi.getAllTools())
-    .thenReturn([])
-    .twice();
+    .thenReturn((options.toolNames ?? []).map(toolInfo))
+    .times(3);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       // Most of this owner suite predates operation tallies and owns the list
@@ -196,6 +214,7 @@ interface SeedMarketplaceOpts {
         agents?: readonly string[];
         mcpServers?: readonly string[];
         hooks?: readonly string[];
+        workflows?: readonly string[];
       };
     }
   >;
@@ -211,6 +230,56 @@ interface SeedMarketplaceOpts {
  * `manifest` is provided. Creates installable source dirs under the same
  * marketplace root so resolveStrict can find them.
  */
+type SeededPluginInfo = NonNullable<SeedMarketplaceOpts["installed"]>[string];
+
+/**
+ * The per-plugin resource inventory a seeded record carries.
+ *
+ * ENBL-18: the inventory is INDEPENDENT of `disabled` -- disable preserves
+ * every array, so the same defaults apply to an enabled and a disabled record
+ * and the caller's `resources` override decides the rest.
+ * D-63-04: hooksOnly seeds the resources.hooks axis populated while every
+ * other axis is empty (the production shape of a hooks-only installed plugin
+ * like learning-output-style).
+ *
+ * Extracted from `seedMarketplace` so the seeder stays under the complexity
+ * ceiling: every axis contributes one fallback branch, so the composition
+ * grows with the record schema while the seeder's own control flow does not.
+ */
+function seededResources(
+  name: string,
+  info: SeededPluginInfo,
+): {
+  skills: string[];
+  prompts: string[];
+  agents: string[];
+  mcpServers: string[];
+  hooks: string[];
+  workflows: string[];
+} {
+  const defaults =
+    info.hooksOnly === true
+      ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [name], workflows: [] }
+      : {
+          skills: [`${name}-skill`],
+          prompts: [],
+          agents: [],
+          mcpServers: [],
+          hooks: [],
+          workflows: [],
+        };
+  const override = info.resources;
+
+  return {
+    skills: [...(override?.skills ?? defaults.skills)],
+    prompts: [...(override?.prompts ?? defaults.prompts)],
+    agents: [...(override?.agents ?? defaults.agents)],
+    mcpServers: [...(override?.mcpServers ?? defaults.mcpServers)],
+    hooks: [...(override?.hooks ?? defaults.hooks)],
+    workflows: [...(override?.workflows ?? defaults.workflows)],
+  };
+}
+
 async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
   const { scope, scopeRoot, cwd, mpName, manifest } = opts;
   const locations = locationsFor(scope, cwd);
@@ -236,32 +305,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
 
   const plugins: Record<string, unknown> = {};
   for (const [name, info] of Object.entries(opts.installed ?? {})) {
-    // ENBL-18: the inventory is INDEPENDENT of `disabled` -- disable preserves
-    // every array, so the same defaults apply to an enabled and a disabled
-    // record and the caller's `resources` override decides the rest.
-    // D-63-04: hooksOnly seeds the resources.hooks axis populated while
-    // every other axis is empty (the production shape of a hooks-only
-    // installed plugin like learning-output-style).
-    const defaults =
-      info.hooksOnly === true
-        ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [name] }
-        : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] };
-    const override = info.resources;
-    const resources: {
-      skills: string[];
-      prompts: string[];
-      agents: string[];
-      mcpServers: string[];
-      hooks: string[];
-    } = {
-      skills: [...(override?.skills ?? defaults.skills)],
-      prompts: [...(override?.prompts ?? defaults.prompts)],
-      agents: [...(override?.agents ?? defaults.agents)],
-      mcpServers: [...(override?.mcpServers ?? defaults.mcpServers)],
-      hooks: [...(override?.hooks ?? defaults.hooks)],
-    };
-
-    plugins[name] = buildInstalledPluginRecord(info, resources);
+    plugins[name] = buildInstalledPluginRecord(info, seededResources(name, info));
   }
 
   const record: Record<string, unknown> = {
@@ -1474,6 +1518,7 @@ test("FSTAT-02 / FSTAT-04: same-name partially-installed + partially-upgradable 
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               provenance: "explicit",
@@ -1492,6 +1537,7 @@ test("FSTAT-02 / FSTAT-04: same-name partially-installed + partially-upgradable 
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               provenance: "explicit",
@@ -2088,6 +2134,7 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               provenance: "explicit",
@@ -3810,6 +3857,7 @@ async function seedFoldedProjectClone(opts: {
               agents: [],
               mcpServers: [],
               hooks: [],
+              workflows: [],
             },
             enabled: true,
             provenance: "explicit",
@@ -4370,7 +4418,7 @@ test("listPlugins normalizes a non-Error notification failure before reporting i
       .twice();
     when(() => pi.getAllTools())
       .thenReturn([])
-      .times(4);
+      .times(6);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         notifyCall += 1;
@@ -4400,6 +4448,159 @@ test("listPlugins normalizes a non-Error notification failure before reporting i
         ].join("\n"),
         severity: "error",
       },
+    ]);
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WFLW-04: the inventory row is INDIFFERENT to workflows.
+//
+// No kind carries a per-kind count on a `list` row, so the workflows kind adds
+// none either -- a count for this kind alone would be an inconsistency rather
+// than a feature. These two cases pin the row's bytes for a workflow-bearing
+// plugin on both sides of the installed/not-installed split, which is the half
+// of the claim the catalog states cannot make on their own: their bytes are
+// identical to the generic rows by construction, so a fixture alone would stay
+// green if a workflow token came back.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WFLW-04: a workflow-bearing available plugin renders the generic available row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = path.join(userRoot, "marketplaces", "official");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "official",
+      manifest: {
+        name: "official",
+        plugins: [{ name: "helper", source: "./helper", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["helper"],
+    });
+    await mkdir(path.join(mpRoot, "helper", "workflows"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "helper", "workflows", "greet.js"),
+      'export const meta = { name: "greet", description: "greets" };\n',
+      "utf8",
+    );
+    const { ctx, pi, notifications, ui } = makeCtx();
+
+    // act
+    await listPlugins({ ctx, pi, cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: ["● official [user]", "  ○ helper v1.0.0 (available)"].join("\n") },
+    ]);
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("WFLW-04: a non-empty persisted workflow inventory leaves the installed row unchanged when the host engine is loaded", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["alpha"],
+      installed: {
+        alpha: { version: "1.0.0", resources: { workflows: ["alpha:greet", "alpha:shout"] } },
+      },
+    });
+    const { ctx, pi, notifications, ui } = makeCtx({ toolNames: ["workflow_control"] });
+
+    // act
+    await listPlugins({ ctx, pi, cwd });
+
+    // assert -- byte-identical to the same record with an empty inventory.
+    assert.deepStrictEqual(notifications, [
+      { message: ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n") },
+    ]);
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("WDEP-02: a persisted workflow inventory stamps the host-engine marker when the engine is absent", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- the decoy tool name re-proves the WDEP-01 discriminator through
+    // the list surface: `workflow` alone must read as engine-absent.
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["alpha"],
+      installed: {
+        alpha: { version: "1.0.0", resources: { workflows: ["alpha:greet"] } },
+      },
+    });
+    const { ctx, pi, notifications, ui } = makeCtx({ toolNames: ["workflow"] });
+
+    // act
+    await listPlugins({ ctx, pi, cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp1 [user]",
+          "  ● alpha v1.0.0 (installed) {requires pi-dynamic-workflows}",
+        ].join("\n"),
+      },
+    ]);
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("WDEP-02: an empty persisted workflow inventory stamps no host-engine marker", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- a plugin shipping an EMPTY `workflows/` directory discovers zero
+    // scripts, so the record's `resources.workflows` array stays empty.
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["alpha"],
+      installed: { alpha: { version: "1.0.0", resources: { workflows: [] } } },
+    });
+    const { ctx, pi, notifications, ui } = makeCtx({ toolNames: ["workflow"] });
+
+    // act
+    await listPlugins({ ctx, pi, cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n") },
     ]);
     verify(ctx);
     verify(pi);

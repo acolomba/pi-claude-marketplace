@@ -124,13 +124,8 @@ const UNINSTALLED_ROW_REASONS_DEPENDENTS_DATA_KEPT = [
   "data kept",
 ] as const satisfies readonly ContentReason[];
 
-/**
- * The named plugin's brace, composed from the two INDEPENDENT axes the row can
- * carry: what the removal means for the rest of the scope, and what it left on
- * disk. Neither replaces the other, and with neither present the row keeps its
- * byte-frozen brace-less form (D-02-01).
- */
-function uninstalledRowReasons(
+/** The two axes that were the brace's whole content before WLIF-06. */
+function scopeAndDiskReasons(
   keepData: boolean,
   hasDependents: boolean,
 ): readonly ContentReason[] | undefined {
@@ -141,6 +136,29 @@ function uninstalledRowReasons(
   }
 
   return keepData ? UNINSTALLED_ROW_REASONS_DATA_KEPT : undefined;
+}
+
+/**
+ * The named plugin's brace, composed from the three INDEPENDENT axes the row
+ * can carry: what the removal means for the rest of the scope, what it left on
+ * disk, and whether it retired a workflow command that stays registered until
+ * a reload. None replaces another, and with none present the row keeps its
+ * byte-frozen brace-less form (D-02-01).
+ *
+ * WLIF-06: the stale-command token sits LAST, the tail position the closed set
+ * itself gives it, so a reader meets it in the same place on every surface.
+ */
+function uninstalledRowReasons(
+  keepData: boolean,
+  hasDependents: boolean,
+  staleWorkflowCommand: boolean,
+): readonly ContentReason[] | undefined {
+  const scopeAndDisk = scopeAndDiskReasons(keepData, hasDependents);
+  if (!staleWorkflowCommand) {
+    return scopeAndDisk;
+  }
+
+  return [...(scopeAndDisk ?? []), "stale workflow command"];
 }
 
 /**
@@ -180,17 +198,28 @@ export function composeUninstalledRow(args: {
   readonly keepData: boolean;
   /** Sorted `name@marketplace` keys of the records that still declare the plugin. */
   readonly dependents: readonly string[];
+  /**
+   * WLIF-06: the cascade took at least one workflow envelope off disk. The host
+   * exposes no unregister call, so the command that envelope registered stays
+   * runnable until a reload, and the row names that rather than reporting a
+   * clean removal.
+   */
+  readonly staleWorkflowCommand: boolean;
 }): PluginUninstalledMessage {
   const hasDependents = args.dependents.length > 0;
-  const reasons = uninstalledRowReasons(args.keepData, hasDependents);
+  const reasons = uninstalledRowReasons(args.keepData, hasDependents, args.staleWorkflowCommand);
   return {
     status: "uninstalled",
     name: args.plugin,
     ...(args.version !== undefined && { version: args.version }),
     ...(reasons !== undefined && { reasons }),
     ...(hasDependents && { cause: new Error(`required by ${renderDependents(args.dependents)}`) }),
-    // D-03/D-06: realized uninstall transition -> info, reloads Pi resources.
-    severity: "info",
+    // D-03/D-06: a realized uninstall transition reloads Pi resources. WLIF-06:
+    // it is `info` when the removal reached the desired state and `warning`
+    // when it was carried out but a retired command lingers. The data
+    // disposition and the dependents consequence do NOT move the channel --
+    // the uninstall was carried out in full on both.
+    severity: args.staleWorkflowCommand ? "warning" : "info",
     needsReload: true,
   };
 }

@@ -262,7 +262,7 @@ for (const { args, arity } of [{ args: URL_SOURCE, arity: "at the accepted arity
   test(`clones through the injected port into the user scope when no scope flag narrows the command ${arity}`, async (t) => {
     // arrange
     const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "default-scope");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });
@@ -306,7 +306,7 @@ for (const { footprint, row, scope } of [
   test(`clones into the ${scope} scope when --scope ${scope} selects it`, async (t) => {
     // arrange
     const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });
@@ -335,7 +335,7 @@ for (const { args, position } of [
   test(`records the marketplace in the per-machine config when the scope-target flag is supplied ${position} the source`, async (t) => {
     // arrange
     const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, `local-${position}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });
@@ -360,7 +360,7 @@ for (const { args, position } of [
 test("carries a scope flag and the scope-target flag through together rather than rejecting the pair", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "scope-and-target");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: cwd,
     reads: 1,
   });
@@ -387,7 +387,7 @@ test("carries a scope flag and the scope-target flag through together rather tha
 test("adds a path source without ever reaching the git port it was handed (NFR-5)", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "path-source");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: cwd,
     reads: 1,
   });

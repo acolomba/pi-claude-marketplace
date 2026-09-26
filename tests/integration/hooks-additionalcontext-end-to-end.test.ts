@@ -6,9 +6,10 @@
 // Pi's next agent turn through the `before_agent_start` handler's
 // `systemPrompt` slot".
 //
-// Distinct from `tests/bridges/hooks/session-start-additional-context.test.ts`
-// (the unit-level test that calls `adaptObservationResultForEvent` and
-// `beforeAgentStartHandlerFor` directly) -- this one runs the production
+// Distinct from the unit-level coverage that calls those two functions
+// directly -- `adaptObservationResultForEvent` in
+// `tests/bridges/hooks/event-adapters.test.ts` and `beforeAgentStartHandlerFor`
+// in `tests/bridges/hooks/event-router.test.ts` -- this one runs the production
 // executor (`dispatchHookExec`) through a real `spawn(bash, [...])`
 // invocation whose handler writes the additionalContext envelope, the
 // bridge's stdout parser fold lands in the pending buffer, and the
@@ -102,6 +103,7 @@ function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {
               agents: [],
               mcpServers: [],
               hooks: ["test-plugin"],
+              workflows: [],
             },
             enabled: true,
             provenance: "explicit",

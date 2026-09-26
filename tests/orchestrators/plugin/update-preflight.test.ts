@@ -44,6 +44,7 @@ function pluginRecord(version: string, enabled = true): PluginRecord {
       agents: ["hello:bot"],
       mcpServers: ["hello:server"],
       hooks: ["hello"],
+      workflows: [],
     },
     enabled,
     provenance: "explicit",
@@ -173,6 +174,7 @@ test("classifies a missing marketplace without reading a manifest", async (t) =>
     reasons: ["not in manifest"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 });
 
@@ -198,6 +200,7 @@ test("distinguishes an undeclared target from a declared uninstalled target", as
     reasons: ["not in manifest"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
   assert.deepStrictEqual(uninstalledOutcome, {
     partition: "skipped",
@@ -206,6 +209,7 @@ test("distinguishes an undeclared target from a declared uninstalled target", as
     reasons: ["not installed"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 });
 
@@ -226,6 +230,7 @@ test("retains the recorded version when the refreshed manifest drops the plugin"
     reasons: ["not in manifest"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 });
 
@@ -247,6 +252,7 @@ test("returns an exact unchanged outcome for an enabled current plugin", async (
     declaresAgents: false,
     declaresMcp: false,
     constraint: undefined,
+    declaresWorkflows: false,
   });
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
@@ -335,6 +341,7 @@ test("D-10-03: the gate runs after triage and before candidate resolution", asyn
     reasons: ["dependents constrain"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 });
 
@@ -413,6 +420,7 @@ test("UPDT-01: a no-tag repository is still gated by the post-fetch guard", asyn
     reasons: ["dependents constrain"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 });
 
@@ -595,6 +603,7 @@ test("refreshes a disabled pin without materializing its recorded resources", as
     reasons: ["already disabled"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
   const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
   assert.strictEqual(refreshed?.version, "2.0.0");
@@ -668,6 +677,7 @@ test("does not rewrite an unchanged disabled pin", async (t) => {
     declaresAgents: false,
     declaresMcp: false,
     constraint: undefined,
+    declaresWorkflows: false,
   });
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
@@ -874,6 +884,7 @@ test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) =
     toVersion: "1.2.0",
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     // D-10-13: the pinned verdict's own disclosure, read from the SAME
     // `verdict` local -- present even though nothing changed on disk.
     constraint: {
@@ -1067,6 +1078,7 @@ test("classifies a clone transport failure without exposing a raw throw", async 
     reasons: ["network unreachable"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 });
 

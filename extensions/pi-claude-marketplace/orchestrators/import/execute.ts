@@ -110,6 +110,7 @@ export interface PluginInstalledOutcome {
    * import enabled. Omitted otherwise.
    */
   readonly reenabled?: true;
+  readonly declaresWorkflows: boolean;
 }
 
 export interface PluginSkipOutcome {
@@ -452,6 +453,11 @@ function unexpectedFailureReason(reason: UnexpectedPluginFailureOutcome["reason"
   }
 }
 
+/**
+ * WDEP-02: `workflows` pushes LAST, so a cascade row that declares agents and
+ * mcp renders the same two-marker brace whether or not it also declares
+ * workflows.
+ */
 function dependenciesFromInstalled(o: PluginInstalledOutcome): readonly Dependency[] {
   const deps: Dependency[] = [];
   if (o.declaresAgents) {
@@ -460,6 +466,10 @@ function dependenciesFromInstalled(o: PluginInstalledOutcome): readonly Dependen
 
   if (o.declaresMcp) {
     deps.push("mcp");
+  }
+
+  if (o.declaresWorkflows) {
+    deps.push("workflows");
   }
 
   // defense-in-depth: typed readonly + runtime freeze (codebase convention)
@@ -886,6 +896,7 @@ async function installOnePlannedPlugin(
         declaresMcp: outcome.declaresMcp,
         ...(outcome.promoted === true && { promoted: true }),
         ...(promoting !== undefined && isRecordedButDisabled(promoting) && { reenabled: true }),
+        declaresWorkflows: outcome.declaresWorkflows,
       });
       result.changedResources ||= outcome.resourcesChanged;
       for (const w of outcome.postCommitWarnings ?? []) {

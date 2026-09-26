@@ -19,10 +19,11 @@
 // (D-64-07): a plugin that is both structurally broken AND declares
 // unsupported component kinds resolves `unavailable`.
 //
-// HOOK-01: `hooks` is admitted alongside `skills` / `commands` / `agents` /
-// `mcpServers`. The supported component result is a closed set; the
-// path-validation loop iterates a PRIVATE subset (`COMPONENT_PATH_KINDS`)
-// because `hooks` carries no per-entry component-path semantics -- the
+// HOOK-01 / WINV-01: `hooks` is admitted alongside `skills` / `commands` /
+// `agents` / `workflows` / `mcpServers`. The supported component result is a
+// closed set; the path-validation loop iterates a PRIVATE subset
+// (`COMPONENT_PATH_KINDS`) because `hooks` carries no per-entry
+// component-path semantics -- the
 // discovery path is the convention file `<pluginRoot>/hooks/hooks.json`,
 // parsed through `parseHooksConfig` (D-57-04: a parse failure is structural
 // and resolves `unavailable`).
@@ -104,7 +105,7 @@ function emptyResolution(): PartialResolution {
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
   };
 }
@@ -601,8 +602,8 @@ export async function resolveStrict(
  * short-circuited, which is what the original `(await stage()) || dirty` chain
  * did too.
  *
- * Component-path collection owns the closed skills/commands/agents subset;
- * hooks-config discovery remains the separate shared stage below.
+ * Component-path collection owns the closed skills/commands/agents/workflows
+ * subset; hooks-config discovery remains the separate shared stage below.
  */
 async function runStructuralStages(args: {
   readonly entry: PluginEntry;

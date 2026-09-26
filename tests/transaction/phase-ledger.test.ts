@@ -9,7 +9,19 @@ import {
   type RunPhasesResult,
 } from "../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 
-const PRODUCTION_PHASE_NAMES = ["skills", "commands", "agents", "hooks", "mcp", "state"] as const;
+// The install ledger's literal phase array, mirrored so this suite's fixtures
+// exercise the same shape production runs. Nothing fails if a new phase is
+// missed here, which is exactly why it gets missed -- the ledger's own suite
+// would keep modelling a five-bridge production while production runs six.
+const PRODUCTION_PHASE_NAMES = [
+  "skills",
+  "commands",
+  "agents",
+  "hooks",
+  "mcp",
+  "workflows",
+  "state",
+] as const;
 
 type PhaseName = (typeof PRODUCTION_PHASE_NAMES)[number];
 
@@ -87,6 +99,24 @@ const FORWARD_FAILURE_CASES = [
     ],
   },
   {
+    name: "compensates a workflows failure own-first and newest-first",
+    phase: "workflows",
+    expectedOperations: [
+      "do:skills",
+      "do:commands",
+      "do:agents",
+      "do:hooks",
+      "do:mcp",
+      "do:workflows",
+      "undo:workflows",
+      "undo:mcp",
+      "undo:hooks",
+      "undo:agents",
+      "undo:commands",
+      "undo:skills",
+    ],
+  },
+  {
     name: "compensates a state failure own-first and newest-first",
     phase: "state",
     expectedOperations: [
@@ -95,8 +125,10 @@ const FORWARD_FAILURE_CASES = [
       "do:agents",
       "do:hooks",
       "do:mcp",
+      "do:workflows",
       "do:state",
       "undo:state",
+      "undo:workflows",
       "undo:mcp",
       "undo:hooks",
       "undo:agents",
@@ -163,8 +195,16 @@ test("runs the complete install schedule successfully in production order", asyn
   // assert
   assert.deepStrictEqual(ledgerResult, expectedLedgerResult);
   assert.deepStrictEqual(context, {
-    operations: ["do:skills", "do:commands", "do:agents", "do:hooks", "do:mcp", "do:state"],
-    active: ["skills", "commands", "agents", "hooks", "mcp", "state"],
+    operations: [
+      "do:skills",
+      "do:commands",
+      "do:agents",
+      "do:hooks",
+      "do:mcp",
+      "do:workflows",
+      "do:state",
+    ],
+    active: ["skills", "commands", "agents", "hooks", "mcp", "workflows", "state"],
   });
 });
 
@@ -422,8 +462,10 @@ test("reports several completed-phase undo failures newest-first", async () => {
       "do:agents",
       "do:hooks",
       "do:mcp",
+      "do:workflows",
       "do:state",
       "undo:state",
+      "undo:workflows",
       "undo:mcp",
       "undo:hooks",
       "undo:agents",

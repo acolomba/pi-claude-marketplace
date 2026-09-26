@@ -9,7 +9,7 @@
 
 [![CI](https://github.com/acolomba/pi-claude-marketplace/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/acolomba/pi-claude-marketplace/actions/workflows/ci.yml) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=alert_status)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=coverage)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=bugs)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=code_smells)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=sqale_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=reliability_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=security_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![GitHub](https://img.shields.io/badge/GitHub-acolomba%2Fpi--claude--marketplace-181717?logo=github&logoColor=white)](https://github.com/acolomba/pi-claude-marketplace) [![npm](https://img.shields.io/badge/npm-pi--claude--marketplace-cb3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/pi-claude-marketplace) [![pi.dev](https://img.shields.io/badge/pi.dev-pi--claude--marketplace-09090b?logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MDAgODAwIj48cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjgwMCIgcng9IjEyMCIgZmlsbD0iIzA5MDkwYiIvPjxwYXRoIGZpbGw9IiNmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTTE2NS4yOSAxNjUuMjlINTE3LjM2VjQwMEg0MDBWNTE3LjM2SDI4Mi42NVY2MzQuNzJIMTY1LjI5Wk0yODIuNjUgMjgyLjY1VjQwMEg0MDBWMjgyLjY1WiIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik01MTcuMzYgNDAwSDYzNC43MlY2MzQuNzJINTE3LjM2WiIvPjwvc3ZnPg==)](https://pi.dev/packages/pi-claude-marketplace)
 
-Accede a los mercados de complementos de Claude desde [Pi Coding Agent](https://pi.dev). Admite los comandos, habilidades, agentes, hooks y servidores MCP de Claude.
+Accede a los mercados de complementos de Claude desde [Pi Coding Agent](https://pi.dev). Admite los comandos, habilidades, agentes, hooks, servidores MCP y workflows de Claude.
 
 <!-- markdownlint-disable MD033 -->
 
@@ -27,6 +27,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 - Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents).
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
 - Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
+- Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).
 
 Los complementos que contienen componentes no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
 
@@ -34,9 +35,10 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 
 ## Requisitos previos
 
-- [Pi Coding Agent](https://pi.dev)
+- [Pi Coding Agent](https://pi.dev) 0.86.1 o posterior
 - [pi-subagents](https://pi.dev/packages/pi-subagents) (opcional pero recomendado, `pi install npm:pi-subagents`)
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (opcional pero recomendado, `pi install npm:pi-mcp-adapter`)
+- [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Uso
 
@@ -98,29 +100,23 @@ Ejecuta un complemento:
 
 Esta extensión prefija los nombres de comandos y habilidades con el nombre del complemento. Si el nombre ya empieza con el nombre del complemento y `-`, esta extensión elimina esa parte común.
 
-Los nombres de comandos y habilidades usan el formato con dos puntos de Pi:
+Los comandos usan dos puntos (`:`) en POSIX y un punto (`.`) en Windows:
 
-| Nombre del complemento | Nombre del comando o habilidad | Nombre en Pi |
-| ---------------------- | ------------------------------ | ------------ |
-| `foo`                  | `bar`                          | `/foo:bar`   |
-| `foo`                  | `foo-bar`                      | `/foo:bar`   |
-| `foo`                  | `foo`                          | `/foo:foo`   |
+| Nombre del complemento | Nombre del comando | Nombre en Pi (POSIX) | Nombre en Pi (Windows) |
+| ---------------------- | ------------------ | -------------------- | ---------------------- |
+| `foo`                  | `bar`              | `/foo:bar`           | `/foo.bar`             |
+| `foo`                  | `foo-bar`          | `/foo:bar`           | `/foo.bar`             |
+| `foo`                  | `foo`              | `/foo:foo`           | `/foo.foo`             |
 
-En Windows, los comandos se prefijan con un punto (`.`) en lugar de dos puntos (`:`). Los nombres de habilidades no cambian:
+Las habilidades usan la forma `/skill:` de Pi y también tienen un alias en las sesiones interactivas:
 
-| Nombre del complemento | Nombre del comando | Nombre en Pi (Windows) |
-| ---------------------- | ------------------ | ---------------------- |
-| `foo`                  | `bar`              | `/foo.bar`             |
-| `foo`                  | `foo-bar`          | `/foo.bar`             |
-| `foo`                  | `foo`              | `/foo.foo`             |
+| Nombre del complemento | Nombre de la habilidad | Forma de Pi      | Alias interactivo |
+| ---------------------- | ---------------------- | ---------------- | ----------------- |
+| `foo`                  | `bar`                  | `/skill:foo-bar` | `/foo:bar`        |
+| `foo`                  | `foo-bar`              | `/skill:foo-bar` | `/foo:bar`        |
+| `foo`                  | `foo`                  | `/skill:foo`     | `/foo:foo`        |
 
-Esta extensión también registra las habilidades con nombres separados por guiones después del prefijo `/skill:`:
-
-| Nombre del complemento | Nombre de la habilidad | Nombre en Pi     |
-| ---------------------- | ---------------------- | ---------------- |
-| `foo`                  | `bar`                  | `/skill:foo-bar` |
-| `foo`                  | `foo-bar`              | `/skill:foo-bar` |
-| `foo`                  | `foo`                  | `/skill:foo`     |
+Los alias de habilidades usan dos puntos en todas las plataformas. Si un alias entra en conflicto con un comando, el comando tiene prioridad. Usa `/skill:foo-bar` para ejecutar la habilidad.
 
 Los nombres de los servidores MCP no cambian. Si otra configuración de MCP ya utiliza ese nombre, la instalación o actualización del complemento fallará.
 

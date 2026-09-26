@@ -364,7 +364,7 @@ export interface CascadeMemberOutcome {
   readonly requiredBy: string | undefined;
   readonly version: string;
   /**
-   * What the member staged, as the two soft-dependency kinds the renderer
+   * What the member staged, as the three soft-dependency kinds the renderer
    * probes for. Carried as booleans rather than as the staged name lists so a
    * member row can fire the same `{requires pi-...}` marker and the same SEV-01
    * severity an ordinary install row does, without this module reaching for the
@@ -372,6 +372,7 @@ export interface CascadeMemberOutcome {
    */
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  readonly declaresWorkflows: boolean;
   /**
    * Where the member materialized, and the hooks config it declared relative to
    * that root -- `undefined` when it declared none.
@@ -964,6 +965,7 @@ function buildMemberPhase(
         version: result.summary.version,
         declaresAgents: result.summary.stagedAgentNames.length > 0,
         declaresMcp: result.summary.stagedMcpServerNames.length > 0,
+        declaresWorkflows: result.summary.stagedWorkflowNames.length > 0,
         pluginRoot: result.summary.resolved.pluginRoot,
         hooksConfigPath: result.summary.resolved.hooksConfigPath,
         fellBackToCurrentCopy: member.fellBackToCurrentCopy ?? false,
@@ -1089,6 +1091,7 @@ function buildReEnableMemberPhase(
         version: result.summary.version,
         declaresAgents: result.summary.stagedAgentNames.length > 0,
         declaresMcp: result.summary.stagedMcpServerNames.length > 0,
+        declaresWorkflows: result.summary.stagedWorkflowNames.length > 0,
         pluginRoot: result.summary.resolved.pluginRoot,
         hooksConfigPath: result.summary.resolved.hooksConfigPath,
         fellBackToCurrentCopy: false,

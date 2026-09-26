@@ -1,0 +1,121 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-23T10:40:14.991Z",
+  "phase": "117",
+  "phase_name": "Measured agent failure evidence (milestone workflows-replay, archived)",
+  "phase_dir": ".planning/workstreams/workflows",
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "Diagnose the OpenAI child-tool failure and commit the resolved debug record",
+      "status": "done",
+      "commit": "a0d8f9ee"
+    },
+    {
+      "id": 2,
+      "name": "Confirm pi-dynamic-workflows 3.13.0 is current upstream and isolate three engine defects",
+      "status": "done",
+      "commit": null
+    },
+    {
+      "id": 3,
+      "name": "Fix explicit-extension result delivery and open upstream PR 232",
+      "status": "done",
+      "commit": "8c62327"
+    },
+    {
+      "id": 4,
+      "name": "Fix host and child Pi SDK compatibility and open upstream PR 233",
+      "status": "done",
+      "commit": "d3ef63a"
+    },
+    {
+      "id": 5,
+      "name": "Fix the completed workflow status heading and open upstream PR 234",
+      "status": "done",
+      "commit": "abb61e7"
+    },
+    {
+      "id": 6,
+      "name": "Run a combined OpenAI plugin smoke test across Pi host 0.85.1 and engine dependency 0.87.0",
+      "status": "done",
+      "commit": null
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 7,
+      "name": "Monitor upstream PRs 232, 233, and 234; respond to review and CI",
+      "status": "not_started"
+    },
+    {
+      "id": 8,
+      "name": "Decide the version bump for features/workflow",
+      "status": "not_started"
+    },
+    {
+      "id": 9,
+      "name": "Open the pi-claude-marketplace features/workflow PR",
+      "status": "not_started"
+    },
+    {
+      "id": 10,
+      "name": "Decide whether to fix the code-modernization credential-finding semantic dedup issue",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Upstream PRs 232, 233, and 234 are open but GitHub reports BLOCKED with no checks because a maintainer must approve the first CI run from the new fork.",
+      "type": "external",
+      "workaround": "Wait for maintainer approval, then inspect CI and review feedback."
+    }
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Rotate or re-authenticate the OpenAI credential that was exposed during the earlier audit investigation.",
+      "context": "Copied credentials were removed from both disposable /tmp sandboxes, but credential rotation requires the account owner.",
+      "blocking": true
+    },
+    {
+      "action": "Decide whether features/workflow needs a version bump before its PR.",
+      "context": "Main released 0.19.0 while this branch already used 0.19.0, so the workflows changes still need an explicit release-version decision.",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Use OpenAI credentials only for workflow validation.",
+      "rationale": "The workflow must work with an OpenAI model, and the user explicitly rejected an Anthropic-credential dependency.",
+      "phase": "117"
+    },
+    {
+      "decision": "Submit three pi-dynamic-workflows PRs instead of one combined PR.",
+      "rationale": "The upstream contributor guide requires one concern per PR. Delivery, runtime compatibility, and status rendering are independent defects.",
+      "phase": "117"
+    },
+    {
+      "decision": "Keep the combined integration branch local and test patch-identical cherry-picks of the three PR commits.",
+      "rationale": "The upstream PRs must stay isolated, while the local combined build verifies their interaction before merge.",
+      "phase": "117"
+    },
+    {
+      "decision": "Do not change pi-claude-marketplace production code for the engine defects.",
+      "rationale": "The root causes and fix sites are in pi-dynamic-workflows. The marketplace bridge already installed and invoked the saved workflow correctly.",
+      "phase": "117"
+    }
+  ],
+  "uncommitted_files": [
+    " M .claude/settings.json",
+    " M .codex/config.toml",
+    "?? .mcp.json",
+    "?? .planning/workstreams/workflows/.verification-ledger.json"
+  ],
+  "next_action": "Check upstream PRs 232-234 for approved CI or review feedback, then decide the features/workflow version bump and prepare the repository PR.",
+  "context_notes": "No active phase exists. The workflows-replay milestone is archived, and this was post-milestone UAT plus upstream defect work. features/workflow is seven commits ahead of origin/features/workflow. The final smoke run read-fixture-mudxlglt-nz0e5t used the current marketplace extension, Pi host 0.85.1, a local combined engine build with Pi dependency 0.87.0, and OpenAI gpt-5.6-terra. It called native read and structured_output with zero errors, returned workflow-tool-probe, delivered into the parent session, removed pendingDelivery, and rendered Workflow completed. Cost was about $0.0059. No background process remains. Do not infer a cross-version test from source state: read the installed host and engine package versions first. Do not report gate status from a compound shell command's final exit code."
+}

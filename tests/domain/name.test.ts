@@ -3,10 +3,13 @@ import { describe, test } from "node:test";
 
 import {
   assertSafeName,
+  declaredAgentName,
   generatedAgentName,
   generatedCommandName,
   generatedSkillName,
+  generatedWorkflowName,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
+import { UnsafeGeneratedNameError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { setCasePlatform } from "../platform/case-platform.ts";
 
 describe("assertSafeName", () => {
@@ -172,19 +175,20 @@ describe("assertSafeName", () => {
 
 describe("generatedSkillName", () => {
   for (const { plugin, source, expectedSkillName } of [
-    { plugin: "acme", source: "foo", expectedSkillName: "acme:foo" },
-    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme:foo" },
-    { plugin: "acme", source: "acme:foo", expectedSkillName: "acme:foo" },
-    { plugin: "ab", source: "abc", expectedSkillName: "ab:abc" },
+    { plugin: "acme", source: "foo", expectedSkillName: "acme-foo" },
+    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme-foo" },
+    { plugin: "acme", source: "acme:foo", expectedSkillName: "acme-foo" },
+    { plugin: "acme", source: "acme.foo", expectedSkillName: "acme-foo" },
+    { plugin: "ab", source: "abc", expectedSkillName: "ab-abc" },
     {
       plugin: "acme",
       source: "acme-acme-foo",
-      expectedSkillName: "acme:acme-foo",
+      expectedSkillName: "acme-acme-foo",
     },
     {
       plugin: "Ac.Me",
       source: "Ac.Me-Task_Name",
-      expectedSkillName: "Ac.Me:Task_Name",
+      expectedSkillName: "ac-me-task-name",
     },
     { plugin: "foo", source: "foo", expectedSkillName: "foo" },
   ]) {
@@ -201,10 +205,40 @@ describe("generatedSkillName", () => {
     });
   }
 
+  test("caps long names with a stable suffix that distinguishes sources", () => {
+    // arrange
+    const firstSource = `review-${"a".repeat(80)}`;
+    const secondSource = `review-${"a".repeat(79)}b`;
+
+    // act
+    const first = generatedSkillName("acme", firstSource);
+    const repeated = generatedSkillName("acme", firstSource);
+    const second = generatedSkillName("acme", secondSource);
+
+    // assert
+    assert.match(first, /^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+    assert.strictEqual(first.length, 64);
+    assert.strictEqual(first, repeated);
+    assert.notStrictEqual(first, second);
+  });
+
+  test("gives non-ASCII and punctuation-only sources a stable valid name", () => {
+    // arrange
+    const source = "___";
+
+    // act
+    const generated = generatedSkillName("acme", source);
+
+    // assert
+    assert.match(generated, /^acme-name-[a-f0-9]{8}$/);
+    assert.strictEqual(generated, generatedSkillName("acme", source));
+    assert.notStrictEqual(generated, generatedSkillName("acme", "é"));
+  });
+
   for (const { plugin, source, expectedSkillName } of [
-    { plugin: "acme", source: "foo", expectedSkillName: "acme.foo" },
-    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme.foo" },
-    { plugin: "acme", source: "acme.foo", expectedSkillName: "acme.foo" },
+    { plugin: "acme", source: "foo", expectedSkillName: "acme-foo" },
+    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme-foo" },
+    { plugin: "acme", source: "acme.foo", expectedSkillName: "acme-foo" },
   ]) {
     test(`generates ${JSON.stringify(expectedSkillName)} from ${JSON.stringify(source)} on win32`, (t) => {
       // arrange
@@ -476,6 +510,254 @@ describe("generatedAgentName", () => {
       assert.throws(generateAgentName, (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
+    });
+  }
+});
+
+describe("declaredAgentName", () => {
+  for (const { plugin, source, expectedDeclaredName } of [
+    { plugin: "acme", source: "bot", expectedDeclaredName: "acme:bot" },
+    // No elision, matching generatedAgentName: with it, plugin acme's `bot`
+    // and `acme-bot` would both declare `acme:bot` and collide.
+    { plugin: "acme", source: "acme-bot", expectedDeclaredName: "acme:acme-bot" },
+    { plugin: "ab", source: "abc", expectedDeclaredName: "ab:abc" },
+    { plugin: "acme", source: "acme", expectedDeclaredName: "acme:acme" },
+    { plugin: "Ac.Me", source: "Ac.Me-Bot_v2", expectedDeclaredName: "Ac.Me:Ac.Me-Bot_v2" },
+  ]) {
+    test(`declares ${plugin} + ${source} as ${expectedDeclaredName}`, () => {
+      // arrange
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const declaredName = declaredAgentName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(declaredName, expectedDeclaredName);
+    });
+  }
+
+  test("separates with a colon on every platform, unlike command and skill names", () => {
+    // arrange
+    // Those names become filenames, so they take a dot on Windows. This one
+    // is frontmatter only, and a dot here would miss the `<plugin>:<agent>`
+    // agentType a bridged workflow script names.
+    const plugin = "code-modernization";
+    const source = "security-auditor";
+
+    // act
+    const declaredName = declaredAgentName(plugin, source);
+
+    // assert
+    assert.strictEqual(declaredName, "code-modernization:security-auditor");
+    assert.ok(!declaredName.includes("."));
+  });
+
+  for (const { pluginName, sourceName, errorMessage } of [
+    {
+      pluginName: "acme",
+      sourceName: "..",
+      errorMessage: 'Name must not be "." or "..".',
+    },
+    {
+      pluginName: "acme",
+      sourceName: "a/b",
+      errorMessage: 'Name "a/b" must not contain path separators.',
+    },
+  ]) {
+    test(`rejects ${sourceName} with the shared name rules`, () => {
+      // arrange
+      const plugin = pluginName;
+      const source = sourceName;
+
+      // act
+      const declareAgentName = () => declaredAgentName(plugin, source);
+
+      // assert
+      assert.throws(declareAgentName, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
+    });
+  }
+});
+
+describe("generatedWorkflowName", () => {
+  for (const { plugin, source, expectedWorkflowName } of [
+    { plugin: "acme", source: "audit", expectedWorkflowName: "acme:audit" },
+    { plugin: "acme", source: "acme-audit", expectedWorkflowName: "acme:audit" },
+    { plugin: "ab", source: "abc", expectedWorkflowName: "ab:abc" },
+    { plugin: "foo", source: "foo", expectedWorkflowName: "foo:foo" },
+    { plugin: "acme", source: "a.b", expectedWorkflowName: "acme:a.b" },
+    // The engine judges the WHOLE saved name, and its own `isSafeSavedWorkflowName`
+    // rejects a name that IS "." or ".." rather than one that ends in it. Refusing
+    // these would be a gate stricter than the engine, which is the one direction
+    // that does not self-correct when a later engine relaxes a rule.
+    { plugin: "acme", source: ".", expectedWorkflowName: "acme:." },
+    { plugin: "acme", source: "..", expectedWorkflowName: "acme:.." },
+    // D-141-02: the elision would empty the head, so it does not fire and the
+    // source stands verbatim. The bare "acme:" is never produced.
+    { plugin: "acme", source: "acme-", expectedWorkflowName: "acme:acme-" },
+    // A WELL-FORMED astral character is one code point, not a surrogate, so the
+    // \p{Cs} screen below must not touch it. Written as a code-point escape
+    // (U+1F680 ROCKET) rather than pasted.
+    { plugin: "acme", source: "ship\u{1F680}", expectedWorkflowName: "acme:ship\u{1F680}" },
+  ]) {
+    test(`generates ${JSON.stringify(expectedWorkflowName)} from ${JSON.stringify(source)}`, () => {
+      // arrange
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const workflowName = generatedWorkflowName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(workflowName, expectedWorkflowName);
+    });
+  }
+
+  test("accepts a joined name of exactly 128 code units", () => {
+    // arrange
+    // "acme:" is 5 code units, so a 123-unit source lands the join on the ceiling.
+    const plugin = "acme";
+    const source = "x".repeat(123);
+
+    // act
+    const workflowName = generatedWorkflowName(plugin, source);
+
+    // assert
+    assert.strictEqual(workflowName, `acme:${"x".repeat(123)}`);
+    assert.strictEqual(workflowName.length, 128);
+  });
+
+  test("rejects a joined name of 129 code units", () => {
+    // arrange
+    const plugin = "acme";
+    const source = "x".repeat(124);
+    const attemptedName = `acme:${"x".repeat(124)}`;
+    const errorMessage = `Generated workflow name "${attemptedName}" must be at most 128 characters (got 129).`;
+
+    // act
+    const generateWorkflowName = () => generatedWorkflowName(plugin, source);
+
+    // assert
+    assert.throws(generateWorkflowName, (error: unknown) => {
+      assert.ok(error instanceof UnsafeGeneratedNameError);
+      assert.strictEqual(error.message, errorMessage);
+      assert.strictEqual(error.attemptedName, attemptedName);
+      return true;
+    });
+  });
+
+  test("throws a bare Error for an unsafe PLUGIN name, which no one file causes", () => {
+    // arrange
+    // The plugin check sits outside the typed-error conversion on purpose: it
+    // disqualifies every script in the plugin at once, so `workflow-script.ts`
+    // must let it escape rather than refuse one arbitrary file for it.
+    const plugin = "ac/me";
+    const source = "audit";
+
+    // act
+    const generateWorkflowName = () => generatedWorkflowName(plugin, source);
+
+    // assert
+    assert.throws(generateWorkflowName, (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(error.constructor, Error);
+      assert.ok(!(error instanceof UnsafeGeneratedNameError));
+      assert.strictEqual(error.message, 'Name "ac/me" must not contain path separators.');
+      return true;
+    });
+  });
+
+  for (const { pluginName, sourceName, errorMessage } of [
+    {
+      pluginName: "acme",
+      sourceName: "",
+      errorMessage: "Workflow name must be a non-empty string.",
+    },
+    {
+      pluginName: "acme",
+      sourceName: "   ",
+      errorMessage: "Workflow name must be a non-empty string.",
+    },
+    {
+      // A separator is the one part-level defect the join cannot fix, and
+      // `assertSafeName` sees it in the joined name rather than in the part.
+      pluginName: "acme",
+      sourceName: "reports/weekly",
+      errorMessage: 'Name "acme:reports/weekly" must not contain path separators.',
+    },
+    {
+      pluginName: "acme",
+      sourceName: "trail ",
+      errorMessage:
+        'Generated workflow name "acme:trail " must not have leading or trailing whitespace.',
+    },
+    {
+      pluginName: "acme",
+      sourceName: "my name",
+      errorMessage:
+        'Generated workflow name "acme:my name" must not contain whitespace, path separators, or NUL.',
+    },
+    {
+      // A leading space in the source survives the join: "acme: lead" has no
+      // leading or trailing whitespace of its own, so the trim rule cannot see it.
+      pluginName: "acme",
+      sourceName: " lead",
+      errorMessage:
+        'Generated workflow name "acme: lead" must not contain whitespace, path separators, or NUL.',
+    },
+    {
+      // U+200B ZERO WIDTH SPACE, a format character written as an escape because
+      // it is invisible in source.
+      pluginName: "acme",
+      sourceName: "zw\u200Bsp",
+      errorMessage:
+        'Generated workflow name "acme:zw\u200Bsp" must not contain control or format characters.',
+    },
+    {
+      // U+202E RIGHT-TO-LEFT OVERRIDE, a bidi control and also a format
+      // character: it reverses how the rest of the name renders.
+      pluginName: "acme",
+      sourceName: "bidi\u202Ex",
+      errorMessage:
+        'Generated workflow name "acme:bidi\u202Ex" must not contain control or format characters.',
+    },
+    {
+      // A lone HIGH surrogate (U+D800), written as an escape because it is not a
+      // character and cannot be pasted. The engine admits it -- its screen is
+      // \p{Cc} and \p{Cf} only -- but Node writes it to a path as U+FFFD, so this
+      // name and the one below would be the same file.
+      pluginName: "acme",
+      sourceName: "a\uD800b",
+      errorMessage: 'Generated workflow name "acme:a\uD800b" must not contain unpaired surrogates.',
+    },
+    {
+      // A lone LOW surrogate (U+DC00): distinct from the row above in memory,
+      // identical to it once either becomes a file name.
+      pluginName: "acme",
+      sourceName: "a\uDC00b",
+      errorMessage: 'Generated workflow name "acme:a\uDC00b" must not contain unpaired surrogates.',
+    },
+  ]) {
+    test(`rejects plugin ${JSON.stringify(pluginName)} and source ${JSON.stringify(sourceName)}`, () => {
+      // arrange
+      const plugin = pluginName;
+      const source = sourceName;
+
+      // act
+      const generateWorkflowName = () => generatedWorkflowName(plugin, source);
+
+      // assert
+      assert.throws(generateWorkflowName, (error: unknown) => {
+        assert.ok(error instanceof UnsafeGeneratedNameError);
+        assert.strictEqual(error.name, "UnsafeGeneratedNameError");
         assert.strictEqual(error.message, errorMessage);
         return true;
       });

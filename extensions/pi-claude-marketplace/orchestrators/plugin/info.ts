@@ -28,6 +28,7 @@
 import { homedir } from "node:os";
 import path from "node:path";
 
+import { discoverPluginWorkflows } from "../../bridges/workflows/index.ts";
 import { BUCKET_A_EVENTS } from "../../domain/components/hook-events.ts";
 import {
   hookSummaryEntriesFromPersisted,
@@ -76,6 +77,7 @@ import {
   narrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { crossScopeFlag } from "../marketplace/shared.ts";
 import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
@@ -926,10 +928,20 @@ function parseLenientHooksJson(raw: string): unknown {
  * arrays return `undefined` so the renderer omits the line (the
  * renderer assumes pre-sorted input and does not sort defensively).
  *
+ * WFLW-04: `workflows` is the one kind whose names cannot be read off the
+ * directory listing -- each command is named by its script's own `meta.name`,
+ * so the discovery pass that reads the bodies is the only producer. It runs in
+ * the `preview` tense here: nothing on this surface writes to disk.
+ *
+ * WR-09: that one pass yields the names AND the per-file advisories, returned
+ * side by side as `notes` so no second discovery runs to produce them. `notes`
+ * is free text, already reduced and already ordered, and the caller spreads it
+ * onto the row only when non-empty.
+ *
  * SURF-01: object-literal field placement is documentation
  * only -- the renderer iterates `COMPONENT_KINDS` to enforce the
- * `["agents", "commands", "hooks", "mcp", "skills"]` ordering. Source
- * placement matches the alphabetical order for readability.
+ * `["agents", "commands", "hooks", "mcp", "skills", "workflows"]` ordering.
+ * Source placement matches the alphabetical order for readability.
  */
 async function composeResolvedComponents(
   reader: PluginInfoReader,
@@ -939,16 +951,27 @@ async function composeResolvedComponents(
       readonly skills: readonly string[];
       readonly commands: readonly string[];
       readonly agents: readonly string[];
+      /**
+       * WFLW-04: REQUIRED, so every producer of this shape -- including the
+       * two lenient maps this surface re-derives for the arms the resolver
+       * could not resolve -- is compile-forced to answer for the kind.
+       */
+      readonly workflows: readonly string[];
     };
     readonly mcpServers: Record<string, unknown>;
     readonly hooksConfigPath?: string;
   },
+  pluginName: string,
 ): Promise<{
-  readonly agents?: readonly string[];
-  readonly commands?: readonly string[];
-  readonly hooks?: readonly HookSummaryEntry[];
-  readonly mcp?: readonly string[];
-  readonly skills?: readonly string[];
+  readonly components: {
+    readonly agents?: readonly string[];
+    readonly commands?: readonly string[];
+    readonly hooks?: readonly HookSummaryEntry[];
+    readonly mcp?: readonly string[];
+    readonly skills?: readonly string[];
+    readonly workflows?: readonly string[];
+  };
+  readonly notes: readonly string[];
 }> {
   const agents = await discoverComponentNames(
     reader,
@@ -989,12 +1012,79 @@ async function composeResolvedComponents(
       ? await readLenientHookSummary(reader, pluginRoot)
       : await readHookSummaryEntries(reader, pluginRoot, resolved.hooksConfigPath);
 
+  const workflows = await previewWorkflows(pluginRoot, resolved.componentPaths.workflows, {
+    pluginName,
+  });
+
   return {
-    ...(agents.length > 0 && { agents }),
-    ...(commands.length > 0 && { commands }),
-    ...(hooks !== undefined && hooks.length > 0 && { hooks }),
-    ...(mcp.length > 0 && { mcp }),
-    ...(skills.length > 0 && { skills }),
+    components: {
+      ...(agents.length > 0 && { agents }),
+      ...(commands.length > 0 && { commands }),
+      ...(hooks !== undefined && hooks.length > 0 && { hooks }),
+      ...(mcp.length > 0 && { mcp }),
+      ...(skills.length > 0 && { skills }),
+      ...(workflows.names.length > 0 && { workflows: workflows.names }),
+    },
+    notes: workflows.warnings,
+  };
+}
+
+/**
+ * WR-09: the advisory field, carried only when there is something to say.
+ *
+ * Every row builder spreads this rather than testing emptiness itself, so the
+ * "omit when empty" decision -- the one that keeps an unaffected row's bytes
+ * unchanged -- has a single site rather than one per builder.
+ */
+function advisoryFields(notes: readonly string[]): { notes?: readonly string[] } {
+  return notes.length > 0 ? { notes } : {};
+}
+
+/**
+ * WFLW-04 / WR-09: ONE discovery pass over the declared workflows directories,
+ * yielding the generated `<plugin>:<name>` of every ADMITTED script, sorted,
+ * beside the preview-tense advisory for every script that earned one.
+ *
+ * Only the `named` arm is listed, because it is the only arm an envelope is
+ * written for, so this surface agrees with what install puts on disk. A gate
+ * caveat rides its own discovery warning and is not repeated on the name.
+ *
+ * The names are taken off the verdict rather than recomposed: the generated
+ * name has one composer (`domain/workflow-script.ts`), which owns the
+ * engine-parity clauses, and a second one here would drift from it. Nothing is
+ * enumerated from the saved directory either -- that directory is shared with
+ * the user's own workflows and with every other plugin.
+ *
+ * NFR-9: each advisory embeds the ABSOLUTE directory the pass walked, so every
+ * one is reduced HERE, at the composition site, the same way
+ * `surfaceDiscoveryWarnings` reduces this exact string family before it reaches
+ * a user. Two consequences follow and both are wanted: the row stops disclosing
+ * the resolved home path, and its bytes stop varying by machine.
+ *
+ * NFR-10: a declared path that escapes the plugin root raises out of the
+ * discovery pass, which is what the row builders' existing catch turns into
+ * the not-resolved marker rather than a listing of somewhere else's contents.
+ */
+async function previewWorkflows(
+  pluginRoot: string,
+  declared: readonly string[],
+  opts: { readonly pluginName: string },
+): Promise<{ readonly names: readonly string[]; readonly warnings: readonly string[] }> {
+  const { discovered, warnings } = await discoverPluginWorkflows({
+    pluginName: opts.pluginName,
+    resolved: { pluginRoot, componentPaths: { workflows: declared } },
+    // WR-09: a read-only surface states what WOULD happen, never what did.
+    tense: "preview",
+  });
+
+  return {
+    names: sortComponentNames(
+      discovered
+        .map((record) => record.verdict)
+        .filter((verdict) => verdict.outcome === "named")
+        .map((verdict) => verdict.generatedName),
+    ),
+    warnings: warnings.map((warning) => redactAbsolutePaths(warning)),
   };
 }
 
@@ -1517,11 +1607,11 @@ function skipReasonFor(
  * builder, so neither `makeFetchProbe` call site is reachable from here: a
  * signature that cannot express a fetch is a stronger guarantee than a branch
  * that declines one, and adding a `fetchCtx` parameter would silently dissolve
- * it. What keeps that true under change is the zero-call suite in
- * `tests/orchestrators/plugin/info-manifest-absent.test.ts`, which injects the
- * clone-cache and credential seams and pins every counter on both mocks at 0
- * for a `--fetch` run -- an assertion that can fail, not a reading of the
- * control flow.
+ * it. What keeps that true under change is the pair of zero-call INFO-12 cases
+ * in `tests/orchestrators/plugin/info.test.ts`, which inject the clone-cache
+ * and credential seams and pin every counter on both mocks at 0 -- once for a
+ * `--fetch` run and once for a bare `info` run -- an assertion that can fail,
+ * not a reading of the control flow.
  */
 async function buildStateOnlyInstalledRow(
   reader: PluginInfoReader,
@@ -1564,12 +1654,19 @@ function derivePersistedInstalledStatus(
 
 /**
  * INFO-11 / D-96-01: the component inventory for the state-only arm, read from
- * the four name-list `resources` arrays. The names render VERBATIM as the
+ * the five name-list `resources` arrays. The names render VERBATIM as the
  * Pi-generated installed names (`<plugin>-<skill>`, `<plugin>:<command>`,
- * `pi-claude-marketplace-<plugin>-<agent>`); MCP servers are the sole
- * exception by data shape, holding their raw source keys. There is no
- * reverse-mapping to the manifest-backed arm's source names -- the divergence
- * is documented in the output catalog, not engineered away.
+ * `pi-claude-marketplace-<plugin>-<agent>`, `<plugin>:<workflow>`); MCP servers
+ * are the sole exception by data shape, holding their raw source keys. There is
+ * no reverse-mapping to the manifest-backed arm's source names -- the
+ * divergence is documented in the output catalog, not engineered away.
+ *
+ * WFLW-04: `workflows` comes from the record for the same reason every other
+ * name-list kind does, and it is the only inventory there is -- the saved
+ * directory the envelopes live in is shared with the user's own workflows and
+ * with every other plugin, so listing it would attribute foreign names to this
+ * plugin. This arm runs NO discovery: it reads no plugin source and opens no
+ * script, which is what keeps it network-free and manifest-free by signature.
  *
  * Sorting reuses `discoverComponentNames`' comparator so the two surfaces
  * order identically. Entries are copied, never de-duplicated: `resources.*` is
@@ -1597,6 +1694,7 @@ async function composeStateOnlyComponents(
   const commands = sortComponentNames(record.resources.prompts);
   const mcp = sortComponentNames(record.resources.mcpServers);
   const skills = sortComponentNames(record.resources.skills);
+  const workflows = sortComponentNames(record.resources.workflows);
   // D-100-03 / ENBL-12 read ladder: the record wins when it carries the key,
   // the materialized file answers when it does not, and records self-heal on
   // the next install, update, reinstall or enable (there is no backfill,
@@ -1625,6 +1723,7 @@ async function composeStateOnlyComponents(
         hooksRead.entries.length > 0 && { hooks: hooksRead.entries }),
       ...(mcp.length > 0 && { mcp }),
       ...(skills.length > 0 && { skills }),
+      ...(workflows.length > 0 && { workflows }),
     },
     ...(hooksRead.kind === "degraded" && { degraded: hooksRead.reason }),
   };
@@ -1656,6 +1755,7 @@ function sortComponentNames(names: readonly string[]): readonly string[] {
  */
 async function buildNotInstallablePathRowFields(
   reader: PluginInfoReader,
+  pluginName: string,
   resolved: Parameters<typeof composeResolvedComponents>[2],
   resolverReasons: readonly ContentReason[],
   marketplaceRoot: string,
@@ -1663,8 +1763,9 @@ async function buildNotInstallablePathRowFields(
 ): Promise<
   | {
       readonly reasons?: readonly ContentReason[];
+      readonly notes?: readonly string[];
       readonly componentsResolved: true;
-      readonly components: Awaited<ReturnType<typeof composeResolvedComponents>>;
+      readonly components: Awaited<ReturnType<typeof composeResolvedComponents>>["components"];
     }
   | {
       readonly reasons: readonly ContentReason[];
@@ -1680,11 +1781,17 @@ async function buildNotInstallablePathRowFields(
   // unmasked to the caller; classifying them as IO probe failures
   // would mis-route a path-escape as a transient disk error.
   try {
-    const components = await composeResolvedComponents(reader, pluginRoot, resolved);
+    const resolvedComponents = await composeResolvedComponents(
+      reader,
+      pluginRoot,
+      resolved,
+      pluginName,
+    );
     return {
       ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
+      ...advisoryFields(resolvedComponents.notes),
       componentsResolved: true,
-      components,
+      components: resolvedComponents.components,
     };
   } catch (err) {
     return {
@@ -1699,23 +1806,25 @@ async function buildNotInstallablePathRowFields(
  * arm, which (unlike `installable` / `partially-available`) does not carry
  * `componentPaths`. The info surface re-resolves independently from the
  * marketplace entry's declared component paths plus the conventional
- * `<pluginRoot>/{skills,commands,agents}` locations; `composeResolvedComponents`
- * tolerates missing directories (ENOENT -> empty), so a declared-but-absent
- * or convention-absent directory contributes nothing. This keeps the
- * `(unavailable)`/`(installed)` path-source rows enumerating on-disk
- * components without reading the arm's stripped fields (NFR-7).
+ * `<pluginRoot>/{skills,commands,agents,workflows}` locations;
+ * `composeResolvedComponents` tolerates missing directories (ENOENT -> empty),
+ * so a declared-but-absent or convention-absent directory contributes nothing.
+ * This keeps the `(unavailable)`/`(installed)` path-source rows enumerating
+ * on-disk components without reading the arm's stripped fields (NFR-7).
  */
 function deriveLenientComponentPaths(entry: MarketplaceManifest["plugins"][number]): {
   skills: string[];
   commands: string[];
   agents: string[];
+  workflows: string[];
 } {
   const out = {
     skills: ["skills"],
     commands: ["commands"],
     agents: ["agents"],
+    workflows: ["workflows"],
   };
-  for (const kind of ["skills", "commands", "agents"] as const) {
+  for (const kind of ["skills", "commands", "agents", "workflows"] as const) {
     for (const d of asDeclaredList((entry as Record<string, unknown>)[kind])) {
       if (typeof d === "string" && !out[kind].includes(d)) {
         out[kind].push(d);
@@ -1752,6 +1861,7 @@ function asDeclaredList(raw: unknown): readonly unknown[] {
  */
 function buildNonInstallableRowFields(
   reader: PluginInfoReader,
+  pluginName: string,
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   entry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
@@ -1763,6 +1873,7 @@ function buildNonInstallableRowFields(
     case "partially-available":
       return buildNotInstallablePathRowFields(
         reader,
+        pluginName,
         resolved,
         narrowUnsupportedKinds(resolved.unsupported),
         marketplaceRoot,
@@ -1771,6 +1882,7 @@ function buildNonInstallableRowFields(
     case "unavailable":
       return buildNotInstallablePathRowFields(
         reader,
+        pluginName,
         {
           componentPaths: deriveLenientComponentPaths(entry),
           mcpServers: {},
@@ -1949,13 +2061,20 @@ async function buildInstalledGitRow(opts: {
         resolveGitPluginRoot: probe,
       });
       if (resolved.state === "installable") {
+        const composed = await composeResolvedComponents(
+          reader,
+          presence.pluginRoot,
+          resolved,
+          pluginName,
+        );
         return {
           status: "installed",
           name: pluginName,
           ...(version !== undefined && { version }),
           ...(description !== undefined && { description }),
+          ...advisoryFields(composed.notes),
           componentsResolved: true,
-          components: await composeResolvedComponents(reader, presence.pluginRoot, resolved),
+          components: composed.components,
           ...(dependencies !== undefined && { dependencies }),
         };
       }
@@ -2047,13 +2166,20 @@ async function buildInstalledRow(opts: {
       readFileText: (filePath) => reader.readTextFile(filePath),
     });
     if (resolved.state === "installable") {
+      const composed = await composeResolvedComponents(
+        reader,
+        resolved.pluginRoot,
+        resolved,
+        pluginName,
+      );
       return {
         status: "installed",
         name: pluginName,
         ...(version !== undefined && { version }),
         ...(description !== undefined && { description }),
+        ...advisoryFields(composed.notes),
         componentsResolved: true,
-        components: await composeResolvedComponents(reader, resolved.pluginRoot, resolved),
+        components: composed.components,
         ...(dependencies !== undefined && { dependencies }),
       };
     }
@@ -2072,6 +2198,7 @@ async function buildInstalledRow(opts: {
     // re-derives independently (D-64-05).
     const fields = await buildNonInstallableRowFields(
       reader,
+      pluginName,
       resolved,
       entry,
       mpRecord.marketplaceRoot,
@@ -2136,6 +2263,7 @@ async function buildNotInstalledPathRow(
   try {
     const fields = await buildNonInstallableRowFields(
       reader,
+      pluginName,
       resolved,
       entry,
       mpRecord.marketplaceRoot,
@@ -2324,25 +2452,32 @@ async function buildWarmGitNonInstallableRow(
       ? narrowUnsupportedKinds(resolved.unsupported)
       : narrowResolverNotes(resolved.notes);
   // The `unavailable` arm carries no `componentPaths` (NFR-7); enumerate from
-  // the conventional `<pluginRoot>/{skills,commands,agents}` locations so the
-  // warm tree still lists on-disk components (mirrors `deriveLenientComponentPaths`).
+  // the conventional `<pluginRoot>/{skills,commands,agents,workflows}` locations
+  // so the warm tree still lists on-disk components (mirrors
+  // `deriveLenientComponentPaths`).
   const forComponents =
     resolved.state === "partially-available"
       ? resolved
       : {
-          componentPaths: { skills: ["skills"], commands: ["commands"], agents: ["agents"] },
+          componentPaths: {
+            skills: ["skills"],
+            commands: ["commands"],
+            agents: ["agents"],
+            workflows: ["workflows"],
+          },
           mcpServers: {},
         };
   try {
-    const components = await composeResolvedComponents(reader, pluginRoot, forComponents);
+    const composed = await composeResolvedComponents(reader, pluginRoot, forComponents, pluginName);
     return {
       status,
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
       ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
+      ...advisoryFields(composed.notes),
       componentsResolved: true,
-      components,
+      components: composed.components,
     };
   } catch (err) {
     return {
@@ -2521,18 +2656,20 @@ async function buildAvailableRow(opts: {
   const { reader, pluginName, version, description, dependencies } = opts;
 
   try {
-    const components = await composeResolvedComponents(
+    const composed = await composeResolvedComponents(
       reader,
       opts.pluginRoot,
       opts.resolvedForComponents,
+      pluginName,
     );
     return {
       status: "available",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
+      ...advisoryFields(composed.notes),
       componentsResolved: true,
-      components,
+      components: composed.components,
       ...(dependencies !== undefined && { dependencies }),
     };
   } catch (err) {

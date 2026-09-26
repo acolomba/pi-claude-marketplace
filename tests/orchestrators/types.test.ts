@@ -26,6 +26,7 @@ const REINSTALL_BASE = {
 const REINSTALL_REINSTALLED_CLEAN = {
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
@@ -39,6 +40,7 @@ const REINSTALL_REINSTALLED_CLEAN = {
 const REINSTALL_REINSTALLED_FULL = {
   declaresAgents: true,
   declaresMcp: true,
+  declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
   discoveryWarnings: ["skill alpha could not be read", "command beta could not be read"],
   marketplace: "official",
@@ -91,6 +93,7 @@ const UPDATE_PHASE_BRIDGES = {
   hooks: true,
   mcp: true,
   skills: true,
+  workflows: true,
 } satisfies Record<UpdatePhaseBridge, true>;
 
 const UPDATE_PHASE_FAILURE = {
@@ -98,9 +101,26 @@ const UPDATE_PHASE_FAILURE = {
   phase: "skills",
 } satisfies UpdatePhaseFailure;
 
+/**
+ * WR-03: the workflows member exercised as its five siblings are -- a concrete
+ * failure carried on the `(failed)` partition, not just a key in the Record
+ * above.
+ *
+ * The message is the refusal the update verb actually raises: the saved
+ * directory is shared with the user's own workflows and with every other
+ * plugin, so a target still occupied after displacement is foreign and the
+ * commit declines it rather than renaming over it. The behavior behind this
+ * shape is driven end to end in `tests/orchestrators/plugin/update-flow.test.ts`.
+ */
+const UPDATE_PHASE_FAILURE_WORKFLOWS = {
+  msg: "cannot replace workflow target with non-previous content",
+  phase: "workflows",
+} satisfies UpdatePhaseFailure;
+
 const PLUGIN_UPDATE_BASE = {
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   name: "alpha",
 } satisfies PluginUpdateBase;
 
@@ -108,6 +128,7 @@ const PLUGIN_UPDATE_UPDATED_CLEAN = {
   constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
@@ -123,6 +144,7 @@ const PLUGIN_UPDATE_UPDATED_FULL = {
   },
   declaresAgents: true,
   declaresMcp: true,
+  declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
   fromVersion: "1.0.0",
   name: "alpha",
@@ -142,6 +164,7 @@ const PLUGIN_UPDATE_UNCHANGED = {
   constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "unchanged",
@@ -151,6 +174,7 @@ const PLUGIN_UPDATE_UNCHANGED = {
 const PLUGIN_UPDATE_SKIPPED_CLEAN = {
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   name: "alpha",
   notes: [],
   partition: "skipped",
@@ -160,6 +184,7 @@ const PLUGIN_UPDATE_SKIPPED_CLEAN = {
 const PLUGIN_UPDATE_SKIPPED_FULL = {
   declaresAgents: true,
   declaresMcp: true,
+  declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
   notes: ["hooks and lsp require --partial"],
@@ -171,6 +196,7 @@ const PLUGIN_UPDATE_SKIPPED_FULL = {
 const PLUGIN_UPDATE_FAILED_CLEAN = {
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   name: "alpha",
   notes: [],
   partition: "failed",
@@ -180,11 +206,12 @@ const PLUGIN_UPDATE_FAILED_FULL = {
   cause: new Error("permission denied"),
   declaresAgents: true,
   declaresMcp: true,
+  declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
   notes: ["permission denied while updating alpha"],
   partition: "failed",
-  phaseFailures: [UPDATE_PHASE_FAILURE],
+  phaseFailures: [UPDATE_PHASE_FAILURE, UPDATE_PHASE_FAILURE_WORKFLOWS],
   reasons: ["permission denied", "rollback partial"],
   toVersion: "2.0.0",
 } satisfies PluginUpdateFailedOutcome;
@@ -219,6 +246,7 @@ const LEDGER_DEGRADATION_SIGNALS = {
 const INSTALL_INSTALLED_CLEAN = {
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   resourcesChanged: false,
   status: "installed",
 } satisfies InstallPluginOutcome;
@@ -226,6 +254,7 @@ const INSTALL_INSTALLED_CLEAN = {
 const INSTALL_INSTALLED_FULL = {
   declaresAgents: true,
   declaresMcp: true,
+  declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
   landedDisabled: true,
   orphanRewake: true,
@@ -312,6 +341,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   marketplace: "official",
   name: "alpha",
   notes: undefined,
@@ -327,6 +357,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   // @ts-expect-error degradedKinds accepts only supported degraded component kinds
   degradedKinds: ["agent"],
   marketplace: "official",
@@ -346,6 +377,7 @@ void ({
   constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
@@ -358,6 +390,7 @@ void ({
   constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "unchanged",
@@ -369,6 +402,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   name: "alpha",
   notes: [],
   partition: "skipped",
@@ -378,6 +412,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   name: "alpha",
   notes: [],
   partition: "skipped",
@@ -390,6 +425,7 @@ void ({
   constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
   // @ts-expect-error partialDegrade is atomic and requires newlyDegraded
@@ -406,6 +442,7 @@ void ({
   constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
@@ -420,6 +457,7 @@ void ({
   constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
@@ -433,6 +471,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   name: "alpha",
   notes: [],
   partition: "skipped",
@@ -443,6 +482,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   name: "alpha",
   notes: [],
   partition: "failed",
@@ -453,6 +493,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   name: "alpha",
   notes: [],
   partition: "failed",
@@ -464,6 +505,7 @@ void ({
   constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
@@ -527,6 +569,7 @@ void (PLUGIN_UPDATE_FN_WITH_WRONG_RETURN satisfies PluginUpdateFn);
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   resourcesChanged: false,
   // @ts-expect-error an install outcome always carries its status discriminant
 } satisfies InstallPluginOutcome);
@@ -549,6 +592,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   resourcesChanged: false,
   status: "installed",
   // @ts-expect-error installed outcomes structurally exclude failure fields
@@ -558,6 +602,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   // @ts-expect-error landedDisabled is a true-only presence marker
   landedDisabled: false,
   resourcesChanged: false,
@@ -576,6 +621,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   version: undefined,
   resourcesChanged: false,
   status: "installed",
@@ -585,6 +631,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   resourcesChanged: false,
   status: "installed",
   // @ts-expect-error install outcomes exclude the ledger's staged-count duplicates
@@ -594,6 +641,7 @@ void ({
 void ({
   declaresAgents: false,
   declaresMcp: false,
+  declaresWorkflows: false,
   resourcesChanged: false,
   status: "installed",
   // @ts-expect-error install outcomes do not carry rendered-row dependencies

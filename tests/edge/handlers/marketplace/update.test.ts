@@ -166,6 +166,7 @@ function unchangedHello(): PluginUpdateOutcome {
     declaresAgents: false,
     declaresMcp: false,
     constraint: undefined,
+    declaresWorkflows: false,
   };
 }
 
@@ -204,7 +205,7 @@ async function seedMarketplace(opts: {
       version: "0.0.1",
       resolvedSource: `./plugins/${plugin}`,
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
       enabled: true,
       provenance: "explicit",
       installedAt: "2026-01-01T00:00:00.000Z",
@@ -254,7 +255,7 @@ test("updates every recorded marketplace in both scopes when no name is supplied
   // arrange
   const { cwd, networkCallCount } = await createHermeticScope(t, "all");
   const clones = await seedThreeMarketplaces(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 6, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 9, {
     value: cwd,
     reads: 1,
   });
@@ -293,7 +294,7 @@ for (const { args, label, arity } of [
     // arrange
     const { cwd, networkCallCount } = await createHermeticScope(t, label);
     const clones = await seedThreeMarketplaces(cwd);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });
@@ -327,7 +328,7 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
   // 1 after both.
   const { cwd, networkCallCount } = await createHermeticScope(t, "run-boundary");
   const clones = await seedThreeMarketplaces(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 6, {
     value: cwd,
     reads: 2,
   });
@@ -370,14 +371,14 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
 for (const { emissions, probes, rows, scope, touched } of [
   {
     emissions: 1,
-    probes: 2,
+    probes: 3,
     rows: [USER_ALPHA_ROW],
     scope: "user",
     touched: (clones: SeededClones): readonly string[] => [clones.userAlpha],
   },
   {
     emissions: 2,
-    probes: 4,
+    probes: 6,
     rows: [PROJECT_ALPHA_ROW, PROJECT_BETA_ROW],
     scope: "project",
     touched: (clones: SeededClones): readonly string[] => [clones.projectAlpha, clones.projectBeta],
@@ -529,7 +530,7 @@ for (const { args, tally } of [
       '{ "marketplaces": { "alpha": { "source": "./alpha-local", "autoupdate": true } }, "plugins": { "keep@alpha": { "enabled": false } } }\n';
     await writeFile(locations.configJsonPath, sharedBytes);
     await writeFile(locations.configLocalJsonPath, localBytes);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });
@@ -557,11 +558,12 @@ for (const { args, tally } of [
     assert.deepStrictEqual(
       (await loadState(locations.extensionRoot)).marketplaces.alpha?.plugins.hello?.resources,
       {
-        skills: ["hello:greet"],
+        skills: ["hello-greet"],
         prompts: [],
         agents: [],
         mcpServers: [],
         hooks: [],
+        workflows: [],
       },
     );
     assert.deepStrictEqual(

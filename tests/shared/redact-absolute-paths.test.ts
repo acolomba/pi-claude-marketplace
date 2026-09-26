@@ -39,6 +39,11 @@ describe("redactAbsolutePaths", () => {
       expected: "invalid /schemaVersion detail",
     },
     {
+      name: "preserves a URL whose scheme satisfies the drive-letter and POSIX path shapes",
+      input: "invalid https://github.com/org/repo.git detail",
+      expected: "invalid https://github.com/org/repo.git detail",
+    },
+    {
       name: "redacts multiple paths deterministically",
       input: String.raw`from /srv/private/a.json to C:\Users\alice\b.json`,
       expected: "from a.json to b.json",

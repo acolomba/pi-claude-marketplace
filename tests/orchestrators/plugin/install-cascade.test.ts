@@ -191,7 +191,14 @@ async function seedMarketplace(
               version: recordedVersions[name] ?? "0.0.1",
               resolvedSource: path.join(marketplaceRoot, "plugins", name),
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: { skills: [], prompts: [], agents: [], hooks: [], mcpServers: [] },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                hooks: [],
+                mcpServers: [],
+                workflows: [],
+              },
               enabled: true,
               provenance: "explicit",
               installedAt: "2026-01-01T00:00:00.000Z",
@@ -244,12 +251,13 @@ function unmaterializedSummary(
   member: ClosureMember,
 ): InstallLedgerSummary {
   return {
+    stagedWorkflowNames: [],
     locations,
     cwd,
     marketplace: member.marketplace,
     plugin: member.name,
     resolved: {
-      componentPaths: { agents: [], commands: [], skills: [] },
+      componentPaths: { workflows: [], agents: [], commands: [], skills: [] },
       defaultEnabled: true,
       installable: true,
       mcpServers: {},
@@ -430,6 +438,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       version: "1.2.3",
       declaresAgents: true,
       declaresMcp: false,
+      declaresWorkflows: false,
       pluginRoot: path.join(environment.cwd, "bar-root"),
       hooksConfigPath: "hooks/hooks.json",
       fellBackToCurrentCopy: false,
@@ -443,6 +452,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       version: "4.5.6",
       declaresAgents: false,
       declaresMcp: true,
+      declaresWorkflows: false,
       pluginRoot: path.join(environment.cwd, "unmaterialized"),
       hooksConfigPath: undefined,
       fellBackToCurrentCopy: false,
@@ -653,7 +663,14 @@ for (const { label, cause, expected } of [
         plugin === "bar"
           ? Promise.resolve({
               ok: false,
-              dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+              dropped: {
+                skills: [],
+                commands: [],
+                agents: [],
+                hooks: [],
+                mcpServers: [],
+                workflows: [],
+              },
               ...(cause !== undefined && { cause }),
             })
           : cascadeUnstagePlugin(plugin, marketplace, memberLocations, installed),
@@ -712,6 +729,7 @@ test("RESV-06 an unstage that dropped part of its inventory keeps the record hon
         ? Promise.resolve({
             ok: false,
             dropped: {
+              workflows: [],
               skills: ["bar-dropped"],
               commands: ["bar-prompt"],
               agents: [],
@@ -739,6 +757,7 @@ test("RESV-06 an unstage that dropped part of its inventory keeps the record hon
   // assert
   assert.strictEqual(cascade.kind, "member-failed");
   assert.deepStrictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.resources, {
+    workflows: [],
     skills: ["bar-kept"],
     prompts: [],
     agents: [],
@@ -2926,7 +2945,14 @@ for (const { label, cause, expected } of [
         plugin === "bar"
           ? Promise.resolve({
               ok: false,
-              dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+              dropped: {
+                skills: [],
+                commands: [],
+                agents: [],
+                hooks: [],
+                mcpServers: [],
+                workflows: [],
+              },
               ...(cause !== undefined && { cause }),
             })
           : cascadeUnstagePlugin(plugin, marketplace, memberLocations, installed),

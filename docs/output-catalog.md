@@ -56,17 +56,17 @@ The plugin-row `[<scope>]` bracket is emitted ONLY when the plugin's `scope` fie
 - `rollbackPartial` child rows on `failed` variants at 4-space indent (each phase: `[<phase>] (rollback failed)`); each phase's optional `cause?: Error` renders a 6-space-indent cause-chain trailer below it.
 - One blank line between marketplace blocks.
 
-This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ctx.ui.notify` boundary, captured **before** any markdown/tui display layer. The interactive pi-tui markdown renderer can add a single leading space when it displays the message, so a header may **appear** at one space and plugin rows at three (a "1/3" visual). That appearance is a display-layer artifact, not a renderer deviation: the binding contract is the pre-tui byte ladder above, which `tests/architecture/catalog-uat/catalog-contract.test.ts` (byte-equality) and `tests/shared/snm38-indent-ladder.test.ts` (explicit leading-whitespace) both lock at 0 / 2 / 4 / 6 (SNM-38 / G-MIL-03, D-25-09 -- refuted: not a renderer bug).
+This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ctx.ui.notify` boundary, captured **before** any markdown/tui display layer. The interactive pi-tui markdown renderer can add a single leading space when it displays the message, so a header may **appear** at one space and plugin rows at three (a "1/3" visual). That appearance is a display-layer artifact, not a renderer deviation: the binding contract is the pre-tui byte ladder above, which `tests/architecture/catalog-uat/catalog-contract.test.ts` (byte-equality against this document) and the renderer indent cases in `tests/shared/notification-dispatch.test.ts` (explicit leading whitespace inside the expected strings) both lock at 0 / 2 / 4 / 6 (SNM-38 / G-MIL-03, D-25-09 -- refuted: not a renderer bug).
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 63-member `extensions/pi-claude-marketplace/shared/notification-types.ts::Reason` union defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}`, `{dependents unsatisfied}`, `{dependency current copy}`, `{dependency enabled}`, `{dependents remain}`, `{dependency installed}`, `{dependents constrain}`, and `{cross-marketplace}` -- which sits after uninstall's data-disposition marker `{data kept}`. `{dependency disabled}` is RETIRED (EDEP-03): `{dependency enabled}` replaces the skip it used to name.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 46-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set; its length is pinned by `tests/architecture/notify-closed-set-locks.test.ts` and its membership by `tests/architecture/compat-01-no-expansion.test.ts`. `workflows` carries no unsupported-kind carve-out: the kind is a fully supported bridge, not a probed carve-out like `lspServers`.
 
-Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`. The typed `workflows` kind uses the second path.
+Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`.
 
 Multi-reason emit order is contractual. `composeReasons` joins in ARRAY order, so the order the orchestrator writes into `reasons[]` is the order the brace shows, and the soft-dependency markers append AFTER every typed reason (MSG-GR-4). The orchestrators write the record's relationship to its marketplace first and the facts about the install itself after it, which is why an absent-and-degraded row reads `{not in manifest, lsp}` and never the reverse (INV-02). The DECLARED order of the `REASONS` tuple must also stay byte-stable: the fenced blocks below are byte contracts, so reordering the tuple would move the rendered bytes of every multi-reason row even though no member changed.
 
-The soft-dep markers `requires pi-subagents` and `requires pi-mcp` live INSIDE the same brace block as the variant's typed reasons (D-16-15 injection). They are emitted by the renderer at render time from the plugin's `dependencies` field and the Pi-host probe; callers do not place them in `reasons` directly. The 4 dep-bearing variants (`installed | updated | reinstalled | partially-installed`) declare the `dependencies` field per D-15-02 and WR-03; the remaining 15 of the 19 plugin statuses cannot emit soft-dep markers structurally. `partially-installed` is the one variant whose `dependencies` field is OPTIONAL: the install / update / enable success rows thread the staged counts, while the list / info inventory rows omit it so they carry no marker.
+The soft-dep markers `requires pi-subagents`, `requires pi-mcp` and `requires pi-dynamic-workflows` live INSIDE the same brace block as the variant's typed reasons (D-16-15 injection). They are emitted by the renderer at render time from the plugin's `dependencies` field and the Pi-host probe; callers do not place them in `reasons` directly. Marker order inside the brace is `agents`, `mcp`, `workflows` -- appended, never interleaved, so adding a companion leaves every existing brace byte-unchanged. The 4 dep-bearing variants (`installed | updated | reinstalled | partially-installed`) declare the `dependencies` field per D-15-02 and WR-03; the remaining 15 of the 19 plugin statuses cannot emit soft-dep markers structurally. `partially-installed` is the one variant whose `dependencies` field is OPTIONAL: the install / update / enable success rows thread the staged counts, while the list / info inventory rows omit it so they carry no marker.
 
 ### Reload-hint trailer
 
@@ -144,7 +144,7 @@ The table below holds ONE row per member of the 19-member `PLUGIN_STATUSES` tupl
 | `(uninstalled)`          | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows. It admits up to two tokens: the data-disposition marker `{data kept}`, stamped by `uninstall --keep-data` (DATA-01 / WR-06) on any `(uninstalled)` row; and `{dependency pruned}` (D-05-11 / PRUNE-04), stamped only on a dependency record `uninstall --prune` swept out after the named plugin, ordered before `{data kept}` when both apply (`{dependency pruned, data kept}`). A bare row means the plugin's data directory went with it and, for the named plugin's own row, that no pruning happened. `marketplace remove` has no such opt-out, so its rows are always bare. |
 | `(available)`            | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11). It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, answered from the marketplace entry in the cached manifest and never from the plugin's own `plugin.json`, which this path declines to fetch (OUT-02 / OUT-05).                                                                                                                                                                                                                                                                                    |
 | `(remote)`               | ◌    | Plugin row -- list / info / install-completion surfaces for a not-installed git-source plugin whose clone/mirror is not yet materialized locally (RSTA-01 / D-80-03). No scope bracket (SNM-11), and no probe-derived or soft-dependency-derived reason brace -- no materialized tree exists to derive one from. It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, which needs no tree because the marketplace entry is readable from the cached manifest (OUT-05 / RSTA-01).                                                                                                                        |
-| `(partially-available)`  | ⊖    | Plugin row -- list / info surfaces AND the install-failure surface (XSURF-01) for a partially-available plugin (resolver `partially-available`: LSP / hooks / unsupported component / workflows); carries `{unsupported hooks}` / `{lsp}` / `{unsupported component}` / `{workflows}`. A normal install rejects this arm. With `--partial`, the install materializes its supported subset (USTAT-01 / D-64-01); the install-failure row carries the `--partial` hint trailer.                                                                                                                                                                                      |
+| `(partially-available)`  | ⊖    | Plugin row -- list / info surfaces AND the install-failure surface (XSURF-01) for a partially-available plugin (resolver `partially-available`: LSP / hooks / unsupported component); carries `{unsupported hooks}` / `{lsp}` / `{unsupported component}`. A normal install rejects this arm. With `--partial`, the install materializes its supported subset (USTAT-01 / D-64-01); the install-failure row carries the `--partial` hint trailer.                                                                                           |
 | `(unavailable)`          | ⊘    | Plugin row -- install / reinstall / import / list / info surfaces for a STRUCTURALLY-unavailable plugin (malformed manifest / hooks.json, unreadable source, or a broken `mcpServers` string reference -- missing file / malformed JSON / wrapper-less / out-of-root -> `{malformed mcp}`); carries the structural reasons.                                                                                                                                                                                                                                                                                                                                        |
 | `(upgradable)`           | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `(partially-upgradable)` | ●    | Plugin row -- list inventory surface AND the manual update-decline surface (XSURF-03) for a currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it (FSTAT-04 / D-66-02). REUSES `●` rather than `◉` because the row is clean today -- only its candidate would degrade. The decline row carries the update-worded `--partial` hint trailer; the inventory row renders byte-frozen.                                                                                                                                                                                                                                         |
@@ -466,20 +466,22 @@ Plugin list: 1 success
 
 A recorded-installed plugin that currently re-resolves `partially-available` (installed with one or more components dropped) is DERIVED as `partially-installed` -- no persisted flag, no migration (FSTAT-01 / D-66-01). The row uses the dedicated `◉` glyph (`ICON_PARTIALLY_INSTALLED`), DISTINCT from the clean `(installed)` row's `●` so the degraded install is visually separable (FSTAT-02). The reasons brace carries the degradation detail, composed exactly like the `upgradable` row. Severity `info`; no reload-hint (inventory row). Once a fully-supported upgrade rewrites the recorded resolution the same deriver yields `(installed)` with no lingering state (FSTAT-03).
 
-### Workflow partially-available inventory row (WDET-04)
+### Workflow available inventory row (WINV-04)
 
-<!-- catalog-state: workflow-partially-available-inventory -->
+<!-- catalog-state: workflow-available-inventory -->
 
 ```text
 ● official [user]
-  ⊖ helper v1.0.0 (partially-available) {workflows}
+  ○ helper v1.0.0 (available)
 
 Plugin list: 1 success
 ```
 
-A workflow-bearing plugin uses the existing partial status before installation. The row has info severity and no hint or reload trailer.
+A workflow-bearing plugin renders as an ordinary not-installed inventory row: the `○` glyph, the `(available)` status, and no reason brace. The row has info severity and no hint or reload trailer.
 
 This state adds no workflow-specific glyph, heading, or wrapping rule.
+
+These bytes are identical to the generic `(available)` row by construction (D-109-04), so the paired fixture cannot enforce the workflow-specific half of the claim on its own: `catalog-uat` renders the fixture, and the fixture carries no workflow signal. Two live `list` runs in `tests/orchestrators/plugin/list-flow.test.ts` supply that half. One drives `list` over a plugin whose source tree holds a workflow script and pins this row; the other drives `list` over an installed record that holds a non-empty workflow inventory and pins the `(installed)` row as unchanged. Thus a workflow token that came back on either row would fail a test and not only differ from a fixture.
 
 ### Partially-installed inventory row -- partial-hook plugin (FSTAT-02 / PHOOK-04 / PHOOK-05 / D-71-04)
 
@@ -567,6 +569,36 @@ A plugin operation needs attention.
 
 `helper` declares both `agents` and `mcp` dependencies; the probe reports both companion extensions unloaded so both markers fire inside one brace block (D-16-15). SEV-01: a declared companion that is unloaded silently degrades an otherwise-clean install, so the success row stamps `warning` and the cascade carries the `needs attention` summary line. The per-row bytes are unchanged from the info form -- only the severity (and therefore the summary line) moves.
 
+### Success with the host workflow engine absent
+
+<!-- catalog-state: success-with-workflow-engine-absent -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● helper v1.0.0 (installed) {requires pi-dynamic-workflows}
+
+/reload to pick up changes
+```
+
+`helper` declares only `workflows` and the session carries no host workflow engine, so the brace holds exactly one marker (WDEP-02). The severity is `warning` rather than `info` by the tri-state rule: the operation WAS carried out -- the envelopes are written and correct -- but the desired state is not reached, because nothing runs them yet. It is not `error` either, because the install itself succeeded; a missing companion degrades an install and never blocks it. The `warning` is what puts the `needs attention` summary line above the cascade.
+
+### Success with the agents and workflows markers in one brace
+
+<!-- catalog-state: success-with-agents-and-workflows-soft-dep -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● helper v1.0.0 (installed) {requires pi-subagents, requires pi-dynamic-workflows}
+
+/reload to pick up changes
+```
+
+`helper` declares `agents` and `workflows`; the probe reports `pi-mcp-adapter` loaded and the other two companions absent, so two markers render inside ONE brace, comma-space separated, with the host-engine marker SECOND (WDEP-04, D-16-15 injection). Marker order inside the brace is `agents`, `mcp`, `workflows` -- appended, never interleaved, which is what leaves every existing two-marker byte form unchanged. These rendered bytes are the order authority: no runtime tuple enumerates the `Dependency` members, so nothing but this block pins where a marker sits.
+
 ### Success with orphan-rewake warning (SURF-05 / D-63-08)
 
 <!-- catalog-state: success-with-orphan-rewake -->
@@ -610,18 +642,20 @@ A plugin operation needs attention.
 
 A `--partial` install that succeeds with one or more components dropped (the resolver's `partially-available` arm) renders the `(partially-installed)` row with the dedicated `◉` glyph. The partially-available arm still stages the SUPPORTED components, so a `(partially-installed)` success row carries `dependencies` exactly like a clean `(installed)` row (WR-03). With the `agents` companion extension unloaded the soft-dep marker fires inside the SAME brace as the dropped-component reason -- `composeReasons` appends the `{requires pi-...}` markers AFTER the typed `reasons[]` (MSG-GR-4), so the dropped-component token leads: `{lsp, requires pi-subagents}`. partially-installed is a realized transition, so the reload-hint fires (the caller stamps `needsReload: true`). SEV-01: the unloaded `agents` companion is a silent degradation independent of the dropped components, so the success row stamps `warning` and the cascade carries the `needs attention` summary line (the per-row bytes are unchanged from the info partially-installed form). The direct `--partial` opt-in itself stays benign info -- the warning here is the missing companion, not the partial install.
 
-### Workflow partial-install success (WDET-04)
+### Workflow install success (WINV-04)
 
-<!-- catalog-state: workflow-partial-install-success -->
+<!-- catalog-state: workflow-install-success -->
 
 ```text
 ● official [user]
-  ◉ helper v1.0.0 (partially-installed) {workflows}
+  ● helper v1.0.0 (installed)
 
 /reload to pick up changes
 ```
 
-Explicit partial consent installs the supported components. The existing reload trailer appears because the command changed the installed resources.
+A plain install -- no flag opt-in -- materializes the supported components of a workflow-bearing plugin and renders the clean `(installed)` row with no reason brace. The existing reload trailer appears because the command changed the installed resources.
+
+The workflow-specific half of that claim is enforced by `tests/integration/workflow-kind-inversion.test.ts`, not by this block's byte pairing. These bytes are identical to the generic `(installed)` success row by construction (D-109-04), and the paired fixture carries no workflow signal, so `catalog-uat` would stay green if a workflow reason token came back.
 
 ### Install that lands disabled (DFEN-04 / OUT-01 / OUT-04)
 
@@ -663,19 +697,21 @@ A plugin operation has failed.
 
 The manifest declares Claude features Pi doesn't support, but the plugin is otherwise structurally sound, so the resolver verdict is the partially-available arm (SEV-02 / D-69-03 / XSURF-01). The install-failure surface renders the resolver-state-driven `(partially-available)` token with the dedicated `⊖` glyph -- consistent with how `list` / `info` describe the same plugin -- not the `⊘ (unavailable)` token reserved for structural defects. The `partially-available` variant has no `scope` field (SNM-11) so the plugin row carries no bracket; reasons name the offending fields verbatim. Because `--partial` can degrade-install the supported components, the row carries a 4-space-indented `--partial` hint trailer pointing the user at the flag, and the install renders at `error` severity (so the leading summary line fires). No `cause:` trailer -- the reason carries the explanation. No reload-hint (nothing landed). The hint references the user's own flag only, with no plugin/marketplace interpolation (T-69-01); the byte-exact wording is FROZEN as the DOC contract (D-70-01) and locked in `docs/messaging-style-guide.md`.
 
-### Workflow install rejection (WDET-04)
+### Workflow plus unsupported-kind rejection (WINV-04)
 
-<!-- catalog-state: workflow-install-rejection -->
+<!-- catalog-state: workflow-plus-unsupported-rejection -->
 
 ```text
 A plugin operation has failed.
 
 ● official [user]
-  ⊖ helper (partially-available) {workflows}
+  ⊖ helper (partially-available) {unsupported component}
     Re-run with --partial to install the supported components.
 ```
 
-A normal install rejects the workflow-bearing plugin. With `--partial`, the install admits the partial arm and materializes only its supported components. A rejected install uses the existing error summary and partial-install hint, with no reload trailer.
+The plugin carries a `workflows/` directory AND a second component kind Pi does not support (`themes`). The rejection is driven by that second kind, and the brace names it alone -- which is what shows the workflow kind contributes no token of its own. With `--partial`, the install admits the partial arm and materializes only its supported components. A rejected install uses the existing error summary and partial-install hint, with no reload trailer.
+
+That causal claim is enforced by `tests/domain/plugin-resolver.test.ts` ("WINV-01 strict: workflows/ plus themes -> partially-available, unsupported names themes alone"), not by this block's byte pairing. `catalog-uat` pairs annotation prose to rendered bytes only, and the fixture paired with the block above is a renderer-level `notify()` message carrying no plugin, no `workflows/` directory and no `themes` declaration.
 
 ### Failure -- structurally unavailable (`--partial` cannot help)
 
@@ -1072,6 +1108,25 @@ Same row as the plain success case with the `data kept` reason added (DATA-01 / 
 
 The `uninstalled` variant has no `dependencies` field by construction (D-15-02 / MSG-SD-3); soft-dep markers cannot appear on uninstall rows. The byte form is identical to the plain success case above -- there is no way to expose a soft-dep here structurally.
 
+### Success when the removal retired a workflow command (WLIF-06)
+
+<!-- catalog-state: uninstall-stale-workflow-command -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ○ helper v1.0.0 (uninstalled) {stale workflow command}
+
+/reload to pick up changes
+```
+
+The removal took at least one workflow envelope off disk. The host exposes no way to unregister a command, so the command that envelope registered is still live and still runnable for the rest of the session, and the row says so instead of reporting a clean removal. The gate is what the cascade REPORTED dropping, never the length of the record's workflow inventory: a disable deliberately keeps that array populated, and it can name envelopes a cascade failed to remove, so its length answers a different question.
+
+The `{stale workflow command}` token and the `/reload to pick up changes` trailer are two different facts on one screen, and both are here on purpose. The trailer is about NEW things a reload will pick up. The token is about a REMOVED thing a reload will drop. Reusing the trailer for the second would report it as if it were the first.
+
+Severity `warning` with the summary line, the middle band of the three-way model: the uninstall WAS carried out, but the desired state is not reached until the reload. A removal that took no workflow renders the brace-less `success` row above, byte for byte.
+
 ### Failure -- permission denied
 
 <!-- catalog-state: failure-permission-denied -->
@@ -1085,6 +1140,22 @@ A plugin operation has failed.
 ```
 
 Marketplace header is bare (SUB-BRANCH A); plugin row is `failed` with the typed `permission denied` reason and a 4-space-indent `cause:` trailer (D-16-08). Severity: `error`. No reload-hint -- no state-changing status (a failed uninstall did not remove anything, so there is nothing to reload).
+
+### Failure after the cascade had already retired a workflow command (WLIF-06)
+
+<!-- catalog-state: failure-stale-workflow-command -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper v1.0.0 (failed) {permission denied, stale workflow command}
+    cause: EACCES: permission denied, unlink '/path/to/file'
+```
+
+A partial cascade that removed a workflow envelope and then failed on a later axis. The command that envelope registered is live over nothing AND the uninstall did not finish, so the row names both: a row reporting only the failure would say nothing changed, which is the opposite of what happened. The gate is the same one the clean `uninstall-stale-workflow-command` row above uses -- what the cascade REPORTED dropping -- read from the same sentinel, so the two arms of the verb cannot disagree about what counts as retired.
+
+The token sits LAST inside the brace, the position it takes on every stamping verb. Severity stays `error` rather than the `warning` the token carries alone: the uninstall was NOT carried out, and that outranks it. No reload-hint, exactly as on the plain failure row above -- the trailer is about NEW things a reload picks up, and this is a REMOVED thing a reload drops. This mirrors the `disable` verb, whose failed arm stamps on the same terms; withholding it here would report one fact inconsistently inside a single verb.
 
 ### Failure -- marketplace not added (ATTR-04 / SCOPE-01)
 
@@ -1468,6 +1539,25 @@ Plugin reinstall: 1 warning
 
 A reinstall drives the same bridges as an install, so a skill or command whose source frontmatter cannot be parsed degrades identically (skill -> synthesized `disable-model-invocation` block; command -> neutralized frontmatter). The row keeps `(reinstalled)` -- a degraded component is reinstalled-but-short, not dropped -- and carries one `{malformed skill}` / `{malformed command}` token per kind, composed through the same `malformedReasonsForKinds` seam the install, enable and backfill rows use. Severity `warning` with the summary line, the same raise those surfaces take for the same class of degrade: this one the reinstall's own ledger just produced. OUT-03/D-04: the tally counts by STAMPED severity, so the raised row lands in `1 warning` rather than `1 success` -- the operation completed, short of ideal, and the tally says so without a second vocabulary. Both reinstall row composers (the standalone verb and the bulk cascade mapper) read the one signal, so the two surfaces cannot disagree. A clean reinstall renders the brace-less rows above unchanged.
 
+### Reinstall that retired a workflow command (WLIF-06)
+
+<!-- catalog-state: reinstall-stale-workflow-command -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● alpha v1.0.0 (reinstalled) {stale workflow command}
+
+Plugin reinstall: 1 warning
+
+/reload to pick up changes
+```
+
+The reinstall's source no longer declares a workflow the record named, or declares it under a different generated name. Either way the old envelope is gone and the command it registered is still live, because the host cannot unregister one. The gate is the record's pre-reinstall inventory minus the names the replace step reported placing, so a RENAME retires a command exactly as a deletion does, and a name present in both sets retires nothing -- that is the ordinary re-place.
+
+One token per plugin however many names were retired, at the tail of the brace. Severity `warning`: the reinstall was carried out, but the desired state is not reached until the reload the trailer names. A reinstall that re-placed everything renders the brace-less row above.
+
 ### Reinstall over an already-disabled record inside a cascade (ENBL-05 / ENBL-18 / DFEN-07)
 
 <!-- catalog-state: reinstall-disabled-record-cascade -->
@@ -1780,6 +1870,23 @@ Severity `warning` with the summary line, the same raise the install, enable and
 ```
 
 The re-materialized `hooks/hooks.json` declares `rewakeMessage` or `rewakeSummary` on a handler WITHOUT `asyncRewake: true`. `update` re-materializes that file exactly as install, enable and backfill do, so it can introduce the same config bug and now names it the same way: one token per plugin regardless of N orphan handlers, read off the re-resolved candidate. Severity `info` -- the config bug names itself in the brace; the update itself was carried out in full, so this axis moves no severity channel (unlike the malformed-component axis below it). When more than one signal is present they share ONE brace in the install row's emit order: `{orphan rewake, malformed skill}`. A dropped kind cannot join that brace on THIS row form: a non-empty dropped-kind set selects `(partially-installed)` instead, so the three-signal case renders there -- see `update-degraded-and-dropped` below.
+
+### Update that retired a workflow command (WLIF-06)
+
+<!-- catalog-state: update-stale-workflow-command -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● alpha v1.0.0 → v1.0.1 (updated) {stale workflow command}
+
+/reload to pick up changes
+```
+
+The new version withdrew a workflow the old one declared, or renamed it. The envelope is off disk and the command it registered stays live until a reload. This is a FOURTH independent axis on the `(updated)` partition, alongside the dropped-kind, malformed-component and orphan-rewake axes, and it sits LAST in the brace on both row forms -- so an update that drops a kind AND retires a command renders `{unsupported component, stale workflow command}` on the `(partially-installed)` row.
+
+Severity `warning`, the second axis that moves the severity channel and for a different reason than the malformed one: this is a shortfall in what the update ACHIEVED, not a component it wrote in degraded form. The raise applies on both surfaces that render this row -- the manual update cascade and the marketplace autoupdate cascade -- because a command left registered over a missing envelope is short of the desired state whichever surface reports it.
 
 ### Update that both drops a kind and degrades a component (CR-01 / WARN-01 / FSTAT-07)
 
@@ -2435,7 +2542,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin info <plugin>@<marketplace>`
 
-Read-only detail surface. Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05), itself followed by the same optional `dependencies:` line on the cold git-source row (D-01-32). INFO-02 + INFO-05 + INFO-07 lock the full state set below.
+Read-only detail surface. Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`, `workflows`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05), itself followed by the same optional `dependencies:` line on the cold git-source row (D-01-32). INFO-02 + INFO-05 + INFO-07 lock the full state set below.
 
 Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed / state-only-disabled-with-components) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{marketplace not added}` missing-marketplace, `{marketplace not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
@@ -2470,6 +2577,52 @@ Same as above but with a `dependencies: <plugin>@<marketplace>, ...` line emitte
     dependencies: helper@utils-mp
 ```
 
+### Success -- installed with workflows (WFLW-04)
+
+The plugin ships workflow scripts. The `workflows:` line shows them LAST among the per-kind component lines, before any `dependencies:` line, which keeps the alphabetical kind order the other lines follow. Each entry is the generated command name, `<plugin>:<name>`, and not the script's file name. The line shows every ADMITTED script. Thus it shows a script that declares its own `meta.name`, and it also shows a script that has no readable name and takes its name from the file stem, because the install writes a saved-workflow file for both. A script that the command skips or refuses does not show on this line; its own advisory line reports it instead. If no script is admitted, the `workflows:` line does not show at all. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-workflows -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    agents: review-bot
+    commands: c1, c2
+    skills: commit-summary
+    workflows: commit-commands:changelog, commit-commands:release
+```
+
+### Success -- a workflow script that will not install (WR-09)
+
+The plugin ships a workflow script that the command will not admit. The row shows a `note:` line for that script, after every component line and after any `dependencies:` line, one line per affected script, in the order the scan found them. The wording is in the FUTURE tense, because this surface writes nothing: it states what WOULD happen at install time, and it pairs one-for-one with the past-tense wording that the install surface shows for the same condition. The line names the script and the directory that holds it, and then it gives the reason. The directory shows as its name alone and never as a full path, so the row does not disclose where the user's home directory is (NFR-9) and its bytes do not change from one machine to another. A `note:` line does not change the severity of the row: it is a statement about one file, and not a failure of the read. If every script is admitted, no `note:` line shows. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-workflow-preview-note -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    skills: commit-summary
+    workflows: commit-commands:changelog
+    note: workflow script "roll.js" in "workflows" will be refused: roll.js calls `Math.random`, which the workflow engine refuses as nondeterministic
+```
+
+### Success -- a workflow script the engine will refuse to load (WGATE-01)
+
+The plugin ships a workflow script that the command installs and that the host workflow engine will then refuse to load. The script is admitted, so its command name shows on the `workflows:` line like any other; the `note:` line for it names the script, the directory that holds it, and the engine check that will refuse it, so the author can fix the script before they install it. The wording is in the FUTURE tense, because this surface writes nothing: it states what WOULD happen. The directory shows as its name alone and never as a full path, so the row does not disclose where the user's home directory is (NFR-9) and its bytes do not change from one machine to another. A `note:` line does not change the severity of the row: it is a statement about one file, and not a failure of the read. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-workflow-gate-note -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    skills: commit-summary
+    workflows: commit-commands:changelog, commit-commands:greet
+    note: workflow script "greet.js" in "workflows" would be installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared
+```
+
 ### Success -- installed single scope with dependency constraints
 
 Same as above, but each dependency carries the constraint its manifest declared, in one parenthetical after the address (D-01-30). A version range renders bare, because a range is self-evidently a version. A sha renders labelled and short-formed to seven characters, because a 40-hex string is not. When an element declares both, the version comes first and a comma separates them inside the one parenthetical. An element that declares neither renders the bare address, as the state above shows. The line is ordered by dependency name, not by the rendered string (D-01-04). Severity `info`.
@@ -2496,6 +2649,19 @@ The marketplace manifest loads correctly, but it does not declare the plugin. An
 ● mp [user] <no autoupdate>
   ● alpha v1.0.0 (installed) {not in manifest}
     skills: alpha-skill
+```
+
+### Success -- workflows listed from the installation record (WFLW-04)
+
+The marketplace manifest no longer declares the plugin, so the row reads its whole component inventory from the installation record. The `workflows:` line shows the generated names that the install wrote, exactly as the record holds them, sorted by the same rule the other name-list kinds use. This arm runs no discovery: it reads no plugin source and it opens no script file, so the names come from the record and from nowhere else. If the record holds no workflow names, the `workflows:` line does not show. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: state-only-installed-with-workflows -->
+
+```text
+● mp [user] <no autoupdate>
+  ● alpha v1.0.0 (installed) {not in manifest}
+    skills: alpha-skill
+    workflows: alpha:changelog, alpha:release
 ```
 
 ### Success -- partially installed from the installation record (INFO-10)
@@ -2679,9 +2845,9 @@ Triggered when `resolveStrict` returns `state: "partially-available" | "unavaila
 
 A structurally malformed plugin resolves to `unavailable`. Structural errors include invalid or schema-invalid `hooks/hooks.json`, unreadable or non-path sources, and broken `mcpServers` references. A broken reference uses the `{malformed mcp}` reason (MCPR-03 / D-02). The row uses the `⊘` glyph and the `(unavailable)` status.
 
-A partially available plugin has typed unsupported kinds. These kinds include `lspServers`, workflows, other unsupported components, and supported subsets of `hooks.json`. The row uses the `⊖` glyph and the `(partially-available)` status (D-71-03 / PHOOK-03). After installation, the inventory row renders `(partially-installed)`.
+A partially available plugin has typed unsupported kinds. These kinds include `lspServers`, other unsupported components, and supported subsets of `hooks.json`. The row uses the `⊖` glyph and the `(partially-available)` status (D-71-03 / PHOOK-03). After installation, the inventory row renders `(partially-installed)`.
 
-Each row has one closed-set reason block. The structural arm uses `narrowResolverNotes` for `{unsupported source}` or `{malformed mcp}`. The partial arm uses `narrowUnsupportedKinds` for `{unsupported hooks}`, `{lsp}`, `{unsupported component}`, or `{workflows}`.
+Each row has one closed-set reason block. The structural arm uses `narrowResolverNotes` for `{unsupported source}` or `{malformed mcp}`. The partial arm uses `narrowUnsupportedKinds` for `{unsupported hooks}`, `{lsp}`, or `{unsupported component}`.
 
 The example shows malformed `hooks.json`, so the row remains `⊘ (unavailable)`. Sources without a readable materialized tree use `componentsResolved: false`. Component-read failures also use that value. Then the renderer writes `components: not resolved` instead of the component list. For a path source or warm git source, the renderer tries to enumerate components for both non-installable states. It sets `componentsResolved` to `true` when that read succeeds.
 
@@ -2794,6 +2960,18 @@ The merged config matches the recorded state byte-for-byte in every scope -- the
 Pending: next reload will apply 0 actions.
 ```
 
+### Empty steady-state carrying a retained workflow staging tree (WR-06)
+
+The next reload would apply zero actions, AND a workflow staging tree survives that the sweeper keeps forever: its `.previous/` still holds displaced envelopes, which are the only surviving copy of the user's previous workflow scripts. The tree sits under the workflow home rather than under any scope root, so uninstall and `/reload` never reach it and no other surface names it. One free-form advisory body line per retained tree is appended after the body, sorted by directory name, each carrying the tree's directory NAME and its envelope count. The line interpolates NO absolute path (T-53-02-02 -- the same information-disclosure rule that puts a basename on the invalid-config row), and states the containing location as fixed text. An empty set renders nothing at all: no header, no zero-count line. Severity `info`; no reload-hint; no summary line.
+
+<!-- catalog-state: empty-steady-state-retained-workflow-staging -->
+
+```text
+Pending: next reload will apply 0 actions.
+
+    retained workflow staging: 9f1c4d2a-3b7e (2 envelopes) under the workflows staging directory
+```
+
 ### Marketplace add with child plugin install
 
 A new marketplace declared in `claude-plugins.json` carries one child plugin row declared with the same key (`will install`). WILL-01 / D-65.1-02: the marketplace add is immediate, so its header carries no `will add` token and renders status-less (list-arm bare header); only the reload-deferred child install carries a pending token. Subject-first row grammar per DIFF-02: `● new-mp [user]` / `● new-plugin (will install)`. Orphan-fold (D-13-18 / MSG-PL-6): the plugin row omits its `[scope]` bracket because its scope matches the parent marketplace's scope. Severity `info`; no reload-hint.
@@ -2825,6 +3003,19 @@ A plugin recorded in `state.json` but no longer declared in `claude-plugins.json
 ```text
 ● mp [user]
   ○ old-plugin (will uninstall)
+```
+
+### Plugin pending uninstall carrying a retained workflow staging tree (WR-06)
+
+The same retained-tree advisory on the command's OTHER arm. The cascade message and the empty-steady-state message declare the SAME optional advisory member and one render site composes both, so the appended line is byte-identical to the [empty steady-state](#empty-steady-state-carrying-a-retained-workflow-staging-tree-wr-06) form above whichever arm the user's configuration lands on. The advisory sits after the cascade body and before the trailing tally slot; it is a body line, not a row, because its subject is a directory and the row grammar's name slot expects a plugin or a marketplace. Severity `info`; no reload-hint.
+
+<!-- catalog-state: plugin-pending-uninstall-retained-workflow-staging -->
+
+```text
+● mp [user]
+  ○ old-plugin (will uninstall)
+
+    retained workflow staging: 9f1c4d2a-3b7e (2 envelopes) under the workflows staging directory
 ```
 
 ### Marketplace remove with installed plugins
@@ -2969,26 +3160,52 @@ OUT-03/D-04: the plural tally counts the failed mp header + the two failed plugi
 
 ### Load-time backfill -- partially-installed promotion carries the dropped-kinds brace (SEV-05)
 
-BFILL-01 / SEV-05 / D-69-04: a load-time backfill re-materialized a recorded partially-installed plugin in place (its supported set grew, but it still re-resolves `partially-available`). The promotion row reuses the `◉` `(partially-installed)` byte form and now carries a factual `{reasons}` brace composed from the re-resolved dropped-component kinds through the SAME shared `narrowUnsupportedKinds` seam the install / list / info surfaces use -- no per-state reasons mechanism (`installed` / `partially-installed` / `partially-upgradable` rows all route through `composeReasons`). The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a backfill is a benign promotion (re-materializing now-supported components), NOT a new degradation, so the row stays `info` -- the SEV-03 newly-degrades warning fires only on the autoupdate cascade. The `Run /reload` trailer is structurally excluded (RECON-04); the trailing tally counts the row as one success.
+BFILL-01 / WCONV-03 / SEV-05 / D-69-04: a load-time backfill re-materialized a recorded partially-installed plugin in place (its supported set grew, but it still re-resolves `partially-available`). The promotion row reuses the `◉` `(partially-installed)` byte form. Its brace leads with `components now supported`, the WCONV-03 convergence marker every backfilled row carries, so a reload the user did not initiate never renders byte-identically to a fresh install; the re-resolved dropped-component kinds follow, composed through the SAME shared `narrowUnsupportedKinds` seam the install / list / info surfaces use -- no per-state reasons mechanism (`installed` / `partially-installed` / `partially-upgradable` rows all route through `composeReasons`). The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a backfill is a benign promotion (re-materializing now-supported components), NOT a new degradation, so the row stays `info` -- the SEV-03 newly-degrades warning fires only on the autoupdate cascade. The `Run /reload` trailer is structurally excluded (RECON-04); the trailing tally counts the row as one success.
 
 <!-- catalog-state: backfill-partially-installed -->
 
 ```text
 ● local-mp [user]
-  ◉ hello v1.0.0 (partially-installed) {lsp}
+  ◉ hello v1.0.0 (partially-installed) {components now supported, lsp}
 
 Reconcile: 1 success
 ```
 
-### Load-time backfill -- no dropped kinds renders brace-less (byte-identical to today)
+### Load-time backfill -- no dropped kinds leaves the convergence marker alone in the brace (WCONV-03)
 
-The degenerate case: a backfill `(partially-installed)` row whose re-resolved dropped-kind set is empty renders brace-less -- `narrowUnsupportedKinds([])` returns `[]`, so `composeReasons` emits no brace and the row is byte-identical to the pre-SEV-05 form. This proves the SEV-05 change is additive: rows WITHOUT reasons do not gain a brace (D-69-04).
+The degenerate case: a backfill `(partially-installed)` row whose re-resolved dropped-kind set is empty. `narrowUnsupportedKinds([])` returns `[]`, so nothing follows the `components now supported` marker and the brace holds that one token. A backfilled row has no brace-less shape at all -- the projection places the marker ahead of any dropped kind (WCONV-03 / D-69-04), and that is what separates this row from a fresh install of the same plugin.
 
-<!-- catalog-state: backfill-partially-installed-no-reasons -->
+<!-- catalog-state: backfill-partially-installed-marker-only -->
 
 ```text
 ● local-mp [user]
-  ◉ hello v1.0.0 (partially-installed)
+  ◉ hello v1.0.0 (partially-installed) {components now supported}
+
+Reconcile: 1 success
+```
+
+### Load-time backfill -- the fully promoted arm carries the convergence marker alone (WCONV-03)
+
+The arm the convergence marker exists for: the extension's supported component set grew, so a recorded plugin re-resolved clean and was re-materialized in place at load time, without the user running any command. The row reuses the `●` `(installed)` byte form a fresh install renders, and the marker in the brace is the ONLY thing that separates the two -- which is why `backfilledRowFromOutcome` places it unconditionally on this arm (WCONV-03 / D-69-04). Without it, the commands that appeared after a reload nobody initiated could not be attributed to anything the user could name. The probe reports every companion loaded, so no soft-dep marker fires and this state isolates the marker. The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a benign promotion is not a new degradation, so the row stays `info`; the `Run /reload` trailer is structurally excluded (RECON-04) and the trailing tally counts the row as one success.
+
+<!-- catalog-state: backfill-installed -->
+
+```text
+● local-mp [user]
+  ● hello v1.0.0 (installed) {components now supported}
+
+Reconcile: 1 success
+```
+
+### Load-time backfill -- fully promoted in a session with no host workflow engine (WCONV-03 / WDEP-04)
+
+The same promotion in the session the real population most likely renders it in first: the plugin declares `workflows`, the host workflow engine is not loaded, and both tokens land in ONE brace. The order is contractual, and these bytes are where it is pinned for a backfilled row: the convergence marker comes FIRST because the projection writes it into `reasons[]` as the caller, and `requires pi-dynamic-workflows` comes LAST because `composeReasons` appends the soft-dep markers after every caller-placed reason (MSG-GR-4 / D-16-15). Severity stays `info` rather than the `warning` the standalone install row stamps for the same marker: this projection raises only on a malformed-frontmatter degrade its own re-materialization produced, so the SEV-01 companion raise does not fire here -- the same stance the sibling load-time enable row takes.
+
+<!-- catalog-state: backfill-installed-workflow-engine-absent -->
+
+```text
+● local-mp [user]
+  ● hello v1.0.0 (installed) {components now supported, requires pi-dynamic-workflows}
 
 Reconcile: 1 success
 ```
@@ -3414,7 +3631,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin enable <plugin>@<marketplace>`
 
-D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from the cached marketplace clone -- the orchestrator reads `marketplace.json` from disk (PI-2 cached read; NFR-5: no network), reuses the install ledger's 5-phase sequence with `version: installed.version` (the pinned version from the state record), and writes `enabled: true` back to the config file at the resolved scope. A `--local` flag targets `claude-plugins.local.json` (Pitfall 54-5: the base `claude-plugins.json` mtime is unchanged). The cascade renders the BARE always-marketplace-header form (`mp.status === undefined`, no `(added)` token -- that header belongs to `marketplace add`; v1.12 milestone UAT-04 decision, 2026-06-11) with the existing `(installed)` PluginStatus row token (state-changer; reload-hint fires).
+D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from the cached marketplace clone -- the orchestrator reads `marketplace.json` from disk (PI-2 cached read; NFR-5: no network), reuses the install ledger's 7-phase sequence with `version: installed.version` (the pinned version from the state record), and writes `enabled: true` back to the config file at the resolved scope. A `--local` flag targets `claude-plugins.local.json` (Pitfall 54-5: the base `claude-plugins.json` mtime is unchanged). The cascade renders the BARE always-marketplace-header form (`mp.status === undefined`, no `(added)` token -- that header belongs to `marketplace add`; v1.12 milestone UAT-04 decision, 2026-06-11) with the existing `(installed)` PluginStatus row token (state-changer; reload-hint fires).
 
 ### Fresh enable
 
@@ -3609,6 +3826,25 @@ D-54-01 / ENBL-02. Removes a plugin's materialized artifacts (skills/commands/ag
 ```
 
 Fresh disable -- a previously-enabled plugin's artifacts are unstaged via `cascadeUnstagePlugin`. Plugin row = `PluginDisabledMessage` (status: `"disabled"`, byte-identical to the `disabled-inventory` row); the cascade is dispatched with the `disable-cascade` kind, so the reload-hint fires (artifacts were removed -- SNM-33 / UAT-03). Severity `info`.
+
+### Fresh disable that retired a workflow command (WLIF-06)
+
+<!-- catalog-state: disable-stale-workflow-command -->
+
+```text
+A plugin operation needs attention.
+
+● claude-plugins-official [user]
+  ◍ foo-plugin v1.2.3 (disabled) {stale workflow command}
+
+/reload to pick up changes
+```
+
+The disable cascade took at least one workflow envelope off disk, so the command it registered stays live for the rest of the session. The gate is `cascade.dropped.workflows` -- what the cascade REPORTED removing -- and never `record.resources.workflows.length`: ENBL-18 deliberately keeps that array populated across a disable, so its length says what the plugin contains, not what just came off disk.
+
+A partial cascade that removed two envelopes and then failed on a third stamps the same token on its `(failed)` row, joined to the failure reason rather than replacing it. Two commands are registered over nothing in that case, and a row reporting only the failure would say nothing changed, which is the opposite of what happened. That row stays `error` severity: the disable was not carried out, which outranks the warning band this token carries alone.
+
+Severity `warning` here, with the summary line: the disable WAS carried out and the desired state is reached everywhere except the still-registered command. A disable over a plugin declaring no workflows renders the brace-less `disable-fresh` row above.
 
 ### Idempotent disable
 
@@ -3867,4 +4103,4 @@ ______________________________________________________________________
 - [`extensions/pi-claude-marketplace/shared/compare-name-scope.ts`](../extensions/pi-claude-marketplace/shared/compare-name-scope.ts) -- stable name-first, project-before-user ordering.
 - [`extensions/pi-claude-marketplace/shared/notify-reasons.ts`](../extensions/pi-claude-marketplace/shared/notify-reasons.ts) -- compile-time closed-set membership proof: the `_UncoveredReason` / `_ExtraReason` reason-coverage check, plus the per-command `satisfies CommandContext` checks in the `*.messaging.ts` modules.
 - [`tests/architecture/catalog-uat/catalog-contract.test.ts`](../tests/architecture/catalog-uat/catalog-contract.test.ts) -- user-contract gate; drives this catalog's `<!-- catalog-state: STATE -->` annotated fixtures through `notify()` via mock `ctx` and asserts byte-equality.
-- [`docs/prd/pi-claude-marketplace-prd.md`](prd/pi-claude-marketplace-prd.md) §6.12 ES-5 -- the stable user-contract strings origin; the 5 ES-5 markers were superseded by the v1.3 style guide and remain blocked by `tests/architecture/no-legacy-markers.test.ts`.
+- [`docs/prd/pi-claude-marketplace-prd.md`](prd/pi-claude-marketplace-prd.md) §6.12 ES-5 -- the stable user-contract strings origin; the 5 ES-5 markers were superseded by the v1.3 style guide and no renderer arm emits one. They are deliberately ungated: the suite that pinned the literals was retired with the V1 wrappers, and reinstating a ban on strings no producer emits was declined. The accepted residual is that a reintroduction is caught only where `tests/architecture/catalog-uat/catalog-contract.test.ts` already records the row byte-for-byte.

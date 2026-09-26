@@ -435,6 +435,35 @@ function tallyCategory(count: number, singular: string, plural: string): string 
 }
 
 /**
+ * WR-06: one advisory body line per workflow staging tree the sweeper keeps
+ * forever, in the caller's order.
+ *
+ * The tree holds displaced envelopes: the only surviving copy of the user's
+ * previous workflow scripts. It sits outside every scope root, so uninstall and
+ * a reload cannot reach it, and no other surface names it.
+ *
+ * T-53-02-02: the line carries the directory NAME and states the containing
+ * location as fixed text. It interpolates no absolute path -- the surface that
+ * renders this already carries basenames rather than paths for the same
+ * information-disclosure reason, and a machine-specific absolute path could not
+ * be pinned by a byte-equality fixture at all.
+ *
+ * WR-05: the count is omitted, never rendered as zero, when the reader could not
+ * establish it. A tree is reported on the same open question that keeps it, and
+ * a count nobody read is not a fact the line may state.
+ */
+export function composeRetainedWorkflowsAdvisories(
+  retained: readonly { readonly name: string; readonly envelopeCount?: number }[],
+): readonly string[] {
+  return retained.map((tree) => {
+    const count = tree.envelopeCount;
+    const envelopes =
+      count === undefined ? "" : ` (${tallyCategory(count, "envelope", "envelopes")})`;
+    return `    retained workflow staging: ${tree.name}${envelopes} under the workflows staging directory`;
+  });
+}
+
+/**
  * OUT-03 / OUT-04 / D-04: build the trailing per-operation tally for a
  * structurally PLURAL (bulk) cascade. Plural cardinality makes the tally
  * eligible. Returns `<Operation>: <n> failure(s), <n> warning(s), <n>

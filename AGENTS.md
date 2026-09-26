@@ -18,6 +18,17 @@ Before editing any file, read it first. Before modifying a function, trace its c
 - When writing PR descriptions, use the `simple-english` skill in Plain mode and the `humanizer` skill, if available.
 - Always use `--squash` when merging PRs (`gh pr merge --squash`). The repository does not allow merge commits or rebase merges.
 
+### GSD records
+
+- Prefix each `gsd-tools windows append --description` with the milestone, such as `[workflows-replay]`. Phase numbers can repeat across milestones. Do not put the milestone in `--phase` or hand-edit `.planning/WINDOWS.md`.
+- Include `## Threat Flags` in every plan `SUMMARY.md`, even when the answer is "None":
+
+```markdown
+## Threat Flags
+
+None -- no security-relevant surface outside the plan's `<threat_model>` was introduced.
+```
+
 ### TypeScript
 
 Rules for TypeScript live under `skills/` and are not registered with any runtime; read the ones that apply before editing (skip any your prompt already carries under `<agent_skills>`):
@@ -33,7 +44,7 @@ Before creating a PR, offer to bump the version in `package.json` and `sonar-pro
 
 ## Project
 
-`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artifacts (skills, commands, agents, hooks, MCP servers) into the equivalent Pi-native artifacts (Pi skills, Pi prompt templates, pi-subagents agents, staged Pi hook registrations, pi-mcp-adapter MCP entries) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
+`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artifacts (skills, commands, agents, hooks, MCP servers, workflows) into the equivalent Pi-native artifacts (Pi skills, Pi prompt templates, pi-subagents agents, staged Pi hook registrations, pi-mcp-adapter MCP entries, saved workflow-engine scripts) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
 
 **Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
@@ -42,7 +53,7 @@ Before creating a PR, offer to bump the version in `package.json` and `sonar-pro
 - **Upstream parity:** Claude Code's behavior is the default for every user-visible decision, because this extension installs real Claude plugins and anything it does differently is something a user already learned upstream and must unlearn. Exactly two things license a divergence: a recorded project decision carried here with an ID (SC-1, for instance), or a Pi capability gap that makes parity unavailable. Neither "upstream looks wrong" nor "our way is simpler" qualifies -- those go to the user as a question. Research the upstream contract with `skills/claude-code-compat-research`.
 - **Runtime:** Node >= 20.19.0 (NFR-4)
 - **Tech stack:** TypeScript strict; the resolver MUST expose discriminated `installable: true | false` so consumers cannot read `pluginRoot` from a non-installable plugin (NFR-7)
-- **Pi API:** `@earendil-works/pi-coding-agent` peer dependency, pinned to `>=0.80.5` (dev `^0.84.2`); the NFR-11 floor-pinning SHOULD is now satisfied
+- **Pi API:** `@earendil-works/pi-coding-agent` peer dependency, pinned to `>=0.86.1` (dev `^0.86.1`); the NFR-11 floor-pinning SHOULD is now satisfied
 - **File operations:** All disk mutations atomic (tmp + rename or atomic JSON write) -- NFR-1
 - **Recovery model:** No fix may require a Pi process restart; `Run /reload` must suffice (NFR-2). All operations must be safe to retry -- idempotent or fail-clean (NFR-3)
 - **Network policy (NFR-5, amended by url-source and by D-03-03):** Network is required only for git-source `marketplace add`/`update`, and for `install`/`update`/`reinstall` of git-source plugins **on cache miss only** -- warm sha-pinned cache operations stay offline. Resolving a dependency that carries a version constraint may additionally read that dependency's source repository tag list over the network, even when a cached or otherwise resolvable copy of that dependency already exists, because the constraint can demand a different tag than the cached one (D-03-03). `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations MUST NOT touch the network

@@ -1,4 +1,4 @@
-import { piWithBothLoaded, piWithNothingLoaded } from "../mock-pi.ts";
+import { piWithAllLoaded, piWithBothLoaded, piWithNothingLoaded } from "../mock-pi.ts";
 
 import type { NotificationMessage } from "../../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { FixtureMap } from "../fixture-types.ts";
@@ -51,6 +51,34 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // WLIF-06: the removal took a workflow envelope off disk, so the command it
+    // registered stays live until a reload. The `{stale workflow command}` token
+    // and the `/reload to pick up changes` trailer coexist on one screen and
+    // state different facts -- new things a reload picks up versus a removed
+    // thing it drops.
+    "uninstall-stale-workflow-command": {
+      pi: piWithAllLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["stale workflow command"],
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "success-soft-dep-omitted": {
       pi: piWithNothingLoaded(),
       message: {
@@ -88,6 +116,34 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
                 name: "helper",
                 version: "1.0.0",
                 reasons: ["permission denied"],
+                cause: new Error("EACCES: permission denied, unlink '/path/to/file'"),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WLIF-06: the partial cascade removed a workflow envelope and then failed,
+    // so the token joins the failure reason at the tail. Severity stays `error`
+    // -- the uninstall was not carried out, which outranks the warning band the
+    // token carries alone -- and the reload trailer stays structurally absent.
+    "failure-stale-workflow-command": {
+      pi: piWithAllLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["permission denied", "stale workflow command"],
                 cause: new Error("EACCES: permission denied, unlink '/path/to/file'"),
               },
             ],

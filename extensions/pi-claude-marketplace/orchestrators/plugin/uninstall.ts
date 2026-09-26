@@ -92,6 +92,7 @@ import {
   composeUninstalledRow,
   UNINSTALL_CONTEXT,
 } from "./uninstall.messaging.ts";
+import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { IndexedRecord, ScopeDeclarationIndexResult } from "./dependency-index.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
@@ -367,43 +368,65 @@ function emitCascadeFailure(args: {
   plugin: string;
   cause: Error;
   removedVersion: string | undefined;
+  staleWorkflowCommand: boolean;
   orchestrated: boolean;
-}): UninstallPluginOutcome | undefined {
-  const { ctx, pi, marketplace, scope, plugin, cause, removedVersion, orchestrated } = args;
-  if (orchestrated) {
-    return {
-      status: "failed",
-      reason: narrowCascadeFailure(cause),
-      error: cause,
-      cause: errorMessage(cause),
-    };
-  }
-
-  const failedRow: PluginFailedMessage = {
-    status: "failed",
-    name: plugin,
-    reasons: [narrowCascadeFailure(cause)],
-    ...(removedVersion !== undefined && { version: removedVersion }),
-    cause,
-    // D-03/D-06: a failed uninstall -> error, no reload (nothing changed).
-    severity: "error",
-    needsReload: false,
-  };
-  notifyWithContext(
+}): UninstallPluginOutcome {
+  const {
     ctx,
     pi,
-    UNINSTALL_CONTEXT,
-    [
-      {
-        name: marketplace,
-        scope,
-        plugins: [failedRow],
-      },
-    ],
-    undefined,
-    "single",
-  );
-  return undefined;
+    marketplace,
+    scope,
+    plugin,
+    cause,
+    removedVersion,
+    staleWorkflowCommand,
+    orchestrated,
+  } = args;
+  const outcome: UninstallPluginOutcome = {
+    status: "failed",
+    reason: narrowCascadeFailure(cause),
+    error: cause,
+    cause: errorMessage(cause),
+  };
+
+  if (!orchestrated) {
+    const failedRow: PluginFailedMessage = {
+      status: "failed",
+      name: plugin,
+      // WLIF-06: a partial cascade that took envelopes off disk and then failed
+      // leaves those commands registered over nothing, so the token joins the
+      // failure reason at the tail rather than replacing it -- a row naming only
+      // the failure would report that nothing changed. Same gate as the clean
+      // arm and same tail position as every other stamping verb. Severity stays
+      // `error`: the uninstall was NOT carried out, which outranks the warning
+      // band the token carries alone.
+      reasons: [
+        narrowCascadeFailure(cause),
+        ...(staleWorkflowCommand ? (["stale workflow command"] as const) : []),
+      ],
+      ...(removedVersion !== undefined && { version: removedVersion }),
+      cause,
+      // D-03/D-06: a failed uninstall -> error, no reload (nothing changed).
+      severity: "error",
+      needsReload: false,
+    };
+    notifyWithContext(
+      ctx,
+      pi,
+      UNINSTALL_CONTEXT,
+      [
+        {
+          name: marketplace,
+          scope,
+          plugins: [failedRow],
+        },
+      ],
+      undefined,
+      "single",
+    );
+  }
+
+  return outcome;
 }
 
 /**
@@ -419,39 +442,45 @@ function emitConfigInvalid(args: {
   plugin: string;
   configBasename: string;
   orchestrated: boolean;
-}): UninstallPluginOutcome | undefined {
+}): UninstallPluginOutcome {
   const { ctx, pi, marketplace, scope, plugin, configBasename, orchestrated } = args;
   const cause = `Config file "${configBasename}" failed schema validation.`;
   const invalidErr = new Error(cause);
-  if (orchestrated) {
-    return { status: "failed", reason: "invalid manifest", error: invalidErr, cause };
+  const outcome: UninstallPluginOutcome = {
+    status: "failed",
+    reason: "invalid manifest",
+    error: invalidErr,
+    cause,
+  };
+
+  if (!orchestrated) {
+    notifyWithContext(
+      ctx,
+      pi,
+      UNINSTALL_CONTEXT,
+      [
+        {
+          name: marketplace,
+          scope,
+          plugins: [
+            {
+              status: "failed",
+              name: plugin,
+              reasons: ["invalid manifest"] as const,
+              cause: invalidErr,
+              // D-03/D-06: invalid-config abort -> error, no reload.
+              severity: "error" as const,
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+      undefined,
+      "single",
+    );
   }
 
-  notifyWithContext(
-    ctx,
-    pi,
-    UNINSTALL_CONTEXT,
-    [
-      {
-        name: marketplace,
-        scope,
-        plugins: [
-          {
-            status: "failed",
-            name: plugin,
-            reasons: ["invalid manifest"] as const,
-            cause: invalidErr,
-            // D-03/D-06: invalid-config abort -> error, no reload.
-            severity: "error" as const,
-            needsReload: false,
-          },
-        ],
-      },
-    ],
-    undefined,
-    "single",
-  );
-  return undefined;
+  return outcome;
 }
 
 /**
@@ -806,6 +835,10 @@ interface PostUninstallCleanupOptions {
  * it. NFR-3: a crash before this leaves an orphan the next idempotent pass
  * removes. `garbageCollectPluginClones` already folds per-dir rm leaks into a
  * returned string[] rather than throwing; the try/catch is belt and braces.
+ *
+ * WLIF-01: the workflow staging sweep runs last. Its trees live under the home
+ * directory rather than under any scope root, so no other arm of this cleanup
+ * reaches them.
  */
 async function runPostUninstallCleanup({
   completionCache,
@@ -857,6 +890,23 @@ async function runPostUninstallCleanup({
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
     hookDebugLog(`uninstall: clone GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`);
   }
+
+  // WLIF-01: workflow staging trees live under the home directory rather than
+  // under any scope root, so nothing else in this cleanup reaches them.
+  // Debug-logged, leaks included, and never user-facing (D-19-01).
+  try {
+    const leaks = await garbageCollectWorkflowsStaging(locations);
+    if (leaks.length > 0) {
+      hookDebugLog(
+        `uninstall: workflows staging GC left ${leaks.length.toString()} tree(s) for ${plugin}@${marketplace}: ${leaks.join("; ")}`,
+      );
+    }
+  } catch (err) {
+    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    hookDebugLog(
+      `uninstall: workflows staging GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
+    );
+  }
 }
 
 /**
@@ -885,7 +935,7 @@ function emitAlreadyGone(args: {
   readonly plugin: string;
   readonly orchestrated: boolean;
   readonly notInstalledAt?: Scope;
-}): UninstallPluginOutcome | undefined {
+}): UninstallPluginOutcome {
   const { ctx, pi, marketplace, scope, plugin, orchestrated } = args;
   if (orchestrated) {
     return { status: "converged", name: plugin };
@@ -906,7 +956,8 @@ function emitAlreadyGone(args: {
     undefined,
     "single",
   );
-  return undefined;
+
+  return { status: "converged", name: plugin };
 }
 
 /**
@@ -922,18 +973,16 @@ function emitAlreadyGone(args: {
  * overload stays last so a caller holding the entrypoint in a
  * single-signature variable keeps its `undefined` arm.
  *
- * WR-01: what the overload proves and what it does not. It removes the
- * `undefined` arm AT THE CALL SITE, which is what makes a consumer's
- * absent-outcome guard a compile error. It does NOT prove the body honours it:
+ * WR-01: the overload is backed by a compile-time check, not by an assertion.
+ * The body lives in `runUninstallOutcome`, whose DECLARED return type is
+ * `Promise<UninstallPluginOutcome>`, so TypeScript checks every return statement
+ * and the fall-off-the-end path in it: an arm that yielded `undefined` is a
+ * compile error there. A narrower overload return alone would not give that --
  * TypeScript checks an overload signature against the implementation only
- * loosely, and a narrower overload return is accepted with no diagnostic even
- * when the implementation demonstrably returns the excluded value on that path.
- * The narrowing is therefore an ASSERTION about this module, relocated from the
- * consumer to the producer's signature -- not a proof. Every orchestrated arm
- * below does return a defined outcome today, and the reconcile owner suite
- * drives this entrypoint in orchestrated mode across its whole outcome matrix
- * and asserts the complete cascade, so a regression on an exercised path fails
- * there. An arm the matrix does not reach is not covered by either.
+ * loosely, and accepts a narrowed return with no diagnostic even when the
+ * implementation demonstrably returns the excluded value. This entrypoint is the
+ * thin mode switch that reintroduces `undefined` for the standalone arm and for
+ * that arm only, so the narrow overload can never outrun the body.
  */
 async function uninstallPluginWithTransaction(
   transaction: UninstallTransaction,
@@ -941,9 +990,34 @@ async function uninstallPluginWithTransaction(
   completionCache: CompletionCache,
   opts: UninstallPluginOptions,
 ): Promise<UninstallPluginOutcome | undefined> {
+  const orchestrated = opts.notifications?.mode === "orchestrated";
+  const outcome = await runUninstallOutcome(
+    transaction,
+    hooksRouting,
+    completionCache,
+    opts,
+    orchestrated,
+  );
+
+  return orchestrated ? outcome : undefined;
+}
+
+/**
+ * The whole uninstall body, always answering with a typed
+ * `UninstallPluginOutcome`. Standalone mode emits its notify() rows on the way
+ * through and its outcome is discarded by the entrypoint above; the declared
+ * return type is what proves the orchestrated arms never yield `undefined`
+ * (WR-01).
+ */
+async function runUninstallOutcome(
+  transaction: UninstallTransaction,
+  hooksRouting: UninstallHooksRouting,
+  completionCache: CompletionCache,
+  opts: UninstallPluginOptions,
+  orchestrated: boolean,
+): Promise<UninstallPluginOutcome> {
   const { ctx, pi, cwd, marketplace, plugin } = opts;
   const cascade = opts.cascade ?? transaction.cascadeUnstagePlugin;
-  const orchestrated = opts.notifications?.mode === "orchestrated";
 
   // ATTR-04 / SCOPE-01 / M3 / M4: the discriminated cross-scope resolver
   // distinguishes "marketplace container absent" (loud `{marketplace not added}`) from
@@ -1008,6 +1082,16 @@ async function uninstallPluginWithTransaction(
   // shrunken-row save has committed. AG-5 still throws (preserves row);
   // non-AG-5 mutates resources.* in place and surfaces via this sentinel.
   let cascadeFailure: Error | undefined;
+  // WLIF-06: did this removal take a workflow envelope off disk? Read from what
+  // the cascade REPORTED dropping, never from the length of the record's
+  // workflow inventory -- the inventory can name envelopes the cascade failed to
+  // remove, so its length answers a different question than "does a command
+  // linger". Captured outside the guard because BOTH post-guard rows are
+  // composed after it: a partial cascade can strand a registered command
+  // exactly as a clean removal can, so the failure arm stamps from this same
+  // sentinel. Assigned the moment the cascade returns, ahead of the failure
+  // split, so the failing arms see what was already dropped.
+  let retiredWorkflowCommand = false;
   const routeEffect = { removeAfterSave: false };
   // D-05-10: the sweep's members, carried out of the closure for the
   // post-commit cleanup and the report.
@@ -1075,6 +1159,7 @@ async function uninstallPluginWithTransaction(
       // PU-1 ordering enforced INSIDE cascadeUnstagePlugin (D-03:
       // skills -> commands -> agents -> mcp).
       const localOutcome = await cascade(plugin, marketplace, locations, installed);
+      retiredWorkflowCommand = localOutcome.dropped.workflows.length > 0;
 
       // TR-03: split the failure handling by cause type.
       //   - AG-5 (AgentsUnstageFailureError): foreign content owned by
@@ -1149,6 +1234,7 @@ async function uninstallPluginWithTransaction(
       plugin,
       cause,
       removedVersion,
+      staleWorkflowCommand: retiredWorkflowCommand,
       orchestrated,
     });
   }
@@ -1187,6 +1273,7 @@ async function uninstallPluginWithTransaction(
       plugin,
       cause: cascadeFailure,
       removedVersion,
+      staleWorkflowCommand: retiredWorkflowCommand,
       orchestrated,
     });
   }
@@ -1241,12 +1328,13 @@ async function uninstallPluginWithTransaction(
   // full remedy naming both parties, where a dependents brace here would only
   // list names. Carrying both would state one fact twice inside a single
   // emission, which the single-emit discipline treats as a defect.
+  const outcome: UninstallPluginOutcome = {
+    status: "uninstalled",
+    name: plugin,
+    ...(removedVersion !== undefined && { version: removedVersion }),
+  };
   if (orchestrated) {
-    return {
-      status: "uninstalled",
-      name: plugin,
-      ...(removedVersion !== undefined && { version: removedVersion }),
-    };
+    return outcome;
   }
 
   // PRUNE-04: the cardinality stays `single` with members present -- the user
@@ -1254,9 +1342,11 @@ async function uninstallPluginWithTransaction(
   // (the install cascade's precedent), so no tally line joins the report.
   const uninstalledRow = composeUninstalledRow({
     plugin,
+
     ...(removedVersion !== undefined && { version: removedVersion }),
     keepData,
     dependents,
+    staleWorkflowCommand: retiredWorkflowCommand,
   });
   notifyWithContext(
     ctx,
@@ -1270,7 +1360,7 @@ async function uninstallPluginWithTransaction(
     undefined,
     "single",
   );
-  return undefined;
+  return outcome;
 }
 
 /** Bind uninstall orchestration to one required cohesive transaction owner. */

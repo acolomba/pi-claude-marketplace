@@ -85,7 +85,7 @@ function createNotifyHarness(
     .once();
   when(() => pi.getAllTools())
     .thenReturn(toolNames.map(toolInfo))
-    .twice();
+    .times(3);
   if (expected.severity === undefined) {
     when(() => {
       ui.notify(expected.message);
@@ -112,6 +112,7 @@ test("reinstalledRowFromOutcome omits empty version, matching scope, reasons, an
     stagedMcpServerNames: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     degradedKinds: [],
   };
 
@@ -141,6 +142,7 @@ test("reinstalledRowFromOutcome orders agent dependency and degraded reasons wit
     stagedMcpServerNames: [],
     declaresAgents: true,
     declaresMcp: false,
+    declaresWorkflows: false,
     degradedKinds: ["command", "skill", "command"],
   };
 
@@ -173,6 +175,7 @@ test("reinstalledRowFromOutcome projects an MCP-only dependency", () => {
     stagedMcpServerNames: ["docs"],
     declaresAgents: false,
     declaresMcp: true,
+    declaresWorkflows: false,
   };
 
   // act
@@ -202,6 +205,7 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
   };
 
   // act
@@ -216,6 +220,60 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
     severity: "info",
     needsReload: true,
   });
+});
+
+test("WDEP-02: reinstalledRowFromOutcome places the workflows dependency LAST", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "all-three",
+    marketplace: "official",
+    scope: "user",
+    version: "1.0.0",
+    resourcesChanged: true,
+    stagedAgentNames: ["reviewer"],
+    stagedMcpServerNames: ["docs"],
+    declaresAgents: true,
+    declaresMcp: true,
+    declaresWorkflows: true,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert -- SEV-01: the reinstall row stamps the marker and stays `info`; the
+  // no-raise asymmetry against install / update / enable is deliberate.
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "all-three",
+    dependencies: ["agents", "mcp", "workflows"],
+    version: "1.0.0",
+    severity: "info",
+    needsReload: true,
+  });
+});
+
+test("WDEP-02: a reinstall declaring no workflow carries no host-engine dependency", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "none",
+    marketplace: "official",
+    scope: "user",
+    version: "1.0.0",
+    resourcesChanged: true,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row.dependencies, []);
 });
 
 /**
@@ -248,6 +306,7 @@ test("renderReinstallPartitionAndNotify projects a clean reinstalled row with a 
       stagedMcpServerNames: [],
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     },
   ];
 
@@ -612,6 +671,7 @@ test("renderReinstallPartitionAndNotify sorts case-insensitive names and scopes 
       stagedMcpServerNames: ["docs"],
       declaresAgents: true,
       declaresMcp: true,
+      declaresWorkflows: false,
     },
     {
       partition: "failed",
@@ -667,4 +727,102 @@ test("renderReinstallPartitionAndNotify omits tally and reload for a single miss
   verify(harness.ctx);
   verify(harness.pi);
   verify(harness.ui);
+});
+
+test("WLIF-06: a retired workflow command takes the tail token and raises the row", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    resourcesChanged: true,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    degradedKinds: ["skill"],
+    staleWorkflowCommand: true,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert -- the malformed kinds first, the stale-command token at the tail,
+  // the same order the enable and update rows use.
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    reasons: ["malformed skill", "stale workflow command"],
+    severity: "warning",
+    needsReload: true,
+  });
+});
+
+test("WLIF-06: the token raises a row that has no other reason of its own", () => {
+  // arrange -- nothing degraded, so the raise can only come from this axis.
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    resourcesChanged: true,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    staleWorkflowCommand: true,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    reasons: ["stale workflow command"],
+    severity: "warning",
+    needsReload: true,
+  });
+});
+
+test("WLIF-06: a reinstall that retired nothing renders the row it always rendered", () => {
+  // arrange -- the same outcome with the axis absent. The key must be ABSENT
+  // rather than present-and-empty, which is what preserves the legacy bytes.
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    resourcesChanged: true,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    severity: "info",
+    needsReload: true,
+  });
+  assert.equal(Object.hasOwn(row, "reasons"), false, "no present-and-empty reasons key");
 });

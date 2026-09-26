@@ -2,7 +2,6 @@ import { mock, verify, when } from "strong-mock";
 
 import type {
   NotificationContext,
-  NotificationUi,
   ToolInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -10,9 +9,9 @@ import type {
 export type MockCtx = NotificationContext;
 export type MockPi = ToolInventory;
 type NotifyArguments = [message: string, severity?: "info" | "warning" | "error"];
-type MockNotificationUi = Omit<NotificationUi, "notify"> & {
+interface MockNotificationUi {
   readonly notify: (...args: NotifyArguments) => void;
-};
+}
 
 export interface CapturedNotification {
   readonly message: string;
@@ -58,13 +57,33 @@ function makePi(tools: readonly ToolInventoryItem[]): MockPi {
   const pi = mock<ToolInventory>({ exactParams: true, name: "catalog Pi API" });
   when(() => pi.getAllTools())
     .thenReturn(tools)
-    .times(2);
+    .times(3);
   return pi;
 }
 
-/** Reports both companion extensions loaded. */
+/**
+ * Probe reports all three companions loaded -- pi-subagents, pi-mcp-adapter and
+ * the host workflow engine -- so no soft-dep marker fires on any row, whatever
+ * that row declares.
+ */
+export function piWithAllLoaded(): MockPi {
+  return makePi([{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }]);
+}
+
+/** Reports pi-subagents and pi-mcp-adapter loaded, the host workflow engine NOT loaded. */
 export function piWithBothLoaded(): MockPi {
   return makePi([{ name: "subagent" }, { name: "mcp" }]);
+}
+
+/**
+ * Probe reports pi-subagents and pi-mcp-adapter loaded, the host workflow engine
+ * NOT loaded -- `{requires pi-dynamic-workflows}` fires on dep-bearing rows
+ * declaring workflows, and no other soft-dep marker fires (WDEP-01). Byte-identical
+ * to `piWithBothLoaded`; this name is for call sites specifically exercising the
+ * workflow-engine-absent scenario.
+ */
+export function piWithoutWorkflowEngine(): MockPi {
+  return piWithBothLoaded();
 }
 
 /** Reports only the MCP companion extension loaded. */
@@ -77,7 +96,7 @@ export function piWithNothingLoaded(): MockPi {
   return makePi([]);
 }
 
-/** Verifies the catalog renderer performed exactly two tool probes. */
+/** Verifies the catalog renderer performed exactly three tool probes. */
 export function verifyPi(pi: MockPi): void {
   verify(pi);
 }

@@ -52,6 +52,10 @@
         "patterns": ["extensions/pi-claude-marketplace/bridges/hooks/**"]
       },
       {
+        "name": "bridges-workflows",
+        "patterns": ["extensions/pi-claude-marketplace/bridges/workflows/**"]
+      },
+      {
         "name": "domain",
         "patterns": ["extensions/pi-claude-marketplace/domain/**"]
       },
@@ -89,6 +93,7 @@
           "bridges-mcp",
           "bridges-skills",
           "bridges-hooks",
+          "bridges-workflows",
           "domain",
           "transaction",
           "persistence",
@@ -117,6 +122,10 @@
         "allow": ["domain", "persistence", "shared", "platform"]
       },
       {
+        "from": "bridges-workflows",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
         "from": "domain",
         "allow": ["shared", "platform"]
       },
@@ -139,7 +148,7 @@
     ]
   },
   "duplicates": {
-    "ignoredClones": ["dup:cc950b18:2", "dup:6d8c002d:2"],
+    "ignoredClones": ["dup:cc950b18:2"],
     "threshold": 3
   },
   "includeEntryExports": true,

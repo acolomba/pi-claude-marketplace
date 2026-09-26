@@ -724,7 +724,57 @@ Review files.
     });
   }
 
-  test("emits complete metadata, sanitized provenance, a skill legend, and exact body bytes", () => {
+  test("renders nonempty aliases before optional metadata and preserves body bytes", () => {
+    // arrange
+    const generatedAgent = {
+      frontmatter: {
+        name: "pi-claude-marketplace-acme-reviewer",
+        description: "Review source changes",
+        aliases: ["review", "audit"],
+        model: "anthropic/claude-sonnet-4-6",
+        skills: [],
+        inheritSkills: false,
+      },
+      provenance: {
+        pluginName: "acme",
+        sourceName: "reviewer",
+        sourcePath: "agents/reviewer.md",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+      body: "Review the source.\nKeep the final newline.\n",
+    };
+    const expectedGeneratedAgentFile = `---
+name: pi-claude-marketplace-acme-reviewer
+description: Review source changes
+aliases: review,audit
+model: anthropic/claude-sonnet-4-6
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: reviewer
+  sourcePath: agents/reviewer.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Review the source.
+Keep the final newline.
+`;
+
+    // act
+    const generatedAgentFile = emitGeneratedAgentFile(generatedAgent);
+
+    // assert
+    assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
+  });
+
+  test("emits complete metadata, sanitized provenance, and exact body bytes", () => {
     // arrange
     const generatedAgent = {
       frontmatter: {
@@ -746,10 +796,6 @@ Review files.
         warnings: ["first warning\nwarningInjection: blocked", "second warning"],
       },
       body: "Review the source.",
-      legend: [
-        { token: "acme:review", generatedName: "acme-review" },
-        { token: "acme:check", generatedName: "acme-check" },
-      ],
     };
     const expectedGeneratedAgentFile = `---
 name: pi-claude-marketplace-acme-reviewer
@@ -777,13 +823,6 @@ provenance:
     - first warning warningInjection: blocked
     - second warning
 ---
-
-## Pi coding agent skill legend
-
-These instructions reference Claude skills by their original names. In this Pi session:
-
-- \`acme:review\` → skill \`acme-review\` (available on demand)
-- \`acme:check\` → skill \`acme-check\` (available on demand)
 
 Review the source.
 `;
@@ -891,7 +930,7 @@ Scout body.
     assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
   });
 
-  test("treats an empty legend as absent and adds only the missing trailing newline", () => {
+  test("adds the missing trailing newline", () => {
     // arrange
     const generatedAgent = {
       frontmatter: {
@@ -910,7 +949,6 @@ Scout body.
         warnings: [],
       },
       body: "\nBody lacks its final newline.",
-      legend: [],
     };
     const expectedGeneratedAgentFile = `---
 name: pi-claude-marketplace-acme-writer

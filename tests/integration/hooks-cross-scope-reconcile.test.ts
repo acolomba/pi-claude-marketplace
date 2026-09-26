@@ -83,6 +83,7 @@ function buildStateWithSingleHooksPlugin(opts: {
               agents: [],
               mcpServers: [],
               hooks: [opts.plugin],
+              workflows: [],
             },
             enabled: true,
             provenance: "explicit",

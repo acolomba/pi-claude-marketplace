@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
@@ -26,7 +27,10 @@ import { createHermeticEnvironment } from "../../platform/hermetic-environment.t
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
-import type { InstallLedgerSummary } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import type {
+  InstallFailureCapture,
+  InstallLedgerSummary,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -46,6 +50,8 @@ interface SeededComponents {
   readonly skills?: readonly string[];
   readonly commands?: readonly string[];
   readonly agents?: readonly string[];
+  /** Workflow scripts, each declaring its own `meta.name` as the file stem. */
+  readonly workflows?: readonly string[];
   /**
    * Sources whose frontmatter block closes but whose inner YAML does not
    * parse. The bridge synthesizes a degraded artifact and records the parse
@@ -72,6 +78,14 @@ async function writeComponents(pluginRoot: string, components: SeededComponents)
     await writeFile(
       path.join(pluginRoot, "agents", `${agent}.md`),
       `---\nname: ${agent}\ndescription: ${agent} agent\ntools: Read,Grep\n---\n\nBody.\n`,
+    );
+  }
+
+  for (const workflow of components.workflows ?? []) {
+    await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, "workflows", `${workflow}.js`),
+      `export const meta = { name: "${workflow}", description: "${workflow} workflow" };\n`,
     );
   }
 
@@ -176,7 +190,14 @@ async function seedPlugin(
                     supported: [],
                     unsupported: [],
                   },
-                  resources: { skills: [], prompts: [], agents: [], hooks: [], mcpServers: [] },
+                  resources: {
+                    skills: [],
+                    prompts: [],
+                    agents: [],
+                    hooks: [],
+                    mcpServers: [],
+                    workflows: [],
+                  },
                   enabled: false,
                   provenance: "explicit",
                   installedAt: "2026-01-01T00:00:00.000Z",
@@ -250,7 +271,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
       plugin: "empty",
       pluginDataDir: path.join(locations.dataRoot, "marketplace", "empty"),
       resolved: {
-        componentPaths: { agents: [], commands: [], skills: [] },
+        componentPaths: { agents: [], commands: [], skills: [], workflows: [] },
         defaultEnabled: true,
         installable: true,
         mcpServers: {},
@@ -265,6 +286,12 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
       stagedCommandNames: [],
       stagedMcpServerNames: [],
       stagedSkillNames: [],
+      // WLIF-05: a plugin declaring no workflows projects an EMPTY array, not
+      // an absent key. `deepStrictEqual` over the whole summary is what makes
+      // that distinction assertable -- a per-key assertion passes for an
+      // omitted member too, and an omitted member is a materialization
+      // reporting nothing about an axis rather than reporting nothing on it.
+      stagedWorkflowNames: [],
       version: "pinned-by-caller",
     },
   });
@@ -275,6 +302,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
   assert.deepStrictEqual(installedPluginOutcome(ledgerOutcome.summary, [], false), {
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     resourcesChanged: false,
     status: "installed",
     version: "pinned-by-caller",
@@ -297,6 +325,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
     stagedCommandNames: ["command"],
     stagedMcpServerNames: ["server"],
     stagedSkillNames: ["skill"],
+    stagedWorkflowNames: ["workflow"],
   };
   assert.deepStrictEqual(ledgerDegradationSignals(richSummary), {
     degradedKinds: ["skill", "command"],
@@ -305,6 +334,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
   assert.deepStrictEqual(installedPluginOutcome(richSummary, ["warning"], true), {
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: true,
     degradedKinds: ["skill", "command"],
     landedDisabled: true,
     orphanRewake: true,
@@ -329,7 +359,7 @@ test("captures the resolved version when a concurrent record aborts state commit
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     resolvedSource: "/raced/plugin",
-    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
     updatedAt: "2026-01-01T00:00:00.000Z",
     version: "raced",
   };
@@ -338,7 +368,12 @@ test("captures the resolved version when a concurrent record aborts state commit
     get(target, property, receiver): unknown {
       if (property === "empty") {
         pluginReads += 1;
-        return pluginReads >= 2 ? racedRecord : undefined;
+        // Reads, in order: the early-sanity check, the workflows phase's
+        // previous-names lookup, then the state commit. The raced record must
+        // appear at the LAST of the three so the failure is driven from
+        // `statePhase` -- the only phase that can fail after the workflows
+        // phase, which is the last bridge slot.
+        return pluginReads >= 3 ? racedRecord : undefined;
       }
 
       return Reflect.get(target, property, receiver) as unknown;
@@ -366,7 +401,7 @@ test("captures the resolved version when a concurrent record aborts state commit
     message: 'Plugin "empty" was installed concurrently in marketplace "marketplace".',
     name: "ConcurrentInstallError",
   });
-  assert.equal(pluginReads, 2);
+  assert.equal(pluginReads, 3);
   assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
 });
 
@@ -382,7 +417,10 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
     get(target, property, receiver): unknown {
       if (property === "marketplace") {
         marketplaceReads += 1;
-        return marketplaceReads >= 4 ? undefined : marketplace;
+        // The workflows phase's previous-names lookup adds one read ahead of
+        // the state commit's, so the marketplace must survive one read
+        // longer than it did with five phases.
+        return marketplaceReads >= 5 ? undefined : marketplace;
       }
 
       return Reflect.get(target, property, receiver) as unknown;
@@ -410,7 +448,7 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
     message: 'Marketplace "marketplace" disappeared from state during install of "empty".',
     name: "Error",
   });
-  assert.equal(marketplaceReads, 4);
+  assert.equal(marketplaceReads, 5);
   assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
 });
 
@@ -439,7 +477,7 @@ test("preserves installedAt while replacing an existing disabled record", async 
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     resolvedSource: seeded.pluginRoot,
-    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
     updatedAt: seeded.state.marketplaces.marketplace?.plugins.empty?.updatedAt,
     version: "0.0.1",
   });
@@ -564,7 +602,7 @@ test("surfaces the skills staging cleanup leak and still lands the install", asy
   assert.deepStrictEqual(installed.summary.bridgeWarnings, [
     `failed to clean up skills staging directory at ${installed.stagingRoot}: staging cleanup denied`,
   ]);
-  assert.deepStrictEqual(installed.summary.stagedSkillNames, ["empty:alpha"]);
+  assert.deepStrictEqual(installed.summary.stagedSkillNames, ["empty-alpha"]);
 });
 
 test("surfaces the commands staging cleanup leak and still lands the install", async (t) => {
@@ -580,6 +618,133 @@ test("surfaces the commands staging cleanup leak and still lands the install", a
     `failed to clean up commands staging directory at ${installed.stagingRoot}: staging cleanup denied`,
   ]);
   assert.deepStrictEqual(installed.summary.stagedCommandNames, ["empty:beta"]);
+});
+
+// The workflows bridge binds its own removal ops rather than taking the
+// ledger's, so its staging-cleanup fault is planted on the module the bridge
+// reads (`node:fs/promises`) instead of on the injected fake. The `require`
+// handle is the same object the bridge's default import resolves to, and the
+// sync call republishes the patched binding to its named-import readers.
+const filesystemPromises = createRequire(import.meta.url)(
+  "node:fs/promises",
+) as typeof import("node:fs/promises");
+
+test("surfaces the workflows staging cleanup leak and still lands the install", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-workflows-leak-");
+  const seeded = await seedPlugin(environment.cwd, { components: { workflows: ["delta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  let leakedRoot: string | undefined;
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    const target = String(args[0]);
+    if (target.startsWith(`${locations.workflowsStagingDir}${path.sep}`)) {
+      leakedRoot = target;
+      throw Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
+    }
+
+    return originalRm(...args);
+  });
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.ok(leakedRoot !== undefined);
+  assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
+    `failed to clean up workflows staging directory at ${leakedRoot}: staging cleanup denied`,
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedWorkflowNames, ["empty:delta"]);
+});
+
+test("a failed workflows removal during rollback surfaces as its own partial rather than a clean unwind", async (t) => {
+  // arrange -- the state commit is what fails, AFTER the workflows phase
+  // placed its envelope, so the ledger's reverse walk reaches the workflows
+  // undo with a real envelope to unlink; that unlink is the planted fault.
+  const environment = await createHermeticEnvironment(t, "install-outcome-workflows-undo-");
+  const seeded = await seedPlugin(environment.cwd, { components: { workflows: ["delta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const marketplace = seeded.state.marketplaces.marketplace;
+  assert.ok(marketplace !== undefined);
+  const racedRecord: ExtensionState["marketplaces"][string]["plugins"][string] = {
+    provenance: "explicit",
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    enabled: true,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    resolvedSource: "/raced/plugin",
+    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    version: "raced",
+  };
+  let pluginReads = 0;
+  marketplace.plugins = new Proxy(marketplace.plugins, {
+    get(target, property, receiver): unknown {
+      if (property === "empty") {
+        pluginReads += 1;
+        return pluginReads >= 3 ? racedRecord : undefined;
+      }
+
+      return Reflect.get(target, property, receiver) as unknown;
+    },
+  });
+  const stuckPath = path.join(locations.workflowsSavedDir, "empty:delta.json");
+  const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
+  t.mock.method(
+    filesystemPromises,
+    "unlink",
+    async (...args: Parameters<typeof originalUnlink>) => {
+      if (String(args[0]) === stuckPath) {
+        throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+      }
+
+      return originalUnlink(...args);
+    },
+  );
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+    },
+    capture,
+  );
+
+  // assert -- the rollback partial wraps the state-commit race; the workflows
+  // undo's own failure rides along as the partial, naming the envelope it
+  // could not unlink, and the envelope is still on disk.
+  await assert.rejects(
+    operation,
+    (error: unknown) =>
+      error instanceof Error &&
+      error.cause instanceof Error &&
+      error.cause.name === "ConcurrentInstallError",
+  );
+  assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), ["empty:delta.json"]);
+  const partial = capture.rollbackPartials[0];
+  assert.strictEqual(partial?.phase, "workflows");
+  assert.strictEqual(partial.cause?.name, "WorkflowsUnstageFailureError");
+  assert.match(partial.cause.message, /^empty:delta: /);
 });
 
 test("surfaces the agents staging cleanup leak and still lands the install", async (t) => {
@@ -768,7 +933,7 @@ test("collects the per-source frontmatter degrade records from the skills and co
     ledgerOutcome.summary.frontmatterDegradations.map((record) => record.kind),
     ["skill", "command"],
   );
-  assert.deepStrictEqual(ledgerOutcome.summary.stagedSkillNames, ["empty:bad-skill"]);
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedSkillNames, ["empty-bad-skill"]);
   assert.deepStrictEqual(ledgerOutcome.summary.stagedCommandNames, ["empty:bad-command"]);
 });
 
@@ -912,7 +1077,7 @@ test("an mcp phase that cannot even prepare unwinds the hooks config the phase b
       () => false,
     );
   assert.equal(await survives(path.join(locations.hooksDir, "empty", "hooks.json")), false);
-  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty:alpha")), false);
+  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty-alpha")), false);
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
   // Every undo ran to completion; nothing was left half-unwound.
   assert.deepStrictEqual(capture.rollbackPartials, []);
@@ -968,7 +1133,7 @@ test("a hooks.json that turns malformed after resolution unwinds the ledger", as
       () => false,
     );
   assert.equal(await survives(path.join(locations.hooksDir, "empty", "hooks.json")), false);
-  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty:alpha")), false);
+  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty-alpha")), false);
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
   assert.deepStrictEqual(capture.rollbackPartials, []);
 });
@@ -1031,7 +1196,7 @@ test("a skills prepare that refuses leaves the skills phase with nothing to undo
     prefix: "install-outcome-skills-refuse-",
     components: { skills: ["alpha"] },
     targetDir: (locations) => locations.skillsTargetDir,
-    generatedName: "empty:alpha",
+    generatedName: "empty-alpha",
   });
 });
 
@@ -1050,6 +1215,15 @@ test("an agents prepare that refuses leaves the agents phase with nothing to und
     components: { skills: ["alpha"], agents: ["gamma"] },
     targetDir: (locations) => locations.agentsDir,
     generatedName: "pi-claude-marketplace-empty-gamma.md",
+  });
+});
+
+test("a workflows prepare that refuses leaves the workflows phase with nothing to undo", async (t) => {
+  await assertFailingPhaseUndoIsInert(t, {
+    prefix: "install-outcome-workflows-refuse-",
+    components: { skills: ["alpha"], workflows: ["delta"] },
+    targetDir: (locations) => locations.workflowsSavedDir,
+    generatedName: "empty:delta.json",
   });
 });
 

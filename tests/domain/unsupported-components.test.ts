@@ -104,7 +104,7 @@ test("collectUnsupportedKinds reads direct and experimental declarations in tupl
     channels: null,
     userConfig: false,
   };
-  const manifest = { outputStyles: [], settings: false, workflows: {} };
+  const manifest = { outputStyles: [], settings: false };
 
   // act
   const kinds = await collectUnsupportedKinds(entry, manifest, "/plugins/alpha", () =>
@@ -120,7 +120,6 @@ test("collectUnsupportedKinds reads direct and experimental declarations in tupl
     "channels",
     "userConfig",
     "settings",
-    "workflows",
   ]);
 });
 
@@ -135,7 +134,6 @@ test("collectUnsupportedKinds detects every filesystem convention", async () => 
     [path.join(pluginRoot, "themes"), "dir"],
     [path.join(pluginRoot, "output-styles"), "dir"],
     [path.join(pluginRoot, "settings.json"), "file"],
-    [path.join(pluginRoot, "workflows"), "dir"],
   ]);
 
   // act
@@ -144,14 +142,7 @@ test("collectUnsupportedKinds detects every filesystem convention", async () => 
   );
 
   // assert
-  assert.deepStrictEqual(kinds, [
-    "lspServers",
-    "monitors",
-    "themes",
-    "outputStyles",
-    "settings",
-    "workflows",
-  ]);
+  assert.deepStrictEqual(kinds, ["lspServers", "monitors", "themes", "outputStyles", "settings"]);
 });
 
 const ignoredExperimentalCases = [

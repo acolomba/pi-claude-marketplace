@@ -1,69 +1,119 @@
 // domain/skill-tokens.ts
 //
-// SKTK-01: retarget same-plugin `<plugin>:<skill>` references inside staged
-// skill content onto the generated names the install actually materializes.
-// Skill prose written for Claude Code names siblings in the upstream
-// namespace; the installed Pi name diverges from that spelling on Windows
-// (`.` separator) and wherever RN-1 prefix elision applies
-// (`acme:acme-foo` -> `acme:foo`). Mapping every token through
-// `generatedSkillName` makes an already-aligned token its own replacement,
-// so aligned content is byte-identical and only divergent references move.
+// Resolve references through the names selected by plugin discovery.
+//
+// A qualified sibling can be a command, a workflow, or a skill: all three are
+// `/`-invocable, and each installs under a name the upstream spelling does not
+// predict. The token grammar cannot tell the kinds apart, so a candidate is
+// resolved through each generator in turn -- command, then skill, then
+// workflow -- and replaced by the first generated name the plugin stages.
 
+import { errorMessage } from "../shared/errors.ts";
 import { escapeRegExp } from "../shared/regexp.ts";
 
-import { generatedSkillName } from "./name.ts";
+import { generatedCommandName, generatedSkillName, generatedWorkflowName } from "./name.ts";
 
-/** A fenced-code-block delimiter line (``` or ~~~), leading-whitespace-tolerant. */
-const FENCE = /^(```|~~~)/;
+/** A known same-plugin skill, or the reason a source reference cannot map. */
+export type SkillReferenceResolution =
+  | { readonly kind: "known"; readonly generatedName: string }
+  | { readonly kind: "foreign" | "unknown" }
+  | { readonly kind: "malformed"; readonly reason: string };
 
 /**
- * SKTK-01: rewrite `<pluginName>:<skill>` tokens to their generated skill
- * names, outside fenced code blocks.
- *
- * The token grammar matches the agents bridge's skill-legend detector: the
- * lookbehind rejects tokens embedded in a longer word, and the candidate
- * class excludes `.` so sentence punctuation never joins a candidate. Only
- * candidates resolving into `knownGeneratedNames` are replaced -- an
- * unknown or cross-plugin reference stays verbatim, and a candidate the
- * name generator rejects (e.g. one that elides to nothing) is skipped
- * rather than thrown. Fenced code blocks are left untouched: unlike the
- * agents legend (D-82-07), this rewrite mutates content in place, and a
- * fenced example documenting upstream syntax must survive verbatim.
+ * Names selected by discovery for one plugin. Every member is required: a
+ * caller that stages no workflows says so with an empty list rather than by
+ * omission, which would let a bridge that forgot to thread the names compile.
  */
-export function rewriteSkillTokens(
+export interface InstalledReferenceNames {
+  readonly skills: readonly string[];
+  readonly commands: readonly string[];
+  readonly workflows: readonly string[];
+}
+
+/** Resolves bare and qualified source references to installed Pi skill names. */
+export function resolveSkillReference(
+  pluginName: string,
+  reference: string,
+  knownGeneratedNames: ReadonlySet<string>,
+): SkillReferenceResolution {
+  const colon = reference.indexOf(":");
+  let sourceName = reference;
+  if (colon !== -1) {
+    if (reference.slice(0, colon).trim() !== pluginName) {
+      return { kind: "foreign" };
+    }
+
+    sourceName = reference.slice(colon + 1).trim();
+  }
+
+  let generatedName: string;
+  try {
+    generatedName = generatedSkillName(pluginName, sourceName);
+  } catch (error) {
+    return { kind: "malformed", reason: errorMessage(error) };
+  }
+
+  return knownGeneratedNames.has(generatedName)
+    ? { kind: "known", generatedName }
+    : { kind: "unknown" };
+}
+
+/**
+ * Resolves a workflow reference, or `undefined` when the plugin stages no
+ * workflow under it. A name the generator refuses is skipped rather than
+ * thrown, so one malformed candidate cannot fail the whole rewrite.
+ */
+function resolveWorkflowReference(
+  pluginName: string,
+  source: string,
+  workflows: ReadonlySet<string>,
+): string | undefined {
+  let generated: string;
+  try {
+    generated = generatedWorkflowName(pluginName, source);
+  } catch {
+    return undefined;
+  }
+
+  return workflows.has(generated) ? generated : undefined;
+}
+
+/** Rewrites known references to the invocation Pi actually loads. */
+export function rewriteMarkdownReferences(
   content: string,
   pluginName: string,
-  knownGeneratedNames: readonly string[],
+  names: InstalledReferenceNames,
 ): string {
-  const known = new Set(knownGeneratedNames);
+  const skills = new Set(names.skills);
+  const commands = new Set(names.commands);
+  const workflows = new Set(names.workflows);
   const tokenRe = new RegExp(
-    `(?<![A-Za-z0-9_.:-])${escapeRegExp(pluginName)}:([A-Za-z0-9_-]+)`,
+    `(?<![A-Za-z0-9_.:/-])/?(?:(${escapeRegExp(pluginName)}):|skill:)([A-Za-z0-9_-]+(?:[:.][A-Za-z0-9_-]+)*)`,
     "g",
   );
 
   const rewriteLine = (line: string): string =>
-    line.replaceAll(tokenRe, (token, candidate: string) => {
-      let generated: string;
-      try {
-        generated = generatedSkillName(pluginName, candidate);
-      } catch {
-        return token;
+    line.replaceAll(tokenRe, (token, qualifiedPlugin: string | undefined, source: string) => {
+      if (qualifiedPlugin === undefined) {
+        const skill = resolveSkillReference(pluginName, source, skills);
+        return skill.kind === "known" ? `/skill:${skill.generatedName}` : token;
       }
 
-      return known.has(generated) ? generated : token;
+      const commandName = generatedCommandName(pluginName, source.replaceAll(":", "/"));
+
+      if (commands.has(commandName)) {
+        return `/${commandName}`;
+      }
+
+      const skill = resolveSkillReference(pluginName, `${pluginName}:${source}`, skills);
+
+      if (skill.kind === "known") {
+        return `/skill:${skill.generatedName}`;
+      }
+
+      const workflowName = resolveWorkflowReference(pluginName, source, workflows);
+      return workflowName === undefined ? token : `/${workflowName}`;
     });
 
-  const out: string[] = [];
-  let inFence = false;
-
-  for (const line of content.split("\n")) {
-    if (FENCE.test(line.trimStart())) {
-      inFence = !inFence;
-      out.push(line);
-    } else {
-      out.push(inFence ? line : rewriteLine(line));
-    }
-  }
-
-  return out.join("\n");
+  return content.split("\n").map(rewriteLine).join("\n");
 }

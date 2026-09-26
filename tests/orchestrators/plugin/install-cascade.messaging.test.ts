@@ -41,8 +41,16 @@ import type {
 
 const BOTH_LOADED: readonly ToolInventoryItem[] = [{ name: "subagent" }, { name: "mcp" }];
 const MCP_ONLY: readonly ToolInventoryItem[] = [{ name: "mcp" }];
-const PROBE_BOTH_LOADED: SoftDepStatus = { piSubagentsLoaded: true, piMcpAdapterLoaded: true };
-const PROBE_NO_AGENTS: SoftDepStatus = { piSubagentsLoaded: false, piMcpAdapterLoaded: true };
+const PROBE_BOTH_LOADED: SoftDepStatus = {
+  workflowEngineLoaded: false,
+  piSubagentsLoaded: true,
+  piMcpAdapterLoaded: true,
+};
+const PROBE_NO_AGENTS: SoftDepStatus = {
+  workflowEngineLoaded: false,
+  piSubagentsLoaded: false,
+  piMcpAdapterLoaded: true,
+};
 
 /** One captured emission: the composed body plus the severity argument. */
 interface Emission {
@@ -98,6 +106,7 @@ function member(overrides: Partial<CascadeInstalledRow> = {}): CascadeInstalledR
     version: "2.1.0",
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     fellBackToCurrentCopy: false,
     reEnabledFromRecord: false,
     ...overrides,

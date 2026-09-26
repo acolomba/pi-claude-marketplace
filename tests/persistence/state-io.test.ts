@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, watch, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -23,13 +24,14 @@ interface HooksOnlyResources {
   readonly agents: [];
   readonly mcpServers: [];
   readonly hooks: [string];
+  readonly workflows: [];
 }
 
 void ({
   version: "1.0.0",
   resolvedSource: "/plugins/active",
   compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-  resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
   enabled: true,
   provenance: "explicit",
   installedAt: "2026-01-01T00:00:00.000Z",
@@ -74,6 +76,17 @@ function stateJsonPersisted(t: TestContext, extensionRoot: string): Promise<void
       }
     }
   })();
+}
+
+/**
+ * Waits for `loadState`'s background persist, which it does not await: the
+ * file is atomically replaced, so its bytes change exactly once. The case's
+ * own timeout bounds the wait.
+ */
+async function waitForReplacedBytes(stateJsonPath: string, storedBytes: string): Promise<void> {
+  while ((await readFile(stateJsonPath, "utf8")) === storedBytes) {
+    await delay(5);
+  }
 }
 
 test("publishes the exact frozen default state", () => {
@@ -124,6 +137,7 @@ test("clones every plugin field without retaining nested aliases", () => {
       agents: ["agent-a"],
       mcpServers: ["mcp-a"],
       hooks: ["hooks-a"],
+      workflows: ["plugin:build"],
     },
     enabled: false,
     provenance: "dependency",
@@ -148,6 +162,7 @@ test("clones every plugin field without retaining nested aliases", () => {
       agents: ["agent-a"],
       mcpServers: ["mcp-a"],
       hooks: ["hooks-a"],
+      workflows: ["plugin:build"],
     },
     enabled: false,
     provenance: "dependency",
@@ -167,6 +182,10 @@ test("clones every plugin field without retaining nested aliases", () => {
   assert.notStrictEqual(clonedRecord.compatibility.notes, record.compatibility.notes);
   assert.notStrictEqual(clonedRecord.resources, record.resources);
   assert.notStrictEqual(clonedRecord.resources.skills, record.resources.skills);
+  // WLIF-01: the enumeration must deep-copy the workflows axis too. A spread
+  // would alias it, and a later in-place mutation of the live record would
+  // reach the snapshot the removal paths read from.
+  assert.notStrictEqual(clonedRecord.resources.workflows, record.resources.workflows);
 });
 
 test("clones a legacy plugin without inventing optional fields", () => {
@@ -175,7 +194,7 @@ test("clones a legacy plugin without inventing optional fields", () => {
     version: "1.0.0",
     resolvedSource: "/plugins/legacy",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: true,
     provenance: "explicit",
     installedAt: "2025-01-01T00:00:00.000Z",
@@ -190,7 +209,7 @@ test("clones a legacy plugin without inventing optional fields", () => {
     version: "1.0.0",
     resolvedSource: "/plugins/legacy",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: true,
     provenance: "explicit",
     installedAt: "2025-01-01T00:00:00.000Z",
@@ -209,6 +228,7 @@ test("disables a plugin while preserving its complete inventory", () => {
     agents: [],
     mcpServers: [],
     hooks: ["hooks-a"],
+    workflows: [],
   };
   const record: PluginInstallRecord & { resources: HooksOnlyResources } = {
     version: "sha-a1b2c3d4e5f6",
@@ -384,6 +404,7 @@ test("loads complete hook and resolved-sha plugin records", async (t) => {
               agents: [],
               mcpServers: [],
               hooks: ["hooks-a"],
+              workflows: [],
             },
             enabled: true,
             provenance: "dependency",
@@ -586,6 +607,7 @@ test(
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               provenance: "explicit",
@@ -627,7 +649,8 @@ test(
             ],
             "agents": [],
             "mcpServers": [],
-            "hooks": []
+            "hooks": [],
+            "workflows": []
           },
           "installedAt": "2025-01-01T00:00:00.000Z",
           "updatedAt": "2025-01-01T00:00:00.000Z",
@@ -642,28 +665,11 @@ test(
 }
 `;
     await writeFile(stateJsonPath, JSON.stringify(storedState));
-    const controller = new AbortController();
-    t.after(() => {
-      controller.abort();
-    });
-    const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
-    const stateJsonChanged = (async () => {
-      while (true) {
-        const change = await changes.next();
-        if (change.done) {
-          throw new Error("state.json watcher ended before persistence");
-        }
-
-        if (change.value.filename === "state.json") {
-          return change.value;
-        }
-      }
-    })();
+    const storedMetadata = await stat(stateJsonPath, { bigint: true });
 
     // act
     const state = await loadState(extensionRoot);
-    const change = await stateJsonChanged;
-    await changes.return?.();
+    await waitForReplacedBytes(stateJsonPath, JSON.stringify(storedState));
     const persistedBytes = await readFile(stateJsonPath, "utf8");
     const persistedMetadata = await stat(stateJsonPath, { bigint: true });
     const replayedState = await loadState(extensionRoot);
@@ -671,7 +677,8 @@ test(
     const replayedMetadata = await stat(stateJsonPath, { bigint: true });
 
     // assert
-    assert.deepStrictEqual({ ...change }, { eventType: "rename", filename: "state.json" });
+    // A new inode is the atomic rename's signature; an in-place write keeps it.
+    assert.notStrictEqual(persistedMetadata.ino, storedMetadata.ino);
     assert.deepStrictEqual(state, expectedState);
     assert.strictEqual(persistedBytes, expectedBytes);
     assert.deepStrictEqual(replayedState, expectedState);
@@ -739,7 +746,14 @@ test(
               version: "1.0.0",
               resolvedSource: "/catalog/plugin",
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              resources: {
+                workflows: [],
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+              },
               enabled: true,
               provenance: "explicit",
               installedAt: "2026-01-01T00:00:00.000Z",
@@ -778,7 +792,8 @@ test(
             "prompts": [],
             "agents": [],
             "mcpServers": [],
-            "hooks": []
+            "hooks": [],
+            "workflows": []
           },
           "enabled": true,
           "installedAt": "2026-01-01T00:00:00.000Z",
@@ -1140,7 +1155,14 @@ test("reports the exact post-normalization schema failure", async (t) => {
             version: "1.0.0",
             resolvedSource: "/catalog/plugin",
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
             enabled: null,
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
@@ -1345,28 +1367,10 @@ test(
 `;
     await writeFile(path.join(scopeRoot, "claude-plugins.json"), "{}");
     await writeFile(stateJsonPath, JSON.stringify(storedState));
-    const controller = new AbortController();
-    t.after(() => {
-      controller.abort();
-    });
-    const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
-    const stateJsonChanged = (async () => {
-      while (true) {
-        const change = await changes.next();
-        if (change.done) {
-          throw new Error("state.json watcher ended before persistence");
-        }
-
-        if (change.value.filename === "state.json") {
-          return;
-        }
-      }
-    })();
 
     // act
     const state = await loadState(extensionRoot);
-    await stateJsonChanged;
-    await changes.return?.();
+    await waitForReplacedBytes(stateJsonPath, JSON.stringify(storedState));
     const persistedBytes = await readFile(stateJsonPath, "utf8");
 
     // assert
@@ -1384,7 +1388,7 @@ for (const { name, plugin, expectedError } of [
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], workflows: [] },
       enabled: true,
       provenance: "explicit",
       installedAt: "2026-01-01T00:00:00.000Z",
@@ -1399,7 +1403,36 @@ for (const { name, plugin, expectedError } of [
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: "hooks" },
+      resources: {
+        skills: [],
+        prompts: [],
+        agents: [],
+        mcpServers: [],
+        hooks: "hooks",
+        workflows: [],
+      },
+      enabled: true,
+      // D-04-03: `provenance` is required too, and the validator reports the
+      // first failure it meets -- without it this case would report the
+      // missing provenance instead of the non-array hooks it is about.
+      provenance: "explicit",
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  },
+  {
+    // WLIF-01: `workflows` is a REQUIRED resources member, not an optional
+    // one, so every construction site is compile-forced to answer for it and
+    // a record that reaches the validator without it is rejected rather than
+    // silently read as an empty inventory.
+    name: "a plugin whose resources omit workflows",
+    expectedError:
+      "saveState refused: in-memory state failed schema validation: /marketplaces/catalog/plugins/plugin/resources: must have required properties workflows",
+    plugin: {
+      version: "1.0.0",
+      resolvedSource: "/catalog/plugin",
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
       enabled: true,
       provenance: "explicit",
       installedAt: "2026-01-01T00:00:00.000Z",
@@ -1414,7 +1447,7 @@ for (const { name, plugin, expectedError } of [
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
       provenance: "explicit",
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -1428,7 +1461,7 @@ for (const { name, plugin, expectedError } of [
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
       enabled: true,
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -1442,7 +1475,7 @@ for (const { name, plugin, expectedError } of [
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
       enabled: true,
       provenance: "manual",
       installedAt: "2026-01-01T00:00:00.000Z",
@@ -1488,6 +1521,62 @@ for (const { name, plugin, expectedError } of [
   });
 }
 
+test("round-trips the recorded workflow envelope names through save and load", async (t) => {
+  // arrange
+  // WLIF-01: the record is the ONLY inventory of the placed envelopes -- they
+  // sit outside every scope root and nothing on disk can be enumerated to
+  // rediscover them -- so a name that does not survive the round trip is a
+  // name no removal path can ever reach.
+  const extensionRoot = await createExtensionRoot(t, "state-io-workflows-roundtrip-");
+  const state: ExtensionState = {
+    schemaVersion: 3,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {
+          plugin: {
+            version: "1.0.0",
+            resolvedSource: "/catalog/plugin",
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["workflows"],
+              unsupported: [],
+            },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: ["plugin:build", "plugin:deploy"],
+            },
+            enabled: true,
+            provenance: "explicit",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+
+  // act
+  await saveState(extensionRoot, state);
+  const loaded = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(loaded.marketplaces["catalog"]?.plugins["plugin"]?.resources.workflows, [
+    "plugin:build",
+    "plugin:deploy",
+  ]);
+});
+
 test("round-trips resolved sha, hook entries and provenance through exact state bytes", async (t) => {
   // arrange
   const extensionRoot = await createExtensionRoot(t, "state-io-plugin-roundtrip-");
@@ -1508,7 +1597,14 @@ test("round-trips resolved sha, hook entries and provenance through exact state 
             resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
             hookEntries: [{ event: "SessionStart" }],
             compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hooks-a"] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: ["hooks-a"],
+              workflows: [],
+            },
             enabled: true,
             provenance: "dependency",
             installedAt: "2026-01-01T00:00:00.000Z",
@@ -1546,6 +1642,7 @@ test("round-trips resolved sha, hook entries and provenance through exact state 
               agents: [],
               mcpServers: [],
               hooks: ["hooks-a"],
+              workflows: [],
             },
             enabled: true,
             provenance: "dependency",

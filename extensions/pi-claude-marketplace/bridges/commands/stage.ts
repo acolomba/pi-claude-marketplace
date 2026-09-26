@@ -34,6 +34,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
+import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
 import { BridgeStagingError } from "../../shared/errors-bridges.ts";
@@ -197,6 +198,12 @@ export async function prepareStageCommands(
     };
   }
 
+  const referenceNames = input.referenceNames ?? {
+    skills: [],
+    commands: discovered.map((command) => command.generatedName),
+    workflows: [],
+  };
+
   const stagingRoot = path.join(locations.commandsStagingDir, randomUUID());
   await mkdir(stagingRoot, { recursive: true });
   await assertPathInside(locations.commandsStagingDir, stagingRoot, "commands staging root");
@@ -218,7 +225,7 @@ export async function prepareStageCommands(
 
         // FMBOM-01: a leading U+FEFF produces no gate-1 throw, so no CMD-01
         // degrade fires and the marker rides `content` straight into the
-        // staged artifact below -- where a peer at the `>=0.80.5` floor drops
+        // staged artifact below -- where Pi's loader drops
         // the whole frontmatter block at load time.
         let content = stripBom(await readFile(command.commandFile, "utf8"));
 
@@ -251,6 +258,7 @@ export async function prepareStageCommands(
           pluginData: pluginDataDir,
           projectDir: locations.scope === "project" ? cwd : undefined,
         });
+        content = rewriteMarkdownReferences(content, pluginName, referenceNames);
         await writeFile(stagedFile, content, "utf8");
 
         // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
