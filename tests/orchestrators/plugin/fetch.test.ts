@@ -482,7 +482,7 @@ test("materializes a cold pinned URL clone at its recorded SHA", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/plugin";
-    const networkUrl = "https://example.com/plugin.git";
+    const networkUrl = "https://example.com/plugin";
     const pin = "2222222222222222222222222222222222222222";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "cold", "2.0.0");
@@ -556,7 +556,7 @@ test("refreshes an unpinned warm mirror with its ref and leaves state immutable"
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/plugin";
-    const networkUrl = "https://example.com/plugin.git";
+    const networkUrl = "https://example.com/plugin";
     const head = "3333333333333333333333333333333333333333";
     const marketplace = await marketplaceRecord({
       cwd,
@@ -1082,7 +1082,7 @@ test("continues a manifest-ordered sweep after a network failure", async () => {
     const locations = await saveMarketplaces(cwd, "project", [marketplace]);
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
     const git = gitBoundary({
-      allowedRemoteUrls: [`${okUrl}.git`, `${badUrl}.git`],
+      allowedRemoteUrls: [okUrl, badUrl],
       fixtureSourceDir: fixture,
     });
     const cache = cacheBoundary(git.gitOps);
@@ -1170,7 +1170,7 @@ test("derives partially available and unavailable git rows exactly", async () =>
     });
     await saveMarketplaces(cwd, "project", [marketplace]);
     const git = gitBoundary({
-      allowedRemoteUrls: [`${partialUrl}.git`, `${subdirUrl}.git`],
+      allowedRemoteUrls: [partialUrl, subdirUrl],
       fixtureSourceDir: fixture,
     });
     const cache = cacheBoundary(git.gitOps);
@@ -1346,7 +1346,7 @@ test("renders fresh status after materialization through the required capability
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/status-capability";
-    const networkUrl = "https://example.com/status-capability.git";
+    const networkUrl = "https://example.com/status-capability";
     const pin = "acacacacacacacacacacacacacacacacacacacac";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "fresh", "4.0.0");
@@ -1516,7 +1516,7 @@ test("cleans failed clone staging and converges on retry", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/retry";
-    const networkUrl = "https://example.com/retry.git";
+    const networkUrl = "https://example.com/retry";
     const pin = "ffffffffffffffffffffffffffffffffffffffff";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "retry", "1.0.0");
@@ -1585,7 +1585,7 @@ test("accepts a concurrent cache winner and removes losing staging", async () =>
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/race";
-    const networkUrl = "https://example.com/race.git";
+    const networkUrl = "https://example.com/race";
     const pin = "0123456789abcdef0123456789abcdef01234567";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "race", "1.0.0");
@@ -1635,7 +1635,7 @@ test("surfaces a cleanup leak and retries safely after permissions are repaired"
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/leak";
-    const networkUrl = "https://example.com/leak.git";
+    const networkUrl = "https://example.com/leak";
     const pin = "89abcdef0123456789abcdef0123456789abcdef";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "leak", "1.0.0");
@@ -2023,7 +2023,7 @@ test("cleans a non-race promotion failure and converges on retry", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/promotion";
-    const networkUrl = "https://example.com/promotion.git";
+    const networkUrl = "https://example.com/promotion";
     const pin = "567890abcdef1234567890abcdef123456789012";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "promotion", "1.0.0");
