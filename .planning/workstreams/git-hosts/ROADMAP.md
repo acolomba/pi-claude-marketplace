@@ -126,13 +126,21 @@ Plans:
 
 Plans:
 
+**Wave 1:**
 - [ ] 02-01-PLAN.md — `networkCloneUrl` and the slash/fragment strip helper land in `domain/`, and the
   `marketplace add` seam sends them; proven end to end against a git port that admits only the verbatim
   URL, with exactly-one-attempt and original-error-identity cases (MURL-08, MURL-09)
+
+**Wave 2** *(blocked on Wave 1 completion)*:
 - [ ] 02-02-PLAN.md — the three `clone-cache.ts` seam sites and their nine callers thread a required
   `networkUrl`; the direct seam suite asserts forwarding rather than appending (MURL-08, MURL-09)
+
+**Wave 3** *(blocked on Wave 2 completion)*:
 - [ ] 02-03-PLAN.md — the residual suite audit that discharges RESEARCH assumption A1, the docstrings
   that still teach the retired rule, and `npm run check` green at the phase boundary (MURL-08, MURL-09)
+
+**Cross-cutting constraints:**
+- The exactly-one-attempt guarantee is per OPERATION, not per process: each clone or `resolveRemoteRef` operation records exactly one call on the git seam, so N concurrently running operations record N calls, one each — a parallel run is not a violation of the count. (MURL-09 edge: concurrency)
 
 ### Phase 3: `marketplace add` recovers from its own leftover clone
 

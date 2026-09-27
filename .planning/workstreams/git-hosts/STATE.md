@@ -5,17 +5,17 @@ milestone_name: Any Git Host
 current_phase: 2
 current_phase_name: Endpoints that answer only at the verbatim URL
 current_plan: 0
-total_plans_in_phase: 0
-status: Phase 2 context gathered — ready for planning
-stopped_at: "Phase 2 context gathered; ROADMAP SC3/SC4 and MURL-09 corrected to the no-retry design (1f680673)"
-last_updated: "2026-09-26T20:35:00.000Z"
+total_plans_in_phase: 3
+status: Phase 2 planned (3 plans, 3 waves) — ready to execute
+stopped_at: "Phase 2 planned: 3 plans across 3 sequential waves, plan-checker clean (efa72cd9, c7d103b0)"
+last_updated: "2026-09-26T23:05:00.000Z"
 last_activity: 2026-09-26
-last_activity_desc: "Discussed Phase 2; upstream research replaced the retry with verbatim cloning (D-2-01..D-2-04)"
-state_head: 1f680673
+last_activity_desc: "Planned Phase 2; plan-checker clean, requirements 2/2 and decisions 4/4 covered"
+state_head: ebb13939
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 3
+  total_plans: 6
   completed_plans: 3
   percent: 0
 ---
@@ -37,11 +37,34 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 2 — Endpoints that answer only at the verbatim URL (context gathered, not yet planned)
+Phase: 2 — Endpoints that answer only at the verbatim URL (planned, ready to execute)
 Current Plan: 0
-Total Plans in Phase: 0
-Status: 02-CONTEXT.md written; ROADMAP Phase 2 and MURL-09 corrected to match
-Last activity: 2026-09-26 — Discussed Phase 2 (1f680673)
+Total Plans in Phase: 3
+Status: 3 plans across 3 sequential waves; plan-checker returned clean after one documentation fix
+Last activity: 2026-09-26 — Planned Phase 2 (efa72cd9, c7d103b0)
+
+**Phase 2 is planned: three plans, three waves, sequential by necessity.** Plan 01 (wave 1) lands
+`networkCloneUrl` and an extracted `stripSlashAndFragment` in `domain/`, wires the `marketplace add`
+seam, and proves it end to end against a git port that admits only the verbatim URL. Plan 02 (wave 2)
+threads a required `networkUrl` through the three `clone-cache.ts` seam sites and their nine callers.
+Plan 03 (wave 3) discharges RESEARCH assumption A1 with a residual suite audit, fixes the docstrings
+that still teach the retired rule, and owns the phase-boundary `npm run check`. The waves cannot run
+in parallel: the required `networkUrl` field makes each seam edit atomic with its callers, and the
+`contracts.json` pins are line:col, so ROADMAP already mandates one edit at a time.
+
+**Mid-phase red is planned, not accidental.** After plan 02 task 1 the test tree does not typecheck —
+30 literal-construction sites lack the new required field — and after plan 02 the flow, bootstrap,
+reconcile, register, integration and `marketplace update` suites are red because their allowlists
+still admit only the suffixed form. Both plans state this and forbid restoring a `.git` suffix to
+reach green. Plan 03 closes it.
+
+**Planning surfaced three gate exposures RESEARCH.md had missed**, all now planned: `fallow`
+dead-code would have gone red had `networkCloneUrl` stripped `ensureGitSuffix` of its last production
+consumer (the github arm is locked to `ensureGitSuffix(canonicalCloneUrl(source))`);
+`addGitClonedInGuard`'s `cloneUrl` parameter becomes dead and is removed with both call-site passes;
+and four `check-unused-type-members.contracts.json` coordinates shift under prettier and need an
+in-place line remap. A fourth Wave 0 gap was recorded: five wire-URL sites are template literals and
+were invisible to the `.git"` grep that sized RESEARCH's blast radius.
 
 **Phase 2 turned out not to need the retry it was scoped around.** Research against the Claude Code
 2.1.274 binary settled it: the marketplace source parser appends `.git` only for `github.com`
@@ -85,8 +108,8 @@ consulted until the server issues a challenge (PROV-02's surviving half).
 
 **The gate is green at the phase boundary.** `npm run check` exits 0 (`CHECK_EXIT=0`) at
 `d5762e0d`: 7261 tests, 7261 pass, 0 fail, `all files | 100.00 | 100.00 | 100.00` with an empty
-uncovered-lines cell on every row under `extensions/`, and `fallow` at `FALLOW_EXIT=0`. Next step
-is verification of Phase 1, then `/gsd-plan-phase 2` with `--skip-ui`.
+uncovered-lines cell on every row under `extensions/`, and `fallow` at `FALLOW_EXIT=0`. Phase 2 was
+planned from there with `--skip-ui`; Phase 1's verification canary remains deferred to the operator.
 
 ## Deferred Verification
 
@@ -107,18 +130,18 @@ blocked until this is resolved.
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** none yet (phase 2 not planned)
+**Current Plan:** none yet (phase 2 planned, not started)
 
 ```
 Phase 1  [==========]  plans complete (3/3)
-Phase 2  [          ]  context gathered, not planned
+Phase 2  [          ]  planned (0/3 plans executed)
 Phase 3  [          ]  not started
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
-| 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Context gathered, not planned |
+| 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Planned (3 plans), not executed |
 | 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Not started |
 
 ## Accumulated Context
@@ -209,9 +232,9 @@ None.
 
 **Last session:** 2026-09-26T04:42:35.574Z
 
-**Stopped At:** Phase 2 context gathered; ROADMAP SC3/SC4 and MURL-09 corrected to the no-retry design (`1f680673`).
-**Resume File:** `.planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-CONTEXT.md`
-**Next Action:** `/gsd-plan-phase 2 --skip-ui`, then execute. Phase 1's `human_needed` canary stays open for the operator.
+**Stopped At:** Phase 2 planned — 3 plans, 3 waves, plan-checker clean (`efa72cd9`, `c7d103b0`).
+**Resume File:** `.planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-01-PLAN.md`
+**Next Action:** `/gsd-execute-phase 2`. Phase 1's `human_needed` canary stays open for the operator.
 
 ## Performance Metrics
 
