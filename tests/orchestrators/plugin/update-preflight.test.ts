@@ -656,6 +656,61 @@ test("passes authenticated clone context and refs through both clone arms", asyn
   assert.strictEqual(unpinnedPrepared.resolvedSha, sha);
 });
 
+test("D-3-04: authenticates the autoupdate cascade against github.com with no notification context", async (t) => {
+  // arrange -- the cascade shape: prepare() with `ctx` OMITTED, mirroring
+  // update-flow.ts's PluginUpdateFn, which never threads one through.
+  const sha = "9999999999999999999999999999999999999999";
+  const pinned = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "github", repo: "org/repo", ref: "stable", sha },
+  });
+  const unpinned = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "github", repo: "org/repo", ref: "next" },
+  });
+  t.after(() =>
+    Promise.all([pinned.cwd, unpinned.cwd].map((cwd) => rm(cwd, { force: true, recursive: true }))),
+  );
+  const credentialOps: CredentialOps = {
+    approve: () => Promise.resolve(),
+    fill: () => Promise.resolve(null),
+    reject: () => Promise.resolve(),
+  };
+  const pinnedSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: (options) => {
+      assert.strictEqual(options.auth?.host, "github.com");
+      assert.strictEqual(options.auth?.credentialOps, credentialOps);
+      return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" });
+    },
+    materializePluginClone: (options) => {
+      assert.strictEqual(options.auth?.host, "github.com");
+      assert.strictEqual(options.auth?.credentialOps, credentialOps);
+      return Promise.resolve(pinned.pluginRoot);
+    },
+    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+  };
+  const unpinnedSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+    materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
+    materializeOrRefreshPluginMirror: (options) => {
+      assert.strictEqual(options.auth?.host, "github.com");
+      assert.strictEqual(options.auth?.credentialOps, credentialOps);
+      return Promise.resolve({ pluginRoot: unpinned.pluginRoot, resolvedSha: sha });
+    },
+  };
+
+  // act -- no ctx: the registry-host cascade case, proving both clone-cache
+  // seam arms authenticate instead of the pre-fix code's silent authless clone.
+  const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam, credentialOps });
+  const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam, credentialOps });
+
+  // assert
+  assert.ok(!("partition" in pinnedPrepared));
+  assert.strictEqual(pinnedPrepared.resolvedSha, sha);
+  assert.ok(!("partition" in unpinnedPrepared));
+  assert.strictEqual(unpinnedPrepared.resolvedSha, sha);
+});
+
 test("resolves pinned and unpinned git-subdir roots", async (t) => {
   // arrange
   const pinnedSha = "5555555555555555555555555555555555555555";

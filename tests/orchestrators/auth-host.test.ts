@@ -814,6 +814,74 @@ describe("buildAuthForHost", () => {
     verify(ctx);
     verify(ui);
   });
+
+  test("resolves the stored-credential cause for an unregistered host with no notification context", async () => {
+    // arrange
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    const auth = buildAuthForHost({
+      host: "git.example.invalid",
+      credentialOps: credentials.credentialOps,
+    });
+    const attempt = await auth.onAuthRequired();
+
+    // assert
+    assert.deepStrictEqual(auth, {
+      credentialOps: credentials.credentialOps,
+      host: "git.example.invalid",
+      evictOnFailure: false,
+      onAuthRequired: auth.onAuthRequired,
+    });
+    assert.deepStrictEqual(attempt, {
+      ok: false,
+      reason: NO_STORED_CREDENTIAL_CAUSE("git.example.invalid"),
+      authAttempted: true,
+    });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+  });
+
+  test("D-3-04: github.com with no notification context declines the Device Flow gracefully instead of crashing", async () => {
+    // arrange
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const deviceFlow = createDeviceFlowFake({
+      boundary: "memory",
+      network: "disabled",
+      deviceCode: {
+        device_code: "unused-device-code",
+        user_code: "UNUSED",
+        verification_uri: "https://github.com/login/device",
+        expires_in: 900,
+        interval: 0,
+      },
+    });
+
+    // act
+    const auth = buildAuthForHost({
+      host: "github.com",
+      credentialOps: credentials.credentialOps,
+      deviceFlowHttp: deviceFlow.http,
+    });
+    const attempt = await auth.onAuthRequired();
+
+    // assert -- this is the graceful-decline branch: RESOLVES, never throws.
+    assert.deepStrictEqual(auth, {
+      credentialOps: credentials.credentialOps,
+      host: "github.com",
+      evictOnFailure: false,
+      onAuthRequired: auth.onAuthRequired,
+    });
+    assert.deepStrictEqual(attempt, {
+      ok: false,
+      reason: NO_STORED_CREDENTIAL_CAUSE("github.com"),
+      authAttempted: true,
+    });
+    // No Device Flow HTTP collaborator was called -- the widened guard never
+    // reaches makeRawNotifyFn(ctx), so no user code is minted and no
+    // notification is raised.
+    assert.deepStrictEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+  });
 });
 
 describe("buildCloneAuth", () => {
@@ -1002,5 +1070,24 @@ describe("buildCloneAuth", () => {
     });
     assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
     verify(ctx);
+  });
+
+  test("D-3-04: returns a bundle bound to the resolved host when ctx is omitted", () => {
+    // arrange
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    const auth = buildCloneAuth("https://gitlab.com/team/plugin.git", "url", {
+      credentialOps: credentials.credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(auth, {
+      credentialOps: credentials.credentialOps,
+      host: "gitlab.com",
+      evictOnFailure: false,
+      onAuthRequired: auth.onAuthRequired,
+    });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
   });
 });

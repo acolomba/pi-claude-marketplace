@@ -16,7 +16,7 @@ import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 
 import {
   canonicalCloneUrl,
@@ -146,6 +146,13 @@ interface UpdateCloneProbe {
   readonly resolvedSha: () => string | undefined;
 }
 
+/**
+ * `buildCloneAuth` (`auth-host.ts`) supplies the host-bound auth bundle for
+ * both arms below. No local builder is kept here: the cascade calls this
+ * probe with no notification context at all, and `buildCloneAuth` accepts
+ * that directly rather than needing its own undefined-returning wrapper
+ * (D-3-04).
+ */
 function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
   locations: ScopedLocations,
@@ -158,29 +165,15 @@ function makeUpdateCloneProbe(
 ): UpdateCloneProbe {
   let captured: string | undefined;
 
-  const buildBundle = (gitSource: GitBackedSource, cloneUrl: string) => {
-    if (auth.ctx === undefined) {
-      return undefined;
-    }
-
-    return buildAuthForHost({
-      host: hostFromCloneUrl(cloneUrl, gitSource.kind),
-      credentialOps: auth.credentialOps,
-      ctx: auth.ctx,
-      ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
-      ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
-    });
-  };
-
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
     const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = buildBundle(gitSource, cloneUrl);
+    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, auth);
     const materialized = await seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
       networkUrl: networkCloneUrl(gitSource),
       ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
-      ...(authBundle !== undefined && { auth: authBundle }),
+      auth: authBundle,
     });
     if (gitSource.kind === "git-subdir") {
       const subdir = await resolveGitSubdirRoot(materialized.pluginRoot, gitSource.path);
@@ -201,10 +194,10 @@ function makeUpdateCloneProbe(
   }
 
   async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
-    const authBundle = buildBundle(gitSource, canonicalCloneUrl(gitSource));
+    const authBundle = buildCloneAuth(canonicalCloneUrl(gitSource), gitSource.kind, auth);
     const pin = await seam.resolvePluginPin({
       source: gitSource,
-      ...(authBundle !== undefined && { auth: authBundle }),
+      auth: authBundle,
     });
     const cloneRoot = await seam.materializePluginClone({
       locations,
@@ -212,7 +205,7 @@ function makeUpdateCloneProbe(
       networkUrl: networkCloneUrl(gitSource),
       pin: pin.pin,
       ...(pin.ref !== undefined && { ref: pin.ref }),
-      ...(authBundle !== undefined && { auth: authBundle }),
+      auth: authBundle,
     });
     if (gitSource.kind === "git-subdir") {
       const subdir = await resolveGitSubdirRoot(cloneRoot, gitSource.path);

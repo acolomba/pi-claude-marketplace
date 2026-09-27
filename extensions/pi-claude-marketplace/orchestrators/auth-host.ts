@@ -163,16 +163,21 @@ export function hasDeviceFlowProvider(host: string): boolean {
 export function buildAuthForHost(args: {
   host: string;
   credentialOps: CredentialOps;
-  ctx: NotificationContext;
+  ctx?: NotificationContext;
   deviceFlowHttp?: DeviceFlowHttp;
   authMemo?: Map<string, AuthAttemptResult>;
 }): GitAuthBundle {
   const { host, credentialOps, ctx, deviceFlowHttp, authMemo } = args;
 
   const provider = findProviderForHost(host);
-  if (provider === undefined) {
+  if (provider === undefined || ctx === undefined) {
     // D-1-02: a state producer, so no notification is raised from this seam --
     // the reason rides the caller's error cause chain instead.
+    // D-3-04: a missing `ctx` answers the same way on ANY host, including a
+    // registry one -- the Device Flow is interactive by construction, and a
+    // caller with no notification context (the autoupdate cascade) is a
+    // background operation with nowhere to render a user code. Declining is
+    // the correct behaviour here, not a fallback.
     const onAuthRequired: OnAuthRequiredFn = () =>
       Promise.resolve<AuthAttemptResult>({
         ok: false,
@@ -228,18 +233,18 @@ export function buildAuthForHost(args: {
  * interpolates credentials into any surfaced string (AUTH-09). D-79-02: the
  * command-scope `authMemo` caps the device flow at once per host.
  *
- * Shared by the install, reinstall, fetch, and `info --fetch` probes, and by
- * the pinned and unpinned arms within each, so none of those call sites needs
- * its own copy of this logic.
- * `update-preflight.ts` is the one git-plugin probe outside it: it keeps a local
- * `buildBundle` because its cascade path may run with no `ctx` at all and
- * returns undefined rather than a bundle in that case.
+ * Shared by the install, reinstall, fetch, `info --fetch`, and update probes,
+ * and by the pinned and unpinned arms within each, so none of those call
+ * sites needs its own copy of this logic. A caller with no notification
+ * context -- the autoupdate cascade -- is served by this same helper: the
+ * missing `ctx` forwards to `buildAuthForHost`, which declines the Device
+ * Flow gracefully instead of crashing (D-3-04).
  */
 export function buildCloneAuth(
   cloneUrl: string,
   kind: "url" | "git-subdir" | "github",
   auth: {
-    readonly ctx: NotificationContext;
+    readonly ctx?: NotificationContext;
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -248,7 +253,7 @@ export function buildCloneAuth(
   return buildAuthForHost({
     host: hostFromCloneUrl(cloneUrl, kind),
     credentialOps: auth.credentialOps,
-    ctx: auth.ctx,
+    ...(auth.ctx !== undefined && { ctx: auth.ctx }),
     ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
     ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
   });
