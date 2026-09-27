@@ -234,6 +234,22 @@ Phase 3 because that is where it is finally measured, but nothing may be left re
   domain vocabulary (`form`, `component`, `view`), so pass `--skip-ui` to `/gsd-plan-phase`; no
   phase in this milestone carries a UI hint.
 
+### Outstanding at milestone close: two live canaries
+
+Neither is closable on this machine. Both block milestone close only, not any phase's completion —
+see STATE.md § Deferred Verification for the full explanatory paragraphs.
+
+- **Phase 1** (`01-private-repos-on-any-git-host/`): one end-to-end clone of a real private repo on
+  a non-registry host, using an operator PAT stored in a real git credential helper. Every seam in
+  the chain is individually proven; their composition against one real server is not. Blocking
+  reason: no operator PAT / configured credential helper on this machine. Resume:
+  `/gsd-verify-work 1`.
+- **Phase 2** (`02-endpoints-that-answer-only-at-the-verbatim-url/`): one `marketplace add` against
+  a real smart-HTTP server that answers only at the verbatim path and 404s the `.git`-suffixed form,
+  plus a later `resolveRemoteRef` against it. Every test proves the URL sent through the offline
+  fake; none exercises a real HTTP round trip. Blocking reason: no such server available on this
+  machine. Resume: `/gsd-verify-work 2`.
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |

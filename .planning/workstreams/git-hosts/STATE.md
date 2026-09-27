@@ -306,14 +306,18 @@ Phase 1's only outstanding verification item is the live canary: one end-to-end 
 private repo on a non-registry host, which needs operator credentials this machine does not have.
 The scoped-canary commit (`130d68a9`) already closed the helper-subprocess link with a negative
 control. Deferred so autonomous runs can proceed through phases 2 and 3; milestone close stays
-blocked until this is resolved.
+blocked until this is resolved. This item survives Phase 3's completion unchanged; it blocks
+milestone close only, not Phase 3 or any phase after it.
 
 Phase 2's single outstanding item is the same class: one `marketplace add` against a REAL
 smart-HTTP server that answers only at the verbatim path and 404s the `.git` form, plus a later
 `resolveRemoteRef` against it. Every phase test proves the URL that is SENT through the offline
 `createGitOpsFake`; none exercises a real HTTP round trip. Recorded in `02-UAT.md`. Deferred by
 operator decision on 2026-09-27 so the run could proceed to Phase 3. Both canaries block
-milestone close only, not Phase 3.
+milestone close only, not Phase 3. This item likewise survives Phase 3's completion unchanged;
+both are also carried forward in `.planning/workstreams/git-hosts/ROADMAP.md` § Milestone-wide
+constraints and filed in `.planning/BACKLOG.md` (GHCAN-01, GHCAN-02) for visibility after this
+workstream's documents are archived.
 
 ## Progress
 
