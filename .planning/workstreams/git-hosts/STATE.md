@@ -88,6 +88,18 @@ consulted until the server issues a challenge (PROV-02's surviving half).
 uncovered-lines cell on every row under `extensions/`, and `fallow` at `FALLOW_EXIT=0`. Next step
 is verification of Phase 1, then `/gsd-plan-phase 2` with `--skip-ui`.
 
+## Deferred Verification
+
+| Phase | State | Resume |
+|-------|-------|--------|
+| 01 | verification_deferred_human | /gsd-verify-work 01 |
+
+Phase 1's only outstanding verification item is the live canary: one end-to-end clone of a real
+private repo on a non-registry host, which needs operator credentials this machine does not have.
+The scoped-canary commit (`130d68a9`) already closed the helper-subprocess link with a negative
+control. Deferred so autonomous runs can proceed through phases 2 and 3; milestone close stays
+blocked until this is resolved.
+
 ## Progress
 
 **Phases Complete:** 0 / 3
