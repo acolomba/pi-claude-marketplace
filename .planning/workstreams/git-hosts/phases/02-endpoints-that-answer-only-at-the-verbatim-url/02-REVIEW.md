@@ -1,8 +1,9 @@
 ---
 phase: 02-endpoints-that-answer-only-at-the-verbatim-url
-reviewed: 2026-09-27T05:05:39Z
+reviewed: 2026-09-27T00:00:00Z
 depth: standard
-files_reviewed: 22
+iteration: 2
+files_reviewed: 23
 files_reviewed_list:
   - extensions/pi-claude-marketplace/domain/clone-key.ts
   - extensions/pi-claude-marketplace/domain/source.ts
@@ -22,384 +23,451 @@ files_reviewed_list:
   - tests/orchestrators/marketplace/add.test.ts
   - tests/orchestrators/plugin/clone-cache.test.ts
   - tests/orchestrators/plugin/fetch.test.ts
+  - tests/orchestrators/plugin/info.test.ts
   - tests/orchestrators/plugin/install-flow.test.ts
   - tests/orchestrators/plugin/reinstall-clone-probe.test.ts
   - tests/orchestrators/plugin/reinstall-flow.test.ts
   - tests/orchestrators/plugin/update-flow.test.ts
 findings:
   critical: 2
-  warning: 6
-  info: 3
-  total: 11
+  warning: 9
+  info: 6
+  total: 17
 status: issues_found
 ---
 
-# Phase 02: Code Review Report
+# Phase 02: Code Review Report (iteration 2)
 
-**Reviewed:** 2026-09-27T05:05:39Z
+**Reviewed:** 2026-09-27
 **Depth:** standard
-**Files Reviewed:** 22
+**Files Reviewed:** 23
 **Status:** issues_found
 
 ## Summary
 
-The core split is sound. `networkCloneUrl` reads `source.raw` on the `url` arm (not the
-`.git`-stripped `source.url`), `canonicalCloneUrl` is untouched so no warm clone cold-misses, the
-`stripUrlDecorations` -> `stripSlashAndFragment` extraction is byte-for-byte behavior-preserving on
-the parse path, all nine orchestrator call sites thread `networkCloneUrl(source)` consistently, and
-`ensureGitSuffix` keeps a production consumer (`fallow dead-code --fail-on-issues` exits 0). All six
-remapped `contracts.json` pins land on the members they name, and the entry count is 108.
-`npm run typecheck`, `npm run lint:type-members`, all four `fallow` gates, and the test files I ran
-(`clone-key`, `source`, `clone-cache`, `reinstall-clone-probe`, both `add` suites, the seed-mirrors
-integration suite: 272 cases) are green.
+Reviewed the current tree at `a361171e` against the diff base `130d68a9`, with the
+iteration-1 fix commits `d42f7625..4be1c19a` in scope. Every claim the fixer made about its
+own work was re-tested rather than accepted.
 
-Two defects remain in the wire-URL derivation itself. MURL-09 promises the sent URL is the typed URL
-"modulo trailing-slash and `#<ref>` decoration stripping", but the `url` arm does not strip a
-trailing slash that sits *before* the fragment, and the `git-subdir` arm strips nothing at all. Both
-cases previously worked, because `ensureGitSuffix` trimmed trailing slashes on its way to appending
-`.git`; both now put a malformed URL on the wire. Neither is covered by D-2-02, which is scoped to
-the `.git` suffix only.
+**Gates (all green, independently re-run on this tree):** `tsc --noEmit` exit 0 · `eslint`
+exit 0 · `npm run fallow` exit 0 (dead-code, circular-deps, re-export-cycles, health, dupes)
+· `prettier --check` exit 0 · `npm run lint:type-members` exit 0, `contracts.json` = **108
+entries**, all pins resolve to the members they name (the two `add.ts`, one `info.ts` and
+three `update-preflight.ts` remaps landed in the phase commits `48493e4e`/`a909adaf`, not in
+the fix commits; no further remap is needed).
 
-The larger quality concern is test honesty in the direction the phase's own risk register named. The
-suite proves the raw-vs-url rule at the pure-function level only: not one flow-level fixture uses a
-non-github source whose `raw` differs from its `url`, and `info.test.ts` — paired with a changed
-production file — admits both the verbatim and the suffixed form of every remote while never
-asserting a clone URL by value, so the `info --fetch` arm of this change cannot fail either way.
+**Verification of the fixer's claims:**
+
+| Claim | Verdict |
+| --- | --- |
+| `canonicalCloneUrl` output is byte-identical for all three source kinds | **False end-to-end.** CR-01 changed the parse-time identity for the `<url>/#<ref>` input class. `canonicalCloneUrl` itself is untouched, but its input (`source.url`) moved. |
+| WR-02 negative-control verified (revert → assertions fail) | **Confirmed.** Reverting all nine threading sites to `canonicalCloneUrl` fails the new case in install-flow, reinstall-flow, update-flow and reinstall-clone-probe. |
+| WR-01 negative-control (info.test.ts) | **Not confirmed.** Both strengthened `info.test.ts` cases stay green under the same revert; see WR-01. |
+| WR-04 negative-control (parse path) | **Confirmed** at `tests/domain/source.test.ts:250`. |
+| `contracts.json` needed no remap / 108 entries | **Confirmed** (gate passes, 108 entries). |
+| WR-04 causes no collateral parse behavior change | **Not confirmed.** It widens an existing unvalidated-scheme hole onto `raw`; see CR-02. |
+
+Two BLOCKERs: an unintended change to the cache-key identity (which D-2-03 explicitly locks),
+and an https-only-gate bypass on the object source form that this phase newly routes the wire
+URL through. Nine warnings, six info items. The three deferred iteration-1 Info findings all
+still stand and are re-reported as IN-01/IN-02/IN-03.
 
 ## Narrative Findings (AI reviewer)
 
-### Critical
+All findings below come from direct review of the current source, with the mechanism
+reproduced by running the code or the suite. No external reviewer evidence was supplied.
 
-#### CR-01: the `url` arm leaves a trailing slash on the wire URL when the slash precedes the `#<ref>` fragment
+## Critical Issues
 
-**File:** `extensions/pi-claude-marketplace/domain/source.ts:414-432` (consumed at `extensions/pi-claude-marketplace/domain/clone-key.ts:101`)
+### CR-01: the CR-01 fix silently changed the parse-time cache identity, violating D-2-03
 
-**Issue:** `stripSlashAndFragment` runs the trailing-slash loop *before* the fragment split, and
-never re-runs it on the remainder. For `https://host/repo/#v1.0` the loop sees a trailing `0`, does
-nothing, then the fragment split leaves `base = "https://host/repo/"`. Verified by executing the
-real modules:
+**File:** `extensions/pi-claude-marketplace/domain/source.ts:417-439` (and `:446-449`)
 
-```
-"https://gitlab.example.com/team/mp/#v1.0" => kind: url | wire: "https://gitlab.example.com/team/mp/"
-```
+**Issue:** Reordering `stripSlashAndFragment` so the `#` split runs first moved the
+trailing-slash strip *after* the fragment removal. `stripUrlDecorations` — the **parse-time**
+path — now inherits that new order, so `parseUrlSource` / `parseGitHubUrl` produce a different
+canonical value for any input of the form `<url>/#<ref>`. `canonicalCloneUrl` is untouched, but
+the value it reads (`source.url`) is not, so the end-to-end identity moved. Reproduced by
+running the parser at the diff base and at HEAD:
 
-isomorphic-git composes the smart-HTTP request as `` `${url}/info/refs?service=${service}` ``
-(`node_modules/isomorphic-git/index.cjs:9457`), so the request becomes
-`https://gitlab.example.com/team/mp//info/refs?service=git-upload-pack` — a double-slash path whose
-acceptance is host-dependent. Before this phase the same input produced
-`ensureGitSuffix("https://.../mp/")` = `https://.../mp.git`, which worked. This is a regression that
-D-2-02 does not license (D-2-02 covers only the `.git` suffix) and it directly contradicts MURL-09's
-"modulo trailing-slash and `#<ref>` decoration stripping".
+| raw input | base `130d68a9` | HEAD |
+| --- | --- | --- |
+| `https://gitlab.com/o/r/#main` | `url: https://gitlab.com/o/r/` | `url: https://gitlab.com/o/r` |
+| `https://gitlab.com/o/r.git/#main` | `url: https://gitlab.com/o/r.git/` | `url: https://gitlab.com/o/r` |
+| `https://github.com/o/r/#main` | `kind: unknown` (rejected) | `kind: github`, `ref: main` |
 
-The test table at `tests/domain/source.test.ts:940-983` covers `#main/` (slash *after* the fragment)
-but has no case for `/#main` (slash *before* it), which is why the gap shipped green.
+Consequences:
 
-**Fix:** strip trailing slashes again after the fragment is removed, and add the missing data row.
+1. `pluginCloneKey` / `pluginMirrorKey` hash `canonicalCloneUrl(source)`, so every existing
+   `plugin-clones/<hash>/` directory for such a source cold-misses and is re-cloned; the old
+   directory is orphaned on disk. `domain/clone-key.ts:76-79` is explicit that this is the one
+   thing the split exists to prevent, and `02-CONTEXT.md` states "the stored/canonical form
+   does not [change] (D-76-01 is untouched)".
+2. The github parse surface widened: a browser-shaped `.../o/r/#main` that previously produced
+   the `must be https://github.com/<owner>/<repo>[.git][#<ref>]` diagnostic is now accepted.
+   Nothing asserts either the old or the new behavior — `grep -n '/#' tests/domain/*.test.ts`
+   finds exactly one hit, the direct `stripSlashAndFragment` row at
+   `tests/domain/source.test.ts:979`, which pins the helper and not the parser.
+
+**Fix:** keep the new order only on the network-side export and restore the old order for the
+parse-time path, so the identity is provably unmoved:
 
 ```ts
-export function stripSlashAndFragment(input: string): { base: string; ref: string | undefined } {
+/** Shared canonicalization tail for https sources. */
+function stripUrlDecorations(input: string): { base: string; ref: string | undefined } {
   let rest = input;
-  let ref: string | undefined;
-
-  const hashIdx = rest.indexOf("#");
-  if (hashIdx !== -1) {
-    const frag = rest.slice(hashIdx + 1).replace(/\/+$/, "");
-    rest = rest.slice(0, hashIdx);
-    if (frag.length > 0) {
-      ref = frag;
-    }
-  }
-
   while (rest.endsWith("/")) {
     rest = rest.slice(0, -1);
   }
 
-  return { base: rest, ref };
+  const { base, ref } = stripSlashAndFragment(rest);
+  return base.endsWith(".git") ? { base: base.slice(0, -".git".length), ref } : { base, ref };
 }
 ```
 
-New row for `tests/domain/source.test.ts`:
+If the new canonical form is wanted instead, it needs its own decision record, a test that
+pins `parsePluginSource("https://gitlab.com/o/r/#main").url` and the github acceptance flip,
+and a note that warm clones/mirrors for that input class are re-created once.
 
-```ts
-{
-  name: "trims a trailing slash that precedes the #<ref> fragment",
-  input: "https://gitlab.com/o/r/#main",
-  expected: { base: "https://gitlab.com/o/r", ref: "main" },
-},
-```
+### CR-02: object-form `url` sources bypass the https-only scheme gate, and this phase routes the wire URL through the attacker-controllable `raw` field
 
-#### CR-02: the `git-subdir` arm applies no decoration stripping, so a trailing slash or `#<ref>` reaches the remote verbatim
+**File:** `extensions/pi-claude-marketplace/domain/source.ts:170-190` (changed line `:174`),
+consumed at `extensions/pi-claude-marketplace/domain/clone-key.ts:100-101`
 
-**File:** `extensions/pi-claude-marketplace/domain/clone-key.ts:102-103`
-
-**Issue:** the arm returns `source.url` unchanged. `gitSubdirObjectSource`
-(`extensions/pi-claude-marketplace/domain/source.ts:189-197`) stores the manifest `url` field
-verbatim — it is the one git-backed kind that is never parse-canonicalized — so whatever decoration
-the manifest carries is what goes on the wire. Verified against the real modules:
-
-```
-{"source":"git-subdir","url":"https://gitlab.example.com/team/mono/","path":"plugins/p"}
-  => wire: "https://gitlab.example.com/team/mono/"
-{"source":"git-subdir","url":"https://gitlab.example.com/team/mono#v1","path":"plugins/p"}
-  => wire: "https://gitlab.example.com/team/mono#v1"
-```
-
-- The trailing-slash case is a regression: `ensureGitSuffix` used to trim it (that trim's stated
-  reason, in the pre-change docstring, was *precisely* that a `git-subdir` source stores its url
-  un-canonicalized). It now produces the same double-slash request as CR-01.
-- The fragment case is worse but pre-existing: `new URL("https://h/mono#v1/info/refs?service=x")`
-  resolves to pathname `/mono` with the entire `/info/refs?service=...` swallowed into the hash, so
-  the request is not a smart-HTTP request at all. Under the old code it was equally broken
-  (`...#v1.git`), so only the trailing-slash half is new — but MURL-09 now promises fragment
-  stripping on the wire, and this arm does not deliver it.
-
-Both violate MURL-09 as written. The `url` arm and the `git-subdir` arm also disagree about the same
-decoration, which makes the contract impossible to state in one sentence.
-
-**Fix:** route the arm through the same helper as the `url` arm.
-
-```ts
-    case "git-subdir":
-      return stripSlashAndFragment(source.url).base;
-```
-
-Add a `networkCloneUrl` case per decoration in `tests/domain/clone-key.test.ts` (the existing
-git-subdir case at line 263 only covers a bare `.git`):
-
-```ts
-  test("drops a trailing slash and a #<ref> fragment from a git-subdir url", () => {
-    // arrange
-    const source = {
-      kind: "git-subdir",
-      raw: "https://example.com/mono/",
-      url: "https://example.com/mono/",
-      path: "plugins/p",
-    } as const;
-
-    // act
-    const cloneUrl = networkCloneUrl(source);
-
-    // assert
-    assert.strictEqual(cloneUrl, "https://example.com/mono");
-  });
-```
-
-### Warnings
-
-#### WR-01: the `info --fetch` arm of this change is unverifiable — its fixture admits both URL forms and never asserts one
-
-**File:** `tests/orchestrators/plugin/info.test.ts:186-195`, `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1633,1646`
-
-**Issue:** `info.ts` is a changed production file (two new `networkUrl: networkCloneUrl(gitSource)`
-threads), but `info.test.ts` was not touched by this phase and its allowlist still admits **both**
-forms of every non-github remote:
-
-```ts
-const ALLOWED_INFO_REMOTES = [
-  "https://example.com/monorepo",
-  "https://example.com/monorepo.git",
-  "https://example.com/repo",
-  "https://example.com/repo.git",
-  "https://example.com/warmdecl",
-  "https://example.com/warmdecl.git",
-  ...
-```
-
-`grep -n cloneCalls tests/orchestrators/plugin/info.test.ts` shows the suite only ever asserts
-`cloneCalls.length === 0` or `cloneCalls.length >= 1` — never a URL by value. So the fixture passes
-identically under the old rule and the new one, and the weak `>= 1` form also fails to assert
-MURL-09's exactly-one-attempt property on this path. This is precisely the review scope's
-"fixture that cannot fail either way".
-
-**Fix:** narrow `ALLOWED_INFO_REMOTES` to the form `networkCloneUrl` actually produces for each
-source (drop the three `.git` duplicates for `example.com`, keep the github one), and tighten at
-least the two fetch-hook cases to assert the URL and the count by value:
-
-```ts
-    assert.equal(gitState.cloneCalls.length, 1);
-    assert.equal(gitState.cloneCalls[0]?.url, "https://example.com/repo");
-```
-
-#### WR-02: no flow-level test discriminates `source.raw` from `source.url`, so the change's central claim is proven only in the pure unit
-
-**File:** `tests/orchestrators/plugin/install-flow.test.ts:5986-5994`, `tests/orchestrators/plugin/reinstall-flow.test.ts:3279-3285`, `tests/orchestrators/plugin/update-flow.test.ts:95-101`, `tests/orchestrators/plugin/reinstall-clone-probe.test.ts:213-221`
-
-**Issue:** every non-github source in the install / reinstall / update / fetch / reinstall-probe
-fixtures has `raw === url` (no `.git`, no `#ref`, no trailing slash) — confirmed by grepping those
-files for a `.git`-suffixed non-github source string, which returns only `path.join(..., ".git")`
-directory writes. The consequence: swapping `networkCloneUrl(source)` back to
-`canonicalCloneUrl(source)` at any of the nine threading sites leaves the entire flow suite green.
-The `reinstall-clone-probe.test.ts:216` assertion is the sharpest example — `networkUrl: cloneUrl`
-is satisfied by both helpers because the fixture source is
-`{ kind: "url", raw: cloneUrl, url: cloneUrl }`.
-
-The phase's own recorded risk was that the suite would assert a contract it does not exercise. It
-does not assert the *old* rule by name anywhere (I checked every changed title), but the property
-that motivated the whole `source.raw` decision is load-bearing at nine call sites and pinned at one.
-
-**Fix:** give one existing fixture per flow a discriminating source — a manifest entry whose url
-carries the suffix the user typed — and assert the wire URL by value. For example, in
-`tests/orchestrators/plugin/reinstall-clone-probe.test.ts`:
-
-```ts
-    const source: GitBackedSource = {
-      kind: "url",
-      raw: "https://example.com/cold-mirror.git",
-      url: "https://example.com/cold-mirror",
-    };
-    // ... expect networkUrl: "https://example.com/cold-mirror.git" alongside cloneUrl
-```
-
-#### WR-03: forbidden GSD phase reference in a production comment, narrating code that does not exist
-
-**File:** `extensions/pi-claude-marketplace/domain/source.ts:453-454`
-
-**Issue:**
+**Issue:** `urlObjectSource` calls the bare `parseUrlSource(...)` constructor, which performs
+no scheme validation. D-76-01's `http://` / `ssh://` / `git@host:` rejection lives only in
+`parseUrlSourceForm` (`source.ts:328-343`), on the *string* path. WR-04 changed line 174 to
+`optionalString(obj, "raw") ?? optionalString(obj, "url")`, making `raw` — the field whose
+interface comment reads "verbatim user input" — the authoritative wire-URL source for the
+object form. `PLUGIN_ENTRY_SCHEMA` declares `source: Type.Unknown()`
+(`domain/components/plugin.ts`), so a **third-party marketplace manifest** fully controls that
+object, including a `raw` key. Reproduced by running the real parser:
 
 ```
- * whatever suffix decision the user's own input made (D-2-01); Phase 3's
- * same-origin comparison normalizes both sides of a URL through this helper.
+{ source: "url", raw: "http://evil.example/x", url: "https://gitlab.com/o/r" }
+  → kind: "url", canonicalCloneUrl: "http://evil.example/x",
+    networkCloneUrl: "http://evil.example/x"      // handed straight to gitOps.clone({ url })
+
+{ kind: "url", raw: "./local/path", url: "https://gitlab.com/o/r" }
+  → networkCloneUrl: "./local/path"
+    and hostFromCloneUrl (auth-host.ts:80-86) does `new URL("./local/path").host`
+    → bare `TypeError: Invalid URL` out of addUrlInGuard / buildCloneAuth, with no diagnostic
+
+{ kind: "url", raw: "https://github.com/o/r/tree/main" }
+  → the github funnel returns `unknown` (browser URL), then falls through to
+    parseUrlSource(raw) → a clonable UrlSource, so the browser-URL rejection is bypassed
 ```
 
-`skills/typescript-comments/SKILL.md` forbids `Phase NN` references to GSD planning steps outright —
-this is the only such token in any file this phase touched, and the remaining `Phase 3a` hits in
-`update-flow.test.ts` are the transaction's own domain phases (allowed, and pre-existing). The
-sentence also describes a consumer that is not in the tree yet, which the same policy rules out in
-the other direction ("a comment describes the code as it stands").
+The missing scheme gate predates this phase (the `url` field was equally unvalidated), but
+the phase does not close it and extends it to a second field while making that field the one
+that reaches the network. The `url` field silently becomes a decoy that no longer decides
+anything.
 
-**Fix:** delete the clause. The preceding sentence already carries the whole rule and its decision
-ID.
-
-```
- * `domain/clone-key.ts::networkCloneUrl` calls this only for the `github`
- * arm, appending `.git` where Claude Code appends it -- a `github.com`
- * `owner/repo` path -- and nowhere else. A `url` source's wire form preserves
- * whatever suffix decision the user's own input made (D-2-01).
-```
-
-#### WR-04: the `kind: "url"` object arm reads the identity field as `raw`, silently discarding the typed `.git` the phase set out to preserve
-
-**File:** `extensions/pi-claude-marketplace/domain/source.ts:170-187,232-233`
-
-**Issue:** `parseKindObjectSource`'s `"url"` case delegates to `urlObjectSource`, which reads only
-`obj.url` and ignores `obj.raw`. Re-parsing a persisted/serialized `UrlSource` therefore rebuilds
-`raw` from the already-`.git`-stripped identity field:
-
-```
-{"kind":"url","raw":"https://gitlab.example.com/team/mp.git","url":"https://gitlab.example.com/team/mp"}
-  => wire: "https://gitlab.example.com/team/mp"
-```
-
-So the D-2-01 promise ("the user's `.git` decision is never silently discarded") holds for the
-discriminator form `{"source":"url","url":"...git"}` and for plain strings, but not for the
-`kind`-tagged shape. Today's only reachable consumer of that reparse is
-`clone-cache.ts::deriveMarketplaceUrl`, which calls `canonicalCloneUrl` and does not care — and
-marketplace records take the safe path (`state-io.ts::normalizeStoredSource` reparses from
-`obj.raw`). This is a live trap rather than a live bug: the first caller that hands a
-`kind`-tagged url source to `networkCloneUrl` loses the suffix with no compile error and no test
-failure.
-
-**Fix:** prefer the stored `raw` when present, so the round trip is idempotent.
+**Fix:** funnel the object arm through the same syntactic gate the string arm uses, and reject
+rather than construct:
 
 ```ts
 function urlObjectSource(obj: Record<string, unknown>): ParsedSource {
   const url = optionalString(obj, "raw") ?? optionalString(obj, "url");
-  ...
+  if (url === undefined) {
+    return unknownObjectSource(obj, "url source is missing url");
+  }
+
+  // D-76-01: the object form is subject to the same https-only gate as the string form.
+  const parsed = parseUrlSourceForm(url);
+  if (parsed === undefined) {
+    return unknownObjectSource(obj, nonRelativeReason(url));
+  }
+
+  if (parsed.kind === "unknown") {
+    return parsed;
+  }
+
+  return withOptionalSourceFields(parsed, obj);
+}
 ```
 
-and add a `tests/domain/source.test.ts` case asserting
-`parsePluginSource(parsePluginSource("https://h/r.git")).raw === "https://h/r.git"`.
+Add cases for `http://`, `ssh://`, `git@host:`, a relative path, and a `/tree/` browser URL in
+the object form.
 
-#### WR-05: the D-2-02 add case asserts the test fake's own message as evidence of a product-facing property
+## Warnings
 
-**File:** `tests/orchestrators/marketplace/add.test.ts:2970-3002`
+### WR-01: WR-01's info.test.ts fix still cannot fail — the fixture remains non-discriminating
 
-**Issue:** the comment promises "the surfaced failure must name the URL that was actually sent so
-the remedy is visible without a fallback", and the case then asserts
+**File:** `tests/orchestrators/plugin/info.test.ts:5645-5649`, `:5711-5715`, `:186-190`
+
+**Issue:** The commit message for `170943f6` claims the fixture "passed unchanged whether the
+clone URL came from `source.raw` or `source.url`" and that narrowing the allowlist plus
+asserting by value fixes it. It does not: the fixture URL is `https://example.com/repo`, where
+`raw === url`, so `assert.equal(gitState.cloneCalls[0]?.url, "https://example.com/repo")`
+holds identically under `networkCloneUrl` and `canonicalCloneUrl`. Proven by negative control
+— reverting all nine threading sites to `canonicalCloneUrl` and running
+`node --test tests/orchestrators/plugin/info.test.ts` yields 2 failures, and **neither is one
+of the two cases the fixer strengthened**:
+
+```
+✖ FTCH-03: info --fetch on a COLD pinned git plugin materializes the clone ...
+✖ D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing clone ...
+```
+
+Both fail because `ALLOWED_INFO_REMOTES` no longer admits the unsuffixed github form — i.e.
+the info suite discriminates the **github** arm only. `info.ts`'s two `url`-arm threading
+sites (`:1633`, `:1646`) are unverified.
+
+**Fix:** make the fixture discriminating, exactly as WR-02 did for the flow suites:
 
 ```ts
-          err.message,
-          "createGitOpsFake blocked unplanned remote https://gitlab.example.com/team/git-only-mp",
+const ALLOWED_INFO_REMOTES = [
+  // ...
+  "https://example.com/repo",
+  "https://example.com/repo.git",
+  // ...
+] as const;
 ```
 
-That string is produced by `tests/platform/git-ops-fake.ts:141-145`, not by any production error
-surface. The URL-was-sent half is already proven one line below by
-`state.cloneCalls[0]?.url`; what the comment claims about the *surfaced* failure is not exercised at
-all. A test whose stated contract is carried by a fixture literal reads as coverage it does not
-provide.
+and seed the two `--fetch` cases with a manifest url of `https://example.com/repo.git` while
+keeping the by-value assertion on `.../repo.git`.
 
-**Fix:** either drop the message assertion and rewrite the comment to claim only the attempt +
-URL (what is actually verified), or assert the real user-visible surface — the notification /
-thrown error `addMarketplace` produces — and keep the claim.
+### WR-02: six of the nine `networkUrl` threading sites are undiscriminated on the `url` arm
 
-#### WR-06: the github wire URL is still hand-built in `add.ts`, in parallel with the arm that now owns it
+**Files:** `orchestrators/marketplace/add.ts:693`,
+`orchestrators/plugin/info.ts:1633` and `:1646`,
+`orchestrators/plugin/install-clone-probe.ts:63`,
+`orchestrators/plugin/fetch.ts:392` and `:404`,
+`orchestrators/plugin/update-preflight.ts:181`,
+`orchestrators/plugin/clone-cache.ts:559`
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:777`
+**Issue:** WR-02 added one discriminating fixture per flow suite, and every one of them is a
+**pinned** source, so they exercise `materializePluginClone` and never
+`materializeOrRefreshPluginMirror`. Measured by reverting only `networkCloneUrl`'s `url` arm to
+`return source.url;` and running the whole unit suite (`npm test`, 7290 cases) plus the
+integration suite:
 
-**Issue:**
+```
+relevant failures (7):
+  tests/domain/clone-key.test.ts  "preserves a trailing .git the user typed ..."
+  tests/domain/clone-key.test.ts  "keeps a trailing .git suffix and drops a #<ref> ..."
+  install-flow    PURL-01/02/09 url-source install (pinned)
+  reinstall-flow  cold-cache git-source reinstall (pinned)
+  update-flow     PURL-06 / D-78-05 pinned sha-change
+  reinstall-clone-probe  falls back from an absent unpinned mirror to the recorded sha
+no failures in: marketplace/add.test.ts, edge add.test.ts, info.test.ts, fetch.test.ts,
+                clone-cache.test.ts, install-clone-probe.test.ts,
+                tests/integration/marketplace-add-seed-mirrors.test.ts (6/6 pass)
+```
+
+So the mirror arm everywhere, the marketplace-add seam, `resolvePluginPin`, and both
+`fetch.ts` sites rest on the github `.git` append alone. Marketplace add is the most
+user-visible path in the phase and no add fixture carries a `.git` url, so D-2-01's
+suffix-preservation promise is unproven there.
+
+**Fix:** add (a) one unpinned/mirror case with a `.git`-carrying `url` source so the mirror arm
+discriminates, and (b) one `addMarketplace` case with `rawSource:
+"https://gitlab.example.com/team/mp.git"` asserting `state.cloneCalls[0].url ===
+"https://gitlab.example.com/team/mp.git"`. Change the `resolvePluginPin` url fixture at
+`tests/orchestrators/plugin/clone-cache.test.ts:847-851` to `raw: ".../o/r.git", url:
+".../o/r"` so the title "sends the url as typed" is actually exercised.
+
+### WR-03: `install-clone-probe.test.ts` asserts nothing about the required `networkUrl` argument
+
+**File:** `tests/orchestrators/plugin/install-clone-probe.test.ts:46-247`
+
+**Issue:** `grep -rn networkUrl tests/` matches only `clone-cache.test.ts`, `fetch.test.ts` and
+`reinstall-clone-probe.test.ts`. `install-clone-probe.ts` gained a required `networkUrl`
+argument at two seam calls, and its paired test module never mentions it — the seam spy at
+`:134` checks `options.cloneUrl` and stops. Every fixture has `raw === url`. Running the suite
+with the url arm reverted gives 6/6 pass. The sibling `reinstall-clone-probe.test.ts` does
+assert it by value (WR-02 fixed that one), so the asymmetry is unintentional.
+
+**Fix:** mirror `reinstall-clone-probe.test.ts:214` — give the url fixture `raw:
+"https://example.com/warm-plugin.git"` and add `networkUrl:
+"https://example.com/warm-plugin.git"` to the recorded-call `deepStrictEqual`.
+
+### WR-04: the D-2-02 add case still takes its evidence from the test double's own message
+
+**File:** `tests/orchestrators/marketplace/add.test.ts:2974-2998`
+
+**Issue:** WR-05 replaced an exact-string assertion on `createGitOpsFake blocked unplanned
+remote …` with `assert.match(err.message, /https:\/\/gitlab\.example\.com\/team\/git-only-mp/)`.
+The string being matched is still produced by the fake, not by any production error surface, so
+the case's title — "fails naming the verbatim URL that was sent" — remains unprovable by this
+assertion. `skills/typescript-unit-testing/SKILL.md` also directs that errors be asserted by
+class and structured fields, not by message text. The `state.cloneCalls[0]?.url` assertion at
+`:2997` is the only production-observable evidence and it already carries the case.
+
+**Fix:** drop the `assert.match` (keep `assert.ok(err instanceof Error)` and the `cloneCalls`
+assertions), and retitle to what is proven, e.g. `"MURL-09 / D-2-02: an add against a
+suffix-only port sends the verbatim URL once and fails"`.
+
+### WR-05: `ensureGitSuffix`'s trailing-slash loop is unreachable from production
+
+**File:** `extensions/pi-claude-marketplace/domain/source.ts:466-474`
+
+**Issue:** After this phase the only caller is `networkCloneUrl`'s github arm
+(`clone-key.ts:99`), which passes `canonicalCloneUrl(source)` =
+`https://github.com/${owner}/${repo}`. Both halves are validated non-empty and slash-free by
+`parseOwnerRepo` (`source.ts:394-406`) and `parseGitHubUrl` (`source.ts:510-517`), so
+`rest.endsWith("/")` is never true. The comment that justified the loop — "a `git-subdir`
+source stores its manifest `url` verbatim … and is therefore not parse-canonicalized" — was
+deleted in this phase, because the git-subdir arm no longer routes through this helper. The
+rows at `tests/domain/source.test.ts:943-945` keep coverage green only by calling the export
+directly with inputs no caller can produce, which is the "case that cannot fail" pattern the
+testing skill rejects.
+
+**Fix:** drop the loop and let the function be the single-purpose suffix appender its docstring
+describes:
 
 ```ts
-  const cloneUrl = `https://github.com/${source.owner}/${source.repo}.git`;
+export function ensureGitSuffix(url: string): string {
+  return url.endsWith(".git") ? url : `${url}.git`;
+}
 ```
 
-The clone call two frames down now derives its URL from `networkCloneUrl(source)`, so this literal
-is a second, independent construction of the same string, kept only to feed
-`hostFromCloneUrl(cloneUrl, "github")`. It is correct today and correctness does not depend on the
-suffix (the host is all that is read), but it is the exact drift the phase's single-sourcing was
-meant to remove: a future change to the `github` arm will not reach this line, and nothing fails if
-the two disagree.
+and remove the two trailing-slash rows from the test table. If a future same-origin comparison
+needs slash normalization, it should call `stripSlashAndFragment` for that.
 
-**Fix:** derive it, so there is one builder.
+### WR-06: the clone-seam comment claims the wire url is "the only thing sent to the remote" — false on the mirror refresh
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts:277-280` (and
+`:191-193`)
+
+**Issue:** `materializeOrRefreshPluginMirror` uses `args.networkUrl` only on the cold-key
+clone at `:290`. It then always calls `refreshGitHubClone(mirrorRoot, …)` at `:308`, which
+issues `gitOps.fetch({ dir, remote: "origin", … })` (`orchestrators/marketplace/shared.ts:241-246`)
+against the URL isomorphic-git recorded in `<mirrorRoot>/.git/config` at first clone.
+Because the mirror dir is keyed on the **identity** url, two sources with the same identity but
+different suffix decisions share one mirror, and every warm refresh goes to the first writer's
+URL. `02-CONTEXT.md` records the same mechanism ("It does not re-derive a URL, so already-added
+sources are unaffected by this change"), so the comment contradicts the design it documents.
+
+**Fix:** scope the claim to what the function guarantees, e.g. `"D-2-03: the mirror key hashes
+the identity url; the caller-supplied wire url is what a COLD clone sends. A warm refresh
+fetches the origin remote recorded at clone time."`
+
+### WR-07: forbidden comment narration in the `ensureGitSuffix` docstring
+
+**File:** `extensions/pi-claude-marketplace/domain/source.ts:462-464`
+
+**Issue:** "a suffix-less URL against a host that serves ONLY the `.git`-suffixed smart-HTTP
+path **no longer** resolves." `skills/typescript-comments/SKILL.md` forbids narration of the
+shape the code replaced and names `X no longer ...` as a banned form; a comment states a
+present-tense fact about the current code. This is the same docstring WR-03 already corrected
+for a GSD phase reference, so the violation survived the fix pass.
+
+**Fix:** `"Accepted trade-off (D-2-02): a suffix-less URL does not resolve against a host that
+serves ONLY the `.git`-suffixed smart-HTTP path. Verbatim means verbatim in both directions,
+and the failure names the URL that was sent."`
+
+### WR-08: WR-06's fix computes a value the callee discards
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:785`
+
+**Issue:** `const host = hostFromCloneUrl(canonicalCloneUrl(source), "github");` —
+`hostFromCloneUrl` (`orchestrators/auth-host.ts:80-86`) returns the literal `"github.com"`
+whenever `kind === "github"` and never reads its first argument. So the "second hand-built
+literal" WR-06 set out to remove was never load-bearing, the replacement is a discarded
+computation, and the surrounding comment now reads as if the host were derived from the URL.
+No test can observe the change (`tests/orchestrators/marketplace/add.test.ts` is green either
+way), which is why it slipped through.
+
+**Fix:** either state the fact directly — `const host = hostFromCloneUrl("", "github");` is
+worse, so prefer making the callee honest — or keep the call and add `/* cloneUrl= */` naming
+plus a one-line comment that the github arm ignores it. The cleanest form is to let the github
+branch of `hostFromCloneUrl` be reached through a parameterless helper, or to pass
+`source.kind` and the source itself rather than a URL the function does not read.
+
+### WR-09: a `networkCloneUrl` case title promises a fragment the fixture does not carry
+
+**File:** `tests/domain/clone-key.test.ts:279-293`
+
+**Issue:** `test("drops a trailing slash and a #<ref> fragment from a git-subdir url", …)` uses
+`raw`/`url` = `"https://example.com/mono/"`. There is no `#<ref>` fragment anywhere in the
+fixture, so half the promised behavior cannot fail. Per the testing skill, "every case must
+discriminate the behavior named in its title".
+
+**Fix:** use `url: "https://example.com/mono/#main"` (keeping the expected
+`"https://example.com/mono"`), or split the fragment half into its own row.
+
+## Info
+
+### IN-01: redundant local rebinding of `args.networkUrl` (carried from iteration 1, deferred)
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts:193`, `:280`
+
+**Issue:** `const networkUrl = args.networkUrl;` adds a name with no transformation. Both
+functions read every other argument as `args.x` at the point of use.
+
+**Fix:** delete both lines and use `args.networkUrl` at `:208` and `:290`, keeping the D-2-03
+comment where it is.
+
+### IN-02: tautological purity case (carried from iteration 1, deferred)
+
+**File:** `tests/domain/clone-key.test.ts:295-311`
+
+**Issue:** "returns the identical string for two consecutive calls with the same source" calls
+a pure function twice and compares both results to the same literal. Only a non-deterministic
+implementation could fail it, and the title's "identical" is not asserted either (it is
+`deepStrictEqual` on an array, not reference identity).
+
+**Fix:** remove the case; the by-value rows above it already pin the output.
+
+### IN-03: `CloneOptions.url` docstring overstates "verbatim" (carried from iteration 1, deferred)
+
+**File:** `extensions/pi-claude-marketplace/platform/git.ts:45-52`
+
+**Issue:** "url and git-subdir sources supply the verbatim form the user typed" — the value is
+`stripSlashAndFragment(...).base`, so trailing slashes and a `#<ref>` fragment are removed; and
+a git-subdir url comes from a marketplace manifest, not from the user. The next sentence, "The
+stored identity form is `.git`-stripped; the wire form is not", is false for a suffix-less
+input, where both forms are identical.
+
+**Fix:** "github sources reconstruct `https://github.com/<owner>/<repo>.git`; url and
+git-subdir sources supply their input with trailing slashes and a `#<ref>` fragment removed and
+any `.git` suffix preserved."
+
+### IN-04: seven `cloneUrl` / `networkUrl` pairs in `fetch.test.ts` now hold the same string
+
+**File:** `tests/orchestrators/plugin/fetch.test.ts:484-485`, `:558-559`, `:1348-1349`,
+`:1518-1519`, `:1587-1588`, `:1637-1638`, `:2025-2026`
+
+**Issue:** The two locals existed to name the identity/wire distinction; after the `.git` was
+removed from `networkUrl` they are aliases, which reads as if the distinction were gone.
+
+**Fix:** where a case does not care about the distinction, use one local; where it should
+(see WR-02), give `networkUrl` a `.git` suffix and add it to `allowedRemoteUrls`.
+
+### IN-05: `networkCloneUrl` is imported from two different modules within one phase
+
+**Files:** `domain/clone-key.ts` direct import in `marketplace/add.ts:53`,
+`plugin/install-clone-probe.ts:1`, `plugin/reinstall-clone-probe.ts:1`; the
+`plugin/clone-cache.ts:595` re-export in `plugin/fetch.ts:54`, `plugin/info.ts:82`,
+`plugin/update-preflight.ts:25`.
+
+**Issue:** The re-export exists to keep pre-existing `canonicalCloneUrl` import sites unbroken;
+adding a brand-new symbol to it creates two provenances for the same binding in the same
+change.
+
+**Fix:** import `networkCloneUrl` from `domain/clone-key.ts` at all six sites and leave the
+re-export carrying only `canonicalCloneUrl`.
+
+### IN-06: the idempotence case asserts one field where the whole value is the promise
+
+**File:** `tests/domain/source.test.ts:655-663`
+
+**Issue:** `assert.strictEqual(reparsedSource.raw, expectedRaw)` pins only `raw`; a regression
+that dropped `url` or `ref` on the round trip would pass. The testing skill asks for whole-value
+comparison when the value is the contract.
+
+**Fix:**
 
 ```ts
-  const host = hostFromCloneUrl(canonicalCloneUrl(source), "github");
+const parsedOnce = parsePluginSource("https://example.com/p.git");
+assert.deepStrictEqual(parsePluginSource(parsedOnce), parsedOnce);
 ```
-
-(`canonicalCloneUrl` is already the identity form used for host extraction on every other git
-path — see `install-clone-probe.ts:56-57`, `fetch.ts:387-388`, `info.ts:1627-1628`.)
-
-### Info
-
-#### IN-01: redundant local alias for a parameter that is already named
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts:191-193,277-280`
-
-**Issue:** `const networkUrl = args.networkUrl;` adds an indirection that says nothing the field
-name does not. Both sites already carry the D-2-03 comment that justifies the split, so the alias is
-pure ceremony.
-
-**Fix:** delete both aliases, keep the comments, and use `args.networkUrl` at the two `gitOps.clone`
-calls — or destructure it alongside the other fields.
-
-#### IN-02: tautological purity case in the `networkCloneUrl` suite
-
-**File:** `tests/domain/clone-key.test.ts:280-296`
-
-**Issue:** "returns the identical string for two consecutive calls with the same source" calls a
-pure function with no captured state twice and compares the results. No implementation that passes
-the other seven cases can fail this one, so it cannot discriminate any behavior —
-`skills/typescript-unit-testing/SKILL.md` requires that a wrong implementation makes the assertion
-fail.
-
-**Fix:** drop the case. If the intent was MURL-09's no-second-attempt property, that is already
-asserted where it can fail: `clone-cache.test.ts` asserts `resolveRemoteRefCalls.length === 1` and
-`cloneCalls.length === 1` with the URL by value.
-
-#### IN-03: `CloneOptions.url` docstring overstates "verbatim" for `git-subdir`
-
-**File:** `extensions/pi-claude-marketplace/platform/git.ts:47-51`
-
-**Issue:** "url and git-subdir sources supply the verbatim form the user typed" is inaccurate on
-both halves: a `url` source supplies `raw` minus trailing-slash/fragment decorations (not verbatim),
-and a `git-subdir` url is a manifest-declared field that no user typed. Once CR-02 lands the
-sentence will also be stale.
-
-**Fix:** state the mechanism instead — "github sources are sent suffixed; `url` and `git-subdir`
-sources are sent as declared, with trailing slashes and a `#<ref>` fragment stripped. The stored
-identity form is `.git`-stripped; the wire form is not."
 
 ---
 
-_Reviewed: 2026-09-27T05:05:39Z_
+_Reviewed: 2026-09-27_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Iteration: 2_
