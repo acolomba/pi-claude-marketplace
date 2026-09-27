@@ -185,12 +185,8 @@ interface GitOpsAdapterOptions {
 
 const ALLOWED_INFO_REMOTES = [
   "https://example.com/monorepo",
-  "https://example.com/monorepo.git",
   "https://example.com/repo",
-  "https://example.com/repo.git",
   "https://example.com/warmdecl",
-  "https://example.com/warmdecl.git",
-  "https://github.com/owner/gh-mp",
   "https://github.com/owner/gh-mp.git",
 ] as const;
 
@@ -5649,7 +5645,8 @@ test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing 
     // The clone was materialized, then the now-warm tree resolved on the
     // recorded (installed) row -- the headline `info --fetch` recovery.
     // assert
-    assert.ok(gitState.cloneCalls.length >= 1, "the fetch hook cloned the cold clone");
+    assert.equal(gitState.cloneCalls.length, 1);
+    assert.equal(gitState.cloneCalls[0]?.url, "https://example.com/repo");
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
     assert.match(msg, /● gplug v1\.0\.0 \(installed\)/, msg);
@@ -5714,7 +5711,8 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source materi
     // Cold mirror: materialized once, then refreshed in place (MIRR-02 -- the
     // mirror refresh IS the consented fetch on the unpinned arm).
     // assert
-    assert.ok(gitState.cloneCalls.length >= 1, "the fetch hook cloned the cold mirror");
+    assert.equal(gitState.cloneCalls.length, 1);
+    assert.equal(gitState.cloneCalls[0]?.url, "https://example.com/repo");
     assert.ok(gitState.fetchCalls.length >= 1, "the fetch hook refreshed the mirror (MIRR-02)");
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
