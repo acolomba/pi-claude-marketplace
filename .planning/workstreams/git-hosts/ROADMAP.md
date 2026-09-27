@@ -122,12 +122,12 @@ Plans:
      lines/functions/branches and an owner unit test for every module touched
      (`test:corresponding`).
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 
 **Wave 1:**
-- [ ] 02-01-PLAN.md — `networkCloneUrl` and the slash/fragment strip helper land in `domain/`, and the
+- [x] 02-01-PLAN.md — `networkCloneUrl` and the slash/fragment strip helper land in `domain/`, and the
   `marketplace add` seam sends them; proven end to end against a git port that admits only the verbatim
   URL, with exactly-one-attempt and original-error-identity cases (MURL-08, MURL-09)
 
@@ -221,5 +221,5 @@ Phase 3 because that is where it is finally measured, but nothing may be left re
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Private repos on any git host | 3/3 | In Progress | — |
-| 2. Endpoints that answer only at the verbatim URL | 0/3 | Planned | — |
+| 2. Endpoints that answer only at the verbatim URL | 1/3 | In Progress|  |
 | 3. `marketplace add` recovers from its own leftover clone | 0/TBD | Not started | — |

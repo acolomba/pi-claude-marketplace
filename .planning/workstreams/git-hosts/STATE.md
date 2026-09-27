@@ -4,20 +4,20 @@ milestone: any-git-host
 milestone_name: Any Git Host
 current_phase: 2
 current_phase_name: Endpoints that answer only at the verbatim URL
-current_plan: 0
+current_plan: 1
 total_plans_in_phase: 3
-status: Phase 2 planned (3 plans, 3 waves) — ready to execute
-stopped_at: "Phase 2 planned: 3 plans across 3 sequential waves, plan-checker clean (efa72cd9, c7d103b0)"
-last_updated: "2026-09-26T23:05:00.000Z"
+status: Phase 2 plan 1 of 3 executed — networkCloneUrl landed on the marketplace-add seam
+stopped_at: "Phase 2 plan 01 executed: networkCloneUrl + stripSlashAndFragment landed, marketplace add wired, MURL-08/MURL-09 proven (48493e4e, c0e5a1fe, 5a745526)"
+last_updated: "2026-09-27T00:45:00.000Z"
 last_activity: 2026-09-26
-last_activity_desc: "Planned Phase 2; plan-checker clean, requirements 2/2 and decisions 4/4 covered"
-state_head: ebb13939
+last_activity_desc: "Executed Phase 2 plan 01: verbatim clone URL derivation, 200 tests green, 100% direct coverage on all three touched files"
+state_head: 5a745526
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  percent: 67
 ---
 
 # Project State
@@ -37,11 +37,11 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 2 — Endpoints that answer only at the verbatim URL (planned, ready to execute)
-Current Plan: 0
+Phase: 2 — Endpoints that answer only at the verbatim URL (plan 1 of 3 executed)
+Current Plan: 1
 Total Plans in Phase: 3
-Status: 3 plans across 3 sequential waves; plan-checker returned clean after one documentation fix
-Last activity: 2026-09-26 — Planned Phase 2 (efa72cd9, c7d103b0)
+Status: Plan 01 (wave 1) executed; plans 02-03 (waves 2-3) remain, sequential by necessity
+Last activity: 2026-09-26 — Executed Phase 2 Plan 01 (48493e4e, c0e5a1fe, 5a745526)
 
 **Phase 2 is planned: three plans, three waves, sequential by necessity.** Plan 01 (wave 1) lands
 `networkCloneUrl` and an extracted `stripSlashAndFragment` in `domain/`, wires the `marketplace add`
@@ -111,6 +111,25 @@ consulted until the server issues a challenge (PROV-02's surviving half).
 uncovered-lines cell on every row under `extensions/`, and `fallow` at `FALLOW_EXIT=0`. Phase 2 was
 planned from there with `--skip-ui`; Phase 1's verification canary remains deferred to the operator.
 
+**Phase 2 Plan 01 (wave 1) is executed.** `networkCloneUrl(source)` lands in `domain/clone-key.ts`
+beside `canonicalCloneUrl`: a 3-arm switch where only the `github` arm appends `.git` (via
+`ensureGitSuffix`, keeping that helper's last production consumer alive against `fallow`'s
+dead-code gate); the `url` arm derives from `source.raw` so a user-typed `.git` survives to the
+wire; `git-subdir` uses `source.url` verbatim. `domain/source.ts` gained `stripSlashAndFragment`,
+the `.git`-preserving half of the parse-time strip; `stripUrlDecorations` is now a thin wrapper
+adding the `.git` strip on top, behavior-identical to before. `addGitClonedInGuard` derives its
+clone url from `args.source` instead of a pre-computed `cloneUrl`, which is now dead and removed
+from the args type and both call sites. MURL-09 is pinned as exactly-one-attempt with the sent URL
+asserted by value on the success path and on three failure paths (404, 401, and the accepted D-2-02
+refusal where a suffix-only host now genuinely fails, naming the URL that was sent). 200 tests
+green across the four touched test files, 100% direct coverage on all three touched production
+files, `npx tsc --noEmit` / `npm run lint` / `npm run format:check` / `npm run fallow` all exit 0.
+Two `check-unused-type-members.contracts.json` pins were remapped from line 539 to 540 (the new
+`domain/clone-key.ts` import shifts everything below it by one line) — anticipated by the plan's
+own remap contingency, not a surprise. Plans 02-03 remain: plan 02 threads the same derivation
+through the three `clone-cache.ts` seam sites and their nine callers; plan 03 owns the residual
+suite audit and the phase-boundary `npm run check`.
+
 ## Deferred Verification
 
 | Phase | State | Resume |
@@ -130,18 +149,18 @@ blocked until this is resolved.
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** none yet (phase 2 planned, not started)
+**Current Plan:** Phase 2 Plan 01 executed (1/3 plans in phase)
 
 ```
 Phase 1  [==========]  plans complete (3/3)
-Phase 2  [          ]  planned (0/3 plans executed)
+Phase 2  [===       ]  in progress (1/3 plans executed)
 Phase 3  [          ]  not started
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
-| 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Planned (3 plans), not executed |
+| 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | In progress (1/3 plans executed) |
 | 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Not started |
 
 ## Accumulated Context
@@ -179,6 +198,13 @@ Phase 3  [          ]  not started
   `credentialOps.fill` is called, so a URL on another host causes no helper query at all. The
   `url` parameter is load-bearing and named `url`; `onAuthFailure` keeps its unused `_url`
   because the credential it evicts has already been sent (GAUTH-06, D-1-03).
+- **Phase 2 Plan 01: `networkCloneUrl`'s `url` arm reads `source.raw`, never `source.url`.** The
+  parse-time-stripped identity form would silently discard a user-typed trailing `.git`; `raw` is
+  the string the `https://`-only admission gate already accepted, so no new scheme can enter there.
+- **Phase 2 Plan 01: `ALLOWED_MARKETPLACE_REMOTES` is narrowed per `source.kind`, not per hostname
+  string.** `https://GitHub.com/acme/mp` (case-sensitive github prefix check) and
+  `https://gitlab.com/team/mp` (no gitlab.com literal in this parser) are both `url` kind and both
+  drop the `.git` suffix despite the host names looking github/gitlab-adjacent.
 - **Edge bundle expectations use the reduced-token shape.** `describeClone` and the new
   `describeFetch` replace a recorded `auth` bundle with `{ host }`, so the bound host stays inside
   the byte-locked deep-equality comparison and a bundle bound to the wrong host fails the suite. A
@@ -230,11 +256,11 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-09-26T04:42:35.574Z
+**Last session:** 2026-09-27T00:45:00.000Z
 
-**Stopped At:** Phase 2 planned — 3 plans, 3 waves, plan-checker clean (`efa72cd9`, `c7d103b0`).
-**Resume File:** `.planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-01-PLAN.md`
-**Next Action:** `/gsd-execute-phase 2`. Phase 1's `human_needed` canary stays open for the operator.
+**Stopped At:** Phase 2 Plan 01 executed — `networkCloneUrl` landed, 200 tests green (`48493e4e`, `c0e5a1fe`, `5a745526`).
+**Resume File:** `.planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-02-PLAN.md`
+**Next Action:** `/gsd-execute-phase 2` (plan 02, wave 2). Phase 1's `human_needed` canary stays open for the operator.
 
 ## Performance Metrics
 
@@ -242,3 +268,4 @@ None.
 |------|----------|-------|-------|
 | Phase 01 P02 | 22min | 2 tasks | 3 files |
 | Phase 01 P03 | 41min | 2 tasks | 11 files |
+| Phase 02 P01 | 95min | 3 tasks | 8 files |
