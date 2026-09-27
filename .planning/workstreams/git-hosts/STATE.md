@@ -2,16 +2,16 @@
 gsd_state_version: "1.0"
 milestone: any-git-host
 milestone_name: Any Git Host
-current_phase: 1
-current_phase_name: Private repos on any git host
-current_plan: 3
-total_plans_in_phase: 3
-status: Phase 1 complete (3/3 plans) — awaiting verification
-stopped_at: "Completed 01-03-PLAN.md (3 commits, 1c7d6e52..d5762e0d); npm run check exits 0"
-last_updated: "2026-09-26T04:42:43.870Z"
+current_phase: 2
+current_phase_name: Endpoints that answer only at the verbatim URL
+current_plan: 0
+total_plans_in_phase: 0
+status: Phase 2 context gathered — ready for planning
+stopped_at: "Phase 2 context gathered; ROADMAP SC3/SC4 and MURL-09 corrected to the no-retry design (1f680673)"
+last_updated: "2026-09-26T20:35:00.000Z"
 last_activity: 2026-09-26
-last_activity_desc: "Executed 01-03: the plugin and edge surfaces assert they carry a host-keyed bundle; npm run check exits 0 with 0 failing tests"
-state_head: d5762e0da783a6cb9560dcb0542d733aa9a393fe
+last_activity_desc: "Discussed Phase 2; upstream research replaced the retry with verbatim cloning (D-2-01..D-2-04)"
+state_head: 1f680673
 progress:
   total_phases: 3
   completed_phases: 0
@@ -37,11 +37,31 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 1 — Private repos on any git host (all 3 plans executed, awaiting verification)
-Current Plan: 3
-Total Plans in Phase: 3
-Status: Plans 01, 02 and 03 of 3 executed and summarized
-Last activity: 2026-09-26 — Executed 01-03 (3 commits, GAUTH-03 / GAUTH-05 on the plugin and edge surfaces)
+Phase: 2 — Endpoints that answer only at the verbatim URL (context gathered, not yet planned)
+Current Plan: 0
+Total Plans in Phase: 0
+Status: 02-CONTEXT.md written; ROADMAP Phase 2 and MURL-09 corrected to match
+Last activity: 2026-09-26 — Discussed Phase 2 (1f680673)
+
+**Phase 2 turned out not to need the retry it was scoped around.** Research against the Claude Code
+2.1.274 binary settled it: the marketplace source parser appends `.git` only for `github.com`
+(`ho`/`Fs`) and `gitlab.com` (`fio`/`dio`) `owner/repo` paths, and its add dispatcher passes a `git`
+source's URL through to the clone untouched. Its `{source:"url"}` kind is not a clone at all — it
+fetches a hosted `marketplace.json`. So our unconditional `ensureGitSuffix` on the network path IS
+the defect, and not appending is the fix (D-2-01). `networkCloneUrl(source)` lands in
+`domain/clone-key.ts` beside `canonicalCloneUrl` with the same three-kind switch, introducing no type
+member and so no `contracts.json` pin (D-2-03). MURL-09 is re-aimed as a no-second-attempt assertion
+rather than retired (D-2-04), ROADMAP SC3 becomes a call count of exactly one, and SC4 drops as
+vacuous. The one accepted regression: a suffix-less URL against a host serving only `/repo.git`
+stops working (D-2-02).
+
+**Phase 1 verification is still open.** `01-VERIFICATION.md` stands at `status: human_needed` with
+5/5 must-haves verified — everything provable offline is closed, including the real-credential-helper
+link via the scoped canary at `130d68a9`. What remains is one end-to-end clone of a real private repo
+on a non-registry host, which needs an operator PAT and a configured helper. The manager projection
+reports Phase 1 as `stale` rather than `human_needed`; that is the `covered_files` self-stale class
+(the report lists REQUIREMENTS/ROADMAP, which this commit just edited), not a new gap. This blocks
+milestone close, not Phase 2.
 
 Plan 01 landed wave 1: `buildAuthForHost` returns a `GitAuthBundle` for every https host, so
 `credentialOps.fill(host)` is reached off the two-host registry; `NO_PROVIDER_CAUSE` and
@@ -71,18 +91,18 @@ is verification of Phase 1, then `/gsd-plan-phase 2` with `--skip-ui`.
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** 3 of 3 (phase 1)
+**Current Plan:** none yet (phase 2 not planned)
 
 ```
 Phase 1  [==========]  plans complete (3/3)
-Phase 2  [          ]  not started
+Phase 2  [          ]  context gathered, not planned
 Phase 3  [          ]  not started
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
-| 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Not started |
+| 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Context gathered, not planned |
 | 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Not started |
 
 ## Accumulated Context
@@ -173,9 +193,9 @@ None.
 
 **Last session:** 2026-09-26T04:42:35.574Z
 
-**Stopped At:** Completed `01-03-PLAN.md` (3 commits, `1c7d6e52`..`d5762e0d`); `npm run check` exits 0 with 0 failing tests.
-**Resume File:** None
-**Next Action:** Verify Phase 1, then plan Phase 2 with `--skip-ui`
+**Stopped At:** Phase 2 context gathered; ROADMAP SC3/SC4 and MURL-09 corrected to the no-retry design (`1f680673`).
+**Resume File:** `.planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-CONTEXT.md`
+**Next Action:** `/gsd-plan-phase 2 --skip-ui`, then execute. Phase 1's `human_needed` canary stays open for the operator.
 
 ## Performance Metrics
 
