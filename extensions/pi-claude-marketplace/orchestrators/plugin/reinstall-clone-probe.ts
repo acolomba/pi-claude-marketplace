@@ -1,4 +1,4 @@
-import { canonicalCloneUrl, pluginMirrorKey } from "../../domain/clone-key.ts";
+import { canonicalCloneUrl, networkCloneUrl, pluginMirrorKey } from "../../domain/clone-key.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { buildCloneAuth } from "../auth-host.ts";
 
@@ -64,6 +64,7 @@ export async function probeReinstallClone(
   const cloneRoot = await seam.materializePluginClone({
     locations,
     cloneUrl,
+    networkUrl: networkCloneUrl(source),
     pin: recordedSha,
     auth,
   });

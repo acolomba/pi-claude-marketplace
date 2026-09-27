@@ -22,6 +22,7 @@ import {
   canonicalCloneUrl,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  networkCloneUrl,
   resolveGitSubdirRoot,
   resolvePluginPin,
 } from "./clone-cache.ts";
@@ -177,6 +178,7 @@ function makeUpdateCloneProbe(
     const materialized = await seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
+      networkUrl: networkCloneUrl(gitSource),
       ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
       ...(authBundle !== undefined && { auth: authBundle }),
     });
@@ -207,6 +209,7 @@ function makeUpdateCloneProbe(
     const cloneRoot = await seam.materializePluginClone({
       locations,
       cloneUrl: pin.cloneUrl,
+      networkUrl: networkCloneUrl(gitSource),
       pin: pin.pin,
       ...(pin.ref !== undefined && { ref: pin.ref }),
       ...(authBundle !== undefined && { auth: authBundle }),

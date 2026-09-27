@@ -79,6 +79,7 @@ import {
   canonicalCloneUrl,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  networkCloneUrl,
   resolveGitPluginRootWithSubdir,
   resolvePluginPin,
 } from "./clone-cache.ts";
@@ -1629,6 +1630,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
       await fetchCtx.seam.materializeOrRefreshPluginMirror({
         locations,
         cloneUrl,
+        networkUrl: networkCloneUrl(gitSource),
         ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
         auth: authBundle,
       });
@@ -1641,6 +1643,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
     const cloneRoot = await fetchCtx.seam.materializePluginClone({
       locations,
       cloneUrl,
+      networkUrl: networkCloneUrl(gitSource),
       pin,
       ...(ref !== undefined && { ref }),
       auth: authBundle,
