@@ -21,7 +21,7 @@
   "firecrawl": false,
   "exa_search": false,
   "git": {
-    "branching_strategy": "milestone",
+    "branching_strategy": "none",
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
     "milestone_branch_template": "features/{milestone}",
     "quick_branch_template": null,
