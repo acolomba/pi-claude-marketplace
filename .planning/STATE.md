@@ -1,7 +1,7 @@
 ---
 gsd_state_version: "1.0"
 milestone: workflows-replay
-status: "No active milestone — workflows-replay archived; npm 0.19.2 released"
+status: "between milestones; workflows-replay archived; npm 0.19.2 released"
 stopped_at: workflows workstream archived and GSD config pinned to the quality profile
 last_updated: "2026-09-27T00:00:00Z"
 last_activity: 2026-09-27
