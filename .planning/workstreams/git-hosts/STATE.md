@@ -4,20 +4,20 @@ milestone: any-git-host
 milestone_name: Any Git Host
 current_phase: 3
 current_phase_name: "`marketplace add` recovers from its own leftover clone"
-current_plan: 1
-total_plans_in_phase: 3
-status: "Phase 3 wave 1 of 3 executed — PAUSED at the wave boundary (orchestrator context limit), waves 2 and 3 not run"
-stopped_at: "Phase 3 plan 01 executed: GitOps gains listRemotes (8th primitive, never throws); addGitClonedInGuard step 4 recognizes and removes a same-origin leftover clone before the atomic rename (MA-12, MA-13); recognizeLeftover extracted to hold fallow's cognitive-complexity gate (49898651)"
-last_updated: "2026-09-27T14:30:00.000Z"
+current_plan: 3
+status: executing
+stopped_at: "Completed 03-02-PLAN.md: MA-13 refusal arms, MA-8 precedence, MA-14 leak arms; test:coverage:unit at 100/100/100"
+last_updated: "2026-09-27T14:38:03.069Z"
 last_activity: 2026-09-27
-last_activity_desc: "Executed 03-01-PLAN.md: listRemotes seam + recognize-remove-rename leftover-clone recovery, both tasks green"
-state_head: 49898651
+last_activity_desc: "Executed 03-02-PLAN.md: MA-13 refusal-arm table, MA-8-precedence case, MA-14 single/double-fault leak cases, both tasks green"
+state_head: c74861a22d296d221af00e8345f06a414d332e52
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 9
-  completed_plans: 7
-  percent: 100
+  completed_plans: 8
+  percent: 0
+total_plans_in_phase: 3
 ---
 
 # Project State
@@ -37,8 +37,8 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 3 — `marketplace add` recovers from its own leftover clone (plan 01 of 3 executed)
-Current Plan: 1
+Phase: 3 — `marketplace add` recovers from its own leftover clone — EXECUTING (plan 02 of 3 complete)
+Current Plan: 3
 Total Plans in Phase: 3
 
 **Phase 3 Plan 01 (wave 1) is executed.** `platform/git.ts::listRemotes({ dir })` is the 8th `GitOps`
@@ -99,15 +99,31 @@ fail the 100%-branch gate unless made unconditional in the same edit.
 failure, not the retry this phase delivers. The truth is written as the no-state-entry retry, with an
 explicit MA-8-precedence case so it cannot be misread.
 
-**One mid-phase red is declared.** `test:coverage:unit` does not reach 100% branches at plan 01's
-boundary; plan 01 names the exact uncovered branches and forbids reaching green by collapsing an arm
-or adding a coverage pin, and plan 02 closes them. `npm run check` green is a phase-boundary
+**The mid-phase red plan 01 declared is now closed.** `test:coverage:unit` did not reach 100%
+branches at plan 01's boundary; plan 01 named the exact uncovered branches and forbade reaching
+green by collapsing an arm or adding a coverage pin. `npm run check` green is a phase-boundary
 obligation, not a plan-boundary one — the precedent Phase 2 set.
 
-Status: Phase 2 verified — 9/9 must-haves, all 5 ROADMAP success criteria, all 5 plan
-prohibitions, `npm run check` at `CHECK_EXIT=0`. Its live smart-HTTP canary is deferred to the
-operator alongside Phase 1's (see Deferred Verification). Phase 3 is not yet planned.
-Last activity: 2026-09-27 — Verified Phase 2 after the review-fix loop and D-2-05 (4d530bfb)
+**Phase 3 Plan 02 (wave 2) is executed.** Every MA-13 refusal arm plan 01 left unproven is now
+asserted by behaviour through `addMarketplace`, table-driven over one `ListRemotesResult` row per
+arm: origin mismatch, prefix-adjacent (the whole-string-equality guard), case-differing (byte
+comparison, no folding, D-3-01), ssh-form, garbage, and empty-string origin, plus the `no-origin`
+and `unreadable` arms. Each case asserts the `{stale clone}` reason, the derived-name subject, and
+the marker file surviving on disk. The pre-existing `MA-6 / ATTR-07` not-a-repo case is confirmed
+byte-unchanged. A new case proves MA-8's duplicate-name check runs before recognition: a matching
+leftover plus an existing state entry still renders `{duplicate name}`, not `{stale clone}`.
+MA-14's single- and double-fault cases prove an unremovable recognized leftover fails as stale with
+the leak appended and no recorded destination, and that a double fault (both the leftover-removal
+leak and the staging-cleanup leak) still classifies through exactly one `Error.cause` level — the
+case that fails if the two leaks were ever chained through two `appendLeakToError` calls instead of
+joined into one. `npm run test:coverage:unit` now reports `all files | 100.00 | 100.00 | 100.00`.
+No production file was touched (`git diff --name-only -- extensions/` is empty across both commits).
+
+Status: Phase 3 executing (wave 3 of 3 remaining). Phase 2 verified — 9/9 must-haves, all 5 ROADMAP
+success criteria, all 5 plan prohibitions, `npm run check` at `CHECK_EXIT=0`. Its live smart-HTTP
+canary is deferred to the operator alongside Phase 1's (see Deferred Verification).
+Last activity: 2026-09-27 — Phase 3 wave 2 of 3 executed; the whole gate surface is green at this
+plan's boundary
 
 **Phase 2 took three code-review iterations, and the second one earned its keep.** The first fix
 pass closed all 8 findings and went green — while silently moving the parse-time cache identity,
@@ -302,19 +318,19 @@ milestone close only, not Phase 3.
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** none yet (phase 3 planned, not started)
+**Current Plan:** 3
 
 ```
 Phase 1  [==========]  plans complete (3/3)
 Phase 2  [==========]  verified 9/9, live canary deferred
-Phase 3  [          ]  planned (0/3 plans executed)
+Phase 3  [======    ]  executing (2/3 plans executed)
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
 | 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Verified 9/9, live canary deferred |
-| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Planned (3 plans), not executed |
+| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Executing (2/3 plans), wave 3 remains |
 
 ## Accumulated Context
 
@@ -421,6 +437,8 @@ Phase 3  [          ]  planned (0/3 plans executed)
 - **Phase 3 Plan 01: `tests/orchestrators/marketplace/update.test.ts::makeForbiddenGitOps`
   is a sixth hand-enumerated `GitOps` literal 03-CONTEXT.md/03-VALIDATION.md did not predict** —
   found via `npx tsc --noEmit`, fixed with the same rejecting-stub pattern as its five siblings.
+- [Phase 03]: Phase 3 Plan 02: marketplace add's standalone notify() row carries no cause/leak text by design (MpFailed has reasons/severity/plugins only), so both MA-14 cases call addMarketplace twice -- once standalone for the rendered {stale clone} row + subject, once orchestrated for outcome.cause's leak text.
+- [Phase 03]: Phase 3 Plan 02: the double-fault MA-14 case must restore sources-staging/ to 0o755 between its two addMarketplace calls -- the first call's onClone leaves it read-only permanently, so an un-restored second call's own fixture-copy mkdir fails before recognition ever runs, misclassifying the whole case as {unparseable}.
 
 ### Source-review facts carried into planning
 
@@ -462,17 +480,17 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-09-27 (autonomous run, `/gsd-autonomous --from 2 --interactive`)
+**Last session:** 2026-09-27T14:38:02.962Z
 
-**Stopped At:** Phase 3 wave 1 of 3 complete and spot-check verified (`1a9320ca`). Paused at the
-wave-1/wave-2 boundary because the orchestrator's context window was 66% consumed — a clean boundary
-chosen deliberately over running out mid-wave.
+**Stopped At:** Completed 03-02-PLAN.md: MA-13 refusal arms, MA-8 precedence, MA-14 leak arms;
+`npm run test:coverage:unit` reports `all files | 100.00 | 100.00 | 100.00`, closing the red wave 1
+declared. Wave 3 (`03-03-PLAN.md`) has NOT run.
 
-**Resume File:** `.planning/workstreams/git-hosts/phases/03-marketplace-add-recovers-from-its-own-leftover-clone/03-02-PLAN.md`
+**Resume File:** `.planning/workstreams/git-hosts/phases/03-marketplace-add-recovers-from-its-own-leftover-clone/03-03-PLAN.md`
 
-**Next Action:** `/clear`, then `/gsd-execute-phase 3`. It resumes at wave 2 on its own —
-`phase-plan-index` reports `03-01` with a SUMMARY and `03-02` as the only ready plan, so no flag is
-needed.
+**Next Action:** `/clear`, then `/gsd-execute-phase 3`. It resumes at wave 3 on its own —
+`phase-plan-index` reports `03-01` and `03-02` with SUMMARYs and `03-03` as the only ready plan, so
+no flag is needed.
 
 ### What this run completed
 
@@ -483,24 +501,25 @@ needed.
   reach the identity. Two operator decisions followed: D-2-05 (the `url` identity is a fixed point,
   chosen over byte-parity because pre-phase contradicted itself and orphaned the clone directory),
   and deferral of the live smart-HTTP canary.
-- **Phase 3: discussed, planned, wave 1 of 3 executed.** D-3-01..D-3-04 locked; 3 plans, 3 waves;
-  plan-checker passed with zero issues.
+- **Phase 3: discussed, planned, waves 1-2 of 3 executed.** D-3-01..D-3-04 locked; 3 plans, 3 waves;
+  plan-checker passed with zero issues. Wave 2 closed the 100%-branch gate wave 1 declared red.
 
 ### Steps SKIPPED — read before assuming this phase is closable
 
-- **Phase 3 waves 2 and 3 have NOT run.** Wave 2 (`03-02`, test-only, one file) closes the
-  100%-branch gate wave 1 deliberately left open. Wave 3 (`03-03`, 9 files) carries the three
-  milestone-closing obligations: SC5 (FIX the autoupdate cascade, per D-3-04), SC6 (carry both live
-  canaries forward), SC7 (amend `PROJECT.md`'s D-79-03 rationale, which Phase 1 made false).
+- **Phase 3 wave 3 has NOT run.** Wave 3 (`03-03`, 9 files) carries the three milestone-closing
+  obligations: SC5 (FIX the autoupdate cascade, per D-3-04), SC6 (carry both live canaries forward),
+  SC7 (amend `PROJECT.md`'s D-79-03 rationale, which Phase 1 made false).
 - **Phase 3 has had no code review and no verification.** Phase 2's review found 2 Criticals on its
   first pass and 2 more after the fix; do not skip this.
-- **`npm run check` is NOT green at Phase 3's current HEAD, by design.** Wave 1 declared the red and
-  MEASURED the uncovered `add.ts` branches for wave 2: `joinLeaks()`'s both-defined and b-undefined
-  join arms, `recognizeLeftover()`'s origin-present-but-mismatched throw, and
-  `addGitClonedInGuard()`'s MA-14 leftover-removal-leaked throw. Re-derive those line numbers from
-  the current tree — wave 1 already shifted lines in this file once, moving two contracts.json pins.
-- **MA-12/MA-13/MA-14 remain `Pending` in REQUIREMENTS.md**, correctly: both `03-01` and `03-02`
-  declare them, so the shared-ID gate holds them until wave 2's SUMMARY exists.
+- **`npm run check`-equivalent commands ARE green at Phase 3's wave-2 boundary**, at last: wave 1
+  declared the red and MEASURED the uncovered `add.ts` branches; wave 2 closed exactly those branches
+  (`joinLeaks()`'s both-defined and b-undefined join arms, `recognizeLeftover()`'s
+  origin-present-but-mismatched throw, `addGitClonedInGuard()`'s MA-14 leftover-removal-leaked
+  throw). `npm run test:coverage:unit` now reports 100% lines/functions/branches. `npm run check`
+  itself (the composed script) was not re-run end-to-end this session — the individual commands it
+  composes were, and all exited 0.
+- **MA-12/MA-13/MA-14 are ready to mark `Complete` in REQUIREMENTS.md** as of this plan's SUMMARY:
+  both `03-01` and `03-02` now have a SUMMARY, so the shared-ID gate is satisfied.
 
 ### Environment debts
 
@@ -524,3 +543,4 @@ needed.
 | Phase 02 P02 | 165min | 3 tasks | 10 files |
 | Phase 02 P03 | 51min | 3 tasks | 6 files |
 | Phase 03 P01 | 55min | 2 tasks | 15 files |
+| Phase 03 P02 | ~45min | 2 tasks | 1 files |

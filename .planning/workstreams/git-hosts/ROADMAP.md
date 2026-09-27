@@ -190,18 +190,18 @@ Plans:
      rationale to match what the code does, or the next reader will infer a behavior that no
      longer exists.
 
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 
 **Wave 1:**
-- [ ] 03-01-PLAN.md — `listRemotes` lands in `platform/git.ts` as a four-arm discriminated value with
+- [x] 03-01-PLAN.md — `listRemotes` lands in `platform/git.ts` as a four-arm discriminated value with
   its own filesystem probe, the `GitOps` seam gains its eighth member, and `marketplace add` step 4
   becomes recognize-remove-rename — proven end to end on the matching-leftover path (MA-12, MA-13,
   MA-14)
 
 **Wave 2** *(blocked on Wave 1 completion)*:
-- [ ] 03-02-PLAN.md — every refusal arm and both leak arms asserted by behaviour: origin mismatch,
+- [x] 03-02-PLAN.md — every refusal arm and both leak arms asserted by behaviour: origin mismatch,
   prefix-adjacent, case-differing, ssh-form, garbage, empty, no-origin, unreadable, MA-8 precedence,
   and the single- and double-fault MA-14 cases that close the 100%-branch gate (MA-12, MA-13, MA-14)
 
@@ -240,4 +240,4 @@ Phase 3 because that is where it is finally measured, but nothing may be left re
 |-------|----------------|--------|-----------|
 | 1. Private repos on any git host | 3/3 | In Progress | — |
 | 2. Endpoints that answer only at the verbatim URL | 3/3 | In Progress | — |
-| 3. `marketplace add` recovers from its own leftover clone | 1/3 | In Progress | — |
+| 3. `marketplace add` recovers from its own leftover clone | 2/3 | In Progress | — |

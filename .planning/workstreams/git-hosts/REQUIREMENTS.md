@@ -63,12 +63,12 @@ helper is therefore invisible to this extension on every other host.
 
 ### Marketplace Add Recovery
 
-- [ ] **MA-12**: `marketplace add` succeeds when `sources/<name>/` already holds a leftover clone
+- [x] **MA-12**: `marketplace add` succeeds when `sources/<name>/` already holds a leftover clone
   whose `origin` URL is the source being added — the WR-07 crash window and state rebuilds no longer
   require deleting the directory by hand before every retry.
-- [ ] **MA-13**: A leftover tree that is not a git clone, is unreadable, or whose `origin` names a
+- [x] **MA-13**: A leftover tree that is not a git clone, is unreadable, or whose `origin` names a
   different URL still refuses with the MA-6 `{stale clone}` row on the marketplace subject.
-- [ ] **MA-14**: When the leftover clone cannot be fully removed, the add fails as stale with the
+- [x] **MA-14**: When the leftover clone cannot be fully removed, the add fails as stale with the
   cleanup leak appended (MA-9 discipline) rather than masked, and no partially-removed destination
   is left recorded in state.
 
@@ -113,9 +113,9 @@ repo's shared counter.
 | GAUTH-06 | Phase 1 | Complete |
 | MURL-08 | Phase 2 | Complete |
 | MURL-09 | Phase 2 | Complete |
-| MA-12 | Phase 3 | Pending |
-| MA-13 | Phase 3 | Pending |
-| MA-14 | Phase 3 | Pending |
+| MA-12 | Phase 3 | Complete |
+| MA-13 | Phase 3 | Complete |
+| MA-14 | Phase 3 | Complete |
 | GATE-01 | Phase 3 | Pending |
 
 **Coverage:**
