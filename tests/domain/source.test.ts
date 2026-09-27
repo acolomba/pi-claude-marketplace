@@ -8,6 +8,7 @@ import {
   pathSource,
   samePlannedSource,
   sourceLogical,
+  stripSlashAndFragment,
   type ParsedSource,
   type SamePlannedSourceResult,
 } from "../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -932,6 +933,57 @@ describe("ensureGitSuffix", () => {
 
       // assert
       assert.strictEqual(normalizedCloneUrl, expectedCloneUrl);
+    });
+  }
+});
+
+describe("stripSlashAndFragment", () => {
+  for (const { name, input, expected } of [
+    {
+      name: "trims trailing slashes only",
+      input: "https://gitlab.com/o/r///",
+      expected: { base: "https://gitlab.com/o/r", ref: undefined },
+    },
+    {
+      name: "splits off a #<ref> fragment",
+      input: "https://gitlab.com/o/r#main",
+      expected: { base: "https://gitlab.com/o/r", ref: "main" },
+    },
+    {
+      name: "trims a trailing slash after the #<ref> fragment before splitting it off",
+      input: "https://gitlab.com/o/r#main/",
+      expected: { base: "https://gitlab.com/o/r", ref: "main" },
+    },
+    {
+      name: "returns the input unchanged when it carries neither",
+      input: "https://gitlab.com/o/r",
+      expected: { base: "https://gitlab.com/o/r", ref: undefined },
+    },
+    {
+      name: "drops an empty #fragment and leaves ref undefined",
+      input: "https://gitlab.com/o/r#",
+      expected: { base: "https://gitlab.com/o/r", ref: undefined },
+    },
+    {
+      name: "leaves a trailing .git suffix untouched",
+      input: "https://gitlab.com/o/r.git",
+      expected: { base: "https://gitlab.com/o/r.git", ref: undefined },
+    },
+    {
+      name: "keeps a trailing .git suffix and trims a trailing slash",
+      input: "https://gitlab.com/o/r.git/",
+      expected: { base: "https://gitlab.com/o/r.git", ref: undefined },
+    },
+  ]) {
+    test(name, () => {
+      // arrange
+      const expectedStripped = expected;
+
+      // act
+      const stripped = stripSlashAndFragment(input);
+
+      // assert
+      assert.deepStrictEqual(stripped, expectedStripped);
     });
   }
 });
