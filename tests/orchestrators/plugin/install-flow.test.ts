@@ -5985,13 +5985,13 @@ test("FORCE-05: force cannot bypass a missing marketplace", async () => {
 
 const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 const INSTALL_REMOTE_URLS = [
-  "https://example.com/org/repo.git",
-  "https://example.com/org/mono.git",
+  "https://example.com/org/repo",
+  "https://example.com/org/mono",
   "https://github.com/org/repo.git",
   "https://github.com/org/private.git",
-  "https://gitlab.com/o/r.git",
-  "https://gitlab.example.com/o/private.git",
-  "https://gitlab.example.com/o/r.git",
+  "https://gitlab.com/o/r",
+  "https://gitlab.example.com/o/private",
+  "https://gitlab.example.com/o/r",
 ] as const;
 
 function createGitOps(options: {
@@ -7204,7 +7204,7 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
             authHost: "gitlab.example.com",
             ref: undefined,
             singleBranch: undefined,
-            url: `${cloneUrl}.git`,
+            url: cloneUrl,
           },
         ],
       );
@@ -7274,7 +7274,7 @@ test("plugin install authentication: threads the GitLab provider bundle onto the
       );
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ url }) => url),
-        [`${cloneUrl}.git`],
+        [cloneUrl],
       );
       assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
     } finally {
@@ -8284,7 +8284,7 @@ test("an unpinned ref-only source forwards the moving ref to its cold mirror clo
       });
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ ref, singleBranch, url }) => ({ ref, singleBranch, url })),
-        [{ ref: "main", singleBranch: true, url: "https://example.com/org/repo.git" }],
+        [{ ref: "main", singleBranch: true, url: "https://example.com/org/repo" }],
       );
       assert.deepStrictEqual(notifications, []);
       assert.equal(

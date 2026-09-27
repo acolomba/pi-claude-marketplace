@@ -3277,12 +3277,12 @@ const DEVICE_CODE = {
   interval: 0,
 } as const;
 const REINSTALL_REMOTE_URLS = [
-  "https://example.com/org/mono.git",
-  "https://example.com/org/repo.git",
+  "https://example.com/org/mono",
+  "https://example.com/org/repo",
   "https://github.com/org/one.git",
   "https://github.com/org/repo.git",
   "https://github.com/org/two.git",
-  "https://gitlab.example.com/o/r.git",
+  "https://gitlab.example.com/o/r",
 ] as const;
 
 function createGitOps(

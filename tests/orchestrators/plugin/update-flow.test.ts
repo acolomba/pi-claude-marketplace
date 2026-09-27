@@ -95,9 +95,9 @@ const UPDATE_REMOTE_URLS = [
   "https://github.com/anthropics/test.git",
   "https://github.com/org/repo.git",
   "https://github.com/test/repo.git",
-  "https://example.com/org/repo.git",
-  "https://example.com/org/mono.git",
-  "https://example.com/org/monorepo.git",
+  "https://example.com/org/repo",
+  "https://example.com/org/mono",
+  "https://example.com/org/monorepo",
 ] as const;
 
 const DEVICE_CODE = {
