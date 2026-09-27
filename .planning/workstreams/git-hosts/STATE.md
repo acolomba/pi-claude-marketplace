@@ -5,18 +5,18 @@ milestone_name: Any Git Host
 current_phase: 3
 current_phase_name: "`marketplace add` recovers from its own leftover clone"
 current_plan: 3
-status: executing
-stopped_at: "Completed 03-02-PLAN.md: MA-13 refusal arms, MA-8 precedence, MA-14 leak arms; test:coverage:unit at 100/100/100"
-last_updated: "2026-09-27T14:38:03.069Z"
+status: "Phase 3 complete (3/3 plans executed) — cascade authenticates on every host, both canaries carried forward, npm run check green (CHECK_EXIT=0)"
+stopped_at: "Completed 03-03-PLAN.md: autoupdate cascade authenticates (ctx optional on buildAuthForHost/buildCloneAuth), both live canaries carried forward, D-79-03 rationale corrected; npm run check green (CHECK_EXIT=0), 7354/7354 unit tests, all files 100.00/100.00/100.00"
+last_updated: "2026-09-27T16:25:17.000Z"
 last_activity: 2026-09-27
-last_activity_desc: "Executed 03-02-PLAN.md: MA-13 refusal-arm table, MA-8-precedence case, MA-14 single/double-fault leak cases, both tasks green"
-state_head: c74861a22d296d221af00e8345f06a414d332e52
+last_activity_desc: "Executed 03-03-PLAN.md: SC5 cascade fix (ctx optional, graceful Device Flow decline), SC6 canary carry-forward (GHCAN-01/02), SC7 D-79-03 rationale correction, phase-boundary npm run check green"
+state_head: 5fa8ca87a7c69122979953ad05001641716f12b6
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 9
-  completed_plans: 8
-  percent: 0
+  completed_plans: 9
+  percent: 100
 total_plans_in_phase: 3
 ---
 
@@ -37,7 +37,7 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 3 — `marketplace add` recovers from its own leftover clone — EXECUTING (plan 02 of 3 complete)
+Phase: 3 — `marketplace add` recovers from its own leftover clone — PLANS COMPLETE (3 of 3), awaiting code review and verification
 Current Plan: 3
 Total Plans in Phase: 3
 
@@ -119,11 +119,39 @@ case that fails if the two leaks were ever chained through two `appendLeakToErro
 joined into one. `npm run test:coverage:unit` now reports `all files | 100.00 | 100.00 | 100.00`.
 No production file was touched (`git diff --name-only -- extensions/` is empty across both commits).
 
-Status: Phase 3 executing (wave 3 of 3 remaining). Phase 2 verified — 9/9 must-haves, all 5 ROADMAP
-success criteria, all 5 plan prohibitions, `npm run check` at `CHECK_EXIT=0`. Its live smart-HTTP
-canary is deferred to the operator alongside Phase 1's (see Deferred Verification).
-Last activity: 2026-09-27 — Phase 3 wave 2 of 3 executed; the whole gate surface is green at this
-plan's boundary
+Status: Phase 3 plans complete (3/3), awaiting code review and verification. Phase 2 verified — 9/9
+must-haves, all 5 ROADMAP success criteria, all 5 plan prohibitions, `npm run check` at
+`CHECK_EXIT=0`. Its live smart-HTTP canary is deferred to the operator alongside Phase 1's (see
+Deferred Verification).
+Last activity: 2026-09-27 — Phase 3 wave 3 of 3 executed; the milestone-closing obligations are
+done and the whole gate surface is green at the phase's final HEAD
+
+**Phase 3 Plan 03 (wave 3) is executed, and Phase 3's three plans are all complete.**
+`buildAuthForHost`'s and `buildCloneAuth`'s `ctx` parameters become optional; the early-return
+guard widens from `provider === undefined` to `provider === undefined || ctx === undefined`, so
+the autoupdate cascade — which calls through `update-preflight.ts` with no `ctx` at all — now
+attaches a host-bound auth bundle on every host instead of cloning authless, and a registry host
+with no `ctx` declines the Device Flow gracefully rather than crashing on `makeRawNotifyFn(undefined)`.
+The provider-found arm is untouched, so both registry hosts behave exactly as before whenever a
+real `ctx` is present. `update-preflight.ts`'s local `buildBundle` closure — the actual defect,
+which returned `undefined` when `auth.ctx === undefined` — is deleted outright; both clone-cache
+arms call `buildCloneAuth` directly and their three conditional `auth` spreads become unconditional
+properties. `update-flow.ts` is untouched, confirmed empty by `git diff --name-only`; its two
+contract pins are unmoved. One preflight pin below the edit (`update-preflight.ts:349:63`,
+`StaticPreflightRowOptions.fromVersion`) is remapped to `342:63` (a -7 line net delta), re-derived
+on the formatted tree rather than predicted by arithmetic; the two pins above the edit are confirmed
+unchanged. Both live canaries (Phase 1's private-repo clone, Phase 2's verbatim-only smart-HTTP
+server) are carried forward in STATE.md (this section, above), `ROADMAP.md` § Milestone-wide
+constraints, and two new `BACKLOG.md` entries (GHCAN-01, GHCAN-02) — neither is attempted, neither
+is marked passed. `PROJECT.md`'s D-79-03 row rationale is rewritten to name the plugin failure
+grammar's missing cause-chain trailer slot (`install.messaging.ts`) instead of the now-false
+"no `onAuth` callback registered" claim; its OUTCOME sentences are byte-unchanged. `npm run format`
+ran first (no rewrite produced) and the whole `npm run check` then ran green in one command:
+`CHECK_EXIT=0`, 7354/7354 unit tests pass with `all files | 100.00 | 100.00 | 100.00`, 36/36
+integration tests pass, `lint:type-members` holds the same 4 pre-existing exceptions with 108
+contract entries, and both coverage-pin surfaces are unchanged. All four Phase 3 requirements
+(MA-12, MA-13, MA-14, GATE-01) are now marked Complete in REQUIREMENTS.md — all 10 v1 requirements
+across all 3 phases are Complete. Phase 3 has had no code review and no verification yet.
 
 **Phase 2 took three code-review iterations, and the second one earned its keep.** The first fix
 pass closed all 8 findings and went green — while silently moving the parse-time cache identity,
@@ -327,14 +355,14 @@ workstream's documents are archived.
 ```
 Phase 1  [==========]  plans complete (3/3)
 Phase 2  [==========]  verified 9/9, live canary deferred
-Phase 3  [======    ]  executing (2/3 plans executed)
+Phase 3  [==========]  plans complete (3/3), awaiting review and verification
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
 | 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Verified 9/9, live canary deferred |
-| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Executing (2/3 plans), wave 3 remains |
+| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Plans complete (3/3), awaiting code review and verification |
 
 ## Accumulated Context
 
@@ -443,6 +471,10 @@ Phase 3  [======    ]  executing (2/3 plans executed)
   found via `npx tsc --noEmit`, fixed with the same rejecting-stub pattern as its five siblings.
 - [Phase 03]: Phase 3 Plan 02: marketplace add's standalone notify() row carries no cause/leak text by design (MpFailed has reasons/severity/plugins only), so both MA-14 cases call addMarketplace twice -- once standalone for the rendered {stale clone} row + subject, once orchestrated for outcome.cause's leak text.
 - [Phase 03]: Phase 3 Plan 02: the double-fault MA-14 case must restore sources-staging/ to 0o755 between its two addMarketplace calls -- the first call's onClone leaves it read-only permanently, so an un-restored second call's own fixture-copy mkdir fails before recognition ever runs, misclassifying the whole case as {unparseable}.
+- [Phase 03]: Phase 3 Plan 03 (SC5): buildAuthForHost/buildCloneAuth's ctx becomes optional rather than threading a ctx through the cascade -- the guard widens to `provider === undefined || ctx === undefined`, reusing the existing no-provider decline arm verbatim, so the provider-found arm (and both registry hosts) stay byte-identical whenever a real ctx is present.
+- [Phase 03]: Phase 3 Plan 03: update-preflight.ts's local buildBundle closure is deleted outright, not kept as a thinner wrapper -- once buildCloneAuth always returns a bundle, the local copy differs from the shared helper only in an early-undefined-return that is now unreachable.
+- [Phase 03]: Phase 3 Plan 03 (SC7): PROJECT.md's D-79-03 rationale clause is rewritten to cite the plugin failure grammar's missing cause-chain trailer slot (install.messaging.ts), replacing the now-false "no onAuth callback registered" claim; the row's OUTCOME and the table's Outcome column are untouched.
+- [Phase 03]: Phase 3 Plan 03 (SC6): both live canaries are recorded in three places for three different post-close readers -- STATE.md's existing Deferred Verification paragraphs, a new ROADMAP.md subsection, and two new BACKLOG.md entries (GHCAN-01, GHCAN-02) -- rather than in only one.
 
 ### Source-review facts carried into planning
 
@@ -468,11 +500,9 @@ Phase 3  [======    ]  executing (2/3 plans executed)
 - Plan Phases 2 and 3 with `--skip-ui`: the `ui_safety_gate` keyword scan false-positives on this
   project's domain vocabulary (`form`, `component`, `view`). No phase in this milestone is a UI
   phase.
-- Phase 3 must amend `PROJECT.md`'s D-79-03 row. Its OUTCOME stands — only `update` carries a
-  cause line — but its stated RATIONALE ("no `onAuth` callback registered at all for no-provider
-  hosts") is false after plan 01. The now-true reason is recorded in
-  `orchestrators/plugin/install.messaging.ts`: the plugin failure grammar has no cause-chain
-  trailer slot that renders on the subject row.
+- ~~Phase 3 must amend `PROJECT.md`'s D-79-03 row.~~ CLOSED by 03-03: the rationale clause now
+  cites the plugin failure grammar's missing cause-chain trailer slot
+  (`orchestrators/plugin/install.messaging.ts`); the OUTCOME is untouched.
 - A live end-to-end clone of a private repo on a non-registry host, against the operator's own
   credential helper, is untested by design (cases run offline with no credentials) and needs human
   UAT. Recorded as deliverable D4 in `01-01-SUMMARY.md`, and as D5 in `01-02-SUMMARY.md` for the
@@ -484,17 +514,19 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-09-27T14:38:02.962Z
+**Last session:** 2026-09-27T16:25:17.000Z
 
-**Stopped At:** Completed 03-02-PLAN.md: MA-13 refusal arms, MA-8 precedence, MA-14 leak arms;
-`npm run test:coverage:unit` reports `all files | 100.00 | 100.00 | 100.00`, closing the red wave 1
-declared. Wave 3 (`03-03-PLAN.md`) has NOT run.
+**Stopped At:** Completed 03-03-PLAN.md: autoupdate cascade authenticates on every host (SC5), both
+live canaries carried forward (SC6), D-79-03 rationale corrected (SC7); `npm run check` green at
+`CHECK_EXIT=0` (7354/7354 unit tests, `all files | 100.00 | 100.00 | 100.00`, 36/36 integration
+tests). Phase 3's three plans are all complete.
 
-**Resume File:** `.planning/workstreams/git-hosts/phases/03-marketplace-add-recovers-from-its-own-leftover-clone/03-03-PLAN.md`
+**Resume File:** None — Phase 3 has no more plans to execute.
 
-**Next Action:** `/clear`, then `/gsd-execute-phase 3`. It resumes at wave 3 on its own —
-`phase-plan-index` reports `03-01` and `03-02` with SUMMARYs and `03-03` as the only ready plan, so
-no flag is needed.
+**Next Action:** Phase 3 has had no code review and no verification. Run code review next
+(Phase 2's precedent: 2 Criticals on the first pass, 2 more after the fix — do not skip it), then
+`/gsd-verify-work 3`. After that, milestone close is blocked only by the two carried-forward live
+canaries (GHCAN-01, GHCAN-02; `/gsd-verify-work 1`, `/gsd-verify-work 2`).
 
 ### What this run completed
 
@@ -505,37 +537,37 @@ no flag is needed.
   reach the identity. Two operator decisions followed: D-2-05 (the `url` identity is a fixed point,
   chosen over byte-parity because pre-phase contradicted itself and orphaned the clone directory),
   and deferral of the live smart-HTTP canary.
-- **Phase 3: discussed, planned, waves 1-2 of 3 executed.** D-3-01..D-3-04 locked; 3 plans, 3 waves;
+- **Phase 3: discussed, planned, all 3 waves executed.** D-3-01..D-3-04 locked; 3 plans, 3 waves;
   plan-checker passed with zero issues. Wave 2 closed the 100%-branch gate wave 1 declared red.
+  Wave 3 fixed the autoupdate cascade (`ctx` optional on `buildAuthForHost`/`buildCloneAuth`),
+  carried both live canaries forward, corrected the D-79-03 rationale, and closed the
+  phase-boundary `npm run check` green.
 
 ### Steps SKIPPED — read before assuming this phase is closable
 
-- **Phase 3 wave 3 has NOT run.** Wave 3 (`03-03`, 9 files) carries the three milestone-closing
-  obligations: SC5 (FIX the autoupdate cascade, per D-3-04), SC6 (carry both live canaries forward),
-  SC7 (amend `PROJECT.md`'s D-79-03 rationale, which Phase 1 made false).
 - **Phase 3 has had no code review and no verification.** Phase 2's review found 2 Criticals on its
   first pass and 2 more after the fix; do not skip this.
-- **`npm run check`-equivalent commands ARE green at Phase 3's wave-2 boundary**, at last: wave 1
-  declared the red and MEASURED the uncovered `add.ts` branches; wave 2 closed exactly those branches
-  (`joinLeaks()`'s both-defined and b-undefined join arms, `recognizeLeftover()`'s
-  origin-present-but-mismatched throw, `addGitClonedInGuard()`'s MA-14 leftover-removal-leaked
-  throw). `npm run test:coverage:unit` now reports 100% lines/functions/branches. `npm run check`
-  itself (the composed script) was not re-run end-to-end this session — the individual commands it
-  composes were, and all exited 0.
-- **MA-12/MA-13/MA-14 are ready to mark `Complete` in REQUIREMENTS.md** as of this plan's SUMMARY:
-  both `03-01` and `03-02` now have a SUMMARY, so the shared-ID gate is satisfied.
+- **The two live canaries (GHCAN-01, GHCAN-02) are NOT closable on this machine.** Both are recorded
+  in this file (§ Deferred Verification, above), in `ROADMAP.md` § Milestone-wide constraints, and
+  in `BACKLOG.md`. They block milestone close only, not Phase 3's own completion.
 
 ### Environment debts
 
 - **The isolation sentinel is consumed per dispatch.** `dispatch-isolation --force-isolation none`
   must be re-run immediately before EVERY executor dispatch. Wave 1 succeeded; wave 2's dispatch was
   then refused by the agent-isolation guard because the sentinel had reset. Never verify it with a
-  bare call.
+  bare call. (Wave 3 of this phase ran sequentially on the main checkout per its own plan note, so
+  this did not apply to it.)
 - Both live canaries (Phase 1's private-repo clone, Phase 2's verbatim-only smart-HTTP endpoint) stay
-  deferred and block MILESTONE CLOSE only, not Phase 3. Neither is closable on this machine.
+  deferred and block MILESTONE CLOSE only, not any phase. Neither is closable on this machine.
 - Phase 2's six Info code-review findings (IN-01..IN-06) remain open by scope decision — see
   `02-REVIEW-DISPOSITION.md`, which is the reconciled record; `02-REVIEW.md`'s own
   `status: issues_found` is stale for the Critical/Warning set.
+- A `pre-commit npm-lint` hook reported a spurious "files were modified by this hook" failure once
+  during this plan's Task 1 re-verification, caused by Task 2's concurrent edits to PROJECT.md/
+  ROADMAP.md/STATE.md/BACKLOG.md racing the same pre-commit run. A standalone `eslint` run and a
+  third `pre-commit` run on a quiet tree both confirmed clean; no code was affected. See
+  `03-03-SUMMARY.md` § Issues Encountered.
 
 ## Performance Metrics
 
@@ -548,3 +580,4 @@ no flag is needed.
 | Phase 02 P03 | 51min | 3 tasks | 6 files |
 | Phase 03 P01 | 55min | 2 tasks | 15 files |
 | Phase 03 P02 | ~45min | 2 tasks | 1 files |
+| Phase 03 P03 | ~210min | 3 tasks | 9 files |

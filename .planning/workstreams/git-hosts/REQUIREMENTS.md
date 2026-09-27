@@ -74,7 +74,7 @@ helper is therefore invisible to this extension on every other host.
 
 ### Gate Conformance
 
-- [ ] **GATE-01**: Every type member introduced by this milestone is read by production code or
+- [x] **GATE-01**: Every type member introduced by this milestone is read by production code or
   recorded in `scripts/check-unused-type-members.contracts.json`; `npm run check` passes whole,
   including `test:coverage:unit` at 100% lines/functions/branches.
 
@@ -116,7 +116,7 @@ repo's shared counter.
 | MA-12 | Phase 3 | Complete |
 | MA-13 | Phase 3 | Complete |
 | MA-14 | Phase 3 | Complete |
-| GATE-01 | Phase 3 | Pending |
+| GATE-01 | Phase 3 | Complete |
 
 **Coverage:**
 

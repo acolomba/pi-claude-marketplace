@@ -190,7 +190,7 @@ Plans:
      rationale to match what the code does, or the next reader will infer a behavior that no
      longer exists.
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans executed
 
 Plans:
 
@@ -206,9 +206,10 @@ Plans:
   and the single- and double-fault MA-14 cases that close the 100%-branch gate (MA-12, MA-13, MA-14)
 
 **Wave 3** *(blocked on Wave 2 completion)*:
-- [ ] 03-03-PLAN.md — the three milestone-closing obligations: the SC5 autoupdate-cascade fix
+- [x] 03-03-PLAN.md — the three milestone-closing obligations: the SC5 autoupdate-cascade fix
   (`ctx` optional, Device Flow declined gracefully), SC6's carry-forward of both live canaries,
-  SC7's D-79-03 rationale amendment, and the phase-boundary `npm run check` (GATE-01)
+  SC7's D-79-03 rationale amendment, and the phase-boundary `npm run check` (GATE-01) — `CHECK_EXIT=0`
+  at 7354/7354 unit tests, `all files | 100.00 | 100.00 | 100.00`, 36/36 integration tests
 
 ## Milestone-wide constraints
 
@@ -256,4 +257,4 @@ see STATE.md § Deferred Verification for the full explanatory paragraphs.
 |-------|----------------|--------|-----------|
 | 1. Private repos on any git host | 3/3 | In Progress | — |
 | 2. Endpoints that answer only at the verbatim URL | 3/3 | In Progress | — |
-| 3. `marketplace add` recovers from its own leftover clone | 2/3 | In Progress | — |
+| 3. `marketplace add` recovers from its own leftover clone | 3/3 | In Progress | — |
