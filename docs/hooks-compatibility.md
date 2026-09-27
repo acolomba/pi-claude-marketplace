@@ -104,11 +104,13 @@ The `matcher` field on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFai
 | `find`       | `Glob`           |
 | `ls`         | `LS`             |
 
-Unmapped Claude tools: `MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch`, `Task`, `TodoWrite`, `KillShell`, `BashOutput`. A matcher value naming one of these tools cannot be translated because there is no Pi-side analog. An `mcp__<server>__<tool>` matcher is supported and matches that MCP tool by exact name. A tool with no Pi analog drops from its matcher's alternative list, and the remaining alternatives keep working -- `Edit|Write|MultiEdit` still runs on `Edit` and `Write`. Only a matcher left with no supported alternative drops the group; the plugin then resolves `(partially-available)` under the single aggregate `{unsupported hooks}` brace, the way a matcher of `MultiEdit` alone does.
+Unmapped Claude tools: `MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch`, `Task`, `TodoWrite`, `KillShell`, `BashOutput`. Pi has no equivalent for these names, so it cannot translate a `matcher` value that names one. An `mcp__<server>__<tool>` matcher is supported and matches that MCP tool by exact name.
 
-Pi cannot tell a misspelled tool name from a deliberately foreign one. A matcher such as `Wriet|Edit` installs without any warning, because `Edit` alone keeps the hook firing -- the plugin still reports fully supported, and the `Wriet` alternative is silently dropped rather than flagged anywhere. Check the spelling of every tool name in a matcher by hand; a typo in one alternative does not surface in the plugin's reported status.
+A tool that Pi does not have drops out of its `matcher` list, and the other alternatives keep working. For example, `Edit|Write|MultiEdit` still runs on `Edit` and `Write`. Pi drops the whole group only when no supported alternative is left. The plugin then reports `(partially-available)` with the reason `{unsupported hooks}`, the same as a matcher of `MultiEdit` alone.
 
-Matcher compatibility is not payload compatibility: a hook matched on a Pi tool receives that tool's Claude-form payload. A matcher of `Write|Edit|apply_patch` runs on Pi `write` and `edit` and hands the script the `Write` or `Edit` payload, so a script written for another agent's similarly-named tool is responsible for the input it gets.
+Pi cannot tell a misspelled tool name from a deliberately foreign one. A matcher such as `Wriet|Edit` installs with no warning, because `Edit` alone keeps the hook firing. The plugin still reports that it is fully supported, and nothing flags the dropped `Wriet` alternative. Make sure that you spell every tool name in a `matcher` correctly. A typo in one alternative does not appear in the status that the plugin reports.
+
+A matcher that fires on a Pi tool does not change the data the hook receives. The hook gets the Claude-form payload of the Pi tool that fired. For example, `Write|Edit|apply_patch` runs on Pi `write` and `edit`, and the script gets the `Write` or `Edit` payload. A script written for the similarly-named tool of another agent must handle that input itself.
 
 ## `if` field
 
