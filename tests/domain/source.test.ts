@@ -8,6 +8,7 @@ import {
   pathSource,
   samePlannedSource,
   sourceLogical,
+  stripGitSuffix,
   stripSlashAndFragment,
   type ParsedSource,
   type SamePlannedSourceResult,
@@ -1413,6 +1414,42 @@ describe("stripSlashAndFragment", () => {
 
       // assert
       assert.deepStrictEqual(stripped, expectedStripped);
+    });
+  }
+});
+
+describe("stripGitSuffix", () => {
+  for (const { name, input, expected } of [
+    {
+      name: "strips one trailing .git suffix",
+      input: "https://github.com/o/r.git",
+      expected: "https://github.com/o/r",
+    },
+    {
+      name: "returns a url without the suffix unchanged",
+      input: "https://github.com/o/r",
+      expected: "https://github.com/o/r",
+    },
+    {
+      name: "strips only the last of a doubled .git.git suffix",
+      input: "https://github.com/o/r.git.git",
+      expected: "https://github.com/o/r.git",
+    },
+    {
+      name: "does not fold a differing case suffix",
+      input: "https://github.com/o/r.GIT",
+      expected: "https://github.com/o/r.GIT",
+    },
+  ]) {
+    test(name, () => {
+      // arrange
+      const expectedStripped = expected;
+
+      // act
+      const stripped = stripGitSuffix(input);
+
+      // assert
+      assert.strictEqual(stripped, expectedStripped);
     });
   }
 });

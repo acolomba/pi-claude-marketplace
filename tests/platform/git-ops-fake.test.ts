@@ -25,6 +25,7 @@ function createFakeParticipant(): GitOpsContractParticipant {
     updatedOid: UPDATED_OID,
     remoteHead: UPDATED_OID,
     worktreeDir: "/memory/worktree",
+    listRemotesResult: { kind: "origin", url: REMOTE_URL },
   });
 
   return {

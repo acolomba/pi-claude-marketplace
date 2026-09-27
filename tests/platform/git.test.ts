@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { readFile } from "node:fs/promises";
+import { chmod, readFile } from "node:fs/promises";
+import * as path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
 import * as git from "isomorphic-git";
@@ -863,6 +864,49 @@ describe("listRemotes", () => {
 
     // assert
     assert.deepStrictEqual(remotes, { kind: "origin", url: REMOTE_URL });
+  });
+
+  // The not-a-repo and no-origin arms are distinguished by the wrapper's own
+  // `.git/config` read, not by anything isomorphic-git reports -- kept
+  // adjacent so a future reader sees both cases the probe read exists for.
+  test("reports not-a-repo for a directory with no .git", async (t) => {
+    // arrange
+    const directory = await createGitTestDirectory(t, { boundary: "local" });
+
+    // act
+    const remotes = await listRemotes({ dir: directory });
+
+    // assert
+    assert.deepStrictEqual(remotes, { kind: "not-a-repo" });
+  });
+
+  test("reports no-origin for a real repository with no remote configured", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+
+    // act
+    const remotes = await listRemotes({ dir: repository.dir });
+
+    // assert
+    assert.deepStrictEqual(remotes, { kind: "no-origin" });
+  });
+
+  test("reports unreadable for a .git/config the process cannot read", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    const configPath = path.join(repository.dir, ".git", "config");
+    await chmod(configPath, 0o000);
+
+    try {
+      // act
+      const remotes = await listRemotes({ dir: repository.dir });
+
+      // assert
+      assert.deepStrictEqual(remotes, { kind: "unreadable" });
+    } finally {
+      await chmod(configPath, 0o600);
+    }
   });
 });
 
