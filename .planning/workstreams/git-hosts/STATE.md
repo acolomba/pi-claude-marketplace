@@ -5,12 +5,12 @@ milestone_name: Any Git Host
 current_phase: 3
 current_phase_name: "`marketplace add` recovers from its own leftover clone"
 current_plan: 3
-status: "Phase 3 complete (3/3 plans executed) — cascade authenticates on every host, both canaries carried forward, npm run check green (CHECK_EXIT=0)"
+status: "Phase 3 VERIFIED WITH GAPS (6/7 success criteria) — all 3 plans executed and npm run check green, but SC2/MA-13 failed on CR-01; phase NOT complete"
 stopped_at: "Completed 03-03-PLAN.md: autoupdate cascade authenticates (ctx optional on buildAuthForHost/buildCloneAuth), both live canaries carried forward, D-79-03 rationale corrected; npm run check green (CHECK_EXIT=0), 7354/7354 unit tests, all files 100.00/100.00/100.00"
 last_updated: "2026-09-27T16:25:17.000Z"
 last_activity: 2026-09-27
-last_activity_desc: "Executed 03-03-PLAN.md: SC5 cascade fix (ctx optional, graceful Device Flow decline), SC6 canary carry-forward (GHCAN-01/02), SC7 D-79-03 rationale correction, phase-boundary npm run check green"
-state_head: 5fa8ca87a7c69122979953ad05001641716f12b6
+last_activity_desc: "Reviewed and verified Phase 3: 17 review findings (1 critical) all open; verification gaps_found at 6/7 — CR-01 falsifies SC2/MA-13"
+state_head: bd256c4bb8bfd5c5e4e9b4fc600313a3a3811c59
 progress:
   total_phases: 3
   completed_phases: 0
@@ -37,7 +37,21 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 3 — `marketplace add` recovers from its own leftover clone — PLANS COMPLETE (3 of 3), awaiting code review and verification
+Phase: 3 — `marketplace add` recovers from its own leftover clone — PLANS COMPLETE (3 of 3), REVIEWED and VERIFIED WITH GAPS (6/7); NOT marked complete
+
+**One gap blocks closure (CR-01 / SC2 / MA-13).** `platform/git.ts::listRemotes` declares its `origin`
+arm as `{ kind: "origin"; url: string }`, but isomorphic-git resolves `remote.<name>.url` separately
+from the `[remote "<name>"]` subsection it enumerates, so a `[remote "origin"]` section carrying no
+`url` key returns `{ kind: "origin", url: undefined }` — the declared type is not true. `stripGitSuffix`
+then throws a raw `TypeError` that matches no typed precondition, so `classifyAddError` returns
+`undefined` and `handleAddFailure`'s `if (!orchestrated) throw err` lets it escape the orchestrator
+(ATTR-07 violation); orchestrated mode mislabels it `{unparseable}` instead of `{stale clone}`. Both the
+reviewer and the verifier reproduced it independently against the real adapter and the real
+isomorphic-git, not the test fake. Reachable through the very WR-07 crash window this phase exists to
+recover from: a mid-write `.git/config` rewrite produces exactly this shape. The fake's
+`ListRemotesResult` type cannot express `url: undefined`, which is why the 100%-branch gate could not
+catch it (WR-10) — a missing branch, not an uncovered one. Fix: treat a present-but-url-less `origin`
+as the `no-origin` arm, plus a real-filesystem test and an `add.test.ts` refusal case in both modes.
 Current Plan: 3
 Total Plans in Phase: 3
 
