@@ -122,7 +122,7 @@ Plans:
      lines/functions/branches and an owner unit test for every module touched
      (`test:corresponding`).
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans executed
 
 Plans:
 
@@ -136,7 +136,7 @@ Plans:
   `networkUrl`; the direct seam suite asserts forwarding rather than appending (MURL-08, MURL-09)
 
 **Wave 3** *(blocked on Wave 2 completion)*:
-- [ ] 02-03-PLAN.md — the residual suite audit that discharges RESEARCH assumption A1, the docstrings
+- [x] 02-03-PLAN.md — the residual suite audit that discharges RESEARCH assumption A1, the docstrings
   that still teach the retired rule, and `npm run check` green at the phase boundary (MURL-08, MURL-09)
 
 **Cross-cutting constraints:**
@@ -221,5 +221,5 @@ Phase 3 because that is where it is finally measured, but nothing may be left re
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Private repos on any git host | 3/3 | In Progress | — |
-| 2. Endpoints that answer only at the verbatim URL | 2/3 | In Progress|  |
+| 2. Endpoints that answer only at the verbatim URL | 3/3 | In Progress|  |
 | 3. `marketplace add` recovers from its own leftover clone | 0/TBD | Not started | — |

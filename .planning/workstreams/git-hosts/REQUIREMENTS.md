@@ -52,10 +52,10 @@ helper is therefore invisible to this extension on every other host.
 
 ### URL Forms for Non-Conventional Git Endpoints
 
-- [ ] **MURL-08**: A user can add a `url` marketplace source whose smart-HTTP endpoint serves at the
+- [x] **MURL-08**: A user can add a `url` marketplace source whose smart-HTTP endpoint serves at the
   verbatim URL and returns 404 for the conventional `.git`-suffixed form. Both `clone` and
   `resolveRemoteRef` resolve it.
-- [ ] **MURL-09**: The URL sent to a remote is exactly the one the user typed, modulo trailing-slash
+- [x] **MURL-09**: The URL sent to a remote is exactly the one the user typed, modulo trailing-slash
   and `#<ref>` decoration stripping, and exactly ONE network attempt is made per operation. A
   repository that is genuinely absent, private-without-credentials, or otherwise failing therefore
   keeps its original error identity — there is no second attempt to mask it with. `.git` is appended
@@ -111,8 +111,8 @@ repo's shared counter.
 | GAUTH-04 | Phase 1 | Complete |
 | GAUTH-05 | Phase 1 | Complete |
 | GAUTH-06 | Phase 1 | Complete |
-| MURL-08 | Phase 2 | Pending |
-| MURL-09 | Phase 2 | Pending |
+| MURL-08 | Phase 2 | Complete |
+| MURL-09 | Phase 2 | Complete |
 | MA-12 | Phase 3 | Pending |
 | MA-13 | Phase 3 | Pending |
 | MA-14 | Phase 3 | Pending |

@@ -4,20 +4,20 @@ milestone: any-git-host
 milestone_name: Any Git Host
 current_phase: 2
 current_phase_name: Endpoints that answer only at the verbatim URL
-current_plan: 2
+current_plan: 3
 total_plans_in_phase: 3
-status: Phase 2 plan 2 of 3 executed — plugin clone-cache seam threads the derived wire url
-stopped_at: "Phase 2 plan 02 executed: materializePluginClone/materializeOrRefreshPluginMirror take a required networkUrl, resolvePluginPin derives it, all nine callers threaded, MURL-09 count-and-identity guard added (a909adaf, 80251086, bfe43963)"
-last_updated: "2026-09-27T03:56:10.000Z"
+status: Phase 2 complete (3/3 plans executed) — residual suite audit closed, npm run check green
+stopped_at: "Phase 2 plan 03 executed: the three plugin flow suites and the seed-mirrors integration suite narrowed to the verbatim allowlist, RESEARCH assumption A1 discharged by classification, suffix-helper docstrings corrected, CHECK_EXIT=0 (3f416a46, 78fe180c, d06b6325)"
+last_updated: "2026-09-27T04:47:08.000Z"
 last_activity: 2026-09-27
-last_activity_desc: "Executed Phase 2 plan 02: plugin clone-cache seam threads networkUrl, 270 tests green across the six touched seam/owner suites, 100% direct coverage on all six touched files"
-state_head: bfe43963
+last_activity_desc: "Executed Phase 2 plan 03: closed the three deliberately-red plugin flow suites and the seed-mirrors integration suite, discharged assumption A1 by classification, corrected the suffix-helper docstrings, npm run check exits 0 at the phase boundary (100% coverage over extensions/**)"
+state_head: d06b6325
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -37,11 +37,13 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 2 — Endpoints that answer only at the verbatim URL (plan 2 of 3 executed)
-Current Plan: 2
+Phase: 2 — Endpoints that answer only at the verbatim URL (3 of 3 plans executed, complete)
+Current Plan: 3
 Total Plans in Phase: 3
-Status: Plans 01-02 (waves 1-2) executed; plan 03 (wave 3) remains, sequential by necessity
-Last activity: 2026-09-27 — Executed Phase 2 Plan 02 (a909adaf, 80251086, bfe43963)
+Status: Phase 2 fully executed; `npm run check` is green at the phase boundary. Phase 1's
+live-canary verification remains deferred (see Deferred Verification); Phase 2 itself awaits
+`/gsd-verify-work 2`. Phase 3 is not yet planned.
+Last activity: 2026-09-27 — Executed Phase 2 Plan 03 (3f416a46, 78fe180c, d06b6325)
 
 **Phase 2 is planned: three plans, three waves, sequential by necessity.** Plan 01 (wave 1) lands
 `networkCloneUrl` and an extracted `stripSlashAndFragment` in `domain/`, wires the `marketplace add`
@@ -160,6 +162,33 @@ marketplace-update; those four suites were spot-checked and confirmed GREEN this
 owns closing the confirmed-red set and running the phase-boundary `npm run check` to establish the
 authoritative full list.
 
+**Phase 2 Plan 03 (wave 3) is executed, and the phase is complete.** The three plugin flow suites
+(`install-flow`, `update-flow`, `reinstall-flow` — the third was empirically red too, 5/139, though
+not separately reported by plan 02) had their remote allowlists narrowed to admit exactly the
+D-2-01 wire form per fixture's PARSED `source.kind`: every failure traced to
+`createGitOpsFake.requireRemote()` blocking a now-verbatim URL, not a stale recorded value, so
+narrowing the allowlist (plus fixing two template-built wire expectations at
+`install-flow.test.ts:7207,7277`) brought all three suites fully green. RESEARCH.md's assumption
+A1 is discharged by classification, not left open: `tests/integration/marketplace-add-seed-mirrors.test.ts`'s
+allowlist admitted BOTH `REPO_URL` and its suffixed twin — narrowed to `[REPO_URL]` alone, with
+its five by-value clone-url expectations changed to match, the phase's sole integration-tier proof
+of the verbatim wire form. Every other candidate RESEARCH.md and the plan's own read set named
+(the bootstrap/register family and `reconcile/apply.test.ts`'s two non-empty allowlists, all
+resolving through an `owner/repo` shorthand that always parses to `github` kind; the
+empty-allowlist fakes in `reconcile/apply.test.ts`'s remaining cases, `backfill.test.ts`, and
+`import/execute.test.ts`; `marketplace/update.test.ts`'s `onAuth` callback argument;
+`list-flow.test.ts`'s manifest-string fixtures; `tools.test.ts`'s preserve-the-user's-own-suffix
+fixture; `platform/git.test.ts` and `git-auth-callbacks.test.ts`'s raw port/callback constants) was
+confirmed unaffected by running, not by reasoning. `domain/source.ts::ensureGitSuffix`'s docstring
+— which argued the suffix is host-agnostic on purpose and cited a gitlab.com `422`-redirect
+observation, the exact inverse of D-2-02 — is rewritten to name `networkCloneUrl` as the only
+caller and state D-2-02's accepted trade-off in its shipped direction; `platform/git.ts`'s
+`CloneOptions.url` docstring is rewritten to name the derivation in prose only (no import added;
+`platform/` may not import `domain/`). `npm run check` exits 0 at the phase's final HEAD
+(`d06b6325`): 7286/7286 unit tests pass with `all files | 100.00 | 100.00 | 100.00` over
+`extensions/**`, 36/36 integration tests pass, `lint:type-members` holds the same 4 pre-existing
+exceptions with 108 contract entries, and both coverage-pin files are unchanged.
+
 ## Deferred Verification
 
 | Phase | State | Resume |
@@ -179,18 +208,18 @@ blocked until this is resolved.
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** Phase 2 Plan 02 executed (2/3 plans in phase)
+**Current Plan:** Phase 2 Plan 03 executed (3/3 plans in phase, phase complete)
 
 ```
 Phase 1  [==========]  plans complete (3/3)
-Phase 2  [======    ]  in progress (2/3 plans executed)
+Phase 2  [==========]  plans complete (3/3)
 Phase 3  [          ]  not started
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
-| 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | In progress (2/3 plans executed) |
+| 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Plans complete (3/3), awaiting verification |
 | 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Not started |
 
 ## Accumulated Context
@@ -258,6 +287,22 @@ Phase 3  [          ]  not started
   already admits both suffixed and unsuffixed forms per host, and every one of its assertions is a
   call-count check rather than a recorded-url-value check, so D-2-03's wire-form change is
   invisible to that file's existing suite.
+- **Phase 2 Plan 03: every flow-suite failure was a blocked-remote artifact, not a stale value
+  expectation.** `createGitOpsFake.requireRemote()` runs before an injected `cloneError` is thrown,
+  so an allowlist still admitting only the suffixed form silently produced downstream sha/version
+  mismatches (a fallback-to-recorded-state shape) rather than a visible `blocked unplanned remote`
+  line in most failing cases. Narrowing the allowlist alone brought `install-flow`, `update-flow`,
+  and `reinstall-flow` to green with zero additional by-value assertion edits beyond the two
+  template-built expectations the plan already named.
+- **Phase 2 Plan 03: classification follows the PARSED source kind, never the declared kind or the
+  hostname text.** A `github.com` URL declared `source: "url"` in a manifest still parses to
+  `github` kind (`domain/source.ts::urlObjectSource` funnels any `https://github.com/...` URL
+  through the github parser, D-76-02) — this is why two `install-flow.test.ts` allowlist entries
+  declared as `url`-kind manifest entries keep their `.git` suffix.
+- **Phase 2 Plan 03: the bootstrap/register family and `reconcile/apply.test.ts`'s two non-empty
+  allowlists all resolve through an `owner/repo` shorthand string**
+  (`anthropics/claude-plugins-official`, `acme/remote`, `acme/proj`, `acme/user`), which always
+  parses to `github` kind regardless of context — confirmed green with no edit, not assumed.
 
 ### Source-review facts carried into planning
 
@@ -299,11 +344,11 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-09-27T03:56:10.000Z
+**Last session:** 2026-09-27T04:47:08.000Z
 
-**Stopped At:** Phase 2 Plan 02 executed — plugin clone-cache seam threads `networkUrl`, 270 tests green (`a909adaf`, `80251086`, `bfe43963`).
-**Resume File:** `.planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-03-PLAN.md`
-**Next Action:** `/gsd-execute-phase 2` (plan 03, wave 3 — residual suite audit and the phase-boundary `npm run check`). Phase 1's `human_needed` canary stays open for the operator.
+**Stopped At:** Phase 2 Plan 03 executed — residual suite audit closed, assumption A1 discharged, `npm run check` exits 0 (`3f416a46`, `78fe180c`, `d06b6325`).
+**Resume File:** None — Phase 2 is fully executed.
+**Next Action:** `/gsd-verify-work 2` to verify Phase 2, then `/gsd-plan-phase 3` for `marketplace add` recovers from its own leftover clone. Phase 1's `human_needed` canary stays open for the operator and blocks milestone close, not Phase 3.
 
 ## Performance Metrics
 
@@ -313,3 +358,4 @@ None.
 | Phase 01 P03 | 41min | 2 tasks | 11 files |
 | Phase 02 P01 | 95min | 3 tasks | 8 files |
 | Phase 02 P02 | 165min | 3 tasks | 10 files |
+| Phase 02 P03 | 51min | 3 tasks | 6 files |
