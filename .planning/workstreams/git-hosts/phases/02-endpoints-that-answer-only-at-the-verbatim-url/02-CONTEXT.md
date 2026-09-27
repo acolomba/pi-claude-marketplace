@@ -209,6 +209,41 @@ seam — only a correct one at the source:
   verbatim as both `raw` and `url`, so its verbatim form may already carry `.git`. Deriving from
   `raw` and from `url` give the same answer there; pick one and say which.
 
+### The existing suite asserts the defect — this is the phase's main execution risk
+
+**`npm run check` will go green having verified the opposite of SC4 unless these are rewritten
+first.** The current `.git`-for-every-host behavior is not merely untested — it is pinned by name,
+by suites that will keep passing after the production change lands because their expectations were
+written against `ensureGitSuffix`. Verified counts of `.git"` wire literals, and the cases that name
+the old contract in their own titles:
+
+| Test file | `.git"` literals | Names the old contract |
+|---|---|---|
+| `tests/orchestrators/marketplace/add.test.ts` | 26 | **line 2344** — `MURL-01: url source clones source.url \`.git\`-suffixed with a bundle bound to its host`; comments at 2366, 2868, 2884 also assert `ensureGitSuffix` restores the suffix |
+| `tests/orchestrators/plugin/clone-cache.test.ts` | 18 | **line 824** — `MURL-01 / PURL-09: resolvePluginPin sends a \`.git\`-suffixed url but returns the canonical suffix-less cloneUrl` |
+| `tests/orchestrators/plugin/fetch.test.ts` | 16 | 21 `networkUrl` references carrying the suffixed form |
+| `tests/orchestrators/plugin/install-flow.test.ts` | 8 | — |
+| `tests/orchestrators/plugin/update-flow.test.ts` | 6 | — |
+| `tests/orchestrators/plugin/info.test.ts` | 5 | — |
+| `tests/edge/handlers/marketplace/add.test.ts` | 1 | — |
+
+Not every literal is a wire-URL expectation; many are source-identity fixtures that stay correct.
+The distinction the plan must make per file is **"is this asserting what we SEND, or what we
+STORE?"** — the sent form changes under D-2-01, the stored/canonical form does not (D-76-01 is
+untouched). Titles and comments naming `ensureGitSuffix` or "`.git`-suffixed ... on the wire" are the
+reliable signal for the first kind.
+
+Two of these are worse than stale: `add.test.ts:2344` and `clone-cache.test.ts:824` encode the old
+rule in their test NAMES under the MURL-01 / PURL-09 IDs. Retitle them rather than editing the
+assertion under an unchanged name — a suite whose case names still promise the old contract is how
+the next reader concludes this phase never shipped.
+
+**Plan obligation.** Treat the test rewrite as first-class task work with its own verification, not
+as fallout from the production edit. A task that changes `networkCloneUrl` and leaves these suites
+untouched produces a green run that checked nothing, which is exactly the failure SC3's call-count
+assertion exists to catch — and the count assertion itself cannot catch a wrong URL, only a wrong
+number of attempts. Assert the sent URL BY VALUE alongside the count.
+
 ### Integration points
 
 - `ensureGitSuffix` keeps exactly one live consumer after this phase — the github arm inside
