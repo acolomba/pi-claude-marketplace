@@ -6,12 +6,12 @@ current_phase: 2
 current_phase_name: Endpoints that answer only at the verbatim URL
 current_plan: 3
 total_plans_in_phase: 3
-status: Phase 2 complete (3/3 plans executed) — residual suite audit closed, npm run check green
-stopped_at: "Phase 2 plan 03 executed: the three plugin flow suites and the seed-mirrors integration suite narrowed to the verbatim allowlist, RESEARCH assumption A1 discharged by classification, suffix-helper docstrings corrected, CHECK_EXIT=0 (3f416a46, 78fe180c, d06b6325)"
-last_updated: "2026-09-27T04:47:08.000Z"
+status: Phase 2 verified 9/9 — live-canary verification deferred; ready for Phase 3
+stopped_at: "Phase 2 verified 9/9 must-haves after a 3-iteration review-fix loop and the operator-decided D-2-05 fixed-point normalization; live smart-HTTP canary deferred (4d530bfb)"
+last_updated: "2026-09-27T12:10:00.000Z"
 last_activity: 2026-09-27
-last_activity_desc: "Executed Phase 2 plan 03: closed the three deliberately-red plugin flow suites and the seed-mirrors integration suite, discharged assumption A1 by classification, corrected the suffix-helper docstrings, npm run check exits 0 at the phase boundary (100% coverage over extensions/**)"
-state_head: d06b6325
+last_activity_desc: "Verified Phase 2 (9/9 must-haves); code review found and closed a regression the first fix pass introduced, and the operator decided D-2-05 making the url cache identity a fixed point"
+state_head: 4d530bfb
 progress:
   total_phases: 3
   completed_phases: 0
@@ -37,13 +37,35 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 2 — Endpoints that answer only at the verbatim URL (3 of 3 plans executed, complete)
-Current Plan: 3
+Phase: 2 — Endpoints that answer only at the verbatim URL (verified 9/9, live canary deferred)
+Current Plan: none
 Total Plans in Phase: 3
-Status: Phase 2 fully executed; `npm run check` is green at the phase boundary. Phase 1's
-live-canary verification remains deferred (see Deferred Verification); Phase 2 itself awaits
-`/gsd-verify-work 2`. Phase 3 is not yet planned.
-Last activity: 2026-09-27 — Executed Phase 2 Plan 03 (3f416a46, 78fe180c, d06b6325)
+Status: Phase 2 verified — 9/9 must-haves, all 5 ROADMAP success criteria, all 5 plan
+prohibitions, `npm run check` at `CHECK_EXIT=0`. Its live smart-HTTP canary is deferred to the
+operator alongside Phase 1's (see Deferred Verification). Phase 3 is not yet planned.
+Last activity: 2026-09-27 — Verified Phase 2 after the review-fix loop and D-2-05 (4d530bfb)
+
+**Phase 2 took three code-review iterations, and the second one earned its keep.** The first fix
+pass closed all 8 findings and went green — while silently moving the parse-time cache identity,
+because it reordered `stripSlashAndFragment` and `stripUrlDecorations` inherited the change through
+a shared call edge. The re-review caught it by running the pre-phase parser side by side with HEAD.
+The repair restructured the seam into separately-named compositions with no call edge between them,
+so a wire-side correction can no longer reach the identity; two negative controls prove the
+decoupling rather than asserting it. The review also closed a scheme-gate hole that predated the
+phase: object-form `url` sources reached `gitOps.clone` without the `https://`-only check, and the
+phase had made the attacker-controllable `raw` field the one that reaches the network.
+
+**D-2-05 is an operator decision, not a discovered fact.** Measuring the repair showed pre-phase
+contradicted *itself* on one input shape: a `url` typed with a trailing slash immediately before a
+`#<ref>` parsed to `.../o/r/` on first parse but recomputed `.../o/r` on every reload, so `add`
+stored one `plugin-clones/<hash>` and every later operation missed it — orphaning the directory
+permanently. Byte-identity with pre-phase and add/reload agreement are therefore mutually
+exclusive. The operator chose to normalize both paths to `.../o/r`, making the identity a fixed
+point (`FIXED_POINT_VIOLATIONS=0`). The accepted cost is one re-clone for that input class on first
+use after upgrade. `02-01-PLAN.md`'s `canonicalCloneUrl` must_have is amended, not deleted, to name
+the exception and cite D-2-05 — so a later reader sees an accepted amendment, not a failed
+must-have. The scoping was checked, not assumed: every other input of every source kind keeps its
+pre-phase identity byte-for-byte, and `https://github.com/o/r/#main` is still rejected.
 
 **Phase 2 is planned: three plans, three waves, sequential by necessity.** Plan 01 (wave 1) lands
 `networkCloneUrl` and an extracted `stripSlashAndFragment` in `domain/`, wires the `marketplace add`
@@ -194,6 +216,7 @@ exceptions with 108 contract entries, and both coverage-pin files are unchanged.
 | Phase | State | Resume |
 |-------|-------|--------|
 | 1 | verification_deferred_human | /gsd-verify-work 1 |
+| 2 | verification_deferred_human | /gsd-verify-work 2 |
 
 The phase number above is `1`, matching the `number` field `init.manager` emits — that is the
 projection `discover_phases` filters against. The phase directory is `01-private-repos-on-any-git-host`;
@@ -205,26 +228,46 @@ The scoped-canary commit (`130d68a9`) already closed the helper-subprocess link 
 control. Deferred so autonomous runs can proceed through phases 2 and 3; milestone close stays
 blocked until this is resolved.
 
+Phase 2's single outstanding item is the same class: one `marketplace add` against a REAL
+smart-HTTP server that answers only at the verbatim path and 404s the `.git` form, plus a later
+`resolveRemoteRef` against it. Every phase test proves the URL that is SENT through the offline
+`createGitOpsFake`; none exercises a real HTTP round trip. Recorded in `02-UAT.md`. Deferred by
+operator decision on 2026-09-27 so the run could proceed to Phase 3. Both canaries block
+milestone close only, not Phase 3.
+
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** Phase 2 Plan 03 executed (3/3 plans in phase, phase complete)
+**Current Plan:** none — Phase 2 verified, Phase 3 not yet started
 
 ```
 Phase 1  [==========]  plans complete (3/3)
-Phase 2  [==========]  plans complete (3/3)
+Phase 2  [==========]  verified 9/9, live canary deferred
 Phase 3  [          ]  not started
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
-| 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Plans complete (3/3), awaiting verification |
+| 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Verified 9/9, live canary deferred |
 | 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Not started |
 
 ## Accumulated Context
 
 ### Decisions
+
+- **D-2-05 (operator, 2026-09-27): the `url` cache identity is a FIXED POINT.** A trailing slash
+  immediately before a `#<ref>` is normalized away, so `https://host/o/r/#main` and
+  `https://host/o/r.git/#main` both have the identity `https://host/o/r` on first parse and on every
+  reload. This deliberately overrides the byte-identity-with-pre-phase gate that two earlier review
+  passes held, because pre-phase disagreed with itself on that shape and orphaned the clone
+  directory. Cost: one re-clone for that input class. The wire form is unaffected — `.../o/r.git/#main`
+  still SENDS `.../o/r.git` (D-2-01/D-2-03 separation intact).
+- **The `url` identity, the `url` wire form and the `github` identity are three separate
+  compositions** in `domain/source.ts` (`stripUrlDecorations`, `stripSlashAndFragment`,
+  `stripGitHubUrlDecorations`) sharing only leaf primitives, with no call edge between them. They are
+  deliberately NOT collapsed even where two currently agree on ordering: a shared helper is what let
+  a wire-side fix move the cache identity once already.
 
 - **Phase numbering restarts at 1.** `git-hosts` is a fresh workstream with zero prior phases. The
   repo's shared counter runs to Phase 117 on other workstreams; it does not apply here.

@@ -221,5 +221,5 @@ Phase 3 because that is where it is finally measured, but nothing may be left re
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Private repos on any git host | 3/3 | In Progress | — |
-| 2. Endpoints that answer only at the verbatim URL | 3/3 | In Progress|  |
+| 2. Endpoints that answer only at the verbatim URL | 3/3 | In Progress | — |
 | 3. `marketplace add` recovers from its own leftover clone | 0/TBD | Not started | — |
