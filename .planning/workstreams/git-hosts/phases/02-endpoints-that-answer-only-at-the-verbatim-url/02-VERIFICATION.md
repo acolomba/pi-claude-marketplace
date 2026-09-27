@@ -126,17 +126,18 @@ Not from SUMMARY.md or REVIEW-FIX.md narration alone. Independently, in this ses
   `tests/orchestrators/plugin/{install-flow,update-flow,reinstall-flow}.test.ts tests/integration/
   marketplace-add-seed-mirrors.test.ts tests/architecture/{no-credential-leak,import-boundaries,
   no-stale-test-citations}.test.ts` → 496/496 pass. Total: 1008/1008 directly run, 0 failures.
-- Launched `npm run check` end-to-end in this session; it progressed cleanly through `typecheck`,
-  `lint`, `lint:workflows(+negative)`, `fallow` (no issues, the two non-blocking `fallow health`/
-  `fallow dupes` advisories match the numbers `02-REVIEW-FIX.md` recorded), `format:check`,
-  `test:corresponding(+negative)`, and `test:coverage:direct:negative` with no failures, and was
-  still running the `test:coverage:unit`/`lint:type-members` tail (a slow segment on this
-  resource-contended host — several competing codegraph/fallow-mcp/tsserver daemons were consuming
-  CPU throughout the session) when this report was finalized. This is not required for the verdict:
-  `02-REVIEW-FIX.md` independently ran the identical `extensions/`/`tests/` tree (HEAD's code is
+- Ran `npm run check` end-to-end in this session, to completion, not reused from any prior run:
+  `typecheck`, `lint`, `lint:workflows(+negative)`, `fallow` (no issues; the two non-blocking `fallow
+  health`/`fallow dupes` advisories match the numbers `02-REVIEW-FIX.md` recorded), `format:check`,
+  `test:corresponding(+negative)`, `test:coverage:direct:negative`, `test:coverage:unit` (7328/7328
+  pass, 100.00/100.00/100.00 lines/functions/branches over `extensions/**`), `test:integration`
+  (36/36 pass), `lint:type-members` (passed, 4 recorded exceptions), and `lint:type-members:negative`
+  (7 of 7 negative controls passed) — captured into the log as `CHECK_EXIT=0`. The run took
+  substantially longer than usual because several competing codegraph/fallow-mcp/tsserver daemons
+  were consuming CPU on this host throughout the session; the result is unambiguous regardless.
+  `02-REVIEW-FIX.md` additionally ran the identical `extensions/`/`tests/` tree (HEAD's code is
   byte-identical to `7c7df1df`, which is what that report's final gate ran against) to `CHECK_EXIT=0`
-  twice, and this session's own 1008 directly-run tests plus the probes above cover every must-have
-  the coverage/type-member gates would otherwise be the only evidence for.
+  twice, so this is now a third independent confirmation of the same result.
 - Confirmed `scripts/check-unused-type-members.contracts.json` holds 108 `contracts` entries and
   zero pins name `domain/source.ts` or `domain/clone-key.ts`; spot-checked the four remapped
   `info.ts`/`update-preflight.ts` pins against the actual file lines — all four line up with the
@@ -169,7 +170,7 @@ Not from SUMMARY.md or REVIEW-FIX.md narration alone. Independently, in this ses
 | SC2 | 401/403/404/5xx keeps original error identity | ✓ — truth 6 above, plus equivalent `clone-cache.test.ts` MURL-09 cases for all three plugin seams (274/274 pass, run directly). |
 | SC3 | exactly ONE network attempt per operation, both paths | ✓ — truth 5 above; ROADMAP.md's own SC3 text (line 114-117) matches D-2-04's correction (count of one, not two) verbatim. |
 | SC4 | `.git` only where Claude Code appends it; `canonicalCloneUrl` unchanged | ✓ with the D-2-05 sanctioned exception, now closed (truth 4) rather than an open human decision. |
-| SC5 | `npm run check` green, 100% on every new arm, `test:corresponding` | ✓ — `02-REVIEW-FIX.md`'s Gate 8 independently ran the identical `extensions/`/`tests/` tree (byte-identical to HEAD) to `CHECK_EXIT=0` twice; this session's own 1008 directly-run tests across every add/plugin/architecture suite this phase touches all pass; this session's own `npm run check` run progressed cleanly through every stage it completed (typecheck, lint, lint:workflows(+negative), fallow, format:check, test:corresponding(+negative), test:coverage:direct:negative) before the report was finalized while the coverage/type-member tail was still running on a resource-contended host. |
+| SC5 | `npm run check` green, 100% on every new arm, `test:corresponding` | ✓ — this session's own `npm run check` ran end-to-end to completion at HEAD (`4d530bfb`), `CHECK_EXIT=0`, including 100.00/100.00/100.00 lines/functions/branches on `extensions/**` (7328/7328 unit tests), `test:integration` 36/36, and `lint:type-members`(+negative) 4 exceptions / 7 of 7 negative controls; this session's own 1008 directly-run tests across every add/plugin/architecture suite this phase touches all pass; `02-REVIEW-FIX.md`'s Gate 8 independently ran the identical `extensions/`/`tests/` tree (byte-identical to HEAD) to `CHECK_EXIT=0` twice more. |
 
 ### Required Artifacts
 
@@ -211,7 +212,7 @@ derivation produces. Status: ✓ FLOWING.
 | Negative control: revert identity composition ordering on a scratch copy of `source.ts` | `node --experimental-strip-types` against a patched scratch file (production file never touched) | Exactly the 2 slash-before-fragment identity cases differ; 0 wire-form cases affected | ✓ PASS — confirms the fixed-point test table is behavioral, not vacuous |
 | Negative control: revert wire composition ordering on a scratch copy | same method | The 1 pinned `.git`-behind-slash wire case differs; 0 identity cases affected | ✓ PASS — confirms the wire test is behavioral |
 | CR-02 scheme-gate probe, both object fields | direct probe, 10 attacker-shaped inputs | All 10 reject (`kind: "unknown"`) | ✓ PASS |
-| `npm run check` | this verifier, end-to-end, launched once this session | Clean through typecheck/lint/lint:workflows(+neg)/fallow/format:check/test:corresponding(+neg)/test:coverage:direct:negative/test:coverage:unit (7328/7328 pass, 100.00/100.00/100.00 lines/functions/branches over `extensions/**`)/test:integration (36/36 pass)/lint:type-members (passed with 4 recorded exceptions, matching `02-REVIEW-FIX.md`'s count); `lint:type-members:negative` still running on a resource-contended host at report finalization — not required for the verdict (see "How this was verified") | ✓ PASS (near-complete; corroborated by `02-REVIEW-FIX.md`'s two independent `CHECK_EXIT=0` runs of the identical code tree, which include this final negative-control gate) |
+| `npm run check` | this verifier, end-to-end, launched once this session, ran to completion | Clean through every stage: typecheck, lint, lint:workflows(+neg), fallow, format:check, test:corresponding(+neg), test:coverage:direct:negative, test:coverage:unit (7328/7328 pass, 100.00/100.00/100.00 lines/functions/branches over `extensions/**`), test:integration (36/36 pass), lint:type-members (passed, 4 recorded exceptions), lint:type-members:negative (7 of 7 negative controls passed). `CHECK_EXIT=0`. | ✓ PASS — full run completed in this session, not reused from a prior run; corroborated by `02-REVIEW-FIX.md`'s two independent `CHECK_EXIT=0` runs of the identical code tree |
 
 ### Requirements Coverage
 
