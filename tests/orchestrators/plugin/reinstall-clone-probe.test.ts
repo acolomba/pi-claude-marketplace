@@ -213,6 +213,7 @@ test("falls back from an absent unpinned mirror to the recorded sha", async (tes
     {
       auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
       cloneUrl,
+      networkUrl: cloneUrl,
       locations,
       pin: SHA,
     },
