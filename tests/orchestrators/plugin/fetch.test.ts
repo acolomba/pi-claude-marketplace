@@ -481,8 +481,11 @@ test("keeps a pinned warm URL clone offline and byte-identical", async () => {
 test("materializes a cold pinned URL clone at its recorded SHA", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
+    // D-2-01: the manifest url carries a `.git`, so the identity `cloneUrl`
+    // (which keys the clone dir) and the wire `networkUrl` differ, and the
+    // gitBoundary admits only the suffixed remote.
     const cloneUrl = "https://example.com/plugin";
-    const networkUrl = "https://example.com/plugin";
+    const networkUrl = "https://example.com/plugin.git";
     const pin = "2222222222222222222222222222222222222222";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "cold", "2.0.0");
@@ -491,7 +494,7 @@ test("materializes a cold pinned URL clone at its recorded SHA", async () => {
       entries: [
         {
           name: "cold",
-          source: { source: "url", url: cloneUrl, sha: pin, ref: "v2" },
+          source: { source: "url", url: networkUrl, sha: pin, ref: "v2" },
           version: "2.0.0",
         },
       ],
@@ -608,6 +611,88 @@ test("refreshes an unpinned warm mirror with its ref and leaves state immutable"
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     assert.deepStrictEqual(await stagingEntries(locations), []);
+    verifyNotifications(boundary);
+  });
+});
+
+test("materializes a cold unpinned URL mirror at the typed wire url", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    // D-2-01 / D-2-03: the mirror dir is keyed on the identity url; the COLD
+    // clone goes out at the wire url, `.git` and all.
+    const cloneUrl = "https://example.com/cold-mirror";
+    const networkUrl = "https://example.com/cold-mirror.git";
+    const head = "5555555555555555555555555555555555555555";
+    const fixture = path.join(cwd, "fixture");
+    await writePluginTree(fixture, "cold-mirror", "5.0.0");
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [
+        { name: "cold-mirror", source: { source: "url", url: networkUrl }, version: "5.0.0" },
+      ],
+      name: "marketplace",
+      scope: "project",
+    });
+    const locations = await saveMarketplaces(cwd, "project", [marketplace]);
+    const git = gitBoundary({
+      allowedRemoteUrls: [networkUrl],
+      fixtureSourceDir: fixture,
+      head,
+      localRefs: { "refs/heads/main": head },
+      remoteHead: head,
+      remoteRefs: { "refs/remotes/origin/HEAD": head },
+      writeHead: true,
+    });
+    const cache = cacheBoundary(git.gitOps);
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const boundary = notificationBoundary("cold URL mirror");
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: cache.seam,
+      credentialOps: credentials.credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      pi: boundary.pi,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "cold-mirror" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● marketplace [project]\n  ○ cold-mirror v5.0.0 (available)" },
+    ]);
+    assert.deepStrictEqual(cache.calls, [`mirror ${cloneUrl} ref=- auth=example.com`]);
+    assert.deepStrictEqual(git.schedule, [
+      `clone ${networkUrl} ref=- single=false auth=example.com`,
+      "fetch remote=origin ref=- auth=example.com",
+      "resolve-local refs/remotes/origin/HEAD",
+      "current-branch",
+      `force-update refs/heads/main=${head}`,
+      "checkout main",
+      "resolve-local HEAD",
+    ]);
+    assert.deepStrictEqual(await stagingEntries(locations), []);
+    assert.deepStrictEqual(
+      await snapshotTree(await locations.pluginCloneDir(pluginMirrorKey(cloneUrl))),
+      [
+        { path: ".claude-plugin", type: "directory" },
+        {
+          contents: '{"name":"cold-mirror","version":"5.0.0"}',
+          path: path.join(".claude-plugin", "plugin.json"),
+          type: "file",
+        },
+        { path: ".git", type: "directory" },
+        { contents: `${head}\n`, path: path.join(".git", "HEAD"), type: "file" },
+        { path: "skills", type: "directory" },
+        { path: path.join("skills", "greet"), type: "directory" },
+        {
+          contents: "---\nname: greet\n---\n\nHello 5.0.0.\n",
+          path: path.join("skills", "greet", "SKILL.md"),
+          type: "file",
+        },
+      ],
+    );
     verifyNotifications(boundary);
   });
 });

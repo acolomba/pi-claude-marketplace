@@ -50,7 +50,7 @@ import { mkdir, rename, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
+import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
@@ -80,7 +80,12 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import {
+  DEFAULT_CREDENTIAL_OPS,
+  GITHUB_HOST,
+  buildAuthForHost,
+  hostFromCloneUrl,
+} from "../auth-host.ts";
 import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 
 import { ADD_CONTEXT } from "./add.messaging.ts";
@@ -782,7 +787,10 @@ async function addGithubInGuard(args: {
   // AUTH-09: the closure interpolates ONLY user_code + verification_uri
   // (via initiateDeviceFlow's notifyFn) -- the access token is acquired
   // LATER in the poll loop and is never passed back to a notify or Error.
-  const host = hostFromCloneUrl(canonicalCloneUrl(source), "github");
+  // D-77-06: this arm's source is statically `github`, whose host is the literal
+  // `GITHUB_HOST` -- `hostFromCloneUrl` returns it without reading a url, so
+  // there is nothing to derive here.
+  const host = GITHUB_HOST;
   const auth = buildAuthForHost({
     host,
     credentialOps,

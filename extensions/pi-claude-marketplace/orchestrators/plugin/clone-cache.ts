@@ -274,9 +274,11 @@ export async function materializeOrRefreshPluginMirror(args: {
   // cannot go uninjected.
   const removalOps = createRemovalOps();
   const mirrorRoot = await args.locations.pluginCloneDir(pluginMirrorKey(args.cloneUrl));
-  // D-2-03: same split as `materializePluginClone` -- the mirror key hashes
-  // the canonical identity url; the caller-supplied wire url is the only
-  // thing sent to the remote.
+  // D-2-03: same split as `materializePluginClone` -- the mirror key hashes the
+  // canonical identity url, and the caller-supplied wire url is what a COLD
+  // clone sends. The refresh below fetches the `origin` remote isomorphic-git
+  // recorded at that first clone, so two sources sharing one identity share the
+  // first writer's wire url on every warm refresh.
   const networkUrl = args.networkUrl;
 
   // MIRR-01: materialize the mirror on a cold key (no fixed-pin checkout; the

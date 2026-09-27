@@ -280,9 +280,10 @@ describe("networkCloneUrl", () => {
     // arrange
     const source = {
       kind: "git-subdir",
-      raw: "https://example.com/mono/",
-      url: "https://example.com/mono/",
+      raw: "https://example.com/mono/#main",
+      url: "https://example.com/mono/#main",
       path: "plugins/p",
+      ref: "main",
     } as const;
 
     // act

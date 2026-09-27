@@ -846,7 +846,7 @@ void test("MURL-08 / PURL-09: resolvePluginPin sends the url as typed and still 
   const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
   const source: UrlSource = {
     kind: "url",
-    raw: "https://gitlab.example.com/o/r",
+    raw: "https://gitlab.example.com/o/r.git",
     url: "https://gitlab.example.com/o/r",
   };
 
@@ -854,8 +854,8 @@ void test("MURL-08 / PURL-09: resolvePluginPin sends the url as typed and still 
 
   assert.equal(
     state.resolveRemoteRefCalls[0]?.url,
-    "https://gitlab.example.com/o/r",
-    "the wire url is sent verbatim, with no suffix appended",
+    "https://gitlab.example.com/o/r.git",
+    "the wire url is sent as typed, keeping the user's .git decision",
   );
   assert.equal(
     resolved.cloneUrl,

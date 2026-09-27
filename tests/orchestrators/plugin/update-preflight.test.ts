@@ -472,6 +472,40 @@ test("prepares pinned and unpinned URL clones with their exact resolved sha", as
   assert.strictEqual(unpinnedPrepared.toVersion, "sha-222222222222");
 });
 
+test("sends the unpinned mirror the identity url and the typed wire url", async (t) => {
+  // arrange
+  // D-2-01 / D-2-03: the manifest url carries a `.git`, so the mirror seam's
+  // identity `cloneUrl` and wire `networkUrl` arguments differ.
+  const mirrorSha = "3333333333333333333333333333333333333333";
+  const seed = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "url", url: "https://example.com/mirror.git" },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const mirrorCalls: { readonly cloneUrl: string; readonly networkUrl: string }[] = [];
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+    materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
+    materializeOrRefreshPluginMirror: ({ cloneUrl, networkUrl }) => {
+      mirrorCalls.push({ cloneUrl, networkUrl });
+      return Promise.resolve({ pluginRoot: seed.pluginRoot, resolvedSha: mirrorSha });
+    },
+  };
+
+  // act
+  const prepared = await prepare(seed, { cloneCacheSeam });
+
+  // assert
+  assert.deepStrictEqual(mirrorCalls, [
+    {
+      cloneUrl: "https://example.com/mirror",
+      networkUrl: "https://example.com/mirror.git",
+    },
+  ]);
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(prepared.resolvedSha, mirrorSha);
+});
+
 test("classifies a clone transport failure without exposing a raw throw", async (t) => {
   // arrange
   const seed = await seedUpdate({

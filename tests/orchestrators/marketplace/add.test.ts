@@ -149,6 +149,10 @@ const ALLOWED_MARKETPLACE_REMOTES = [
   "https://gitlab.example.com/team/gone-mp",
   "https://GitHub.com/acme/mp",
   "https://gitlab.com/team/mp",
+  // D-2-01: the `.git` a user typed survives onto the wire. Only the suffixed
+  // form is admitted, so sending the `.git`-stripped cache-key identity instead
+  // is refused by the fake as well as caught by the by-value assertion.
+  "https://gitlab.example.com/team/suffixed-mp.git",
   // D-2-02: stands in for a host that serves ONLY its `.git`-suffixed path --
   // admitted here suffixed so a verbatim (non-github) request is refused.
   "https://gitlab.example.com/team/git-only-mp.git",
@@ -2343,6 +2347,42 @@ test("cleans a URL clone after state-save failure and a second invocation conver
       "valid-marketplace",
     ]);
     assert.strictEqual(await pathExists(finalClone), true);
+  });
+});
+
+test("MURL-08 / D-2-01: url source with a typed .git suffix clones the suffixed URL and stores the suffix-less identity", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, pi } = makeCtx();
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/suffixed-mp.git",
+      gitOps,
+    });
+
+    // assert
+    assert.equal(state.cloneCalls.length, 1);
+    assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/team/suffixed-mp.git");
+    assert.deepStrictEqual(
+      Object.values((await loadState(locations.extensionRoot)).marketplaces).map(
+        (marketplace) => marketplace.source,
+      ),
+      [
+        {
+          kind: "url",
+          raw: "https://gitlab.example.com/team/suffixed-mp.git",
+          url: "https://gitlab.example.com/team/suffixed-mp",
+        },
+      ],
+    );
   });
 });
 

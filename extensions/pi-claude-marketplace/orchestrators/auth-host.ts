@@ -69,17 +69,25 @@ export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
 });
 
 /**
+ * D-77-06: the bare host of every `github` source. Named so a caller whose kind
+ * is statically `github` can read it directly instead of handing
+ * `hostFromCloneUrl` a url that arm does not read.
+ */
+export const GITHUB_HOST = "github.com";
+
+/**
  * Extract the bare host from a clone URL per source kind.
  *
  * A `github` source canonicalizes to `https://github.com/<owner>/<repo>` (see
- * domain/source.ts), so it always resolves to the literal `github.com` without
- * a URL parse. Every other kind parses `new URL(cloneUrl).host` -- which
- * INCLUDES the port (e.g. `gitlab.example.com:8443`) so a future
- * enterprise-host provider match stays forward-consistent.
+ * domain/source.ts), so it always resolves to `GITHUB_HOST` without a URL parse
+ * and `cloneUrl` is unread on that arm. Every other kind parses
+ * `new URL(cloneUrl).host` -- which INCLUDES the port (e.g.
+ * `gitlab.example.com:8443`) so a future enterprise-host provider match stays
+ * forward-consistent.
  */
 export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git-subdir"): string {
   if (kind === "github") {
-    return "github.com";
+    return GITHUB_HOST;
   }
 
   return new URL(cloneUrl).host;
