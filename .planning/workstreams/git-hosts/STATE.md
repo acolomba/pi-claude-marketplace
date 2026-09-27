@@ -2,16 +2,16 @@
 gsd_state_version: "1.0"
 milestone: any-git-host
 milestone_name: Any Git Host
-current_phase: 2
-current_phase_name: Endpoints that answer only at the verbatim URL
+current_phase: 3
+current_phase_name: "`marketplace add` recovers from its own leftover clone"
 current_plan: 3
 total_plans_in_phase: 3
-status: Phase 2 verified 9/9 — live-canary verification deferred; ready for Phase 3
-stopped_at: "Phase 2 verified 9/9 must-haves after a 3-iteration review-fix loop and the operator-decided D-2-05 fixed-point normalization; live smart-HTTP canary deferred (4d530bfb)"
-last_updated: "2026-09-27T12:10:00.000Z"
+status: Phase 3 context gathered (D-3-01..D-3-04) — ready for planning
+stopped_at: "Phase 3 context gathered: same-origin recognition on the canonical identity, remove-and-rename, a discriminated listRemotes, and the autoupdate cascade to be FIXED (97ff18a3)"
+last_updated: "2026-09-27T12:40:00.000Z"
 last_activity: 2026-09-27
-last_activity_desc: "Verified Phase 2 (9/9 must-haves); code review found and closed a regression the first fix pass introduced, and the operator decided D-2-05 making the url cache identity a fixed point"
-state_head: 4d530bfb
+last_activity_desc: "Discussed Phase 3; four decisions locked (D-3-01..D-3-04), including fixing the autoupdate cascade rather than filing it"
+state_head: 97ff18a3
 progress:
   total_phases: 3
   completed_phases: 0
@@ -37,9 +37,23 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 2 — Endpoints that answer only at the verbatim URL (verified 9/9, live canary deferred)
-Current Plan: none
-Total Plans in Phase: 3
+Phase: 3 — `marketplace add` recovers from its own leftover clone (context gathered, not planned)
+Current Plan: 0
+Total Plans in Phase: 0
+
+**Phase 3 is discussed; four decisions are locked.** Recognition compares the leftover's `origin`
+against `canonicalCloneUrl(source)` — the identity, not the wire form, because identity is
+`.git`-insensitive and D-2-05 just made it a fixed point (D-3-01). A recognized leftover is removed
+and the fresh staging clone renamed in, so a partial tree from the crash window cannot leak into
+installed state (D-3-02). The new `GitOps.listRemotes` returns a discriminated value rather than
+throwing, so "foreign tree" stays distinguishable from "could not look" (D-3-03) — it will be the
+only seam member that does not throw. The autoupdate cascade is to be FIXED, not filed (D-3-04):
+`buildAuthForHost` requires a `ctx` its no-provider arm never reads, which is what makes the fix
+narrow.
+
+Recognition stays at the existing refusal site by necessity, not choice: `finalDir` derives from the
+staged manifest's own name, so a retry still pays one clone to learn it could have reused.
+
 Status: Phase 2 verified — 9/9 must-haves, all 5 ROADMAP success criteria, all 5 plan
 prohibitions, `npm run check` at `CHECK_EXIT=0`. Its live smart-HTTP canary is deferred to the
 operator alongside Phase 1's (see Deferred Verification). Phase 3 is not yet planned.
@@ -243,14 +257,14 @@ milestone close only, not Phase 3.
 ```
 Phase 1  [==========]  plans complete (3/3)
 Phase 2  [==========]  verified 9/9, live canary deferred
-Phase 3  [          ]  not started
+Phase 3  [          ]  context gathered, not planned
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
 | 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Verified 9/9, live canary deferred |
-| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Not started |
+| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Context gathered, not planned |
 
 ## Accumulated Context
 
