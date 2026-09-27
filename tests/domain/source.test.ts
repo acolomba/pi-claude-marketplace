@@ -716,12 +716,26 @@ const URL_IDENTITY_CASES: readonly ParseCase[] = [
 /**
  * D-76-01: the object form passes the same https-only scheme gate as the string
  * form. `PLUGIN_ENTRY_SCHEMA` types a manifest entry's source as `unknown`, so a
- * third-party marketplace controls these fields, and the string picked here is
- * the one `networkCloneUrl` hands to `gitOps.clone`.
+ * third-party marketplace controls every field of the object, and the two fields
+ * `urlObjectSource` reads reach different consumers: `url` becomes the cache
+ * identity `canonicalCloneUrl` returns, and `raw` becomes the wire url
+ * `networkCloneUrl` hands to `gitOps.clone`. Each rejected scheme is therefore
+ * listed twice, once per field: a gate on only one of them leaves the other as a
+ * way to reach the network with an unvalidated string.
  */
 const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
   {
-    name: "rejects an http:// url in the object form",
+    name: "rejects an http:// identity url in the object form",
+    raw: { source: "url", url: "http://evil.example/x" },
+    source: {
+      kind: "unknown",
+      raw: "http://evil.example/x",
+      reason:
+        "http://evil.example/x is not supported; http:// URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects an http:// raw url in the object form",
     raw: { source: "url", raw: "http://evil.example/x", url: "https://gitlab.com/o/r" },
     source: {
       kind: "unknown",
@@ -731,7 +745,17 @@ const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
     },
   },
   {
-    name: "rejects an ssh:// url in the object form",
+    name: "rejects an ssh:// identity url in the object form",
+    raw: { source: "url", url: "ssh://git@evil.example/x" },
+    source: {
+      kind: "unknown",
+      raw: "ssh://git@evil.example/x",
+      reason:
+        "ssh://git@evil.example/x is not supported; ssh:// URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects an ssh:// raw url in the object form",
     raw: { source: "url", raw: "ssh://git@evil.example/x", url: "https://gitlab.com/o/r" },
     source: {
       kind: "unknown",
@@ -741,7 +765,17 @@ const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
     },
   },
   {
-    name: "rejects a git@host: scp-form url in the object form",
+    name: "rejects a git@host: scp-form identity url in the object form",
+    raw: { source: "url", url: "git@evil.example:o/r.git" },
+    source: {
+      kind: "unknown",
+      raw: "git@evil.example:o/r.git",
+      reason:
+        "git@evil.example:o/r.git is not supported; git@host: scp-form URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects a git@host: scp-form raw url in the object form",
     raw: { source: "url", raw: "git@evil.example:o/r.git", url: "https://gitlab.com/o/r" },
     source: {
       kind: "unknown",
@@ -751,7 +785,16 @@ const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
     },
   },
   {
-    name: "rejects a relative path in the object form",
+    name: "rejects a relative identity path in the object form",
+    raw: { source: "url", url: "./local/path" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","url":"./local/path"}',
+      reason: "non-relative string source ./local/path cannot be classified",
+    },
+  },
+  {
+    name: "rejects a relative raw path in the object form",
     raw: { source: "url", raw: "./local/path", url: "https://gitlab.com/o/r" },
     source: {
       kind: "unknown",
@@ -760,17 +803,8 @@ const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
     },
   },
   {
-    name: "rejects an owner/repo shorthand in the object form",
-    raw: { source: "url", url: "o/r" },
-    source: {
-      kind: "unknown",
-      raw: '{"source":"url","url":"o/r"}',
-      reason: "non-relative string source o/r cannot be classified",
-    },
-  },
-  {
-    name: "rejects a github browser url in the object form",
-    raw: { source: "url", raw: "https://github.com/o/r/tree/main" },
+    name: "rejects a github browser identity url in the object form",
+    raw: { source: "url", url: "https://github.com/o/r/tree/main" },
     source: {
       kind: "unknown",
       raw: "https://github.com/o/r/tree/main",
@@ -779,9 +813,124 @@ const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
     },
   },
   {
+    name: "rejects a github browser raw url in the object form",
+    raw: {
+      source: "url",
+      raw: "https://github.com/o/r/tree/main",
+      url: "https://gitlab.com/o/r",
+    },
+    source: {
+      kind: "unknown",
+      raw: "https://github.com/o/r/tree/main",
+      reason:
+        "https://github.com/o/r/tree/main is a browser URL; use https://github.com/o/r#main instead",
+    },
+  },
+  {
+    name: "rejects an owner/repo identity shorthand in the object form",
+    raw: { source: "url", url: "o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","url":"o/r"}',
+      reason: "non-relative string source o/r cannot be classified",
+    },
+  },
+  {
+    name: "rejects an owner/repo raw shorthand in the object form",
+    raw: { source: "url", raw: "o/r", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","raw":"o/r","url":"https://gitlab.com/o/r"}',
+      reason: "non-relative string source o/r cannot be classified",
+    },
+  },
+  {
     name: "accepts an https object-form url and keeps its .git decision on raw",
     raw: { source: "url", url: "https://gitlab.com/o/r.git" },
     source: { kind: "url", raw: "https://gitlab.com/o/r.git", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "drops the raw field of a github object url, whose wire form never reads it",
+    raw: { source: "url", url: "https://github.com/o/r", raw: "http://evil.example/x" },
+    source: { kind: "github", raw: "https://github.com/o/r", owner: "o", repo: "r" },
+  },
+];
+
+/**
+ * D-2-03: the reload half of the identity table above. A persisted `UrlSource`
+ * is re-parsed as an object, and `canonicalCloneUrl` reads the `url` these rows
+ * pin, so each expected `url` names a `plugin-clones/<hash>` directory exactly
+ * as the string rows do. The identity derives from the stored `url`, so the
+ * three rows whose stored `url` ends in a path slash strip it again and reach a
+ * fixed point the fourth row then holds. `raw` is carried over verbatim in every
+ * row, because `networkCloneUrl` reads it and the wire form keeps the `.git`
+ * decision the user typed.
+ */
+const URL_RELOAD_IDENTITY_CASES: readonly ParseCase[] = [
+  {
+    name: "re-strips a path slash that precedes a #<ref> fragment from a reloaded url identity",
+    raw: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r/#main",
+      url: "https://gitlab.com/o/r/",
+      ref: "main",
+    },
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "re-strips a path slash that precedes an empty #fragment from a reloaded url identity",
+    raw: { kind: "url", raw: "https://gitlab.com/o/r/#", url: "https://gitlab.com/o/r/" },
+    source: { kind: "url", raw: "https://gitlab.com/o/r/#", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "re-strips a .git suffix behind a path slash from a reloaded url identity",
+    raw: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r.git/",
+      ref: "main",
+    },
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "reloads a url source whose identity is already stripped to a fixed point",
+    raw: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "reloads a url source whose #<ref> fragment follows no path slash",
+    raw: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
   },
 ];
 
@@ -789,6 +938,7 @@ describe("parsePluginSource", () => {
   for (const { name, raw, source } of [
     ...PARSE_CASES,
     ...URL_IDENTITY_CASES,
+    ...URL_RELOAD_IDENTITY_CASES,
     ...URL_OBJECT_GATE_CASES,
     ...UNKNOWN_PARSE_CASES,
     ...INVALID_INPUT_CASES,
@@ -815,38 +965,6 @@ describe("parsePluginSource", () => {
     // assert
     assert.strictEqual(reparsedSource.raw, expectedRaw);
   });
-
-  // D-2-01 / D-2-03: `urlObjectSource` prefers the stored `raw`, because
-  // `networkCloneUrl` reads it and a reload that fell back to `url` would send a
-  // suffix-less wire url for a source the user typed with `.git`. For the one
-  // input shape whose identity keeps a path slash, that makes the reload agree
-  // with the add instead of re-normalizing the slash away, so the round trip is
-  // a fixed point. These two rows pin that reload identity.
-  for (const stored of [
-    {
-      kind: "url",
-      raw: "https://gitlab.com/o/r/#main",
-      url: "https://gitlab.com/o/r/",
-      ref: "main",
-    },
-    {
-      kind: "url",
-      raw: "https://gitlab.com/o/r.git/#main",
-      url: "https://gitlab.com/o/r.git/",
-      ref: "main",
-    },
-  ] as const) {
-    test("re-parsing the stored form of " + stored.raw + " keeps its identity", () => {
-      // arrange
-      const expectedSource = { ...stored };
-
-      // act
-      const reparsedSource = parsePluginSource(stored);
-
-      // assert
-      assert.deepStrictEqual(reparsedSource, expectedSource);
-    });
-  }
 });
 
 describe("pathSource", () => {

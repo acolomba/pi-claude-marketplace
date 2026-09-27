@@ -167,35 +167,61 @@ function unknownObjectSource(obj: Record<string, unknown>, reason: string): Unkn
   return { kind: "unknown", raw: objectRaw(obj), reason };
 }
 
+/**
+ * D-76-01: put one field of a manifest-supplied url object through the same
+ * syntactic gate the string form uses, so `http://`, `ssh://`, `git@host:`, a
+ * relative path and a github browser URL are rejected whichever field carries
+ * them. `PLUGIN_ENTRY_SCHEMA` types an entry's source as `unknown`, so a
+ * third-party marketplace manifest controls every field of the object, and the
+ * two fields `urlObjectSource` reads reach different consumers: `url` becomes
+ * the cache identity `canonicalCloneUrl` returns, and `raw` becomes the wire url
+ * `networkCloneUrl` hands to `gitOps`. Each one is gated on its own.
+ *
+ * D-76-02: the gate's first arm sends a github.com url through the github
+ * parser, so it normalizes to `github` kind (one canonical identity per repo;
+ * Device Flow auth stays applicable) and a github url the parser rejects is
+ * rejected here rather than falling through to a clonable `url` source.
+ */
+function gatedUrlField(
+  obj: Record<string, unknown>,
+  field: string,
+): GitHubSource | UrlSource | UnknownSource {
+  return parseUrlSourceForm(field) ?? unknownObjectSource(obj, nonRelativeReason(field));
+}
+
 function urlObjectSource(obj: Record<string, unknown>): ParsedSource {
-  // D-2-01: prefer the stored `raw` when present so re-parsing a persisted
-  // `kind: "url"` source is idempotent -- `raw` still carries a `.git`
-  // decision that `url` (the parse-time-stripped identity) has already lost.
-  const url = optionalString(obj, "raw") ?? optionalString(obj, "url");
+  // D-76-01 / D-2-03: the identity derives from `url`, the parse-time
+  // `.git`-stripped form that `canonicalCloneUrl` returns and `pluginCloneKey`
+  // hashes, so a re-parse of a persisted source names the same
+  // `plugin-clones/<hash>` directory as the parse that stored it.
+  const url = optionalString(obj, "url");
   if (url === undefined) {
     return unknownObjectSource(obj, "url source is missing url");
   }
 
-  // D-76-01: the object form passes the same syntactic gate as the string form,
-  // so `http://`, `ssh://`, `git@host:`, a relative path and a github browser
-  // URL are rejected here too. `PLUGIN_ENTRY_SCHEMA` types the entry's source
-  // as `unknown`, so a third-party marketplace manifest controls this object,
-  // and the string picked above is what `networkCloneUrl` sends to `gitOps`.
-  //
-  // D-76-02: the gate's first arm sends a github.com url through the github
-  // parser, so it normalizes to `github` kind (one canonical identity per repo;
-  // Device Flow auth stays applicable) and a github url the parser rejects is
-  // rejected here rather than falling through to a clonable `url` source.
-  const parsed = parseUrlSourceForm(url);
-  if (parsed === undefined) {
-    return unknownObjectSource(obj, nonRelativeReason(url));
+  const identity = gatedUrlField(obj, url);
+  if (identity.kind === "unknown") {
+    return identity;
   }
 
-  if (parsed.kind === "unknown") {
-    return parsed;
+  // D-2-01 / D-2-03: `networkCloneUrl`'s `url` arm reads `raw`, so a stored
+  // `raw` is carried onto the parsed source verbatim and keeps the `.git`
+  // decision the user typed -- a decision `url` has already stripped. The
+  // `github` arm builds its wire url from owner/repo and never reads `raw`, so
+  // that kind keeps the `raw` its own parse produced.
+  const raw = optionalString(obj, "raw");
+  if (identity.kind !== "url" || raw === undefined) {
+    return withOptionalSourceFields(identity, obj);
   }
 
-  return withOptionalSourceFields(parsed, obj);
+  const gatedRaw = gatedUrlField(obj, raw);
+  if (gatedRaw.kind === "unknown") {
+    return gatedRaw;
+  }
+
+  // The gate above decides only whether `raw` is admissible; the value carried
+  // over is the manifest's own string, because the wire form is verbatim.
+  return withOptionalSourceFields({ ...identity, raw }, obj);
 }
 
 function gitSubdirObjectSource(obj: Record<string, unknown>): ParsedSource {
