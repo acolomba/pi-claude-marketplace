@@ -122,7 +122,7 @@ Plans:
      lines/functions/branches and an owner unit test for every module touched
      (`test:corresponding`).
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 
@@ -132,7 +132,7 @@ Plans:
   URL, with exactly-one-attempt and original-error-identity cases (MURL-08, MURL-09)
 
 **Wave 2** *(blocked on Wave 1 completion)*:
-- [ ] 02-02-PLAN.md — the three `clone-cache.ts` seam sites and their nine callers thread a required
+- [x] 02-02-PLAN.md — the three `clone-cache.ts` seam sites and their nine callers thread a required
   `networkUrl`; the direct seam suite asserts forwarding rather than appending (MURL-08, MURL-09)
 
 **Wave 3** *(blocked on Wave 2 completion)*:
@@ -221,5 +221,5 @@ Phase 3 because that is where it is finally measured, but nothing may be left re
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Private repos on any git host | 3/3 | In Progress | — |
-| 2. Endpoints that answer only at the verbatim URL | 1/3 | In Progress|  |
+| 2. Endpoints that answer only at the verbatim URL | 2/3 | In Progress|  |
 | 3. `marketplace add` recovers from its own leftover clone | 0/TBD | Not started | — |
