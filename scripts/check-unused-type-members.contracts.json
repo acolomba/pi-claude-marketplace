@@ -250,20 +250,20 @@
       "filter": "extensions/pi-claude-marketplace/domain/resolver-types.ts:53:13"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:35",
+      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:545:35",
       "owner": "addMarketplace.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:9"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:545:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:52",
+      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:545:52",
       "owner": "addMarketplace.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:9"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:545:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:701:38",
