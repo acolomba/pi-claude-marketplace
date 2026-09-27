@@ -530,6 +530,167 @@ test("MA-12: a leftover clone whose origin names the same source recovers", asyn
   });
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// MA-13: every non-matching listRemotes arm still refuses as stale clone, and
+// the leftover tree stays on disk. Recognition compares WHOLE strings
+// (D-3-01), so a near-miss origin refuses exactly like a foreign tree.
+// ───────────────────────────────────────────────────────────────────────────
+
+interface Ma13RefusalArm {
+  readonly title: string;
+  readonly listRemotesResult: ListRemotesResult;
+}
+
+const MA13_REFUSAL_ARMS: readonly Ma13RefusalArm[] = [
+  {
+    title: "origin names a different repository",
+    listRemotesResult: {
+      kind: "origin",
+      url: "https://github.com/anthropics/other-repo.git",
+    },
+  },
+  {
+    // The whole-string-equality guard: one extra trailing character defeats
+    // a prefix match.
+    title: "origin is the source identity plus one extra trailing character",
+    listRemotesResult: {
+      kind: "origin",
+      url: "https://github.com/anthropics/claude-plugins-officialx",
+    },
+  },
+  {
+    // D-3-01: the comparison is a byte comparison with no case folding.
+    title: "origin differs from the identity only by letter case",
+    listRemotesResult: {
+      kind: "origin",
+      url: "https://GitHub.com/anthropics/claude-plugins-official.git",
+    },
+  },
+  {
+    title: "origin is an ssh-form remote",
+    listRemotesResult: {
+      kind: "origin",
+      url: "git@github.com:anthropics/claude-plugins-official.git",
+    },
+  },
+  {
+    title: "origin is a garbage string",
+    listRemotesResult: { kind: "origin", url: "not a url" },
+  },
+  {
+    // canonicalCloneUrl is always a non-empty https:// string, so an empty
+    // origin can only fail to match.
+    title: "origin is the empty string",
+    listRemotesResult: { kind: "origin", url: "" },
+  },
+  {
+    title: "no remote is named origin",
+    listRemotesResult: { kind: "no-origin" },
+  },
+  {
+    // The arm exists so a permissions failure is never silently classified
+    // as a foreign tree.
+    title: "the destination could not be read",
+    listRemotesResult: { kind: "unreadable" },
+  },
+] as const;
+
+for (const { title, listRemotesResult } of MA13_REFUSAL_ARMS) {
+  test(`MA-13: ${title} still refuses as stale clone`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, pi, notifications } = makeCtx();
+      const finalDir = await locations.sourceCloneDir("valid-marketplace");
+      await mkdir(finalDir, { recursive: true });
+      await writeFile(path.join(finalDir, ".leftover-marker"), "x");
+
+      const { gitOps } = createGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+        listRemotesResult,
+      });
+
+      let threw = false;
+      // act
+      try {
+        await addMarketplace({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          rawSource: "anthropics/claude-plugins-official",
+          gitOps,
+        });
+      } catch {
+        threw = true;
+      }
+
+      // assert
+      assert.equal(
+        threw,
+        false,
+        "a near-miss or unreadable origin must classify through notify(), never throw",
+      );
+      const note = notifications[0];
+      assert.ok(note);
+      assert.equal(
+        note.message,
+        "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
+      );
+      assert.equal(note.severity, "error");
+      assert.equal(await pathExists(path.join(finalDir, ".leftover-marker")), true);
+    });
+  });
+}
+
+test("MA-8: a matching leftover still yields (failed) {duplicate name}, not {stale clone}", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, pi } = makeCtx();
+    const { gitOps: gitOps1 } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps: gitOps1,
+    });
+
+    const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
+    // The second add's leftover origin MATCHES the source -- recognition
+    // would accept it -- but MA-8's duplicate-name check (step 3) runs BEFORE
+    // recognition (step 4), so a matching leftover never overrides it.
+    const { gitOps: gitOps2 } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      listRemotesResult: {
+        kind: "origin",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
+    });
+    await addMarketplace({
+      ctx: ctx2,
+      pi: pi2,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps: gitOps2,
+    });
+
+    const note = n2[0];
+    // assert
+    assert.ok(note);
+    assert.equal(
+      note.message,
+      "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
+    );
+    assert.equal(note.severity, "error");
+  });
+});
+
 test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate name}", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
