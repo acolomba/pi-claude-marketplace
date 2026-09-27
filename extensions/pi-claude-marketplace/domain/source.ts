@@ -450,8 +450,7 @@ function stripUrlDecorations(input: string): { base: string; ref: string | undef
  * `domain/clone-key.ts::networkCloneUrl` calls this only for the `github`
  * arm, appending `.git` where Claude Code appends it -- a `github.com`
  * `owner/repo` path -- and nowhere else. A `url` source's wire form preserves
- * whatever suffix decision the user's own input made (D-2-01); Phase 3's
- * same-origin comparison normalizes both sides of a URL through this helper.
+ * whatever suffix decision the user's own input made (D-2-01).
  *
  * Accepted trade-off (D-2-02): a suffix-less URL against a host that serves
  * ONLY the `.git`-suffixed smart-HTTP path no longer resolves. Verbatim means
