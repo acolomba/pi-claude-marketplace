@@ -663,3 +663,304 @@ only `raw`. The five new reload rows next to it do compare whole values.
 _Fixed: 2026-09-27_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 3, residual closure_
+
+## Operator-decided behavior change: the url identity is now a fixed point (D-2-05)
+
+**Requested:** § "What this closure does not close" above named the remaining
+choice — byte-identity to `130d68a9` on both paths, or a round trip that is a
+fixed point — and stated that the two are mutually exclusive because `130d68a9`
+disagreed with itself on one input shape. The operator chose the **fixed point**,
+with the reasoning that a trailing slash sitting in front of a `#<ref>` fragment
+carries no meaning in a clone URL, so preserving pre-phase bytes there preserves
+a bug rather than a contract.
+
+**Commit:** `7c7df1df` — `fix(02): make the url cache identity a fixed point`
+**Files:** `extensions/pi-claude-marketplace/domain/source.ts`,
+`tests/domain/source.test.ts`, `tests/domain/clone-key.test.ts`
+**Branch:** `features/git-hosts`, base `8173d25a`, head `7c7df1df`. No branch was
+created, renamed, or switched; no git worktree was created (`git worktree list`
+shows the same eight entries as before the run: this checkout plus seven
+pre-existing siblings, none of them added by this pass). All
+three paths were staged explicitly; the three planning documents below are left
+uncommitted for the orchestrator.
+
+### Before / after identity
+
+Measured by importing the parser extracted from `130d68a9` alongside the
+working-tree parser and reading `canonicalCloneUrl` on both. `130d68a9`'s
+`source.ts` has no imports and its `clone-key.ts` imports only `createHash` and
+types, so the side-by-side is exact.
+
+| typed input | pre-phase first parse | pre-phase reload | agreed? | now (both paths) |
+|---|---|---|---|---|
+| `https://gitlab.com/o/r/#main` | `…/o/r/` | `…/o/r` | **no** | `…/o/r` |
+| `https://gitlab.com/o/r.git/#main` | `…/o/r.git/` | `…/o/r` | **no** | `…/o/r` |
+| `https://gitlab.com/o/r/#` | `…/o/r/` | `…/o/r` | **no** | `…/o/r` |
+| `https://gitlab.com/o/r///#main` | `…/o/r///` | `…/o/r` | **no** | `…/o/r` |
+| `https://gitlab.com/o/r#main` | `…/o/r` | `…/o/r` | yes | `…/o/r` |
+| `https://gitlab.com/o/r.git#main` | `…/o/r` | `…/o/r` | yes | `…/o/r` |
+| `https://gitlab.com/o/r.git` | `…/o/r` | `…/o/r` | yes | `…/o/r` |
+| `https://gitlab.com/o/r/` | `…/o/r` | `…/o/r` | yes | `…/o/r` |
+
+`…/o/r.git/#main` keeps the `.git`-stripped identity `…/o/r`, which is what
+pre-phase reload computed and what D-76-01 requires: `https://host/repo.git` and
+`https://host/repo` are one source. The wire form still sends `…/o/r.git` for
+that input (D-2-01).
+
+A persisted record still holding the old `…/o/r/` value converges: its next
+reload derives `…/o/r` and stays there. The accepted cost is one re-clone for
+that input class on first use after upgrade.
+
+### The structural decision: three compositions, not one
+
+`6cc37bd1` split the identity form apart from the wire form precisely because a
+shared helper let a wire-side fix move the cache identity — CR-01. The `url`
+identity now wants the wire form's ordering, so collapsing them would be the
+obvious move and would restore exactly that coupling. It was not done.
+
+`domain/source.ts` holds two leaf primitives (`stripTrailingSlashes`,
+`splitUrlFragment`) plus a new one-line `stripGitSuffix`, and three named
+compositions over them, each with one call site:
+
+| composition | order | `.git` | consumer |
+|---|---|---|---|
+| `stripSlashAndFragment` (exported) | split, then strip path slashes | kept | `networkCloneUrl` — the wire form |
+| `stripUrlDecorations` | split, then strip path slashes | stripped | `parseUrlSource` — the `url` identity |
+| `stripGitHubUrlDecorations` | strip whole input's slashes, then split | stripped | `parseGitHubUrl` — the github identity |
+
+The first two agree on ordering today and still share no composition. The
+negative control below demonstrates the decoupling is real rather than asserted:
+reverting the wire ordering alone fails three wire cases and **zero** identity
+cases, and reverting the identity ordering alone fails six identity cases and
+**zero** wire cases.
+
+The third composition is the one the brief did not anticipate. Giving the github
+arm the new ordering would flip `https://github.com/o/r/#main` from the
+`must be https://github.com/<owner>/<repo>[.git][#<ref>]` diagnostic to an
+accepted github source — CR-01's second consequence, a widening of the accepted
+parse surface, and out of scope for a relaxation the operator scoped to the
+`url` cache identity (gate 3, gate 4). So `parseGitHubUrl` keeps the pre-existing
+ordering under its own name, and both functions' docstrings state which ordering
+they compose and why, in the present tense. The old docstring's justification for
+the surviving slash is gone with the behavior it justified.
+
+### The eight gates
+
+**1. Fixed point over a table — proved.** A harness parses each typed string,
+serializes the result to the persisted `{kind, raw, url[, ref]}` shape, re-parses
+it, and compares `canonicalCloneUrl` on both. Over all 16 `url`-kind rows — `.git`
+and non-`.git`, with and without a slash before the fragment, with an empty
+fragment, with no fragment, multi-slash, sub-group path, and a non-default port:
+
+```
+FIXED_POINT_VIOLATIONS=0
+WIRE_ROUNDTRIP_VIOLATIONS=0
+```
+
+The same harness on the pre-commit tree reported `FIXED_POINT_VIOLATIONS=6`.
+
+**2. First parse and reload agree — proved.** Gate 1 is the general statement of
+it. The two shapes the brief named both land on `https://gitlab.com/o/r` on both
+paths; see the table above.
+
+**3. Identity unchanged from `130d68a9` for every other input — proved, with the
+moves enumerated.** Pre-phase and working-tree parsers run side by side over 31
+accepted string inputs (bare urls, trailing-slash-no-fragment, `.git`, plain
+`#ref`, slash-before-fragment, deep paths, a port, github urls, github browser
+`/tree/` URLs, `owner/repo` shorthands, `owner/repo@ref`, paths, rejected
+schemes) and 80 accepted object inputs (persisted `{kind, raw, url}` records in
+every slash / `.git` / fragment combination, each also with a `ref` and a 40-hex
+`sha`, the `{source:"url"}` manifest form, github and git-subdir kinds, npm,
+path, and the CR-02 attack strings in each of the two fields):
+
+```
+STRING  ACCEPTED_ROWS=31  ACCEPTED_IDENTITY_MOVES=6  ACCEPTED_NON_RAW_FIELD_MOVES=6  ACCEPT_REJECT_FLIPS=0
+OBJECT  ACCEPTED_ROWS=80  ACCEPTED_IDENTITY_MOVES=4  ACCEPTED_NON_RAW_FIELD_MOVES=4  ACCEPT_REJECT_FLIPS=14
+```
+
+All ten identity moves were listed individually and read. Every one is the
+sanctioned shape — a trailing slash immediately before a `#<ref>` fragment —
+and in every one the move is old-value → `…/o/r`:
+
+```
+"https://gitlab.com/o/r/#main"            …/o/r/            -> …/o/r
+"https://gitlab.com/o/r/#"                …/o/r/            -> …/o/r
+"https://gitlab.com/o/r.git/#main"        …/o/r.git/        -> …/o/r
+"https://gitlab.com/o/r///#main"          …/o/r///          -> …/o/r
+"https://gitlab.com/g/sub/o/r/#main"      …/g/sub/o/r/      -> …/g/sub/o/r
+"https://host.example:8443/o/r/#main"     …:8443/o/r/       -> …:8443/o/r
+{source:url  url=…/o/r/#main}             …/o/r/            -> …/o/r
+{kind:url    url=…/o/r/#main}             …/o/r/            -> …/o/r
+{source:url  url=…/o/r.git/#main}         …/o/r.git/        -> …/o/r
+{kind:url    url=…/o/r.git/#main}         …/o/r.git/        -> …/o/r
+```
+
+`ACCEPTED_NON_RAW_FIELD_MOVES` equals `ACCEPTED_IDENTITY_MOVES` on both halves:
+for every accepted input, every field of the parsed source except `raw` is
+byte-identical to pre-phase apart from the `url` on those same rows, so nothing
+else moved under cover of the change. `ACCEPT_REJECT_FLIPS=0` on the string path
+means no input changed between accepted and rejected — in particular the three
+github rejections CR-01 restored are still rejections. The 14 object-path flips
+are unchanged in count and identity from the pre-commit measurement: they are
+CR-02's deliberate rejects (an object-form `http://`, `ssh://`, `git@host:`,
+relative path, browser URL or `owner/repo` shorthand in either field, plus a
+`{kind:"url"}` whose `url` is a github browser URL).
+
+**4. `canonicalCloneUrl` unchanged for github and git-subdir — proved.** Covered
+by the gate-3 harness: `{kind:"github", raw:"o/r"}` bare, with a `ref`, and with
+a `sha`; `{source:"github", repo:"o/r"}`; `{source:"github", repo:"https://github.com/o/r/#main"}`;
+`{kind:"git-subdir"}` bare, with `…/mono/#main`, and with `…/mono.git/` plus a
+ref — all return the pre-phase identity and are byte-identical whole values.
+`domain/clone-key.ts` was not touched by this commit.
+
+**5. The wire form keeps every fix this phase landed — proved across the round
+trip.** `WIRE_ROUNDTRIP_VIOLATIONS=0` over the same 16 rows: `networkCloneUrl` is
+identical at the first parse and at the reload for every one. Every `.git` the
+typed input carried survives on the wire on both (`…/o/r.git#main` → `…/o/r.git`;
+`…/o/r.git/#main` → `…/o/r.git`), and trailing slashes and `#<ref>` come off in
+both orderings. A committed case pins the shape D-2-05 touches:
+`tests/domain/clone-key.test.ts`'s `"keeps a trailing .git suffix behind a path
+slash that precedes a #<ref> fragment"`, whose fixture is exactly the parsed
+source the new first parse produces for `…/mp.git/#v1.0`.
+
+**6. CR-02's scheme gate still rejects through both fields — proved.**
+`URL_OBJECT_GATE_CASES` is untouched and green: `http://`, `ssh://`, `git@host:`,
+a relative path, a `/tree/` browser URL and an `owner/repo` shorthand, each
+listed twice — once with the attack in `url`, once with it in `raw` behind a
+benign `url` — plus the github-object row that drops a hostile `raw`. The
+gate-3 harness re-derives the same verdict independently: all 14 object-form
+accept→reject flips are those rejections, and none of them regressed to accepted.
+
+**7. Test tables updated, with a fixed-point table and a negative control.**
+- `URL_IDENTITY_CASES`: the three sanctioned rows move to `https://gitlab.com/o/r`
+  and are retitled from "keeps a path slash …" to "strips a path slash …". The
+  other five rows, including both github rejections, are unchanged. The table
+  docstring now states which arm splits first and why.
+- `URL_RELOAD_IDENTITY_CASES`: expected values were already the new ones — the
+  reload path has computed `…/o/r` since `3546a28c`. The docstring is corrected to
+  say the three slash-carrying rows now reach the value the string table's
+  first-parse rows produce, rather than a value only the reload reaches.
+- `URL_FIXED_POINT_CASES` (new, 8 rows): each row writes its expected `UrlSource`
+  out **once** and asserts it twice — against the parse of the typed string and
+  against the re-parse of the persisted record built from that same literal. The
+  expected value is a literal, not a production result, and the comparison is
+  whole-value `deepStrictEqual`. Rows cover slash-before-fragment, no-slash
+  fragment, `.git` behind a slash, `.git` before a fragment, empty fragment,
+  `.git` with no fragment, trailing slash with no fragment, and a bare url.
+
+**Negative control, identity ordering.** Reverting `stripUrlDecorations` to
+`splitUrlFragment(stripTrailingSlashes(input))` and changing nothing else fails
+6 of 160 cases across the two domain test modules — the three identity rows and
+three of the eight fixed-point rows (the five that hold under either ordering are
+the rows with no slash before a fragment, which is the point):
+
+```
+✖ strips a path slash that precedes a #<ref> fragment from the url identity
+✖ strips a path slash that precedes an empty #fragment from the url identity
+✖ strips a .git suffix behind a path slash that precedes a #<ref> fragment
+✖ holds one identity for a path slash before a #<ref> fragment across a reload
+✖ holds one identity for a .git suffix behind a path slash across a reload
+✖ holds one identity for a path slash before an empty #fragment across a reload
+ℹ tests 160 · pass 154 · fail 6
+```
+
+Zero wire cases fail under that revert.
+
+**Negative control, wire ordering.** Reverting `stripSlashAndFragment` to the
+opposite composition fails 3 of 160 — the new clone-key case, the pre-existing
+git-subdir case, and the direct `stripSlashAndFragment` row — and **zero**
+identity or fixed-point cases:
+
+```
+✖ keeps a trailing .git suffix behind a path slash that precedes a #<ref> fragment
+✖ drops a trailing slash and a #<ref> fragment from a git-subdir url
+✖ trims a trailing slash that precedes the #<ref> fragment
+ℹ tests 160 · pass 157 · fail 3
+```
+
+That asymmetry is the evidence that the identity is pinned independently of the
+wire form, which is what CR-01 cost the phase once.
+
+Both controls were restored from a pre-control copy and confirmed byte-identical
+with `diff` before the commit.
+
+**8. `npm run check` — CHECK_EXIT=0.** Run to completion, exit code captured into
+a named shell variable and appended verbatim to the log, not read through a pipe
+and not inferred from a glyph. Two `✗` lines accompany that zero and are not
+failures: `✗ 0 above threshold · 15162 analyzed · maintainability 91.8 (good)`
+from `fallow health` and `✗ 1,327 lines (1.4%) duplicated across 52 files` from
+`fallow dupes`, both of which exit 0 under `--fail-on-issues`.
+
+```
+CHECK_EXIT=0
+```
+
+| Gate | Result |
+|---|---|
+| `typecheck` / `lint` / `lint:workflows` (+ negative) | pass |
+| `fallow` (dead-code, circular-deps, re-export-cycles, health, dupes) | `✓ No issues found` |
+| `format:check` | `All matched files use Prettier code style!` |
+| `test:corresponding` (+ negative), `test:coverage:direct:negative` | pass |
+| `test:coverage:unit` | `tests 7328 · pass 7328 · fail 0`, 100% lines/branches/functions |
+| `test:integration` | `tests 36 · pass 36 · fail 0` |
+| `lint:type-members` (+ negative) | `passed with 4 recorded exception(s)`, 108 contract entries |
+
+`npm run format` was run on the three changed files before `lint:type-members`.
+`scripts/check-unused-type-members.contracts.json` needed no remap: it still
+holds 108 entries with the same 4 recorded exceptions, and no pin names
+`domain/source.ts`, `domain/clone-key.ts`, or either test module (checked by
+parsing the file, then confirmed by the gate). `add.ts` was not touched, so
+`addMarketplace` stays at line 545.
+
+Per-pair direct coverage for the two domain modules:
+
+```
+source.ts     branches 188/188  functions 33/33  lines 728/728
+clone-key.ts  branches  10/10   functions  4/4   lines 105/105
+```
+
+**Where verification ran:** the main checkout of this worktree,
+`/home/acolomba/src/pi-claude-marketplace-pr-153`, which has `node_modules` and
+can therefore run the project's gates. No nested worktree was created — the
+brief forbids creating or switching a branch, and a hand-rolled worktree has no
+`node_modules` and could not have run gate 8. The numbers above are reproducible
+from the tree you are looking at.
+
+### Planning records written (uncommitted, for the orchestrator)
+
+- `02-CONTEXT.md` — new `### The url identity is a fixed point` section holding
+  **D-2-05**, alongside the locked D-2-01..D-2-04: the normalization, why
+  pre-phase self-contradiction made byte-identity and fixed-point mutually
+  exclusive, the accepted one-re-clone cost, the `url`-only scope, and the
+  three-composition structure with its reversibility note.
+- `02-01-PLAN.md` — the `canonicalCloneUrl` must_have is **amended, not
+  deleted**: it still asserts the same-string property and now names the one
+  sanctioned exception and cites D-2-05, so a verifier reads an accepted
+  amendment rather than a failed must-have.
+- `02-REVIEW-FIX.md` — this section, appended.
+
+### What is left open
+
+- **One re-clone for the affected input class.** A marketplace already added at
+  a url with a trailing slash immediately before a `#<ref>` fragment cold-misses
+  its `plugin-clones/<hash>` directory once on first use after upgrade and
+  re-clones under the new hash. The old directory is left on disk; no sweeper
+  removes it. This is the accepted cost recorded in D-2-05, and it is bounded —
+  the new identity is a fixed point, so it happens at most once.
+- **`https://github.com/o/r/#main` stays rejected** while
+  `https://gitlab.com/o/r/#main` is now accepted and normalized. The asymmetry
+  is deliberate (gate 3 / gate 4 scope the relaxation to the `url` kind) and is
+  pre-phase behavior for the github arm, but it is a diagnostic a user could hit
+  on github after learning the slash is harmless elsewhere. Reversing it is a
+  parse-surface widening and needs its own decision.
+- **The six deferred Info findings are still untouched**, including IN-06: the
+  `re-parsing an already-parsed URL source is idempotent on raw` case still
+  asserts only `raw`. The eight new fixed-point rows beside it do compare whole
+  values, so the behavior that case gestures at is now covered by a table that
+  discriminates; the case itself is unchanged.
+
+---
+
+_Fixed: 2026-09-27_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 3, operator-decided fixed-point change (D-2-05)_

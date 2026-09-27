@@ -106,6 +106,42 @@ excluded milestone-wide. `marketplace add` leftover-clone adoption (Phase 3). An
   stand as written. The planner reads ROADMAP success criteria as the spec, so this edit is a
   prerequisite, not a cleanup.
 
+### The url identity is a fixed point
+
+- **D-2-05: the `url` cache identity normalizes a trailing slash that sits immediately before a
+  `#<ref>` fragment, so the identity is a FIXED POINT.** `https://gitlab.com/o/r/#main` and
+  `https://gitlab.com/o/r.git/#main` both have the identity `https://gitlab.com/o/r`, on the first
+  parse of the typed string and on every later re-parse of the persisted `{kind, raw, url}` record.
+  A trailing slash sitting in front of a fragment carries no meaning in a clone URL, so the
+  slash-less form is the canonical one.
+
+  **Why this overrides the byte-identity gate two earlier passes held.** Pre-phase `130d68a9`
+  contradicted itself on exactly this input shape: the first parse computed `.../o/r/` while every
+  later reload computed `.../o/r`. So `add` stored one `plugin-clones/<hash>` and every subsequent
+  operation recomputed a different one — the clone directory was orphaned and re-cloned forever,
+  for any `url` source typed with a trailing slash immediately before a `#<ref>`. Preserving
+  pre-phase bytes on BOTH paths preserves that bug; the two properties are mutually exclusive.
+  Operator-decided 2026-09-27: buy the fix.
+
+  **Accepted cost.** One re-clone for that input class on first use after upgrade — the same cost
+  the byte-identity alternative carried, and it converges: a persisted record still holding the old
+  `.../o/r/` value normalizes to `.../o/r` on its next reload and stays there.
+
+  **Scope.** The normalization is the `url` kind only. A `github` source's identity is its
+  `owner`/`repo` pair, and `parseGitHubUrl` keeps stripping slashes BEFORE the fragment split, so
+  `https://github.com/o/r/#main` stays rejected with the canonical-form diagnostic rather than
+  widening the accepted parse surface. `git-subdir` takes its `url` verbatim from the manifest and
+  is untouched. D-2-01 / D-2-02 / D-2-03 / D-2-04 are unchanged: the WIRE form still derives from
+  `raw` and still carries whatever `.git` decision the user typed.
+
+  **Structure.** `domain/source.ts` keeps the wire composition (`stripSlashAndFragment`) and the two
+  identity compositions (`stripUrlDecorations` for `url`, `stripGitHubUrlDecorations` for `github`)
+  as separate named functions that share no composition, only the two leaf primitives. The `url`
+  identity and the wire form now agree on ordering; they are NOT collapsed into one helper, because
+  a shared helper is what let a wire-side correction move the cache identity once already.
+  — **Reversibility:** costly — reverting the ordering re-orphans the clone directory for that input
+  class and re-clones it a second time.
+
 ### Claude's discretion
 
 Naming beyond `networkCloneUrl`, the exact decoration-stripping helper shape in `domain/source.ts`
