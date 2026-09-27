@@ -25,8 +25,8 @@ never reached becomes the answer for every unregistered host. That change remove
 `undefined`-for-no-provider refusal, which today caps at two hosts the blast radius of a bundle
 whose bound host does not match the URL being cloned; the host check inside `onAuth` that replaces
 that cap lands in the same phase, never after it. Second, URL sources that answer
-only at the verbatim path resolve, with a retry narrow enough that it cannot mask a genuine
-failure. Third, `marketplace add` learns to tell its own leftover clone from a foreign directory
+only at the verbatim path resolve, because the extension stops appending a `.git` the user never
+typed — upstream parity, and narrower than any retry could be. Third, `marketplace add` learns to tell its own leftover clone from a foreign directory
 and recovers from the former without ever overwriting the latter.
 
 ## Phases
@@ -41,8 +41,8 @@ here. Decimal phases (1.1, 2.1) are urgent insertions only, marked `INSERTED`.
   not just the two in the provider registry, and the credential stays bound to the host it was
   resolved for (GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06)
 - [ ] **Phase 2: Endpoints that answer only at the verbatim URL** — a smart-HTTP server that 404s
-  the `.git`-suffixed path still clones and still resolves refs, with a retry narrow enough that a
-  genuine failure keeps its own identity (MURL-08, MURL-09)
+  the `.git`-suffixed path still clones and still resolves refs, because the URL sent is the one the
+  user typed and exactly one attempt is ever made (MURL-08, MURL-09)
 - [ ] **Phase 3: `marketplace add` recovers from its own leftover clone** — a retry after the WR-07
   crash window succeeds instead of demanding a manual delete, while a foreign tree is still refused
   (MA-12, MA-13, MA-14, GATE-01)
@@ -99,24 +99,26 @@ Plans:
 
 **Goal**: A Pi user can add a `url` marketplace source whose smart-HTTP endpoint serves at the URL they typed and returns 404 for the conventional `.git`-suffixed form, and a repository that is genuinely missing or genuinely forbidden still fails as itself.
 
-**Depends on**: Phase 1 — both phases change the `clone` / `resolveRemoteRef` path in `platform/git.ts`, and the verbatim-URL attempt must carry the same auth bundle Phase 1 makes universal, or the retry would reach a private endpoint unauthenticated.
+**Depends on**: Phase 1 — both phases change what reaches `clone` / `resolveRemoteRef` in `platform/git.ts`, and the `scripts/check-unused-type-members.contracts.json` pins are line:col, so one edit at a time keeps them from drifting.
 
 **Requirements**: MURL-08, MURL-09
 
 **Success Criteria** (what must be TRUE):
 
   1. A user can `marketplace add <url>` against a server that answers only at the verbatim path;
-     both the initial clone and the later `resolveRemoteRef` (used by `marketplace update`)
-     resolve, even though callers pass the URL through `domain/source.ts::ensureGitSuffix` first.
+     both the initial clone and the later `resolveRemoteRef` resolve, because the URL sent is the
+     one the user typed rather than the `domain/source.ts::ensureGitSuffix` form.
   2. A repository that is absent, private-without-credentials, or otherwise failing keeps its
-     original error identity and message — the fallback never rewrites a 401/403/5xx into a
-     not-found or a generic failure.
-  3. The second attempt fires only on the status that means "wrong path", at most once; any other
-     status produces zero extra network calls, verified by a call-count assertion rather than by
-     end-state alone.
-  4. A failed first attempt leaves the caller's destination exactly as the caller left it — the
-     fallback deletes no directory it does not own.
-  5. `npm run check` is green, with both retry arms and the no-retry arms at 100%
+     original error identity and message — nothing rewrites a 401/403/5xx into a not-found or a
+     generic failure.
+  3. Exactly ONE network attempt is made per operation, on both the success and the failure path,
+     verified by a call-count assertion rather than by end-state alone. There is no second attempt
+     and no status-gated retry (D-2-01); the count is the regression guard that would catch one
+     being reintroduced.
+  4. `.git` is appended only where Claude Code appends it — a `github.com` `owner/repo` path — and a
+     `url` source's wire URL preserves the suffix decision the user's own input made, while
+     `canonicalCloneUrl` stays the unchanged cache identity so no warm clone cold-misses.
+  5. `npm run check` is green, with every arm of the new derivation at 100%
      lines/functions/branches and an owner unit test for every module touched
      (`test:corresponding`).
 

@@ -55,9 +55,11 @@ helper is therefore invisible to this extension on every other host.
 - [ ] **MURL-08**: A user can add a `url` marketplace source whose smart-HTTP endpoint serves at the
   verbatim URL and returns 404 for the conventional `.git`-suffixed form. Both `clone` and
   `resolveRemoteRef` resolve it.
-- [ ] **MURL-09**: A repository that is genuinely absent, private-without-credentials, or otherwise
-  failing keeps its original error identity — the fallback never masks a real failure, never
-  retries on a status that does not mean "wrong path", and never deletes a directory the caller owns.
+- [ ] **MURL-09**: The URL sent to a remote is exactly the one the user typed, modulo trailing-slash
+  and `#<ref>` decoration stripping, and exactly ONE network attempt is made per operation. A
+  repository that is genuinely absent, private-without-credentials, or otherwise failing therefore
+  keeps its original error identity — there is no second attempt to mask it with. `.git` is appended
+  only where Claude Code appends it: a `github.com` `owner/repo` path.
 
 ### Marketplace Add Recovery
 
