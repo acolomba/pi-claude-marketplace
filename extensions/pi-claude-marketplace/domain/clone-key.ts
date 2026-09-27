@@ -16,6 +16,7 @@
 import { createHash } from "node:crypto";
 
 import { ensureGitSuffix, stripSlashAndFragment } from "./source.ts";
+
 import type { GitHubSource, GitSubdirSource, UrlSource } from "./source.ts";
 
 /**

@@ -149,6 +149,9 @@ const ALLOWED_MARKETPLACE_REMOTES = [
   "https://gitlab.example.com/team/gone-mp",
   "https://GitHub.com/acme/mp",
   "https://gitlab.com/team/mp",
+  // D-2-02: stands in for a host that serves ONLY its `.git`-suffixed path --
+  // admitted here suffixed so a verbatim (non-github) request is refused.
+  "https://gitlab.example.com/team/git-only-mp.git",
 ] as const;
 
 function createGitOps(initial: GitOpsAdapterOptions = {}) {
@@ -2890,5 +2893,110 @@ test("GAUTH-02 / MURL-08: a gitlab.com url add clones the URL as typed WITH the 
     // registry claims for the GitLab provider.
     assert.ok(cloneCall.auth, "gitlab.com must attach the GitLab provider's auth bundle");
     assert.equal(cloneCall.auth.host, "gitlab.com");
+  });
+});
+
+// D-2-04: MURL-09 is re-aimed at the assertion that survives without a second
+// attempt -- the URL sent is the URL typed modulo decoration stripping, and
+// exactly one network attempt is made per operation. `rethrowPreconditionErrors`
+// lets the original clone error reach this test, so its identity through the
+// add seam is provable alongside the attempt count.
+test("MURL-09: a 404 clone failure makes exactly one attempt and keeps its original identity", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, pi } = makeCtx();
+    const cloneThrows = httpError(404);
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act & assert
+    await assert.rejects(
+      addMarketplace({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        rawSource: "https://gitlab.example.com/team/missing-mp",
+        gitOps,
+        rethrowPreconditionErrors: true,
+      }),
+      (err: unknown) => err === cloneThrows,
+    );
+    assert.equal(cloneThrows.message, "HTTP Error: 404");
+    assert.equal((cloneThrows as { code?: string }).code, "HttpError");
+    assert.deepStrictEqual((cloneThrows as { data?: { statusCode: number } }).data, {
+      statusCode: 404,
+    });
+    assert.equal(state.cloneCalls.length, 1);
+    assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/team/missing-mp");
+  });
+});
+
+test("MURL-09: a 401 clone failure makes exactly one attempt and keeps its original identity", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, pi } = makeCtx();
+    const cloneThrows = httpError(401);
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act & assert
+    await assert.rejects(
+      addMarketplace({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        rawSource: "https://gitlab.example.com/team/private-mp",
+        gitOps,
+        rethrowPreconditionErrors: true,
+      }),
+      (err: unknown) => err === cloneThrows,
+    );
+    assert.equal(cloneThrows.message, "HTTP Error: 401");
+    assert.equal((cloneThrows as { code?: string }).code, "HttpError");
+    assert.deepStrictEqual((cloneThrows as { data?: { statusCode: number } }).data, {
+      statusCode: 401,
+    });
+    assert.equal(state.cloneCalls.length, 1);
+    assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/team/private-mp");
+  });
+});
+
+// D-2-02: accepted regression -- a host that serves ONLY its `.git`-suffixed
+// path 404s a verbatim request under D-2-01. The fake stands in for that host
+// by admitting only the suffixed remote; the surfaced failure must name the
+// URL that was actually sent so the remedy is visible without a fallback.
+test("MURL-09 / D-2-02: an add against a suffix-only port fails naming the verbatim URL that was sent", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, pi } = makeCtx();
+    const { gitOps, state } = createGitOps();
+
+    // act & assert
+    await assert.rejects(
+      addMarketplace({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        rawSource: "https://gitlab.example.com/team/git-only-mp",
+        gitOps,
+      }),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.equal(
+          err.message,
+          "createGitOpsFake blocked unplanned remote https://gitlab.example.com/team/git-only-mp",
+        );
+        return true;
+      },
+    );
+    assert.equal(state.cloneCalls.length, 1);
+    assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/team/git-only-mp");
   });
 });
