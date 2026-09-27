@@ -92,7 +92,11 @@ is verification of Phase 1, then `/gsd-plan-phase 2` with `--skip-ui`.
 
 | Phase | State | Resume |
 |-------|-------|--------|
-| 01 | verification_deferred_human | /gsd-verify-work 01 |
+| 1 | verification_deferred_human | /gsd-verify-work 1 |
+
+The phase number above is `1`, matching the `number` field `init.manager` emits — that is the
+projection `discover_phases` filters against. The phase directory is `01-private-repos-on-any-git-host`;
+the zero-padded form is a directory-naming convention, not the queue key.
 
 Phase 1's only outstanding verification item is the live canary: one end-to-end clone of a real
 private repo on a non-registry host, which needs operator credentials this machine does not have.
