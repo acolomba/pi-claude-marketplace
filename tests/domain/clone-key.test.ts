@@ -276,6 +276,22 @@ describe("networkCloneUrl", () => {
     assert.strictEqual(cloneUrl, "https://example.com/mono.git");
   });
 
+  test("drops a trailing slash and a #<ref> fragment from a git-subdir url", () => {
+    // arrange
+    const source = {
+      kind: "git-subdir",
+      raw: "https://example.com/mono/",
+      url: "https://example.com/mono/",
+      path: "plugins/p",
+    } as const;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://example.com/mono");
+  });
+
   test("returns the identical string for two consecutive calls with the same source", () => {
     // arrange
     const source = {

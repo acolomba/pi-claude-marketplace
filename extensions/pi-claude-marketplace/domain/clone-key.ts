@@ -100,6 +100,6 @@ export function networkCloneUrl(source: UrlSource | GitSubdirSource | GitHubSour
     case "url":
       return stripSlashAndFragment(source.raw).base;
     case "git-subdir":
-      return source.url;
+      return stripSlashAndFragment(source.url).base;
   }
 }
