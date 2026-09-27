@@ -1,13 +1,12 @@
 ---
 gsd_state_version: "1.0"
-milestone: workflows-replay
+milestone: none
 status: "between milestones; workflows-replay archived; npm 0.19.2 released"
 stopped_at: workflows workstream archived and GSD config pinned to the quality profile
-last_updated: "2026-09-27T00:00:00Z"
+last_updated: "2026-09-27T23:42:24Z"
 last_activity: 2026-09-27
 last_activity_desc: archived the workflows workstream; reconciled root planning records
-state_head: 0b0d7737bd89e08646d7903d0471aab23c4e07d8
-milestone_name: Workflow Bridge Replay onto main
+state_head: 7c1c1d3bd14b838b000c4bb9bd9bdfc4091a1295
 progress:
   total_phases: 9
   completed_phases: 9
@@ -97,6 +96,10 @@ acknowledged, 17 carried forward, and the phase-25 table conversion.
   undeclared phase as soon as N leaves ROADMAP.md. The directory form says the
   same thing, more precisely, and the check stays quiet. Do not re-add a phase
   checklist to ROADMAP.md to silence it — that trades each W002 for a W006.
+- **Do not zero the `progress:` block between milestones.** The 9/9 phases and
+  39/39 plans are workflows-replay's, not root scope's, but 0 routes worse:
+  `smart-entry` tests `total_phases <= 0` first and recommends
+  `/gsd-discuss-phase` for a phase that does not exist. Measured both ways.
 
 ## Known Risk Worth Revisiting
 

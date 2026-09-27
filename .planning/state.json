@@ -1,12 +1,11 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "workflows-replay",
   "phases": [],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "100% · executing"
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-09-27T21:46:29.134Z"
+  "updated_at": "2026-09-27T23:42:24.000Z"
 }
