@@ -15,7 +15,8 @@
     "ui_safety_gate": false,
     "ui_review": false,
     "test_command": "npm run check",
-    "use_worktrees": true
+    "use_worktrees": true,
+    "research_before_questions": true
   },
   "code_quality": {
     "fallow": {
