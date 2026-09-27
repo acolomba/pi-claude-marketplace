@@ -5986,6 +5986,7 @@ test("FORCE-05: force cannot bypass a missing marketplace", async () => {
 const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 const INSTALL_REMOTE_URLS = [
   "https://example.com/org/repo",
+  "https://example.com/org/repo.git",
   "https://example.com/org/mono",
   "https://github.com/org/repo.git",
   "https://github.com/org/private.git",
@@ -6174,12 +6175,15 @@ test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-url-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      // The manifest's .git suffix survives onto the wire URL (source.raw)
+      // while the parse-time identity (source.url) drops it, so this fixture
+      // also discriminates networkCloneUrl from canonicalCloneUrl.
       await seedGitSourceMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "gp",
-        source: { source: "url", url: "https://example.com/org/repo", sha: GIT_SOURCE_SHA },
+        source: { source: "url", url: "https://example.com/org/repo.git", sha: GIT_SOURCE_SHA },
         fixtureRepoDir,
       });
 
@@ -6208,6 +6212,11 @@ test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex
       );
       // One clone (cold cache) and one checkout at the pin.
       assert.equal(gitState.cloneCalls.length, 1, "one clone on cold cache");
+      assert.equal(
+        gitState.cloneCalls[0]?.url,
+        "https://example.com/org/repo.git",
+        "the wire url preserves the manifest's .git decision (source.raw)",
+      );
       assert.equal(gitState.checkoutCalls.length, 1, "one checkout at the pin");
       assert.equal(gitState.checkoutCalls[0]?.ref, GIT_SOURCE_SHA, "checkout pins the sha");
       // The clone materialized under plugin-clones/<key>/.

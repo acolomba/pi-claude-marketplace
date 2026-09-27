@@ -177,9 +177,10 @@ test("falls back from an absent unpinned mirror to the recorded sha", async (tes
   // arrange
   const { locations, root } = await freshLocations(testContext);
   const cloneUrl = "https://example.com/cold-mirror";
+  const rawUrl = "https://example.com/cold-mirror.git";
   const cloneRoot = path.join(root, "recorded-clone");
   await mkdir(cloneRoot, { recursive: true });
-  const source: GitBackedSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+  const source: GitBackedSource = { kind: "url", raw: rawUrl, url: cloneUrl };
   const calls: unknown[] = [];
   const pluginAuth = auth();
   const seam: ReinstallCloneCacheSeam = {
@@ -213,7 +214,7 @@ test("falls back from an absent unpinned mirror to the recorded sha", async (tes
     {
       auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
       cloneUrl,
-      networkUrl: cloneUrl,
+      networkUrl: rawUrl,
       locations,
       pin: SHA,
     },
