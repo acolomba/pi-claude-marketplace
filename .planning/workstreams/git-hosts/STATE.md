@@ -4,19 +4,19 @@ milestone: any-git-host
 milestone_name: Any Git Host
 current_phase: 3
 current_phase_name: "`marketplace add` recovers from its own leftover clone"
-current_plan: 0
+current_plan: 1
 total_plans_in_phase: 3
-status: Phase 3 planned (3 plans, 3 waves) — ready to execute
-stopped_at: "Phase 3 planned: 3 plans across 3 sequential waves, plan-checker clean; planning found three GitOps enumeration sites beyond the two the validation strategy listed (d0fd22ac)"
-last_updated: "2026-09-27T13:20:00.000Z"
+status: "Phase 3 plan 01 executed (2/3 plans remaining) — GitOps.listRemotes + recognize-remove-rename guard landed"
+stopped_at: "Phase 3 plan 01 executed: GitOps gains listRemotes (8th primitive, never throws); addGitClonedInGuard step 4 recognizes and removes a same-origin leftover clone before the atomic rename (MA-12, MA-13); recognizeLeftover extracted to hold fallow's cognitive-complexity gate (49898651)"
+last_updated: "2026-09-27T13:52:00.000Z"
 last_activity: 2026-09-27
-last_activity_desc: "Planned Phase 3; plan-checker passed with zero issues, requirements 4/4 and decisions 4/4 covered"
-state_head: d0fd22ac
+last_activity_desc: "Executed 03-01-PLAN.md: listRemotes seam + recognize-remove-rename leftover-clone recovery, both tasks green"
+state_head: 49898651
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 9
-  completed_plans: 6
+  completed_plans: 7
   percent: 100
 ---
 
@@ -37,9 +37,39 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 3 — `marketplace add` recovers from its own leftover clone (planned, ready to execute)
-Current Plan: 0
+Phase: 3 — `marketplace add` recovers from its own leftover clone (plan 01 of 3 executed)
+Current Plan: 1
 Total Plans in Phase: 3
+
+**Phase 3 Plan 01 (wave 1) is executed.** `platform/git.ts::listRemotes({ dir })` is the 8th `GitOps`
+primitive and the only one that never throws: it reads `<dir>/.git/config` itself BEFORE calling
+`git.listRemotes`, because isomorphic-git 1.42.2 resolves a missing `.git`, an unreadable
+`.git/config`, and a real zero-remote repo identically to `[]`. It returns a four-arm discriminated
+value (`origin` / `no-origin` / `not-a-repo` / `unreadable`), proven against real directories on disk
+including a `chmod 0o000` unreadable config. `addGitClonedInGuard` step 4 is now recognize-remove-
+rename: a leftover whose `origin` matches `canonicalCloneUrl(source)` (via the newly-exported
+`stripGitSuffix`) is removed so the existing atomic rename can proceed (D-3-01, D-3-02); every other
+arm still throws `StaleSourceCloneError` exactly as before (MA-13 unchanged), and a leftover whose
+removal leaks also throws rather than renaming over a partial tree (MA-14). The leftover-removal leak
+folds into the single existing `appendLeakToError` call via a new `joinLeaks` helper — the call count
+stayed at 4, preserving `unwrapAddError`'s one-level unwrap contract.
+
+The plan's inline switch pushed `addGitClonedInGuard`'s cognitive complexity to 18 against fallow's
+threshold of 15; extracted into a `recognizeLeftover()` helper (Rule 1 deviation) that keeps the same
+exhaustive four-arm switch with no `default`. A sixth hand-enumerated `GitOps` literal neither
+03-CONTEXT.md nor 03-VALIDATION.md predicted — `tests/orchestrators/marketplace/update.test.ts::
+makeForbiddenGitOps` — needed the same one-line stub as its five predicted siblings. Two
+`check-unused-type-members.contracts.json` pins at `add.ts:545` shifted to `add.ts:565` (the new
+helper functions land above them); remapped in place, entry count unchanged at 108. GATE-01's
+unused-type-member gate additionally flagged `GitOps.listRemotes.opts.dir` as unread until the test
+fake's `listRemotes` accepted (and read, via `void`) its `dir` parameter instead of dropping it.
+
+**Measured, not predicted: the exact `add.ts` branches still uncovered at this plan's boundary** (for
+plan 02): `joinLeaks()`'s both-defined and b-undefined join arms; `recognizeLeftover()`'s
+origin-but-mismatched throw; `addGitClonedInGuard()`'s MA-14 leftover-removal-leaked throw. The
+no-origin/not-a-repo/unreadable refusal arms are ALREADY covered by the pre-existing MA-6/WR-07
+tests. `npm run check` stays red at this plan's boundary by design (`test:coverage:unit` does not
+reach 100%); this is a phase-boundary obligation, not a plan-boundary one, per the Phase 2 precedent.
 
 **Phase 3 is discussed; four decisions are locked.** Recognition compares the leftover's `origin`
 against `canonicalCloneUrl(source)` — the identity, not the wire form, because identity is
@@ -380,6 +410,17 @@ Phase 3  [          ]  planned (0/3 plans executed)
   allowlists all resolve through an `owner/repo` shorthand string**
   (`anthropics/claude-plugins-official`, `acme/remote`, `acme/proj`, `acme/user`), which always
   parses to `github` kind regardless of context — confirmed green with no edit, not assumed.
+- **Phase 3 Plan 01: `recognizeLeftover()` extracted from `addGitClonedInGuard` to hold fallow's
+  cognitive-complexity gate (Rule 1 deviation, not in the plan text).** The inline switch pushed
+  complexity to 18 against the 15 threshold; the helper keeps the exhaustive four-arm switch (no
+  `default`) so `switch-exhaustiveness-check` still catches a future fifth `ListRemotesResult` arm.
+- **Phase 3 Plan 01: the leftover-removal leak and the staging-cleanup leak join into ONE string
+  via a new `joinLeaks()` helper** before the single pre-existing `appendLeakToError` call, so
+  `unwrapAddError`'s one-level `Error.cause` unwrap contract stays intact (MA-14). No second
+  `appendLeakToError` call was added; the count stayed at 4.
+- **Phase 3 Plan 01: `tests/orchestrators/marketplace/update.test.ts::makeForbiddenGitOps`
+  is a sixth hand-enumerated `GitOps` literal 03-CONTEXT.md/03-VALIDATION.md did not predict** —
+  found via `npx tsc --noEmit`, fixed with the same rejecting-stub pattern as its five siblings.
 
 ### Source-review facts carried into planning
 
@@ -421,11 +462,11 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-09-27T04:47:08.000Z
+**Last session:** 2026-09-27T13:52:00.000Z
 
-**Stopped At:** Phase 2 Plan 03 executed — residual suite audit closed, assumption A1 discharged, `npm run check` exits 0 (`3f416a46`, `78fe180c`, `d06b6325`).
-**Resume File:** None — Phase 2 is fully executed.
-**Next Action:** `/gsd-verify-work 2` to verify Phase 2, then `/gsd-plan-phase 3` for `marketplace add` recovers from its own leftover clone. Phase 1's `human_needed` canary stays open for the operator and blocks milestone close, not Phase 3.
+**Stopped At:** Phase 3 Plan 01 executed — `GitOps.listRemotes` (8th primitive, never throws) and the recognize-remove-rename leftover-clone guard land; `npm run fallow`, `npx tsc --noEmit`, `npm run lint`, `npm run lint:type-members`, `npm run format:check`, and both tasks' `node --test` suites all exit 0 (`5b075fe0`, `49898651`). Whole-suite `npm run test:coverage:unit` stays red by design (declared mid-plan red); plan 02 closes it.
+**Resume File:** None — Plan 01 is fully executed and committed.
+**Next Action:** `/gsd-plan-phase 3` (already planned) → execute `03-02-PLAN.md` next: refusal-arm and leak proofs for `add.test.ts`. Phase 1's and Phase 2's `human_needed` live canaries stay open for the operator and block milestone close, not Phase 3.
 
 ## Performance Metrics
 
@@ -436,3 +477,4 @@ None.
 | Phase 02 P01 | 95min | 3 tasks | 8 files |
 | Phase 02 P02 | 165min | 3 tasks | 10 files |
 | Phase 02 P03 | 51min | 3 tasks | 6 files |
+| Phase 03 P01 | 55min | 2 tasks | 15 files |

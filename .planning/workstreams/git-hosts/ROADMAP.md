@@ -240,4 +240,4 @@ Phase 3 because that is where it is finally measured, but nothing may be left re
 |-------|----------------|--------|-----------|
 | 1. Private repos on any git host | 3/3 | In Progress | — |
 | 2. Endpoints that answer only at the verbatim URL | 3/3 | In Progress | — |
-| 3. `marketplace add` recovers from its own leftover clone | 0/3 | Planned | — |
+| 3. `marketplace add` recovers from its own leftover clone | 1/3 | In Progress | — |
