@@ -248,6 +248,15 @@ const PARSE_CASES: readonly ParseCase[] = [
     },
   },
   {
+    name: "re-parses a stored URL source from its raw field, preserving the .git decision",
+    raw: { kind: "url", raw: "https://example.com/p.git", url: "https://example.com/p" },
+    source: {
+      kind: "url",
+      raw: "https://example.com/p.git",
+      url: "https://example.com/p",
+    },
+  },
+  {
     name: "parses a stored Git subdirectory source",
     raw: {
       kind: "git-subdir",
@@ -642,6 +651,17 @@ describe("parsePluginSource", () => {
       assert.deepStrictEqual(parsedSource, expectedSource);
     });
   }
+
+  test("re-parsing an already-parsed URL source is idempotent on raw", () => {
+    // arrange
+    const expectedRaw = "https://example.com/p.git";
+
+    // act
+    const reparsedSource = parsePluginSource(parsePluginSource(expectedRaw));
+
+    // assert
+    assert.strictEqual(reparsedSource.raw, expectedRaw);
+  });
 });
 
 describe("pathSource", () => {

@@ -168,7 +168,10 @@ function unknownObjectSource(obj: Record<string, unknown>, reason: string): Unkn
 }
 
 function urlObjectSource(obj: Record<string, unknown>): ParsedSource {
-  const url = optionalString(obj, "url");
+  // D-2-01: prefer the stored `raw` when present so re-parsing a persisted
+  // `kind: "url"` source is idempotent -- `raw` still carries a `.git`
+  // decision that `url` (the parse-time-stripped identity) has already lost.
+  const url = optionalString(obj, "raw") ?? optionalString(obj, "url");
   if (url === undefined) {
     return unknownObjectSource(obj, "url source is missing url");
   }
