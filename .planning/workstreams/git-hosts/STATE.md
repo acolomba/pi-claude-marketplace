@@ -6,9 +6,9 @@ current_phase: 3
 current_phase_name: "`marketplace add` recovers from its own leftover clone"
 current_plan: 1
 total_plans_in_phase: 3
-status: "Phase 3 plan 01 executed (2/3 plans remaining) — GitOps.listRemotes + recognize-remove-rename guard landed"
+status: "Phase 3 wave 1 of 3 executed — PAUSED at the wave boundary (orchestrator context limit), waves 2 and 3 not run"
 stopped_at: "Phase 3 plan 01 executed: GitOps gains listRemotes (8th primitive, never throws); addGitClonedInGuard step 4 recognizes and removes a same-origin leftover clone before the atomic rename (MA-12, MA-13); recognizeLeftover extracted to hold fallow's cognitive-complexity gate (49898651)"
-last_updated: "2026-09-27T13:52:00.000Z"
+last_updated: "2026-09-27T14:30:00.000Z"
 last_activity: 2026-09-27
 last_activity_desc: "Executed 03-01-PLAN.md: listRemotes seam + recognize-remove-rename leftover-clone recovery, both tasks green"
 state_head: 49898651
@@ -462,11 +462,57 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-09-27T13:52:00.000Z
+**Last session:** 2026-09-27 (autonomous run, `/gsd-autonomous --from 2 --interactive`)
 
-**Stopped At:** Phase 3 Plan 01 executed — `GitOps.listRemotes` (8th primitive, never throws) and the recognize-remove-rename leftover-clone guard land; `npm run fallow`, `npx tsc --noEmit`, `npm run lint`, `npm run lint:type-members`, `npm run format:check`, and both tasks' `node --test` suites all exit 0 (`5b075fe0`, `49898651`). Whole-suite `npm run test:coverage:unit` stays red by design (declared mid-plan red); plan 02 closes it.
-**Resume File:** None — Plan 01 is fully executed and committed.
-**Next Action:** `/gsd-plan-phase 3` (already planned) → execute `03-02-PLAN.md` next: refusal-arm and leak proofs for `add.test.ts`. Phase 1's and Phase 2's `human_needed` live canaries stay open for the operator and block milestone close, not Phase 3.
+**Stopped At:** Phase 3 wave 1 of 3 complete and spot-check verified (`1a9320ca`). Paused at the
+wave-1/wave-2 boundary because the orchestrator's context window was 66% consumed — a clean boundary
+chosen deliberately over running out mid-wave.
+
+**Resume File:** `.planning/workstreams/git-hosts/phases/03-marketplace-add-recovers-from-its-own-leftover-clone/03-02-PLAN.md`
+
+**Next Action:** `/clear`, then `/gsd-execute-phase 3`. It resumes at wave 2 on its own —
+`phase-plan-index` reports `03-01` with a SUMMARY and `03-02` as the only ready plan, so no flag is
+needed.
+
+### What this run completed
+
+- **Phase 2: verified 9/9, live canary deferred.** Three plans executed, then a 3-iteration code
+  review loop. Iteration 1 fixed 8 findings and introduced a regression — it moved the parse-time
+  cache identity. Iteration 2 caught it. Iteration 3 restructured the `domain/source.ts` seam into
+  separately-named compositions with no call edge between them, so a wire-side fix can no longer
+  reach the identity. Two operator decisions followed: D-2-05 (the `url` identity is a fixed point,
+  chosen over byte-parity because pre-phase contradicted itself and orphaned the clone directory),
+  and deferral of the live smart-HTTP canary.
+- **Phase 3: discussed, planned, wave 1 of 3 executed.** D-3-01..D-3-04 locked; 3 plans, 3 waves;
+  plan-checker passed with zero issues.
+
+### Steps SKIPPED — read before assuming this phase is closable
+
+- **Phase 3 waves 2 and 3 have NOT run.** Wave 2 (`03-02`, test-only, one file) closes the
+  100%-branch gate wave 1 deliberately left open. Wave 3 (`03-03`, 9 files) carries the three
+  milestone-closing obligations: SC5 (FIX the autoupdate cascade, per D-3-04), SC6 (carry both live
+  canaries forward), SC7 (amend `PROJECT.md`'s D-79-03 rationale, which Phase 1 made false).
+- **Phase 3 has had no code review and no verification.** Phase 2's review found 2 Criticals on its
+  first pass and 2 more after the fix; do not skip this.
+- **`npm run check` is NOT green at Phase 3's current HEAD, by design.** Wave 1 declared the red and
+  MEASURED the uncovered `add.ts` branches for wave 2: `joinLeaks()`'s both-defined and b-undefined
+  join arms, `recognizeLeftover()`'s origin-present-but-mismatched throw, and
+  `addGitClonedInGuard()`'s MA-14 leftover-removal-leaked throw. Re-derive those line numbers from
+  the current tree — wave 1 already shifted lines in this file once, moving two contracts.json pins.
+- **MA-12/MA-13/MA-14 remain `Pending` in REQUIREMENTS.md**, correctly: both `03-01` and `03-02`
+  declare them, so the shared-ID gate holds them until wave 2's SUMMARY exists.
+
+### Environment debts
+
+- **The isolation sentinel is consumed per dispatch.** `dispatch-isolation --force-isolation none`
+  must be re-run immediately before EVERY executor dispatch. Wave 1 succeeded; wave 2's dispatch was
+  then refused by the agent-isolation guard because the sentinel had reset. Never verify it with a
+  bare call.
+- Both live canaries (Phase 1's private-repo clone, Phase 2's verbatim-only smart-HTTP endpoint) stay
+  deferred and block MILESTONE CLOSE only, not Phase 3. Neither is closable on this machine.
+- Phase 2's six Info code-review findings (IN-01..IN-06) remain open by scope decision — see
+  `02-REVIEW-DISPOSITION.md`, which is the reconciled record; `02-REVIEW.md`'s own
+  `status: issues_found` is stale for the Critical/Warning set.
 
 ## Performance Metrics
 
