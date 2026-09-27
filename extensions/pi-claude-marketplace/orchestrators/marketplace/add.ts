@@ -50,7 +50,7 @@ import { mkdir, rename, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { networkCloneUrl } from "../../domain/clone-key.ts";
+import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
@@ -774,7 +774,6 @@ async function addGithubInGuard(args: {
 }): Promise<string> {
   const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd, removalOps } =
     args;
-  const cloneUrl = `https://github.com/${source.owner}/${source.repo}.git`;
 
   // AUTH-01 / D-79-05: buildAuthForHost binds the GitHub provider's Device
   // Flow as the onAuthRequired closure for this clone.
@@ -783,7 +782,7 @@ async function addGithubInGuard(args: {
   // AUTH-09: the closure interpolates ONLY user_code + verification_uri
   // (via initiateDeviceFlow's notifyFn) -- the access token is acquired
   // LATER in the poll loop and is never passed back to a notify or Error.
-  const host = hostFromCloneUrl(cloneUrl, "github");
+  const host = hostFromCloneUrl(canonicalCloneUrl(source), "github");
   const auth = buildAuthForHost({
     host,
     credentialOps,
