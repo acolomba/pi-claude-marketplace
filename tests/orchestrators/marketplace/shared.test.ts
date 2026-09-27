@@ -140,6 +140,9 @@ function createGitOps(scenario: GitScenario): {
     resolveRemoteRef(): Promise<string> {
       return Promise.reject(new Error("unexpected remote ref resolution"));
     },
+    listRemotes(): ReturnType<GitOps["listRemotes"]> {
+      return Promise.reject(new Error("unexpected listRemotes"));
+    },
   };
 
   return { gitOps, calls };
@@ -381,6 +384,7 @@ test("DEFAULT_GIT_OPS exposes every platform git function by exact reference", (
     resolveRef: defaultGit.resolveRef,
     currentBranch: defaultGit.currentBranch,
     resolveRemoteRef: defaultGit.resolveRemoteRef,
+    listRemotes: defaultGit.listRemotes,
   };
 
   // act

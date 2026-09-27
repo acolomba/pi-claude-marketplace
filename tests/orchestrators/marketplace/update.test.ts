@@ -155,6 +155,7 @@ function makeForbiddenGitOps(): { readonly calls: Array<keyof GitOps>; readonly 
       forceUpdateRef: () => reject("forceUpdateRef"),
       resolveRef: () => reject("resolveRef"),
       resolveRemoteRef: () => reject("resolveRemoteRef"),
+      listRemotes: () => reject("listRemotes"),
     },
   };
 }

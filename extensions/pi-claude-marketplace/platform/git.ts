@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 import * as git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
@@ -136,6 +137,25 @@ export interface ForceUpdateRefOptions {
 export interface CurrentBranchOptions {
   dir: string;
 }
+
+export interface ListRemotesOptions {
+  dir: string;
+}
+
+/**
+ * D-3-03 / MA-12 / MA-13: whether `dir` holds a readable git clone and, if so,
+ * what its `origin` remote names. Four arms:
+ *   - `origin`: a readable repo with an `origin` remote configured; `url` is
+ *     the remote's wire-form value, verbatim.
+ *   - `no-origin`: a readable repo with no `origin` remote.
+ *   - `not-a-repo`: `dir` has no `.git/config` (ENOENT/ENOTDIR).
+ *   - `unreadable`: `dir/.git/config` exists but could not be read.
+ */
+export type ListRemotesResult =
+  | { readonly kind: "origin"; readonly url: string }
+  | { readonly kind: "no-origin" }
+  | { readonly kind: "not-a-repo" }
+  | { readonly kind: "unreadable" };
 
 export async function clone(opts: CloneOptions): Promise<void> {
   // When opts.auth is provided, build the isomorphic-git callbacks
@@ -303,6 +323,49 @@ export async function currentBranch(opts: CurrentBranchOptions): Promise<string 
   // undefined.
   const branch = await git.currentBranch({ fs, dir: opts.dir });
   return branch ?? undefined;
+}
+
+/**
+ * D-3-03 / MA-12 / MA-13: report whether `dir` is a readable git clone and,
+ * if so, what its `origin` remote names -- WITHOUT throwing. This is the only
+ * function in this file that reports failure as a return value instead of a
+ * throw: every sibling above throws on absence, ambiguity, or a read error,
+ * but a caller here (`marketplace add`'s leftover-clone recognition) must
+ * tell "this is definitely a foreign or unreadable tree" apart from "I could
+ * not look at all", and a catch block collapses that distinction.
+ *
+ * The function reads `<dir>/.git/config` itself, BEFORE calling
+ * `git.listRemotes`, and uses that read alone to choose between the
+ * `not-a-repo` and `unreadable` arms. This ordering is required, not
+ * stylistic: isomorphic-git's internal filesystem wrapper
+ * (node_modules/isomorphic-git/index.js, the `read` helper backing
+ * `GitConfigManager.get`) catches every filesystem error and resolves `null`,
+ * so `git.listRemotes({ fs, dir })` returns `[]` identically for a missing
+ * `.git`, an unreadable `.git/config`, and a real repo with zero remotes --
+ * wrapping the library call in a `try`/`catch` would be unreachable code, and
+ * the 100%-branch gate would have no way to cover it. The probe read doubles
+ * as the existence check, so no separate `stat` is needed.
+ *
+ * The returned `url`, when present, is the wire form stored on disk,
+ * verbatim. This tier may not import `domain/` (the `platform` zone's
+ * `.fallowrc.json` boundary allows only `shared`), so the identity
+ * comparison against `canonicalCloneUrl` belongs to the caller.
+ */
+export async function listRemotes(opts: ListRemotesOptions): Promise<ListRemotesResult> {
+  try {
+    await fs.promises.readFile(path.join(opts.dir, ".git", "config"));
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return { kind: "not-a-repo" };
+    }
+
+    return { kind: "unreadable" };
+  }
+
+  const remotes = await git.listRemotes({ fs, dir: opts.dir });
+  const origin = remotes.find((r) => r.remote === "origin");
+  return origin === undefined ? { kind: "no-origin" } : { kind: "origin", url: origin.url };
 }
 
 /**

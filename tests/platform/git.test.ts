@@ -12,6 +12,7 @@ import {
   currentBranch,
   fetch,
   forceUpdateRef,
+  listRemotes,
   resolveRef,
   resolveRemoteRef,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -36,18 +37,14 @@ import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
 // @ts-expect-error platform/git.ts does not expose the auth-callback factory
 void ({} satisfies { readonly retired?: typeof GitPlatform.buildAuthCallbacks });
 
-// The branch and remote enumeration wrappers had no production caller: no
-// module outside this file ever imported either, and neither appears in the
-// GitOps surface the orchestrators inject. Restoring either export makes the
-// `satisfies` resolve and turns its directive into an unused one (TS2578).
+// The branch enumeration wrapper had no production caller: no module outside
+// this file ever imported it, and it does not appear in the GitOps surface
+// the orchestrators inject. Restoring the export makes the `satisfies`
+// resolve and turns the directive into an unused one (TS2578).
 // @ts-expect-error platform/git.ts does not expose a branch-listing wrapper
 void ({} satisfies { readonly retired?: typeof GitPlatform.listBranches });
-// @ts-expect-error platform/git.ts does not expose a remote-listing wrapper
-void ({} satisfies { readonly retired?: typeof GitPlatform.listRemotes });
 // @ts-expect-error platform/git.ts does not expose branch-listing options
 void ({} satisfies { readonly retired?: GitPlatform.ListBranchesOptions });
-// @ts-expect-error platform/git.ts does not expose remote-listing options
-void ({} satisfies { readonly retired?: GitPlatform.ListRemotesOptions });
 
 const HOST = "git.example.invalid";
 const REMOTE_URL = `https://${HOST}/owner/repo.git`;
@@ -319,6 +316,7 @@ const productionGitOps = {
   resolveRef,
   currentBranch,
   resolveRemoteRef,
+  listRemotes,
 } satisfies GitOps;
 
 async function createProductionGitOps(t: TestContext): Promise<GitOpsContractParticipant> {
@@ -851,6 +849,20 @@ describe("resolveRemoteRef", () => {
       },
     ]);
     assert.deepStrictEqual(requestsCarryingAuthorization(requests), []);
+  });
+});
+
+describe("listRemotes", () => {
+  test("reports the origin remote url of a real repository", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+
+    // act
+    const remotes = await listRemotes({ dir: repository.dir });
+
+    // assert
+    assert.deepStrictEqual(remotes, { kind: "origin", url: REMOTE_URL });
   });
 });
 

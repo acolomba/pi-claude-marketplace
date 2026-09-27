@@ -44,7 +44,10 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import type {
+  GitCredentials,
+  ListRemotesResult,
+} from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -135,6 +138,7 @@ interface GitOpsAdapterOptions {
   readonly fixtureSourceDir?: string;
   readonly cloneThrows?: unknown;
   readonly onClone?: (directory: string) => Promise<void>;
+  readonly listRemotesResult?: ListRemotesResult;
 }
 
 // D-2-01: only a `kind: "github"` source gets the `.git` suffix -- every
@@ -170,6 +174,9 @@ function createGitOps(initial: GitOpsAdapterOptions = {}) {
             sourceDir: initial.fixtureSourceDir,
           },
         }),
+    ...(initial.listRemotesResult === undefined
+      ? {}
+      : { listRemotesResult: initial.listRemotesResult }),
   });
   const gitOps: GitOps = {
     ...git.gitOps,
@@ -479,6 +486,47 @@ test("MA-6 / ATTR-07: pre-existing non-empty sources/<name>/ renders (failed) {s
       "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
     );
     assert.equal(note.severity, "error");
+  });
+});
+
+test("MA-12: a leftover clone whose origin names the same source recovers", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, pi, notifications } = makeCtx();
+    const finalDir = await locations.sourceCloneDir("valid-marketplace");
+    await mkdir(finalDir, { recursive: true });
+    await writeFile(path.join(finalDir, ".leftover-marker"), "x");
+
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      listRemotesResult: {
+        kind: "origin",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // assert
+    const note = notifications[0];
+    assert.ok(note);
+    assert.equal(note.message, "● valid-marketplace [project] (added)");
+
+    const persisted = await loadState(locations.extensionRoot);
+    const recorded = persisted.marketplaces["valid-marketplace"];
+    assert.ok(recorded);
+    assert.equal(recorded.marketplaceRoot, finalDir);
+
+    assert.equal(await pathExists(path.join(finalDir, ".leftover-marker")), false);
+    assert.equal(await pathExists(path.join(finalDir, ".claude-plugin", "marketplace.json")), true);
   });
 });
 

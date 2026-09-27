@@ -2,9 +2,9 @@
 //
 // Cross-subcommand helpers (D-01 -- shared.ts cap ~300 LOC).
 //
-//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Seven primitives:
+//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Eight primitives:
 //     clone + fetch + forceUpdateRef + checkout + resolveRef +
-//     currentBranch + resolveRemoteRef.
+//     currentBranch + resolveRemoteRef + listRemotes.
 //     NO `pull` -- D-14 follow-upstream-blindly semantics require the
 //     three-step force-overwrite path that `pull --ff-only` cannot
 //     express.
@@ -54,7 +54,7 @@ import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { OnAuthRequiredFn } from "../../platform/git.ts";
+import type { ListRemotesResult, OnAuthRequiredFn } from "../../platform/git.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -135,7 +135,9 @@ export interface GitAuthBundle {
  * meaningless `refs/<40-hex>` -- the local branch never advances.
  * D-77-05 added a 7th -- `resolveRemoteRef` -- so the plugin clone-cache
  * seam can pin an unpinned source's remote HEAD to a SHA without a full
- * clone at install time.
+ * clone at install time. D-3-03 added an 8th -- `listRemotes` -- so the
+ * `marketplace add` leftover-clone guard can tell its own leftover clone
+ * apart from a foreign or unreadable tree (MA-12, MA-13).
  *
  * No `pull` -- D-14 requires the three-step force-overwrite path
  * (fetch → forceUpdateRef → checkout) that `pull --ff-only` cannot
@@ -179,6 +181,16 @@ export interface GitOps {
    * resolution can authenticate (PROV-03); omitted = public-only.
    */
   resolveRemoteRef(opts: { url: string; ref?: string; auth?: GitAuthBundle }): Promise<string>;
+  /**
+   * D-3-03 / MA-12 / MA-13: report whether `dir` is a readable git clone and,
+   * if so, what its `origin` remote names. Used by the `marketplace add`
+   * leftover-clone guard to recognize its own leftover clone before removing
+   * it. This is the only member of this interface that does not throw on
+   * failure: the caller must tell a foreign tree apart from a directory it
+   * could not read, and a throw-and-catch shape would collapse both into one
+   * outcome.
+   */
+  listRemotes(opts: { dir: string }): Promise<ListRemotesResult>;
 }
 
 /**
@@ -199,6 +211,7 @@ export const DEFAULT_GIT_OPS: GitOps = {
   resolveRef: defaultGit.resolveRef,
   currentBranch: defaultGit.currentBranch,
   resolveRemoteRef: defaultGit.resolveRemoteRef,
+  listRemotes: defaultGit.listRemotes,
 };
 
 /**

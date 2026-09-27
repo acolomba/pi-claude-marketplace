@@ -454,9 +454,12 @@ function stripTrailingSlashes(input: string): string {
  * D-76-01: strip one trailing `.git` from a URL path. Shared by the two
  * parse-time identity compositions below, so `https://host/o/r.git` and
  * `https://host/o/r` name one source; the wire form does not call it, because it
- * keeps the suffix decision the user's own input made (D-2-01).
+ * keeps the suffix decision the user's own input made (D-2-01). Also shared
+ * by the marketplace add guard's same-source recognition (D-3-01), which
+ * strips a leftover clone's recorded origin before comparing it against
+ * `canonicalCloneUrl`.
  */
-function stripGitSuffix(path: string): string {
+export function stripGitSuffix(path: string): string {
   return path.endsWith(".git") ? path.slice(0, -".git".length) : path;
 }
 
