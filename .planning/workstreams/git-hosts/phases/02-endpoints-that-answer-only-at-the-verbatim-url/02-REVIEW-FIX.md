@@ -401,3 +401,265 @@ All six Info findings are untouched and still stand:
 _Fixed: 2026-09-27_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 3_
+
+## Operator-requested residual closure: the reload identity
+
+**Requested:** the residual in § "One residual, stated plainly" was put to the
+operator as accept / fix / defer, with the note that it sits in the seam that had
+already produced two consecutive rounds of Criticals. The operator chose **fix it
+now**. This section is that closure, run after iteration 3.
+
+**Commit:** `3546a28c` — `fix(02): derive the reload identity from url and gate raw for the wire`
+**Files:** `extensions/pi-claude-marketplace/domain/source.ts`, `tests/domain/source.test.ts`
+**Branch:** `features/git-hosts`, base `63951a58`, head `3546a28c`. No branch was
+created, renamed, or switched; no git worktree was created (`git worktree list`
+shows only the pre-existing sibling worktrees). Both paths were staged
+explicitly.
+
+### The separation
+
+`urlObjectSource` read `optionalString(obj, "raw") ?? optionalString(obj, "url")`
+and fed the winner to `parseUrlSourceForm`, so a single string decided both the
+identity and the wire form. The two are now taken from the field whose consumer
+needs them:
+
+```ts
+function urlObjectSource(obj: Record<string, unknown>): ParsedSource {
+  const url = optionalString(obj, "url");            // identity: canonicalCloneUrl
+  if (url === undefined) {
+    return unknownObjectSource(obj, "url source is missing url");
+  }
+
+  const identity = gatedUrlField(obj, url);
+  if (identity.kind === "unknown") {
+    return identity;
+  }
+
+  const raw = optionalString(obj, "raw");            // wire: networkCloneUrl
+  if (identity.kind !== "url" || raw === undefined) {
+    return withOptionalSourceFields(identity, obj);
+  }
+
+  const gatedRaw = gatedUrlField(obj, raw);
+  if (gatedRaw.kind === "unknown") {
+    return gatedRaw;
+  }
+
+  return withOptionalSourceFields({ ...identity, raw }, obj);
+}
+```
+
+`gatedUrlField` is the extracted https-only syntactic gate — one function, called
+once per manifest-controlled field. `withOptionalSourceFields` was checked first
+and does nothing with `raw` (it spreads only `ref` and `sha`), so the verbatim
+carry-over is the one-token `{ ...identity, raw }` spread and not a second
+mechanism.
+
+Two points the brief asked to be confirmed against the code rather than assumed:
+
+1. `networkCloneUrl`'s `url` arm does read `source.raw` (`clone-key.ts:100-101`),
+   so `raw` does not have to be the input to the identity derivation — it only
+   has to be present and verbatim on the parsed source. Confirmed.
+2. The `github` arm derives its wire url from `owner`/`repo` and never reads
+   `raw`, so a manifest `raw` on a github-normalized url object is dropped rather
+   than gated-and-kept. That is what keeps the github identity byte-identical to
+   pre-phase for a stored `{kind:"url", url:"https://github.com/o/r/", ...}`,
+   whose `raw` the strict github arm would otherwise reject. Pinned by a case.
+
+The comment at the old lines 171-173 justified the `raw`-first preference; it is
+gone with the preference. The replacement names which field feeds which consumer,
+in the present tense, and keeps the D-76-01 / D-76-02 / D-2-01 / D-2-03 anchors.
+
+### Before / after, reload path
+
+Measured by importing the parser extracted from `130d68a9` (`source.ts` has no
+imports, `clone-key.ts` at that revision imports only `createHash` and types, so
+the side-by-side is exact) alongside the working-tree parser, and reading
+`canonicalCloneUrl` on both:
+
+| stored object (`raw` / `url`) | pre-phase `130d68a9` | iteration 3 `63951a58` | now `3546a28c` | wire form now |
+|---|---|---|---|---|
+| `.../o/r/#main` / `.../o/r/` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r/` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r` |
+| `.../o/r.git/#main` / `.../o/r.git/` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r.git/` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r.git` |
+| `.../o/r#main` / `.../o/r` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r` |
+| `.../o/r/#` / `.../o/r/` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r/` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r` |
+| `.../o/r.git` / `.../o/r` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r` | `https://gitlab.com/o/r.git` |
+
+The identity column now matches `130d68a9` on every row, and the `.git` the user
+typed still reaches the wire.
+
+### The seven gates
+
+**1. Object-form (reload) identity byte-identical to `130d68a9` — proved.** Both
+parsers run side by side over 26 object inputs: persisted `{kind, raw, url}`
+records in every slash / `.git` / fragment combination, the same records with a
+`ref` and a 40-hex `sha`, the manifest `{source:"url", ...}` discriminator form,
+the github and git-subdir kinds, and the five CR-02 attack strings in each of the
+two fields. Verdict over the 54 accepted inputs (strings plus objects):
+
+```
+ACCEPTED_ROWS=54
+ACCEPTED_IDENTITY_MOVES=0
+ACCEPTED_NON_RAW_FIELD_MOVES=0
+DELIBERATE_CR02_REJECTS=13
+```
+
+The second number is the gate: zero accepted inputs whose `canonicalCloneUrl`
+moved. The third is stronger than the gate asked for — for every accepted input,
+*every* field of the parsed source except `raw` is byte-identical to pre-phase,
+so nothing else moved under cover of the fix. The 13 differences that remain are
+all inputs the pre-phase parser accepted and CR-02 now rejects (an object-form
+`http://`, `ssh://`, `git@host:`, relative path, browser URL or `owner/repo`
+shorthand in either field). Each was listed individually and read; none is a
+persisted-source shape.
+
+**2. String-form (first-parse) identity byte-identical to `130d68a9` — proved,
+unregressed.** The same harness over 28 string inputs: 0 identity moves and 0
+parsed-value differences of any kind, including the three github rejections
+CR-01 restored. `URL_IDENTITY_CASES` still pins all 8 of its rows.
+
+**3. The wire form keeps the phase's fix — proved.** For each of ten typed
+strings the first parse was serialized, re-parsed as an object, and
+`networkCloneUrl` read on both. Every `.git` the input carried survives on the
+wire at both the first parse and the reload (`.../o/r.git#main` → `.../o/r.git`;
+`.../o/r.git/#main` → `.../o/r.git`), trailing slashes and `#<ref>` are stripped
+in both orderings, and the wire url is identical first-parse vs reload on all ten
+— including the two rows where the identity is not (see the caveat below).
+
+**4. CR-02's scheme gate still rejects, in the object form, through both fields —
+proved.** `URL_OBJECT_GATE_CASES` now lists each rejected form twice, once with
+the attack in `url` and once with it in `raw` behind a benign `url`: `http://`,
+`ssh://`, `git@host:`, a relative path, a `/tree/` github browser URL, and an
+`owner/repo` shorthand. Twelve reject rows, whole-value `deepStrictEqual`,
+including the exact diagnostic string. This was the brief's specific warning and
+it is why `gatedUrlField` is called twice rather than once: with the identity
+gate alone, `{source:"url", raw:"http://evil.example/x", url:"https://gitlab.com/o/r"}`
+parses clean and `networkCloneUrl` hands `http://evil.example/x` to `gitOps`.
+The one field that is not gated is a github object url's `raw`, and it is not
+gated because it is discarded — a case pins that
+`{source:"url", url:"https://github.com/o/r", raw:"http://evil.example/x"}`
+yields `{kind:"github", raw:"https://github.com/o/r", owner:"o", repo:"r"}`, so
+the hostile string does not survive onto the source at all.
+
+**5. `canonicalCloneUrl` unchanged for github and git-subdir — proved.** Covered
+by the gate-1 harness: `{kind:"github", raw:"o/r"}` with and without a ref,
+`{source:"github", repo:"o/r"}`, `{kind:"git-subdir", ...}` and
+`{source:"git-subdir", url:".../mono/#main", path:"pkg"}` all return the same
+identity as pre-phase, and their whole parsed values are byte-identical.
+`clone-key.ts` was not touched by this commit.
+
+**6. The committed invariant test now covers the object/reload path — done.**
+`URL_RELOAD_IDENTITY_CASES` sits beside `URL_IDENTITY_CASES` in the same
+`parsePluginSource` loop, five rows, each asserting the whole parsed source by
+value, with a docstring stating that each expected `url` names a
+`plugin-clones/<hash>` directory. The two ad-hoc reload tests added by `9e08b48a`
+are replaced by the table (their comment argued for the `raw`-first preference,
+so it could not survive the preference).
+
+**Negative control:** restoring `const url = optionalString(obj, "raw") ?? optionalString(obj, "url");`
+and changing nothing else fails 5 of 132 cases —
+the four discriminating reload rows plus the github-raw-drop row:
+
+```
+✖ re-strips a path slash that precedes a #<ref> fragment from a reloaded url identity
+✖ re-strips a path slash that precedes an empty #fragment from a reloaded url identity
+✖ re-strips a .git suffix behind a path slash from a reloaded url identity
+✖ reloads a url source whose identity is already stripped to a fixed point
+✖ drops the raw field of a github object url, whose wire form never reads it
+ℹ tests 132 · pass 127 · fail 5
+```
+
+Restored from a pre-control copy and confirmed byte-identical with `diff`.
+
+**7. `npm run check` — CHECK_EXIT=0.** Run to completion from the committed tree
+at `3546a28c` with `git status --porcelain` empty, exit code captured into a
+named variable and written into the log, not read through a pipe and not
+inferred from a glyph. Two `✗` lines accompany that zero and are not failures:
+`✗ 0 above threshold · 15158 analyzed · maintainability 91.8 (good)` from `fallow
+health` and `✗ 1,327 lines (1.4%) duplicated across 52 files` from `fallow
+dupes`, both of which exit 0 under `--fail-on-issues`.
+
+```
+CHECK_EXIT=0
+```
+
+| Gate | Result |
+|---|---|
+| `typecheck` / `lint` / `lint:workflows` (+ negative) | pass |
+| `fallow` (dead-code, circular-deps, re-export-cycles, health, dupes) | `✓ No issues found` |
+| `format:check` | `All matched files use Prettier code style!` |
+| `test:coverage:unit` | `tests 7319 · pass 7319 · fail 0`, 100% lines/branches/functions |
+| `test:integration` | `tests 36 · pass 36 · fail 0` |
+| `lint:type-members` (+ negative) | `passed with 4 recorded exception(s)`, 108 contract entries |
+
+`scripts/check-unused-type-members.contracts.json` needed no remap: it still
+holds 108 entries with the same 4 recorded exceptions, and no pin names
+`domain/source.ts` or `tests/domain/source.test.ts` (checked by parsing the file,
+then confirmed by the gate). `add.ts` was not touched, so `addMarketplace` stays
+at line 545. `npm run format` was run on both changed files before
+`lint:type-members`.
+
+Per-pair direct coverage for the one production module whose body changed:
+
+```
+source.ts   branches 185/185  functions 31/31  lines 694/694
+```
+
+**Where verification ran:** the main checkout of this worktree,
+`/home/acolomba/src/pi-claude-marketplace-pr-153`, which has `node_modules` and
+can therefore run the project's gates. The numbers above are reproducible from
+the tree you are looking at.
+
+### What this closure does not close
+
+Restoring the pre-phase reload identity also restores the pre-phase disagreement
+between the two paths, for the same one input shape. Stated plainly, because
+iteration 3 listed the opposite property as one of its three reasons for leaving
+the residual open:
+
+| typed input | first-parse identity | reload identity |
+|---|---|---|
+| `https://gitlab.com/o/r/#main` | `https://gitlab.com/o/r/` | `https://gitlab.com/o/r` |
+| `https://gitlab.com/o/r.git/#main` | `https://gitlab.com/o/r.git/` | `https://gitlab.com/o/r` |
+
+The add computes one `plugin-clones/<hash>` directory and every later operation
+computes another, so a marketplace added at a url whose path carries a trailing
+slash immediately before a `#<ref>` fragment clones once under the add's hash and
+then cold-misses it forever, orphaning that directory. This is exactly
+`130d68a9`'s behaviour, and it is not reachable without that input shape: every
+other url — every `.git` form, every plain `#ref` form, every github and
+git-subdir form — agrees across the two paths, and the reload is a fixed point
+from its first application onward (row 4 of `URL_RELOAD_IDENTITY_CASES` pins
+that).
+
+The two properties are mutually exclusive as long as both gates 1 and 2 pin
+pre-phase bytes: `130d68a9` itself disagreed with itself on this shape, so
+preserving both of its values preserves the disagreement. Making the round trip a
+fixed point instead means moving the *first-parse* identity — dropping the path
+slash in `stripUrlDecorations`, which is gate 2's byte-identity and
+`URL_IDENTITY_CASES`' first three rows — and that needs its own decision record
+plus the note that warm clones for that input class are re-created once. It is
+not something to fold into a residual closure whose stated acceptance condition
+is byte-identity to `130d68a9`. Flagged here as the remaining choice rather than
+made silently.
+
+Two smaller behaviour notes, both pre-phase parity rather than new:
+
+- An object-form url source with `raw` but no `url`
+  (`{source:"url", raw:"https://gitlab.com/o/r"}`) is rejected as `url source is
+  missing url`. `130d68a9` rejected it the same way; iteration 3 accepted it as a
+  side effect of the `raw ?? url` fallback. No persisted `UrlSource` and no
+  documented manifest form omits `url`.
+- A `{kind:"url"}` object whose `url` is a github browser URL
+  (`.../o/r/tree/main`) is now rejected where `130d68a9` fell through to a
+  clonable `url` source. That is CR-02, counted among the 13 deliberate rejects.
+
+The six deferred Info findings are still untouched, including IN-06 — the
+`re-parsing an already-parsed URL source is idempotent on raw` case still asserts
+only `raw`. The five new reload rows next to it do compare whole values.
+
+---
+
+_Fixed: 2026-09-27_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 3, residual closure_
