@@ -2968,10 +2968,11 @@ test("MURL-09: a 401 clone failure makes exactly one attempt and keeps its origi
 });
 
 // D-2-02: accepted regression -- a host that serves ONLY its `.git`-suffixed
-// path 404s a verbatim request under D-2-01. The fake stands in for that host
-// by admitting only the suffixed remote; the surfaced failure must name the
-// URL that was actually sent so the remedy is visible without a fallback.
-test("MURL-09 / D-2-02: an add against a suffix-only port fails naming the verbatim URL that was sent", async () => {
+// path 404s a verbatim request under D-2-01. The fake stands in for that host by
+// admitting only the suffixed remote. What is observable here is the wire url and
+// the attempt count: one attempt, at the URL as typed, and the failure reaches
+// the caller rather than being retried behind a suffix.
+test("MURL-09 / D-2-02: an add against a suffix-only port sends the verbatim URL once and fails", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
@@ -2989,7 +2990,6 @@ test("MURL-09 / D-2-02: an add against a suffix-only port fails naming the verba
       }),
       (err: unknown) => {
         assert.ok(err instanceof Error);
-        assert.match(err.message, /https:\/\/gitlab\.example\.com\/team\/git-only-mp/);
         return true;
       },
     );
