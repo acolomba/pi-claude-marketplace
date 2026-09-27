@@ -420,7 +420,11 @@ export function stripSlashAndFragment(input: string): { base: string; ref: strin
 
   const hashIdx = rest.indexOf("#");
   if (hashIdx !== -1) {
-    const frag = rest.slice(hashIdx + 1).replace(/\/+$/, "");
+    let frag = rest.slice(hashIdx + 1);
+    while (frag.endsWith("/")) {
+      frag = frag.slice(0, -1);
+    }
+
     rest = rest.slice(0, hashIdx);
     if (frag.length > 0) {
       ref = frag;
