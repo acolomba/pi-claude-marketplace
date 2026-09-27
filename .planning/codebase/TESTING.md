@@ -154,7 +154,7 @@ npm run test:coverage
 # emits coverage/unit.lcov, coverage/integration.lcov, coverage/e2e.lcov
 ```
 
-**Caveat — fallow does not compute usable coverage/CRAP data for this repo:** `fallow health`'s `maxCrap: 0` threshold is nominally set, but CRAP scoring needs Istanbul-format JSON coverage, and fallow rejects `lcov` input. Node's `c8`-style coverage output also emits `-1` columns in places, which get silently clamped to zero and zero out coverage for many files if fed through naively. Treat `maxCrap` as inert in practice; `maxCyclomatic`/`maxCognitive`/`maxUnitSize` are the load-bearing fallow health thresholds (see CONVENTIONS.md).
+**Caveat — CRAP is switched off, and `maxCrap: 0` is what switches it off.** CRAP scoring needs Istanbul-format JSON coverage; fallow rejects `lcov` input, and Node's `c8`-style output emits `-1` columns that clamp to zero and zero out coverage for many files. So a CRAP score here would be meaningless. In fallow 3.27.0 a `maxCrap` of `0` disables the check, and **deleting the line does not remove an inert setting — it restores fallow's own default of 30**, which then scores CRAP from a `static_estimated` model and reports 950 findings (148 critical) on a clean tree, turning `npm run fallow` red inside `npm run check`. Measured both ways. Leave the line alone. `maxCyclomatic`/`maxCognitive`/`maxUnitSize` are the load-bearing fallow health thresholds (see CONVENTIONS.md).
 
 ## Test Types
 

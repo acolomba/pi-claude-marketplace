@@ -38,7 +38,10 @@
   },
   "code_quality": {
     "fallow": {
-      "enabled": true
+      "enabled": true,
+      "scope": "repo",
+      "mcp": true,
+      "profile": "standard"
     }
   },
   "agent_skills": {
