@@ -597,7 +597,7 @@ rename, no build artifact). Skipping per the template's own trigger condition.
 | A1 | The exhaustive list of ~40 additional `.git`-suffixed non-github test fixtures outside the 5 confirmed categories are all source-identity fixtures unaffected by this phase (not wire-call assertions) | Test Surface § "This list is not exhaustive" | If one of the unaudited hits (e.g. in `list-flow.test.ts`, `update-flow.test.ts`, `reinstall-flow.test.ts`) is actually a clone-call assertion rather than a source-identity fixture, `npm run check` will fail after implementation and the plan will need an unplanned fix-up task. Mitigation already stated: planner should budget a dedicated audit task before declaring the suite migrated. |
 | A2 | No architecture gate outside the ones checked (`gate-targets.ts`, `import-boundaries.test.ts`, `check-unused-type-members.contracts.json`, `partial-vocabulary-guard.test.ts`, `no-stale-test-citations.test.ts`) references `ensureGitSuffix`, `clone-key.ts`, or the specific strings this phase touches | Gate Exposure | A missed gate would surface as an unexpected `npm run check` failure; low risk since `check` is run at every phase boundary per project convention and would catch it before merge. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Exact name and file organization of the new `domain/source.ts` strip helper.**
    - What we know: it must expose the slash+fragment strip without the `.git` strip, and
@@ -609,6 +609,8 @@ rename, no build artifact). Skipping per the template's own trigger condition.
      module, matches the existing `ensureGitSuffix`-is-source.ts's-sibling precedent) — this is
      explicitly left to Claude's discretion in CONTEXT.md, so the planner should pick one and move
      on rather than treating it as a blocking decision.
+   - RESOLVED: planning took the recommendation. `stripSlashAndFragment(input: string)` is exported
+     from `domain/source.ts`, with `stripUrlDecorations` refactored to call it.
 
 2. **Whether `tests/orchestrators/plugin/clone-cache.test.ts` needs a full pass or can be
    patched incrementally.**
@@ -618,6 +620,8 @@ rename, no build artifact). Skipping per the template's own trigger condition.
      share a common fixture/constant that, once fixed, cascades correctly.
    - Recommendation: the planner should read this file in full during plan execution (not just
      grep-and-patch) given its size (1575 lines) and density of hits — treat it as its own task.
+   - RESOLVED: planning took the recommendation. The full-file pass is its own task, which reads
+     `clone-cache.test.ts` in full rather than grep-and-patching it.
 
 ## Validation Architecture
 
