@@ -4,18 +4,18 @@ milestone: any-git-host
 milestone_name: Any Git Host
 current_phase: 3
 current_phase_name: "`marketplace add` recovers from its own leftover clone"
-current_plan: 3
+current_plan: 0
 total_plans_in_phase: 3
-status: Phase 3 context gathered (D-3-01..D-3-04) — ready for planning
-stopped_at: "Phase 3 context gathered: same-origin recognition on the canonical identity, remove-and-rename, a discriminated listRemotes, and the autoupdate cascade to be FIXED (97ff18a3)"
-last_updated: "2026-09-27T12:40:00.000Z"
+status: Phase 3 planned (3 plans, 3 waves) — ready to execute
+stopped_at: "Phase 3 planned: 3 plans across 3 sequential waves, plan-checker clean; planning found three GitOps enumeration sites beyond the two the validation strategy listed (d0fd22ac)"
+last_updated: "2026-09-27T13:20:00.000Z"
 last_activity: 2026-09-27
-last_activity_desc: "Discussed Phase 3; four decisions locked (D-3-01..D-3-04), including fixing the autoupdate cascade rather than filing it"
-state_head: 97ff18a3
+last_activity_desc: "Planned Phase 3; plan-checker passed with zero issues, requirements 4/4 and decisions 4/4 covered"
+state_head: d0fd22ac
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 6
+  total_plans: 9
   completed_plans: 6
   percent: 100
 ---
@@ -37,9 +37,9 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 3 — `marketplace add` recovers from its own leftover clone (context gathered, not planned)
+Phase: 3 — `marketplace add` recovers from its own leftover clone (planned, ready to execute)
 Current Plan: 0
-Total Plans in Phase: 0
+Total Plans in Phase: 3
 
 **Phase 3 is discussed; four decisions are locked.** Recognition compares the leftover's `origin`
 against `canonicalCloneUrl(source)` — the identity, not the wire form, because identity is
@@ -53,6 +53,26 @@ narrow.
 
 Recognition stays at the existing refusal site by necessity, not choice: `finalDir` derives from the
 staged manifest's own name, so a retry still pays one clone to learn it could have reused.
+
+**Planning found more than the research did, and measured rather than recalled.** Three files beyond
+the obvious two build a `GitOps` value by enumerating every member, so the eighth breaks
+`tests/edge/types.test.ts`, `tests/orchestrators/marketplace/shared.test.ts` and
+`tests/e2e/import-command.test.ts` — the last is easiest to miss, because `tsconfig.json` includes
+`tests/**/*.ts` so it fails `npx tsc --noEmit` even though no suite in `npm run check` runs it. Two
+more catches: the fake must NOT gain a `listRemotes` call ledger (`git-ops-fake.test.ts` deep-equals
+the whole `state.calls` object), and once SC5's `buildBundle` always returns a bundle, three
+`authBundle !== undefined` spreads in `update-preflight.ts` acquire unreachable false arms that would
+fail the 100%-branch gate unless made unconditional in the same edit.
+
+**The MA-12 idempotency probe was corrected during planning.** A second `marketplace add` hits MA-8
+(`{duplicate name}`) at step 3, BEFORE recognition at step 4 — so "run add twice" is a duplicate-name
+failure, not the retry this phase delivers. The truth is written as the no-state-entry retry, with an
+explicit MA-8-precedence case so it cannot be misread.
+
+**One mid-phase red is declared.** `test:coverage:unit` does not reach 100% branches at plan 01's
+boundary; plan 01 names the exact uncovered branches and forbids reaching green by collapsing an arm
+or adding a coverage pin, and plan 02 closes them. `npm run check` green is a phase-boundary
+obligation, not a plan-boundary one — the precedent Phase 2 set.
 
 Status: Phase 2 verified — 9/9 must-haves, all 5 ROADMAP success criteria, all 5 plan
 prohibitions, `npm run check` at `CHECK_EXIT=0`. Its live smart-HTTP canary is deferred to the
@@ -252,19 +272,19 @@ milestone close only, not Phase 3.
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** none — Phase 2 verified, Phase 3 not yet started
+**Current Plan:** none yet (phase 3 planned, not started)
 
 ```
 Phase 1  [==========]  plans complete (3/3)
 Phase 2  [==========]  verified 9/9, live canary deferred
-Phase 3  [          ]  context gathered, not planned
+Phase 3  [          ]  planned (0/3 plans executed)
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
 | 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Verified 9/9, live canary deferred |
-| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Context gathered, not planned |
+| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Planned (3 plans), not executed |
 
 ## Accumulated Context
 
