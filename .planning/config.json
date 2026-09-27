@@ -1,6 +1,5 @@
 {
   "model_profile": "quality",
-  "context_window": 1000000,
   "model_profile_overrides": {
     "codex": {
       "opus": "gpt-6-sol",
@@ -8,7 +7,8 @@
     }
   },
   "git": {
-    "create_tag": false
+    "create_tag": false,
+    "branching_strategy": "none"
   },
   "workflow": {
     "context_guard_mode": "auto",
@@ -19,7 +19,17 @@
     "use_worktrees": true,
     "research_before_questions": true,
     "nyquist_validation": true,
-    "ai_integration_phase": true
+    "ai_integration_phase": true,
+    "research": true,
+    "pattern_mapper": true,
+    "tdd_mode": false,
+    "code_review": true,
+    "code_review_depth": "standard",
+    "plan_check": true,
+    "verifier": true,
+    "auto_advance": false,
+    "compact_content": false,
+    "skip_discuss": false
   },
   "effort": {
     "agent_overrides": {
@@ -68,5 +78,18 @@
       "project": "embed"
     }
   },
-  "claude_md_path": "AGENTS.md"
+  "claude_md_path": "AGENTS.md",
+  "intel": {
+    "enabled": false
+  },
+  "graphify": {
+    "enabled": false
+  },
+  "commit_docs": true,
+  "plan_review": {
+    "source_grounding": true
+  },
+  "hooks": {
+    "context_warnings": true
+  }
 }
