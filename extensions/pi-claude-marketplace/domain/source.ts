@@ -403,12 +403,15 @@ function parseOwnerRepo(candidate: string, raw: string): ParsedSource {
 }
 
 /**
- * Shared canonicalization tail for https sources (`parseUrlSource` /
- * `parseGitHubUrl`): strip trailing slashes, split off an optional `#<ref>`
- * fragment (SP-5: empty fragment dropped), then strip a single trailing
- * `.git` suffix.
+ * D-2-01 / D-2-03: strip trailing slashes and an optional `#<ref>` fragment
+ * (SP-5: empty fragment dropped) from a URL, WITHOUT touching a trailing
+ * `.git` suffix. `stripUrlDecorations` below layers the `.git` strip on top
+ * of this for the parse-time identity form; this export is the network-side
+ * form `networkCloneUrl`'s `url` arm reads, and it deliberately leaves
+ * `.git` alone so the wire request carries whatever suffix decision the
+ * user's own input made.
  */
-function stripUrlDecorations(input: string): { base: string; ref: string | undefined } {
+export function stripSlashAndFragment(input: string): { base: string; ref: string | undefined } {
   let rest = input;
 
   while (rest.endsWith("/")) {
@@ -425,11 +428,17 @@ function stripUrlDecorations(input: string): { base: string; ref: string | undef
     }
   }
 
-  if (rest.endsWith(".git")) {
-    rest = rest.slice(0, -".git".length);
-  }
-
   return { base: rest, ref };
+}
+
+/**
+ * Shared canonicalization tail for https sources (`parseUrlSource` /
+ * `parseGitHubUrl`): layers a single trailing `.git` strip on top of
+ * `stripSlashAndFragment`'s trailing-slash and `#<ref>` fragment strip.
+ */
+function stripUrlDecorations(input: string): { base: string; ref: string | undefined } {
+  const { base, ref } = stripSlashAndFragment(input);
+  return base.endsWith(".git") ? { base: base.slice(0, -".git".length), ref } : { base, ref };
 }
 
 /**

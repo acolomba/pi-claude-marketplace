@@ -137,16 +137,18 @@ interface GitOpsAdapterOptions {
   readonly onClone?: (directory: string) => Promise<void>;
 }
 
+// D-2-01: only a `kind: "github"` source gets the `.git` suffix -- every
+// other host is admitted at exactly the verbatim path the parser produces.
 const ALLOWED_MARKETPLACE_REMOTES = [
   "https://github.com/anthropics/claude-plugins-official.git",
   "https://github.com/owner/repo.git",
-  "https://gitlab.example.com/team/mp.git",
-  "https://gitlab.example.com/team/private-mp.git",
-  "https://gitlab.example.com/team/missing-mp.git",
-  "https://gitlab.example.com/team/flaky-mp.git",
-  "https://gitlab.example.com/team/gone-mp.git",
-  "https://GitHub.com/acme/mp.git",
-  "https://gitlab.com/team/mp.git",
+  "https://gitlab.example.com/team/mp",
+  "https://gitlab.example.com/team/private-mp",
+  "https://gitlab.example.com/team/missing-mp",
+  "https://gitlab.example.com/team/flaky-mp",
+  "https://gitlab.example.com/team/gone-mp",
+  "https://GitHub.com/acme/mp",
+  "https://gitlab.com/team/mp",
 ] as const;
 
 function createGitOps(initial: GitOpsAdapterOptions = {}) {
@@ -2328,11 +2330,11 @@ test("cleans a URL clone after state-save failure and a second invocation conver
     assert.deepStrictEqual(firstBoundary.notifications, []);
     assert.deepStrictEqual(
       firstGit.state.cloneCalls.map(({ url }) => url),
-      ["https://gitlab.example.com/team/mp.git"],
+      ["https://gitlab.example.com/team/mp"],
     );
     assert.deepStrictEqual(
       secondGit.state.cloneCalls.map(({ url }) => url),
-      ["https://gitlab.example.com/team/mp.git"],
+      ["https://gitlab.example.com/team/mp"],
     );
     assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
       "valid-marketplace",
@@ -2341,7 +2343,7 @@ test("cleans a URL clone after state-save failure and a second invocation conver
   });
 });
 
-test("MURL-01: url source clones source.url `.git`-suffixed with a bundle bound to its host", async () => {
+test("MURL-08: url source clones the URL as typed, with a bundle bound to its host", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
@@ -2361,14 +2363,14 @@ test("MURL-01: url source clones source.url `.git`-suffixed with a bundle bound 
       credentialOps,
     });
 
-    // D-76-06: the clone URL is source.url -- no github.com reconstruction.
-    // MURL-01: the parser canonicalized the trailing `.git` off for identity
-    // comparison, and `ensureGitSuffix` restores it for the wire.
+    // D-2-01 / D-2-03: the clone URL derives from source.raw via
+    // networkCloneUrl -- no github.com reconstruction and no `.git`
+    // decoration beyond what the user typed.
     // assert
     assert.equal(state.cloneCalls.length, 1);
     const cloneCall = state.cloneCalls[0];
     assert.ok(cloneCall);
-    assert.equal(cloneCall.url, "https://gitlab.example.com/team/mp.git");
+    assert.equal(cloneCall.url, "https://gitlab.example.com/team/mp");
     // GAUTH-03: the clone carries a bundle keyed on the source's own host.
     assert.deepStrictEqual(cloneCall.auth, {
       credentialOps,
@@ -2410,7 +2412,7 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and t
         singleBranch: cloneCall.singleBranch,
       },
       {
-        url: "https://gitlab.example.com/team/mp.git",
+        url: "https://gitlab.example.com/team/mp",
         ref: "v1.0",
         singleBranch: true,
       },
@@ -2846,13 +2848,13 @@ test("PROV-01: a url add whose host case-folds to github.com carries the provide
     assert.equal(state.cloneCalls.length, 1);
     const cloneCall = state.cloneCalls[0];
     assert.ok(cloneCall);
-    assert.equal(cloneCall.url, "https://GitHub.com/acme/mp.git");
+    assert.equal(cloneCall.url, "https://GitHub.com/acme/mp");
     assert.ok(cloneCall.auth, "provider-registered host must attach an auth bundle");
     assert.equal(cloneCall.auth.host, "github.com");
   });
 });
 
-test("GAUTH-02 / MURL-01: a gitlab.com url add clones .git-suffixed WITH the GitLab provider's auth bundle attached to the same clone call", async () => {
+test("GAUTH-02 / MURL-08: a gitlab.com url add clones the URL as typed WITH the GitLab provider's auth bundle attached to the same clone call", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
@@ -2861,11 +2863,11 @@ test("GAUTH-02 / MURL-01: a gitlab.com url add clones .git-suffixed WITH the Git
     });
     const { credOps: credentialOps } = createCredentialOps();
 
-    // Unlike the gitlab.example.com adds above (MURL-01, PROV-02), gitlab.com
+    // Unlike the gitlab.example.com adds above (MURL-08, PROV-02), gitlab.com
     // is claimed by GITLAB_PROVIDER (exact-match hostMatch) -- the real
     // findProviderForHost/buildAuthForHost path (no mock auth registry) must
     // attach its auth bundle to the SAME clone call that carries the
-    // `.git`-suffixed wire URL.
+    // verbatim wire URL.
     // act
     await addMarketplace({
       ctx,
@@ -2881,8 +2883,9 @@ test("GAUTH-02 / MURL-01: a gitlab.com url add clones .git-suffixed WITH the Git
     assert.equal(state.cloneCalls.length, 1);
     const cloneCall = state.cloneCalls[0];
     assert.ok(cloneCall);
-    // MURL-01: ensureGitSuffix restores the `.git` suffix on the wire URL.
-    assert.equal(cloneCall.url, "https://gitlab.com/team/mp.git");
+    // D-2-01: no `.git` is appended for a non-github host; the wire URL is
+    // sent exactly as typed.
+    assert.equal(cloneCall.url, "https://gitlab.com/team/mp");
     // GAUTH-02: the clone carries a bundle bound to gitlab.com, the host the
     // registry claims for the GitLab provider.
     assert.ok(cloneCall.auth, "gitlab.com must attach the GitLab provider's auth bundle");

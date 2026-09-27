@@ -104,7 +104,7 @@ type DescribedCloneCall = Omit<GitCloneCall, "auth"> & {
 const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
 
 const URL_SOURCE = "https://gitlab.example.com/team/alpha#main";
-const CLONE_URL = "https://gitlab.example.com/team/alpha.git";
+const CLONE_URL = "https://gitlab.example.com/team/alpha";
 
 /** The manifest the cloned staging tree and the path source both carry. */
 const MARKETPLACE_MANIFEST = `{

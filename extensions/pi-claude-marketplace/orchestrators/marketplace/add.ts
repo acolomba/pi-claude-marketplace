@@ -50,8 +50,9 @@ import { mkdir, rename, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
+import { parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -378,9 +379,9 @@ async function runAddInGuard(args: {
         cwd: opts.cwd,
       });
     } else if (source.kind === "url") {
-      // MURL-01 / D-76-06: source.url is the stored canonical identity; the
-      // clone url is that value through `ensureGitSuffix`. Every host carries an
-      // auth bundle; the provider lookup decides its Device Flow half (PROV-03).
+      // MURL-01 / D-76-06: source.url is the stored canonical identity; the wire url derives from
+      // the source via `networkCloneUrl` (D-2-01, D-2-03). Every host carries an auth bundle; the
+      // provider lookup decides its Device Flow half (PROV-03).
       recordedName = await addUrlInGuard({
         ctx: opts.ctx,
         state,
@@ -665,8 +666,9 @@ async function runAddOutcome(
  * url). Owns everything from staging-dir creation through the clone, manifest
  * read, MA-8 duplicate check, MA-6 stale-clone check, atomic rename, state
  * mutation, and the MA-9 append-leak-not-mask cleanup catch. The only per-kind
- * differences are the pre-computed `cloneUrl` and the optional `auth` bundle,
- * so that subtle MA-9 discipline lives in exactly one place.
+ * differences are the parsed `source` (from which the clone url is derived)
+ * and the optional `auth` bundle, so that subtle MA-9 discipline lives in
+ * exactly one place.
  *
  * MURL-01 / GAUTH-03: every git-cloned source carries a host-keyed `auth`
  * bundle, so the clone consults the user's git credential helper when the
@@ -678,18 +680,17 @@ async function addGitClonedInGuard(args: {
   locations: ScopedLocations;
   source: GitHubSource | UrlSource;
   gitOps: GitOps;
-  cloneUrl: string;
   auth: GitAuthBundle;
   cwd: string;
 }): Promise<string> {
-  const { state, locations, source, gitOps, cloneUrl, auth, cwd, removalOps } = args;
+  const { state, locations, source, gitOps, auth, cwd, removalOps } = args;
   const stagingDir = await locations.sourcesStagingDir(randomUUID());
 
   // 1. Clone into staging (NFR-5: only git-cloned kinds reach gitOps.clone).
   try {
     await gitOps.clone({
       dir: stagingDir,
-      url: ensureGitSuffix(cloneUrl),
+      url: networkCloneUrl(source),
       ...(source.ref !== undefined && { ref: source.ref, singleBranch: true }),
       auth,
     });
@@ -796,7 +797,6 @@ async function addGithubInGuard(args: {
     source,
     gitOps,
     removalOps,
-    cloneUrl,
     auth,
     cwd,
   });
@@ -805,8 +805,9 @@ async function addGithubInGuard(args: {
 /**
  * MURL-01 / D-76-06: url-source add. `source.url` is stored as the canonical
  * identity form (parse-time `.git`-stripped) and NOT reconstructed against
- * github.com; the url actually cloned is that value passed through
- * `ensureGitSuffix`. GAUTH-03: the host is extracted from the url and
+ * github.com; the url actually cloned is derived from `source.raw` via
+ * `networkCloneUrl` (D-2-01, D-2-03), preserving whatever `.git` decision the
+ * user's own input made. GAUTH-03: the host is extracted from the url and
  * `buildAuthForHost` binds a bundle to it, so a private source on any host
  * authenticates from the user's git credential helper; the provider registry
  * decides only whether a Device Flow runs on a helper miss (PROV-03). The
@@ -840,7 +841,6 @@ async function addUrlInGuard(args: {
     source,
     gitOps,
     removalOps,
-    cloneUrl: source.url,
     auth,
     cwd,
   });
