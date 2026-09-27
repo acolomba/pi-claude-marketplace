@@ -815,6 +815,38 @@ describe("parsePluginSource", () => {
     // assert
     assert.strictEqual(reparsedSource.raw, expectedRaw);
   });
+
+  // D-2-01 / D-2-03: `urlObjectSource` prefers the stored `raw`, because
+  // `networkCloneUrl` reads it and a reload that fell back to `url` would send a
+  // suffix-less wire url for a source the user typed with `.git`. For the one
+  // input shape whose identity keeps a path slash, that makes the reload agree
+  // with the add instead of re-normalizing the slash away, so the round trip is
+  // a fixed point. These two rows pin that reload identity.
+  for (const stored of [
+    {
+      kind: "url",
+      raw: "https://gitlab.com/o/r/#main",
+      url: "https://gitlab.com/o/r/",
+      ref: "main",
+    },
+    {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r.git/",
+      ref: "main",
+    },
+  ] as const) {
+    test("re-parsing the stored form of " + stored.raw + " keeps its identity", () => {
+      // arrange
+      const expectedSource = { ...stored };
+
+      // act
+      const reparsedSource = parsePluginSource(stored);
+
+      // assert
+      assert.deepStrictEqual(reparsedSource, expectedSource);
+    });
+  }
 });
 
 describe("pathSource", () => {
