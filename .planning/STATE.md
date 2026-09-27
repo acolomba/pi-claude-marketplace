@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
-milestone: test-backlog
-status: "test-backlog milestone shipped — PR #202"
-stopped_at: PR #215 open against releases/v0.19.2; awaiting squash merge and tag
-last_updated: "2026-09-24T14:38:52Z"
-last_activity: 2026-09-24
-last_activity_desc: quick task 260924-bvi complete for 0.19.2
-state_head: b07ae35cab38aa744bbc17025b649b251f6c29bd
-milestone_name: test-backlog
+milestone: workflows-replay
+status: "No active milestone — workflows-replay archived; npm 0.19.2 released"
+stopped_at: workflows workstream archived and GSD config pinned to the quality profile
+last_updated: "2026-09-27T00:00:00Z"
+last_activity: 2026-09-27
+last_activity_desc: archived the workflows workstream; reconciled root planning records
+state_head: 0b0d7737bd89e08646d7903d0471aab23c4e07d8
+milestone_name: Workflow Bridge Replay onto main
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 65
-  completed_plans: 65
+  total_phases: 9
+  completed_phases: 9
+  total_plans: 39
+  completed_plans: 39
   percent: 100
 ---
 
@@ -29,10 +29,30 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: Milestone test-backlog complete
+Phase: No active milestone
 Plan: —
-Status: test-backlog milestone shipped — PR #202
-Last activity: 2026-09-24 — Completed quick task 260924-bvi for 0.19.2
+Status: workflows-replay complete (9/9 phases, 39/39 plans) and archived 2026-09-27
+Last activity: 2026-09-27 — Archived the workflows workstream and reconciled the root planning records
+
+Four milestones have closed since the last root-scope milestone ran here.
+`test-backlog` and `refine-unit-tests` closed in root scope; `workflows` and
+`workflows-replay` ran in the `workflows` workstream, which was archived to
+`milestones/ws-workflows-2026-09-27/` on 2026-09-27. `.planning/workstreams/` no
+longer exists and no workstream is active, so every phase, plan and quick-task
+record for the two workflow milestones lives under that archive directory.
+
+### workflows-replay closeout
+
+Completed 2026-09-21 with no accepted debt: 46/46 requirements, 9/9 phases
+verified, `threats_open: 0`, Nyquist-validated. All twelve
+`[workflows-replay]` broken-window entries are fixed or waived with named
+`BACKLOG.md` carriers (VSTALE-01, WLREC-01, RLHINT-01, PCERR-01, WSTOR-01,
+WPIN-01).
+
+The bridge reached `main` in PR #205 (`5c652697`) on 2026-09-24. The `v0.19.2`
+tag was cut from a release branch that deliberately excluded it, so **no
+published npm version carries the workflows bridge yet** — that is the one open
+release action this milestone leaves behind.
 
 ### test-backlog closeout: `override_closeout`
 
@@ -69,6 +89,14 @@ acknowledged, 17 carried forward, and the phase-25 table conversion.
   bullets with every cell preserved.
 - `state.advance-plan` resets `Status:` and rewrites a historical `Stopped at:`
   line; re-read STATE.md after every state verb.
+- `/gsd-health` reports W002 ("STATE.md references phase N, but only phases ...
+  are declared") for every phase this file names from a **named** milestone
+  archive. The archived-phase exemption matches `^v\d+.*-phases$` only, so
+  `test-backlog-phases`, `refine-unit-tests-phases`, `url-source-phases` and
+  every `ws-*` workstream archive are invisible to it and their phase tokens
+  read as undeclared. Phases 5, 6 and 9 trip it today. It is a tool limitation,
+  not drift — do not reword the references or re-add a phase checklist to
+  ROADMAP.md to silence it (that trades 5 W002 findings for 8 W006 ones).
 
 ## Known Risk Worth Revisiting
 
@@ -127,25 +155,31 @@ hit the same wall; convert it rather than re-disclosing it.
 | --- | --- | --- | --- | --- | --- |
 | 260920-qx0 | Reject `--local` on the merged-read marketplace verbs (info, list, update) | 2026-09-20 | f2fbd402 | complete | [260920-qx0-remove-local-from-marketplace-info](./quick/260920-qx0-remove-local-from-marketplace-info/) |
 | 260921-t5t | Suppress success-count lines for empty cascades and non-bulk operations | 2026-09-21 | ffdecc5f | shipped in PR #209 | [260921-t5t-when-a-command-returns-an-empty-result-a](./quick/260921-t5t-when-a-command-returns-an-empty-result-a/) |
+| 260922-ckn | Read the Claude Code compatibility skill during discuss phases; fix a racy coverage test | 2026-09-22 | 0b0623a3 | complete | [260922-ckn-implement-upstream-informed-discuss-phas](./quick/260922-ckn-implement-upstream-informed-discuss-phas/) |
 | 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na/) |
 | 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | b07ae35c | complete | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew/) |
 | 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./quick/260924-q0m-keep-only-plugin-qualified-interactive-s/) |
 
 ## Session Continuity
 
-**Last session:** 2026-09-24
-**Stopped at:** PR #215 open; awaiting squash merge and 0.19.2 tag
+**Last session:** 2026-09-27
+**Stopped at:** workflows workstream archived; root planning records reconciled
 **Resume file:** None
 
-**Current work:** Skill aliases and cross-artifact reference rewriting are on
-`features/skill-aliases`, based on the 0.19.1 release commit. The release
-branch `releases/v0.19.2` starts at that same commit and excludes unrelated
-workflow work on main. PR #215 targets that release branch and all local gates
-pass. Tag its squash-merge commit as `v0.19.2` after merge.
-Earlier milestone continuity is preserved in
-`inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
+**Current work:** None in flight. The 0.19.1 and 0.19.2 releases are tagged and
+published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218 and
+#219 landed after it. `main` carries the workflows bridge from PR #205, which no
+tag includes yet. Handoffs for the earlier milestones moved into their archives
+(`milestones/refine-unit-tests-HANDOFF*.md`,
+`milestones/ws-defaults-enabled-2026-09-17/HANDOFF.md`) and the paused phase-117
+handoff moved to `milestones/ws-workflows-2026-09-27/`. Earlier milestone
+continuity is preserved in `inputs/test-backlog/PRE-MILESTONE-STATE.md` and
+archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Open the issue #211 PR from `features/issue-211-v0190` into `releases/v0.19.1`.
-- Tag the squash-merge commit `v0.19.1` after the release PR merges.
+- Cut the npm release that carries the workflows bridge: it is on `main` from
+  PR #205 but absent from every tag through `v0.19.2`.
+- Start the next milestone with `/gsd-new-milestone`; `BACKLOG.md` holds the
+  six carriers the workflows-replay close named (VSTALE-01, WLREC-01,
+  RLHINT-01, PCERR-01, WSTOR-01, WPIN-01).
