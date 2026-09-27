@@ -442,26 +442,20 @@ function stripUrlDecorations(input: string): { base: string; ref: string | undef
 }
 
 /**
- * MURL-01 / D-76-06: the network-side counterpart to `stripUrlDecorations`.
- * Parse time strips a trailing `.git` so `sourceLogical` / `samePlannedSource`
- * compare one canonical identity per repo (D-76-01); this restores the suffix
- * on the string that actually goes to the wire.
+ * D-76-06: the network-side counterpart to `stripUrlDecorations`. Parse time
+ * strips a trailing `.git` so `sourceLogical` / `samePlannedSource` compare
+ * one canonical identity per repo (D-76-01); this restores the suffix on the
+ * string that actually goes to the wire.
  *
- * Host-agnostic on purpose: the `.git` suffix is a general git-hosting
- * convention, and a host that 301-redirects the suffix-less smart-HTTP
- * endpoint makes the transport replay the `POST git-upload-pack` as a bodyless
- * `GET`, which the host then rejects (observed against gitlab.com as
- * `422 Unprocessable Entity`). This mirrors the GitHub `url`-kind clone-URL
- * builder (`orchestrators/marketplace/add.ts` / `update.ts`), which already
- * appends `.git` unconditionally, rather than special-casing gitlab.com.
- * Accepted trade-off: a smart-HTTP host that serves ONLY the un-suffixed path
- * (unlike GitHub/GitLab/Gitea/Bitbucket, which serve both forms or redirect
- * one to the other) will now fail to clone via a `url`-kind or
- * `git-subdir`-kind source where it may have worked before this change.
+ * `domain/clone-key.ts::networkCloneUrl` calls this only for the `github`
+ * arm, appending `.git` where Claude Code appends it -- a `github.com`
+ * `owner/repo` path -- and nowhere else. A `url` source's wire form preserves
+ * whatever suffix decision the user's own input made (D-2-01); Phase 3's
+ * same-origin comparison normalizes both sides of a URL through this helper.
  *
- * The trailing-slash trim exists because a `git-subdir` source stores its
- * manifest `url` verbatim (`gitSubdirObjectSource`) and is therefore not
- * parse-canonicalized the way a `url` source is.
+ * Accepted trade-off (D-2-02): a suffix-less URL against a host that serves
+ * ONLY the `.git`-suffixed smart-HTTP path no longer resolves. Verbatim means
+ * verbatim in both directions, and the failure names the URL that was sent.
  */
 export function ensureGitSuffix(url: string): string {
   let rest = url;
