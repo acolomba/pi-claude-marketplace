@@ -64,7 +64,7 @@ override reasons, neither an outcome failure:
 1. **`init.manager` reports every phase `stale`** because each `covered_files`
    list names `STATE.md`, `ROADMAP.md` and `REQUIREMENTS.md`, which every later
    close rewrites. Third milestone with this artifact.
-2. **Two artifacts acknowledged at close** (the Phase 5 and Phase 6 deferred-item
+2. **Two artifacts acknowledged at close** (the `05/` and `06/` deferred-item
    records). Known verification overrides: **2 newly acknowledged, 16 carried
    forward**.
 
@@ -89,18 +89,18 @@ acknowledged, 17 carried forward, and the phase-25 table conversion.
   bullets with every cell preserved.
 - `state.advance-plan` resets `Status:` and rewrites a historical `Stopped at:`
   line; re-read STATE.md after every state verb.
-- `/gsd-health` reports W002 ("STATE.md references phase N, but only phases ...
-  are declared") for every phase this file names from a **named** milestone
-  archive. The archived-phase exemption matches `^v\d+.*-phases$` only, so
-  `test-backlog-phases`, `refine-unit-tests-phases`, `url-source-phases` and
-  every `ws-*` workstream archive are invisible to it and their phase tokens
-  read as undeclared. Phases 5, 6 and 9 trip it today. It is a tool limitation,
-  not drift — do not reword the references or re-add a phase checklist to
-  ROADMAP.md to silence it (that trades 5 W002 findings for 8 W006 ones).
+- **Name an archived phase by its directory token (`05/`, `09/`), never
+  `Phase 5`.** `/gsd-health`'s W002 archived-phase exemption matches
+  `^v\d+.*-phases$` only, so `test-backlog-phases`,
+  `refine-unit-tests-phases`, `url-source-phases` and every `ws-*` workstream
+  archive are invisible to it: a `Phase N` token from one of those reads as an
+  undeclared phase as soon as N leaves ROADMAP.md. The directory form says the
+  same thing, more precisely, and the check stays quiet. Do not re-add a phase
+  checklist to ROADMAP.md to silence it — that trades each W002 for a W006.
 
 ## Known Risk Worth Revisiting
 
-`IN-03` from the Phase 9 code review. **NFR-10 path containment now rests on an
+`IN-03` from the refine-unit-tests `09/` code review. **NFR-10 path containment now rests on an
 injected collaborator honoring a prose-only contract that nothing type-enforces.**
 `IN-01` and `IN-04` are also open by choice but carry no comparable risk.
 
@@ -110,13 +110,13 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
-| deferred_items | 05/deferred-items.md: the Phase 5 record (five open comment-drift items, three closed; the scanner reads the file as one entry)                                                                | acknowledged    | 2026-09-18           | test-backlog |
+| deferred_items | 05/deferred-items.md: the record (five open comment-drift items, three closed; the scanner reads the file as one entry)                                                                | acknowledged    | 2026-09-18           | test-backlog |
 | deferred_items | 06/deferred-items.md: Six ledger notes name a witness coordinate the fresh report no longer holds (table converted to bullets at this close; item 1 was resolved by the #196 hermetic merge)  | acknowledged    | 2026-09-18           | test-backlog |
 | quick_tasks    | 260907-qqo-hkps-01-if-field-powershell-rule-prefix-                                                                                                                                           | unknown (work is complete; scanner misreads it) | 2026-09-13 | refine-unit-tests |
 | deferred_items | 06/deferred-items.md: 1. Stale notification hub reference outside Plan 06-19 callers                                                                                                          | acknowledged — RESOLVED, condition no longer holds | 2026-09-13 | refine-unit-tests |
 | deferred_items | 06/deferred-items.md: 2. Node 26 direct-coverage negative-control subprocess capture                                                                                                          | acknowledged — promoted to backlog `NEGCTL-01` | 2026-09-13 | refine-unit-tests |
 | deferred_items | 25/deferred-items.md (archived v1.4.1): `tests/e2e/import-command.test.ts` 3 failures                                                                                                         | acknowledged — promoted to backlog `E2EIMP-01` | 2026-09-13 | refine-unit-tests |
-| Tooling        | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted)                                    | closed — test-backlog Phase 6 (06-VERIFICATION 2/2); gate `lint:type-members` in `check` | Phase 116 discussion | v1.19     |
+| Tooling        | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted)                                    | closed — test-backlog `06/` (06-VERIFICATION 2/2); gate `lint:type-members` in `check` | Phase 116 discussion | v1.19     |
 | quick_tasks    | 260720-d8i-move-agent-provenance-from-body-comment-                                                                                                                                           | unknown         | 2026-09-04           | v1.19     |
 | todos          | 2026-09-02-detect-unused-code-and-type-members.md                                                                                                                                             | (presence-only) | 2026-09-04           | v1.19     |
 | uat_gaps       | 89/89-UAT.md (archived v1.16)                                                                                                                                                                 | passed          | 2026-09-04           | v1.19     |

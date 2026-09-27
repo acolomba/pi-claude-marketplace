@@ -1,5 +1,6 @@
 {
   "model_profile": "quality",
+  "context_window": 1000000,
   "model_profile_overrides": {
     "codex": {
       "opus": "gpt-6-sol",
@@ -16,7 +17,14 @@
     "ui_review": false,
     "test_command": "npm run check",
     "use_worktrees": true,
-    "research_before_questions": true
+    "research_before_questions": true,
+    "nyquist_validation": true,
+    "ai_integration_phase": true
+  },
+  "effort": {
+    "agent_overrides": {
+      "gsd-planner": "max"
+    }
   },
   "code_quality": {
     "fallow": {
