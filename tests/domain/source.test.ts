@@ -11,12 +11,19 @@ import {
   stripSlashAndFragment,
   type ParsedSource,
   type SamePlannedSourceResult,
+  type UrlSource,
 } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 
 interface ParseCase {
   readonly name: string;
   readonly raw: unknown;
   readonly source: ParsedSource;
+}
+
+interface UrlFixedPointCase {
+  readonly name: string;
+  readonly typed: string;
+  readonly source: UrlSource;
 }
 
 interface SourceComparisonCase {
@@ -639,35 +646,36 @@ const INVALID_INPUT_CASES: readonly ParseCase[] = [
  * `pluginMirrorKey` hash, so every expected value below names a
  * `plugin-clones/<hash>` directory. Each row is an input whose answer depends on
  * the ORDER in which `domain/source.ts` strips trailing slashes and splits the
- * `#<ref>` fragment: the identity form strips slashes first, so a path slash
- * sitting in front of a fragment survives, and the github arm then rejects the
- * `o/r/` it produces. The wire form composes the two steps the other way round
- * (see the `stripSlashAndFragment` table). Changing an expected value here
- * cold-misses every warm clone for that input.
+ * `#<ref>` fragment. D-2-05: the `url` arm splits the fragment off first, so a
+ * path slash sitting in front of one comes off and the identity is a fixed point
+ * across a persist-and-reload round trip (`URL_FIXED_POINT_CASES`). The github
+ * arm strips slashes first, so that slash survives into the owner/repo
+ * validation and the three-part `o/r/` it produces is rejected. Changing an
+ * expected value here cold-misses every warm clone for that input.
  */
 const URL_IDENTITY_CASES: readonly ParseCase[] = [
   {
-    name: "keeps a path slash that precedes a #<ref> fragment in the url identity",
+    name: "strips a path slash that precedes a #<ref> fragment from the url identity",
     raw: "https://gitlab.com/o/r/#main",
     source: {
       kind: "url",
       raw: "https://gitlab.com/o/r/#main",
-      url: "https://gitlab.com/o/r/",
+      url: "https://gitlab.com/o/r",
       ref: "main",
     },
   },
   {
-    name: "keeps a path slash that precedes an empty #fragment in the url identity",
+    name: "strips a path slash that precedes an empty #fragment from the url identity",
     raw: "https://gitlab.com/o/r/#",
-    source: { kind: "url", raw: "https://gitlab.com/o/r/#", url: "https://gitlab.com/o/r/" },
+    source: { kind: "url", raw: "https://gitlab.com/o/r/#", url: "https://gitlab.com/o/r" },
   },
   {
-    name: "leaves a .git suffix in the url identity when a path slash precedes a #<ref> fragment",
+    name: "strips a .git suffix behind a path slash that precedes a #<ref> fragment",
     raw: "https://gitlab.com/o/r.git/#main",
     source: {
       kind: "url",
       raw: "https://gitlab.com/o/r.git/#main",
-      url: "https://gitlab.com/o/r.git/",
+      url: "https://gitlab.com/o/r",
       ref: "main",
     },
   },
@@ -861,10 +869,11 @@ const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
  * is re-parsed as an object, and `canonicalCloneUrl` reads the `url` these rows
  * pin, so each expected `url` names a `plugin-clones/<hash>` directory exactly
  * as the string rows do. The identity derives from the stored `url`, so the
- * three rows whose stored `url` ends in a path slash strip it again and reach a
- * fixed point the fourth row then holds. `raw` is carried over verbatim in every
- * row, because `networkCloneUrl` reads it and the wire form keeps the `.git`
- * decision the user typed.
+ * three rows whose stored `url` carries a path slash strip it again and reach
+ * the value the string table's first-parse rows produce -- D-2-05's fixed point,
+ * which the fourth row then holds. `raw` is carried over verbatim in every row,
+ * because `networkCloneUrl` reads it and the wire form keeps the `.git` decision
+ * the user typed.
  */
 const URL_RELOAD_IDENTITY_CASES: readonly ParseCase[] = [
   {
@@ -934,6 +943,78 @@ const URL_RELOAD_IDENTITY_CASES: readonly ParseCase[] = [
   },
 ];
 
+/**
+ * D-2-05: the `url` identity is a FIXED POINT. Each row's expected source is
+ * written out once and asserted twice -- against the parse of the typed string,
+ * and against the re-parse of the persisted `{kind, raw, url}` record that
+ * source serializes to. `canonicalCloneUrl` reads `url`, so one literal
+ * satisfying both is the statement that an add and every later operation hash
+ * the same `plugin-clones/<hash>` directory, whatever slash, `.git` suffix or
+ * `#<ref>` fragment the user typed.
+ */
+const URL_FIXED_POINT_CASES: readonly UrlFixedPointCase[] = [
+  {
+    name: "holds one identity for a path slash before a #<ref> fragment across a reload",
+    typed: "https://gitlab.com/o/r/#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "holds one identity for a #<ref> fragment behind no path slash across a reload",
+    typed: "https://gitlab.com/o/r#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "holds one identity for a .git suffix behind a path slash across a reload",
+    typed: "https://gitlab.com/o/r.git/#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "holds one identity for a .git suffix before a #<ref> fragment across a reload",
+    typed: "https://gitlab.com/o/r.git#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "holds one identity for a path slash before an empty #fragment across a reload",
+    typed: "https://gitlab.com/o/r/#",
+    source: { kind: "url", raw: "https://gitlab.com/o/r/#", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "holds one identity for a .git suffix with no fragment across a reload",
+    typed: "https://gitlab.com/o/r.git",
+    source: { kind: "url", raw: "https://gitlab.com/o/r.git", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "holds one identity for a trailing slash with no fragment across a reload",
+    typed: "https://gitlab.com/o/r/",
+    source: { kind: "url", raw: "https://gitlab.com/o/r/", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "holds one identity for a bare url across a reload",
+    typed: "https://gitlab.com/o/r",
+    source: { kind: "url", raw: "https://gitlab.com/o/r", url: "https://gitlab.com/o/r" },
+  },
+];
+
 describe("parsePluginSource", () => {
   for (const { name, raw, source } of [
     ...PARSE_CASES,
@@ -952,6 +1033,25 @@ describe("parsePluginSource", () => {
 
       // assert
       assert.deepStrictEqual(parsedSource, expectedSource);
+    });
+  }
+
+  for (const { name, typed, source } of URL_FIXED_POINT_CASES) {
+    test(name, () => {
+      // arrange
+      const expectedSources = [source, source];
+      const persistedSource = {
+        kind: "url",
+        raw: source.raw,
+        url: source.url,
+        ...(source.ref !== undefined && { ref: source.ref }),
+      };
+
+      // act
+      const parsedSources = [parsePluginSource(typed), parsePluginSource(persistedSource)];
+
+      // assert
+      assert.deepStrictEqual(parsedSources, expectedSources);
     });
   }
 

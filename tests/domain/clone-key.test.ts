@@ -260,6 +260,22 @@ describe("networkCloneUrl", () => {
     assert.strictEqual(cloneUrl, "https://gitlab.example.com/team/mp.git");
   });
 
+  test("keeps a trailing .git suffix behind a path slash that precedes a #<ref> fragment", () => {
+    // arrange
+    const source = {
+      kind: "url",
+      raw: "https://gitlab.example.com/team/mp.git/#v1.0",
+      url: "https://gitlab.example.com/team/mp",
+      ref: "v1.0",
+    } as const;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://gitlab.example.com/team/mp.git");
+  });
+
   test("returns a git-subdir repository url verbatim, including a trailing .git", () => {
     // arrange
     const source = {

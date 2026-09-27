@@ -451,11 +451,21 @@ function stripTrailingSlashes(input: string): string {
 }
 
 /**
+ * D-76-01: strip one trailing `.git` from a URL path. Shared by the two
+ * parse-time identity compositions below, so `https://host/o/r.git` and
+ * `https://host/o/r` name one source; the wire form does not call it, because it
+ * keeps the suffix decision the user's own input made (D-2-01).
+ */
+function stripGitSuffix(path: string): string {
+  return path.endsWith(".git") ? path.slice(0, -".git".length) : path;
+}
+
+/**
  * Split an optional `#<ref>` fragment off a URL. SP-5: a fragment that is empty
  * once its own trailing slashes are stripped is dropped. The path half is
- * returned untouched, because whether a path keeps a trailing slash is the one
- * point on which the identity form and the wire form disagree, and each of the
- * two callers below settles it for itself.
+ * returned untouched, because whether a path's trailing slashes come off before
+ * or after the split is the one point on which the three compositions below
+ * differ, and each of them settles it for itself.
  */
 function splitUrlFragment(input: string): { path: string; ref: string | undefined } {
   const hashIdx = input.indexOf("#");
@@ -480,21 +490,43 @@ export function stripSlashAndFragment(input: string): { base: string; ref: strin
 }
 
 /**
- * D-76-01: the parse-time IDENTITY form shared by `parseUrlSource` and
- * `parseGitHubUrl`. Strips the whole input's trailing slashes, then splits the
- * `#<ref>` fragment, then strips one trailing `.git`. Stripping before the
- * split is load-bearing: a path slash sitting in front of a fragment survives,
- * so the identity of `https://host/o/r/#main` is `https://host/o/r/`.
+ * D-76-01 / D-2-05: the parse-time IDENTITY form of a generic `url` source.
+ * Splits the `#<ref>` fragment off, strips the path's trailing slashes, then
+ * strips one trailing `.git`. A slash sitting in front of a fragment carries no
+ * meaning in a clone url, so it comes off and the identity of
+ * `https://host/o/r/#main` is `https://host/o/r` -- the same value a re-parse of
+ * the persisted source computes, which makes the identity a fixed point and
+ * keeps the add and every later operation on one `plugin-clones/<hash>`
+ * directory (D-2-05).
  *
  * D-2-03: this string is what `pluginCloneKey` and `pluginMirrorKey` hash, so
  * its composition order is pinned by `tests/domain/source.test.ts`'s identity
- * table. `stripSlashAndFragment` composes the same two steps in the opposite
- * order for the wire form; neither function calls the other, so a correction to
- * one cannot move the other.
+ * table. `stripSlashAndFragment` composes the same two steps in the same order
+ * for the wire form and differs only in keeping `.git`; the two share no
+ * composition, so a correction to the wire form cannot move the cache identity.
  */
 function stripUrlDecorations(input: string): { base: string; ref: string | undefined } {
+  const { path, ref } = splitUrlFragment(input);
+  return { base: stripGitSuffix(stripTrailingSlashes(path)), ref };
+}
+
+/**
+ * D-76-01: the parse-time IDENTITY form of a `https://github.com/<owner>/<repo>`
+ * url, applied to the path that follows the host. Strips the whole input's
+ * trailing slashes, then splits the `#<ref>` fragment, then strips one trailing
+ * `.git`. Stripping before the split keeps a path slash that sits in front of a
+ * fragment, so `o/r/#main` reaches `parseGitHubUrl`'s owner/repo validation as
+ * the three-part `o/r/` and is rejected with the canonical-form diagnostic.
+ *
+ * D-2-03 / D-2-05: the slash normalization D-2-05 grants the `url` kind stops
+ * here. A github source's identity is its `owner`/`repo` pair rather than a url
+ * string, `canonicalCloneUrl` rebuilds that pair into one canonical url, and
+ * widening what the owner/repo validation admits would move the accepted parse
+ * surface rather than the identity of an accepted source.
+ */
+function stripGitHubUrlDecorations(input: string): { base: string; ref: string | undefined } {
   const { path, ref } = splitUrlFragment(stripTrailingSlashes(input));
-  return path.endsWith(".git") ? { base: path.slice(0, -".git".length), ref } : { base: path, ref };
+  return { base: stripGitSuffix(path), ref };
 }
 
 /**
@@ -515,11 +547,13 @@ export function ensureGitSuffix(url: string): string {
 
 /**
  * MURL-01 / D-76-01: parse a generic non-github `https://` source into a
- * `UrlSource`. Mirrors `parseGitHubUrl`'s canonicalization: strip a trailing
- * slash, split off an optional `#<ref>` fragment (empty fragment dropped), then
- * strip a single trailing `.git`. Normalizing the `.git` suffix at parse time
- * is the identity rule that lets `sourceLogical` / `samePlannedSource` compare
- * `https://host/repo.git` and `https://host/repo` as the same source (D-76-01).
+ * `UrlSource`. Splits off an optional `#<ref>` fragment (empty fragment
+ * dropped), strips the path's trailing slashes, then strips a single trailing
+ * `.git`. Normalizing the `.git` suffix at parse time is the identity rule that
+ * lets `sourceLogical` / `samePlannedSource` compare `https://host/repo.git` and
+ * `https://host/repo` as the same source (D-76-01); normalizing the slash is
+ * what makes that identity a fixed point across a persist-and-reload round trip
+ * (D-2-05).
  */
 function parseUrlSource(raw: string): UrlSource {
   const { base, ref } = stripUrlDecorations(raw);
@@ -544,7 +578,7 @@ function parseGitHubUrl(raw: string): GitHubSource | UnknownSource {
 
   // strip trailing slash, optional #<ref> fragment (SP-5: empty fragment
   // dropped), and optional .git suffix
-  const { base, ref } = stripUrlDecorations(rest);
+  const { base, ref } = stripGitHubUrlDecorations(rest);
 
   // validate exactly owner/repo
   const parts = base.split("/");
