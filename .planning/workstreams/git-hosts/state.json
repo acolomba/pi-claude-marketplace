@@ -11,18 +11,18 @@
     {
       "number": "2",
       "name": "Endpoints that answer only at the verbatim URL",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "3",
       "name": "`marketplace add` recovers from its own leftover clone",
-      "status": "pending"
+      "status": "in_progress"
     }
   ],
   "next": {
     "command": "/gsd:progress --next",
     "label": "Advance to the next step",
-    "reason": "Phase 1 of 3 · 0% · executing"
+    "reason": "Phase 3 of 3 · 0% · executing"
   },
-  "updated_at": "2026-09-26T04:42:10.801Z"
+  "updated_at": "2026-09-27T14:33:38.935Z"
 }

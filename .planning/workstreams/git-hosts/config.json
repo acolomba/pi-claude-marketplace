@@ -1,5 +1,6 @@
 {
   "workflow": {
-    "ui_phase": false
+    "ui_phase": false,
+    "_auto_chain_active": false
   }
 }
