@@ -955,6 +955,11 @@ describe("stripSlashAndFragment", () => {
       expected: { base: "https://gitlab.com/o/r", ref: "main" },
     },
     {
+      name: "trims a trailing slash that precedes the #<ref> fragment",
+      input: "https://gitlab.com/o/r/#main",
+      expected: { base: "https://gitlab.com/o/r", ref: "main" },
+    },
+    {
       name: "returns the input unchanged when it carries neither",
       input: "https://gitlab.com/o/r",
       expected: { base: "https://gitlab.com/o/r", ref: undefined },

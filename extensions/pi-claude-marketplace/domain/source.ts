@@ -413,19 +413,19 @@ function parseOwnerRepo(candidate: string, raw: string): ParsedSource {
  */
 export function stripSlashAndFragment(input: string): { base: string; ref: string | undefined } {
   let rest = input;
-
-  while (rest.endsWith("/")) {
-    rest = rest.slice(0, -1);
-  }
-
   let ref: string | undefined;
+
   const hashIdx = rest.indexOf("#");
   if (hashIdx !== -1) {
-    const frag = rest.slice(hashIdx + 1);
+    const frag = rest.slice(hashIdx + 1).replace(/\/+$/, "");
     rest = rest.slice(0, hashIdx);
     if (frag.length > 0) {
       ref = frag;
     }
+  }
+
+  while (rest.endsWith("/")) {
+    rest = rest.slice(0, -1);
   }
 
   return { base: rest, ref };
