@@ -176,17 +176,26 @@ function urlObjectSource(obj: Record<string, unknown>): ParsedSource {
     return unknownObjectSource(obj, "url source is missing url");
   }
 
-  // D-76-02: an object-form url pointing at github.com funnels through the
-  // github parser so it normalizes to `github` kind (canonical identity;
-  // Device Flow auth stays applicable), carrying the object's ref/sha fields.
-  if (url.startsWith("https://github.com/")) {
-    const parsed = parsePluginSource(url);
-    if (parsed.kind === "github") {
-      return withOptionalSourceFields(parsed, obj);
-    }
+  // D-76-01: the object form passes the same syntactic gate as the string form,
+  // so `http://`, `ssh://`, `git@host:`, a relative path and a github browser
+  // URL are rejected here too. `PLUGIN_ENTRY_SCHEMA` types the entry's source
+  // as `unknown`, so a third-party marketplace manifest controls this object,
+  // and the string picked above is what `networkCloneUrl` sends to `gitOps`.
+  //
+  // D-76-02: the gate's first arm sends a github.com url through the github
+  // parser, so it normalizes to `github` kind (one canonical identity per repo;
+  // Device Flow auth stays applicable) and a github url the parser rejects is
+  // rejected here rather than falling through to a clonable `url` source.
+  const parsed = parseUrlSourceForm(url);
+  if (parsed === undefined) {
+    return unknownObjectSource(obj, nonRelativeReason(url));
   }
 
-  return withOptionalSourceFields(parseUrlSource(url), obj);
+  if (parsed.kind === "unknown") {
+    return parsed;
+  }
+
+  return withOptionalSourceFields(parsed, obj);
 }
 
 function gitSubdirObjectSource(obj: Record<string, unknown>): ParsedSource {
@@ -325,7 +334,7 @@ function parsePathSourceForm(raw: string): ParsedSource | undefined {
  * Only `https://` URLs and local paths are accepted, so the reject must sit
  * AFTER both https arms.
  */
-function parseUrlSourceForm(raw: string): ParsedSource | undefined {
+function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSource | undefined {
   if (raw.startsWith("https://github.com/")) {
     return parseGitHubUrl(raw);
   }
@@ -405,72 +414,77 @@ function parseOwnerRepo(candidate: string, raw: string): ParsedSource {
   return { kind: "github", raw, owner, repo };
 }
 
-/**
- * D-2-01 / D-2-03: strip trailing slashes and an optional `#<ref>` fragment
- * (SP-5: empty fragment dropped) from a URL, WITHOUT touching a trailing
- * `.git` suffix. `stripUrlDecorations` below layers the `.git` strip on top
- * of this for the parse-time identity form; this export is the network-side
- * form `networkCloneUrl`'s `url` arm reads, and it deliberately leaves
- * `.git` alone so the wire request carries whatever suffix decision the
- * user's own input made.
- */
-export function stripSlashAndFragment(input: string): { base: string; ref: string | undefined } {
+/** Strip every trailing `/` from a URL or from a `#<ref>` fragment. */
+function stripTrailingSlashes(input: string): string {
   let rest = input;
-  let ref: string | undefined;
-
-  const hashIdx = rest.indexOf("#");
-  if (hashIdx !== -1) {
-    let frag = rest.slice(hashIdx + 1);
-    while (frag.endsWith("/")) {
-      frag = frag.slice(0, -1);
-    }
-
-    rest = rest.slice(0, hashIdx);
-    if (frag.length > 0) {
-      ref = frag;
-    }
-  }
-
   while (rest.endsWith("/")) {
     rest = rest.slice(0, -1);
   }
 
-  return { base: rest, ref };
+  return rest;
 }
 
 /**
- * Shared canonicalization tail for https sources (`parseUrlSource` /
- * `parseGitHubUrl`): layers a single trailing `.git` strip on top of
- * `stripSlashAndFragment`'s trailing-slash and `#<ref>` fragment strip.
+ * Split an optional `#<ref>` fragment off a URL. SP-5: a fragment that is empty
+ * once its own trailing slashes are stripped is dropped. The path half is
+ * returned untouched, because whether a path keeps a trailing slash is the one
+ * point on which the identity form and the wire form disagree, and each of the
+ * two callers below settles it for itself.
+ */
+function splitUrlFragment(input: string): { path: string; ref: string | undefined } {
+  const hashIdx = input.indexOf("#");
+  if (hashIdx === -1) {
+    return { path: input, ref: undefined };
+  }
+
+  const frag = stripTrailingSlashes(input.slice(hashIdx + 1));
+  return { path: input.slice(0, hashIdx), ref: frag.length > 0 ? frag : undefined };
+}
+
+/**
+ * D-2-01 / D-2-03: the WIRE form of a `url` or `git-subdir` source, read by
+ * `domain/clone-key.ts::networkCloneUrl`. Splits the `#<ref>` fragment off and
+ * then strips the path's trailing slashes, so `https://host/o/r/#main` is sent
+ * as `https://host/o/r`. A trailing `.git` is left alone, so the wire request
+ * carries whatever suffix decision the user's own input made.
+ */
+export function stripSlashAndFragment(input: string): { base: string; ref: string | undefined } {
+  const { path, ref } = splitUrlFragment(input);
+  return { base: stripTrailingSlashes(path), ref };
+}
+
+/**
+ * D-76-01: the parse-time IDENTITY form shared by `parseUrlSource` and
+ * `parseGitHubUrl`. Strips the whole input's trailing slashes, then splits the
+ * `#<ref>` fragment, then strips one trailing `.git`. Stripping before the
+ * split is load-bearing: a path slash sitting in front of a fragment survives,
+ * so the identity of `https://host/o/r/#main` is `https://host/o/r/`.
+ *
+ * D-2-03: this string is what `pluginCloneKey` and `pluginMirrorKey` hash, so
+ * its composition order is pinned by `tests/domain/source.test.ts`'s identity
+ * table. `stripSlashAndFragment` composes the same two steps in the opposite
+ * order for the wire form; neither function calls the other, so a correction to
+ * one cannot move the other.
  */
 function stripUrlDecorations(input: string): { base: string; ref: string | undefined } {
-  const { base, ref } = stripSlashAndFragment(input);
-  return base.endsWith(".git") ? { base: base.slice(0, -".git".length), ref } : { base, ref };
+  const { path, ref } = splitUrlFragment(stripTrailingSlashes(input));
+  return path.endsWith(".git") ? { base: path.slice(0, -".git".length), ref } : { base: path, ref };
 }
 
 /**
- * D-76-06: the network-side counterpart to `stripUrlDecorations`. Parse time
- * strips a trailing `.git` so `sourceLogical` / `samePlannedSource` compare
- * one canonical identity per repo (D-76-01); this restores the suffix on the
- * string that actually goes to the wire.
+ * D-76-06: append the conventional `.git` suffix to a url that lacks one.
  *
- * `domain/clone-key.ts::networkCloneUrl` calls this only for the `github`
- * arm, appending `.git` where Claude Code appends it -- a `github.com`
- * `owner/repo` path -- and nowhere else. A `url` source's wire form preserves
- * whatever suffix decision the user's own input made (D-2-01).
+ * `domain/clone-key.ts::networkCloneUrl` calls this only for the `github` arm,
+ * appending `.git` where Claude Code appends it -- a `github.com` `owner/repo`
+ * path -- and nowhere else. A `url` source's wire form preserves whatever
+ * suffix decision the user's own input made (D-2-01).
  *
- * Accepted trade-off (D-2-02): a suffix-less URL against a host that serves
- * ONLY the `.git`-suffixed smart-HTTP path no longer resolves. Verbatim means
+ * Accepted trade-off (D-2-02): a suffix-less URL does not resolve against a
+ * host that serves ONLY the `.git`-suffixed smart-HTTP path. Verbatim means
  * verbatim in both directions, and the failure names the URL that was sent.
  */
 export function ensureGitSuffix(url: string): string {
-  let rest = url;
-
-  while (rest.endsWith("/")) {
-    rest = rest.slice(0, -1);
-  }
-
-  return rest.endsWith(".git") ? rest : `${rest}.git`;
+  return url.endsWith(".git") ? url : `${url}.git`;
 }
 
 /**
@@ -486,7 +500,7 @@ function parseUrlSource(raw: string): UrlSource {
   return ref === undefined ? { kind: "url", raw, url: base } : { kind: "url", raw, url: base, ref };
 }
 
-function parseGitHubUrl(raw: string): ParsedSource {
+function parseGitHubUrl(raw: string): GitHubSource | UnknownSource {
   // strip prefix
   const rest = raw.slice("https://github.com/".length);
 

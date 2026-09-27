@@ -634,9 +634,162 @@ const INVALID_INPUT_CASES: readonly ParseCase[] = [
   },
 ];
 
+/**
+ * D-2-03: the parse-time `url` is the exact string `pluginCloneKey` and
+ * `pluginMirrorKey` hash, so every expected value below names a
+ * `plugin-clones/<hash>` directory. Each row is an input whose answer depends on
+ * the ORDER in which `domain/source.ts` strips trailing slashes and splits the
+ * `#<ref>` fragment: the identity form strips slashes first, so a path slash
+ * sitting in front of a fragment survives, and the github arm then rejects the
+ * `o/r/` it produces. The wire form composes the two steps the other way round
+ * (see the `stripSlashAndFragment` table). Changing an expected value here
+ * cold-misses every warm clone for that input.
+ */
+const URL_IDENTITY_CASES: readonly ParseCase[] = [
+  {
+    name: "keeps a path slash that precedes a #<ref> fragment in the url identity",
+    raw: "https://gitlab.com/o/r/#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r/#main",
+      url: "https://gitlab.com/o/r/",
+      ref: "main",
+    },
+  },
+  {
+    name: "keeps a path slash that precedes an empty #fragment in the url identity",
+    raw: "https://gitlab.com/o/r/#",
+    source: { kind: "url", raw: "https://gitlab.com/o/r/#", url: "https://gitlab.com/o/r/" },
+  },
+  {
+    name: "leaves a .git suffix in the url identity when a path slash precedes a #<ref> fragment",
+    raw: "https://gitlab.com/o/r.git/#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r.git/",
+      ref: "main",
+    },
+  },
+  {
+    name: "strips a trailing slash from the url identity when no #<ref> fragment follows it",
+    raw: "https://gitlab.com/o/r/",
+    source: { kind: "url", raw: "https://gitlab.com/o/r/", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "strips a trailing slash from a #<ref> fragment in the url identity",
+    raw: "https://gitlab.com/o/r#main/",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r#main/",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "strips a .git suffix behind a trailing slash from the url identity",
+    raw: "https://gitlab.com/o/r.git/",
+    source: { kind: "url", raw: "https://gitlab.com/o/r.git/", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "rejects a github url whose path slash precedes a #<ref> fragment",
+    raw: "https://github.com/o/r/#main",
+    source: {
+      kind: "unknown",
+      raw: "https://github.com/o/r/#main",
+      reason:
+        "https://github.com/o/r/#main must be https://github.com/<owner>/<repo>[.git][#<ref>]",
+    },
+  },
+  {
+    name: "rejects a github url whose .git suffix and path slash precede a #<ref> fragment",
+    raw: "https://github.com/o/r.git/#main",
+    source: {
+      kind: "unknown",
+      raw: "https://github.com/o/r.git/#main",
+      reason:
+        "https://github.com/o/r.git/#main must be https://github.com/<owner>/<repo>[.git][#<ref>]",
+    },
+  },
+];
+
+/**
+ * D-76-01: the object form passes the same https-only scheme gate as the string
+ * form. `PLUGIN_ENTRY_SCHEMA` types a manifest entry's source as `unknown`, so a
+ * third-party marketplace controls these fields, and the string picked here is
+ * the one `networkCloneUrl` hands to `gitOps.clone`.
+ */
+const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
+  {
+    name: "rejects an http:// url in the object form",
+    raw: { source: "url", raw: "http://evil.example/x", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: "http://evil.example/x",
+      reason:
+        "http://evil.example/x is not supported; http:// URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects an ssh:// url in the object form",
+    raw: { source: "url", raw: "ssh://git@evil.example/x", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: "ssh://git@evil.example/x",
+      reason:
+        "ssh://git@evil.example/x is not supported; ssh:// URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects a git@host: scp-form url in the object form",
+    raw: { source: "url", raw: "git@evil.example:o/r.git", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: "git@evil.example:o/r.git",
+      reason:
+        "git@evil.example:o/r.git is not supported; git@host: scp-form URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects a relative path in the object form",
+    raw: { source: "url", raw: "./local/path", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","raw":"./local/path","url":"https://gitlab.com/o/r"}',
+      reason: "non-relative string source ./local/path cannot be classified",
+    },
+  },
+  {
+    name: "rejects an owner/repo shorthand in the object form",
+    raw: { source: "url", url: "o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","url":"o/r"}',
+      reason: "non-relative string source o/r cannot be classified",
+    },
+  },
+  {
+    name: "rejects a github browser url in the object form",
+    raw: { source: "url", raw: "https://github.com/o/r/tree/main" },
+    source: {
+      kind: "unknown",
+      raw: "https://github.com/o/r/tree/main",
+      reason:
+        "https://github.com/o/r/tree/main is a browser URL; use https://github.com/o/r#main instead",
+    },
+  },
+  {
+    name: "accepts an https object-form url and keeps its .git decision on raw",
+    raw: { source: "url", url: "https://gitlab.com/o/r.git" },
+    source: { kind: "url", raw: "https://gitlab.com/o/r.git", url: "https://gitlab.com/o/r" },
+  },
+];
+
 describe("parsePluginSource", () => {
   for (const { name, raw, source } of [
     ...PARSE_CASES,
+    ...URL_IDENTITY_CASES,
+    ...URL_OBJECT_GATE_CASES,
     ...UNKNOWN_PARSE_CASES,
     ...INVALID_INPUT_CASES,
   ]) {
@@ -937,12 +1090,13 @@ describe("sourceLogical", () => {
 });
 
 describe("ensureGitSuffix", () => {
+  // The only production caller is `networkCloneUrl`'s github arm, which passes
+  // `canonicalCloneUrl(source)`. Both inputs below are values that arm produces:
+  // `https://github.com/<owner>/<repo>` for a parsed github url, and the same
+  // with `.git` inside `repo` for the `owner/repo.git` shorthand.
   for (const { url, cloneUrl } of [
     { url: "https://gitlab.com/o/r", cloneUrl: "https://gitlab.com/o/r.git" },
     { url: "https://gitlab.com/o/r.git", cloneUrl: "https://gitlab.com/o/r.git" },
-    { url: "https://gitlab.com/o/r/", cloneUrl: "https://gitlab.com/o/r.git" },
-    { url: "https://gitlab.com/o/r///", cloneUrl: "https://gitlab.com/o/r.git" },
-    { url: "https://gitlab.com/o/r.git/", cloneUrl: "https://gitlab.com/o/r.git" },
   ]) {
     test("normalizes " + url + " for Git transport", () => {
       // arrange
