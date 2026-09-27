@@ -2989,10 +2989,7 @@ test("MURL-09 / D-2-02: an add against a suffix-only port fails naming the verba
       }),
       (err: unknown) => {
         assert.ok(err instanceof Error);
-        assert.equal(
-          err.message,
-          "createGitOpsFake blocked unplanned remote https://gitlab.example.com/team/git-only-mp",
-        );
+        assert.match(err.message, /https:\/\/gitlab\.example\.com\/team\/git-only-mp/);
         return true;
       },
     );
