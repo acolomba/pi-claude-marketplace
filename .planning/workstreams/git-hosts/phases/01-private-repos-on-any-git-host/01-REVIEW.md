@@ -1,478 +1,207 @@
 ---
 phase: 01-private-repos-on-any-git-host
-reviewed: 2026-09-26T00:00:00Z
-depth: deep
-diff_base: f4f98c66
-diff_head: 3adb12c4
-files_reviewed: 22
+reviewed: 2026-09-28T13:34:19Z
+depth: standard
+diff_base: 5958ee30
+diff_head: a90650b6
+files_reviewed: 4
 files_reviewed_list:
   - extensions/pi-claude-marketplace/orchestrators/auth-host.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-clone-probe.ts
   - extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts
-  - tests/edge/handlers/marketplace/add.test.ts
-  - tests/edge/handlers/marketplace/update.test.ts
-  - tests/orchestrators/auth-host.test.ts
-  - tests/orchestrators/marketplace/add.test.ts
-  - tests/orchestrators/marketplace/update.test.ts
-  - tests/orchestrators/plugin/fetch.test.ts
-  - tests/orchestrators/plugin/install-clone-probe.test.ts
-  - tests/orchestrators/plugin/install-flow.test.ts
-  - tests/orchestrators/plugin/reinstall-clone-probe.test.ts
-  - tests/orchestrators/plugin/reinstall-flow.test.ts
-  - tests/platform/git-auth-callbacks.test.ts
+  - extensions/pi-claude-marketplace/platform/git.ts
   - tests/platform/git.test.ts
 findings:
-  critical: 1
-  high: 2
-  medium: 3
-  low: 5
-  total: 11
+  critical: 0
+  warning: 4
+  info: 5
+  total: 9
 status: issues_found
 ---
 
-# Phase 01: Code Review Report
+# Phase 1: Code Review Report (gap closure 01-04)
 
-**Reviewed:** 2026-09-26
-**Depth:** deep (cross-file: auth-host -> platform/git -> git-auth-callbacks -> git-credential; domain/source parse surface; isomorphic-git transport)
-**Files Reviewed:** 22 (10 source, 12 test)
+**Reviewed:** 2026-09-28T13:34:19Z
+**Depth:** standard
+**Files Reviewed:** 4
 **Status:** issues_found
+
+> This is an incremental review of gap-closure plan 01-04 (`git diff 5958ee30..a90650b6`).
+> It supersedes the earlier phase-1 review for these four files. The earlier report
+> (deep, `f4f98c66..3adb12c4`, 22 files) is still in git history at commit `370cca68`.
 
 ## Summary
 
-The host compare itself is correct. I traced every route into `buildAuthCallbacks`
-(`platform/git.ts::clone` / `fetch` / `resolveRemoteRef`, all three at
-`opts.auth !== undefined`) and every producer of `opts.host`
-(`hostFromCloneUrl`, the `"github"` literal arm, the `update.ts` / `update-preflight.ts`
-local builders). Both sides of the compare read `URL.host`, which I verified empirically
-normalizes case, punycode/IDN, userinfo and the default port identically, and
-isomorphic-git's `discover` passes the caller's own userinfo-stripped URL
-(`node_modules/isomorphic-git/index.cjs:9440-9476`), so I found **no false negative** —
-no credential for host A can reach host B. I also found no false positive on any
-production route: every site that builds a bundle from one URL and clones another
-(`install-clone-probe.ts:56-84`, `update-preflight.ts:202-212`) resolves both through
-`canonicalCloneUrl`. AUTH-09 holds: only parsed hosts are interpolated into the new
-`hookDebugLog` line, and Node's `Invalid URL` message carries no input.
+Plan 01-04 replaces `isomorphic-git/http/node` with a module-private client in
+`platform/git.ts`. The client sends each hop with `followRedirects: false` and follows
+redirects itself. It drops `authorization` and `cookie` whenever the target's `URL.origin`
+differs from the origin of the original request. The two docstring edits in
+`auth-host.ts` and `git-auth-callbacks.ts` now name this client as the redirect guard.
 
-What the phase did not weigh is the **rest** of the bundle it now attaches to every host.
-`buildAuthCallbacks` is a pair, and the second half (`onAuthFailure`) unconditionally
-calls `credentialOps.reject(host, cred)`. Attaching a bundle everywhere therefore also
-attached a *destructive* keychain eviction everywhere — on hosts where, by construction,
-nothing can re-mint the evicted secret. That is CR-01, and I proved it runs. The
-docstring at `git-auth-callbacks.ts:100-102` does consider `onAuthFailure`, but only on
-disclosure grounds ("a compare there would change nothing about what was disclosed") and
-never asks what the eviction now destroys.
+The core guard is correct for what it claims:
 
-Second, the new compare checks `host` and not the scheme, while `credentialFill`
-hardcodes `protocol=https`. Object-form sources are not scheme-validated (only the
-*string* parser rejects `http://`), so a manifest-declared `http://` source now walks a
-stored https credential onto a cleartext wire (WR-01, also proven).
+- The origin compare uses `URL.origin`. Scheme, host and port all count, and a default port normalizes away.
+- The header filter ignores case, which matters because isomorphic-git sets `Authorization` with a capital A.
+- A relative `Location` resolves against the current hop.
+- A dropped header stays dropped on later hops.
+- The redirect body is closed with `body.return()`, which destroys the stream. `decompress-response`'s wrapper also destroys the socket.
+- The redirect cap matches `simple-get`: 11 requests, then an error.
+- A redirect to a non-HTTP scheme fails in Node's `http.request` with `ERR_INVALID_PROTOCOL`, so nothing is sent.
+- A redirect from https to http on the same host no longer carries the credential. The redirect is still followed in cleartext, as the plan requires.
 
-Third, the phase's headline contract ("EVERY host gets a bundle, so the credential helper
-is consulted on every host") is not delivered on the cascade update path, which is the
-path `marketplace update` uses (WR-02).
+Verification run by this review:
 
-The tests are genuinely re-proven, not merely re-aimed: the new `git.test.ts` cases assert
-at the transport that `fill` was never called and that no request carried `Authorization`,
-and the orchestrator reducers pin `auth.host` **by value** (`"gitlab.example.com"`,
-`auth=example.com`) rather than pinning key presence. GAUTH-05 has a real negative test
-that constructs a `url`-kind source on `github.com` through the case-sensitive prefix
-quirk. Residual test weaknesses are Low (IN-04). No comment-policy violations: I found no
-phase/plan/wave/milestone numbers and no bare `Pitfall N`/`Pattern N` refs in any added
-line.
+- `node --test tests/platform/git.test.ts`: 51/51 pass.
+- `npm run test:coverage:direct -- extensions/pi-claude-marketplace/platform/git.ts`: 100% (branches 67/67, functions 17/17, lines 503/503).
+- A scratch probe against the real client (not committed) confirmed WR-01 and WR-04 below.
 
-## Critical Issues
+The main defects:
 
-### CR-01: Attaching a bundle to every host also attached an unrecoverable keychain eviction to every host
-
-**File:** `extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:193-211`,
-reached via `extensions/pi-claude-marketplace/orchestrators/auth-host.ts:139-152`
-
-**Issue:** `buildAuthCallbacks` returns a *pair*. Before this phase, `buildAuthForHost`
-returned `undefined` for any host the registry did not claim, so `platform/git.ts` built
-neither callback and `onAuthFailure` was unreachable on those hosts. It now returns a
-bundle for every host, so `onAuthFailure` — which calls
-`credentialOps.reject(opts.host, cred)` and thus `git credential reject` ->
-`git credential-<helper> erase` — is live on every git host.
-
-isomorphic-git's discover loop invokes `onAuthFailure` (not `onAuth`) on the **second**
-401 of one operation (`node_modules/isomorphic-git/index.cjs:9468-9470`:
-`const getAuth = providedAuthBefore ? onAuthFailure : onAuth`). So the sequence is: the
-helper returns a stored PAT -> the server still answers 401 -> the PAT is erased from the
-user's keychain for the whole host.
-
-On `github.com` / `gitlab.com` that is survivable: CP-9's comment reasons that "the next
-operation invokes onAuth which performs the right thing (fill miss -> Device Flow)". On a
-host the registry does not claim there **is** no Device Flow — the replacement
-`onAuthRequired` (`auth-host.ts:146-151`) resolves `{ ok: false }` and does no I/O. The
-eviction is therefore terminal, and the secret is generally unrecoverable (a Gitea /
-Bitbucket / GitHub-Enterprise PAT is displayed once at creation).
-
-**Concrete failure scenario:** a user stores a read-scoped Gitea PAT for
-`gitea.example.com` and runs
-`pi marketplace add https://gitea.example.com/team/private-b`, where the PAT lacks read
-access to `private-b`. Gitea answers 401. `onAuth` hits the helper and sends the PAT; the
-server answers 401 again; `onAuthFailure` erases the PAT. The user's *working*
-`marketplace update` for `team/private-a` on the same host now also fails, and the token
-value is gone. Before this phase the same command carried no bundle and touched nothing.
-
-**Proof** (scratch test, run green on this tree, then deleted — the fake's `reject`
-really erases, so the follow-up `fill` returns `null`):
-
-```ts
-const bundle = buildAuthForHost({ host: "gitea.example.invalid", credentialOps, ctx });
-const cbs = buildAuthCallbacks(bundle);
-const first = await cbs.onAuth("https://gitea.example.invalid/team/private.git");
-// -> { username: "u", password: "irreplaceable-pat" }
-await cbs.onAuthFailure("https://gitea.example.invalid/team/private.git", first);
-assert.deepStrictEqual(credentials.calls.reject, [
-  { host: "gitea.example.invalid", credential: { username: "u", password: "irreplaceable-pat" } },
-]);
-assert.strictEqual(await credentials.credentialOps.fill("gitea.example.invalid"), null);
-```
-
-Note there is no test anywhere in the phase's 12 changed test files that exercises
-`onAuthFailure` on a non-registry-host bundle — `tests/platform/git-auth-callbacks.test.ts`
-proves `reject` fires (`:340`, `:367`, `:396`) but only for hand-built bundles, never for
-one produced by `buildAuthForHost` on an unclaimed host.
-
-**Fix:** make the destructive half conditional on there being a way back. Either gate the
-eviction on the bundle knowing a re-mint path, e.g. carry the fact on the bundle instead
-of re-deriving it:
-
-```ts
-// platform/git-auth-callbacks.ts
-export interface BuildAuthCallbacksOpts {
-  credentialOps: CredentialOps;
-  host: string;
-  onAuthRequired: OnAuthRequiredFn;
-  /** When false, a rejected credential is NOT evicted: nothing can re-mint it. */
-  evictOnFailure: boolean;
-}
-
-async function onAuthFailure(_url: string, cred: GitCredentials): Promise<GitCredentials> {
-  if (!opts.evictOnFailure) {
-    hookDebugLog(`onAuthFailure: keeping the stored credential for ${opts.host}`, "auth");
-    return { cancel: true };
-  }
-  // ... existing reject path
-}
-```
-
-with `auth-host.ts` setting `evictOnFailure: provider !== undefined`; or, if eviction on a
-credential the server has definitively rejected is still wanted, sequence a
-`reject -> approve` re-store so the value is not lost, and say so in the docstring.
-Either way `git-auth-callbacks.ts:100-102` must stop reasoning about `onAuthFailure`
-solely in terms of disclosure.
+- **WR-01:** A 401 from a foreign origin still enters the bound host's auth loop. On GitHub and GitLab, this evicts a credential the bound host never rejected.
+- **WR-02:** The UAT saw the credential leak on two requests: `info/refs` and the `git-upload-pack` POST. Only the `info/refs` request has a regression test.
+- **WR-03:** The header scrub is a denylist. The credential type still allows arbitrary headers, and the scrub would pass them through.
+- **WR-04:** An empty `Location` header is treated as a redirect to the same URL, which the docstring and `simple-get` do not do.
 
 ## Warnings
 
-### WR-01: The new host compare ignores the URL scheme, so an `http://` source offers an https-stored credential in cleartext
+### WR-01: A 401 from another origin makes the bound host's credential be filled and then evicted, or starts a Device Flow
 
-**File:** `extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:153-167`
-(compare), `extensions/pi-claude-marketplace/platform/git-credential.ts:199`
-(`protocol=https` hardcoded), `extensions/pi-claude-marketplace/domain/source.ts:170-186`
-and `:198-205` (object forms, unvalidated)
+**File:** `extensions/pi-claude-marketplace/platform/git.ts:212-237` (the docstring states the behavior at `:255-258`). The eviction happens in `extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:214-243`.
 
-**Severity:** High
+**Issue:** When a cross-origin hop answers 401, `sendHop` returns that 401 to isomorphic-git unchanged. `GitRemoteHTTP.discover` cannot tell which origin sent the 401. It calls `onAuth(<original url>)`, which runs `credentialOps.fill(host)` for the bound host. It retries the bound host with the credential. The bound host redirects again, the foreign origin answers 401 again, and discover calls `onAuthFailure`. On a provider host (`evictOnFailure: true`, meaning github.com and gitlab.com), `onAuthFailure` calls `credentialOps.reject(host, cred)` and deletes a stored credential that the bound host never rejected.
 
-**Issue:** `onAuth` compares `new URL(url).host` against `opts.host` and nothing else. The
-scheme never participates. Meanwhile `buildAttributeBlock` always emits
-`protocol=https`, so the helper lookup claims https regardless of the transport actually
-in use. `domain/source.ts` rejects `http://` **only** in the string-form parser
-(`parseUrlSourceForm`, `:325-338`); `urlObjectSource` (`:170-186`) and
-`gitSubdirObjectSource` (`:198-205`) hand their `url` straight to `parseUrlSource` /
-store it verbatim with no scheme check. A marketplace `marketplace.json` is third-party
-content.
+This review reproduced the sequence against the real client: bound host `h.invalid` 302 → `h.invalid:8443` 401, with `evictOnFailure: true`. The credential calls were `['fill', 'reject']`. The wire log showed the credential sent only to the bound origin, so no credential leaked.
 
-Before this phase, a bundle for such a source existed only on `github.com` / `gitlab.com`
-(both of which 301 port 80, so nothing 401s in cleartext). This phase extends it to every
-host, including hosts that genuinely serve smart-HTTP over plaintext.
+On a provider host with nothing stored, the same foreign 401 starts an interactive Device Flow for the bound host. The token the user then approves is evicted on the next round. The server that asked for credentials can never receive them, so the whole auth loop is wasted work, and on provider hosts it destroys a credential. The new tests use `evictOnFailure: false` (`tests/platform/git.test.ts:623-632`), so they never exercise this path.
 
-**Concrete failure scenario:** a marketplace manifest declares
-`{"source": "url", "url": "http://gitea.internal.example/team/repo"}`. The user has a PAT
-for `gitea.internal.example` in their helper. Install -> plaintext GET -> 401 -> host
-compare passes (`gitea.internal.example` both sides) -> `fill` returns the https-stored
-PAT -> isomorphic-git sends it as an HTTP Basic header over an unencrypted connection. Any
-on-path observer captures it. The phase's own security argument (`auth-host.ts:123-131`)
-enumerates redirect and helper-keying defenses and never mentions the scheme.
+Before 01-04, the same thing happened on cross-hostname redirects. The gap closure extends it to redirects that change only the port or the scheme. Plan 01-04's truth 4 promises no eviction "on a host that cannot mint a replacement". The client could decline the challenge itself and keep the auth callbacks out of the loop entirely.
 
-**Proof** (scratch test, run green on this tree, then deleted):
+**Fix:** In the client, end the operation when a hop that left the original origin is challenged. Throw the same `UserCanceledError` that the cancel path already produces, so orchestrators still render `{authentication required}`, but `fill`, `onAuthRequired` and `reject` are never reached:
 
 ```ts
-const source = parsePluginSource({ source: "url", url: "http://gitea.example.invalid/team/repo" });
-assert.strictEqual(source.kind, "url");                       // no scheme rejection
-assert.strictEqual(canonicalCloneUrl(source), "http://gitea.example.invalid/team/repo");
-const bundle = buildCloneAuth(canonicalCloneUrl(source), source.kind, { ctx, credentialOps });
-assert.strictEqual(bundle.host, "gitea.example.invalid");
-const cred = await buildAuthCallbacks(bundle).onAuth("http://gitea.example.invalid/team/repo.git");
-assert.deepStrictEqual(cred, { username: "u", password: "pat" });  // sent over cleartext
-assert.deepStrictEqual(credentials.calls.fill, [{ host: "gitea.example.invalid" }]);
-```
-
-**Fix:** the compare is the right place, and it should compare what the helper lookup
-assumes:
-
-```ts
-const requested = new URL(url);
-if (requested.protocol !== "https:" || requested.host !== opts.host) {
-  hookDebugLog(
-    `onAuth: url ${requested.protocol}//${requested.host} does not match the bound https host ${opts.host}`,
-    "auth",
-  );
-  return { cancel: true };
+async function sendHop(hop: GitHttpRequest, origin: string, redirects: number): Promise<GitHttpResponse> {
+  const response = await nodeHttpClient.request({ ...hop, fetchOptions: { followRedirects: false } });
+  const location = redirectLocation(response);
+  if (location === undefined) {
+    if (new URL(hop.url).origin !== origin && (response.statusCode === 401 || response.statusCode === 203)) {
+      await response.body?.return?.();
+      // GAUTH-06: a foreign origin can never receive the bound credential, so its
+      // challenge must not reach onAuth / onAuthFailure (no fill, no Device Flow, no eviction).
+      throw new git.Errors.UserCanceledError();
+    }
+    return response;
+  }
+  // ...
 }
 ```
 
-Secondarily, close the parse hole so a non-https object-form source never becomes a git
-source at all: route `urlObjectSource` / `gitSubdirObjectSource` through the same
-`unsupportedUrlReason` reject the string form uses (`domain/source.ts:333-335`).
+Then update the cross-origin expectations: `credentials.calls.fill` becomes `[]`, and the wire log stops after the second request. Add one row with `evictOnFailure: true` that asserts `reject: []`.
 
-### WR-02: GAUTH-03 is not delivered on the cascade update path — `marketplace update` still cannot reach a stored credential
+### WR-02: No test covers a redirect of the credential-bearing `git-upload-pack` POST
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:160-163`;
-contract asserted at `extensions/pi-claude-marketplace/orchestrators/auth-host.ts:10-11`
-and acknowledged at `:190-192`
+**File:** `tests/platform/git.test.ts:794-810`, `:870-887`, `:1174-1227`
 
-**Severity:** High
+**Issue:** The UAT reproduction in 01-04-PLAN (objective) saw the credential cross origins twice: on `info/refs`, and "again on the POST->GET `git-upload-pack`". isomorphic-git's `connect` applies `updateHeaders(headers, auth)`, so the POST carries `Authorization`.
 
-**Issue:** `makeUpdateCloneProbe`'s local `buildBundle` returns `undefined` whenever
-`auth.ctx === undefined`:
+Every credential-carrying redirect test redirects only `info/refs`:
 
-```ts
-const buildBundle = (gitSource: GitBackedSource, cloneUrl: string) => {
-  if (auth.ctx === undefined) {
-    return undefined;
-  }
-  return buildAuthForHost({ host: hostFromCloneUrl(cloneUrl, gitSource.kind), ... });
-};
-```
+- The clone and fetch cases cancel inside `discover` and never reach the POST.
+- The same-origin rows redirect only `info/refs`.
+- The POST-redirect rows (`postRedirectServer`, `:596`) run with no `auth`, so their requests carry no `Authorization`.
 
-and `update-swap.ts:179-183` pins `CascadeThreePhaseArgs.ctx?: never`, so the cascade
-path — the one `marketplace update` drives for each of a marketplace's plugins — *always*
-has no `ctx`. No bundle means `platform/git.ts` builds no callbacks, which means
-`credentialOps.fill` is never consulted.
+A plausible wrong `nextHop` passes the whole suite. For example, one that strips credential headers only when `hop.method === "GET"`, or only on the POST→GET arm. This is the second leak path the UAT found. Must-have truth 1 ("receives no `authorization` header on any request… for `clone`, `fetch`") is therefore proven only for the GET leg.
 
-`ctx` exists only to build the Device Flow's `notifyFn` (`auth-host.ts:155`). The
-non-registry arm of `buildAuthForHost` (`:146-151`) needs no `ctx` at all — it is a pure
-closure. So the `ctx`-gated short-circuit now suppresses an auth path that has no
-dependency on `ctx`, and it does so on the surface where it matters most. The module
-header states the contract absolutely ("EVERY host gets a bundle, so ... its fill-first
-path consults `credentialOps.fill(host)` on every host"), which is false as shipped.
+**Fix:** Add rows to the POST-redirect table that use `boundAuth(storedCredentials())`, with a server that challenges `info/refs` once and then redirects `git-upload-pack`:
 
-**Concrete failure scenario:** a user has a Gitea PAT in their credential helper and a
-private plugin installed from a Gitea marketplace. `pi plugin update <name>` (direct path,
-has `ctx`) authenticates and updates. `pi marketplace update` cascading to the same plugin
-carries no bundle, so the fetch 401s and the plugin renders
-`(failed) {authentication required}` — with no cause line either, since the plugin grammar
-has no trailer slot. Same credential, same host, same repo, two different outcomes.
+- 302 and 307 to `OTHER_PORT_UPLOAD_PACK_URL`. Assert that the cross-origin POST/GET arrives with `authorization: null`. Include the same-origin POST in the whole-log assertion.
+- 307 to `RENAMED_UPLOAD_PACK_URL` as the same-origin control. It keeps `BASIC_CREDENTIAL`.
 
-**Fix:** build the bundle unconditionally and let the registry arm degrade instead of the
-caller. `buildAuthForHost` needs `ctx` only to reach `makeRawNotifyFn`, so either make the
-`ctx` optional there (a no-provider host never touches it) or, minimally:
+Compare the whole `wireCredentials(requests)` log, as the existing cross-origin rows do.
 
-```ts
-const buildBundle = (gitSource: GitBackedSource, cloneUrl: string) => {
-  const host = hostFromCloneUrl(cloneUrl, gitSource.kind);
-  if (auth.ctx === undefined && hasDeviceFlowProvider(host)) {
-    return undefined; // no notification surface for a Device Flow
-  }
-  return buildAuthForHost({ host, credentialOps: auth.credentialOps, ctx: auth.ctx!, ... });
-};
-```
+### WR-03: The cross-origin scrub is a denylist, but `GitCredentials.headers` lets a credential add any header
 
-and then update `auth-host.ts:190-192`, which currently documents the exception as a
-deliberate carve-out.
+**File:** `extensions/pi-claude-marketplace/platform/git.ts:168`, `:497-503`; `extensions/pi-claude-marketplace/orchestrators/auth-host.ts:156-157`
 
-### WR-03: `NO_STORED_CREDENTIAL_CAUSE` is attached on an outcome classification, so it asserts a fact it has not established
+**Issue:** `CROSS_ORIGIN_HEADERS` names only `authorization` and `cookie`. `GitCredentials` (`git.ts:497-503`) still declares `headers?: Record<string, string>`. isomorphic-git's `updateHeaders` does `Object.assign(headers, auth.headers)` for whatever `onAuth` returns (`node_modules/isomorphic-git/index.cjs:9369-9378`). A provider whose `credentialFrom` returns a token header, such as GitLab's `Private-Token` or a Gitea-style `X-Gitea-OTP`, would pass through every cross-origin hop unchanged.
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts:404-412`;
-cause text at `extensions/pi-claude-marketplace/orchestrators/auth-host.ts:93-94`;
-miss paths at `extensions/pi-claude-marketplace/platform/git-credential.ts:251-274`
+No producer sets `headers` today. `credentialFill` returns `{ username, password }`, and both registry descriptors return `{ username, password }`. So this is latent, but nothing enforces it. The docstrings now claim the client "never forwards the credential headers to another origin" (`auth-host.ts:156-157`), and that is only true while no credential carries a header.
 
-**Severity:** Medium
+**Fix:** Pick one:
 
-**Issue:** the guard fires on
-`classifyGitTransportFailure(err) === "authentication required" && !hasDeviceFlowProvider(host)`
-and then states as fact "no credential stored for `<host>`". But
-`classifyGitTransportFailure` folds every `UserCanceledError` into
-`"authentication required"` (`shared/git-failure-classifiers.ts:83-85`), and
-`onAuth` returns `{ cancel: true }` — which isomorphic-git throws as `UserCanceledError` —
-on several non-"empty helper" conditions. `credentialFill` deliberately collapses all of
-these to `null` (`git-credential.ts:239-243`):
+- Narrow the type so the compiler enforces the assumption. Remove `headers` from `GitCredentials`. It is still assignable to isomorphic-git's `GitAuth`, because the field is optional there.
+- Switch the scrub to an allowlist on cross-origin hops, keeping only the headers isomorphic-git itself sets: `accept`, `content-type`, `content-length`, `user-agent`, `git-protocol`, `accept-encoding`. Everything else is dropped.
 
-1. `git` absent from PATH (spawn ENOENT) -> `null`
-2. the 5 s `CREDENTIAL_TIMEOUT_MS` SIGTERM -> `null` (a locked macOS keychain, a slow
-   `pass`/`op`/pinentry helper)
-3. a helper that exits non-zero for any reason -> `null`
-4. exit 0 but the helper emitted no `username=` / `password=` pair -> `null`
+### WR-04: An empty `Location` header is followed as a redirect to the same URL
 
-and `onAuth` additionally cancels on a host/URL mismatch (`git-auth-callbacks.ts:154-162`)
-and on any thrown error (`:179-189`).
+**File:** `extensions/pi-claude-marketplace/platform/git.ts:186-189`, `:231`
 
-Every one of those reaches the user as `no credential stored for <host>; add one with
-git credential approve`. A user whose PAT *is* stored, behind a helper that took 5.1 s,
-is told the opposite and directed to re-store a credential that is already there. The
-audit trail is `hookDebugLog`-only, i.e. invisible without
-`PI_CLAUDE_MARKETPLACE_DEBUG=1`.
+**Issue:** `redirectLocation` returns `headers.location` whenever the status is 3xx, including `""`. Then `new URL("", hop.url)` resolves to the current URL, and the client loops back to the same URL until the cap. This review measured the result: 11 requests, then `Error: too many redirects`.
 
-**Fix:** attach the line on evidence, not on the outcome token. The `onAuthRequired`
-closure is the only place that knows the helper genuinely returned a miss; have the
-no-provider arm distinguish it, or widen `CredentialOps.fill` to return a
-`{ kind: "miss" } | { kind: "unavailable"; detail: string }` discriminant so the cause line
-can say `the git credential helper did not answer for <host>` in cases 1-3. At minimum,
-soften the assertion to something the code can actually back:
+`simple-get` checks `res.headers.location` for truthiness (`node_modules/simple-get/index.js:50`), so it returns such a response to isomorphic-git, which raises `HttpError` 302. The docstring (`:260-262`) says "Every other redirect rule is the one `simple-get` applies" and "A 3xx without a `Location` is returned unchanged". Both statements are false for an empty header. The user sees a generic redirect-loop error instead of the server's status, and the server gets ten extra requests.
+
+**Fix:**
 
 ```ts
-export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
-  `no credential was obtained for ${host}; store one with git credential approve`;
+function redirectLocation(response: GitHttpResponse): string | undefined {
+  const { statusCode, headers = {} } = response;
+  const location = headers.location;
+  return statusCode >= 300 && statusCode < 400 && location !== undefined && location !== ""
+    ? location
+    : undefined;
+}
 ```
 
-### WR-04: `git credential fill` now spawns for arbitrary hosts, and the non-interactive guarantee does not cover third-party helpers
-
-**File:** `extensions/pi-claude-marketplace/platform/git-credential.ts:137-144` (env),
-`:26-30` (the guarantee), reached for every host via
-`extensions/pi-claude-marketplace/orchestrators/auth-host.ts:139`
-
-**Severity:** Medium
-
-**Issue:** the docstring's non-interactive guarantee rests on `GIT_TERMINAL_PROMPT=0` and
-`GCM_INTERACTIVE=never`. Those are necessary but not sufficient for the new breadth:
-
-- `GIT_TERMINAL_PROMPT=0` suppresses **git's own** terminal prompt. It does not suppress a
-  configured `credential.helper` that prompts on its own — `pass`/gpg-agent pinentry,
-  `op`/1Password, `gh auth`, a shell one-liner helper — nor a macOS keychain
-  *access-permission* dialog from `git-credential-osxkeychain`, which is a GUI prompt
-  `GIT_TERMINAL_PROMPT` never sees. `GIT_ASKPASS` / `SSH_ASKPASS` / `core.askPass` are
-  also left intact.
-- The 5 s timeout then SIGTERMs mid-prompt, so the user's experience is a dialog that
-  flashes and a wrong "no credential stored" line (see WR-03).
-- `spawn` passes no `cwd`, so `credential.helper` is resolved from whatever repository the
-  Pi process happens to be sitting in. That was already true, but it now runs on every
-  host rather than two, making the outcome non-deterministic across invocations far more
-  often.
-
-**Concrete failure scenario:** a user with `credential.helper = /usr/bin/pass-git-helper`
-runs `pi plugin fetch` across a manifest with six git plugins on five hosts. Each
-challenged source spawns one `git credential fill`; pinentry pops per host; each is killed
-at 5 s; all five render "no credential stored for …".
-
-**Fix:** either document the residual interactive surface honestly in the
-`git-credential.ts` header (naming askpass and GUI-helper prompts as out of scope), or
-close it: add `GIT_ASKPASS=""`/`SSH_ASKPASS=""` and `-c core.askPass=` to the spawn, and
-consider `-c credential.interactive=false` where the helper honors it. Either way the
-"Non-interactive guarantee" heading should not claim more than the two env vars deliver.
-
-### WR-05: Docstrings still describe the retired contract
-
-**Severity:** Medium
-
-**Issue:** the phase rewrote several docstrings but left others asserting the
-`undefined`-for-no-provider world, in files it touched:
-
-| File:line | Stale claim |
-| --- | --- |
-| `orchestrators/auth-host.ts:2-8` | Header still reads "Host-keyed auth bundle factory" that turns "a bare host into a `GitAuthBundle` bound to **that host's registered provider**". The general case now has no provider. |
-| `orchestrators/auth-host.ts:190-192` | "`update.ts` is the one git-plugin probe still outside it" — the file is `update-preflight.ts`; `orchestrators/plugin/update.ts` does not exist. |
-| `orchestrators/plugin/clone-cache.ts:160-161` | "`auth` is an optional bundle … When omitted the clone is byte-identical to the public-only path (PROV-02)". Every install / reinstall / fetch / `info --fetch` caller now passes it unconditionally; the only remaining omitter is the `ctx`-less cascade path of WR-02, i.e. a bug, not a documented mode. |
-| `orchestrators/plugin/install.messaging.ts:201, 207, 304` | Leads with `PROV-04`, the requirement this phase deleted ("no registered provider fails clean"), and attributes `onAuth` to `platform/git.ts` — it has lived in `platform/git-auth-callbacks.ts` for some time. |
-| `orchestrators/marketplace/shared.ts:221-224` | "The optional `auth` parameter is forwarded to `gitOps.fetch` so private-repository refreshes can trigger **Device Flow** on a credential miss" — now true only on registry hosts. |
-| `platform/git-auth-callbacks.ts:99` | Attributes the new compare to "(PROV-04 / T-79-04)". PROV-04 *was* the refusal this compare replaced; citing it as the compare's own requirement inverts the traceability. GAUTH-06 is already cited at `:75` and `:133` and is the right ID. |
-| `platform/git-auth-callbacks.ts:45-48` | "The orchestrator binds `host`, `credentialOps`, and `notifyFn` at the call site" — the new non-registry closure (`auth-host.ts:146-151`) binds only `host`. |
-
-Per the repo's comment policy, requirement and decision IDs are traceability and should be
-kept — the defect is that these ones now point at retired semantics, which is worse than
-no ID.
-
-**Fix:** re-aim each row at the live contract; replace `PROV-04` with `GAUTH-04`/`GAUTH-06`
-where the sentence describes current behavior; fix the two wrong file names
-(`update.ts` -> `update-preflight.ts`, `platform/git.ts` -> `platform/git-auth-callbacks.ts`).
+Add a row to the existing "returns a redirect without a Location header" case with `headers: { location: "" }`.
 
 ## Info
 
-### IN-01: `deviceFlowAttempted` is documented in two places and does not exist
+### IN-01: The docstring's git-parity claim is broader than what git does
 
-**File:** `extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:66-70`, `:139-146`
+**File:** `extensions/pi-claude-marketplace/platform/git.ts:255-266`
 
-**Issue:** both the factory docstring ("The factory owns a closure-scoped
-`deviceFlowAttempted` flag (set when `onAuthRequired` returns `{ ok: true }`)") and the
-in-body comment describe a variable that is not declared anywhere in the module
-(`grep -rn deviceFlowAttempted extensions/ tests/` returns only these two comments). The
-claim predates this phase, but the phase rewrote the surrounding docstring block and left
-it. **Fix:** delete both references; the CP-9 rationale below them stands on its own.
+**Issue:** "A cross-origin redirect is still followed, as git does over libcurl" holds only for git's initial request. Git's default `http.followRedirects=initial` follows a redirect only on the first `info/refs` request, and then rebases later requests onto the redirected URL. It does not follow a redirect on the `git-upload-pack` POST.
 
-### IN-02: The cause line's remedy is not executable as written
+This client follows redirects on every request. On a 307 or 308, it re-sends the POST body to the target, including a cross-origin one. A POST answered with 303 also stays a POST with its body; RFC 9110 §15.4.4 says a 303 should become a GET. Both behaviors come from `simple-get` and are not new, but the comment presents them as git behavior.
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/auth-host.ts:93-94`
+**Fix:** Limit the parity sentence to the initial `info/refs` redirect. State explicitly that later requests follow redirects too, which git does not do by default.
 
-**Issue:** `add one with git credential approve` names a command that reads the
-git-credential wire format from stdin and does nothing useful when run bare. A user
-following the line literally sees a hang, then nothing. It also must be fed exactly the
-attribute set `buildAttributeBlock` uses — `protocol=https` + `host=` + `username=` +
-`password=`, and **no** `path=` line (`git-credential.ts:193-196`) — or `fill` will not
-find the entry. **Fix:** name the shape, e.g.
-`` `printf 'protocol=https\\nhost=${host}\\nusername=<u>\\npassword=<t>\\n\\n' | git credential approve` ``,
-or point at the helper the user already has configured.
+### IN-02: A malformed `Location` escapes as an untyped `TypeError` that carries the server's string
 
-### IN-03: `hasDeviceFlowProvider` re-derives a fact the bundle already computed
+**File:** `extensions/pi-claude-marketplace/platform/git.ts:231`
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/auth-host.ts:103-105`, consumed
-at `orchestrators/marketplace/update.ts:410`
+**Issue:** `new URL(location, hop.url)` throws `TypeError [ERR_INVALID_URL]` with `input` set to the raw `Location`. This review measured it with `https://exa mple:99999/`. `simple-get`'s legacy `url.parse` accepted such values. The throw now reaches the orchestrators as a bare `TypeError`, with no HTTP context such as the status code.
 
-**Issue:** `refreshUrlClone` calls `buildAuthForHost(host)` — which runs
-`findProviderForHost(host)` at `:142` — and then calls `hasDeviceFlowProvider(host)`,
-running the same registry lookup again for the same host, to recover a fact the first call
-already knew. The two lookups can never disagree today, but they are two independent
-derivations of one predicate, which is the shape that drifts. **Fix:** carry it on the
-bundle (`readonly hasDeviceFlow: boolean`) and drop the second lookup; this also gives
-CR-01 the flag it needs.
+**Fix:** Catch the parse failure and throw a typed error that names the status and not the raw value. Or treat the response as having no `Location` and return it unchanged, which yields `HttpError`.
 
-### IN-04: Two test reducers discard the bundle fields they do not compare
+### IN-03: `too many redirects` is an untyped `Error`, and the test asserts it by message
 
-**File:** `tests/edge/handlers/marketplace/add.test.ts:95-101, 233-238`;
-`tests/edge/handlers/marketplace/update.test.ts:82-89, 170-173`;
-`tests/orchestrators/marketplace/update.test.ts:350-357` (and four sibling call sites)
+**File:** `extensions/pi-claude-marketplace/platform/git.ts:228`; `tests/platform/git.test.ts:1265`
 
-**Issue:** `DescribedCloneCall` / `DescribedFetchCall` reduce the recorded bundle to
-`{ host }`, dropping `credentialOps` and `onAuthRequired` entirely, so a bundle bound to
-the right host but carrying the wrong `credentialOps` (or a non-callable
-`onAuthRequired`) passes. Separately, the `update.test.ts` expectations spell
-`onAuthRequired: state.fetchCalls[0]?.auth?.onAuthRequired`, reading the expected value off
-the actual — which does still catch an absent key under `deepStrictEqual`, but proves
-nothing about the closure. The orchestrator-level suites (`install-clone-probe.test.ts:172-176`,
-`reinstall-clone-probe.test.ts:186-192`, `install-flow.test.ts:7179-7200`) *do* pin
-`credentialOps` by identity, so the gap is narrow. **Fix:** include `credentialOps` in
-the edge reducers (it is a stable injected identity) and add
-`authRequiredType: typeof auth?.onAuthRequired` as `install-flow.test.ts` already does.
+**Issue:** CONVENTIONS.md asks for one typed error class per failure mode, narrowed by `instanceof` and never by message. The client re-creates `simple-get`'s bare `Error`, and the test pins `{ name: "Error", message: "too many redirects" }`. This keeps the old observable error, so it is acceptable. But it is new production code that uses the pattern the conventions forbid.
 
-### IN-05: A host/URL mismatch and an empty helper are indistinguishable to the user
+**Fix:** None is required for parity. If callers ever need to branch on this failure, add a typed `TooManyRedirectsError` in `shared/errors.ts`.
 
-**File:** `extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:154-162`
-combined with `orchestrators/marketplace/update.ts:404-412`
+### IN-04: Parts of the guard's documented contract have no discriminating case
 
-**Issue:** the mismatch cancel and the helper-miss cancel both surface as the same
-`UserCanceledError`, so both render `no credential stored for <host>`. I could not reach
-the mismatch on any production route (every producer pairs its bundle with the URL it then
-clones), so this is latent rather than live — but it means the guard that CR-01/GAUTH-06
-depends on fires *silently* apart from a `hookDebugLog` line, and a future caller that
-introduces a mismatch will be debugged as a credential problem. A subcase worth noting:
-`refreshUrlClone` derives the bundle host from `source.url` while `refreshGitHubClone`
-fetches by **remote name**, so isomorphic-git supplies the on-disk
-`remote.origin.url` — the two agree today only because `add` wrote origin from the same
-`source.url`. **Fix:** give the mismatch its own cause line (or a distinct error identity)
-rather than letting it borrow the stored-credential one.
+**File:** `tests/platform/git.test.ts:1117-1141`; `extensions/pi-claude-marketplace/platform/git.ts:251-253`
+
+**Issue:**
+
+- `cookie` stripping has no test. isomorphic-git never sets a cookie today, so the risk is low.
+- The "another host" row passes with the old `simple-get` client, which scrubs cross-hostname hops itself. It is useful regression coverage, but not proof of the new guard.
+- The docstring promises that "a header dropped once stays dropped", as in A → B → A. No row covers a chain that returns to the original origin.
+
+**Fix:** Optionally add an A → B (another port) → A chain row, and assert the whole wire log. The final same-origin hop carries no `authorization`.
+
+### IN-05: `PostRedirectRow` is declared inside `describe`, while its sibling row type is at module scope
+
+**File:** `tests/platform/git.test.ts:1174-1180` versus `:471-475`
+
+**Issue:** `RedirectRow` sits with the other wire types at module scope. `PostRedirectRow` is declared inside `describe("resolveRemoteRef")`, with a `//` comment instead of the `/** */` form its siblings use. This is a small inconsistency in one file.
+
+**Fix:** Move `PostRedirectRow` next to `RedirectRow`, with a `/** */` doc line.
 
 ---
 
-_Reviewed: 2026-09-26_
+_Reviewed: 2026-09-28T13:34:19Z_
 _Reviewer: Claude (gsd-code-reviewer)_
-_Depth: deep_
-_Scope: `git diff f4f98c66..3adb12c4 -- extensions/ tests/` (22 files)_
-_No source file was modified. Two scratch test files were created under `tests/orchestrators/`
-to prove CR-01 and WR-01, run with `node --test --experimental-strip-types`, and deleted._
+_Depth: standard_
