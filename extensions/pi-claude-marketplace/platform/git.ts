@@ -145,9 +145,10 @@ export interface ListRemotesOptions {
 /**
  * D-3-03 / MA-12 / MA-13: whether `dir` holds a readable git clone and, if so,
  * what its `origin` remote names. Four arms:
- *   - `origin`: a readable repo with an `origin` remote configured; `url` is
+ *   - `origin`: a readable repo whose `origin` remote records a url; `url` is
  *     the remote's wire-form value, verbatim.
- *   - `no-origin`: a readable repo with no `origin` remote.
+ *   - `no-origin`: a readable repo with no `origin` remote, or with an
+ *     `origin` section that records no url.
  *   - `not-a-repo`: `dir` has no `.git/config` (ENOENT/ENOTDIR).
  *   - `unreadable`: `dir/.git/config` exists but could not be read.
  */
@@ -346,6 +347,13 @@ export async function currentBranch(opts: CurrentBranchOptions): Promise<string 
  * the 100%-branch gate would have no way to cover it. The probe read doubles
  * as the existence check, so no separate `stat` is needed.
  *
+ * isomorphic-git enumerates `[remote "<name>"]` sections and resolves each
+ * url separately, so a section with no `url` key comes back holding
+ * `undefined`, although the library declares `url` a string. Such a section
+ * names no remote, so it reports `no-origin` and the caller refuses it
+ * (D-3-03, MA-13). The check is on the value's type, so any string, including
+ * an empty one, reaches the caller verbatim.
+ *
  * The returned `url`, when present, is the wire form stored on disk,
  * verbatim. This tier may not import `domain/` (the `platform` zone's
  * `.fallowrc.json` boundary allows only `shared`), so the identity
@@ -365,7 +373,10 @@ export async function listRemotes(opts: ListRemotesOptions): Promise<ListRemotes
 
   const remotes = await git.listRemotes({ fs, dir: opts.dir });
   const origin = remotes.find((r) => r.remote === "origin");
-  return origin === undefined ? { kind: "no-origin" } : { kind: "origin", url: origin.url };
+  // `unknown`, not the library's declared `string`: see the url-less section
+  // paragraph above.
+  const url: unknown = origin?.url;
+  return typeof url === "string" ? { kind: "origin", url } : { kind: "no-origin" };
 }
 
 /**

@@ -23,6 +23,7 @@ import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistenc
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
+import { listRemotes } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   MarketplaceDuplicateNameError,
@@ -641,6 +642,60 @@ for (const { title, listRemotesResult } of MA13_REFUSAL_ARMS) {
     });
   });
 }
+
+const ORIGIN_WITHOUT_URL_CONFIG =
+  '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n';
+
+// The fake's canned `listRemotesResult` is typed `ListRemotesResult`, which
+// cannot express an `origin` section without a url. This helper composes the
+// real `listRemotes` so it reads a hand-written `.git/config` in the destination.
+async function arrangeLeftoverWithoutOriginUrl(
+  locations: ScopedLocations,
+): Promise<{ finalDir: string; configPath: string; gitOps: GitOps }> {
+  const finalDir = await locations.sourceCloneDir("valid-marketplace");
+  const configPath = path.join(finalDir, ".git", "config");
+  await mkdir(path.join(finalDir, ".git"), { recursive: true });
+  await writeFile(configPath, ORIGIN_WITHOUT_URL_CONFIG);
+  const gitOps: GitOps = {
+    ...createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") }).gitOps,
+    listRemotes,
+  };
+
+  return { finalDir, configPath, gitOps };
+}
+
+test("MA-13 / ATTR-07: a leftover whose origin section names no url refuses as stale clone", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, pi, notifications } = makeCtx();
+    const { configPath, gitOps } = await arrangeLeftoverWithoutOriginUrl(locations);
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // assert
+    assert.strictEqual(outcome, undefined);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
+        severity: "error",
+      },
+    ]);
+    assert.strictEqual(await readFile(configPath, "utf8"), ORIGIN_WITHOUT_URL_CONFIG);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {},
+    });
+  });
+});
 
 test("MA-8: a matching leftover still yields (failed) {duplicate name}, not {stale clone}", async () => {
   await withTmpScope(async ({ cwd }) => {
