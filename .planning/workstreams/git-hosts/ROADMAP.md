@@ -85,7 +85,7 @@ here. Decimal phases (1.1, 2.1) are urgent insertions only, marked `INSERTED`.
      (`orchestrators/auth-host.ts` gains no value import of `platform/git.ts`; a type-only import is
      permitted).
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans executed
 
 Plans:
 
@@ -98,7 +98,7 @@ Plans:
   unregistered host; `npm run check` green at the phase boundary (GAUTH-03, GAUTH-05)
 
 **Wave 4** *(gap closure G-01-4 -- blocked on Wave 3 completion)*:
-- [ ] 01-04-PLAN.md -- `platform/git.ts` follows redirects itself and never forwards a credential
+- [x] 01-04-PLAN.md -- `platform/git.ts` follows redirects itself and never forwards a credential
   header to another origin (scheme, host, port); reproduced red at the wire through real
   isomorphic-git and `simple-get`, then proven for clone, fetch and resolveRemoteRef; docstrings
   and GAUTH-06 text corrected (GAUTH-06)
@@ -269,6 +269,6 @@ see STATE.md § Deferred Verification for the full explanatory paragraphs.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Private repos on any git host | 3/3 | In Progress | — |
+| 1. Private repos on any git host | 4/4 | In Progress | — |
 | 2. Endpoints that answer only at the verbatim URL | 3/3 | In Progress | — |
 | 3. `marketplace add` recovers from its own leftover clone | 4/4 | Complete | 2026-09-28 |

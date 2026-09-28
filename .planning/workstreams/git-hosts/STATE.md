@@ -6,16 +6,16 @@ current_phase: 01
 current_phase_name: Private repos on any git host
 current_plan: 4
 status: "Executing Phase 1 gap closure 01-04 (G-01-4 redirect credential leak, found by Phase 1 UAT). Phase 3 COMPLETE (re-verified 7/7 after gap closure 03-04)"
-stopped_at: "Phase 3 complete: gap closure 03-04 fixed CR-01, re-verification passed 7/7; WR-11 (multi-url origin) left open as a residual edge"
+stopped_at: "Phase 1 gap closure 01-04 executed (96c9eb13, c9c21446, d2deadd3; CHECK_EXIT=0); awaiting code review and re-verification"
 last_updated: "2026-09-28T12:29:46.273Z"
 last_activity: 2026-09-28
-last_activity_desc: Phase 01 execution started
+last_activity_desc: "Phase 1 gap closure 01-04 executed; redirect credential leak closed"
 state_head: 248746a3c16a2b607bc78ce53903d3773e5eda4b
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 33
 total_plans_in_phase: 4
 ---
@@ -44,6 +44,13 @@ a credential bound to one host reaches a redirect target on the same hostname bu
 `http:`), because `simple-get` scrubs `authorization` only on a hostname change. `01-04-PLAN.md`
 (`gap_closure: true`, GAUTH-06) is dispatched sequentially in this checkout via
 `/gsd-execute-phase 01 --gaps-only --ws git-hosts`.
+
+**Gap closure EXECUTED (2026-09-28).** 01-04 landed in `96c9eb13` (origin-aware redirect client in
+`platform/git.ts` + wire-level tests through the real `simple-get`; test and fix in one commit),
+`c9c21446` (docstrings, GAUTH-06 and ROADMAP text) and `d2deadd3` (SUMMARY). `npm run check`:
+`CHECK_EXIT=0`, 7381/7381 unit tests, 36/36 integration, 100% coverage, 108 contract entries, fallow
+audit `pass`. Residual parity gap (DD-3): a cross-origin redirect target that needs its own
+credential fails clean, since isomorphic-git calls `onAuth` with the original URL only.
 
 **Phase 3 complete.** Re-verification passed 7/7: CR-01 is fixed by 03-04 and confirmed by a follow-up
 code review (03-REVIEW.md; CR-01 and WR-10 recorded `fixed` in 03-REVIEW-DISPOSITION.md). That review
@@ -396,14 +403,14 @@ workstream's documents are archived.
 **Current Plan:** 4
 
 ```
-Phase 1  [==========]  plans complete (3/3)
+Phase 1  [==========]  4/4 executed; gap closure awaiting re-verification
 Phase 2  [==========]  verified 9/9, live canary deferred
 Phase 3  [==========]  4/4 executed; gap closure awaiting re-verification
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
+| 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | 4/4 executed; gap closure 01-04 awaiting code review and re-verification |
 | 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Verified 9/9, live canary deferred |
 | 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | 4/4 executed; gap closure awaiting code review and re-verification |
 
