@@ -17,7 +17,7 @@ findings:
     title: "the orchestrated url-less case does not check that state stays empty, though its standalone sibling does"
   - id: CR-01
     severity: critical
-    disposition: open
+    disposition: fixed
     title: "`listRemotes` returns `url: undefined` on its `origin` arm and crashes `recognizeLeftover` with a raw `TypeError`"
   - id: WR-01
     severity: warning
@@ -57,7 +57,7 @@ findings:
     title: "each MA-14 test runs two complete act/assert cycles in one case"
   - id: WR-10
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "no test covers the `[remote \"origin\"]`-without-`url` config shape behind CR-01"
   - id: IN-01
     severity: info
@@ -83,7 +83,8 @@ findings:
     severity: info
     disposition: open
     title: "`pathExists` and `listRemotes` are two reads of the same destination"
-open: 20
+open: 18
+fixed: 2
 total: 20
 recorded: 2026-09-28T03:10:59.759Z
 ---
@@ -95,7 +96,7 @@ recorded: 2026-09-28T03:10:59.759Z
 | WR-11 | warning | open | - |
 | IN-07 | info | open | - |
 | IN-08 | info | open | - |
-| CR-01 | critical | open | - (not in the current review) |
+| CR-01 | critical | fixed | 03-04 (24f2da2c): listRemotes reports no-origin for a url-less origin section; confirmed resolved by the follow-up review |
 | WR-01 | warning | open | - (not in the current review) |
 | WR-02 | warning | open | - (not in the current review) |
 | WR-03 | warning | open | - (not in the current review) |
@@ -105,7 +106,7 @@ recorded: 2026-09-28T03:10:59.759Z
 | WR-07 | warning | open | - (not in the current review) |
 | WR-08 | warning | open | - (not in the current review) |
 | WR-09 | warning | open | - (not in the current review) |
-| WR-10 | warning | open | - (not in the current review) |
+| WR-10 | warning | fixed | 03-04 (24f2da2c, 235fdc17): real-adapter tests for the url-less shapes in add.test.ts and git.test.ts |
 | IN-01 | info | open | - (not in the current review) |
 | IN-02 | info | open | - (not in the current review) |
 | IN-03 | info | open | - (not in the current review) |
