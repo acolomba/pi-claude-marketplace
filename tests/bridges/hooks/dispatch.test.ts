@@ -61,7 +61,7 @@ interface ExecutorCall {
     readonly pluginId: string;
     readonly resolvedSource: string;
     readonly claudeEvent: RoutingEntry["claudeEvent"];
-    readonly matcher: { readonly kind: "tool-set"; readonly piTools: readonly string[] };
+    readonly matcher: { readonly kind: "tool-set"; readonly toolNames: readonly string[] };
     readonly rawMatcher: string;
     readonly handlerDecl: RoutingEntry["handlerDecl"];
     readonly declarationIndex: number;
@@ -138,7 +138,7 @@ function recordExecutorCall(
       pluginId: entry.pluginId,
       resolvedSource: entry.resolvedSource,
       claudeEvent: entry.claudeEvent,
-      matcher: { kind: "tool-set", piTools: [...entry.matcher.piTools] },
+      matcher: { kind: "tool-set", toolNames: [...entry.matcher.toolNames] },
       rawMatcher: entry.rawMatcher,
       handlerDecl: structuredClone(entry.handlerDecl),
       declarationIndex: entry.declarationIndex,
@@ -422,7 +422,7 @@ describe("compositeHandlerFor", () => {
           pluginId: "first-mutation",
           resolvedSource: "/plugins/first-mutation",
           claudeEvent: "PreToolUse",
-          matcher: { kind: "tool-set", piTools: ["bash"] },
+          matcher: { kind: "tool-set", toolNames: ["bash"] },
           rawMatcher: "Bash",
           handlerDecl: {
             type: "command",
@@ -454,7 +454,7 @@ describe("compositeHandlerFor", () => {
           pluginId: "second-mutation",
           resolvedSource: "/plugins/second-mutation",
           claudeEvent: "PreToolUse",
-          matcher: { kind: "tool-set", piTools: ["bash"] },
+          matcher: { kind: "tool-set", toolNames: ["bash"] },
           rawMatcher: "Bash",
           handlerDecl: {
             type: "command",
@@ -1177,6 +1177,81 @@ describe("composite dispatch closure partitions", () => {
 
     // assert
     assert.deepStrictEqual(output, expectedOutput);
+    assert.deepStrictEqual(executorCalls, expectedCalls);
+  });
+
+  for (const { toolName, fires } of [
+    { toolName: "write", fires: true },
+    { toolName: "edit", fires: true },
+    { toolName: "bash", fires: false },
+    { toolName: "apply_patch", fires: false },
+  ]) {
+    test(`${fires ? "dispatches" : "does not dispatch"} toolName "${toolName}" for the pipe-OR matcher "Write|Edit|apply_patch" (#217)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const context = createExtensionContext("/workspace/dispatch-pipe-or");
+      const entry = createRoutingEntry({
+        pluginId: "pipe-or-write-edit",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Write|Edit|apply_patch",
+        declarationIndex: 0,
+      });
+      const executorCalls: RecordedCall[] = [];
+      const executor = createRecordingExecutor(
+        { "pipe-or-write-edit": { kind: "noop" } },
+        executorCalls,
+      );
+      runtime.setRoutingBucket("PreToolUse", [entry]);
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+      const expectedCalls: RecordedCall[] = fires
+        ? [{ pluginId: "pipe-or-write-edit", event: createToolCallEvent(toolName) }]
+        : [];
+
+      // act
+      await handler(createToolCallEvent(toolName), context);
+
+      // assert
+      assert.deepStrictEqual(executorCalls, expectedCalls);
+    });
+  }
+
+  test("does not dispatch any tool_call when every pipe-OR alternative is discarded (#217)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-pipe-or-unmapped");
+    const entry = createRoutingEntry({
+      pluginId: "pipe-or-fully-discarded",
+      claudeEvent: "PreToolUse",
+      rawMatcher: "apply_patch|MultiEdit",
+      declarationIndex: 0,
+    });
+    const executorCalls: RecordedCall[] = [];
+    const executor = createRecordingExecutor(
+      { "pipe-or-fully-discarded": { kind: "noop" } },
+      executorCalls,
+    );
+    runtime.setRoutingBucket("PreToolUse", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+    const expectedCalls: RecordedCall[] = [];
+
+    // act
+    await handler(createToolCallEvent("bash"), context);
+
+    // assert
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 

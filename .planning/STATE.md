@@ -36,6 +36,19 @@ Plan: —
 Status: Awaiting next milestone
 Last activity: 2026-09-24 — Milestone v1.20 completed and archived
 
+### workflows-replay closeout (merged from main)
+
+`workflows` and `workflows-replay` ran in the `workflows` workstream, which was
+archived to `milestones/ws-workflows-2026-09-27/` on 2026-09-27.
+`.planning/workstreams/` no longer exists and no workstream is active.
+workflows-replay completed 2026-09-21 with no accepted debt: 46/46
+requirements, 9/9 phases verified, `threats_open: 0`, Nyquist-validated. All
+twelve `[workflows-replay]` broken-window entries are fixed or waived with named
+`BACKLOG.md` carriers (VSTALE-01, WLREC-01, RLHINT-01, PCERR-01, WSTOR-01,
+WPIN-01). The bridge reached `main` in PR #205 (`5c652697`) on 2026-09-24; the
+`0.19.x` tags deliberately exclude it, and the next release cut from `main`
+carries it.
+
 ## Performance Metrics
 
 **Velocity:**
@@ -649,6 +662,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 260913-f6a | Gate the two SonarQube workflow findings, githubactions:S6505 and githubactions:S7637 | 2026-09-13 | 8a8a0396..69797ebc | Complete | [260913-f6a-gate-sonar-workflow-findings-s6505-and-s](./quick/260913-f6a-gate-sonar-workflow-findings-s6505-and-s/) |
 | 260920-qx0 | Reject `--local` on the merged-read marketplace verbs (info, list, update) | 2026-09-20 | f2fbd402 | complete | [260920-qx0-remove-local-from-marketplace-info](./quick/260920-qx0-remove-local-from-marketplace-info/) |
 | 260921-t5t | Suppress success-count lines for empty cascades and non-bulk operations | 2026-09-21 | ffdecc5f | shipped in PR #209 | [260921-t5t-when-a-command-returns-an-empty-result-a](./quick/260921-t5t-when-a-command-returns-an-empty-result-a/) |
+| 260922-ckn | Read the Claude Code compatibility skill during discuss phases; fix a racy coverage test | 2026-09-22 | 0b0623a3 | complete | [260922-ckn-implement-upstream-informed-discuss-phas](./quick/260922-ckn-implement-upstream-informed-discuss-phas/) |
 | 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na/) |
 | 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | b07ae35c | complete | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew/) |
 | 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./quick/260924-q0m-keep-only-plugin-qualified-interactive-s/) |

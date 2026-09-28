@@ -104,7 +104,13 @@ The `matcher` field on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFai
 | `find`       | `Glob`           |
 | `ls`         | `LS`             |
 
-Unmapped Claude tools: `MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch`, `Task`, `TodoWrite`, `KillShell`, `BashOutput`, and any `mcp__*` MCP server tool. A matcher value naming one of these tools cannot be translated because there is no Pi-side analog; the affected hook entry drops per-entry and the plugin resolves `(partially-available)` under the single aggregate `{unsupported hooks}` brace. A pipe-OR matcher containing any unmapped alternative drops the whole matcher group -- `Edit|Write|MultiEdit` drops even though two of its alternatives are mapped (this is why security-guidance's `Edit|Write|MultiEdit|NotebookEdit` group drops and the plugin resolves partially-available).
+Unmapped Claude tools: `MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch`, `Task`, `TodoWrite`, `KillShell`, `BashOutput`. Pi has no equivalent for these names, so it cannot translate a `matcher` value that names one. An `mcp__<server>__<tool>` matcher is supported and matches that MCP tool by exact name.
+
+A tool that Pi does not have drops out of its `matcher` list, and the other alternatives keep working. For example, `Edit|Write|MultiEdit` still runs on `Edit` and `Write`. Pi drops the whole group only when no supported alternative is left. The plugin then reports `(partially-available)` with the reason `{unsupported hooks}`, the same as a matcher of `MultiEdit` alone.
+
+Pi cannot tell a misspelled tool name from a deliberately foreign one. A matcher such as `Wriet|Edit` installs with no warning, because `Edit` alone keeps the hook firing. The plugin still reports that it is fully supported, and nothing flags the dropped `Wriet` alternative. Make sure that you spell every tool name in a `matcher` correctly. A typo in one alternative does not appear in the status that the plugin reports.
+
+A matcher that fires on a Pi tool does not change the data the hook receives. The hook gets the Claude-form payload of the Pi tool that fired. For example, `Write|Edit|apply_patch` runs on Pi `write` and `edit`, and the script gets the `Write` or `Edit` payload. A script written for the similarly-named tool of another agent must handle that input itself.
 
 ## `if` field
 
