@@ -1,5 +1,43 @@
 # Milestones: pi-claude-marketplace
 
+## workflows-replay -- Workflow Bridge Replay onto main (Completed: 2026-09-21; merged to main 2026-09-24 via PR #205, not yet in an npm release)
+
+**Phases completed:** 9 phases (109-117), 39 plans, 83 tasks
+
+**Driver:** Phases 101-105 shipped the `workflows` bridge on the never-merged
+`features/workflows-spike`, and main had since admitted `workflows` as an
+*unsupported* kind (PR #154) and deleted the test architecture the spike was
+written against (PR #167). A merge would have been re-deriving the wiring while
+calling it a merge, so the bridge was replayed phase by phase onto main -- the
+36 requirements, phase records and spike evidence carried over, the wiring and
+every test rewritten -- and the three gaps the original bridge shipped with were
+closed in the same milestone.
+
+**Key accomplishments:**
+
+- `workflows` inverted from `UNSUPPORTED_COMPONENT_KINDS` to both supported tuples, with every closed set, classifier arm, doc and locking test that #154 wrote turned with it; a plugin carrying workflows now resolves `installable`.
+- The bridge re-landed against the owner-test convention with no test-only seams: one acorn parse decides a script's fate (command name from `meta.name`, nine non-admission causes, a determinism blocklist), naming is engine-parity gated, the three `$HOME`-derived roots and the `workflowArtifactPath` chokepoint are containment-checked, and prepare/commit/abort staging refuses an occupied target before its first rename and rolls back both ways.
+- Every lifecycle verb owns its workflow envelopes: install's sixth ledger phase, cascade unstage across all four removal verbs, reinstall re-materialization, update's two-write inventory that can strand no executable code, enable and disable, the `info` and `list` read surfaces, and one `stale workflow command` reason token stamped by six verbs.
+- The host engine became the third soft dependency -- `requires pi-dynamic-workflows` on every marker-bearing row, envelope bytes proven independent of the probe, marker coverage held by a gate rather than a grep -- and `docs/workflows-compatibility.md` writes down the contract of the one bridge that installs executable code.
+- The three original gaps closed: an author whose script the engine will refuse learns which of six gates refuses it at install time, and nothing a gate reads can block; a plugin installed before the kind was admitted converges after one reload, exactly once, with `components now supported` saying why; and the degrade-or-die claim was measured against a real engine 3.10.1 -- which refuted the source read (a recoverable `agent()` failure resolves to `null`) -- with every document restated at the grade that holds.
+
+**Closeout:** closed with no accepted debt -- 46/46 requirements, 9/9 phases
+verified, threat-verified (`threats_open: 0`) and Nyquist-validated. All twelve
+`[workflows-replay]` ledger entries are fixed or waived with named `BACKLOG.md`
+carriers (VSTALE-01, WLREC-01, RLHINT-01, PCERR-01, WSTOR-01, WPIN-01). The
+close-out itself fixed a held-lock reason token, a saved-directory symlink
+asymmetry, and a ledger citation the #202 merge had renumbered out from under
+phase 117.
+
+**Release state:** the bridge is on `main` (PR #205, `5c652697`). The `v0.19.2`
+tag was cut from a release branch that deliberately excluded it, so no `0.19.x`
+release carries workflows. PR #216 merged that release branch back into `main`,
+so the next release cut from `main` includes the bridge.
+
+**Archive:** `.planning/milestones/ws-workflows-2026-09-27/milestones/workflows-replay-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`
+
+---
+
 ## test-backlog -- Test Backlog (Shipped: 2026-09-18, no npm release - internal quality milestone)
 
 **Phases completed:** 8 phases (1-8), 65 plans, 127 tasks
@@ -222,7 +260,32 @@ directories into that bucket, including 29 that date from June to August. Those
 
 **Closeout:** `verified_closeout` -- 1/1 phase verified, 6/6 requirements complete, 5/5 integration seams wired, and 4/4 end-to-end flows complete. Nyquist coverage is compliant. Security closed all 9 threats. The terminal UI review scored 24/24. The final `npm run check` passed with 3,649 unit tests, 21 integration assertions, and no failures. The open-artifact audit found no items.
 
-**Archive:** `.planning/workstreams/workflows-detection/milestones/workflows-detection-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`
+**Archive:** `.planning/milestones/ws-workflows-detection-2026-09-17/milestones/workflows-detection-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`
+
+---
+
+## workflows -- Claude workflows Component-Kind Bridge (Completed: 2026-08-16 on `features/workflows-spike`; never merged, superseded by workflows-replay)
+
+**Phases completed:** 5 phases (101-105), 20 plans, 39 tasks
+
+**Driver:** give the `workflows` component kind a real bridge rather than an
+unsupported-kind verdict, so a plugin's workflow scripts become runnable Pi
+workflow commands.
+
+**Key accomplishments:**
+
+- `workflows` admitted to both resolver tuples on the convention axis as well as the manifest axis, with a required `componentPaths.workflows` member and a `workflows:` line on `/claude:plugin info` under the byte-equality contract.
+- A workflow script names its own command: acorn parses the source, `meta.name` is read off the AST, and `generatedWorkflowName` joins it to the plugin under both the RN-2 rules and the host engine's length and trim rules. Every non-admitted shape has its own verdict -- an unreadable name is skipped, a broken or nondeterministic script is refused by file with the real reason, and two scripts claiming one command name fail loudly.
+- `cascadeUnstagePlugin` calls six bridges instead of five, so `uninstall`, `disable` and `marketplace remove --cascade` physically remove the workflow envelopes they used to orphan; `update` and `reinstall` gained the matching prepare/commit/abort and re-materialization paths.
+- The host workflow engine became the third soft dependency, probed by its distinctive `workflow_control` tool and marked `requires pi-dynamic-workflows` on the install / update / reinstall / enable rows, while the envelopes are still written and the install still succeeds.
+
+**Why it is recorded as unmerged:** main admitted `workflows` as an
+*unsupported* kind (PR #154) and replaced the test architecture this branch was
+written against (PR #167) before the spike could land. The requirements, phase
+records and evidence were carried into `workflows-replay`, which re-landed the
+bridge on main with the wiring and every test rewritten.
+
+**Archive:** `.planning/milestones/ws-workflows-2026-09-27/milestones/workflows-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`
 
 ---
 
