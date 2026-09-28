@@ -1,8 +1,8 @@
 ---
 phase: 03-marketplace-add-recovers-from-its-own-leftover-clone
-verified: 2026-09-27T00:00:00Z
-status: gaps_found
-score: 6/7 must-haves verified
+verified: 2026-09-28T00:00:00Z
+status: passed
+score: 7/7 must-haves verified
 covered_files:
   - ".planning/workstreams/git-hosts/phases/03-marketplace-add-recovers-from-its-own-leftover-clone/03-01-PLAN.md"
   - ".planning/workstreams/git-hosts/phases/03-marketplace-add-recovers-from-its-own-leftover-clone/03-01-SUMMARY.md"
@@ -10,6 +10,8 @@ covered_files:
   - ".planning/workstreams/git-hosts/phases/03-marketplace-add-recovers-from-its-own-leftover-clone/03-02-SUMMARY.md"
   - ".planning/workstreams/git-hosts/phases/03-marketplace-add-recovers-from-its-own-leftover-clone/03-03-PLAN.md"
   - ".planning/workstreams/git-hosts/phases/03-marketplace-add-recovers-from-its-own-leftover-clone/03-03-SUMMARY.md"
+  - ".planning/workstreams/git-hosts/phases/03-marketplace-add-recovers-from-its-own-leftover-clone/03-04-PLAN.md"
+  - ".planning/workstreams/git-hosts/phases/03-marketplace-add-recovers-from-its-own-leftover-clone/03-04-SUMMARY.md"
   - "extensions/pi-claude-marketplace/domain/source.ts"
   - "extensions/pi-claude-marketplace/orchestrators/auth-host.ts"
   - "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
@@ -29,68 +31,16 @@ covered_files:
   - "tests/platform/git-ops-fake.test.ts"
   - "tests/platform/git-ops-fake.ts"
   - "tests/platform/git.test.ts"
-covered_digest: "v2:sha256:79a0811eefe59b1f04094bfc53fd5ec7732d240be41c22b15996acd8ffba1f9c"
+covered_digest: "v2:sha256:4c69a66507ee21e4e907aeabfd753ce837d5bbba0cee351f6142bf91c4d232db"
 behavior_unverified: 0
 overrides_applied: 0
-gaps:
-  - truth: "SC2 / MA-13: a leftover tree that is not a git clone, is unreadable, or whose origin names a different URL still refuses with the MA-6 {stale clone} row; recognition never widens into overwriting a directory the extension did not create."
-    status: failed
-    reason: >
-      CR-01 (open, critical, from 03-REVIEW.md) is confirmed against the real code and the real
-      isomorphic-git in node_modules, independently of the reviewer's report. `platform/git.ts::listRemotes`
-      declares its `origin` arm as `{ kind: "origin"; url: string }`, but isomorphic-git's `_listRemotes`
-      (node_modules/isomorphic-git/index.cjs:13043-13053) enumerates `[remote "<name>"]` subsections and
-      resolves `remote.<name>.url` separately — a `[remote "origin"]` section with no `url` key yields
-      `{ remote: "origin" }` with `url` absent, so the wrapper returns `{ kind: "origin", url: undefined }`,
-      violating its own declared type. I reproduced this directly: built a real `.git/config` on disk
-      holding `[remote "origin"]` with only a `fetch` line, called the real (non-faked) `listRemotes`, and
-      got `{"kind":"origin"} url typeof: undefined`; feeding that into `add.ts`'s
-      `stripGitSuffix(remotes.url)` (the exact call `recognizeLeftover` makes at add.ts:725) throws
-      `TypeError: Cannot read properties of undefined (reading 'endsWith')`.
-
-      Traced the consequence through the real `classifyAddError`/`handleAddFailure` code (not inferred):
-      a raw `TypeError` matches none of `classifyAddError`'s `instanceof` checks and carries no `.code`,
-      so it classifies as `undefined`. In standalone mode `handleAddFailure` executes
-      `if (!orchestrated) { throw err; }` — the raw `TypeError` escapes past the orchestrator, which is
-      exactly what the project's own ATTR-07 "no raw error escapes" discipline (named throughout this
-      phase's plans) forbids. In orchestrated mode the same error is silently returned as
-      `{ status: "failed", reason: "unparseable", ... }` instead of `{ status: "failed", reason: "stale clone" }`.
-
-      This is reachable from the phase's own motivating scenario, not a contrived shape: isomorphic-git's
-      clone writes `remote.origin.url` via `GitConfigManager.save`, which rewrites the whole config file;
-      a crash or short write during that exact rewrite — the WR-07 crash window this phase exists to let
-      users retry through — produces precisely this truncated shape. WR-10 (open, warning) independently
-      confirms no test in `tests/platform/git.test.ts` or `tests/orchestrators/marketplace/add.test.ts`
-      exercises a `[remote "origin"]` section with no `url` key; I confirmed this absence directly by
-      grep against both files. The 100%-branch coverage gate cannot catch this because the missing
-      behavior is a missing branch (an unhandled type-contract violation), not an uncovered one.
-
-      Weighed against SC2: a leftover with this exact shape is neither "not a git clone" (it has a
-      `.git`, readable), nor "unreadable" (the config read succeeds), nor cleanly "an origin naming a
-      different URL" (there is no url to compare) — it is a fourth, unhandled shape that SC2's
-      guarantee implicitly must cover ("recognition never widens... still refuses with the MA-6
-      {stale clone} row"), and today it does neither: it crashes raw (standalone) or misclassifies as
-      unparseable (orchestrated). This is a genuine gap in this phase's own goal, not a pre-existing or
-      out-of-scope defect: `listRemotes` and the `recognizeLeftover` branch are both artifacts this
-      phase created in Wave 1, and the missing-url shape is a direct near-miss of the exact edge-probe
-      row (MA-13 / encoding: "an origin that is not an https:// URL at all... fails the byte comparison
-      and refuses; it is never re-parsed as a source and never crashes the add") this phase's own
-      must-haves promised and did not fully deliver — the promise held for a garbage *string* but not
-      for an absent one.
-    artifacts:
-      - path: "extensions/pi-claude-marketplace/platform/git.ts"
-        issue: "listRemotes:366-368 returns { kind: \"origin\", url: origin.url } without checking that origin.url is actually a string; isomorphic-git can and does return { remote: \"origin\" } with url absent for a truncated/racing .git/config write."
-      - path: "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
-        issue: "recognizeLeftover (~line 725) calls stripGitSuffix(remotes.url) on the origin arm with no defensive check, so an undefined url throws a raw TypeError that escapes classifyAddError's instanceof/code ladder entirely."
-      - path: "tests/platform/git.test.ts"
-        issue: "the listRemotes describe block (4 cases) has no case for a [remote \"origin\"] section with no url key (WR-10, open) — confirmed absent by grep."
-      - path: "tests/orchestrators/marketplace/add.test.ts"
-        issue: "the MA-13 refusal table drives listRemotes entirely through createGitOpsFake's canned listRemotesResult, which is typed ListRemotesResult and therefore cannot express url: undefined at all — the fake's type safety hides the real adapter's type violation."
-    missing:
-      - "platform/git.ts::listRemotes must treat a present origin subsection with an absent/non-string url as a non-recognizable tree (e.g. return { kind: \"no-origin\" }) rather than returning a value that violates its own declared ListRemotesResult type."
-      - "A real-filesystem test in tests/platform/git.test.ts asserting this exact .git/config shape (a hand-written [remote \"origin\"] section with a fetch line and no url line) resolves to a safe arm, not a crash."
-      - "An add.test.ts case proving that this leftover shape still refuses as {stale clone} through addMarketplace end to end, in both standalone and orchestrated mode, rather than escaping as a raw TypeError or misclassifying as {unparseable}."
-human_verification: []
+re_verification:
+  previous_status: "gaps_found"
+  previous_score: "6/7"
+  gaps_closed:
+    - "SC2 / MA-13: a leftover whose `.git/config` declares an `origin` remote section with no `url` key now refuses with the MA-6 `{stale clone}` row in both standalone and orchestrated mode, instead of crashing raw (`TypeError`) or misclassifying as `{unparseable}` (CR-01, closed by plan 03-04, commits `24f2da2c`/`235fdc17`)."
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 3: `marketplace add` recovers from its own leftover clone Verification Report
@@ -100,9 +50,9 @@ the directory left behind is a clone of the very source being added, still gets 
 when it is anything else, and is never left with a half-removed tree recorded in state — with the
 milestone's whole gate surface green at its final HEAD.
 
-**Verified:** 2026-09-27
-**Status:** gaps_found
-**Re-verification:** No — initial verification
+**Verified:** 2026-09-28
+**Status:** passed
+**Re-verification:** Yes — after gap closure (plan 03-04)
 
 ## Goal Achievement
 
@@ -110,125 +60,192 @@ milestone's whole gate surface green at its final HEAD.
 
 | # | Truth (SC) | Status | Evidence |
 |---|------------|--------|----------|
-| 1 | SC1 — `marketplace add` succeeds when `sources/<name>/` holds a leftover clone whose `origin` is the source being added; no manual delete needed for the WR-07 crash window or a state rebuild | ✓ VERIFIED | `tests/orchestrators/marketplace/add.test.ts` MA-12 case (plan 01) runs through the real parser/orchestrator/GitOps seam: leftover marker file gone, fresh manifest present at `finalDir`, state records the entry. `node --test tests/platform/git.test.ts` re-run: 36/36 pass. |
-| 2 | SC2 — a leftover that is not a git clone, is unreadable, or whose `origin` names a different URL still refuses with the MA-6 `{stale clone}` row; recognition never widens into overwriting a directory the extension did not create | ✗ FAILED | CR-01 (independently reproduced below) — a leftover whose `.git/config` holds a `[remote "origin"]` section with no `url` key is neither cleanly refused nor left alone: it crashes with a raw `TypeError` (standalone mode) or misclassifies as `{unparseable}` (orchestrated mode) instead of refusing as `{stale clone}`. See Gaps below. |
-| 3 | SC3 — a recognized leftover that cannot be fully removed fails as stale with the cleanup leak appended (MA-9 discipline), and state records no destination for the partially-removed tree | ✓ VERIFIED | `tests/orchestrators/marketplace/add.test.ts` MA-14 single-fault and double-fault cases (plan 02): `loadState(...)` asserted to hold no entry; double fault classifies through exactly one `Error.cause` level with both leak texts and one `" (additionally: "` marker. `node scripts/test-coverage-direct.mjs .../add.ts` — branches 143/143 per 03-02-SUMMARY.md. |
-| 4 | SC4 — every type member this milestone introduced is read by production code or recorded in the contracts file, and `npm run check` passes whole at the milestone's final HEAD | ✓ VERIFIED | `node -e '...contracts.json...length'` → `108` (spot-checked directly). `git diff --name-only 50746b81..HEAD -- ':!.planning/'` is empty, so the plan-03 executor's `CHECK_EXIT=0` run (7354/7354 unit, 36/36 integration, `all files 100.00/100.00/100.00`, 108 contracts/4 exceptions, 7/7 negative controls) still describes this source tree; not re-run per the gate-evidence note, spot-checked via grep/git-log instead. |
-| 5 | SC5 — the marketplace autoupdate cascade is settled (fixed): a private plugin source refreshes from the user's credential helper instead of cloning authless, on any host | ✓ VERIFIED | `grep -n "ctx?:" auth-host.ts` shows both `buildAuthForHost` and `buildCloneAuth` widened; `grep -n "provider === undefined \|\| ctx === undefined"` confirms the widened guard. `update-preflight.ts` has zero `buildBundle` occurrences and 3 unconditional `auth: authBundle` properties. `update-flow.ts` pins (`834:42`, `915:42`) confirmed unchanged in `contracts.json`, and `git log` shows no commit touching that file in this phase. |
-| 6 | SC6 — Phase 1's and Phase 2's live canaries are carried forward with reasons/resume commands, never marked passed on link-by-link evidence | ✓ VERIFIED | `grep -n "gsd-verify-work 1\|gsd-verify-work 2" ROADMAP.md` finds both; `grep -n "GHCAN-01\|GHCAN-02" BACKLOG.md` finds both entries; STATE.md § Deferred Verification retains both rows. Neither `01-VERIFICATION.md` nor `02-UAT.md` was touched by this phase (confirmed via `git log` — no commits to those paths since Phase 3 began). |
-| 7 | SC7 — `PROJECT.md`'s D-79-03 row rationale is amended to match the code; its OUTCOME (a recorded 2026-07-11 user checkpoint) is untouched | ✓ VERIFIED | `grep -n "D-79-03" PROJECT.md` → exactly 2 occurrences (the row + the untouched dated narrative). The row's rationale now reads "...the plugin failure grammar has no cause-chain trailer slot that renders on the subject row, per `install.messaging.ts`..." (matches the code), and the OUTCOME clause ("Marketplace add and plugin install/reinstall show the bare `(failed) {authentication required}` row; only `update`'s cause-carrying child row appends...") is the same text ROADMAP.md's SC7 quotes verbatim, i.e., unrevisited. |
+| 1 | SC1 — `marketplace add` succeeds when `sources/<name>/` holds a leftover clone whose `origin` is the source being added; no manual delete needed for the WR-07 crash window or a state rebuild | ✓ VERIFIED (carried, regression check) | Re-ran `node --test tests/orchestrators/marketplace/add.test.ts` this session: `MA-12: a leftover clone whose origin names the same source recovers` passes (81/81 total). `git diff --name-only 50746b81..HEAD -- extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` is empty — the recovery code path is byte-unchanged since the prior verification round. |
+| 2 | SC2 — a leftover that is not a git clone, is unreadable, or whose `origin` names a different URL still refuses with the MA-6 `{stale clone}` row; recognition never widens into overwriting a directory the extension did not create | ✓ VERIFIED (gap closed) | See "Gap closure verification" below. The CR-01 crash and the `{unparseable}` misclassification are both eliminated; the url-less leftover now refuses as `{stale clone}` in both modes, proven end to end through the real (non-faked) adapter. A residual finding (WR-11) is discussed separately and judged not to falsify this truth — see "WR-11" section. |
+| 3 | SC3 — a recognized leftover that cannot be fully removed fails as stale with the cleanup leak appended (MA-9 discipline), and state records no destination for the partially-removed tree | ✓ VERIFIED (carried, regression check) | Both MA-14 cases (`MA-14: an unremovable recognized leftover fails as stale...` and `MA-14 double fault: ...`) re-ran green this session. `add.ts`'s `joinLeaks`/`appendLeakToError`/bottom catch are untouched by plan 03-04 (confirmed: `git diff --numstat f301135e..HEAD -- extensions/` touches only `platform/git.ts`). |
+| 4 | SC4 — every type member this milestone introduced is read by production code or recorded in the contracts file, and `npm run check` passes whole at the milestone's final HEAD | ✓ VERIFIED (gate re-measured) | `scripts/check-unused-type-members.contracts.json` holds exactly 108 entries (re-confirmed this session via direct JSON parse). `npm run lint:type-members` re-run fresh this session: `TYPE_MEMBERS_EXIT=0`, same 4 recorded exceptions. `npx tsc --noEmit` and `npx eslint` on all 3 plan-03-04 files: exit 0. `node scripts/test-coverage-direct.mjs extensions/pi-claude-marketplace/platform/git.ts`: branches 47/47, functions 11/11, lines 394/394. `git diff --name-only 235fdc17..HEAD -- ':!.planning/'` is empty, so 03-04-SUMMARY's fresh whole-gate run (`CHECK_EXIT=0`, 7369/7369 unit, `all files 100.00/100.00/100.00`, 36/36 integration, taken ON commit `235fdc17`) still describes the current tree; only three subsequent commits exist and all three are docs-only (`git log --oneline 235fdc17..HEAD -- ':!.planning/'` is empty). |
+| 5 | SC5 — the marketplace autoupdate cascade is settled: a private plugin source refreshes from the user's credential helper instead of cloning authless, on any host | ✓ VERIFIED (carried, regression check) | `git diff --name-only 50746b81..HEAD -- extensions/pi-claude-marketplace/orchestrators/auth-host.ts extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts` is empty — untouched since the prior verification confirmed `ctx?:` widening and the 3 unconditional `auth:` spreads. |
+| 6 | SC6 — Phase 1's and Phase 2's live canaries are carried forward with reasons/resume commands, never marked passed on link-by-link evidence | ✓ VERIFIED (carried, regression check) | `grep -n "GHCAN-01\|GHCAN-02"` still finds both in STATE.md/BACKLOG.md/ROADMAP.md. `git log --oneline` for `phases/01-.../` and `phases/02-.../` shows no commits since the prior verification (last touches were `dd4fefb4`/`9ddd9360`/`4d530bfb`, all pre-dating Phase 3's gap-closure work) — neither canary was silently closed. |
+| 7 | SC7 — `PROJECT.md`'s D-79-03 row rationale is amended to match the code; its OUTCOME is untouched | ✓ VERIFIED (carried, regression check) | `git diff --name-only 50746b81..HEAD -- PROJECT.md` is empty — unedited since the prior verification confirmed the amendment. |
 
-**Score:** 6/7 truths verified (0 present-but-behavior-unverified)
+**Score:** 7/7 truths verified (0 present-but-behavior-unverified)
 
-### CR-01 — independently reproduced
+### Gap closure verification (SC2 / MA-13, CR-01)
 
-Built a real, non-faked `.git/config` on disk:
+Independently re-derived this session, not taken on SUMMARY's word:
 
-```
-[core]
-	repositoryformatversion = 0
-[remote "origin"]
-	fetch = +refs/heads/*:refs/remotes/origin/*
-```
+1. **Code inspection.** `extensions/pi-claude-marketplace/platform/git.ts:362-379` (`listRemotes`)
+   now reads the origin's `url` into a `const url: unknown`, and returns the `origin` arm only when
+   `typeof url === "string"`; every other case (no `origin` entry, or an `origin` entry whose parsed
+   value is not a string) returns `{ kind: "no-origin" }`, which `recognizeLeftover` (`add.ts`,
+   unedited) already routes to the `StaleSourceCloneError` refusal arm. `add.ts` itself has zero
+   diff since the pre-gap-closure baseline (`f301135e`) — the fix is confined to the one platform
+   module that talks to isomorphic-git, exactly as D-3-03 requires.
+2. **Targeted test runs (this session, not from SUMMARY).**
+   - `node --test tests/orchestrators/marketplace/add.test.ts` → `ADD_EXIT=0`, 81/81 pass, including
+     both new cases: `✔ MA-13 / ATTR-07: a leftover whose origin section names no url refuses as
+     stale clone` (standalone) and `✔ MA-13 / RECON-03: orchestrated mode reports a leftover whose
+     origin section names no url as stale clone` (orchestrated).
+   - `node --test tests/platform/git.test.ts` → `GIT_TEST_EXIT=0`, 39/39 pass, including the three
+     new `ORIGIN_SECTION_SHAPES` rows: `reports no-origin for an origin section with a fetch line
+     but no url`, `reports no-origin for an origin section with no keys`, `reports the empty url of
+     an origin section whose url value is empty` (the last one pins that an empty string is still a
+     string and stays on the `origin` arm, refused instead by `add.ts`'s byte comparison — D-3-01's
+     single refusal site is preserved).
+   - `npx tsc --noEmit` → exit 0. `npx eslint` on the 3 touched files → exit 0 (no
+     `no-unnecessary-condition`/`prefer-optional-chain`/`different-types-comparison` violations, i.e.
+     the guard is a genuine `typeof` narrowing from `unknown`, not a comparison against the library's
+     declared-but-false `string` type).
+   - `node scripts/test-coverage-direct.mjs extensions/pi-claude-marketplace/platform/git.ts` →
+     branches 47/47, functions 11/11, lines 394/394 — the new branch is exercised by a named case,
+     not merely by the coverage figure (GATE-01's own "a missing branch is proven by a named case"
+     truth).
+3. **No regression.** Both carried MA-13 refusal-table cases (ssh-form, garbage, empty-string,
+   case-differing, prefix-adjacent, no-origin, unreadable) and both MA-14 leak cases still pass, and
+   `git diff --numstat f301135e..HEAD -- tests/orchestrators/marketplace/add.test.ts` shows 0
+   deletions (additions only) — no pre-existing case was altered to make the new one pass.
 
-Called the actual `platform/git.ts::listRemotes` (not the test fake) against it:
+**Verdict: the CR-01 gap is closed.** The url-less leftover shape that previously crashed raw
+(standalone) or misclassified as `{unparseable}` (orchestrated) now refuses cleanly as `{stale
+clone}` in both modes, through the real (non-faked) adapter, with the leftover's `.git/config` bytes
+left unchanged and no state entry recorded (`MA-13 / ATTR-07`'s and `MA-13 / RECON-03`'s assertions,
+independently re-run above).
 
-```
-listRemotes -> {"kind":"origin"} url typeof: undefined
-THROWS: TypeError Cannot read properties of undefined (reading 'endsWith')
-```
+### WR-11 — reasoned as a residual, non-blocking finding (not a gap)
 
-Confirmed the isomorphic-git internals the reviewer cited at
-`node_modules/isomorphic-git/index.cjs:13043-13053` — `_listRemotes` enumerates `config.getSubsections('remote')`
-and resolves each remote's `url` as a separate, independently-absent lookup, exactly as CR-01 describes.
-Confirmed the escape path by reading `classifyAddError` (add.ts:265-300) and `handleAddFailure`
-(add.ts:496-533) directly: a bare `TypeError` matches no `instanceof` arm and has no `.code`, so
-`classifyAddError` returns `undefined`, and `handleAddFailure`'s `if (!orchestrated) { throw err; }`
-re-throws it raw in standalone mode; in orchestrated mode it becomes `{ reason: "unparseable" }`.
+The gap-closure code review (`03-REVIEW.md`) raised a new warning after the CR-01 fix landed: when a
+`.git/config`'s `[remote "origin"]` section carries **two** `url` lines, isomorphic-git's
+`GitConfig.get` resolves the config value as the **last** one, while real git's own
+`remote get-url`/effective fetch behavior resolves the **first** one. A leftover whose first url is
+foreign but whose second (last) url happens to byte-equal the canonical url of the source being
+added would therefore be recognized as a matching leftover and removed by `recognizeLeftover`, even
+though git itself would treat that tree's origin as the foreign, first URL. I independently read
+`03-REVIEW.md`'s reproduction (a real `.git/config` with two `url` lines, real `git remote get-url`
+output, and the real `listRemotes` result) and confirmed the current code (`git.ts:362-379`) still
+uses `git.listRemotes` (last-value-wins) rather than the reviewer's suggested `getConfigAll`-based
+"refuse on ambiguity" fix — this finding is unaddressed in the code, and `03-REVIEW-DISPOSITION.md`
+correctly records it `open`.
 
-**Verdict: CR-01 is a GAP in this phase's own goal, not a separate defect to file.** It is reachable
-through the exact WR-07 crash-window scenario this phase exists to make recoverable (isomorphic-git's
-own `GitConfigManager.save` rewrites the whole config file on clone, and an interruption mid-rewrite
-produces this shape), it sits entirely inside artifacts this phase created (`listRemotes`,
-`recognizeLeftover`), and it breaks SC2's explicit guarantee that recognition "still refuses with the
-MA-6 `{stale clone}` row" for anything it cannot positively confirm as the same source. The WR-10
-finding (no test for this shape) is the direct cause: the 100%-branch gate cannot catch a missing
-branch, only an uncovered one, so `npm run check` being green does not — and cannot — attest to this
-truth.
+**Judgment: this does not falsify SC2 for the purposes of this phase's completion.** Reasoning:
+
+- SC2's guarantee is scoped to the recovery scenario this phase builds: the WR-07 crash window and a
+  state rebuild. Neither can produce a multi-valued `origin.url`. isomorphic-git's own config writer
+  (`GitConfigManager.save`) serializes the whole file from one parsed value per key on every clone;
+  an interrupted rewrite can leave a config truncated or absent, but it cannot leave two *different*
+  `url` lines under the same section, because no code path in this codebase (or in isomorphic-git's
+  own write path) ever emits a second one. The shape the reviewer built required hand-authoring the
+  config directly — the parenthetical in this verification's own instructions names exactly that
+  caveat ("requires a hand-edited multi-url config the extension never writes"), and it holds: I
+  confirmed `git.ts` and `add.ts` contain no code path that writes more than one `url` value per
+  remote.
+- The directory in question (`<scopeRoot>/pi-claude-marketplace/sources/<name>/`) is
+  extension-owned and extension-populated (NFR-10 containment). An actor with the local filesystem
+  write access needed to hand-author a two-`url` config inside it already has the access needed to
+  replace its contents directly — tricking recognition into a remove-then-reclone does not gain such
+  an actor anything a direct write would not already give them, and arguably works against them
+  (their planted directory gets replaced with the legitimate clone).
+  This differs from the CR-01 shape, which is the direct byproduct of the extension's own ordinary,
+  attacker-free clone-then-crash sequence.
+  - This filesystem-access framing is a supporting observation on exploitability, not the basis for
+    the "reachable from crash" verdict above, which follows from the write-path analysis alone.
+- The finding's own severity, assigned by the phase's code reviewer, is `warning` — the same tier as
+  WR-01 through WR-09, which the prior verification round already classified as non-blocking
+  maintainability/diagnosability findings distinct from CR-01's `critical` tier. WR-11 does not carry
+  the same "reachable from this phase's own recovery mechanism" property that made CR-01 a genuine
+  gap.
+
+This is a real, correctly-identified divergence between isomorphic-git's config resolution and
+git's own semantics, and it is worth hardening defensively (the reviewer's `getConfigAll`-based fix
+is narrow and additive). It is **recommended for a BACKLOG entry** so it is not lost, but it is not
+being treated as a gap blocking this phase's closure, for the reasons above. If the maintainer
+weighs the residual risk differently, this section provides the evidence needed to reopen it as a
+gap.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `extensions/pi-claude-marketplace/platform/git.ts::listRemotes` | 4-arm discriminated, own fs probe before isomorphic-git, never throws | ⚠️ VERIFIED WITH DEFECT | Never throws (confirmed) and the fs-probe-first design is correctly implemented and tested for 3 of 4 arms plus the origin-with-url arm — but its `origin` arm's declared type (`url: string`) is falsifiable at runtime (CR-01), and the consuming code assumes the type holds. |
-| `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts::GitOps` | 8th member `listRemotes`, wired through `DEFAULT_GIT_OPS` | ✓ VERIFIED | `grep -c 'defaultGit\.'` inside `DEFAULT_GIT_OPS` block = 8 (re-confirmed via 03-01-SUMMARY's own acceptance-criteria grep, spot-checked structurally). |
-| `extensions/pi-claude-marketplace/domain/source.ts::stripGitSuffix` | exported leaf, byte comparison, no case folding | ✓ VERIFIED | `grep -c 'export function stripGitSuffix'` = 1; direct tests in `tests/domain/source.test.ts` per 03-01-SUMMARY. |
-| `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts::recognizeLeftover` / `addGitClonedInGuard` | recognize-remove-rename branch, single-level leak fold | ⚠️ VERIFIED WITH DEFECT | `appendLeakToError(` count 4 (unchanged), `cleanupStaging(` count 5, exhaustive switch with no `default` — all confirmed. The `origin` arm's `stripGitSuffix(remotes.url)` call has no defensive check against CR-01's falsified type. |
-| `extensions/pi-claude-marketplace/orchestrators/auth-host.ts::buildAuthForHost`/`buildCloneAuth` | `ctx` optional, graceful Device-Flow decline | ✓ VERIFIED | `ctx?: NotificationContext` confirmed at both sites; widened guard `provider === undefined \|\| ctx === undefined` confirmed. |
-| `extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts` | local `buildBundle` deleted, `buildCloneAuth` called directly, 3 unconditional `auth:` spreads | ✓ VERIFIED | `buildBundle` occurrences = 0; `auth: authBundle` occurrences = 3. |
-| `scripts/check-unused-type-members.contracts.json` | 108 entries, 4 exceptions, `update-flow.ts` pins unmoved | ✓ VERIFIED | `contracts.length` = 108; the two `update-flow.ts` ids (`834:42`, `915:42`) present unchanged. |
-| Planning docs (ROADMAP/STATE/BACKLOG/PROJECT) | SC6/SC7 carry-forward and amendment | ✓ VERIFIED | See SC6/SC7 rows above. |
+| `extensions/pi-claude-marketplace/platform/git.ts::listRemotes` | 4-arm discriminated, own fs probe before isomorphic-git, never throws, `origin` arm carries a real string url | ✓ VERIFIED | The `origin` arm's declared type (`url: string`) is now enforced at runtime via `typeof url === "string"` narrowing from `unknown`; CR-01's falsifiable-type defect is closed. 100% direct coverage (branches 47/47, functions 11/11, lines 394/394), re-measured this session. |
+| `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts::recognizeLeftover` | recognize-remove-rename branch, single-level leak fold | ✓ VERIFIED | Unedited since `f301135e` (confirmed via empty diff); its existing refusal arm now receives a type-honest `no-origin` for the url-less shape instead of a value that violated its own contract. |
+| `tests/orchestrators/marketplace/add.test.ts` | end-to-end refusal proof, both modes, through the real adapter | ✓ VERIFIED | `MA-13 / ATTR-07` (standalone) and `MA-13 / RECON-03` (orchestrated) both compose the real, non-faked `listRemotes` into the fake-clone `GitOps` seam, against a hand-written `.git/config` — not the fake's typed canned value, which cannot express this shape. Both pass; both were observed failing pre-fix (RED evidence recorded in 03-04-SUMMARY, independently corroborated by 03-REVIEW.md's own pre-fix re-run). |
+| `tests/platform/git.test.ts` | real-repository platform-tier proof of both truncation shapes plus the empty-url boundary | ✓ VERIFIED | `ORIGIN_SECTION_SHAPES` (3 rows) run against `createGitTestRepository`-backed real repositories; each row asserts the library's own output before the wrapper's, proving the fixture reproduces the named shape. |
+| `scripts/check-unused-type-members.contracts.json` | 108 entries, 4 exceptions, unmoved | ✓ VERIFIED | Re-confirmed via direct JSON parse and a fresh `npm run lint:type-members` run this session. |
+| Planning docs (ROADMAP/STATE/BACKLOG/PROJECT, SC6/SC7) | carry-forward and amendment preserved | ✓ VERIFIED (carried) | No diff since the prior verification round. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|-----|-----|--------|---------|
-| `add.ts::recognizeLeftover` | `gitOps.listRemotes(...)` | the sole production caller | ✓ WIRED | `grep -c 'gitOps.listRemotes('` (comment-filtered) in `add.ts` = 1, matching the plan's own acceptance criterion; `npm run fallow` (per plan-03's gate run) reported no dead-code finding. |
-| `add.ts::recognizeLeftover` | `domain/clone-key.ts::canonicalCloneUrl` + `domain/source.ts::stripGitSuffix` | the identity comparison, orchestrator-tier only | ✓ WIRED | Both imports present on existing single-line import statements; `platform/git.ts` still imports zero `domain` modules (`grep -c 'from "../../domain'` = 0), preserving the `.fallowrc.json` zone boundary. |
-| `add.ts` bottom `catch` (`!stagedAtFinal`) | `joinLeaks` → single `appendLeakToError` call | MA-14 single-level `Error.cause` contract | ✓ WIRED | `appendLeakToError(` count unchanged at 4 (pre/post); MA-14 double-fault test (plan 02) is the direct behavioral proof this link holds and that a two-level chain was NOT introduced. |
-| `update-preflight.ts::makeUpdateCloneProbe` | `auth-host.ts::buildCloneAuth` | the cascade's auth attachment | ✓ WIRED | `grep -c 'buildCloneAuth'` in `update-preflight.ts` ≥ 4 (import + 3 call sites), confirmed. |
-| The `.git/config` on disk | `platform/git.ts::listRemotes`'s `origin` arm | the removal decision | ⚠️ PARTIAL | Wired and functioning for a well-formed `.git/config`; NOT safe for a `.git/config` whose `origin` subsection lacks a `url` key (CR-01) — the link silently carries an `undefined` past a type boundary into a destructive-decision branch. |
+| The `.git/config` on disk | `platform/git.ts::listRemotes`'s `origin` arm | the removal decision | ✓ WIRED (gap closed) | Now safe for a `.git/config` whose `origin` subsection lacks a `url` key (`typeof` guard); safe for an empty-string url (stays on the `origin` arm, refused by the caller's byte comparison, D-3-01 preserved). **Not** safe for a two-`url`-line section (WR-11, judged residual/non-blocking above). |
+| `add.ts::recognizeLeftover` | `gitOps.listRemotes(...)` | the sole production caller | ✓ WIRED (carried) | `add.ts` unedited; link unchanged since prior verification. |
+| `tests/orchestrators/marketplace/add.test.ts`'s new cases | the real (non-faked) `platform/git.ts::listRemotes` | `arrangeLeftoverWithoutOriginUrl`'s `gitOps` spread | ✓ WIRED | Confirmed by reading the helper and by the fact both new cases were observed to fail pre-fix and pass post-fix — a fake-fixture-only case could not have shown that distinction. |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| `listRemotes` — all declared arms pass against real fixtures | `node --test tests/platform/git.test.ts` | `tests 36`, `pass 36`, `fail 0` (re-run this session) | ✓ PASS |
-| CR-01's missing-`url` shape crashes the real (non-faked) code | custom repro script against a hand-written `.git/config`, this session | `THROWS: TypeError Cannot read properties of undefined (reading 'endsWith')` | ✗ FAIL (confirms the gap) |
-| No production/test file introduced a debt marker | `grep -n -E "TBD\|FIXME\|XXX\|TODO\|HACK\|PLACEHOLDER"` across the 6 touched production files | no matches | ✓ PASS |
-| Requirement/type-member counts match plan claims | `grep -c` on `appendLeakToError(`, `cleanupStaging(`, `gitOps.listRemotes(`, `stripGitSuffix` export, `GIT_OPS_CASE_NAMES` entries, `contracts.length` | 4 / 5 / 1 / 1 / 13 / 108 — all match SUMMARY claims exactly | ✓ PASS |
-| No source changed since the plan-03 executor's `CHECK_EXIT=0` run | `git diff --name-only 50746b81..HEAD -- ':!.planning/'` | empty | ✓ PASS (gate evidence still describes this tree; full suite not re-run per instructions) |
+| Both new MA-13 refusal cases pass | `node --test tests/orchestrators/marketplace/add.test.ts` (this session) | `ADD_EXIT=0`, 81/81, both new cases on `✔` lines | ✓ PASS |
+| Both new platform truncation rows + the empty-url boundary row pass | `node --test tests/platform/git.test.ts` (this session) | `GIT_TEST_EXIT=0`, 39/39, all three rows on `✔` lines | ✓ PASS |
+| `platform/git.ts` still typechecks and lints clean | `npx tsc --noEmit`; `npx eslint extensions/.../git.ts tests/.../add.test.ts tests/platform/git.test.ts` | both exit 0 | ✓ PASS |
+| `platform/git.ts` holds 100% direct coverage | `node scripts/test-coverage-direct.mjs extensions/pi-claude-marketplace/platform/git.ts` | `DIRECT_GIT_EXIT=0`, branches 47/47, functions 11/11, lines 394/394 | ✓ PASS |
+| `scripts/check-unused-type-members.contracts.json` still holds 108 entries, 4 exceptions | `npm run lint:type-members` (this session) | `TYPE_MEMBERS_EXIT=0`, same 4 named exceptions | ✓ PASS |
+| No source changed since the 03-04 executor's fresh `CHECK_EXIT=0` run (commit `235fdc17`) | `git diff --name-only 235fdc17..HEAD -- ':!.planning/'` | empty | ✓ PASS (whole-gate evidence still describes this tree; full suite not re-run per instructions, corroborated by the targeted re-runs above) |
+| No debt markers in the 3 gap-closure files | `grep -n -E "TBD\|FIXME\|XXX\|TODO\|HACK\|PLACEHOLDER"` | no matches | ✓ PASS |
+| Working tree is clean | `git status --porcelain` | only the untracked, expected `.planning/workstreams/git-hosts/milestone.lock` | ✓ PASS |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan(s) | Description | Status | Evidence |
 |-------------|-----------------|--------------|--------|----------|
-| MA-12 | 03-01, 03-02 | same-origin leftover recovers | ✓ SATISFIED | MA-12 end-to-end case, MA-8-precedence case |
-| MA-13 | 03-01, 03-02 | foreign/unreadable/mismatched leftover still refuses | ⚠️ PARTIALLY SATISFIED | 8 of 9 near-miss/refusal shapes proven by behavior; the missing-`url`-key shape (CR-01) is unhandled and untested (WR-10) |
-| MA-14 | 03-01, 03-02 | unremovable leftover fails as stale, no state entry | ✓ SATISFIED | single-fault + double-fault cases, `loadState` assertions |
-| GATE-01 | 03-03 | type members read/pinned; whole-check green | ✓ SATISFIED | 108 contracts/4 exceptions confirmed; `CHECK_EXIT=0` evidence still valid (no source diff since) |
+| MA-12 | 03-01, 03-02 (carried) | same-origin leftover recovers | ✓ SATISFIED | MA-12 case re-run green this session; `add.ts` byte-unchanged since prior verification. |
+| MA-13 | 03-01, 03-02, 03-04 | foreign/unreadable/mismatched/url-less leftover still refuses | ✓ SATISFIED | All 9 refusal-table shapes plus the url-less shape (both modes) pass; the sole gap (CR-01) is closed. |
+| MA-14 | 03-01, 03-02 (carried) | unremovable leftover fails as stale, no state entry | ✓ SATISFIED | Both cases re-run green this session; leak path byte-unchanged since prior verification. |
+| GATE-01 | 03-03, 03-04 | type members read/pinned; whole-check green, measured fresh on the final committed tree | ✓ SATISFIED | 108 contracts/4 exceptions re-confirmed; `lint:type-members`, `tsc`, `eslint`, and direct coverage re-run green this session; the SUMMARY's fresh whole-`npm run check` (`CHECK_EXIT=0` at `235fdc17`) still describes the current tree (empty diff, docs-only commits since). |
 
-No orphaned requirements found: `grep -E "Phase 3"` against REQUIREMENTS.md returns exactly MA-12/MA-13/MA-14/GATE-01, all four of which appear in at least one plan's `requirements:` frontmatter.
+No orphaned requirements: `grep -n "Phase 3" REQUIREMENTS.md` returns exactly MA-12/MA-13/MA-14/GATE-01, all four `[x]` and all four present in at least one plan's `requirements:` frontmatter (03-01 through 03-04).
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| — | — | none found (`TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` scan across all 6 touched production files) | — | — |
+| — | — | No `TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` in the 3 gap-closure files (re-scanned this session) | — | — |
+| `extensions/pi-claude-marketplace/platform/git.ts:376-377` | 376 | IN-07 (open, info): the inline comment retains the banned "X, not Y" framing the reviewer flagged | Info | Non-blocking style nit; does not affect behavior or the gate. |
+| `tests/orchestrators/marketplace/add.test.ts:701-728` | — | IN-08 (open, info): the orchestrated url-less case does not assert `loadState` stays empty, unlike its standalone sibling | Info | Non-blocking test-completeness gap; the plan's own `<behavior>` spec for this case did not require the state assertion, and no code path in `add.ts` writes state on any refusal branch, so this is a coverage-of-assertions nit, not a functional gap. |
+| `extensions/pi-claude-marketplace/platform/git.ts` (multi-url config resolution) | :362-379 | WR-11 (open, warning): reasoned above as residual/non-blocking, not a gate blocker | Warning (advisory) | See "WR-11" section — recommended for a BACKLOG entry, not blocking this phase. |
 
-No debt-marker gate violation. The 17 findings from `03-REVIEW.md` (1 critical, 10 warning, 6 info, all still `open` per `03-REVIEW-DISPOSITION.md`) are the substantive quality signal for this phase; CR-01 is escalated into the gap above per this report's own independent verification. WR-02 through WR-09 and IN-01 through IN-06 are real but non-blocking maintainability/diagnosability findings (stale doc comments, positional-parameter style, a discarded leak message on the standalone notify path, a corroboration gap on same-origin leftovers already accepted by D-3-02, a symlink asymmetry, vacuous root-run permission tests) — none of them falsifies a ROADMAP success criterion the way CR-01 does, and none is escalated as a gap here.
+No debt-marker gate violation. WR-01 through WR-09 and IN-01 through IN-06 remain open per
+`03-REVIEW-DISPOSITION.md`, carried unchanged from the prior verification round (that round already
+judged none of them falsifies a ROADMAP success criterion); this round adds no new evidence against
+that judgment and does not re-open them.
 
 ### Human Verification Required
 
-None. All ROADMAP success criteria are either programmatically verified or programmatically falsified (CR-01); no item requires subjective/runtime human judgment to resolve. SC6's two live canaries are explicitly OUT OF SCOPE for this phase's own completion (ROADMAP: "Neither is closable on this machine... Both block milestone close only, not any phase's completion") and are correctly carried forward rather than closed here — that is what SC6 asked for, and it is done.
+None. Every ROADMAP success criterion is either programmatically verified or, in SC2's case,
+programmatically verified with a reasoned, evidence-backed disposition of the one residual finding
+(WR-11) that could plausibly bear on it. SC6's two live canaries remain explicitly out of scope for
+phase completion (carried forward per ROADMAP's own instruction) and are not re-litigated here.
 
 ### Gaps Summary
 
-One BLOCKER: CR-01 (independently reproduced against the real, non-faked code and the real
-isomorphic-git library) breaks SC2/MA-13's refusal guarantee for a `.git/config` whose `origin`
-subsection has no `url` key — a shape directly reachable from the WR-07 crash window this phase
-exists to recover from. The fix the reviewer proposed (treat a present-but-url-less origin as
-`no-origin` at the `platform/git.ts::listRemotes` boundary, so the type contract `add.ts` relies on
-is actually true) is narrow, additive, and reuses the already-tested `StaleSourceCloneError` refusal
-path — no new mechanism is required, only a stricter guard on an existing one, plus the paired test
-(WR-10) that would have caught this before code review.
+No gaps remain. The prior round's sole gap — SC2 / MA-13, CR-01 (a url-less `origin` section
+crashing or misclassifying `marketplace add`) — is closed by plan 03-04 and independently
+re-confirmed in this session through direct code inspection, fresh targeted test runs (not taken from
+SUMMARY.md), and fresh toolchain re-runs (`tsc`, `eslint`, direct coverage, `lint:type-members`). No
+regression was found in any of the six previously-verified truths (SC1, SC3, SC4, SC5, SC6, SC7): the
+gap-closure plan touched exactly three files (`platform/git.ts`, `tests/orchestrators/marketplace/add.test.ts`,
+`tests/platform/git.test.ts`), and every file underlying the other six truths is byte-unchanged since
+the prior verification's baseline.
 
-Everything else this phase set out to do — the MA-12 success path, the MA-14 leak discipline, the
-autoupdate-cascade fix (SC5), the two canary carry-forwards (SC6), the D-79-03 rationale amendment
-(SC7), and the whole-gate-green measurement (SC4/GATE-01) — is verified against the actual codebase,
-not merely against SUMMARY.md's claims about it.
+One residual finding (WR-11, a multi-valued `origin.url` config resolved by last-value instead of
+git's first-value semantics) surfaced during the gap-closure code review and remains unaddressed in
+the code. It is reasoned above, with evidence, as **not** falsifying SC2 for this phase's completion
+— it requires a hand-authored config shape that no code path in this codebase or in isomorphic-git's
+own write path ever produces, so it cannot arise from the crash-window or state-rebuild scenarios
+SC2 is written to cover. It is recommended for a BACKLOG entry so the maintainer can weigh the
+residual risk on their own terms; this report's evidence is sufficient to reopen it as a gap if that
+judgment differs from the one made here.
 
 ---
 
-_Verified: 2026-09-27_
+_Verified: 2026-09-28_
 _Verifier: Claude (gsd-verifier)_

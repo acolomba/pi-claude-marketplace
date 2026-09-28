@@ -43,9 +43,9 @@ here. Decimal phases (1.1, 2.1) are urgent insertions only, marked `INSERTED`.
 - [ ] **Phase 2: Endpoints that answer only at the verbatim URL** — a smart-HTTP server that 404s
   the `.git`-suffixed path still clones and still resolves refs, because the URL sent is the one the
   user typed and exactly one attempt is ever made (MURL-08, MURL-09)
-- [ ] **Phase 3: `marketplace add` recovers from its own leftover clone** — a retry after the WR-07
+- [x] **Phase 3: `marketplace add` recovers from its own leftover clone** — a retry after the WR-07
   crash window succeeds instead of demanding a manual delete, while a foreign tree is still refused
-  (MA-12, MA-13, MA-14, GATE-01)
+  (MA-12, MA-13, MA-14, GATE-01) (completed 2026-09-28)
 
 ## Phase Details
 
@@ -190,7 +190,7 @@ Plans:
      rationale to match what the code does, or the next reader will infer a behavior that no
      longer exists.
 
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 
@@ -263,4 +263,4 @@ see STATE.md § Deferred Verification for the full explanatory paragraphs.
 |-------|----------------|--------|-----------|
 | 1. Private repos on any git host | 3/3 | In Progress | — |
 | 2. Endpoints that answer only at the verbatim URL | 3/3 | In Progress | — |
-| 3. `marketplace add` recovers from its own leftover clone | 4/4 | In Progress | — |
+| 3. `marketplace add` recovers from its own leftover clone | 4/4 | Complete | 2026-09-28 |

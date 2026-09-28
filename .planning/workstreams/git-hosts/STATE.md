@@ -5,18 +5,18 @@ milestone_name: Any Git Host
 current_phase: 3
 current_phase_name: "`marketplace add` recovers from its own leftover clone"
 current_plan: 4
-status: "Phase 3 gap closure EXECUTED — 03-04 complete (CR-01 fixed; npm run check CHECK_EXIT=0, 7369/7369 unit tests, 100% coverage); awaiting code review and re-verification"
-stopped_at: "Completed 03-04-PLAN.md: listRemotes reports no-origin for a url-less origin section; real-adapter tests in add.test.ts and git.test.ts; whole gate green at 235fdc17"
-last_updated: "2026-09-28T03:03:37.000Z"
+status: "Phase 3 COMPLETE (re-verified 7/7 after gap closure 03-04). All 3 phases executed; milestone close blocked only on the Phase 1 and Phase 2 live canaries (GHCAN-01, GHCAN-02)"
+stopped_at: "Phase 3 complete: gap closure 03-04 fixed CR-01, re-verification passed 7/7; WR-11 (multi-url origin) left open as a residual edge"
+last_updated: "2026-09-28T03:21:28.703Z"
 last_activity: 2026-09-28
-last_activity_desc: "Executed Phase 3 gap-closure plan 03-04 (commits 24f2da2c, 235fdc17, 26e4cfc8)"
-state_head: bd256c4bb8bfd5c5e4e9b4fc600313a3a3811c59
+last_activity_desc: "Phase 3 re-verified (passed 7/7) and marked complete"
+state_head: dc3aa2004dad53900c132c6f9df489189824a499
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 10
   completed_plans: 10
-  percent: 100
+  percent: 33
 total_plans_in_phase: 4
 ---
 
@@ -37,7 +37,14 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 3 — `marketplace add` recovers from its own leftover clone — PLANS COMPLETE (3 of 3), REVIEWED and VERIFIED WITH GAPS (6/7); NOT marked complete
+Phase: 3 — `marketplace add` recovers from its own leftover clone — COMPLETE (4/4 plans, re-verified 7/7 on 2026-09-28)
+
+**Phase 3 complete.** Re-verification passed 7/7: CR-01 is fixed by 03-04 and confirmed by a follow-up
+code review (03-REVIEW.md; CR-01 and WR-10 recorded `fixed` in 03-REVIEW-DISPOSITION.md). That review
+raised WR-11 (open): a `.git/config` with two `url` lines under `[remote "origin"]` is read by its LAST
+value while git fetches from the FIRST. The verifier judged it outside SC2 because only a hand-edited
+config produces it. IN-07 and IN-08 (info) are open too. Every phase is now executed; milestone close
+waits only on the two live canaries (`/gsd-verify-work 1`, `/gsd-verify-work 2`).
 
 **Gap closure EXECUTED (2026-09-28).** 03-04 landed in `24f2da2c` (fix + standalone case), `235fdc17`
 (orchestrated case + real-repository table) and `26e4cfc8` (SUMMARY). `npm run check` at `235fdc17`:
@@ -149,7 +156,7 @@ case that fails if the two leaks were ever chained through two `appendLeakToErro
 joined into one. `npm run test:coverage:unit` now reports `all files | 100.00 | 100.00 | 100.00`.
 No production file was touched (`git diff --name-only -- extensions/` is empty across both commits).
 
-Status: Phase 3 plans complete (3/3), awaiting code review and verification. Phase 2 verified — 9/9
+Status (historical, Phase 2 closure): Phase 2 verified — 9/9
 must-haves, all 5 ROADMAP success criteria, all 5 plan prohibitions, `npm run check` at
 `CHECK_EXIT=0`. Its live smart-HTTP canary is deferred to the operator alongside Phase 1's (see
 Deferred Verification).
@@ -544,14 +551,15 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-09-28T03:03:37.000Z
+**Last session:** 2026-09-28T03:21:28.000Z
 
-**Stopped At:** Completed gap-closure plan 03-04 (CR-01 fixed, whole gate green at `235fdc17`).
+**Stopped At:** Phase 3 complete (re-verified 7/7 after gap closure 03-04).
 
 **Resume File:** None — all four Phase 3 plans have SUMMARYs.
 
-**Next Action:** code review of the gap-closure diff, then re-verify Phase 3. After that, milestone
-close is blocked only by the two carried-forward live canaries (GHCAN-01, GHCAN-02).
+**Next Action:** run the two carried live canaries (`/gsd-verify-work 1 --ws git-hosts`,
+`/gsd-verify-work 2 --ws git-hosts`), then milestone close. Optionally fix WR-11 (read
+`remote.origin.url` with `getConfigAll`, refuse unless exactly one url) before closing.
 
 ### What this run completed
 
