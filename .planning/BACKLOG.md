@@ -3320,6 +3320,11 @@ confirm the clone succeeds. Resume with `/gsd-verify-work 1`.
 
 ## GHCAN-02: `any-git-host` Phase 2 live canary -- a real verbatim-only smart-HTTP server
 
+**Status (2026-09-28): closed against a local stand-in.** `02-UAT.md` test 1 ran
+`marketplace add` and a later `marketplace update` through pi against a real
+smart-HTTP server (git http-backend behind HTTPS) that answers only at the
+verbatim path and 404s the `.git` form: both succeeded with no `.git` request.
+
 Carried from the `any-git-host` milestone at Phase 3 close (ROADMAP.md Phase 3
 SC6; STATE.md § Deferred Verification).
 

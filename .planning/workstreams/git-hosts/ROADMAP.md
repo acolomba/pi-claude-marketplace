@@ -40,7 +40,7 @@ here. Decimal phases (1.1, 2.1) are urgent insertions only, marked `INSERTED`.
 - [x] **Phase 1: Private repos on any git host** — a stored credential is consulted on every host, (completed 2026-09-28)
   not just the two in the provider registry, and the credential stays bound to the host it was
   resolved for (GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06)
-- [ ] **Phase 2: Endpoints that answer only at the verbatim URL** — a smart-HTTP server that 404s
+- [x] **Phase 2: Endpoints that answer only at the verbatim URL** — a smart-HTTP server that 404s (completed 2026-09-28)
   the `.git`-suffixed path still clones and still resolves refs, because the URL sent is the one the
   user typed and exactly one attempt is ever made (MURL-08, MURL-09)
 - [x] **Phase 3: `marketplace add` recovers from its own leftover clone** — a retry after the WR-07
@@ -130,7 +130,7 @@ Plans:
      lines/functions/branches and an owner unit test for every module touched
      (`test:corresponding`).
 
-**Plans:** 3/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 
@@ -249,10 +249,10 @@ Phase 3 because that is where it is finally measured, but nothing may be left re
   domain vocabulary (`form`, `component`, `view`), so pass `--skip-ui` to `/gsd-plan-phase`; no
   phase in this milestone carries a UI hint.
 
-### Outstanding at milestone close: two live canaries
+### Milestone-close live canaries (both closed 2026-09-28)
 
-Neither is closable on this machine. Both block milestone close only, not any phase's completion —
-see STATE.md § Deferred Verification for the full explanatory paragraphs.
+Both were closed on 2026-09-28 against local instrumented servers (`01-UAT.md` tests 1-3 and 16,
+`02-UAT.md` test 1). The original descriptions follow.
 
 - **Phase 1** (`01-private-repos-on-any-git-host/`): one end-to-end clone of a real private repo on
   a non-registry host, using an operator PAT stored in a real git credential helper. Every seam in
@@ -270,5 +270,5 @@ see STATE.md § Deferred Verification for the full explanatory paragraphs.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Private repos on any git host | 4/4 | Complete    | 2026-09-28 |
-| 2. Endpoints that answer only at the verbatim URL | 3/3 | In Progress | — |
+| 2. Endpoints that answer only at the verbatim URL | 3/3 | Complete    | 2026-09-28 |
 | 3. `marketplace add` recovers from its own leftover clone | 4/4 | Complete | 2026-09-28 |

@@ -2,21 +2,21 @@
 gsd_state_version: "1.0"
 milestone: any-git-host
 milestone_name: Any Git Host
-current_phase: 02
+current_phase: 2
 current_phase_name: Endpoints that answer only at the verbatim URL
 current_plan: 4
-status: "Phase 1 COMPLETE (UAT 16/16, re-verified 5/5, validated, secured). Phase 3 COMPLETE. Phase 2 executed; verification stale + live canary (02-UAT test 1) outstanding"
-stopped_at: "Phase 1 complete; Phase 2 awaits re-verification and its live smart-HTTP canary"
-last_updated: "2026-09-28T20:38:43.002Z"
+status: "All 3 phases complete. Phases 1-2 verified passed 2026-09-28 with live canaries closed; Phase 3 verification stale (needs a verifier re-run before milestone close)"
+stopped_at: "Phase 2 complete; Phase 3 verification stale before milestone close"
+last_updated: "2026-09-28T21:22:05.298Z"
 last_activity: 2026-09-28
-last_activity_desc: Phase 1 complete, transitioned to Phase 02
-state_head: 9de848148d9fcf33fbdf1af7dcd7eb4f14c97cdf
+last_activity_desc: Phase 2 complete
+state_head: 4dc8177bfce3681a12bfd6eb532543d2dca8a6e6
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
   completed_plans: 11
-  percent: 67
+  percent: 100
 total_plans_in_phase: 4
 ---
 
@@ -37,7 +37,16 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 02 — Endpoints that answer only at the verbatim URL (executed; verification stale, live canary outstanding)
+Phase: 2 (Endpoints that answer only at the verbatim URL) — complete; all 3 phases complete
+
+**Phase 2 COMPLETE (2026-09-28).** Live canary `02-UAT.md` 1/1 (`4dc8177b`): a local HTTPS server
+serving only `/verbatim-mp` and 404ing every `.git` path; `marketplace add` and a later `marketplace
+update` each made exactly one verbatim info/refs + upload-pack pair, and a missing repo or the `.git`
+form failed as `{source missing}` after one request. Re-verified `passed` 9/9 (the 01-04 redirect
+hop is a server-directed follow, not a D-2-01 retry), `npm run check` `CHECK_EXIT=0`.
+
+**Phase 3 verification is stale** (covered files changed after it, including 01-04's `platform/git.ts`).
+Re-run its verifier before `/gsd-complete-milestone`.
 
 **Phase 1 COMPLETE (2026-09-28).** UAT `01-UAT.md` 16/16 (`0876dcd1`): the live canary (tests 1-3)
 ran on an instrumented HTTPS server with a scoped `credential.helper=store`; test 4 re-run after
@@ -189,7 +198,7 @@ Status (historical, Phase 2 closure): Phase 2 verified — 9/9
 must-haves, all 5 ROADMAP success criteria, all 5 plan prohibitions, `npm run check` at
 `CHECK_EXIT=0`. Its live smart-HTTP canary is deferred to the operator alongside Phase 1's (see
 Deferred Verification).
-Last activity: 2026-09-28 — Phase 1 complete (UAT 16/16, re-verified passed)
+Last activity: 2026-09-28 — Phase 2 complete
 
 **Phase 3 Plan 03 (wave 3) is executed, and Phase 3's three plans are all complete.**
 `buildAuthForHost`'s and `buildCloneAuth`'s `ctx` parameters become optional; the early-return
@@ -388,7 +397,7 @@ exceptions with 108 contract entries, and both coverage-pin files are unchanged.
 
 | Phase | State | Resume |
 |-------|-------|--------|
-| 2 | verification_deferred_human | /gsd-verify-work 2 |
+| — | none | — |
 
 The phase numbers above match the `number` field `init.manager` emits — that is the
 projection `discover_phases` filters against. Phase directories are zero-padded
@@ -401,7 +410,7 @@ control. Deferred so autonomous runs can proceed through phases 2 and 3; milesto
 blocked until this is resolved. This item survives Phase 3's completion unchanged; it blocks
 milestone close only, not Phase 3 or any phase after it.
 
-Phase 2's single outstanding item is the same class: one `marketplace add` against a REAL
+Phase 2's live canary is CLOSED (2026-09-28, `02-UAT.md` test 1, instrumented local server). Originally: one `marketplace add` against a REAL
 smart-HTTP server that answers only at the verbatim path and 404s the `.git` form, plus a later
 `resolveRemoteRef` against it. Every phase test proves the URL that is SENT through the offline
 `createGitOpsFake`; none exercises a real HTTP round trip. Recorded in `02-UAT.md`. Deferred by
@@ -580,12 +589,11 @@ None.
 
 **Last session:** 2026-09-28T20:45:00.000Z
 
-**Stopped At:** Phase 1 complete (UAT 16/16, re-verified passed 5/5)
+**Stopped At:** Phase 2 complete; all phases complete, Phase 3 verification stale
 
 **Resume File:** None.
 
-**Next Action:** Phase 2 — run its live smart-HTTP canary (`/gsd-verify-work 2 --ws git-hosts`)
-and re-run its verifier (stale), then milestone close. Optionally fix WR-11 (read
+**Next Action:** re-run Phase 3's verifier (stale), then `/gsd-complete-milestone`. Optionally fix WR-11 (read
 `remote.origin.url` with `getConfigAll`, refuse unless exactly one url) before closing.
 
 ### What this run completed

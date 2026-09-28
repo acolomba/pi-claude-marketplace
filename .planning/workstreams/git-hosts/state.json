@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Endpoints that answer only at the verbatim URL",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "3",
@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 02 of 3 · 67% · executing"
+    "command": "/gsd:new-milestone",
+    "label": "Start a new milestone",
+    "reason": "All phases complete — start a new milestone"
   },
-  "updated_at": "2026-09-28T20:38:43.069Z"
+  "updated_at": "2026-09-28T21:22:05.370Z"
 }
