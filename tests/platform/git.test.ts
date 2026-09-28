@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
 import { chmod, readFile, writeFile } from "node:fs/promises";
+import nodeHttp from "node:http";
+import https from "node:https";
 import * as path from "node:path";
+import { Readable } from "node:stream";
 import { describe, test, type TestContext } from "node:test";
 
 import * as git from "isomorphic-git";
@@ -22,6 +26,7 @@ import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import { registerGitOpsContract } from "./git-ops-contract.ts";
 import { createGitTestDirectory, createGitTestRepository } from "./git-test-repository.ts";
 
+import type { CredentialOpsFake } from "./credential-ops-fake.ts";
 import type { GitOpsContractParticipant } from "./git-ops-contract.ts";
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as GitPlatform from "../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -428,6 +433,226 @@ function expectedDiscoveryRequest(
   };
 }
 
+const INFO_REFS_PATH = "/info/refs?service=git-upload-pack";
+const BOUND_INFO_URL = `${REMOTE_URL}${INFO_REFS_PATH}`;
+const BOUND_UPLOAD_PACK_URL = `${REMOTE_URL}/git-upload-pack`;
+const RENAMED_REMOTE_URL = `https://${HOST}/renamed/repo.git`;
+const RENAMED_INFO_URL = `${RENAMED_REMOTE_URL}${INFO_REFS_PATH}`;
+const RENAMED_UPLOAD_PACK_URL = `${RENAMED_REMOTE_URL}/git-upload-pack`;
+const OTHER_PORT_INFO_URL = `https://${HOST}:8443/owner/repo.git${INFO_REFS_PATH}`;
+const BASIC_CREDENTIAL = "Basic dXNlcjpzZWNyZXQ=";
+
+/** The options `simple-get` passes to the `request` function of `node:https` and `node:http`. */
+interface WireRequestOptions {
+  readonly protocol: string;
+  readonly hostname: string;
+  readonly port: string | null;
+  readonly path: string;
+  readonly method: string;
+  readonly headers: Readonly<Record<string, string | number>>;
+}
+
+/** One request as it reaches the socket. Node lower-cases every header name. */
+interface WireRequest {
+  readonly url: string;
+  readonly method: string;
+  readonly headers: Readonly<Record<string, string | number>>;
+  readonly body: Buffer;
+}
+
+/** The answer a wire double gives to one request. */
+interface WireResponse {
+  readonly statusCode: number;
+  readonly statusMessage: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: Buffer;
+}
+
+/** A redirect case: what the redirect is about, and its `Location` header. */
+interface RedirectRow {
+  readonly kind: string;
+  readonly location: string;
+}
+
+/**
+ * Replaces the socket door of both `node:https` and `node:http`.
+ *
+ * The real `simple-get`, `isomorphic-git/http/node` and isomorphic-git all
+ * run, so every hop a redirect produces reaches `serve` as its own request.
+ * `simple-get` picks the module by scheme, which is why both are replaced.
+ */
+function installWireTransport(
+  t: TestContext,
+  serve: (request: WireRequest) => WireResponse,
+): WireRequest[] {
+  const requests: WireRequest[] = [];
+
+  function request(
+    options: WireRequestOptions,
+    onResponse: (response: Readable) => void,
+  ): EventEmitter {
+    const url = new URL(options.path, `${options.protocol}//${options.hostname}`);
+    url.port = options.port ?? "";
+
+    return Object.assign(new EventEmitter(), {
+      end(body: Buffer = Buffer.alloc(0)): void {
+        const wireRequest = {
+          url: url.href,
+          method: options.method,
+          headers: { ...options.headers },
+          body,
+        };
+        requests.push(wireRequest);
+        const answer = serve(wireRequest);
+        setImmediate(() => {
+          onResponse(
+            Object.assign(Readable.from([answer.body]), {
+              statusCode: answer.statusCode,
+              statusMessage: answer.statusMessage,
+              headers: answer.headers,
+            }),
+          );
+        });
+      },
+    });
+  }
+
+  t.mock.method(https, "request", request);
+  t.mock.method(nodeHttp, "request", request);
+  return requests;
+}
+
+function unauthorizedWireResponse(): WireResponse {
+  return { statusCode: 401, statusMessage: "Unauthorized", headers: {}, body: Buffer.alloc(0) };
+}
+
+function redirectWireResponse(statusCode: number, location: string): WireResponse {
+  return {
+    statusCode,
+    statusMessage: "Redirect",
+    headers: { location },
+    body: Buffer.from("moved"),
+  };
+}
+
+function advertisementWireResponse(): WireResponse {
+  return {
+    statusCode: 200,
+    statusMessage: "OK",
+    headers: { "content-type": "application/x-git-upload-pack-advertisement" },
+    body: advertisementBody(),
+  };
+}
+
+function refsWireResponse(): WireResponse {
+  return {
+    statusCode: 200,
+    statusMessage: "OK",
+    headers: { "content-type": "application/x-git-upload-pack-result" },
+    body: refsBody(FULL_ADVERTISEMENT),
+  };
+}
+
+function unplannedWireRequest(request: WireRequest): Error {
+  return new Error(`unplanned wire request: ${request.method} ${request.url}`);
+}
+
+/** The bound host redirects `info/refs` to `location`; every other request is challenged. */
+function crossOriginServer(location: string): (request: WireRequest) => WireResponse {
+  return (request) =>
+    request.url === BOUND_INFO_URL
+      ? redirectWireResponse(302, location)
+      : unauthorizedWireResponse();
+}
+
+/**
+ * The bound host redirects `info/refs` to `location`, inside its own origin.
+ * The renamed `info/refs` and the bound `git-upload-pack` answer only a
+ * request that carries a credential.
+ */
+function sameOriginServer(location: string): (request: WireRequest) => WireResponse {
+  return (request) => {
+    if (request.url === BOUND_INFO_URL) {
+      return redirectWireResponse(302, location);
+    }
+
+    if (request.headers.authorization === undefined) {
+      return unauthorizedWireResponse();
+    }
+
+    if (request.url === RENAMED_INFO_URL) {
+      return advertisementWireResponse();
+    }
+
+    if (request.url === BOUND_UPLOAD_PACK_URL) {
+      return refsWireResponse();
+    }
+
+    throw unplannedWireRequest(request);
+  };
+}
+
+/** The bound host redirects its `git-upload-pack` POST to the renamed repository. */
+function postRedirectServer(statusCode: number): (request: WireRequest) => WireResponse {
+  return (request) => {
+    if (request.url === BOUND_INFO_URL) {
+      return advertisementWireResponse();
+    }
+
+    if (request.url === BOUND_UPLOAD_PACK_URL) {
+      return redirectWireResponse(statusCode, RENAMED_UPLOAD_PACK_URL);
+    }
+
+    if (request.url === RENAMED_UPLOAD_PACK_URL) {
+      return refsWireResponse();
+    }
+
+    throw unplannedWireRequest(request);
+  };
+}
+
+/** A credential fake whose helper holds `user:secret` for the bound host. */
+function storedCredentials(): CredentialOpsFake {
+  return createCredentialOpsFake({
+    boundary: "memory",
+    credentials: [[HOST, { username: "user", password: "secret" }]],
+  });
+}
+
+/** The auth bundle bound to `HOST`: no eviction, and no interactive fallback. */
+function boundAuth(credentials: CredentialOpsFake): NonNullable<GitPlatform.CloneOptions["auth"]> {
+  return {
+    credentialOps: credentials.credentialOps,
+    host: HOST,
+    evictOnFailure: false,
+    onAuthRequired: () => {
+      throw new Error("interactive auth is forbidden on a stored-credential hit");
+    },
+  };
+}
+
+/** The url of each wire request and the credential header it carried, or null. */
+function wireCredentials(
+  requests: readonly WireRequest[],
+): Array<{ readonly url: string; readonly authorization: string | number | null }> {
+  return requests.map(({ url, headers }) => ({
+    url,
+    authorization: headers.authorization ?? null,
+  }));
+}
+
+/** The wire log of a challenge answered once, when `location` is on another origin. */
+function expectedCrossOriginWireLog(
+  location: string,
+): Array<{ readonly url: string; readonly authorization: string | null }> {
+  return [
+    { url: BOUND_INFO_URL, authorization: null },
+    { url: location, authorization: null },
+    { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
+    { url: location, authorization: null },
+  ];
+}
+
 describe("local Git operations", () => {
   test("reports the current branch after the initial commit", async (t) => {
     // arrange
@@ -565,6 +790,24 @@ describe("clone", () => {
       expectedDiscoveryRequest({ Authorization: "Basic dXNlcjpzZWNyZXQ=" }),
     ]);
   });
+
+  test("GAUTH-06: does not forward the credential on a redirect to another port of the same host", async (t) => {
+    // arrange
+    const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
+    const directory = await createGitTestDirectory(t, { boundary: "local" });
+    const credentials = storedCredentials();
+
+    // act
+    const cloning = clone({ dir: directory, url: REMOTE_URL, auth: boundAuth(credentials) });
+
+    // assert
+    await assert.rejects(cloning, isUserCanceledError);
+    assert.deepStrictEqual(
+      wireCredentials(requests),
+      expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
+    );
+    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
+  });
 });
 
 describe("fetch", () => {
@@ -622,6 +865,25 @@ describe("fetch", () => {
       expectedDiscoveryRequest(),
       expectedDiscoveryRequest({ Authorization: "Basic dXNlcjpzZWNyZXQ=" }),
     ]);
+  });
+
+  test("GAUTH-06: does not forward the credential on a redirect to another port of the same host", async (t) => {
+    // arrange
+    const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    const credentials = storedCredentials();
+
+    // act
+    const fetching = fetch({ dir: repository.dir, auth: boundAuth(credentials) });
+
+    // assert
+    await assert.rejects(fetching, isUserCanceledError);
+    assert.deepStrictEqual(
+      wireCredentials(requests),
+      expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
+    );
+    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
   });
 });
 
@@ -850,6 +1112,156 @@ describe("resolveRemoteRef", () => {
       },
     ]);
     assert.deepStrictEqual(requestsCarryingAuthorization(requests), []);
+  });
+
+  const CROSS_ORIGIN_REDIRECTS: readonly RedirectRow[] = [
+    { kind: "another port of the same host", location: OTHER_PORT_INFO_URL },
+    { kind: "http on the same host", location: `http://${HOST}/owner/repo.git${INFO_REFS_PATH}` },
+    { kind: "another host", location: `${OTHER_REMOTE_URL}${INFO_REFS_PATH}` },
+  ];
+
+  for (const { kind, location } of CROSS_ORIGIN_REDIRECTS) {
+    test(`GAUTH-06: does not forward the credential on a redirect to ${kind}`, async (t) => {
+      // arrange
+      const requests = installWireTransport(t, crossOriginServer(location));
+      const credentials = storedCredentials();
+
+      // act
+      const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+      // assert
+      await assert.rejects(resolution, isUserCanceledError);
+      assert.deepStrictEqual(wireCredentials(requests), expectedCrossOriginWireLog(location));
+      assert.deepStrictEqual(credentials.calls, {
+        fill: [{ host: HOST }],
+        approve: [],
+        reject: [],
+      });
+    });
+  }
+
+  const SAME_ORIGIN_REDIRECTS: readonly RedirectRow[] = [
+    { kind: "another path", location: RENAMED_INFO_URL },
+  ];
+
+  for (const { kind, location } of SAME_ORIGIN_REDIRECTS) {
+    test(`GAUTH-06: forwards the credential on a redirect within its origin (${kind})`, async (t) => {
+      // arrange
+      const requests = installWireTransport(t, sameOriginServer(location));
+      const credentials = storedCredentials();
+
+      // act
+      const oid = await resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+      // assert
+      assert.strictEqual(oid, OID_MAIN);
+      assert.deepStrictEqual(wireCredentials(requests), [
+        { url: BOUND_INFO_URL, authorization: null },
+        { url: RENAMED_INFO_URL, authorization: null },
+        { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
+        { url: RENAMED_INFO_URL, authorization: BASIC_CREDENTIAL },
+        { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
+      ]);
+    });
+  }
+
+  // How `git-upload-pack` is re-sent after its POST is redirected.
+  interface PostRedirectRow {
+    readonly title: string;
+    readonly statusCode: number;
+    readonly finalMethod: string;
+    readonly finalBody: Buffer;
+    readonly finalContentHeaders: readonly string[];
+  }
+
+  const POST_REDIRECTS: readonly PostRedirectRow[] = [
+    {
+      title: "re-sends a POST answered with 302 as a GET without its body",
+      statusCode: 302,
+      finalMethod: "GET",
+      finalBody: Buffer.alloc(0),
+      finalContentHeaders: [],
+    },
+    {
+      title: "re-sends a POST answered with 307 with its body",
+      statusCode: 307,
+      finalMethod: "POST",
+      finalBody: expectedListRefsBody(),
+      finalContentHeaders: ["content-length", "content-type"],
+    },
+  ];
+
+  for (const { title, statusCode, finalMethod, finalBody, finalContentHeaders } of POST_REDIRECTS) {
+    test(title, async (t) => {
+      // arrange
+      const requests = installWireTransport(t, postRedirectServer(statusCode));
+
+      // act
+      const oid = await resolveRemoteRef({ url: REMOTE_URL });
+
+      // assert
+      assert.strictEqual(oid, OID_MAIN);
+      assert.deepStrictEqual(
+        requests.map(({ method, url }) => `${method} ${url}`),
+        [
+          `GET ${BOUND_INFO_URL}`,
+          `POST ${BOUND_UPLOAD_PACK_URL}`,
+          `${finalMethod} ${RENAMED_UPLOAD_PACK_URL}`,
+        ],
+      );
+      assert.deepStrictEqual(
+        requests.slice(-1).map(({ headers, body }) => ({
+          body: withoutAgentPacket(body),
+          contentHeaders: Object.keys(headers)
+            .filter((name) => name.startsWith("content-"))
+            .sort(),
+        })),
+        [{ body: finalBody, contentHeaders: finalContentHeaders }],
+      );
+    });
+  }
+
+  test("returns a redirect without a Location header to isomorphic-git as an HttpError", async (t) => {
+    // arrange
+    const requests = installWireTransport(t, () => ({
+      statusCode: 302,
+      statusMessage: "Found",
+      headers: {},
+      body: Buffer.alloc(0),
+    }));
+
+    // act
+    const resolution = resolveRemoteRef({ url: REMOTE_URL });
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof git.Errors.HttpError);
+      assert.deepStrictEqual(error.data, {
+        statusCode: 302,
+        statusMessage: "Found",
+        response: "",
+      });
+      return true;
+    });
+    assert.deepStrictEqual(
+      requests.map(({ url }) => url),
+      [BOUND_INFO_URL],
+    );
+  });
+
+  test("rejects an eleventh consecutive redirect with too many redirects", async (t) => {
+    // arrange
+    const requests = installWireTransport(t, () => redirectWireResponse(302, BOUND_INFO_URL));
+
+    // act
+    const resolution = resolveRemoteRef({ url: REMOTE_URL });
+
+    // assert
+    await assert.rejects(resolution, { name: "Error", message: "too many redirects" });
+    assert.deepStrictEqual(
+      requests.map(({ url }) => url),
+      Array.from({ length: 11 }, () => BOUND_INFO_URL),
+    );
   });
 });
 

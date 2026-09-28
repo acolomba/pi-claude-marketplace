@@ -2,12 +2,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import * as git from "isomorphic-git";
-import http from "isomorphic-git/http/node";
+import nodeHttpClient from "isomorphic-git/http/node";
 
 import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
 
 import type { OnAuthRequiredFn } from "./git-auth-callbacks.ts";
 import type { CredentialOps } from "./git-credential.ts";
+import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git/http/node";
 
 /**
  * platform/git.ts -- isomorphic-git wrapper (D-18, D-19, D-20).
@@ -15,8 +16,10 @@ import type { CredentialOps } from "./git-credential.ts";
  * Uses pure-JS `isomorphic-git`, so there is no `git not found on PATH`
  * failure mode (D-21, MA-7).
  *
- * Pins `fs` (Node's built-in) and `http` (`isomorphic-git/http/node`) so
- * the marketplace orchestrators don't thread them through every call.
+ * Pins `fs` (Node's built-in) and `http` so the marketplace orchestrators
+ * don't thread them through every call. `http` is the module-private client
+ * below: it sends each hop through `isomorphic-git/http/node` and follows
+ * redirects itself, so a credential never reaches another origin (GAUTH-06).
  *
  * NOT exposed:
  *   - sparse checkout (PRD §11 deferred; isomorphic-git also doesn't support it)
@@ -157,6 +160,112 @@ export type ListRemotesResult =
   | { readonly kind: "no-origin" }
   | { readonly kind: "not-a-repo" }
   | { readonly kind: "unreadable" };
+
+/** The redirect cap of `simple-get`, which `http` keeps. */
+const MAX_REDIRECTS = 10;
+
+/** Headers a hop loses when it leaves the origin of the original request. */
+const CROSS_ORIGIN_HEADERS: ReadonlySet<string> = new Set(["authorization", "cookie"]);
+
+/** Headers that describe a request body; they go with the body. */
+const BODY_HEADERS: ReadonlySet<string> = new Set(["content-length", "content-type"]);
+
+/** Redirect statuses on which a POST is re-sent as a GET. */
+const POST_TO_GET_STATUSES: ReadonlySet<number> = new Set([301, 302]);
+
+function withoutHeaders(
+  headers: Record<string, string>,
+  names: ReadonlySet<string>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => !names.has(name.toLowerCase())),
+  );
+}
+
+/** The `Location` of a redirect, or undefined when `response` is final. */
+function redirectLocation(response: GitHttpResponse): string | undefined {
+  const { statusCode, headers = {} } = response;
+  return statusCode >= 300 && statusCode < 400 ? headers.location : undefined;
+}
+
+/** Builds the request for the hop that `statusCode` redirected to `target`. */
+function nextHop(
+  hop: GitHttpRequest,
+  statusCode: number,
+  target: URL,
+  origin: string,
+): GitHttpRequest {
+  const { headers = {}, body, ...rest } = hop;
+  const kept = target.origin === origin ? headers : withoutHeaders(headers, CROSS_ORIGIN_HEADERS);
+  if (hop.method === "POST" && POST_TO_GET_STATUSES.has(statusCode)) {
+    return {
+      ...rest,
+      url: target.href,
+      method: "GET",
+      headers: withoutHeaders(kept, BODY_HEADERS),
+    };
+  }
+
+  return { ...rest, url: target.href, headers: kept, ...(body !== undefined && { body }) };
+}
+
+async function sendHop(
+  hop: GitHttpRequest,
+  origin: string,
+  redirects: number,
+): Promise<GitHttpResponse> {
+  const response = await nodeHttpClient.request({
+    ...hop,
+    fetchOptions: { followRedirects: false },
+  });
+  const location = redirectLocation(response);
+  if (location === undefined) {
+    return response;
+  }
+
+  await response.body?.return?.();
+  if (redirects === MAX_REDIRECTS) {
+    throw new Error("too many redirects");
+  }
+
+  const target = new URL(location, hop.url);
+  return sendHop(nextHop(hop, response.statusCode, target, origin), origin, redirects + 1);
+}
+
+async function requestWithinOrigin(original: GitHttpRequest): Promise<GitHttpResponse> {
+  return sendHop(original, new URL(original.url).origin, 0);
+}
+
+/**
+ * The HTTP client every isomorphic-git call in this file uses (GAUTH-06).
+ *
+ * `simple-get@4.0.1`, under `isomorphic-git/http/node`, follows redirects on
+ * its own. It drops `authorization` and `cookie` only when the hostname
+ * changes (node_modules/simple-get/index.js:55-60). So on its own it forwards
+ * the credential to another port, or to `http:`, on the same hostname. This
+ * client therefore sends each hop with `followRedirects: false`, gets every
+ * 3xx back unchanged, and follows the redirect itself.
+ *
+ * The rule is the origin, compared with the original request: scheme, host and
+ * port as `URL.origin` normalizes them, with the default port removed. A hop
+ * on another origin loses `authorization` and `cookie`. `onAuth` applies the
+ * same normalization to the bound host. Each hop starts from the previous one,
+ * so a header dropped once stays dropped.
+ *
+ * A cross-origin redirect is still followed, as git does over libcurl: libcurl
+ * 7.83 and later sends credentials only to the scheme, host and port of the
+ * original URL (CVE-2022-27776). If the target asks for credentials,
+ * isomorphic-git's auth loop ends in the cancel from `onAuthFailure`.
+ *
+ * Every other redirect rule is the one `simple-get` applies. After 10
+ * redirects the next one throws `too many redirects`. A 3xx without a
+ * `Location` is returned unchanged. The body of a redirect is discarded. A POST
+ * answered with 301 or 302 becomes a GET without its body, `content-type` and
+ * `content-length`. A 307 or 308 keeps the method and the body, where
+ * `simple-get` re-sends an empty one. isomorphic-git's request bodies are
+ * arrays, so the same reference sends the same bytes again.
+ */
+const http: HttpClient = { request: requestWithinOrigin };
 
 export async function clone(opts: CloneOptions): Promise<void> {
   // When opts.auth is provided, build the isomorphic-git callbacks
