@@ -1,288 +1,259 @@
 # Feature Research
 
-**Domain:** Methodical brownfield unit-test refactor for an existing TypeScript extension
-**Milestone:** v1.19 Unit Test Refactor
-**Researched:** 2026-08-28
-**Confidence:** HIGH for repository scope and inventory. MEDIUM for external tool behavior.
+**Domain:** Machine-readable (JSON) presentation strategy for the `/claude:plugin` command surface of a Pi extension, selected by `ctx.mode` and carried over `pi.appendEntry`
+**Milestone:** json-output (Mode-Keyed Presentation Strategies)
+**Researched:** 2026-09-28
+**Confidence:** HIGH for the upstream contract and the Pi transport (both read from primary artifacts); MEDIUM for the per-verb payload mapping (derived from the types and the catalog, not from a built prototype); LOW for the general CLI prior art beyond what was probed locally.
 
-## Scope Summary
+## Scope of this file
 
-This milestone changes test ownership and production testability. It does not add a product feature. Public behavior and stored data must stay compatible.
+This file covers only the new JSON strategy: what a payload must carry, the contract rules around it, and what to leave out. The locked decisions D1-D8 are inputs and are not revisited here. Where a finding creates tension with a locked decision, it goes under "Open questions" at the end, not into a recommendation.
 
-The repository has 204 production TypeScript modules at HEAD. All 204 source-test pairs remain open for a new compliance review.
+## Prior art (evidence)
 
-The direct pair audit gives these triage signals:
+### Claude Code `claude plugin ... --json` (the upstream contract)
 
-| Audit result | Pairs | Meaning |
-| --- | ---: | --- |
-| Direct coverage passes | 59 | The focused coverage command passes. The pair has no completion credit. |
-| Direct coverage is incomplete | 83 | A mirrored test exists, but direct function, line, or branch coverage is incomplete. |
-| Mirrored test is missing | 60 | The required `tests/<path>.test.ts` file does not exist. |
-| Focused test fails | 2 | The pair needs diagnosis before coverage work. |
+Evidence: the installed binary `claude` 2.1.283 (strings grepped on 2026-09-28) and `https://code.claude.com/docs/en/plugins/cli-reference.md` (fetched 2026-09-28). The binary and the docs agree. Confidence HIGH.
 
-The corresponding-test gate reports 107 structural violations at HEAD:
+- **Where it lives.** `--json` exists only on the shell CLI: `plugin list`, `plugin marketplace list`, `plugin install`, `uninstall`, `update`, `enable`, `disable`, `validate`, and `eval`. The in-session `/plugin` slash command has no JSON form. This confirms D3: no parity gap exists.
+- **Mutating verbs print one result object.** For `install`/`uninstall`/`update`/`enable`/`disable`, the last stdout line is one JSON object with three fields that are always present: `command` (the subcommand), `outcome` (`"ok" | "failed"`), and `message` (the human-readable result). Other fields appear only when they apply: `plugin`, `pluginId` (`name@marketplace`), `scope`, `failureCode`, `alreadyInGoalState`, `installedScope`, `reverseDependents`, `shownCommand`, `installedVersion`/`availableVersion` (install), `keptData`/`savedKept` (uninstall), and `updateOutcome`/`oldVersion`/`newVersion`/`skipReason`/`blockedBy`/`refreshFailed` (update). The exit code is unchanged: 0 or 1.
+- **Typed failure codes.** `failureCode` is snake_case: `op_failed`, `already_in_goal_state`, `settings_still_on`, `command_source_declined`, `entry_helper_unconfirmed`, `error_<category>`, and `claudeai_<code>`. For "already enabled", upstream exits 1 but sets `alreadyInGoalState: true` "so a script can treat that case as success". This is an ad-hoc tri-state layered on top of a binary outcome.
+- **Usage errors print no result line.** They print only the reason on stderr and exit 1.
+- **`plugin list --json`** prints a bare array. It has no envelope and no version field. Each object has `id`, `version` (`"unknown"` fallback), `scope`, `enabled`, and `installPath` (an absolute path). It may also have `installedAt`, `lastUpdated`, `projectPath`, `mcpServers`, `errors[]`, `notes[]`, `errorDetails[]`, and `noteDetails[]`. With `--available` the output becomes `{installed: [...], available: [{pluginId, name, marketplaceName, source, description?, version?, installCount?}]}`. That is a shape change keyed on a flag. The output is pretty-printed with `JSON.stringify(x, null, 2)`.
+- **`plugin marketplace list --json`** prints an array of `{name, source, repo|url|path, ref?, installLocation}`, sorted.
+- **No schema version anywhere.** Fields are gated by "Requires Claude Code v2.1.268 or later" notes in the docs instead.
 
-- 60 missing mirrored tests.
-- 4 mirrored tests that do not import their source module.
-- 43 extra tests in corresponding-test directories without a matching source path.
+Takeaways: (a) upstream always pairs structured fields with a human `message`; (b) failures carry a machine code; (c) upstream leaks absolute paths (`installPath`, `projectPath`) and ships no version field, and we should not copy either; (d) a one-bit `ok|failed` is too coarse, which is why upstream had to add `alreadyInGoalState`. Our existing tri-state severity already covers that case.
 
-The test tree has 241 `.test.ts` files. Only 19 files contain a `// arrange` marker. Only two files import `strong-mock`.
+### Pi transport (what the consumer actually receives)
 
-These counts show the size of the review. They do not prove that a file violates every related rule.
+Evidence: pinned `@earendil-works/pi-coding-agent` 0.86.1 source, read 2026-09-28. Confidence HIGH.
+
+- `pi.appendEntry(customType, data)` calls `sessionManager.appendCustomEntry`. The entry is `{type: "custom", customType, data, id, parentId, timestamp}`, followed by `_emit({type: "entry_appended", entry})` (`dist/core/agent-session.js:2131-2137`, `dist/core/session-manager.js:855-866`). The Pi envelope therefore already supplies `id` and an ISO `timestamp`, so the payload should not duplicate them.
+- In RPC, every session event is forwarded with `output(toJsonEvent(event))` (`dist/modes/rpc/rpc-mode.js:265`). An extension slash command runs inside `session.prompt()`, and `preflightResult(true)` fires only after `command.handler` returns (`agent-session.js:944-949`). As a result, the RPC `{type: "response", command: "prompt", success: true}` for a `/claude:plugin` prompt arrives **after** every `entry_appended` event that the command produced. That response is the natural end-of-command marker. `success: true` means only that the command ran. It says nothing about the outcome.
+- A handler that throws is routed to `emitError` and then to an `extension_error` frame in RPC. This is a separate channel. NFR-2 already forbids handler throws.
+- Custom entries are **persisted to the session file**. Pi can share that file (`modes/interactive/session-share.js`, via Radius or a private gist) and export it to HTML. A JSON payload is therefore more durable and more shareable than today's ephemeral `ctx.ui.notify` string. This matters for NFR-9 (paths) and for payload size.
+- **Today, RPC clients receive text.** RPC's `ui.notify` forwards `{type: "extension_ui_request", method: "notify", message, notifyType}` (`rpc-mode.js:87-95`). Under D3, RPC switches to JSON-only, so an existing RPC frontend that shows notify strings will stop showing `/claude:plugin` output. This is a consequence of a locked decision. See "Open questions".
+
+### Other CLIs (general conventions)
+
+- **npm** (11.19.1, probed locally): `npm view <missing> --json` writes `{"error": {"code": "E404", "summary": "...", "detail": "..."}}` to stdout, human text to stderr, and exits 1. This is prior art for a typed error object inside the JSON channel, with a code plus a human summary. HIGH (observed).
+- **gh** (2.97.0, probed locally): `--json field,field` selects fields explicitly. An unknown field is a usage error that lists the available fields. `--jq` and `--template` post-process the output. Field selection is a client-side convenience, and there is no version field. HIGH (observed).
+- **Terraform** (`terraform show -json`, machine-readable UI): `format_version` is `"major.minor"`. A minor bump is additive, and consumers "ignore any object properties with unrecognized names". A major bump is breaking, and consumers "reject any input which reports an unsupported major version". The streamed UI frames carry `@level` (severity), `@message` (human summary), and a `type` discriminant. Clients facing an unknown `type` should present at least `@message`. This is the closest analogue to our case (a streamed, typed, severity-bearing event log), and it states the versioning policy outright. LOW per the confidence seam (web source), though it is vendor documentation.
+- **kubectl `-o json`**: every object carries `apiVersion` and `kind`, and lists are `{kind: "List", items: [...]}`. Errors are text on stderr, not JSON. LOW (from training, not re-verified).
+
+### Competitor: `@nklisch/pi-plugins` control channel
+
+Source: `docs/competitive-analysis/pi-plugins.md` (code read at commit `175142c`). They emit `pi.appendEntry` frames in rpc/json modes and a zod discriminated union of `accepted`/`progress`/`result` frames with strict ordering. The grammar is versioned as `plugin-control/v1`. It also has an 11-code exit-code vocabulary, `--cursor`/`--limit` pagination, and an `--output human|json` flag. Appendix D of that document records our decision to adopt only `ctx.mode` and `appendEntry` and to invent no pagination, exit codes, or bespoke status grammar. MRO-01 (`.planning/BACKLOG.md:1051`) tracks the adopted part.
 
 ## Feature Landscape
 
 ### Table Stakes (Users Expect These)
 
-These features define a completed v1.19 milestone. A partial subset is not a valid milestone release.
+A consumer (a script using `pi --mode json`, or an RPC client) cannot use the output reliably without these.
 
-| Feature | Why Expected | Complexity | Concrete Acceptance Signal |
-| --- | --- | --- | --- |
-| **Complete pair inventory** | The milestone goal applies to every production TypeScript module. | MEDIUM | Each of the 204 HEAD modules has a reviewed disposition. Every production module in the final tree has one test owner. |
-| **One mirrored test per source module** | A clear owner prevents aggregate suites from hiding gaps. | HIGH | Each source has one `tests/<mirrored-path>.test.ts`. The test imports its source directly. |
-| **Type-only and barrel ownership** | The guidelines have no small-module exemptions. | MEDIUM | Type-only tests prove compile-time shapes. Barrel tests prove each runtime re-export has the source binding. |
-| **Public-behavior cases** | Tests must fail when the named public behavior changes. | HIGH | Cases call exports only. Expected values are independent. Whole values and typed errors are asserted. |
-| **Complete direct coverage** | Aggregate coverage can hide ownership gaps. | HIGH | Each focused pair reaches 100% functions, lines, and branches. No coverage ignore directive exists. |
-| **Independent case state** | Shared state makes focused and reordered runs unreliable. | HIGH | Each case owns mutable doubles, temporary paths, timers, environment changes, and cleanup. |
-| **Role-correct test doubles** | Interaction checks must prove promises without coupling tests to incidental calls. | HIGH | Cases use fakes, stubs, spies, or strict mocks by role. Each strict mock uses exact parameters and explicit verification. |
-| **Production design for testability** | Some modules cannot meet the rules through their current exports. | HIGH | A resistant module gets one coherent extraction, one explicit dependency, one narrow port, or factory-owned state. |
-| **No test-only production surface** | A test back door weakens the public API and hides poor boundaries. | MEDIUM | Tests do not require private constants, reset hooks, state readers, global mutators, or exports used only by tests. |
-| **Boolean resolver safety discriminant** | Project NFR-7 requires safe narrowing before a consumer reads `pluginRoot`. | HIGH | Both materializable arms have `installable: true`. The unavailable arm has `installable: false` and no `pluginRoot`. |
-| **Three-way resolver meaning retained** | Full and partial materialization remain distinct product states. | MEDIUM | The existing `state` field keeps `installable`, `partially-available`, and `unavailable` meanings. |
-| **Product contract preservation** | This is a brownfield refactor of a shipped extension. | HIGH | Public commands, output grammar, errors, persistence, atomic writes, network rules, containment, scopes, and retry behavior remain unchanged. |
-| **Named correction preservation** | The handoff records product defects found during the abandoned refactor. | HIGH | Each named correction has a public-behavior case. A retained commit alone gives no credit. |
-| **Adapter parity** | Production adapters and their test doubles must implement the same contract. | HIGH | Git, credential, and device-flow implementations pass shared contracts with fresh state and a proven negative control. |
-| **Fail-closed structural enforcement** | Missing or ambiguous ownership must stop the quality gate. | MEDIUM | Pair mapping, direct coverage, and related structural gates reject planted violations, then pass on the clean fixture. |
-| **One pair per plan and commit** | Small atomic changes limit behavior drift and make review evidence precise. | HIGH | Each executable plan and implementation commit owns exactly one production source-test pair. |
-| **Project-wide closure gate** | A focused pass can still break another module or integration. | HIGH | Focused tests and coverage pass first. Then `npm run check` passes on the completed tree. |
-
-### Guideline Compliance for Each Pair
-
-Each pair must meet all relevant rules. Direct coverage is only one rule.
-
-| Area | Required Behavior |
-| --- | --- |
-| Pair mapping | Mirror the production path under `tests/`. Use one primary test module. |
-| Case layout | Use independent `test()` cases with lowercase Arrange, Act, and Assert markers. |
-| Grouping | Use top-level `describe()` blocks only for exported entrypoints. Do not nest them. |
-| Naming | Name cases by public behavior. Do not put plan, phase, or ticket labels in titles. |
-| Assertions | Assert the public result and state before interactions. Compare complete values. |
-| Errors | Assert stable error classes and fields. Do not depend on unrelated message fragments. |
-| Expected values | Build expected values without production formatters, serializers, snapshots, or harness calculations. |
-| Isolation | Use a fresh stateful fake and a fresh temporary directory for each case. |
-| Time and globals | Use injected clocks or case timers. Restore environment and global changes with the test context. |
-| External boundaries | Use fakes, case-owned local resources, or loopback-only resources. Do not use live services or credentials. |
-| Strict interactions | Use `strong-mock` with `exactParams: true`. State all promised calls and call `verify()` in the case. |
-| Support layout | Keep fakes, seeds, contracts, and fixtures beside their concern. Do not create a generic helper root. |
-| Coverage | Run the mirrored test alone. Require 100% direct functions, lines, and branches for its source. |
-
-### Preserved Product Corrections
-
-The replacement tests must prove these corrections through public behavior:
-
-1. Plugin update keeps agent skill preloads.
-2. Plugin update carries bridge staging warnings.
-3. Hook exhaustiveness markers survive refactoring.
-4. Hook supportability debug details survive refactoring.
-5. One reconcile entry failure does not stop other entries.
-6. Marketplace reconcile applies every required arm.
-7. Plugin and toggle reconcile apply every required arm.
-8. Device-flow HTTP remains an explicit production-reachable port.
+| Feature | Why Expected | Complexity | Notes / dependencies on existing code |
+|---------|--------------|------------|----------------------------------------|
+| **TS-1 Payload envelope with `schemaVersion`** | Every mature JSON surface versions its output (Terraform `format_version`, kubectl `apiVersion`, competitor `plugin-control/v1`). Upstream's lack of a version is the counter-example: it has to gate fields with "requires v2.1.268" prose. | LOW | `customType: "claude-plugin"` is the namespace (D4). Put `schemaVersion: 1` (integer) at the top of `data`. Do not add a `timestamp`/`id`: the Pi envelope already has both. typebox `Type.Literal(1)`. |
+| **TS-2 Compatibility policy, written down** | Consumers need to know what a version bump means. Without a policy, every additive change is a potential break. | LOW | Recommended policy: integer major version. Additive changes do **not** bump it: a new optional field, a new payload `kind`, or a new member in a closed set (`Reason`, `StatusToken`). Removing, renaming, changing a type, or changing meaning bumps it. Consumers must ignore unknown fields and must treat unknown enum members as opaque, falling back to `severity`. The project amends closed sets often (`Reason` has 46 members today), so bumping on every amendment would churn. Put the policy in the schema reference doc. |
+| **TS-3 One discriminated union keyed by `kind`** | Consumers switch on one field. Terraform uses `type`, and our model already uses `kind`. | MEDIUM | Map 1:1 from `NotificationMessage` (`cascade`, `marketplace-info`, `plugin-info`, `marketplace-info-cascade`, `plugin-info-cascade`, `marketplace-not-added`, `reconcile-pending-empty`, `reconcile-applied-cascade`). Add the D2 raw surfaces as kinds: `usage-error`, `usage-info`, `diagnostic`, `device-flow-prompt`, `hook-rewake-summary`, `stop-hook-override-cap`. The legacy `kind: undefined` cascade must serialize as an explicit `"cascade"`. Depends on the D1 model. |
+| **TS-4 Success signalled by `severity`, not exit code** | Pi exits 0 in print/json regardless (D5, Appendix D), and RPC's `success` only means "ran". The payload is the only outcome channel. | LOW | Reuse the closed `Severity` set (`info`/`warning`/`error`) with its tri-state meaning: info = desired state reached, warning = carried out but short, error = not carried out. Every payload carries `severity` as a **required** field, including info surfaces. Today the info kinds leave it implicit (`dispatchInfoMessage` derives it from `kind`). This is not a new "status field" (Appendix D forbids inventing one). It is the existing model field, serialized. |
+| **TS-5 Per-invocation verdict rule, documented** | One command can emit several payloads. Examples: `marketplace update` emits one per target (catalog `update-all-many-alpha`/`-beta`); a device-flow prompt precedes a cascade; `import` emits a cascade plus a `diagnostic`. A consumer needs one answer per command. | LOW | Document the rule: the command's verdict is the maximum `severity` over all `claude-plugin` entries appended between sending the prompt and receiving the RPC `response`, or before process exit in `--mode json -p`. The same rule gives `needsReload` as an OR over entries. No code needed beyond the docs. |
+| **TS-6 `needsReload` as a required boolean** | This is the machine form of the `/reload to pick up changes` trailer. A script that installs and then uses a plugin must know whether to reload. | LOW | This is already a model decision (`shouldEmitReloadHint`, the OR over caller-stamped `needsReload`). Serialize it at the payload level, and per row where the row carries it. It is required, never absent. |
+| **TS-7 Closed-set tokens emitted verbatim as enums** | Stable enums instead of free text are the core value of JSON output. | LOW | Emit `status`, `reasons[]`, `scope`, and `severity` using the **existing** literal strings (`"partially-installed"`, `"not in manifest"`, `"requires pi-mcp"`). Do not add a parallel snake_case code vocabulary like upstream's `failureCode`: it would double the closed-set gates (`compat-01-no-expansion`, `notify-closed-set-locks`) and let the two vocabularies drift apart. Spaces in enum values are legal JSON and read fine in `jq`. The `reasons` tokens are our typed failure codes. |
+| **TS-8 Reasons carry the soft-dep markers, in contract order** | `{requires pi-subagents}` tells a consumer that the install succeeded but a companion is missing. Losing it silently would misreport a degraded install. | MEDIUM | D1 moves `softDepMarkers` and the `softDepStatus(pi)` probe out of the renderer into the model, which yields a fully composed `reasons[]`: typed reasons first, then markers in the order agents, mcp, workflows (MSG-GR-4). Emit that array unchanged. Also emit `dependencies[]` on the four dependency-bearing rows, so a consumer can tell "declares agents" apart from "agents companion missing". Depends on D1 landing first. |
+| **TS-9 Raw values, not display forms** | A consumer compares versions and dates by value. The text surface abbreviates for people. | LOW | `version` is the full persisted string (`hash-2ea95f85703d`, `sha-a1b2c3d4e5f6`, `1.2.3`), never `v#2ea95f8`. Emit `lastUpdatedAt` in full ISO, even though the list surface hides it (UXG-01). Emit `autoupdate` as a boolean, never the `<autoupdate>` marker text. No glyphs, no `v` prefix, no indentation. These are text-converter formatting decisions and must not reach the JSON converter. |
+| **TS-10 Explicit scope on every row that has one** | The text form hides a plugin's `[scope]` when it equals the marketplace's scope (orphan-fold, D-13-18). A consumer should not have to reproduce that fold rule. | LOW | For rows that have an install scope (installed, upgradable, disabled, partially-*, and the realized transitions), always emit the resolved scope. `pluginScopeOrFallback` already exists for the LLM-tool surface, but it also stamps the marketplace scope onto `available`/`unavailable` rows, where it means "listed from", not "installed at". Keep `scope` absent there. The marketplace block's own `scope` stays required. |
+| **TS-11 Failure detail serialized explicitly** | `cause?: Error` and `rollbackPartial[].cause` are how a failed row explains itself. `JSON.stringify(new Error("x"))` produces `{}`, so a naive converter silently drops every cause. | LOW-MEDIUM | Have the model precompute `causeChain: string[]` (depth 5 with a `truncated` flag, the same walk as `causeChainTrailer`, including the `CleanupContextError` basename rendering). Text joins it with `" -> "` and JSON emits the array. Per phase: `rollbackPartial: [{phase, causeChain?}]`. Redaction must match the text form byte for byte (see TS-13). |
+| **TS-12 Usage errors are payloads** | Upstream prints nothing on a usage error. A JSON consumer then cannot tell a usage error from a silent success. | LOW | `{kind: "usage-error", severity: "error", message, usage}`. `usage-info` (help) is `{severity: "info", usage}`. D6's `browse` refusal outside tui uses the same channel and names `list` in `message`. About 20 files call `notifyUsageError`, but the change stays inside the dispatch owner. |
+| **TS-13 No new path disclosure (NFR-9)** | Payloads persist in a shareable session file. That exposes more than an ephemeral notify string does. | LOW | Rule: no wire field may carry a path the text form would not show. Emit no `installPath`/`projectPath`/`stateJsonPath` (upstream does, and we should not). Keep the existing composition-site redaction (`redactAbsolutePaths` in reconcile, info notes, and diagnostics) as the single policy. A path-source `marketplace info` keeps `absPath`, because the text shows it and the user typed it. Pin this with a gate that lists the schema's string fields. |
+| **TS-14 Array order is a contract; object key order is not** | Consumers diff outputs and assert in tests. | LOW | Marketplace blocks and rows keep model order (`compare-name-scope`: name first, project before user). `reasons[]` keeps its contract order, and multiple payloads from one invocation keep emission order. State in the docs that key order is not guaranteed. |
+| **TS-15 Optional means absent, never `null`** | A single representation per state. `JSON.stringify` drops `undefined`, `exactOptionalPropertyTypes` already forbids stamping `undefined`, and typebox `Type.Optional` models it as absent. | LOW | Upstream does the same ("appear only when they apply"). Always-required fields: `schemaVersion`, `kind`, `severity`, `needsReload`, and `origin` (TS-16). Empty collections are `[]` and not absent where the model has them (for example `marketplaces: []` replaces the `(no marketplaces)` sentinel, and `plugins: []` replaces the bare header). |
+| **TS-16 `origin` distinguishes command output from lifecycle output** | In `--mode json`, the load-time reconcile (`resources_discover`), hook rewake summaries, and the Stop-cap warning show up in the same event stream as command output. They are not responses to any command. | MEDIUM | `origin: {type: "command", command: "plugin install" \| "marketplace add" \| ...}`, `{type: "load"}` (reconcile, PATH refresh, reconcile-aborted), or `{type: "hook"}` (rewake, Stop cap). Use a machine command id, not the human `Messaging.label`. The id also tells `enable` apart from `install`: both render an `(installed)` row. This needs the edge router's verb threaded into the dispatch strategy, which touches `NotificationContext` (already being widened for `mode`/`appendEntry`). |
+| **TS-17 Structured raw surfaces (D2), including the two missed ones** | Total coverage means every emission has a typed kind, not a string wrapped in JSON. | MEDIUM | `device-flow-prompt {verificationUri, userCode}`: `domain/github-auth.ts:436` builds the string today, so the domain must pass the two values instead. `stop-hook-override-cap {pluginId, cap: 8}`. `hook-rewake-summary {text, pluginId}` (the text is plugin-author prose, passed through). `diagnostic {header, lines[]}` (3 call sites). **Also found:** `makeRawNotifyFn` has two more callers in `index.ts` besides device flow: `reconcile aborted: <err>` (error, `index.ts:128`) and `plugin PATH not refreshed for <scope> scope ...` (warning, `index.ts:149`). D2's wording ("`makeRawNotifyFn` (device-flow code)") names only one of the three. Both need kinds, for example `reconcile-aborted {causeChain}` and `plugin-path-skipped {scope, reason}`. |
+| **TS-18 Published schema reference** | Consumers need the contract without reading TypeScript. | LOW | typebox schemas already are JSON Schema. Ship a `docs/` reference (kinds, fields, versioning policy, the verdict rule, and the print-mode limitation per D5). Adding a generated schema file is optional (see D-3 below). |
+| **TS-19 In-process JSON capture helper for tests** | The milestone's second motivation is structured behavioral tests. | LOW | A fake `pi.appendEntry` that records `{customType, data}` and runs `Value.Check(schema, data)` on every capture, so any test that captures also validates the schema. Fakes carry an explicit `mode` (D7). The e2e path is `pi -p --mode json --no-session --offline "/claude:plugin list"`. |
 
 ### Differentiators (Competitive Advantage)
 
-These practices make the refactor safer than a normal coverage campaign.
+These are not required for a usable contract, but each adds value at low cost or lines up with the Core Value.
 
 | Feature | Value Proposition | Complexity | Notes |
-| --- | --- | --- | --- |
-| **All-open accounting** | Existing green tests cannot hide a guideline defect. | LOW | The 59 passing audit rows are ordering signals only. All 204 pairs need new review evidence. |
-| **Contract-first replacement** | The team can change module boundaries without losing product behavior. | HIGH | Public, persistence, adapter, and oracle contracts outrank historical call graphs. |
-| **Production improvements through public seams** | Tests improve dependency design instead of adding test access. | HIGH | Use coherent modules, explicit dependencies, narrow ports, and instance-owned state. |
-| **Negative-control enforcement** | A green structural gate proves that it can reject the defect it claims to detect. | MEDIUM | Plant one small violation, observe failure, remove it, and observe success. |
-| **Explicit legacy-test disposition** | Useful assertions survive while obsolete test ownership disappears. | HIGH | Move behavior into its pair, move true cross-module behavior to a designated suite, or remove proven duplication. |
-| **Pair-atomic delivery** | Reviewers can connect every production change to one owner test and one coverage result. | MEDIUM | One plan and one commit own one pair. Shared support changes trigger the full direct-coverage run. |
-| **Environment-aware failure triage** | The team does not change product code for a sandbox limitation. | LOW | Re-run the Unix-socket case with the required permission before changing behavior. |
+|---------|-------------------|------------|-------|
+| **D-1 `summary` string on warning/error payloads** | A generic client that does not know a `kind` can still show one human line. This is Terraform's "present at least `@message`" rule. It partly offsets the RPC text loss (see Open questions). Upstream always has `message`. | LOW | The model already computes the summary line (D1): "A plugin operation has failed." Emit it when present. This is model data, not a rendering of the text form, so the peer architecture holds. |
+| **D-2 Numeric `tally`** | Scripts get counts without walking the tree. | LOW | `{failures, warnings, successes}`, or `{updated: n}` under the UGRM-02 update override. Present only when the model makes a tally eligible (plural cardinality with a label). Drop the English "Plugin list: 3 successes" string. |
+| **D-3 Exported JSON Schema file plus a drift gate** | Consumers validate with any JSON Schema tool. It matches the project's gate culture (a test that plants the violation). | LOW-MEDIUM | Generate `schema/claude-plugin.v1.json` from the typebox objects, commit it, and test that the committed file equals the export. Include it in the npm package `files`. |
+| **D-4 `id: "<name>@<marketplace>"` on plugin rows** | This is upstream's `pluginId` convention, which Claude Code users already know. It can be pasted back as a command argument. | LOW | A pure concatenation in the converter. Harmless under D1, since it is formatting, not a decision. |
+| **D-5 Structured advisories** | `pending`'s retained-workflow-staging advisory is pre-rendered prose with a 4-space indent baked in (`composeRetainedWorkflowsAdvisories`). Serializing it verbatim leaks text formatting into JSON. | MEDIUM | Model it as `retainedWorkflowStaging: [{name, envelopeCount?}]`, and let the text converter compose the sentence. `PluginInfoRowBase.notes` (WR-09) can stay free-text strings, since they are already redacted sentences about files. Remove the indent in both places. This is D1-consistent work, just not on D1's named list. |
+| **D-6 Explicit no-op marker on `update`** | `emitUpdateNoOpCascade` produces the "Plugin update: nothing to update" headline. Only the orchestrator's choice of emitter records that decision. | LOW | `noOp: true` on the cascade payload, or derive it as `tally.updated === 0` and document that. Either way the decision moves into the model. |
+| **D-7 `invocationId` correlating the payloads of one command run** | Async hook payloads (rewake) can interleave with command output, so "contiguous entries" is not a safe grouping rule. | LOW-MEDIUM | A random id minted once per handler invocation and stamped on every command-origin payload. Tests need an injectable generator. The RPC `response` boundary (TS-5) already covers most consumers, so this is P2. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
-| --- | --- | --- | --- |
-| **Completion credit from a retained commit** | The code already passed once. | A retained commit does not prove current guideline compliance. | Review the pair at HEAD and record fresh focused evidence. |
-| **Completion credit from direct coverage alone** | The number is objective and easy to collect. | Coverage does not prove assertion quality, isolation, public ownership, or correct doubles. | Apply the complete pair checklist after coverage passes. |
-| **Several pairs in one plan or commit** | Bulk edits look faster. | Failures become hard to attribute and rollback. Review evidence becomes ambiguous. | Keep one source-test pair per executable plan and commit. |
-| **Replay of retired Phase 106 or 107 plans** | The archived work appears to contain a ready sequence. | Those artifacts describe abandoned milestone state. They give no completion credit. | Start future work at Phase 108 from the new roadmap. |
-| **Automatic application of `DIRTY-CHECKPOINT.patch`** | The patch contains plausible cleanup. | It is unverified evidence against another tree. | Re-evaluate each candidate against HEAD and public callers. |
-| **Historical module reconstruction** | The handoff lists many former moves. | Old partitions can restore obsolete responsibilities and comments. | Use `TRANSFORMATIONS.yaml` only as a search index. Decide boundaries from current responsibilities. |
-| **Migration-history comments** | They explain how an old layout evolved. | They preserve an abandoned design inside the new source. | Document the current invariant and public reason only. |
-| **Old exemption and ownership systems** | They appear to solve the inventory problem. | The handoff explicitly drops them. They also preserve old exceptions. | Use small fail-closed gates without baseline counts or exemptions. |
-| **Old sharded LCOV protocol** | It handled a large test tree. | The handoff drops its runner, reconcile protocol, and coverage matrix. | Run a focused pair and inspect exactly one source LCOV record. |
-| **Generic `tests/helpers/` expansion** | Shared helpers reduce repeated setup. | Generic ownership hides the concern and can share mutable state. | Put support beside the tests of its production concern. |
-| **Test-only exports or private assertions** | They make difficult branches easy to reach. | They test implementation details and widen the production API. | Change the production boundary or assert through the public export. |
-| **Module replacement or process-wide mocks** | They avoid changing production dependencies. | They hide dependencies and leak state between cases. | Inject a narrow production port and use case-owned doubles. |
-| **Snapshots or implementation-built expectations** | They reduce assertion code. | They can approve the same defect on both sides of the assertion. | Build exact expected values independently. |
-| **Coverage ignore directives** | They make a hard branch pass quickly. | They hide dead or unowned behavior. | Remove dead code or cover the branch through public behavior. |
-| **Live network, credentials, or shared fixtures** | They appear more realistic. | They make tests slow, unsafe, and environment-dependent. | Use a fake, a temporary local boundary, or a case-owned loopback service. |
-| **Incidental product changes** | A refactor exposes nearby feature ideas. | New behavior makes preservation results ambiguous. | Record the idea outside v1.19 and keep the pair behavior stable. |
-| **Blind expectation updates for current failures** | Changing expected text makes the test green. | The difference can expose a real product regression. | Decide the public contract first, then change code or the case. |
+|---------|---------------|-----------------|-------------|
+| **Embedding the full rendered text in the payload** (`text: "● official [user]\n  ● foo ..."`) | It looks like a free fallback for RPC clients, and upstream has `message`. | The JSON converter would have to call the text converter, which breaks D1's peer architecture. It doubles the size of every persisted entry. It invites consumers to scrape the text, which is the failure mode JSON exists to end. It also drags glyphs and catalog bytes into a second contract. | D-1 `summary` (model-computed) plus typed fields. |
+| **A per-command `--json` flag** | Upstream's CLI has one. | D3: selection is by mode only, and upstream's flag is on the shell CLI, not `/plugin`. A flag creates a second selection axis and a second test matrix. | `pi --mode json` / RPC. |
+| **Pagination (`--cursor`/`--limit`)** | The competitor has it, and big lists are big. | No Pi contract anchors it (Appendix D searched the pinned API). It would be bespoke grammar, and our lists are bounded by a user's marketplaces. | Existing filter flags (`--installed`, `--available`, ...). Document `--no-session` for scripted runs to avoid session bloat. |
+| **Exit-code vocabulary / `outcome: ok\|failed`** | Upstream and the competitor both have one. | Pi cannot set exit codes from a command (Appendix D). A binary outcome loses the tri-state, which is why upstream had to bolt on `alreadyInGoalState`. | `severity` (TS-4) and the verdict rule (TS-5). |
+| **A new snake_case `failureCode` vocabulary** | It looks more "API-like" than `"not in manifest"`. | It adds a second closed set that must be kept in sync with `Reason` forever, doubling the gates. | Emit `Reason` tokens verbatim (TS-7). |
+| **Fields the text form does not show** (`installPath`, state paths, clone roots, raw manifest dumps) | Upstream's `list --json` has `installPath` and `mcpServers`. | NFR-9. Session files persist and can be shared. It widens the contract past the model. | Keep to the model's fields (TS-13). A consumer needing paths can read `state.json`. |
+| **Runtime schema validation before every `appendEntry` in production** | Belt and braces. | A validation failure would have to throw or drop output, and both break NFR-2 / never-silent. It also costs time on every emit. | Compile-time `Static<typeof Schema>` in production, `Value.Check` in the test capture helper (TS-19). |
+| **`null` placeholders for absent optionals** | Some consumers like a fixed shape (gh does this). | Two representations of "absent" means `exactOptionalPropertyTypes` friction and converter branches. | Absent (TS-15). |
+| **ANSI, glyphs, `v#` short SHAs, `<autoupdate>` markers in JSON** | "Keep it consistent with text." | These are display decisions and are meaningless to machines. | TS-9. |
+| **Streaming progress frames (`accepted`/`progress`/`result`)** | The competitor has them. | No consumer need was identified. It is bespoke grammar, and our commands are short. The device-flow prompt is the only mid-command emission, and it is already its own `kind`. | One payload per notify seam, plus the RPC response as the end marker. |
+| **Duplicating Pi's entry `id`/`timestamp` inside `data`** | Self-contained payloads. | It is redundant, and it makes tests non-deterministic. | Read them from the `entry_appended` envelope. |
+
+## Per-verb payload content
+
+Every payload has this envelope: `{schemaVersion, kind, origin, severity, needsReload, summary?, tally?}` plus the kind body. "Rows" below means `PluginNotificationMessage` serialized by TS-7 through TS-11: `status`, `name`, `id` (D-4), `version?`, `scope?`, `description?`, `reasons[]`, `dependencies[]?`, `from`/`to` (updated), `partialHint?`, `enableHint?`, `partial?` (will install), `causeChain?`, `rollbackPartial?`, and `severity`/`needsReload` where stamped. A marketplace block is `MarketplaceNotificationMessage`: `name`, `scope`, `status?`, `details?{autoupdate, lastUpdatedAt?}`, `reasons?`, `severity?`, `plugins[]`.
+
+| Command | Payload kind(s) | Body content beyond the envelope | Notes |
+|---------|-----------------|----------------------------------|-------|
+| `list` | `cascade` (plural, label "Plugin list") | `marketplaces[]` of statusless `MpList` blocks with `details`, plus inventory rows (`installed`, `upgradable`, `available`, `remote`, `unavailable`, `partially-available`, `partially-installed`, `partially-upgradable`, `disabled`) | `marketplaces: []` replaces `(no marketplaces)`. Inventory rows carry no soft-dep markers (their `dependencies` is omitted by design). `needsReload: false`. Unparseable or zero-plugin manifests show as reasons on the block. |
+| `info <p>@<mp>` | `plugin-info` or `plugin-info-cascade` (both scopes); `marketplace-not-added`; failure `cascade` | `marketplaceName`, `marketplaceScope`, `marketplaceDetails`, `plugin: {status, name, version?, scope?, description?, reasons?, notes?, componentsResolved, components?{agents, commands, hooks: HookSummaryEntry[], mcp, skills, workflows}, dependencies?}` | Keep `componentsResolved: false` as a discriminant, not an absent `components`. `HookSummaryEntry` is already a structured union and passes through as-is. The `--fetch`-skipped warning (D-96-04) shows up as `severity: warning`. |
+| `pending` | `cascade` (label "Reconcile pending") or `reconcile-pending-empty` | Rows: `will install`/`will uninstall`/`will enable`/`will disable` with `scope`, `partial?`; empty form: advisories (D-5) | `needsReload: false` by construction. The "0 actions" wording is text-only; the JSON consumer reads the empty kind. |
+| `install` | `cascade` (single); `marketplace-not-added`; optional preceding `device-flow-prompt` | One block plus one row: `installed`, `partially-installed`, `unavailable`, `partially-available` (`partialHint`), `failed` (`causeChain`, `rollbackPartial`), or `disabled` (`enableHint`) | `marketplace-not-added {name, scope?, presentInOtherScope?}`. `dependencies` and the composed markers go on success rows. |
+| `uninstall` | `cascade` (single); `marketplace-not-added` | `uninstalled` (`reasons` may be `["stale workflow command"]`), `failed`, or `skipped {not installed}` | Uninstall rows never carry soft-dep markers (MSG-SD-3). The model must keep that true. |
+| `update [target]` | `cascade` (single or plural), or the no-op cascade (D-6) | `updated {from, to, dependencies}`, `skipped {up-to-date}` (benign, info), `partially-upgradable` (decline, `partialHint`), `failed`, `manual recovery`; `tally {updated}` | Emit `from`/`to` in full, not as the short-SHA arrow. |
+| `reinstall` | `cascade` | `reinstalled`, `skipped`, `failed`, `unavailable`, `disabled`, with `reasons` (`stale workflow command`, degraded kinds) | Per-scope blocks stay separate (no orphan-fold in JSON anyway). |
+| `fetch` | `cascade` (label "Plugin fetch") | `available`, `partially-available`, `remote`, `skipped` (no-op, FTCH-03) | Pi-only verb with no upstream analogue. |
+| `enable` / `disable` | `cascade` | Enable: `installed` or `partially-installed` (`dependencies`). Disable: `disabled` (`needsReload: true`, the RLD-05 stamp). Both: `skipped {already enabled \| already disabled}` (benign) | `origin.command` is what tells enable apart from install (TS-16). Note the upstream difference: the upstream CLI exits 1 with `already_in_goal_state`, while ours reports info. The tri-state already encodes it, so no flag is needed. |
+| `import` | `cascade` (plural, mixed subjects); optional `diagnostic`; optional `device-flow-prompt` | Marketplace blocks with `status` (`added`/`failed`/`skipped`) plus plugin rows; `tally` | Mixed-subject summary wording (D-03) arrives via `summary`. |
+| `bootstrap` | `cascade` | One marketplace block, `added` or `updated`, with `plugins: []` | `needsReload: false` (marketplace-only). |
+| `browse` | tui: none (interactive). Other modes: `usage-error` (D6) | `message` names `list` | Replaces the `list` fallback at `edge/handlers/plugin/browse.ts:140`. |
+| `help` / bare | `usage-info` | `usage` (free text) | Usage text is inherently prose, so it passes through verbatim. |
+| any verb, bad args | `usage-error` | `message`, `usage` | Always `severity: error`. |
+| `marketplace list` | `cascade` (label "Marketplace list") | Statusless blocks with `details`, `plugins: []` | Upstream's `marketplace list --json` also carries the source. Our `MpList` does not. Deferred (see v1.x). |
+| `marketplace add` | `cascade`; optional `device-flow-prompt` | Block with `status: added` or `failed` plus `reasons` (`duplicate name`, `stale clone`, `unsupported source`, `source missing`, `invalid manifest`, `authentication required`, `network unreachable`) | The device-flow prompt payload must reach the RPC client promptly, or auth waits until the flow times out. |
+| `marketplace remove` | `cascade`; `marketplace-not-added` | Block `removed` or `failed` with child rows (`uninstalled`/`failed`) | Partial removal is `severity: error` with per-plugin detail. |
+| `marketplace info` | `marketplace-info` or `marketplace-info-cascade`; failure forms | `name`, `scope`, `details {autoupdate, lastUpdatedAt?}`, `source` (`github {owner, repo, ref?}` / `url {url, ref?}` / `path {absPath}`), `description?` | Emit `lastUpdatedAt` for every source kind that has it. Text gates it (D-76-10), but that is display policy. Confirm that stored `url` values cannot carry userinfo credentials before persisting them to the session. |
+| `marketplace update [name]` | `cascade`, **one per target**; optional `device-flow-prompt` | Blocks `updated`/`skipped {up-to-date}`/`failed`, with nested autoupdate plugin rows (`updated`, `disabled` pin-moved, `not in manifest`) | Multi-emission is a documented contract (TS-5). |
+| `marketplace autoupdate` / `noautoupdate` | `cascade` | Block `autoupdate enabled`/`autoupdate disabled`/`skipped {already autoupdate \| already no autoupdate}` | Info. |
+| Load (`resources_discover`) | `reconcile-applied-cascade`; `diagnostic`; `reconcile-aborted`; `plugin-path-skipped` | Mixed-subject rows including the backfill `components now supported`; post-commit warnings | `origin.type: "load"`. No reload hint, structurally. The last two kinds are the ones D2's list missed (TS-17). |
+| Hooks | `hook-rewake-summary`; `stop-hook-override-cap` | `{pluginId, text}`; `{pluginId, cap: 8}` | `origin.type: "hook"`. The rewake text is untrusted plugin-author prose. Pass it through as data and never interpret it. |
+
+## How consumers judge success
+
+1. **Scripts (`pi --mode json -p --no-session --offline "/claude:plugin <verb> ..."`).** Parse the stdout JSONL. Keep `type == "entry_appended" && entry.customType == "claude-plugin"`. Check `entry.data.schemaVersion`: reject unknown majors, and ignore unknown fields and kinds. Verdict = max `severity` over the entries whose `origin.type == "command"`. `error` means the command did not happen, `warning` means it happened but fell short, and `info` means the desired state was reached (benign skips such as `already installed` count as info). The process exit code is always 0 and says nothing (D5). If there are zero command-origin entries, treat it as a failure: the handler threw, which should never happen under NFR-2. A `jq` one-liner in the docs would show this.
+2. **RPC clients.** Same filter. The command's entries end at the `{type: "response", command: "prompt"}` for that request, whose `success: true` means only that the command ran. Surface `device-flow-prompt` to the user at once. Load/hook-origin entries can arrive at any time and belong to no request.
+3. **In-process tests.** Use the capture helper (TS-19). Assert on typed fields, never on bytes (the catalog tests keep owning the text bytes).
 
 ## Feature Dependencies
 
-```text
-[HEAD inventory and stable contract set]
-    ├──requires──> [Resolver discriminant decision]
-    ├──requires──> [Fail-closed pair and coverage gates]
-    └──enables──> [Pair-by-pair implementation from Phase 108]
-                       ├──for each pair──> [Trace exported behavior and callers]
-                       ├──then───────────> [Refactor one production boundary if required]
-                       ├──then───────────> [Write or repair the mirrored test]
-                       ├──then───────────> [Focused test and 100% direct coverage]
-                       └──then───────────> [Pair review against the full guideline]
+```
+D1 presentation model (severity, reload, tally, summary, soft-dep markers upstream of rendering)
+    ├──requires──> TS-8 composed reasons with markers
+    ├──requires──> TS-4 / TS-6 required severity + needsReload on every kind
+    ├──requires──> TS-11 precomputed causeChain
+    └──enables───> D-1 summary, D-2 numeric tally, D-5 structured advisories, D-6 no-op marker
 
-[Narrow adapter ports]
-    └──enable──> [Shared real-and-fake contracts]
-                     └──require──> [Independent negative controls]
+TS-1 envelope + TS-3 kind union ──requires──> typebox wire schema
+    └──enables───> TS-18 docs, D-3 exported schema + drift gate, TS-19 capture helper
 
-[All current and new pairs complete]
-    └──requires──> [Named correction and oracle coverage]
-    └──requires──> [Zero corresponding-test violations]
-    └──requires──> [npm run check passes]
+TS-16 origin/command id ──requires──> router verb threaded into NotificationContext (widened for mode/appendEntry anyway)
+    └──enhances──> TS-5 verdict rule, D-7 invocationId
+
+TS-17 raw-surface kinds ──requires──> domain/github-auth.ts passes {verificationUri, userCode}, not a string
+                        ──requires──> index.ts load-path raw strings get kinds
+
+TS-12 usage-error kind ──enables──> D6 browse refusal
+TS-13 no-new-paths ──conflicts──> copying upstream list --json fields (installPath, projectPath)
+Embedded full text (anti) ──conflicts──> D1 peer converters
 ```
 
 ### Dependency Notes
 
-- **Lock the resolver shape before its pair.** The current source still uses only the three-way `state` discriminant.
-- **Keep the three-way meaning.** Add the boolean safety field. Do not collapse partial availability into full availability.
-- **Keep `pluginRoot` off the unavailable arm.** This requirement applies to runtime schemas and TypeScript narrowing.
-- **Establish gates before broad pair work.** The gate must reject missing, ambiguous, and uncovered pairs.
-- **Trace callers before a production change.** A production split can add a new pair and change the closure inventory.
-- **Preserve assertions during test moves.** Remove an assertion only when the public contract changed or another independent case owns it.
-- **Run the full direct gate after shared support changes.** One support change can affect several pairs even when one plan owns it.
-- **Run the project gate after focused evidence.** A pair is not complete while typecheck, lint, Fallow, formatting, unit, or integration tests fail.
-
-## Pair Completion Contract
-
-A pair receives completion credit only when all signals pass:
-
-1. The plan and commit own exactly one production source-test pair.
-2. The mirrored test imports the source module directly.
-3. The test uses only exported production behavior.
-4. Every applicable guideline rule passes review.
-5. `node --test <test-path>` passes.
-6. `npm run test:coverage:direct -- <source-or-test-path>` reports 100% functions, lines, and branches.
-7. Relevant public contracts and oracle scenarios pass.
-8. The pair introduces no coverage exception or test-only export.
-9. The work does not resurrect a dropped handoff mechanism.
-10. `npm run check` passes before the implementation commit is accepted.
-
-For type-only modules, the compile-time contract replaces runtime coverage. The direct gate must identify this case explicitly.
-
-## Current Failure Triage
-
-The two focused failures need different treatment:
-
-| Pair | Observed Failure | Required Planning Treatment |
-| --- | --- | --- |
-| `orchestrators/marketplace/add.ts` | One Unix-domain-socket case gets `EPERM` in the current sandbox. | Re-run with listener permission. Do not change product behavior before that run. |
-| `orchestrators/plugin/update.ts` | Three cases expect `{no longer installable}` but receive `{network unreachable}`. | Decide the stable reason contract from public behavior and product rules. Do not update expectations blindly. |
-
-These failures do not reduce the 204-pair scope. They only affect ordering and diagnosis.
+- **Everything in the per-verb table requires D1 first.** Without the model refactor, the JSON converter would have to re-derive severity, markers, and hints. That is exactly the duplication D1 exists to prevent, and it would drift from the text form.
+- **TS-16 and TS-17 touch call sites outside the dispatch owner.** Every other JSON feature stays inside `shared/` plus the strategy switch. These two change `edge/router.ts` threading, `domain/github-auth.ts`, and `index.ts`. Plan them explicitly.
+- **TS-19 depends on TS-3's schema object existing.** Build the schema before the helper so the helper validates from day one.
 
 ## MVP Definition
 
-### Launch With (v1.19)
+### Launch With (v1: this milestone)
 
-- [ ] A fresh compliance decision for every current and newly added production TypeScript module.
-- [ ] One mirrored owner test for every source, including type-only modules and barrels.
-- [ ] Complete direct function, line, and branch coverage for each executable pair.
-- [ ] Full guideline compliance for cases, doubles, data, assertions, cleanup, and support layout.
-- [ ] The boolean `installable` discriminant with the unavailable `pluginRoot` exclusion.
-- [ ] Public, persistence, adapter, and named correction contracts preserved.
-- [ ] Zero missing, wrong-import, or unexpected corresponding-test violations.
-- [ ] Fail-closed gates with negative controls.
-- [ ] One pair per executable plan and implementation commit.
-- [ ] A green `npm run check` result.
-
-The roadmap starts at Phase 108. Retired Phase 106 and 107 artifacts remain historical evidence only.
+- [ ] TS-1, TS-2, TS-3: envelope, versioning policy, kind union. Without these there is no contract.
+- [ ] TS-4, TS-5, TS-6: severity/needsReload required on every payload, plus the verdict rule. This is the only outcome channel Pi allows.
+- [ ] TS-7 through TS-11, TS-14, TS-15: faithful, raw-valued, ordered, absent-not-null serialization of the model.
+- [ ] TS-12, TS-17: typed usage errors and every raw surface, including `reconcile-aborted` and `plugin-path-skipped` (D2 total coverage).
+- [ ] TS-13: no new path disclosure. The session file is persistent and shareable.
+- [ ] TS-16: origin. Without it, load-time and hook output can't be told apart from command output in the stream.
+- [ ] TS-18, TS-19: schema reference and capture helper (milestone scope: docs and test enablement).
+- [ ] D-1, D-2, D-6: summary, numeric tally, no-op marker. Near-free once D1 lands, and they close obvious gaps.
 
 ### Add After Validation (v1.x)
 
-- [ ] Faster direct-coverage execution only after measurements show a problem.
-- [ ] More static style enforcement only after the pair review exposes repeated misses.
-- [ ] Additional shared contracts only when two real implementations promise the same behavior.
-
-These additions must not weaken the focused pair result or add a baseline exemption.
+- [ ] D-3 exported schema file plus drift gate: when the first external consumer appears.
+- [ ] D-4 `id` field: when a consumer asks to pipe rows back into commands.
+- [ ] D-5 structured advisories: when `pending` gains a second advisory kind, or a consumer parses one.
+- [ ] Marketplace `source` on `marketplace list` rows (upstream parity for `marketplace list --json`): this needs an `MpList` model change that the text form must then ignore.
 
 ### Future Consideration (v2+)
 
-- [ ] Product features discovered during the refactor.
-- [ ] New adapters or component types.
-- [ ] Test tooling that changes the approved runner, assertion, or mock stack.
+- [ ] D-7 `invocationId`: only if async-hook interleaving proves to be a real correlation problem beyond the RPC response boundary.
+- [ ] A text-bearing companion field for RPC frontends: only if the D3 consequence (below) is reopened.
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
-| --- | --- | --- | --- |
-| Contract and inventory lock | HIGH | MEDIUM | P1 |
-| Boolean resolver discriminant | HIGH | MEDIUM | P1 |
-| Mirrored test ownership | HIGH | HIGH | P1 |
-| Full guideline compliance | HIGH | HIGH | P1 |
-| Complete direct coverage | HIGH | HIGH | P1 |
-| Public-only production testability | HIGH | HIGH | P1 |
-| Named correction preservation | HIGH | HIGH | P1 |
-| Adapter parity and negative controls | HIGH | MEDIUM | P1 |
-| Fail-closed structural gates | HIGH | MEDIUM | P1 |
-| Pair-atomic plans and commits | HIGH | MEDIUM | P1 |
-| Full project quality gate | HIGH | MEDIUM | P1 |
-| Gate performance optimization | LOW | MEDIUM | P2 |
-| Extra static style rules | LOW | MEDIUM | P2 |
-| New product behavior | OUT OF SCOPE | HIGH | P3 |
+|---------|------------|---------------------|----------|
+| TS-1/2/3 envelope, policy, kinds | HIGH | MEDIUM | P1 |
+| TS-4/5/6 severity, verdict rule, needsReload | HIGH | LOW | P1 |
+| TS-7/8 verbatim enums, composed reasons | HIGH | MEDIUM (rides D1) | P1 |
+| TS-9/10/14/15 raw values, scope, order, absent | HIGH | LOW | P1 |
+| TS-11 cause chain | HIGH | LOW-MEDIUM | P1 |
+| TS-12 usage-error kind | MEDIUM | LOW | P1 |
+| TS-13 no new paths | HIGH (risk) | LOW | P1 |
+| TS-16 origin/command id | HIGH | MEDIUM | P1 |
+| TS-17 raw-surface kinds (6 + 2 found) | MEDIUM | MEDIUM | P1 |
+| TS-18/19 docs, capture helper | HIGH (milestone goal) | LOW | P1 |
+| D-1 summary / D-2 tally / D-6 no-op | MEDIUM | LOW | P1 |
+| D-3 schema file + gate | MEDIUM | LOW-MEDIUM | P2 |
+| D-4 `id` | LOW-MEDIUM | LOW | P2 |
+| D-5 structured advisories | LOW-MEDIUM | MEDIUM | P2 |
+| D-7 invocationId | LOW | LOW-MEDIUM | P3 |
 
 **Priority key:**
+- P1: Must have for launch
+- P2: Should have, add when possible
+- P3: Nice to have, future consideration
 
-- P1: Required for v1.19 completion.
-- P2: Add only after measured need.
-- P3: Keep outside v1.19.
+## Competitor Feature Analysis
 
-## Approach Comparison
+| Feature | Claude Code CLI `--json` (2.1.283) | `@nklisch/pi-plugins` | Our approach |
+|---------|-------------------------------------|-----------------------|--------------|
+| Selection | Per-command `--json` flag, shell only | `--output human\|json` flag, plus mode-keyed channel | `ctx.mode` only (D3) |
+| Transport | stdout, last line (mutations) or whole stdout (lists) | `appendEntry` in rpc/json; stdout lines in print | `appendEntry` in json/rpc; print silent (D4/D5) |
+| Versioning | None (per-field "requires vX") | `plugin-control/v1` grammar id | `schemaVersion` integer plus a written additive policy |
+| Outcome | `outcome: ok\|failed` plus exit 0/1 plus `alreadyInGoalState` | 11-code exit vocabulary (in payload) | Tri-state `severity`, max over the invocation |
+| Error codes | snake_case `failureCode` | Closed diagnostic reason/action vocabularies | Existing closed `Reason` tokens, verbatim |
+| Human text | `message` always present | Human output mode | `summary` on warning/error only; no embedded render |
+| Usage errors | No JSON line, stderr, exit 1 | Exit 2 | `usage-error` payload |
+| Paths | `installPath`, `projectPath` absolute | Scrubbed provenance | Nothing beyond what text shows (NFR-9) |
+| Pagination | None | `--cursor`/`--limit` | None (Appendix D) |
+| Progress | None | `accepted`/`progress`/`result` frames | None; device-flow prompt is its own kind |
 
-| Characteristic | Aggregate Test Cleanup | Retained-Pass Campaign | v1.19 Pair Method |
-| --- | --- | --- | --- |
-| Ownership unit | Test suite or concern | Existing green file | One source-test pair |
-| Coverage evidence | Aggregate percentage | Prior focused result | Fresh direct result for one source |
-| Existing passes | Usually accepted | Treated as completed | Triage signal only |
-| Production design | Usually unchanged or broadly rewritten | Usually unchanged | One permitted boundary improvement when necessary |
-| Contract safety | Regression suite inference | Historical commit inference | Explicit public, persistence, adapter, and oracle contracts |
-| Structural enforcement | Often count-based | Often baseline-based | Fail-closed mapping and coverage with negative controls |
-| Review size | Large mixed batches | Mixed historical batches | One pair per plan and commit |
-| Legacy tests | Left in place | Assumed valid | Moved, reclassified, or removed after behavior preservation |
+## Open questions (for requirements, not decided here)
 
-## Research Gaps for Planning
-
-- The three update reason mismatches need a product-contract decision before that pair starts.
-- The Unix-socket case needs a permitted environment run before the team classifies it as a code defect.
-- Each of the 43 unexpected tests needs a disposition. Some can contain unique public behavior.
-- Each retained direct pass still needs a full guideline review. The audit measured coverage, not case quality.
-- A coherent production split changes the pair count. Closure must use the final source inventory, not the initial count alone.
+1. **RPC text loss (a consequence of D3).** RPC clients receive `/claude:plugin` notify text today via `extension_ui_request`. Under D3 they will receive only `entry_appended` custom entries. A frontend that does not understand `claude-plugin` will show nothing, and the device-flow code is the dangerous case, because auth then waits until the flow times out. D3 is locked. The requirements should still name this behavior change, and the docs should say that RPC frontends must render `device-flow-prompt` at minimum. D-1 `summary` softens but does not remove the gap.
+2. **D2's raw-surface list is incomplete.** `makeRawNotifyFn` has three callers (`orchestrators/auth-host.ts:112`, `index.ts:128`, `index.ts:149`), not one. The two `index.ts` load-path strings need kinds for "total coverage" to hold.
+3. **`appendEntry` during `resources_discover`.** Whether the session manager accepts custom entries during extension load, before the first prompt, in `--mode json -p` and in `--no-session`, was not verified. This is for architecture or phase research to check, since load-origin payloads depend on it.
+4. **Session growth.** Every RPC `list` appends a full inventory to the persisted session. Recommending `--no-session` for scripts covers one-shot use. Long-lived RPC sessions accumulate entries, and no Pi mechanism prunes custom entries.
+5. **URL userinfo.** Check whether a stored `url`-source marketplace can carry `user:token@` before `marketplace info` persists it into a shareable session. The text form has the same exposure today, but it is ephemeral there.
 
 ## Sources
 
-### Repository Evidence (HIGH confidence)
-
-- `.planning/PROJECT.md` — current v1.19 goal, constraints, active requirements, and Phase 108 boundary.
-- `docs/guidelines/typescript-unit-testing-guidelines.md` — complete unit-test contract.
-- `.claude/rules/typescript-unit-testing.md` — enforced short-form test rules.
-- `.planning/inputs/unit-test-refactor-handoff/` — imported decisions, contracts, oracles, and replay evidence.
-- `/tmp/pi-cm-pair-audit.CJWiph/results.tsv` — 204-pair HEAD audit with 59 pass, 83 coverage-fail, 60 missing, and 2 test-fail rows.
-- `scripts/check-corresponding-tests.mjs` — current fail-closed ownership gate. It reports 107 violations at HEAD.
-- `scripts/test-coverage-direct.mjs` — focused direct-coverage behavior and explicit type-only handling.
-- `package.json` — Node test runner, `strong-mock` 9.2.2, Fallow, direct coverage, and full quality commands.
-- Repository HEAD `96adc467cda9429947e72e224a473f65bb82f234` — inspected production and test inventory.
-
-### External Tool Evidence (MEDIUM confidence)
-
-- [Node.js 20 test runner documentation](https://nodejs.org/docs/latest-v20.x/api/test.html) — explicit file execution, per-file child processes, case-context restoration, and LCOV coverage output.
-- [`strong-mock` documentation](https://github.com/NiGhTTraX/strong-mock) — exact-parameter behavior, once-by-default expectations, and explicit verification.
+- Claude Code 2.1.283 binary (`/home/linuxbrew/.linuxbrew/Caskroom/claude-code@latest/2.1.283/claude`), strings grepped 2026-09-28: install/uninstall/update/enable/disable `--json` result objects, `failureCode` derivation, `plugin list --json` / `--available` / `marketplace list --json` builders. HIGH.
+- [Plugin commands reference](https://code.claude.com/docs/en/plugins/cli-reference.md), fetched 2026-09-28: "JSON result format", `plugin list` "JSON output" tables, exit codes. HIGH (agrees with the binary).
+- `claude plugin <verb> --help` output, 2.1.283. HIGH.
+- `@earendil-works/pi-coding-agent` 0.86.1 (pinned): `dist/core/agent-session.js` (appendEntry, prompt/extension command path), `dist/core/session-manager.js` / `.d.ts` (CustomEntry), `dist/modes/rpc/rpc-mode.js` (event forwarding, ui.notify forwarding, prompt response timing), `dist/core/extensions/runner.js` (no-op UI), `dist/modes/interactive/session-share.js`. HIGH.
+- npm 11.19.1 and gh 2.97.0, probed locally 2026-09-28. HIGH.
+- [Terraform JSON output format](https://developer.hashicorp.com/terraform/internals/json-format) and [machine-readable UI](https://developer.hashicorp.com/terraform/internals/machine-readable-ui). LOW per the confidence seam (webfetch); used only as an analogy.
+- [gh formatting help](https://cli.github.com/manual/gh_help_formatting). LOW per the seam; the behavior was also observed locally.
+- kubectl `-o json` conventions: training knowledge, not re-verified. LOW.
+- `docs/competitive-analysis/pi-plugins.md` (control channel, exit codes, pagination, Appendix D decisions) and `.planning/BACKLOG.md` MRO-01.
+- In-repo: `extensions/pi-claude-marketplace/shared/notification-types.ts`, `notification-dispatch.ts`, `notification-summary.ts`, `notify-context.ts`, `redact-absolute-paths.ts`, `errors.ts`, `edge/handlers/tools.ts`, `edge/handlers/plugin/browse.ts`, `index.ts`, `domain/github-auth.ts`, `orchestrators/*/*.messaging.ts`; `docs/output-catalog.md`; `.planning/MILESTONE-CONTEXT.md`; `docs/prd/pi-claude-marketplace-prd.md` (NFR-9).
 
 ---
-*Feature research for: v1.19 Unit Test Refactor*
-*Researched: 2026-08-28*
+*Feature research for: JSON presentation strategy for `/claude:plugin` (json-output milestone)*
+*Researched: 2026-09-28*

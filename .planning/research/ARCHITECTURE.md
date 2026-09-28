@@ -1,491 +1,441 @@
-# Architecture Research: v1.19 Unit Test Refactor
+# Architecture Research: json-output (Mode-Keyed Presentation Strategies)
 
-**Domain:** Brownfield TypeScript unit-test ownership and direct-coverage refactor
-**Researched:** 2026-08-28
-**Confidence:** HIGH
+**Domain:** Brownfield Pi extension. The work adds a JSON presentation strategy next to the text renderer for `/claude:plugin`, selected by `ctx.mode`.
+**Researched:** 2026-09-28
+**Confidence:** HIGH for the inventory and the Pi runtime facts. Both were checked with grep and by reading source in the installed `@earendil-works/pi-coding-agent@0.86.1`. MEDIUM for the proposed layout, which is a design recommendation.
 
-## Executive Recommendation
+Terms used below:
 
-Keep the production architecture that exists at HEAD. Build the milestone around its
-204 current production modules, not around the abandoned Phase 106/107 partition.
-Each executable plan must own exactly one production source and its mirrored unit
-test. Each plan must finish with one atomic commit for that pair.
+- **Producer**: an orchestrator or edge handler that builds a `NotificationMessage`.
+- **Report**: the new resolved, serializable presentation model. It is also the typebox wire schema.
+- **Strategy**: a pure formatter from Report to one output form (text or JSON).
+- **Sink**: the single call that emits output. Today that is `ctx.ui.notify`. After this work it can also be `pi.appendEntry`.
 
-The roadmap should start at Phase 108 and follow the live dependency direction:
-domain and platform, shared contracts, persistence and transaction, bridges,
-orchestrators, edge commands, and finally the extension entry point. This order lets
-lower-level public contracts stabilize before their consumers receive direct tests.
-It also makes the large lifecycle and composition modules depend on already-proven
-seams.
+## Standard Architecture
 
-Treat every one of the 204 pairs as open. The audit labels and retained commits are
-diagnostic brownfield evidence. They are never completion proof. A `PASS` pair still
-needs a v1.19 plan, current direct-coverage evidence, and its own commit.
+### System Overview (target)
 
-Cross-cutting work must ride with a source-test pair that owns the contract. For
-example, the resolver pair owns the required `installable: true | false`
-discriminant. Structural gates run throughout the milestone, but they do not justify
-gate-only executable plans.
-
-## Current HEAD Architecture
-
-The live extension is a layered TypeScript system under
-`extensions/pi-claude-marketplace/`. The dependency flow is mostly inward from the
-entry point and command surface toward orchestration, domain, persistence, and
-platform seams.
-
-```text
-Pi extension entry (index.ts)
-            |
-            v
-       edge commands
-            |
-            v
- lifecycle and composition orchestrators
-       |          |          |
-       v          v          v
-    bridges   transaction  persistence
-       |          |          |
-       +----------+----------+
-                  |
-                  v
-          domain / shared / platform
+```
+ producers (orchestrators/*, edge/handlers/*, bridges/hooks, index.ts, auth-host)
+   | build NotificationMessage (unchanged vocabulary, shared/notification-types.ts)
+   | + per-command ROW POLICY map (was: per-command RenderFn string map)
+   v
+ shared/notification-dispatch.ts  -- public notify-family API (thin)
+   | resolve(): ONE softDepStatus probe, severity, summary facts, tally counts,
+   |            reload flag, {requires ...} markers, cause chains, leaks,
+   |            hints, not-added reason        (shared/notification-resolve.ts)
+   v
+ Report  (typebox Static; schemaVersion)       (shared/notification-model.ts)
+   | presentationFor(ctx.mode)  exhaustive     (shared/notification-mode.ts)
+   +--------------------------+------------------------------+
+   | tui / print              | json / rpc                   | other -> UnsupportedModeError
+   v                          v
+ text strategy             JSON strategy
+ (notification-grammar.ts) (notification-json.ts)
+   |                          |
+   v                          v
+ ctx.ui.notify(text[,sev])  pi.appendEntry("claude-plugin", {schemaVersion,...})
+   \______ both calls live ONLY in shared/notification-dispatch.ts ______/
 ```
 
-This is a dependency diagram, not a request to create new directories. Some shared
-and platform modules are intentionally used by higher and lower layers. The roadmap
-must use actual imports and callers to sequence pairs, not enforce a theoretical
-layer model that the repository does not have.
+`browse` has a third "interactive" capability, but only in `tui`. It is not a strategy over Report. It is a mode gate in `edge/handlers/plugin/browse.ts` that asks the same `presentationFor(mode)` selector (see section 6).
 
-### Component Boundaries
+### Component Responsibilities
 
-| Component           | Modules | Responsibility                                                                                   | Main dependencies                                         |
-| ------------------- | ------: | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| `domain/`           |      20 | Resolution, manifests, identities, versions, hook metadata, GitHub authentication rules          | `platform/`, `shared/`                                    |
-| `platform/`         |       3 | Git, credential, and Pi runtime ports                                                            | `shared/`                                                 |
-| `shared/`           |      19 | Errors, notifications, formatting, paths, configuration, concurrency, and common value utilities | selected platform types/APIs                              |
-| `persistence/`      |       9 | Atomic durable stores for registries, ledgers, settings, caches, and snapshots                   | `domain/`, `platform/`, `shared/`                         |
-| `transaction/`      |       3 | Install and lifecycle transaction coordination and rollback                                      | `persistence/`, `shared/`                                 |
-| `bridges/agents/`   |       9 | Claude agent to Pi agent translation and staging                                                 | domain, persistence, platform, shared                     |
-| `bridges/commands/` |       5 | Claude command to Pi prompt-template translation and staging                                     | domain, persistence, platform, shared                     |
-| `bridges/skills/`   |       8 | Claude skill to Pi skill translation and staging                                                 | domain, persistence, platform, shared                     |
-| `bridges/mcp/`      |       9 | Claude MCP to Pi MCP adapter translation and staging                                             | domain, persistence, platform, shared                     |
-| `bridges/hooks/`    |      31 | Hook conversion, routing, dispatch, execution, and state                                         | domain, persistence, platform, shared                     |
-| `orchestrators/`    |      57 | Plugin, marketplace, import, reconcile, discovery, and presentation workflows                    | all lower layers                                          |
-| `edge/`             |      30 | Command parsing, validation, scope choice, and user-facing dispatch                              | orchestrators, domain, shared, platform                   |
-| root `index.ts`     |       1 | Extension composition, command registration, hook installation, and reload lifecycle             | edge, hooks, orchestrators, persistence, platform, shared |
+| Component | Responsibility | New / Modified | Zone |
+|-----------|----------------|----------------|------|
+| `shared/notification-model.ts` | typebox schemas, `Static` types, `SCHEMA_VERSION`. The Report is the wire schema. | NEW | shared |
+| `shared/notification-resolve.ts` | Turns `NotificationMessage` plus row policy plus probe into a Report. Owns every presentation decision. | NEW (absorbs the computation half of `notification-summary.ts` and the derivations in grammar) | shared |
+| `shared/notification-mode.ts` | Exhaustive `switch (mode)` that returns `{ strategy: "text" \| "json"; interactive: boolean }`. Unknown mode throws `UnsupportedModeError`. | NEW | shared |
+| `shared/notification-json.ts` | JSON strategy. Makes a deep plain-data copy of the Report and adds `schemaVersion`. | NEW | shared |
+| `shared/notification-grammar.ts` | Text strategy. Formats a Report into `{ text, severity? }`. It takes no probe and walks no `Error` objects. | MODIFIED (big) | shared |
+| `shared/notification-summary.ts` | Returns structured facts (counts, subject, reload) and no longer returns phrases. The phrases move to grammar. It can also be folded into resolve. | MODIFIED | shared |
+| `shared/notification-dispatch.ts` | Stays the SOLE sink module. `present(ctx, host, report)` makes exactly one `ctx.ui.notify` or `host.appendEntry` call. The public notify functions become resolvers. | MODIFIED | shared |
+| `shared/notify-context.ts` | `CommandContext.render` (a string map) becomes a total map of row policies (data). `RenderFn` and `dispatchRow` string fallback are deleted. | MODIFIED | shared |
+| `platform/pi-api.ts` | Adds `ExtensionMode = ExtensionContext["mode"]` (the package root does not export `ExtensionMode`), adds `NotificationContext.mode`, and adds `EntrySink` / `PresentationHost`. | MODIFIED | platform |
+| `shared/errors.ts` | Adds `UnsupportedModeError`. Adds the browse-outside-tui error, either as a typed error or as a Report kind (see section 6). | MODIFIED | shared |
+| `domain/github-auth.ts` | Replaces the raw `NotifyFn` string callback with a structured device-code callback. | MODIFIED | domain |
+| 16 `orchestrators/**/*.messaging.ts` | Render arms (strings) become row policies (data). | MODIFIED | orchestrators |
+| `edge/handlers/plugin/browse.ts` | Replaces the list fallback at `:140` with the D6 typed error. | MODIFIED | edge |
 
-### Boundary Facts That Plans Must Preserve
+All new modules go in `shared/`. That zone already matches `extensions/pi-claude-marketplace/shared/**` and may import `platform` (`.fallowrc.json` rule `shared -> [platform]`). typebox is already a runtime dependency. **So `.fallowrc.json` needs no change.** A new top-level folder such as `presentation/` would need a new zone, allow-list edges, the ESLint `import-x/no-restricted-paths` zone, and updates to `tests/architecture/import-boundaries.test.ts`. The reason is `boundaries.coverage.requireAllFiles: true`. Do not create one.
 
-- Hook routing state is isolated in `bridges/hooks/routing-state.ts` to break a live
-  dependency cycle.
-- Plugin and marketplace ledgers do not import each other. Workflows cross that
-  boundary through leaf seams such as `orchestrators/marketplace/shared.ts` or through
-  injected dependencies.
-- The bridge families do not import one another. They share domain and persistence
-  contracts instead.
-- Plugin install uses the transaction runner. Other lifecycle operations have their
-  own rollback shapes and must not be forced into install's transaction abstraction.
-- Offline and no-network behavior is an architectural contract. Read-only commands
-  and warm-cache paths must not gain network dependencies.
-- User-visible output goes through `ctx.ui.notify`. Direct stdout or stderr writes are
-  outside the command and bridge contract.
-- Whole-repository cycle and unused-boundary checks remain the job of Fallow. Pair
-  tests should not reproduce a second dependency scanner.
+## 1. Output-surface inventory (complete)
 
-## Unit-Test Ownership Architecture
+**Search method.** Re-run this to check the numbers:
 
-The milestone adds a strict one-to-one ownership view over the existing production
-tree.
-
-```text
-extensions/pi-claude-marketplace/<relative-path>.ts
-                         |
-                         | exactly one mirrored owner
-                         v
-tests/<relative-path>.test.ts
-                         |
-                         +-- imports the production module directly
-                         +-- covers its exported behavior directly
-                         +-- reaches 100% functions, lines, and branches
+```
+rg -n "\b(notify|notifyWithContext|notifyUpdateWithContext|notifyUpdateNoOpWithContext|notifyReconcileAppliedWithContext|notifyUsageError|notifyUsageInfo|notifyDiagnostic|makeRawNotifyFn|notifyAsyncRewakeSummary|notifyStopHookOverrideCap|renderReinstallPartitionAndNotify)\(" extensions/pi-claude-marketplace -g '*.ts' \
+ | rg -v "export function " | rg -v '^\S+:[0-9]+:\s*(//|\*|/\*)' \
+ | rg -v "shared/notification-dispatch.ts|shared/notify-context.ts|platform/pi-api.ts"
 ```
 
-Tests in `tests/architecture/` and `tests/integration/` can prove cross-module
-contracts. They are supplemental evidence only. They cannot replace a mirrored unit
-test or contribute ownership credit for a source pair.
+I also checked that `rg -n "\.notify\(" extensions/` finds no direct `ctx.ui.notify` outside `notification-dispatch.ts`. The only other `ctx.ui.*` uses are `addAutocompleteProvider` (`edge/register.ts:149`, `edge/skill-aliases.ts:78`) and `ctx.ui.custom` (`edge/handlers/plugin/browse.ts:178`). None of these is output.
 
-### Current Pair Baseline
+**Totals: 119 call sites in 45 production files.** Two more files define the family: `notification-dispatch.ts` has 9 internal `ctx.ui.notify` calls and `notify-context.ts` has 4 emit calls. That makes **47 production files**, which matches the estimate of about 50.
 
-The canonical pair audit contains 204 rows.
+| Function | Call sites | Files | Kind |
+|----------|-----------:|------:|------|
+| `notifyWithContext` | 44 | 18 | structured cascade (per-command render map) |
+| `notifyUsageError` | 40 | 18 | raw string |
+| `notify` | 20 | 12 | structured (legacy central switch + standalone kinds) |
+| `notifyDiagnostic` | 3 | 3 | raw string (header + lines) |
+| `makeRawNotifyFn` | 3 | 2 | raw callback |
+| `notifyUpdateNoOpWithContext` | 2 | 2 | structured |
+| `notifyUsageInfo` | 2 | 1 | raw string |
+| `notifyUpdateWithContext` | 1 | 1 | structured |
+| `notifyReconcileAppliedWithContext` | 1 | 1 | structured |
+| `notifyAsyncRewakeSummary` | 1 | 1 | raw string |
+| `notifyStopHookOverrideCap` | 1 | 1 | raw string |
+| `renderReinstallPartitionAndNotify` (wraps `notifyWithContext`) | 1 | 1 | structured |
 
-| Audit label     |   Pairs | Planning meaning                                       |
-| --------------- | ------: | ------------------------------------------------------ |
-| `PASS`          |      59 | Existing evidence to inspect; pair remains open        |
-| `COVERAGE_FAIL` |      83 | Mirrored test exists but direct coverage is incomplete |
-| `MISSING`       |      60 | Mirrored test is absent                                |
-| `TEST_FAIL`     |       2 | Focused test or environment failed; pair remains open  |
-| **Total open**  | **204** | **Every pair receives one executable plan and commit** |
+### By layer and file (line:function)
 
-The current corresponding-test gate reports 107 violations: 60 missing tests, 43
-unexpected tests, and four wrong imports. Both planted negative controls pass. These
-numbers are a starting diagnostic, not a completion ledger.
+**entry (1 file, 2)**
+- `index.ts` 128:`makeRawNotifyFn` ("reconcile aborted: ..."). 149:`makeRawNotifyFn` ("plugin PATH not refreshed ..."). Both run inside `resources_discover` and are wrapped in NFR-2 try/catch.
 
-One audit failure for `orchestrators/marketplace/add.ts` passes when the unchanged
-test can create its Unix socket, so its plan must preserve the behavior while making
-the test hermetic. `orchestrators/plugin/update.ts` has three reproducible assertion
-failures around unavailable Git-source candidates. Its own lifecycle pair must own
-that correction.
+**bridges/hooks (2 files, 2)**
+- `bridges/hooks/async-rewake/registry.ts` 434:`notifyAsyncRewakeSummary`. It has `ctx: ExtensionContext` and `pi: ExtensionAPI` in scope (`spawnAndRegister`, :187).
+- `bridges/hooks/settle.ts` 378:`notifyStopHookOverrideCap`. It has `pi` and `ctx` in scope (`reenterBounded`).
 
-## Recommended Phase Architecture
+**edge (21 files, 46)**
+- `edge/router.ts` 192, 207, 237, 246: `notifyUsageError`. **The router has no `pi`.** `routeClaudePlugin(args, handlers, ctx)` is called from `edge/register.ts:131`.
+- `edge/handlers/shared.ts` 80: `notifyUsageError` (the flag parser, ctx only).
+- `edge/handlers/plugin/shared.ts` 76, 119, 153, 163, 195: `notifyUsageError` (arg-parse helpers, ctx only).
+- `edge/handlers/marketplace/shared.ts` 61, 122: `notifyUsageError`.
+- `edge/handlers/plugin/help.ts` 18, 23: `notifyUsageInfo`. 27: `notifyUsageError`. **`makeHelpHandler()` takes no `pi`.**
+- `edge/handlers/plugin/bootstrap.ts` 41, 46, 52: `notifyUsageError`. 77: `notify` (cascade, marketplace `failed`, no plugins).
+- `edge/handlers/plugin/browse.ts` 134: `notifyUsageError`. 159: `notify` (cascade with a `(browse)` failed row, `cause: err as Error`). 172: `notify` (empty cascade, "(no marketplaces)").
+- `edge/handlers/plugin/enable-disable.ts` 71: `notify` (cascade failed row).
+- `notifyUsageError` only, one or more sites each: `fetch.ts` 53, 60, 68, 100. `import.ts` 35, 43. `info.ts` 44, 53, 62. `install.ts` 70, 82. `list.ts` 54, 62. `pending.ts` 41, 43. `reinstall.ts` 45, 51, 85. `update.ts` 52, 65. `marketplace/autoupdate.ts` 44. `marketplace/list.ts` 34. `marketplace/update.ts` 43.
 
-The following grouping covers each production module exactly once. The phase counts
-sum to 204.
+**orchestrators (21 files, 69)**
+- `auth-host.ts` 112: `makeRawNotifyFn`. This is the device-flow prompt. The bound fn goes to `domain/github-auth.ts:436` (`Open <uri> and enter: <code>`).
+- `import/execute.ts` 1255: `notifyDiagnostic` (import diagnostics). 1307: `notifyWithContext`.
+- `marketplace/add.ts` 507, 657. `list.ts` 106. `remove.ts` 322, 604, 869. `update.ts` 283, 752, 818, 826, 854, 880. All are `notifyWithContext`.
+- `marketplace/autoupdate.ts` 250, 574, 640: `notifyWithContext`. 554: `notify` (`marketplace-not-added`).
+- `marketplace/info.ts` 168: `notify` (not-added). 191: marketplace-info. 193: marketplace-info-cascade. 201: per-scope failure loop (**several emissions per invocation**).
+- `marketplace/shared.ts` 597, 617: `notify` (not-added).
+- `plugin/enable-disable.ts` 1173, 1182, 1367, 1380. `fetch.ts` 205. `list-flow.ts` 755, 800. `uninstall.ts` 291, 335, 603, 921. `update-swap.ts` 1234. All are `notifyWithContext`.
+- `plugin/info.ts` 2469: `notifyWithContext`. 2521: not-added. 2549: plugin-info. 2593: plugin-info. 2595: plugin-info-cascade. 2610: failure loop (**several emissions**).
+- `plugin/install-flow.ts` 459, 526, 1053, 1103: `notifyWithContext`. 1029: `notify` (not-added).
+- `plugin/reinstall-flow.ts` 307, 377, 394, 491, 537, 663: `notifyWithContext`. 570: `renderReinstallPartitionAndNotify` (-> `reinstall.messaging.ts:202`).
+- `plugin/shared.ts` 1292, 1372: `notify` (not-added). 1347: `notifyWithContext`. 1462: `notifyDiagnostic` (discovery warnings).
+- `plugin/update-cascade.ts` 204: `notifyUpdateNoOpWithContext`. 212: `notifyUpdateWithContext`.
+- `plugin/update-flow.ts` 251: `notifyUpdateNoOpWithContext`. 659, 766: `notifyWithContext`.
+- `reconcile/apply.ts` 860: `notifyReconcileAppliedWithContext`. 978: `notifyDiagnostic` (post-install warnings).
+- `reconcile/pending.ts` 264: `notify` (`reconcile-pending-empty`). 318: `notifyWithContext`.
 
-| Phase | Group                               | Pair count | Dependency rationale                                                                                                  |
-| ----: | ----------------------------------- | ---------: | --------------------------------------------------------------------------------------------------------------------- |
-|   108 | Domain and Platform                 |         23 | Stabilize foundational values, resolver result, Git ports, credentials, and GitHub authentication before consumers    |
-|   109 | Shared Contracts                    |         19 | Prove errors, paths, configuration, notifications, and common utilities used by all later layers                      |
-|   110 | Persistence and Transaction         |         12 | Prove formats, atomic writes, idempotency, ledger isolation, and rollback coordination after their value contracts    |
-|   111 | Non-Hook Component Bridges          |         31 | Cover agents, commands, skills, and MCP conversion and staging on stable lower seams                                  |
-|   112 | Hook Runtime                        |         31 | Isolate the larger hook conversion, routing, dispatch, and execution subsystem                                        |
-|   113 | Orchestrator Support and Presenters |         35 | Prove small seams, classifiers, discovery helpers, messaging modules, and planning helpers before lifecycle composers |
-|   114 | Plugin and Marketplace Lifecycle    |         14 | Cover the large state-changing plugin and marketplace workflows after their collaborators                             |
-|   115 | Composition Orchestrators           |          8 | Cover import, reconcile, bootstrap, and edge-dependency composition after lifecycle primitives                        |
-|   116 | Edge Surface                        |         30 | Cover parsing and command dispatch after all invoked workflows have stable contracts                                  |
-|   117 | Extension Entry and Final Gate      |          1 | Cover root registration and composition, then close all global structural gates                                       |
+**Not output surfaces (checked and excluded):**
+- MCP tool results (`edge/handlers/tools.ts`) go to the LLM, not to the user.
+- `hookDebugLog` (`shared/debug-log.ts`) is an env-gated debug channel.
+- The IL-3 `console.warn` in `persistence/migrate.ts`.
+- `pi.sendMessage` in `async-rewake/registry.ts:461` and `settle.ts:395` is model context. It is not presentation.
 
-Phases 111 and 112 can be prepared in parallel after Phase 110 because their source
-trees are independent. Keep their commits and plans separate. Phase 113 must precede
-the lifecycle phase because the lifecycle modules depend on these helpers and
-presenters. Phase 115 follows lifecycle because its modules compose those workflows.
+Requirements should state these exclusions on purpose so that "total coverage" (D2) has a closed boundary.
 
-### Phase 113 Boundary
+### Raw-string surfaces (D2): what each becomes in the Report
 
-Use the live modules, not a new support directory. The intended 35 pairs are:
+| Surface | Today (`notification-dispatch.ts`) | Arity | Report kind (proposed) |
+|---------|-------------------------------------|-------|------------------------|
+| `notifyUsageError` :112 | `` `${message}\n\n${usage}` ``, "error" | 2 | `usage-error { message, usage }` |
+| `notifyUsageInfo` :119 | `usage`, "info" (**explicit**) | 2 | `usage-info { usage }` |
+| `notifyDiagnostic` :142 | `` `${header}\n\n${lines}` ``, "warning". Empty is a no-op. | 2 | `diagnostic { topic: "import" \| "discovery" \| "reconcile-post-install", subject?, lines[] }`. The **header English moves from 3 producers into text**. Import diagnostics also carry a `code` (`ImportDiagnosticCode`) worth exposing. |
+| `makeRawNotifyFn` :347 | severity optional, so 1 or 2 args | 1\|2 | `device-code { host, verificationUri, userCode }` (auth-host) and `lifecycle-warning { topic: "reconcile-aborted" \| "path-not-refreshed", scope?, detail }` (index.ts) |
+| `notifyAsyncRewakeSummary` :167 | summary, "info" (**explicit**). Empty is a no-op. | 2 | `hook-rewake-summary { pluginId, summary }` |
+| `notifyStopHookOverrideCap` :200 | fixed text with `8`, "warning" | 2 | `stop-hook-cap { pluginId, cap: 8 }` |
 
-- Five top-level support modules: authentication host, discovery, plugin path,
-  scope fan-out, and orchestrator types.
-- Fifteen plugin support and presentation modules: clone cache, clone garbage
-  collection, name discovery, Git-source probing, state classification, shared
-  helpers, update-row formatting, and the eight current messaging modules.
-- Six marketplace support and presentation modules: shared helpers and five current
-  messaging modules.
-- Five import support modules: execute messaging, marketplaces, references, settings,
-  and types.
-- Four reconcile support modules: apply outcomes, planning, reconcile messaging, and
-  types.
+**Arity is part of the byte contract.** The catalog harness records `argumentCount` (`tests/architecture/catalog-uat/mock-pi.ts`). Structured info-severity emissions call `ctx.ui.notify(body)` with **one** argument (`emitWithSummary` :96-100). The raw info surfaces pass `"info"` **explicitly**. The text strategy must keep this per-kind rule. The Report carries `severity: "info"` in both cases, so the rule is a text-formatting rule keyed on kind.
 
-### Phase 114 Boundary
+## 2. Per-verb renderers and what each derives at render time
 
-The 14 lifecycle pairs are the eight plugin workflows (`enable-disable`, `fetch`,
-`info`, `install`, `list`, `reinstall`, `uninstall`, and `update`) and the six
-marketplace workflows (`add`, `autoupdate`, `info`, `list`, `remove`, and `update`).
-These are high-value integration boundaries, but each remains one source-test pair.
+There are **19 `CommandContext` consts across 16 `*.messaging.ts` files, with 64 status arms**. There is also the central `renderPluginRow` switch in `notification-grammar.ts:902` (19 statuses). Legacy `notify()` still uses that switch, and `tests/architecture/catalog-uat` drives it. Every arm is a composition of grammar primitives over `(row, probe, mpScope)`.
 
-### Phase 115 Boundary
+What the arms decide, and where each decision goes:
 
-The eight composition pairs are `edge-deps`, the two import composers (`execute` and
-the import barrel), plugin bootstrap, and four reconcile composers (`apply`,
-`backfill`, `notify`, and `pending`).
+| Derivation | Where it happens today | Absorbed by | Notes |
+|------------|------------------------|-------------|-------|
+| `{requires pi-subagents / pi-mcp / pi-dynamic-workflows}` markers | `composeReasons(..., declaresX, probe)` (`grammar:500`) -> `softDepMarkers` (`shared/concerns/soft-dep.ts:54`) | **resolve** | Only arms built on `installedLikeRow` / `partiallyInstalledRow` / an explicit `dependencies.includes(...)` include markers. That covers installed, updated, reinstalled, and partially-installed. Every `pluginRow` / `render*Row` arm passes `false,false,false`. The Report row carries the **final** reasons list: content reasons first, then markers in the fixed order agents, mcp, workflows. |
+| Content reasons shown or suppressed | per arm | **row policy** | Divergences that must be kept (see the table below). |
+| Scope bracket elision | `renderScopeBracket(pScope, mpScope)` (`grammar:456`). Candidate rows (available, remote, unavailable, partially-available) force `undefined`. | **text** | Report keeps the real scope. Elision is lossy formatting. |
+| Version display (`hash-`/`sha-` to `#abcdef0`, `v` prefix, `from -> to` arrow) | `renderVersion` :425, `composeVersionArrow` :476 | **text** | JSON carries raw `version` / `from` / `to`. |
+| Icon glyph | a literal per arm | **text** | This is a pure function of `status` across all 64 arms plus the central switch (checked). It is one table in text. |
+| Status token text, e.g. `(will partially install)` versus `(will install)` | `renderPendingRow` :835, `reconcile.messaging.ts:91` | **text** from the Report field `partial` | |
+| Description truncation and wrapping | `truncateDescription` :113, `wrapDescription` :146, `DESCRIPTION_BEARING_STATUS` :1526 | **text** (truncation). **resolve** (which statuses bear a description). | JSON gets the full description. |
+| Partial / stale-gate / enable hint trailers | `partialHintTrailerFor` :1591, `ENABLE_HINT_TRAILER` | **resolve** chooses `hints: ("partial-install"\|"partial-update"\|"stale-gate-update"\|"enable")[]`. **text** chooses the English. | |
+| Cause chain | `renderIndentedCauseChain` :1069 -> `causeChainTrailer(Error)` (`shared/errors.ts:149`) walks a **live `Error`** at render time | **resolve** gives `cause: { chain: string[], truncated: boolean }` | An `Error` is not JSON-serializable. `CleanupContextError` links render cleanup details (`errors.ts` `linkMessage`). |
+| Manual-recovery leaks | `manualRecoveryLeaks(p.cause)` (`errors.ts:598`), an `instanceof ManualRecoveryError` walk at render time | **resolve** gives `leaked: string[]` | |
+| Rollback-partial lines | `composeRollbackPartialLines` :1085 (phase causes are live Errors) | **resolve** gives `rollbackPartial: { phase, cause? }[]` with serialized causes | |
+| Not-added reason | `notAddedReasonFor` :1398 derives a `Reason` from `presentInOtherScope` + `scope` | **resolve** | |
+| Marketplace header marker | `renderMpHeader` :229. A `skipped` header with reason `already autoupdate` renders `<autoupdate>` in place of `(skipped)`. A list header renders `<autoupdate>` from `details`. | **text** (data is already present) | |
+| Plugin-info glyph and `(${status})` | `pluginInfoStatusGlyph` :1260, `renderPluginInfo` :1434 | **text** | |
+| Hard-coded bodies | `"Pending: next reload will apply 0 actions."` (dispatch :243), `UPDATE_NO_OP_HEADLINE`, `"(no marketplaces)"` | **text**. Report kinds are `reconcile-pending { actions: 0 }` and `update-no-op`, plus an empty cascade. | |
 
-## Within-Phase Execution Sequence
+**Per-verb divergences the row policies must keep** (checked arm by arm; each is a text byte difference pinned by an owner test):
 
-The pair is the smallest executable unit. A phase can use waves, but a wave must not
-change pair ownership.
+| Status | Default (central switch) | Divergent command | Divergence |
+|--------|--------------------------|-------------------|------------|
+| `partially-installed` | markers ON (`partiallyInstalledRow`) | `plugin list` (`list.messaging.ts:126`) | `pluginRow`, so markers OFF |
+| `available`, `remote` | content reasons OFF (`undefined`) | `plugin list` (`list.messaging.ts:115`, `:151`) | reasons ON (`p.reasons`) |
+| `uninstalled` | reasons ON (`renderUninstalledRow`) | reconcile-applied (`reconcile.messaging.ts:177`) | reasons OFF (`composeReasons(undefined, ...)`) |
+| `will *` | no version, no reasons, no probe | (all) | pending arms ignore `probe` |
+| `unavailable` | `renderUnavailableRow` | import (`execute.messaging.ts:97`) | byte-identical duplicate, so no policy needed |
 
-1. Test type-only contracts, leaf values, and leaf adapter ports first.
-2. Test small exported helpers that are imported by other modules in the phase.
-3. Test stateful modules and persistence adapters after their schemas and values.
-4. Test presenters before the workflows that call them.
-5. Test lifecycle workflows before composition modules.
-6. Test barrels after their leaf exports are stable.
-7. Test the root entry point last.
+A row policy can therefore be small data, for example `{ markers: boolean; contentReasons: boolean }` per status. It lives in a **total** map per command, which keeps the D-04/D-10 `satisfies CommandContext` exhaustiveness anchor. It does not keep the `(row, probe, mpScope) => string` function.
 
-Serialize pairs when one changes a public contract used by the other or when both
-must edit the same concern-local test support file. Other pairs in the same phase can
-run in parallel. Never let parallel plans share ownership of a source, mirrored test,
-or commit.
+Per-file arm inventory (status arms per const):
+- `plugin/list` 11
+- `plugin/install` 6
+- `plugin/fetch` 6
+- `plugin/update` 5
+- `reconcile` PENDING 5 and RECONCILE_APPLIED 5
+- `plugin/enable-disable` ENABLE 4 and DISABLE 3
+- `plugin/reinstall` 4
+- `import/execute` 4
+- `marketplace/update` 4
+- `plugin/uninstall` 2
+- `marketplace/remove` 2
+- `marketplace/autoupdate` AUTOUPDATE 1 and NOAUTOUPDATE 1
+- `plugin/info` 1
+- `marketplace/add` 0 (label only)
+- `marketplace/list` 0 (label only)
 
-## Executable Pair Plan Shape
+Tests call these arms directly **70 times in 12 test files** (`rg -n "\.render\.|render\[" tests`). Those calls are the byte locks for the divergences above.
 
-Every plan should use the same evidence-producing sequence.
+## 3. Render-time state probes
 
-### 1. Declare Ownership
+| Probe | Where | Moves to |
+|-------|-------|----------|
+| `softDepStatus(pi)` (3 `getAllTools()` reads) | `notification-dispatch.ts:280` (`notify`), `:387` (`emitCascadeWith`), `:433` (`emitUpdateNoOpCascade`) | `resolve()`. It is still one probe per emission and runs before strategy selection. |
+| `softDepStatus(pi)` for **severity** (a second probe of the same state) | `plugin/install-flow.ts:406`, `plugin/update-cascade.ts:190`, `plugin/enable-disable.ts:1347`, all via `companionSeverity` (`notify-reasons.ts:84`) | Recommended: take the probe **once per command invocation** and pass the same snapshot to severity stamping and to `resolve()`. Today severity and markers read two snapshots that can disagree in principle. |
+| `causeChainTrailer` / `manualRecoveryLeaks` over live `Error` | grammar :1069, :1616-1641 | `resolve()` (serialized) |
+| `crossScopeFlag` (a filesystem probe) | producers (`install-flow.ts:1029`, `plugin/shared.ts:1372`, `autoupdate.ts:554`, `plugin/info.ts:2505`) | Already upstream. No change. |
+| `redactAbsolutePaths` | producers (`reconcile/apply.ts:177,187,811,962`, `backfill.ts:156`, `plugin/shared.ts:1457`) | Already upstream. The JSON strategy inherits it. No redaction may move into text only. |
+| `pluginScopeOrFallback`, `pluginVersion` | `edge/browser/plugin-browser.ts` (a browse TUI consumer of producer types) | Out of scope (browse polish). |
 
-Name one exact production source and its one exact mirrored test. Record the audit
-label as baseline context only. Name any supplemental tests that contain behavior
-currently owned by the source.
+Test cost: the strict boundary helper (`tests/edge/notification-boundary.ts`, used by **31** suites) and `catalog-uat/mock-pi.ts` pin `getAllTools().times(3)` per emission. If one probe per invocation is adopted, those counts change. If the probe stays in `resolve()`, they do not.
 
-### 2. Trace the Public Contract
+## 4. Proposed layout and gate impact
 
-Read the source, its exports, its callers and importers, the mirrored test, and related
-architecture or integration tests. Decide which observable behavior belongs in the
-mirrored test. Do not infer the contract from the old patch or retired phase plans.
-
-### 3. Consolidate Test Ownership
-
-Move source-owned cases from unexpected supplemental unit files into the mirrored
-test. Keep a supplemental test only when it genuinely proves a multi-module contract.
-Do not delete tests solely to make the corresponding-test gate green.
-
-### 4. Make the Smallest Production Change
-
-If the module cannot be tested through its exported surface, add a narrow production
-dependency or port that improves the real design. Prefer an optional dependency,
-explicit callback, clock, filesystem port, process boundary, or existing adapter.
-Keep the change inside the current module boundary unless current callers prove that
-a new production module is necessary.
-
-### 5. Write Direct Unit Tests
-
-Use `node:test` and `node:assert/strict`. Use explicit Arrange, Act, and Assert
-comments. Create fresh mutable state and a fresh temporary directory per case. Use
-strong mocks for promised interactions. Cover success, failure, absence, boundary,
-and retry behavior through exports only.
-
-Type-only files still require a mirrored test with compile-time contract assertions.
-Barrels must prove runtime binding identity for value exports and compile-time
-availability for type exports. The behaviorful root `index.ts` is not a barrel.
-
-### 6. Prove the Pair
-
-Run the focused test and the direct-coverage command for the exact source. Require
-100% functions, lines, and branches. Run type checking, linting, and affected
-contract tests when the public surface changes. Confirm that no test-only export,
-module replacement, or shared mutable state was introduced.
-
-### 7. Commit the Pair
-
-Create one commit that represents one source-test pair. Concern-local support edits
-may ride in the commit only when they exist to test that pair. A plan must not combine
-two production sources to reduce commit count.
-
-## Cross-Cutting Contract Carriers
-
-Cross-cutting concerns still need a single accountable source pair. Use these carrier
-pairs instead of creating non-pair executable plans.
-
-| Contract                                                          | Owning pair or pairs                                               |    Phase | Verification boundary                                                                |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------ | -------: | ------------------------------------------------------------------------------------ |
-| Resolver root safety                                              | `domain/resolver.ts`                                               |      108 | Runtime arm tests plus compile-time rejection of `pluginRoot` on unavailable results |
-| Git and credential adapter parity                                 | `platform/git.ts`, `platform/git-credential.ts`                    |      108 | Public port behavior and concern-local adapter contract cases                        |
-| Device Flow HTTP reachability                                     | `domain/github-auth.ts`                                            |      108 | Public authentication workflow with a production-reachable injected HTTP port        |
-| Version internals remain private                                  | `domain/version.ts`                                                |      108 | Test public version behavior; remove tests of private hashing constants              |
-| Hook metadata and diagnostics                                     | Relevant domain metadata pair and hook routing/dispatch pairs      | 108, 112 | Public translation and dispatch behavior; no private tool-name exports               |
-| Notification grammar and output routing                           | Shared notify/reason/context pairs and each current messaging pair | 109, 113 | Direct message tests plus supplemental architecture checks                           |
-| Durable formats and atomic writes                                 | Each persistence module                                            |      110 | Round trip, corrupted/absent state, retry, and atomic replacement behavior           |
-| Bridge atomicity and foreign-content preservation                 | Each bridge stage/unstage module                                   | 111, 112 | Direct bridge pair tests plus supplemental cross-bridge integration cases            |
-| Update preload, staging warnings, and unavailable-source behavior | `orchestrators/plugin/update.ts`                                   |      114 | Public update outcomes and rollback/notification effects                             |
-| Reconcile entry isolation                                         | `orchestrators/reconcile/apply.ts`                                 |      115 | One entry failure does not stop other entries or arms                                |
-| Correspondence and direct-coverage enforcement                    | Every pair; final closure with root `index.ts`                     | All, 117 | Pair checks continuously; full gates and negative controls at milestone close        |
-
-If a carrier exposes a defect in gate code, repair that gate in the carrier's pair
-commit. Do not introduce a gate-only phase or plan. Gate implementation already at
-HEAD is baseline infrastructure, not proof that any pair is complete.
-
-## Resolver Discriminant Contract
-
-The resolver's three-state `state` field and the new boolean discriminant serve
-different purposes. Keep both. `state` distinguishes fully installable from partially
-available results. `installable` makes root access type-safe.
+### Report shape (sketch, typebox)
 
 ```typescript
-type ResolvedPlugin =
-  | {
-      installable: true;
-      state: "installable";
-      pluginRoot: string;
-      // Current installable fields remain here.
-    }
-  | {
-      installable: true;
-      state: "partially-available";
-      pluginRoot: string;
-      // Current partial-result fields remain here.
-    }
-  | {
-      installable: false;
-      state: "unavailable";
-      name: string;
-      notes: readonly string[];
-      // No pluginRoot.
-    };
+// shared/notification-model.ts
+export const SCHEMA_VERSION = 1;
+const PluginRow = Type.Object({
+  name: Type.String(), status: PluginStatus, scope: Type.Optional(Scope),
+  version: Type.Optional(Type.String()), from: Type.Optional(Type.String()), to: Type.Optional(Type.String()),
+  reasons: Type.Array(ReasonLiteral),          // FINAL: content + soft-dep markers
+  severity: Severity, needsReload: Type.Boolean(),
+  description: Type.Optional(Type.String()),   // full; text truncates
+  hints: Type.Array(HintLiteral), partial: Type.Optional(Type.Boolean()),
+  cause: Type.Optional(Type.Object({ chain: Type.Array(Type.String()), truncated: Type.Boolean() })),
+  leaked: Type.Optional(Type.Array(Type.String())),
+  rollbackPartial: Type.Optional(Type.Array(RollbackPhase)),
+});
+export const Report = Type.Union([CascadeReport, MarketplaceInfoReport, PluginInfoReport,
+  InfoCascadeReports, MarketplaceNotAddedReport, ReconcilePendingReport, ReconcileAppliedReport,
+  UpdateNoOpReport, UsageErrorReport, UsageInfoReport, DiagnosticReport, DeviceCodeReport,
+  LifecycleWarningReport, HookRewakeSummaryReport, StopHookCapReport, UnsupportedModeReport /* browse */]);
+// every variant: { kind, severity, summary?: {count, subject: "plugin"|"marketplace"|null},
+//                  tally?: {label, operation, failures, warnings, successes | {verb,count}},
+//                  reloadHint: boolean, advisories: string[] }
 ```
 
-The `domain/resolver.ts` pair must update its runtime schema or constructors together
-with the exported type. Its mirrored test must prove all runtime arms and include a
-compile-time negative assertion for `pluginRoot` on the unavailable arm. The change
-is additive for consumers that only inspect `state`, so it does not require a mass
-consumer rewrite or a separate migration plan. It does not change a persisted format.
+Design rules:
 
-## Verification Boundaries
+1. **Report is the wire schema** (`Static<typeof Report>`), so a type change reaches both strategies (D1).
+2. Resolve computes **facts**. Text turns facts into English. The summary phrase, the tally text, and the diagnostic headers are formatting. Counts, subjects, and severity are decisions.
+3. Lossy formatting stays in text: truncation, `#sha7`, scope elision, glyphs.
+4. Add a machine `operation` id (for example `"plugin.install"`) beside `Messaging.label`. Consumers should not parse English labels.
 
-### Pair Boundary
+### Gates and tests that must change (check each one)
 
-- The mirrored test imports the production source directly.
-- The focused test passes.
-- Direct coverage for that source is 100% functions, lines, and branches.
-- Tests use only the exported surface.
-- Exactly one mirrored test owns the source.
-- The commit contains one production source-test pair.
+| Gate | Why it is hit | Action |
+|------|---------------|--------|
+| `.fallowrc.json` boundaries | — | **No change** if all new modules stay in `shared/`. |
+| `eslint.config.js` BLOCK A/B (`:96-150`) | `ctx.ui.notify` is banned outside `notification-dispatch.ts` | Keep it. **Add** a selector `CallExpression[callee.property.name='appendEntry']` with the same single-file exemption. Plant a violation in a test, following the house rule: "a gate wants a test that plants the violation". |
+| `rule-packs/architecture.json` | Bans stdio | Optionally add an `appendEntry` banned-call. The ESLint selector is enough and is name-independent. |
+| `tests/architecture/eslint-effective-config.test.ts` | Enumerates exemptions | Extend it for the `appendEntry` sink. |
+| **unused-type-member gate** (`npm run lint:type-members`) | A declared member that no runtime code reads **fails** | (a) Land `NotificationContext.mode` **together with** its first reader (the selector). (b) Land `EntrySink.appendEntry` together with the JSON sink. (c) JSON-only Report fields (`operation`, `code`, `leaked` if text does not read it) are unread unless the JSON strategy performs a *recognized* whole-object read. A deep `JSON.parse(JSON.stringify(report))` counts as "JSON serialization" in the gate's read model and also guarantees plain data. Also, `contracts.json` line:col pins move with every edit. |
+| `no-test-only-production-surface.test.ts` / fallow dead-code | Temporary compatibility adapters | Any adapter kept "for tests" (for example `render = format ∘ project`) must be removed in the same phase that migrates its 70 test calls. |
+| `unit-suite-glob-completeness`, `test:corresponding`, direct coverage at 100% | New `shared/notification-{model,resolve,mode,json}.ts` | Each needs a mirrored `tests/shared/*.test.ts` at 100% line, branch, and function coverage. |
+| `catalog-uat/*` (20 fixture modules, drives `notify()` against `docs/output-catalog.md`) | The text byte lock | Keep it green at every step. It is the regression harness. Add `mode` to `mock-pi.ts` `makeCtx`. Later, add a schema-conformance pass: every fixture's Report validates against `Report`. |
+| `notify-grammar-invariant`, `notify-will-reload-agreement`, `hooks-cap-notify`, `hooks-async-rewake`, `notify-producer-wire-coverage`, `cross-surface-reason-parity` | Drive the notify family with strict `MockCtx` | Add `mode` expectations. The bytes do not change. |
+| `no-credential-leak.test.ts` (`:162-164`, `:230`) | Regex-scans `notifyFn(\`...\`)` in `domain/github-auth.ts` | Retarget it at the new structured device-code callback. Keep AUTH-09: the user code may be surfaced, and the access token must never be. |
+| `notify-closed-set-locks`, `messaging-guide-doc-pins` | Pin `notification-types.ts` closed sets and the style-guide claims | Unaffected while `NotificationMessage` stays the producer vocabulary. Update them if the guide gains a Report section. |
 
-### Wave Boundary
+## 5. How `mode` and `appendEntry` reach every output site
 
-- Type checking and linting pass for the accumulated wave.
-- Direct dependents are retested when a public contract changes.
-- Shared support files have one current owner and no parallel edit collision.
+Facts from Pi 0.86.1 (`dist/core/extensions/types.d.ts`):
 
-### Phase Boundary
+- `mode: ExtensionMode` is on **`ExtensionContext`** (:214), and `ExtensionCommandContext` extends it (:255). So the command `ctx`, the lifecycle `ctx`, and the hook `ctx` all have it.
+- `appendEntry(customType, data?)` is on **`ExtensionAPI`** (:991), the factory `pi`. It is **not** on any ctx.
+- Before binding, `appendEntry` is `notInitialized`, and it throws on a stale extension instance (`loader.js:119, 288-290`, `assertActive`).
 
-- Every pair in the phase passes direct coverage independently.
-- Relevant architecture and integration suites pass.
-- `npm run check` remains green, apart from a separately recorded pre-existing
-  structural-gate gap that the phase has strictly reduced.
-- The global corresponding-test violation count never increases. It may remain nonzero
-  until later phases because the later source pairs are still open.
+Recommended plumbing, driven by types and with the least churn:
 
-### Milestone Boundary
+1. `platform/pi-api.ts`:
+   - `export type ExtensionMode = ExtensionContext["mode"]` (the package root does not re-export it).
+   - `NotificationContext { ui; readonly mode: ExtensionMode }`.
+   - `EntrySink { appendEntry(customType: string, data?: unknown): void }`.
+   - `PresentationHost = ToolInventory & EntrySink`.
 
-Phase 117 closes the full repository, not only the entry pair. Require all of the
-following:
+   Pi's real `ctx` and `pi` already satisfy these structurally. So the **~70 structured call sites that already pass `(ctx, pi)` need no edits**.
+2. The raw-string surfaces take only `ctx` today, so they gain a `host: PresentationHost` parameter. Threading cost:
+   - `router.ts` (`routeClaudePlugin`/`routeMarketplace` gain `pi`, passed from `edge/register.ts:131`).
+   - `makeHelpHandler(pi)`.
+   - The arg-parse helpers in `edge/handlers/shared.ts` and `edge/handlers/{plugin,marketplace}/shared.ts` (about 7 helpers).
+   - Other edge handler factories already close over `pi`.
+   - Orchestrators: `surfaceDiscoveryWarnings` (`plugin/shared.ts:1445`) and `surfaceImportDiagnostics` (`import/execute.ts:1242`).
+   - The auth bags: `buildAuthForHost` / `buildCloneAuth` (`auth-host.ts:97,152`) and their 7 callers (`fetch.ts:387,398`, `install-clone-probe.ts:57`, `reinstall-clone-probe.ts:63`, `info.ts:1627,1640`, `update-preflight.ts:165`, `marketplace/add.ts:785,830`, `marketplace/update.ts:408,459`).
+   - Hooks (`registry.ts`, `settle.ts`) and `index.ts` already have `pi`.
+3. Rejected alternative: wrapping `ctx` at `register.ts` into a ctx-plus-sink object. Pi's ctx is a runtime object with getters and methods, so spreading it is unsafe, and `browse` needs the real `ctx.ui.custom`.
+4. Rejected alternative: a factory-bound presenter injected through `EdgeDeps`. It needs more churn than threading `pi`, because orchestrators already take `pi`.
+5. **Naming collision:** orchestrators already use `opts.notifications?.mode === "orchestrated"` (`install-flow.ts:660`, `uninstall.ts:645`, `enable-disable.ts:815`, `add.ts:549`, `remove.ts:711`, `autoupdate.ts:419`). The new concept must **not** be spelled `mode` in orchestrator options. Read it only as `ctx.mode` and call it "presentation" everywhere else.
 
-- `npm run test:corresponding`
-- `npm run test:coverage:direct:all`
-- the corresponding-test planted negative control
-- the direct-coverage planted negative control
-- `npm run check`
-- no missing, unexpected, or wrong-import pair violations
-- 204 pair commits represented by 204 completed pair plans
+Lifecycle and hook sites:
+- `resources_discover` (`index.ts:81-176`): reconcile-applied cascade, diagnostics, reconcile-aborted, PATH warnings. `ctx.mode` is available. **NFR-2:** `UnsupportedModeError` and `appendEntry` throws must be caught there (hookDebugLog). They must never propagate.
+- Hooks: rewake summary and Stop cap already run inside try/catch (`registry.ts:433-437`). `settle.ts:377` has **no try/catch** around `notifyStopHookOverrideCap`. Add one when the sink can throw.
+- Device flow: change `NotifyFn` (`domain/github-auth.ts:115`) to `onDeviceCode({ verificationUri, userCode })`. The English moves to text. In json/rpc mode this makes the code **visible for the first time**, because `ctx.ui.notify` is a no-op in json mode. Today a device flow under `--mode json` polls without ever showing the code.
 
-If the new structural gates are not yet part of `npm run check`, the root entry pair
-plan can own the final package-script wiring as a supporting task. This keeps the
-roadmap free of a non-pair executable plan. Supplemental architecture and integration
-tests remain contract evidence; they never replace direct pair proof.
+**Critical runtime finding (HIGH, source-verified): startup emissions are not streamed in json or rpc mode.** In both `print-mode.js` (`rebindSession`, about lines 52-88) and `rpc/rpc-mode.js` (:228-270), `session.bindExtensions()` runs first. It awaits `session_start` and then `resources_discover` (`agent-session.js:2009-2031`). Only after that does `session.subscribe(...)` start writing events. So any `appendEntry` made during the **first** `resources_discover` is saved to the session file but never emitted as an `entry_appended` line. That covers the load-time reconcile cascade, PATH warnings, and reconcile-aborted. With `--no-session`, those entries exist only in memory.
 
-## Patterns to Follow
+A `/reload` inside the session runs after subscription and does stream. In rpc mode, today's `ctx.ui.notify` at startup **is** forwarded (the RPC UI context), so moving rpc to appendEntry **regresses startup visibility in rpc**. Requirements need an explicit decision: accept it and document it, or keep a startup-only fallback. D3/D4 are locked, so this is a documentation or acceptance item, not a re-litigation.
 
-### Public-Surface Testability
+## 6. Browse interactive strategy boundary
 
-Refactor a hidden dependency into a production-useful port, then test behavior through
-the exported workflow. Good seams include the existing filesystem, Git, Pi API,
-process, clock, and notification boundaries.
+- Today `browse.ts:140` does `if (ctx.mode !== "tui") { await handlers.list("", ctx); return; }`.
+- Target (D6): `presentationFor(ctx.mode).interactive === false` emits a **Report** (`kind: "unsupported-in-mode"` or a typed error mapped to a usage-error-shaped Report) that names `/claude:plugin list`, at `error` severity. It goes through the normal strategy:
+  - JSON in json/rpc mode, where it is visible.
+  - Text in print mode, where Pi discards it (D5).
 
-### Concern-Local Test Support
+  Prefer emitting a Report over throwing. A thrown error in print/json becomes `Extension error (...)` on stderr (`print-mode.js` `onError`), and in rpc it becomes an `extension_error` event. That path bypasses the schema.
+- The picker (`ctx.ui.custom`, `edge/browser/plugin-browser.ts`) stays **outside** the Report. It is an interactive component that consumes producer types (`PluginNotificationMessage`) and is out of scope (browse polish).
+- The two `notify()` calls in browse (`:159`, `:172`) run only in tui after the gate. They use the text strategy through the normal path.
+- One selector module owns the mode switch for both the output strategy and the interactive capability. Keep `ctx.mode` comparisons out of edge handlers. `browse.ts` currently has the only one (`:140`).
 
-Place a fake or contract suite with the concern it represents. A Git fake can support
-Git adapter pairs. A generic mock bucket shared by unrelated layers weakens ownership
-and creates parallel edit conflicts.
+## 7. Data flow changes
 
-### Stable Mutable-State Isolation
+### Before
+```
+producer -> NotificationMessage [+ render map of (row, probe, mpScope)=>string]
+  -> notify*/notifyWithContext(ctx, pi, ...) -> softDepStatus(pi) (render-time)
+  -> grammar (strings; walks Error causes) + summary (severity/phrases/tally/reload)
+  -> ctx.ui.notify(string[, severity])          [no-op in print/json]
+```
+### After
+```
+producer -> NotificationMessage [+ row-policy map]  (unchanged vocabulary)
+  -> notify*(ctx, host, ...) -> resolve(message, policy, probe) -> Report
+  -> presentationFor(ctx.mode):
+       text -> grammar.format(Report) -> ctx.ui.notify(text[, sev])   (bytes unchanged)
+       json -> json.format(Report)    -> host.appendEntry("claude-plugin", payload)
+       other-> UnsupportedModeError (caught at lifecycle/hook boundaries; NFR-2)
+```
 
-Construct ledgers, registries, hook routers, environment views, and temporary paths
-inside each test. An explicit state holder is preferable to a module-reset hook or
-module replacement.
+Several emissions per invocation stay possible:
+- the `info` failure loops
+- import cascade plus diagnostics
+- install plus discovery warnings
+- the reconcile cascade plus post-install warnings
 
-### Supplemental Contract Catalogs
+In JSON each one becomes a separate `entry_appended`. **Gap:** there is no correlation id today. Consider an `invocation` or `origin: "command" | "reload" | "hook"` field so consumers can group entries and tell command replies apart from lifecycle output.
 
-Keep architecture tests for invariants that span multiple modules: import direction,
-no-network commands, output routing, persistence compatibility, foreign-content
-preservation, and public-surface shape. Use these tests at phase boundaries while
-unit pairs retain direct behavior ownership.
+## Suggested build order
 
-## Anti-Patterns to Avoid
+Each step keeps `npm run check` green and leaves the text bytes unchanged. The steps are ordered so that no declared member exists without a reader (the unused-type-member gate) and no temporary adapter outlives its phase (the test-only-surface gate).
 
-### Replaying the Abandoned Partition
+1. **Model and resolve behind the text strategy (cascade family).**
+   - Add `notification-model.ts` (typebox) and `notification-resolve.ts`.
+   - `notify()` / `emitCascadeWith` / `emitUpdateNoOpCascade` resolve first. Grammar formats the Report.
+   - Move the probe, markers, cause-chain and leak serialization, hints, not-added reason, severity, summary facts, tally counts, and reload flag into resolve.
+   - Keep the `RenderFn` call shape temporarily as `formatRow ∘ projectRow`, so the 70 direct arm calls in 12 test files stay green.
+   - Gates: catalog-uat and the owner tests stay unchanged.
+   - *Risk: grammar is 1655 lines. This step has the largest byte-drift risk.*
+2. **Per-command render maps become row policies.**
+   - Edit 16 messaging files and `notify-context.ts` (`CommandContext.render` becomes a policy map).
+   - Migrate the 70 test calls to assert projections plus text formatting.
+   - Delete the adapter, the central `renderPluginRow`, and the `dispatchRow` string fallback.
+   - *Largest blast radius in production code and owner tests (about 5.6k lines of messaging tests).*
+3. **Raw-string surfaces into the Report (still text only).**
+   - Add the usage-error, usage-info, diagnostic (structured topics; the headers move from 3 producers into text), device-code (structured domain callback; retarget `no-credential-leak`), lifecycle-warning (index.ts), rewake, and stop-cap kinds.
+   - Every public function routes through one `present()`.
+   - Pins: `hooks-cap-notify` and `hooks-async-rewake` byte pins stay. The arity rule is pinned.
+4. **JSON strategy as a pure function.**
+   - `notification-json.ts`: Report to payload with `schemaVersion`, using a deep JSON round-trip.
+   - Add a unit test and a schema-conformance test over all catalog fixtures.
+   - Nothing is wired to a sink yet. The only reader is the strategy function, which production must reach. Wire it in step 5 of the same phase if the dead-code gate objects.
+5. **Mode selection, host widening, and sink.**
+   - `pi-api.ts` gets `mode`, `EntrySink`, and `PresentationHost`.
+   - `notification-mode.ts` exhaustive switch and `UnsupportedModeError`.
+   - `present()` selects the strategy and calls `appendEntry("claude-plugin", ...)` for json/rpc.
+   - Thread `pi` into the raw surfaces (router, help, parse helpers, auth bags, 2 diagnostic helpers).
+   - ESLint `appendEntry` single-site selector with a planted-violation test.
+   - NFR-2 catches in `index.ts` and `settle.ts:377`.
+   - Fakes carry `mode` (D7): `tests/edge/notification-boundary.ts` (31 suites), `catalog-uat/mock-pi.ts`, `tests/e2e/_helpers.ts:85`, and the other about 59 files that fake `ui.notify` or 50 that fake `getAllTools`.
+   - **The 23 `as unknown as ExtensionContext` casts in 9 files hide a missing `mode` from the compiler**, so they fail only at runtime with the new default arm. Grep for them explicitly.
+   - Add a JSON capture helper.
+   - *Largest blast radius in tests.*
+6. **Browse typed error (D6)** through the Report and the `interactive` capability. Delete the list fallback.
+7. **Documentation.**
+   - JSON schema reference, generated from or checked against the typebox schema.
+   - The print-mode limitation (D5) and the startup-emission non-streaming finding.
+   - The IL-2 amendment in AGENTS.md "Output channel" (D8).
+   - An ADR next to `docs/adr/v2-001-structured-notify.md`.
+   - `docs/output-catalog.md` does not change.
 
-Do not recreate the retired resolver subtrees, source schema subtrees, notify shards,
-hook dispatcher shards, or per-verb orchestrator partitions from the old patch. Those
-paths describe an abandoned implementation attempt, not the current architecture.
+Steps 1 and 2 could run in the other order: policies first, and then the model. Policies first would still format strings, so the probe would stay in rendering. The chosen order puts the D1 invariant (no probe in rendering) in the very first phase.
 
-### Migration-History Commentary
+**Largest-blast-radius changes (flag for the roadmap):**
+- Step 2: render maps to policies (16 production files, 12 test files, 70 assertions).
+- Step 5: test fakes (strict `strong-mock` fakes fail on any unexpected `ctx.mode` read) and `pi` threading (about 50 raw call sites, about 15 signatures).
+- Step 1: the grammar refactor under byte lock.
 
-Do not add source comments that explain the retired patch, Phase 106/107, old sharded
-coverage, or previous ownership mechanisms. Comments must explain current behavior
-only.
+## Anti-Patterns
 
-### Test-Only Production Surface
+### Keeping the probe or Error walks in the text strategy "because JSON doesn't need markers"
+**Why it is wrong:** It breaks D1. JSON would then lack `{requires ...}` markers that text shows, and the two outputs would disagree. **Instead:** resolve puts the final reasons into the Report, and both strategies format them.
 
-Do not export private constants, reset functions, singleton accessors, default
-adapters, or internal hook names only for tests. Use public workflow assertions or a
-real dependency seam.
+### JSON strategy re-deriving severity or reload from rows
+**Why it is wrong:** It creates two computations that can drift. The catalog locks only text. **Instead:** the Report carries `severity` and `reloadHint`. The strategies only read them.
 
-### Parallel Coverage Systems
+### Reading `ctx.mode` in handlers or orchestrators
+**Why it is wrong:** The switch is no longer exhaustive in one place, and the name collides with `notifications.mode`. **Instead:** only `notification-mode.ts` switches on mode. `browse` asks it for `interactive`.
 
-Do not restore the sharded LCOV runner, reconciliation protocol, direct-coverage
-matrix baseline, ownership registry, adapter participation scanner, or targeted
-Fallow inventory. Use the current direct pair runner, correspondence gate, negative
-controls, normal type/lint checks, and whole-repository Fallow.
+### Leaving `Error` objects in the Report
+**Why it is wrong:** `appendEntry` data is JSON-serialized by Pi, and an Error becomes `{}`. **Instead:** resolve serializes cause chains and leaks. The deep JSON round-trip in the strategy catches regressions.
 
-### Historical Completion Credit
+### A new top-level `presentation/` folder
+**Why it is wrong:** `requireAllFiles` forces a new fallow zone, ESLint zone changes, and boundary-test amendments for no gain. **Instead:** put the modules in `shared/`.
 
-Do not convert an audit `PASS`, an existing test, a retained commit, or a green
-supplemental suite directly into roadmap completion. Current isolated pair evidence is
-the only completion proof.
+## Integration Points
 
-### Large Refactors for Coverage
+### External (Pi runtime, 0.86.1)
 
-Do not split a production file simply because it is large or hard to cover. First add
-the smallest real seam within the current module. A new production extraction creates
-another source pair and changes callers, so it requires explicit architectural need
-and revised pair accounting.
+| Service | Integration | Notes |
+|---------|-------------|-------|
+| `ctx.ui.notify` | text sink | No-op in print/json (`runner.js:114-118` `noOpUIContext`). Forwarded in rpc today. |
+| `pi.appendEntry(customType, data)` | JSON sink | `agent-session.js:2131-2136`: `appendCustomEntry` then `_emit({type:"entry_appended", entry})`. Serialized by `print-mode.js:84-86` and `rpc-mode.js:265-266`. Not in LLM context. **Not streamed during the first `resources_discover`.** Throws before bind or when stale. |
+| `ctx.mode` | selector input | `ExtensionContext.mode: "tui"\|"rpc"\|"json"\|"print"` (`types.d.ts:209-214`). |
+| Command handler throws | fallback | print/json: `console.error("Extension error ...")`. rpc: `extension_error` event. No schema. |
 
-## Hotspots and Integration Risks
+### Internal boundaries
 
-Large files deserve smaller test scenarios and stricter caller tracing, not automatic
-module splits.
+| Boundary | Communication | Notes |
+|----------|---------------|-------|
+| orchestrators -> shared/notify-context | `notifyWithContext(ctx, pi, context, rows, kind, cardinality)` | Signature stable. `context` becomes a policy map. |
+| edge -> shared/notification-dispatch | `notifyUsageError(ctx, host, msg)` | Gains `host`. |
+| domain/github-auth -> orchestrators/auth-host | structured device-code callback | Replaces the raw string. AUTH-09 gate is retargeted. |
+| edge/browse -> shared/notification-mode | `presentationFor(ctx.mode).interactive` | The single mode switch. |
+| shared -> platform | `pi-api.ts` types and `softDepStatus` | Already allowed. |
 
-| Hotspot                                  | Approximate size | Main risk                                                                 | Recommended handling                                                 |
-| ---------------------------------------- | ---------------: | ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `shared/notify.ts`                       |      4,135 lines | Message grammar and output paths are shared broadly                       | Stabilize in Phase 109; keep catalog-level checks supplemental       |
-| `orchestrators/plugin/update.ts`         |      3,240 lines | Network/cache selection, preload, staging warnings, and rollback interact | Give its pair a late lifecycle wave and retest all direct dependents |
-| `orchestrators/plugin/install.ts`        |      2,442 lines | Transaction phases and bridge staging interact                            | Prove transaction and bridge ports first                             |
-| `orchestrators/plugin/info.ts`           |      2,403 lines | Read-only behavior and presentation are intertwined                       | Prove presenters first; retain no-network checks                     |
-| `domain/resolver.ts`                     |      1,744 lines | Public union, schemas, paths, and availability rules meet                 | Make the discriminant change in Phase 108 before consumers           |
-| `orchestrators/plugin/reinstall.ts`      |      1,687 lines | Uninstall/install state preservation and retry behavior                   | Reuse public lifecycle seams; avoid shared mutable fixtures          |
-| `orchestrators/plugin/list.ts`           |      1,589 lines | Scope aggregation and presentation                                        | Prove fan-out and messaging modules first                            |
-| `orchestrators/plugin/enable-disable.ts` |      1,252 lines | Install ledger and staged artifact state must agree                       | Test durable state and retry paths directly                          |
-| `orchestrators/plugin/shared.ts`         |      1,243 lines | Many lifecycle callers depend on small semantic details                   | Complete in Phase 113 before lifecycle pairs                         |
-| `orchestrators/import/execute.ts`        |      1,130 lines | Multiple external formats converge into lifecycle calls                   | Complete import leaf helpers before composer                         |
+## Sources
 
-The pair for marketplace add must account for sandbox-sensitive Unix socket setup.
-The pair should inject or isolate the relevant boundary so ordinary unit execution
-does not depend on host socket permission, without changing marketplace behavior.
+- Codebase at `features/json` HEAD `ab3d9c31`. All file:line references were checked with `rg` and `sed` in this worktree.
+- `node_modules/@earendil-works/pi-coding-agent@0.86.1`: `dist/core/extensions/types.d.ts` (:209-216, :255, :991), `dist/core/extensions/loader.js` (:110-125, :280-295), `dist/core/extensions/runner.js` (:114-125), `dist/core/agent-session.js` (:2009-2036, :2131-2136), `dist/modes/print-mode.js` (:15-130), `dist/modes/rpc/rpc-mode.js` (:225-275).
+- `.fallowrc.json`, `eslint.config.js` (:96-150), `rule-packs/architecture.json`, `docs/unused-type-member-gate.md`, `tests/edge/notification-boundary.ts`, `tests/architecture/catalog-uat/mock-pi.ts`, `tests/architecture/no-credential-leak.test.ts`.
 
-## Scalability Considerations
-
-This milestone scales by pair count and dependency coordination, not by runtime user
-load.
-
-| Concern               | Early phases                                    | Middle phases                                       | Final phases                                             |
-| --------------------- | ----------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------- |
-| Parallel work         | Leaf pairs with separate files can run together | Serialize public-contract carriers before consumers | Serialize edge and entry composition behind workflows    |
-| Shared test support   | Add only concern-local support                  | Assign one owner per shared support edit            | Freeze support before final global proof                 |
-| Structural-gate noise | Record baseline and prevent regression          | Violation count must decline as pairs close         | Require zero violations and passing negative controls    |
-| Coverage runtime      | Run exact source pair per plan                  | Run phase direct suite at phase close               | Run all 204 pairs plus full check                        |
-| Failure localization  | Pair command identifies one owner               | Phase suites identify integration regressions       | Global gates validate completeness only after pair proof |
-
-## Sources and Confidence
-
-All conclusions come from repository-local primary evidence at HEAD. External ecosystem
-research is not needed for this architecture decision.
-
-| Source                                                  | Use                                                                        | Confidence                                      |
-| ------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------- |
-| `.planning/PROJECT.md`                                  | v1.19 decisions, constraints, and Phase 108 start                          | HIGH                                            |
-| `.planning/codebase/ARCHITECTURE.md`                    | Live layer and dependency descriptions                                     | HIGH                                            |
-| `extensions/pi-claude-marketplace/**/*.ts`              | Actual modules, exports, callers, and imports                              | HIGH                                            |
-| `tests/**/*.test.ts`                                    | Current mirrored and supplemental test topology                            | HIGH                                            |
-| `docs/guidelines/typescript-unit-testing-guidelines.md` | Required pair, public-surface, coverage, and gate model                    | HIGH                                            |
-| `.claude/rules/typescript-unit-testing.md`              | Repository-enforced testing rules                                          | HIGH                                            |
-| `.planning/inputs/unit-test-refactor-handoff/`          | Retained contracts, corrections, abandoned mechanisms, and replay cautions | HIGH for decisions; LOW as implementation proof |
-| `/tmp/pi-cm-pair-audit.CJWiph/results.tsv`              | Current 204-pair diagnostic inventory                                      | HIGH as baseline; NONE as completion proof      |
-| `package.json` and test runner scripts                  | Current check and structural-gate wiring                                   | HIGH                                            |
-
-## Open Planning Questions
-
-- Decide the exact wave size within each phase after the planner builds the caller
-  graph for that phase. Do not change pair ownership to meet a target wave size.
-- Decide whether structural-gate package-script wiring is still absent when Phase 117
-  starts. If it is absent, keep it as support work in the root entry pair.
-- Re-run the audit immediately before roadmap finalization if HEAD changes. Counts in
-  this document describe the researched HEAD and must not silently drift.
+---
+*Architecture research for: json-output (mode-keyed presentation strategies)*
+*Researched: 2026-09-28*
