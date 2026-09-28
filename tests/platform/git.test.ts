@@ -440,6 +440,9 @@ const RENAMED_REMOTE_URL = `https://${HOST}/renamed/repo.git`;
 const RENAMED_INFO_URL = `${RENAMED_REMOTE_URL}${INFO_REFS_PATH}`;
 const RENAMED_UPLOAD_PACK_URL = `${RENAMED_REMOTE_URL}/git-upload-pack`;
 const OTHER_PORT_INFO_URL = `https://${HOST}:8443/owner/repo.git${INFO_REFS_PATH}`;
+const OTHER_PORT_UPLOAD_PACK_URL = `https://${HOST}:8443/owner/repo.git/git-upload-pack`;
+const HTTP_SAME_HOST_UPLOAD_PACK_URL = `http://${HOST}/owner/repo.git/git-upload-pack`;
+const OTHER_HOST_UPLOAD_PACK_URL = `${OTHER_REMOTE_URL}/git-upload-pack`;
 const BASIC_CREDENTIAL = "Basic dXNlcjpzZWNyZXQ=";
 
 /** The options `simple-get` passes to the `request` function of `node:https` and `node:http`. */
@@ -605,6 +608,38 @@ function postRedirectServer(statusCode: number): (request: WireRequest) => WireR
 
     if (request.url === RENAMED_UPLOAD_PACK_URL) {
       return refsWireResponse();
+    }
+
+    throw unplannedWireRequest(request);
+  };
+}
+
+/**
+ * The bound host challenges `info/refs`, then redirects the authenticated
+ * `git-upload-pack` POST to `location`. `respondAtLocation` answers whatever
+ * request reaches `location`, so a same-origin control can require the
+ * credential while a cross-origin row proves it never arrives (GAUTH-06).
+ */
+function authenticatedPostRedirectServer(
+  statusCode: number,
+  location: string,
+  respondAtLocation: (request: WireRequest) => WireResponse,
+): (request: WireRequest) => WireResponse {
+  return (request) => {
+    if (request.url === BOUND_INFO_URL) {
+      return request.headers.authorization === undefined
+        ? unauthorizedWireResponse()
+        : advertisementWireResponse();
+    }
+
+    if (request.url === BOUND_UPLOAD_PACK_URL) {
+      return request.headers.authorization === undefined
+        ? unauthorizedWireResponse()
+        : redirectWireResponse(statusCode, location);
+    }
+
+    if (request.url === location) {
+      return respondAtLocation(request);
     }
 
     throw unplannedWireRequest(request);
@@ -1225,6 +1260,98 @@ describe("resolveRemoteRef", () => {
       );
     });
   }
+
+  // GAUTH-06 rows: what happens to the credential when the *authenticated*
+  // git-upload-pack POST -- not just info/refs -- is redirected. A wrong
+  // `nextHop` that scrubs credential headers only on GET hops, or only on
+  // the POST->GET (302/303) arm, would leave `authorization` on the 307 row.
+  const CROSS_ORIGIN_POST_REDIRECTS: readonly RedirectRow[] = [
+    {
+      kind: "another port of the same host (POST kept, 307)",
+      location: OTHER_PORT_UPLOAD_PACK_URL,
+    },
+    { kind: "http on the same host", location: HTTP_SAME_HOST_UPLOAD_PACK_URL },
+    { kind: "another host", location: OTHER_HOST_UPLOAD_PACK_URL },
+  ];
+
+  for (const { kind, location } of CROSS_ORIGIN_POST_REDIRECTS) {
+    test(`GAUTH-06: does not forward the credential on a git-upload-pack POST redirect to ${kind}`, async (t) => {
+      // arrange
+      const requests = installWireTransport(
+        t,
+        authenticatedPostRedirectServer(307, location, () => unauthorizedWireResponse()),
+      );
+      const credentials = storedCredentials();
+
+      // act
+      const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+      // assert
+      await assert.rejects(resolution, (error: unknown) => {
+        assert.ok(error instanceof git.Errors.HttpError);
+        assert.strictEqual(error.data.statusCode, 401);
+        return true;
+      });
+      assert.deepStrictEqual(wireCredentials(requests), [
+        { url: BOUND_INFO_URL, authorization: null },
+        { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
+        { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
+        { url: location, authorization: null },
+      ]);
+    });
+  }
+
+  test("GAUTH-06: does not forward the credential on a git-upload-pack POST redirect to another port (302, POST->GET)", async (t) => {
+    // arrange
+    const requests = installWireTransport(
+      t,
+      authenticatedPostRedirectServer(302, OTHER_PORT_UPLOAD_PACK_URL, () =>
+        unauthorizedWireResponse(),
+      ),
+    );
+    const credentials = storedCredentials();
+
+    // act
+    const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof git.Errors.HttpError);
+      assert.strictEqual(error.data.statusCode, 401);
+      return true;
+    });
+    assert.deepStrictEqual(wireCredentials(requests), [
+      { url: BOUND_INFO_URL, authorization: null },
+      { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
+      { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
+      { url: OTHER_PORT_UPLOAD_PACK_URL, authorization: null },
+    ]);
+  });
+
+  test("GAUTH-06: forwards the credential on a git-upload-pack POST redirect within its origin (307)", async (t) => {
+    // arrange
+    const requests = installWireTransport(
+      t,
+      authenticatedPostRedirectServer(307, RENAMED_UPLOAD_PACK_URL, (request) =>
+        request.headers.authorization === undefined
+          ? unauthorizedWireResponse()
+          : refsWireResponse(),
+      ),
+    );
+    const credentials = storedCredentials();
+
+    // act
+    const oid = await resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+    // assert
+    assert.strictEqual(oid, OID_MAIN);
+    assert.deepStrictEqual(wireCredentials(requests), [
+      { url: BOUND_INFO_URL, authorization: null },
+      { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
+      { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
+      { url: RENAMED_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
+    ]);
+  });
 
   test("returns a redirect without a Location header to isomorphic-git as an HttpError", async (t) => {
     // arrange
