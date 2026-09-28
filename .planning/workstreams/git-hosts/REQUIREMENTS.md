@@ -50,6 +50,15 @@ helper is therefore invisible to this extension on every other host.
   hosts; GAUTH-03 removes the cap. The guard turns a caller-side mismatch into a cancel instead
   of a credential disclosure, and makes the previously-ignored parameter load-bearing.
 
+  *Amended during Phase 1 gap closure (G-01-4):* `simple-get@4.0.1` compares hostnames only
+  (`index.js:57-59`), so a redirect to another port, or to `http:` on the same hostname, carried
+  the `Authorization` header. UAT measured the port case on the wire. Planning measured the
+  cleartext `http:` case through the real transport. GAUTH-06 therefore covers the redirect path
+  too: `platform/git.ts` follows redirects itself and never forwards a credential header to a hop
+  whose origin differs from the request's. The origin is scheme, host and port, with the default
+  https port removed. A cross-origin redirect is still followed, without the credential, as git
+  over libcurl does it (CVE-2022-27776).
+
 ### URL Forms for Non-Conventional Git Endpoints
 
 - [x] **MURL-08**: A user can add a `url` marketplace source whose smart-HTTP endpoint serves at the

@@ -74,10 +74,12 @@ here. Decimal phases (1.1, 2.1) are urgent insertions only, marked `INSERTED`.
   4. A credential resolved for one host is never sent to another: `buildAuthCallbacks.onAuth`
      cancels when the URL it is handed has a different host than the bundle's bound `host`, making
      a parameter it currently ignores load-bearing. The guard is exercised directly, and
-     PROV-04 / T-79-04 is restated against it rather than deleted. Scoping established what it is
-     and is not for: `simple-get@4.0.1` already drops `authorization` on a cross-host redirect and
-     `git credential fill` is strictly host-keyed (no `path=` line), so the exposure being closed
-     is a caller-side host/URL mismatch, not a transport-level leak.
+     PROV-04 / T-79-04 is restated against it rather than deleted. Scoping held that
+     `simple-get@4.0.1` strips `authorization` on a redirect to another host, but it
+     compares the hostname only, so a redirect to another port, or to `http:` on the same
+     hostname, carried the credential (G-01-4). The transport now follows redirects itself and drops the credential
+     headers whenever the target's origin (scheme, host and port) differs from the request's, so
+     the guard covers both the caller-side binding and the redirect path.
   5. `npm run check` is green, including `tests/architecture/no-credential-leak.test.ts` (no
      credential field reaches an `Error` or a notification) and the no-orchestrator-network gate
      (`orchestrators/auth-host.ts` gains no value import of `platform/git.ts`; a type-only import is

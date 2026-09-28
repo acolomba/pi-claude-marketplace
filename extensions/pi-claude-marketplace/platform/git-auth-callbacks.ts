@@ -106,11 +106,11 @@ export interface BuildAuthCallbacksOpts {
  *
  * - The host compare closes a CALLER-side host/URL mismatch: an orchestrator
  *   that builds a bundle for one host and then clones a URL on another. It is
- *   not a redirect guard, and the transport it sits in front of is not
- *   leaking. isomorphic-git invokes `onAuth` only from `discover`, on status
- *   401 or 203, and always with the caller's own URL, so a redirect target
- *   never reaches this seam; `simple-get` deletes the `authorization` and
- *   `cookie` headers before following a cross-host redirect; and
+ *   not the redirect guard. isomorphic-git invokes `onAuth` only from
+ *   `discover`, on status 401 or 203, and always with the caller's own URL,
+ *   so a redirect target never reaches this seam. The redirect path has its
+ *   own guard: `platform/git.ts` follows redirects itself and drops the
+ *   credential headers on every hop whose origin differs from the request's.
  *   `platform/git-credential.ts::credentialFill` emits `protocol` and `host`
  *   with no `path` line, so the helper lookup is strictly host-keyed. This
  *   compare is what bounds the disclosure surface, because `buildAuthForHost`

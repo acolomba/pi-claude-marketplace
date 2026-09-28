@@ -153,10 +153,11 @@ export function hasDeviceFlowProvider(host: string): boolean {
  * A host-keyed bundle on an unregistered host is safe at the transport level:
  * isomorphic-git invokes `onAuth` only from `discover`, with the caller's own
  * URL and never a redirect target (`node_modules/isomorphic-git/index.cjs`);
- * `simple-get` deletes `authorization` and `cookie` before following a
- * cross-host redirect; and `credentialFill` emits `protocol` + `host` and
- * never a `path` line (`platform/git-credential.ts`), so the lookup is
- * strictly host-keyed. What remains is a bundle whose bound `host` disagrees
+ * `platform/git.ts` follows redirects itself and never forwards the credential
+ * headers to another origin (scheme, host and port); and `credentialFill`
+ * emits `protocol` + `host` and never a `path` line
+ * (`platform/git-credential.ts`), so the lookup is strictly host-keyed.
+ * What remains is a bundle whose bound `host` disagrees
  * with the URL being cloned, and `buildAuthCallbacks.onAuth` compares the two
  * directly (D-1-03, T-79-04).
  */

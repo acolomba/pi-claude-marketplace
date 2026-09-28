@@ -1142,6 +1142,11 @@ describe("resolveRemoteRef", () => {
 
   const SAME_ORIGIN_REDIRECTS: readonly RedirectRow[] = [
     { kind: "another path", location: RENAMED_INFO_URL },
+    { kind: "a relative location", location: `/renamed/repo.git${INFO_REFS_PATH}` },
+    {
+      kind: "an explicit default port",
+      location: `https://${HOST}:443/renamed/repo.git${INFO_REFS_PATH}`,
+    },
   ];
 
   for (const { kind, location } of SAME_ORIGIN_REDIRECTS) {
