@@ -1,14 +1,22 @@
 ---
-status: diagnosed
+status: testing
 phase: 01-private-repos-on-any-git-host
-source: [01-01-SUMMARY.md, 01-02-SUMMARY.md, 01-03-SUMMARY.md]
+source: [01-01-SUMMARY.md, 01-02-SUMMARY.md, 01-03-SUMMARY.md, 01-04-SUMMARY.md, 01-VERIFICATION.md]
 started: 2026-09-28T09:57:51Z
-updated: 2026-09-28T10:08:00Z
+updated: 2026-09-28T13:50:47Z
 ---
 
 ## Current Test
 
-[testing complete]
+number: 16
+name: Cross-origin redirect of the credential-bearing git-upload-pack POST carries no credential
+expected: |
+  The bound host answers info/refs normally, then redirects the credential-bearing
+  git-upload-pack POST to another origin (other port, scheme or hostname). The
+  cross-origin target receives no Authorization header on any request, and the
+  operation fails clean as {authentication required}. A same-origin POST redirect
+  still authenticates.
+awaiting: user response
 
 ## Tests
 
@@ -99,12 +107,17 @@ result: pass
 source: automated
 coverage_id: 01-03/D4
 
+### 16. Cross-origin redirect of the credential-bearing git-upload-pack POST carries no credential
+expected: Re-run the UAT test 4 instrumented-server scenario (or add an automated wire-level case combining the POST-redirect routing with `auth: boundAuth(credentials)`), with the redirect on the git-upload-pack POST leg. The cross-origin target gets no Authorization header on any request and the operation fails clean as {authentication required}; a same-origin POST redirect still authenticates.
+result: [pending]
+source: 01-VERIFICATION.md (re-verification after gap closure 01-04; code-review WR-02)
+
 ## Summary
 
-total: 15
+total: 16
 passed: 14
 issues: 1
-pending: 0
+pending: 1
 skipped: 0
 blocked: 0
 
