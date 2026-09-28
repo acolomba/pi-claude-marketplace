@@ -1,7 +1,7 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "any-git-host \u2014 Any Git Host",
+  "milestone": "any-git-host — Any Git Host",
   "phases": [
     {
       "number": "1",
@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-verify-work 1",
-    "label": "Run the Phase 1 live canary",
-    "reason": "All phases executed; milestone close waits on the Phase 1 and 2 live canaries"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 01 of 3 · 33% · executing"
   },
-  "updated_at": "2026-09-28T03:21:28.774Z"
+  "updated_at": "2026-09-28T12:29:46.344Z"
 }

@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: any-git-host
 milestone_name: Any Git Host
-current_phase: 3
-current_phase_name: "`marketplace add` recovers from its own leftover clone"
+current_phase: 01
+current_phase_name: Private repos on any git host
 current_plan: 4
-status: "Phase 3 COMPLETE (re-verified 7/7 after gap closure 03-04). All 3 phases executed; milestone close blocked only on the Phase 1 and Phase 2 live canaries (GHCAN-01, GHCAN-02)"
+status: "Executing Phase 1 gap closure 01-04 (G-01-4 redirect credential leak, found by Phase 1 UAT). Phase 3 COMPLETE (re-verified 7/7 after gap closure 03-04)"
 stopped_at: "Phase 3 complete: gap closure 03-04 fixed CR-01, re-verification passed 7/7; WR-11 (multi-url origin) left open as a residual edge"
-last_updated: "2026-09-28T03:21:28.703Z"
+last_updated: "2026-09-28T12:29:46.273Z"
 last_activity: 2026-09-28
-last_activity_desc: "Phase 3 re-verified (passed 7/7) and marked complete"
-state_head: dc3aa2004dad53900c132c6f9df489189824a499
+last_activity_desc: Phase 01 execution started
+state_head: 248746a3c16a2b607bc78ce53903d3773e5eda4b
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 10
+  total_plans: 11
   completed_plans: 10
   percent: 33
 total_plans_in_phase: 4
@@ -28,16 +28,22 @@ total_plans_in_phase: 4
 `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact —
 atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-**Current focus:** `any-git-host` reimplements the three real defects PR #153 (jstillwa) surfaced,
-rather than merging that PR. A private source on any git host clones with a credential the user
-already stored; an endpoint that answers only at its verbatim URL resolves; and `marketplace add`
+**Current focus:** Phase 1 gap closure 01-04 (G-01-4, the redirect credential leak). `any-git-host`
+reimplements the three real defects PR #153 (jstillwa) surfaced, rather than merging that PR. A
+private source on any git host clones with a credential the user already stored; an endpoint that answers only at its verbatim URL resolves; and `marketplace add`
 recovers from its own leftover clone instead of demanding a manual `rm -rf`. The PR's two
 Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero references to
 `.agents/plugins/` or `.codex-plugin/`.
 
 ## Current Position
 
-Phase: 3 — `marketplace add` recovers from its own leftover clone — COMPLETE (4/4 plans, re-verified 7/7 on 2026-09-28)
+Phase: 01 (Private repos on any git host) — EXECUTING gap closure 01-04
+
+**Phase 1 gap closure executing (2026-09-28).** UAT (`79884d8a`, 14 passed, 1 issue) found G-01-4:
+a credential bound to one host reaches a redirect target on the same hostname but another port (or
+`http:`), because `simple-get` scrubs `authorization` only on a hostname change. `01-04-PLAN.md`
+(`gap_closure: true`, GAUTH-06) is dispatched sequentially in this checkout via
+`/gsd-execute-phase 01 --gaps-only --ws git-hosts`.
 
 **Phase 3 complete.** Re-verification passed 7/7: CR-01 is fixed by 03-04 and confirmed by a follow-up
 code review (03-REVIEW.md; CR-01 and WR-10 recorded `fixed` in 03-REVIEW-DISPOSITION.md). That review
@@ -387,7 +393,7 @@ workstream's documents are archived.
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** 3
+**Current Plan:** 4
 
 ```
 Phase 1  [==========]  plans complete (3/3)
