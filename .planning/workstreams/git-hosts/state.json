@@ -6,7 +6,7 @@
     {
       "number": "1",
       "name": "Private repos on any git host",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "2",
@@ -22,7 +22,7 @@
   "next": {
     "command": "/gsd:progress --next",
     "label": "Advance to the next step",
-    "reason": "Phase 01 of 3 · 33% · executing"
+    "reason": "Phase 02 of 3 · 67% · executing"
   },
-  "updated_at": "2026-09-28T12:29:46.344Z"
+  "updated_at": "2026-09-28T20:38:43.069Z"
 }

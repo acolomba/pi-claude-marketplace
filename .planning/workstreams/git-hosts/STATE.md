@@ -2,21 +2,21 @@
 gsd_state_version: "1.0"
 milestone: any-git-host
 milestone_name: Any Git Host
-current_phase: 01
-current_phase_name: Private repos on any git host
+current_phase: 02
+current_phase_name: Endpoints that answer only at the verbatim URL
 current_plan: 4
-status: "Phase 1 gap closure 01-04 executed; re-verification human_needed (4/5) pending UAT test 16. Phase 3 COMPLETE (re-verified 7/7 after gap closure 03-04)"
-stopped_at: "Phase 1 gap closure 01-04 executed and re-verified: human_needed 4/5 (UAT test 16, the credential-bearing POST redirect leg); review 0C/4W/5I open"
-last_updated: "2026-09-28T12:29:46.273Z"
+status: "Phase 1 COMPLETE (UAT 16/16, re-verified 5/5, validated, secured). Phase 3 COMPLETE. Phase 2 executed; verification stale + live canary (02-UAT test 1) outstanding"
+stopped_at: "Phase 1 complete; Phase 2 awaits re-verification and its live smart-HTTP canary"
+last_updated: "2026-09-28T20:38:43.002Z"
 last_activity: 2026-09-28
-last_activity_desc: "Phase 1 re-verified after gap closure 01-04: human_needed (UAT test 16)"
-state_head: 248746a3c16a2b607bc78ce53903d3773e5eda4b
+last_activity_desc: Phase 1 complete, transitioned to Phase 02
+state_head: 9de848148d9fcf33fbdf1af7dcd7eb4f14c97cdf
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 11
   completed_plans: 11
-  percent: 33
+  percent: 67
 total_plans_in_phase: 4
 ---
 
@@ -37,7 +37,16 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 01 (Private repos on any git host) — gap closure 01-04 executed, re-verification human_needed
+Phase: 02 — Endpoints that answer only at the verbatim URL (executed; verification stale, live canary outstanding)
+
+**Phase 1 COMPLETE (2026-09-28).** UAT `01-UAT.md` 16/16 (`0876dcd1`): the live canary (tests 1-3)
+ran on an instrumented HTTPS server with a scoped `credential.helper=store`; test 4 re-run after
+01-04 no longer leaks (G-01-4 resolved); test 16 (WR-02, the credential-bearing upload-pack POST
+redirected to another port, hostname or scheme) sends no `Authorization` cross-origin and still
+authenticates same-origin. WR-02 also gained five wire-level tests (`a2db444e`, negative control
+red on a GET-only scrub). `01-VALIDATION.md` (`3c07b6eb`, Nyquist-compliant) and `01-SECURITY.md`
+(`6403aa37`, 22/22 threats closed). Re-verified `passed` 5/5 (`9de84814`), `npm run check`
+`CHECK_EXIT=0`. Review WR-01/03/04 and IN-01..05 remain open as non-blocking follow-ups.
 
 **Phase 1 gap closure executing (2026-09-28).** UAT (`79884d8a`, 14 passed, 1 issue) found G-01-4:
 a credential bound to one host reaches a redirect target on the same hostname but another port (or
@@ -95,7 +104,7 @@ recover from: a mid-write `.git/config` rewrite produces exactly this shape. The
 `ListRemotesResult` type cannot express `url: undefined`, which is why the 100%-branch gate could not
 catch it (WR-10) — a missing branch, not an uncovered one. Fix: treat a present-but-url-less `origin`
 as the `no-origin` arm, plus a real-filesystem test and an `add.test.ts` refusal case in both modes.
-Current Plan: 4
+Current Plan: Not started
 Total Plans in Phase: 4
 
 **Phase 3 Plan 01 (wave 1) is executed.** `platform/git.ts::listRemotes({ dir })` is the 8th `GitOps`
@@ -180,8 +189,7 @@ Status (historical, Phase 2 closure): Phase 2 verified — 9/9
 must-haves, all 5 ROADMAP success criteria, all 5 plan prohibitions, `npm run check` at
 `CHECK_EXIT=0`. Its live smart-HTTP canary is deferred to the operator alongside Phase 1's (see
 Deferred Verification).
-Last activity: 2026-09-27 — Phase 3 wave 3 of 3 executed; the milestone-closing obligations are
-done and the whole gate surface is green at the phase's final HEAD
+Last activity: 2026-09-28 — Phase 1 complete (UAT 16/16, re-verified passed)
 
 **Phase 3 Plan 03 (wave 3) is executed, and Phase 3's three plans are all complete.**
 `buildAuthForHost`'s and `buildCloneAuth`'s `ctx` parameters become optional; the early-return
@@ -380,14 +388,13 @@ exceptions with 108 contract entries, and both coverage-pin files are unchanged.
 
 | Phase | State | Resume |
 |-------|-------|--------|
-| 1 | verification_deferred_human | /gsd-verify-work 1 |
 | 2 | verification_deferred_human | /gsd-verify-work 2 |
 
-The phase number above is `1`, matching the `number` field `init.manager` emits — that is the
-projection `discover_phases` filters against. The phase directory is `01-private-repos-on-any-git-host`;
-the zero-padded form is a directory-naming convention, not the queue key.
+The phase numbers above match the `number` field `init.manager` emits — that is the
+projection `discover_phases` filters against. Phase directories are zero-padded
+(`02-...`); that is a directory-naming convention, not the queue key.
 
-Phase 1's only outstanding verification item is the live canary: one end-to-end clone of a real
+Phase 1's live canary is CLOSED (2026-09-28, `01-UAT.md` tests 1-3, instrumented local server). Originally: one end-to-end clone of a real
 private repo on a non-registry host, which needs operator credentials this machine does not have.
 The scoped-canary commit (`130d68a9`) already closed the helper-subprocess link with a negative
 control. Deferred so autonomous runs can proceed through phases 2 and 3; milestone close stays
@@ -406,7 +413,7 @@ workstream's documents are archived.
 
 ## Progress
 
-**Phases Complete:** 0 / 3
+**Phases Complete:** 2 / 3
 **Current Plan:** 4
 
 ```
@@ -571,14 +578,14 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-09-28T03:21:28.000Z
+**Last session:** 2026-09-28T20:45:00.000Z
 
-**Stopped At:** Phase 3 complete (re-verified 7/7 after gap closure 03-04).
+**Stopped At:** Phase 1 complete (UAT 16/16, re-verified passed 5/5)
 
-**Resume File:** None — all four Phase 3 plans have SUMMARYs.
+**Resume File:** None.
 
-**Next Action:** run the two carried live canaries (`/gsd-verify-work 1 --ws git-hosts`,
-`/gsd-verify-work 2 --ws git-hosts`), then milestone close. Optionally fix WR-11 (read
+**Next Action:** Phase 2 — run its live smart-HTTP canary (`/gsd-verify-work 2 --ws git-hosts`)
+and re-run its verifier (stale), then milestone close. Optionally fix WR-11 (read
 `remote.origin.url` with `getConfigAll`, refuse unless exactly one url) before closing.
 
 ### What this run completed

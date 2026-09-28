@@ -37,7 +37,7 @@ and recovers from the former without ever overwriting the latter.
 phases; the repo's shared counter (which runs to Phase 117 on other workstreams) does not apply
 here. Decimal phases (1.1, 2.1) are urgent insertions only, marked `INSERTED`.
 
-- [ ] **Phase 1: Private repos on any git host** — a stored credential is consulted on every host,
+- [x] **Phase 1: Private repos on any git host** — a stored credential is consulted on every host, (completed 2026-09-28)
   not just the two in the provider registry, and the credential stays bound to the host it was
   resolved for (GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06)
 - [ ] **Phase 2: Endpoints that answer only at the verbatim URL** — a smart-HTTP server that 404s
@@ -85,7 +85,7 @@ here. Decimal phases (1.1, 2.1) are urgent insertions only, marked `INSERTED`.
      (`orchestrators/auth-host.ts` gains no value import of `platform/git.ts`; a type-only import is
      permitted).
 
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 
@@ -269,6 +269,6 @@ see STATE.md § Deferred Verification for the full explanatory paragraphs.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Private repos on any git host | 4/4 | In Progress | — |
+| 1. Private repos on any git host | 4/4 | Complete    | 2026-09-28 |
 | 2. Endpoints that answer only at the verbatim URL | 3/3 | In Progress | — |
 | 3. `marketplace add` recovers from its own leftover clone | 4/4 | Complete | 2026-09-28 |

@@ -3288,6 +3288,13 @@ package's source from a test.
 
 ## GHCAN-01: `any-git-host` Phase 1 live canary -- a real private repo clone on a non-registry host
 
+**Status (2026-09-28): closed against a local stand-in.** `01-UAT.md` tests 1-3
+ran the composed chain in one pi process against a real smart-HTTP server (git
+http-backend behind HTTPS + Basic auth on `localhost:8443`) with a real
+`credential.helper=store`: add succeeded with the helper, failed clean without
+it. A run against a hosted forge (GitLab, Gitea, Forgejo, Bitbucket) is still
+unexercised; keep this entry only if that distinction matters.
+
 Carried from the `any-git-host` milestone at Phase 3 close (ROADMAP.md Phase 3
 SC6; STATE.md § Deferred Verification).
 
