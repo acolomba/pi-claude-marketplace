@@ -1,18 +1,17 @@
 ---
 gsd_state_version: "1.0"
-milestone: test-backlog
-status: "test-backlog milestone shipped — PR #202"
-stopped_at: PR #215 open against releases/v0.19.2; awaiting squash merge and tag
-last_updated: "2026-09-24T14:38:52Z"
-last_activity: 2026-09-24
-last_activity_desc: quick task 260924-bvi complete for 0.19.2
-state_head: b07ae35cab38aa744bbc17025b649b251f6c29bd
-milestone_name: test-backlog
+milestone: none
+status: "between milestones; workflows-replay archived; npm 0.19.2 released"
+stopped_at: workflows workstream archived and GSD config pinned to the quality profile
+last_updated: "2026-09-27T23:42:24Z"
+last_activity: 2026-09-27
+last_activity_desc: archived the workflows workstream; reconciled root planning records
+state_head: 7c1c1d3bd14b838b000c4bb9bd9bdfc4091a1295
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 65
-  completed_plans: 65
+  total_phases: 9
+  completed_phases: 9
+  total_plans: 39
+  completed_plans: 39
   percent: 100
 ---
 
@@ -29,10 +28,30 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: Milestone test-backlog complete
+Phase: No active milestone
 Plan: —
-Status: test-backlog milestone shipped — PR #202
-Last activity: 2026-09-24 — Completed quick task 260924-bvi for 0.19.2
+Status: workflows-replay complete (9/9 phases, 39/39 plans) and archived 2026-09-27
+Last activity: 2026-09-27 — Archived the workflows workstream and reconciled the root planning records
+
+Four milestones have closed since the last root-scope milestone ran here.
+`test-backlog` and `refine-unit-tests` closed in root scope; `workflows` and
+`workflows-replay` ran in the `workflows` workstream, which was archived to
+`milestones/ws-workflows-2026-09-27/` on 2026-09-27. `.planning/workstreams/` no
+longer exists and no workstream is active, so every phase, plan and quick-task
+record for the two workflow milestones lives under that archive directory.
+
+### workflows-replay closeout
+
+Completed 2026-09-21 with no accepted debt: 46/46 requirements, 9/9 phases
+verified, `threats_open: 0`, Nyquist-validated. All twelve
+`[workflows-replay]` broken-window entries are fixed or waived with named
+`BACKLOG.md` carriers (VSTALE-01, WLREC-01, RLHINT-01, PCERR-01, WSTOR-01,
+WPIN-01).
+
+The bridge reached `main` in PR #205 (`5c652697`) on 2026-09-24. The `0.19.x`
+tags deliberately exclude it: they were cut from `releases/v0.19.2`, which PR
+#216 then merged back into `main`. No release action is outstanding — whatever
+is cut from `main` next carries workflows by construction.
 
 ### test-backlog closeout: `override_closeout`
 
@@ -44,7 +63,7 @@ override reasons, neither an outcome failure:
 1. **`init.manager` reports every phase `stale`** because each `covered_files`
    list names `STATE.md`, `ROADMAP.md` and `REQUIREMENTS.md`, which every later
    close rewrites. Third milestone with this artifact.
-2. **Two artifacts acknowledged at close** (the Phase 5 and Phase 6 deferred-item
+2. **Two artifacts acknowledged at close** (the `05/` and `06/` deferred-item
    records). Known verification overrides: **2 newly acknowledged, 16 carried
    forward**.
 
@@ -69,10 +88,22 @@ acknowledged, 17 carried forward, and the phase-25 table conversion.
   bullets with every cell preserved.
 - `state.advance-plan` resets `Status:` and rewrites a historical `Stopped at:`
   line; re-read STATE.md after every state verb.
+- **Name an archived phase by its directory token (`05/`, `09/`), never
+  `Phase 5`.** `/gsd-health`'s W002 archived-phase exemption matches
+  `^v\d+.*-phases$` only, so `test-backlog-phases`,
+  `refine-unit-tests-phases`, `url-source-phases` and every `ws-*` workstream
+  archive are invisible to it: a `Phase N` token from one of those reads as an
+  undeclared phase as soon as N leaves ROADMAP.md. The directory form says the
+  same thing, more precisely, and the check stays quiet. Do not re-add a phase
+  checklist to ROADMAP.md to silence it — that trades each W002 for a W006.
+- **Do not zero the `progress:` block between milestones.** The 9/9 phases and
+  39/39 plans are workflows-replay's, not root scope's, but 0 routes worse:
+  `smart-entry` tests `total_phases <= 0` first and recommends
+  `/gsd-discuss-phase` for a phase that does not exist. Measured both ways.
 
 ## Known Risk Worth Revisiting
 
-`IN-03` from the Phase 9 code review. **NFR-10 path containment now rests on an
+`IN-03` from the refine-unit-tests `09/` code review. **NFR-10 path containment now rests on an
 injected collaborator honoring a prose-only contract that nothing type-enforces.**
 `IN-01` and `IN-04` are also open by choice but carry no comparable risk.
 
@@ -82,13 +113,13 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
-| deferred_items | 05/deferred-items.md: the Phase 5 record (five open comment-drift items, three closed; the scanner reads the file as one entry)                                                                | acknowledged    | 2026-09-18           | test-backlog |
+| deferred_items | 05/deferred-items.md: the record (five open comment-drift items, three closed; the scanner reads the file as one entry)                                                                | acknowledged    | 2026-09-18           | test-backlog |
 | deferred_items | 06/deferred-items.md: Six ledger notes name a witness coordinate the fresh report no longer holds (table converted to bullets at this close; item 1 was resolved by the #196 hermetic merge)  | acknowledged    | 2026-09-18           | test-backlog |
 | quick_tasks    | 260907-qqo-hkps-01-if-field-powershell-rule-prefix-                                                                                                                                           | unknown (work is complete; scanner misreads it) | 2026-09-13 | refine-unit-tests |
 | deferred_items | 06/deferred-items.md: 1. Stale notification hub reference outside Plan 06-19 callers                                                                                                          | acknowledged — RESOLVED, condition no longer holds | 2026-09-13 | refine-unit-tests |
 | deferred_items | 06/deferred-items.md: 2. Node 26 direct-coverage negative-control subprocess capture                                                                                                          | acknowledged — promoted to backlog `NEGCTL-01` | 2026-09-13 | refine-unit-tests |
 | deferred_items | 25/deferred-items.md (archived v1.4.1): `tests/e2e/import-command.test.ts` 3 failures                                                                                                         | acknowledged — promoted to backlog `E2EIMP-01` | 2026-09-13 | refine-unit-tests |
-| Tooling        | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted)                                    | closed — test-backlog Phase 6 (06-VERIFICATION 2/2); gate `lint:type-members` in `check` | Phase 116 discussion | v1.19     |
+| Tooling        | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted)                                    | closed — test-backlog `06/` (06-VERIFICATION 2/2); gate `lint:type-members` in `check` | Phase 116 discussion | v1.19     |
 | quick_tasks    | 260720-d8i-move-agent-provenance-from-body-comment-                                                                                                                                           | unknown         | 2026-09-04           | v1.19     |
 | todos          | 2026-09-02-detect-unused-code-and-type-members.md                                                                                                                                             | (presence-only) | 2026-09-04           | v1.19     |
 | uat_gaps       | 89/89-UAT.md (archived v1.16)                                                                                                                                                                 | passed          | 2026-09-04           | v1.19     |
@@ -127,25 +158,29 @@ hit the same wall; convert it rather than re-disclosing it.
 | --- | --- | --- | --- | --- | --- |
 | 260920-qx0 | Reject `--local` on the merged-read marketplace verbs (info, list, update) | 2026-09-20 | f2fbd402 | complete | [260920-qx0-remove-local-from-marketplace-info](./quick/260920-qx0-remove-local-from-marketplace-info/) |
 | 260921-t5t | Suppress success-count lines for empty cascades and non-bulk operations | 2026-09-21 | ffdecc5f | shipped in PR #209 | [260921-t5t-when-a-command-returns-an-empty-result-a](./quick/260921-t5t-when-a-command-returns-an-empty-result-a/) |
+| 260922-ckn | Read the Claude Code compatibility skill during discuss phases; fix a racy coverage test | 2026-09-22 | 0b0623a3 | complete | [260922-ckn-implement-upstream-informed-discuss-phas](./quick/260922-ckn-implement-upstream-informed-discuss-phas/) |
 | 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na/) |
 | 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | b07ae35c | complete | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew/) |
 | 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./quick/260924-q0m-keep-only-plugin-qualified-interactive-s/) |
 
 ## Session Continuity
 
-**Last session:** 2026-09-24
-**Stopped at:** PR #215 open; awaiting squash merge and 0.19.2 tag
+**Last session:** 2026-09-27
+**Stopped at:** workflows workstream archived; root planning records reconciled
 **Resume file:** None
 
-**Current work:** Skill aliases and cross-artifact reference rewriting are on
-`features/skill-aliases`, based on the 0.19.1 release commit. The release
-branch `releases/v0.19.2` starts at that same commit and excludes unrelated
-workflow work on main. PR #215 targets that release branch and all local gates
-pass. Tag its squash-merge commit as `v0.19.2` after merge.
-Earlier milestone continuity is preserved in
-`inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
+**Current work:** None in flight. The 0.19.1 and 0.19.2 releases are tagged and
+published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218 and
+#219 landed after it. `main` carries the workflows bridge from PR #205, which no
+tag includes yet. Handoffs for the earlier milestones moved into their archives
+(`milestones/refine-unit-tests-HANDOFF*.md`,
+`milestones/ws-defaults-enabled-2026-09-17/HANDOFF.md`) and the paused phase-117
+handoff moved to `milestones/ws-workflows-2026-09-27/`. Earlier milestone
+continuity is preserved in `inputs/test-backlog/PRE-MILESTONE-STATE.md` and
+archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Open the issue #211 PR from `features/issue-211-v0190` into `releases/v0.19.1`.
-- Tag the squash-merge commit `v0.19.1` after the release PR merges.
+- Start the next milestone with `/gsd-new-milestone`; `BACKLOG.md` holds the
+  six carriers the workflows-replay close named (VSTALE-01, WLREC-01,
+  RLHINT-01, PCERR-01, WSTOR-01, WPIN-01).

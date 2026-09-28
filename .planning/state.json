@@ -1,53 +1,11 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "test-backlog",
-  "phases": [
-    {
-      "number": "1",
-      "name": "Reliable Negative Controls",
-      "status": "complete"
-    },
-    {
-      "number": "2",
-      "name": "Sonar Rules for Tests",
-      "status": "complete"
-    },
-    {
-      "number": "3",
-      "name": "Reachable Agent Collision Contract",
-      "status": "complete"
-    },
-    {
-      "number": "4",
-      "name": "Strict Command Arguments",
-      "status": "complete"
-    },
-    {
-      "number": "5",
-      "name": "Production Export Ownership",
-      "status": "complete"
-    },
-    {
-      "number": "6",
-      "name": "Unused Type Member Gate",
-      "status": "complete"
-    },
-    {
-      "number": "7",
-      "name": "Reliable Coverage Metrics",
-      "status": "complete"
-    },
-    {
-      "number": "8",
-      "name": "Final Verification and Reconciliation",
-      "status": "complete"
-    }
-  ],
+  "phases": [],
   "next": {
     "command": "/gsd:progress",
     "label": "Show progress",
     "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-09-19T01:53:29.180Z"
+  "updated_at": "2026-09-27T23:42:24.000Z"
 }
