@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 01-private-repos-on-any-git-host
 source: [01-01-SUMMARY.md, 01-02-SUMMARY.md, 01-03-SUMMARY.md]
 started: 2026-09-28T09:57:51Z
