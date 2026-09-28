@@ -1,22 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 01-private-repos-on-any-git-host
 source: [01-01-SUMMARY.md, 01-02-SUMMARY.md, 01-03-SUMMARY.md, 01-04-SUMMARY.md, 01-VERIFICATION.md]
 started: 2026-09-28T09:57:51Z
-updated: 2026-09-28T13:50:47Z
+updated: 2026-09-28T14:40:00Z
 ---
 
 ## Current Test
 
-number: 16
-name: Cross-origin redirect of the credential-bearing git-upload-pack POST carries no credential
-expected: |
-  The bound host answers info/refs normally, then redirects the credential-bearing
-  git-upload-pack POST to another origin (other port, scheme or hostname). The
-  cross-origin target receives no Authorization header on any request, and the
-  operation fails clean as {authentication required}. A same-origin POST redirect
-  still authenticates.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -37,9 +29,11 @@ evidence: "Rendered `A marketplace operation has failed.` + `⊘ https://localho
 
 ### 4. Host guard holds on a real caller-side mismatch
 expected: A bundle bound to one host driving a clone at another real host sends no credential — the `[auth]` debug line shows `onAuth: url host ... does not match the bound host ...` and the verb fails with `{authentication required}` rather than leaking the PAT. (Verifier notes this half is already proven offline through real isomorphic-git; answer `skip` with a reason if you accept that.)
-result: issue
+result: pass
+original_result: issue
 reported: "Instrumented redirect run: bound host localhost:8444 (credential stored for it) 302-redirects to localhost:9443. The 9443 server received `Authorization: Basic` with the VALID localhost:8444 credential on both `info/refs` and the (POST->GET) `git-upload-pack` request. Control: redirect to 127.0.0.1:9443 (different hostname) sent auth=none and failed cleanly with `{authentication required}`."
-severity: major
+original_severity: major
+retest: "2026-09-28 after 01-04: same scenario (every request 302 from localhost:8444 to localhost:9443) — :9443 received auth=none on both info/refs requests, :8444 alone saw auth=VALID, verb failed clean as {authentication required}. Gap G-01-4 resolved by 01-04."
 
 ### 5. buildAuthForHost returns a bundle for every host
 expected: buildAuthForHost returns a bundle for every host, so a credential already in the user's git credential helper authenticates a clone on a host the provider registry does not claim
@@ -109,15 +103,16 @@ coverage_id: 01-03/D4
 
 ### 16. Cross-origin redirect of the credential-bearing git-upload-pack POST carries no credential
 expected: Re-run the UAT test 4 instrumented-server scenario (or add an automated wire-level case combining the POST-redirect routing with `auth: boundAuth(credentials)`), with the redirect on the git-upload-pack POST leg. The cross-origin target gets no Authorization header on any request and the operation fails clean as {authentication required}; a same-origin POST redirect still authenticates.
-result: [pending]
+result: pass
 source: 01-VERIFICATION.md (re-verification after gap closure 01-04; code-review WR-02)
+evidence: "Claude ran it on an instrumented harness (HTTPS/HTTP + Basic auth + git http-backend, every Authorization header logged) driving `/claude:plugin marketplace add https://localhost:8444/private-mp.git --scope project` through pi 0.87.1 RPC mode with a scoped credential.helper=store for localhost:8444 only. :8444 served info/refs normally and redirected only the git-upload-pack POST. Same-origin 307 -> https://localhost:8444/alias: POST re-sent auth=VALID, rendered `● canary-marketplace [project] (added)`. Cross-origin, each rendered `⊘ https://localhost:8444/private-mp.git [project] (failed) {authentication required}` with no state.json written: 307 -> https://localhost:9443 (port) target auth=none; 307 -> https://127.0.0.1:8444 (hostname) target auth=none; 307 -> http://localhost:9080 (scheme) target auth=none; 302 -> https://localhost:9443 (POST->GET) target auth=none."
 
 ## Summary
 
 total: 16
-passed: 14
-issues: 1
-pending: 1
+passed: 16
+issues: 0
+pending: 0
 skipped: 0
 blocked: 0
 
@@ -125,7 +120,9 @@ blocked: 0
 
 - gap_id: G-01-4
   truth: "No credential bound to one host crosses to another host (host = hostname + port, 01-02 D2) — including when the server redirects"
-  status: failed
+  status: resolved
+  resolved_by: 01-04-PLAN.md
+  resolved_at: 2026-09-28
   reason: "User reported: redirect from localhost:8444 to localhost:9443 forwarded the localhost:8444 Basic credential to :9443 on info/refs and git-upload-pack"
   severity: major
   test: 4
