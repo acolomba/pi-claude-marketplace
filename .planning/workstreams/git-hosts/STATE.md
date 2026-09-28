@@ -5,19 +5,19 @@ milestone_name: Any Git Host
 current_phase: 3
 current_phase_name: "`marketplace add` recovers from its own leftover clone"
 current_plan: 3
-status: "Phase 3 VERIFIED WITH GAPS (6/7 success criteria) — all 3 plans executed and npm run check green, but SC2/MA-13 failed on CR-01; phase NOT complete"
-stopped_at: "Completed 03-03-PLAN.md: autoupdate cascade authenticates (ctx optional on buildAuthForHost/buildCloneAuth), both live canaries carried forward, D-79-03 rationale corrected; npm run check green (CHECK_EXIT=0), 7354/7354 unit tests, all files 100.00/100.00/100.00"
-last_updated: "2026-09-27T16:25:17.000Z"
-last_activity: 2026-09-27
-last_activity_desc: "Reviewed and verified Phase 3: 17 review findings (1 critical) all open; verification gaps_found at 6/7 — CR-01 falsifies SC2/MA-13"
+status: "Phase 3 VERIFIED WITH GAPS (6/7) — gap-closure plan 03-04 planned and checker-passed (CR-01 / SC2 / MA-13); ready to execute with --gaps-only"
+stopped_at: "Planned 03-04-PLAN.md (gap_closure, wave 4) closing CR-01; previously completed 03-03-PLAN.md: autoupdate cascade authenticates (ctx optional on buildAuthForHost/buildCloneAuth), both live canaries carried forward, D-79-03 rationale corrected; npm run check green (CHECK_EXIT=0), 7354/7354 unit tests, all files 100.00/100.00/100.00"
+last_updated: "2026-09-28T01:56:26.000Z"
+last_activity: 2026-09-28
+last_activity_desc: "Planned Phase 3 gap closure: 03-04-PLAN.md (listRemotes url-less origin -> no-origin, paired real-fs tests, fresh whole gate); plan checker passed, requirements 4/4, decisions 4/4"
 state_head: bd256c4bb8bfd5c5e4e9b4fc600313a3a3811c59
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 9
+  total_plans: 10
   completed_plans: 9
-  percent: 100
-total_plans_in_phase: 3
+  percent: 90
+total_plans_in_phase: 4
 ---
 
 # Project State
@@ -39,6 +39,15 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 Phase: 3 — `marketplace add` recovers from its own leftover clone — PLANS COMPLETE (3 of 3), REVIEWED and VERIFIED WITH GAPS (6/7); NOT marked complete
 
+**Gap closure planned (2026-09-27).** `03-04-PLAN.md` (`gap_closure: true`, wave 4, depends on 03-03)
+closes CR-01: `listRemotes` returns the `origin` arm only when isomorphic-git's `url` is a string,
+otherwise `no-origin`, which the existing refusal path turns into `{stale clone}`. Tests first: a
+standalone and an orchestrated `add.test.ts` case over the REAL `listRemotes`, plus a real-repository
+table in `git.test.ts` (fetch-only, header-only, empty `url =`). Task 3 re-runs the whole `npm run
+check` with `CHECK_EXIT` captured and fences scope with `git diff --name-only f301135e..HEAD` (the
+SC4 evidence from `50746b81` went stale when the origin/main merge `f301135e` touched source).
+Plan checker passed with no issues. Next: `/gsd-execute-phase 3 --gaps-only --ws git-hosts`.
+
 **One gap blocks closure (CR-01 / SC2 / MA-13).** `platform/git.ts::listRemotes` declares its `origin`
 arm as `{ kind: "origin"; url: string }`, but isomorphic-git resolves `remote.<name>.url` separately
 from the `[remote "<name>"]` subsection it enumerates, so a `[remote "origin"]` section carrying no
@@ -52,8 +61,8 @@ recover from: a mid-write `.git/config` rewrite produces exactly this shape. The
 `ListRemotesResult` type cannot express `url: undefined`, which is why the 100%-branch gate could not
 catch it (WR-10) — a missing branch, not an uncovered one. Fix: treat a present-but-url-less `origin`
 as the `no-origin` arm, plus a real-filesystem test and an `add.test.ts` refusal case in both modes.
-Current Plan: 3
-Total Plans in Phase: 3
+Current Plan: 4
+Total Plans in Phase: 4
 
 **Phase 3 Plan 01 (wave 1) is executed.** `platform/git.ts::listRemotes({ dir })` is the 8th `GitOps`
 primitive and the only one that never throws: it reads `<dir>/.git/config` itself BEFORE calling
@@ -369,14 +378,14 @@ workstream's documents are archived.
 ```
 Phase 1  [==========]  plans complete (3/3)
 Phase 2  [==========]  verified 9/9, live canary deferred
-Phase 3  [==========]  plans complete (3/3), awaiting review and verification
+Phase 3  [=========.]  3/4 executed, verified 6/7; gap plan 03-04 ready
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
 | 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Verified 9/9, live canary deferred |
-| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Plans complete (3/3), awaiting code review and verification |
+| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | 3/4 executed, verified with gaps (6/7); gap plan 03-04 ready to execute |
 
 ## Accumulated Context
 
@@ -528,19 +537,19 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-09-27T16:25:17.000Z
+**Last session:** 2026-09-28T01:56:26.000Z
 
-**Stopped At:** Completed 03-03-PLAN.md: autoupdate cascade authenticates on every host (SC5), both
+**Stopped At:** Planned gap-closure 03-04-PLAN.md (checker passed). Before that: completed 03-03-PLAN.md: autoupdate cascade authenticates on every host (SC5), both
 live canaries carried forward (SC6), D-79-03 rationale corrected (SC7); `npm run check` green at
 `CHECK_EXIT=0` (7354/7354 unit tests, `all files | 100.00 | 100.00 | 100.00`, 36/36 integration
 tests). Phase 3's three plans are all complete.
 
-**Resume File:** None — Phase 3 has no more plans to execute.
+**Resume File:** None — execute `03-04-PLAN.md` with `/gsd-execute-phase 3 --gaps-only --ws git-hosts`.
 
-**Next Action:** Phase 3 has had no code review and no verification. Run code review next
-(Phase 2's precedent: 2 Criticals on the first pass, 2 more after the fix — do not skip it), then
-`/gsd-verify-work 3`. After that, milestone close is blocked only by the two carried-forward live
-canaries (GHCAN-01, GHCAN-02; `/gsd-verify-work 1`, `/gsd-verify-work 2`).
+**Next Action:** `/gsd-execute-phase 3 --gaps-only --ws git-hosts` runs 03-04 (CR-01 fix plus
+paired tests plus a fresh whole-gate run), then re-verify Phase 3 (`--gaps-only` re-verification).
+After that, milestone close is blocked only by the two carried-forward live canaries (GHCAN-01,
+GHCAN-02; `/gsd-verify-work 1`, `/gsd-verify-work 2`).
 
 ### What this run completed
 

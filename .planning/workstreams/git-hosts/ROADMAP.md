@@ -190,7 +190,7 @@ Plans:
      rationale to match what the code does, or the next reader will infer a behavior that no
      longer exists.
 
-**Plans:** 3/3 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 
@@ -210,6 +210,12 @@ Plans:
   (`ctx` optional, Device Flow declined gracefully), SC6's carry-forward of both live canaries,
   SC7's D-79-03 rationale amendment, and the phase-boundary `npm run check` (GATE-01) — `CHECK_EXIT=0`
   at 7354/7354 unit tests, `all files | 100.00 | 100.00 | 100.00`, 36/36 integration tests
+
+**Wave 4** *(gap closure — blocked on Wave 3 completion)*:
+- [ ] 03-04-PLAN.md — closes the SC2 verification gap: `listRemotes` answers `no-origin` for an `origin`
+  section that records no url, so a leftover truncated mid config rewrite refuses as `{stale clone}` in
+  both modes instead of escaping as a raw `TypeError`; real-adapter proofs at both tiers, then the whole
+  gate re-measured on the final tree (MA-13, GATE-01)
 
 ## Milestone-wide constraints
 
