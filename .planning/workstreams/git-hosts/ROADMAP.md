@@ -83,7 +83,7 @@ here. Decimal phases (1.1, 2.1) are urgent insertions only, marked `INSERTED`.
      (`orchestrators/auth-host.ts` gains no value import of `platform/git.ts`; a type-only import is
      permitted).
 
-**Plans:** 3/3 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 
@@ -94,6 +94,12 @@ Plans:
   bundle's bound host, proven at the factory and at the transport (GAUTH-06)
 - [x] 01-03-PLAN.md — the plugin and edge-handler surfaces assert they carry auth on an
   unregistered host; `npm run check` green at the phase boundary (GAUTH-03, GAUTH-05)
+
+**Wave 4** *(gap closure G-01-4 -- blocked on Wave 3 completion)*:
+- [ ] 01-04-PLAN.md -- `platform/git.ts` follows redirects itself and never forwards a credential
+  header to another origin (scheme, host, port); reproduced red at the wire through real
+  isomorphic-git and `simple-get`, then proven for clone, fetch and resolveRemoteRef; docstrings
+  and GAUTH-06 text corrected (GAUTH-06)
 
 ### Phase 2: Endpoints that answer only at the verbatim URL
 
