@@ -4,19 +4,19 @@ milestone: any-git-host
 milestone_name: Any Git Host
 current_phase: 3
 current_phase_name: "`marketplace add` recovers from its own leftover clone"
-current_plan: 3
-status: "Phase 3 VERIFIED WITH GAPS (6/7) — gap-closure plan 03-04 planned and checker-passed (CR-01 / SC2 / MA-13); ready to execute with --gaps-only"
-stopped_at: "Planned 03-04-PLAN.md (gap_closure, wave 4) closing CR-01; previously completed 03-03-PLAN.md: autoupdate cascade authenticates (ctx optional on buildAuthForHost/buildCloneAuth), both live canaries carried forward, D-79-03 rationale corrected; npm run check green (CHECK_EXIT=0), 7354/7354 unit tests, all files 100.00/100.00/100.00"
-last_updated: "2026-09-28T01:56:26.000Z"
+current_plan: 4
+status: "Phase 3 gap closure EXECUTED — 03-04 complete (CR-01 fixed; npm run check CHECK_EXIT=0, 7369/7369 unit tests, 100% coverage); awaiting code review and re-verification"
+stopped_at: "Completed 03-04-PLAN.md: listRemotes reports no-origin for a url-less origin section; real-adapter tests in add.test.ts and git.test.ts; whole gate green at 235fdc17"
+last_updated: "2026-09-28T03:03:37.000Z"
 last_activity: 2026-09-28
-last_activity_desc: "Planned Phase 3 gap closure: 03-04-PLAN.md (listRemotes url-less origin -> no-origin, paired real-fs tests, fresh whole gate); plan checker passed, requirements 4/4, decisions 4/4"
+last_activity_desc: "Executed Phase 3 gap-closure plan 03-04 (commits 24f2da2c, 235fdc17, 26e4cfc8)"
 state_head: bd256c4bb8bfd5c5e4e9b4fc600313a3a3811c59
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 10
-  completed_plans: 9
-  percent: 90
+  completed_plans: 10
+  percent: 100
 total_plans_in_phase: 4
 ---
 
@@ -38,6 +38,13 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 ## Current Position
 
 Phase: 3 — `marketplace add` recovers from its own leftover clone — PLANS COMPLETE (3 of 3), REVIEWED and VERIFIED WITH GAPS (6/7); NOT marked complete
+
+**Gap closure EXECUTED (2026-09-28).** 03-04 landed in `24f2da2c` (fix + standalone case), `235fdc17`
+(orchestrated case + real-repository table) and `26e4cfc8` (SUMMARY). `npm run check` at `235fdc17`:
+`CHECK_EXIT=0`, 7369/7369 unit tests, `all files | 100.00 | 100.00 | 100.00`, 36/36 integration, 108
+contract entries. Task 1 landed test and fix in one commit (the `npm-coverage-direct` pre-commit hook
+rejects a deliberately red commit); RED evidence recorded in the SUMMARY. Awaiting code review and
+re-verification.
 
 **Gap closure planned (2026-09-27).** `03-04-PLAN.md` (`gap_closure: true`, wave 4, depends on 03-03)
 closes CR-01: `listRemotes` returns the `origin` arm only when isomorphic-git's `url` is a string,
@@ -378,14 +385,14 @@ workstream's documents are archived.
 ```
 Phase 1  [==========]  plans complete (3/3)
 Phase 2  [==========]  verified 9/9, live canary deferred
-Phase 3  [=========.]  3/4 executed, verified 6/7; gap plan 03-04 ready
+Phase 3  [==========]  4/4 executed; gap closure awaiting re-verification
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
 | 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Verified 9/9, live canary deferred |
-| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | 3/4 executed, verified with gaps (6/7); gap plan 03-04 ready to execute |
+| 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | 4/4 executed; gap closure awaiting code review and re-verification |
 
 ## Accumulated Context
 
@@ -537,19 +544,14 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-09-28T01:56:26.000Z
+**Last session:** 2026-09-28T03:03:37.000Z
 
-**Stopped At:** Planned gap-closure 03-04-PLAN.md (checker passed). Before that: completed 03-03-PLAN.md: autoupdate cascade authenticates on every host (SC5), both
-live canaries carried forward (SC6), D-79-03 rationale corrected (SC7); `npm run check` green at
-`CHECK_EXIT=0` (7354/7354 unit tests, `all files | 100.00 | 100.00 | 100.00`, 36/36 integration
-tests). Phase 3's three plans are all complete.
+**Stopped At:** Completed gap-closure plan 03-04 (CR-01 fixed, whole gate green at `235fdc17`).
 
-**Resume File:** None — execute `03-04-PLAN.md` with `/gsd-execute-phase 3 --gaps-only --ws git-hosts`.
+**Resume File:** None — all four Phase 3 plans have SUMMARYs.
 
-**Next Action:** `/gsd-execute-phase 3 --gaps-only --ws git-hosts` runs 03-04 (CR-01 fix plus
-paired tests plus a fresh whole-gate run), then re-verify Phase 3 (`--gaps-only` re-verification).
-After that, milestone close is blocked only by the two carried-forward live canaries (GHCAN-01,
-GHCAN-02; `/gsd-verify-work 1`, `/gsd-verify-work 2`).
+**Next Action:** code review of the gap-closure diff, then re-verify Phase 3. After that, milestone
+close is blocked only by the two carried-forward live canaries (GHCAN-01, GHCAN-02).
 
 ### What this run completed
 
