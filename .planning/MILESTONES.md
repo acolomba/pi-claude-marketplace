@@ -30,8 +30,9 @@ asymmetry, and a ledger citation the #202 merge had renumbered out from under
 phase 117.
 
 **Release state:** the bridge is on `main` (PR #205, `5c652697`). The `v0.19.2`
-tag was cut from a release branch that deliberately excluded it, so no published
-npm version carries workflows yet.
+tag was cut from a release branch that deliberately excluded it, so no `0.19.x`
+release carries workflows. PR #216 merged that release branch back into `main`,
+so the next release cut from `main` includes the bridge.
 
 **Archive:** `.planning/milestones/ws-workflows-2026-09-27/milestones/workflows-replay-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`
 

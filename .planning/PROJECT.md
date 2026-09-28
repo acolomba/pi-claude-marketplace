@@ -307,8 +307,9 @@ and the three original gaps (install-time gate warnings, load-time convergence, 
 `agent()` failure evidence) are closed. Audit `tech_debt` with no blockers; the debt was cleared
 or carried before the archive. The bridge merged to `main` in PR #205 (`5c652697`) on
 2026-09-24 and `EXTENSION_VERSION` is now 0.19.2 (A-03), which opens the load-time backfill
-gate on first load. No tag through `v0.19.2` contains the bridge — that release branch
-deliberately excluded it — so the remaining step is an npm release that carries workflows.
+gate on first load. No `0.19.x` tag contains the bridge, by design: those were cut from
+`releases/v0.19.2`, which PR #216 merged back into `main`. The next release off `main` carries
+workflows with no extra step.
 
 **Just shipped:** test-backlog (2026-09-18, Phases 1-8, 65 plans, 127 tasks; no npm
 release; archived to `.planning/milestones/test-backlog-*`). refine-unit-tests left ten

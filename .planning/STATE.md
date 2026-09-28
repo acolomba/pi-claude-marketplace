@@ -48,10 +48,10 @@ verified, `threats_open: 0`, Nyquist-validated. All twelve
 `BACKLOG.md` carriers (VSTALE-01, WLREC-01, RLHINT-01, PCERR-01, WSTOR-01,
 WPIN-01).
 
-The bridge reached `main` in PR #205 (`5c652697`) on 2026-09-24. The `v0.19.2`
-tag was cut from a release branch that deliberately excluded it, so **no
-published npm version carries the workflows bridge yet** — that is the one open
-release action this milestone leaves behind.
+The bridge reached `main` in PR #205 (`5c652697`) on 2026-09-24. The `0.19.x`
+tags deliberately exclude it: they were cut from `releases/v0.19.2`, which PR
+#216 then merged back into `main`. No release action is outstanding — whatever
+is cut from `main` next carries workflows by construction.
 
 ### test-backlog closeout: `override_closeout`
 
@@ -181,8 +181,6 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Cut the npm release that carries the workflows bridge: it is on `main` from
-  PR #205 but absent from every tag through `v0.19.2`.
 - Start the next milestone with `/gsd-new-milestone`; `BACKLOG.md` holds the
   six carriers the workflows-replay close named (VSTALE-01, WLREC-01,
   RLHINT-01, PCERR-01, WSTOR-01, WPIN-01).
