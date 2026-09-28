@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { chmod, readFile } from "node:fs/promises";
+import { chmod, readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
@@ -908,6 +908,56 @@ describe("listRemotes", () => {
       await chmod(configPath, 0o600);
     }
   });
+
+  // D-3-03 / MA-13: the `origin` section shapes an interrupted config rewrite
+  // leaves behind. `libraryRemotes` is `unknown` because isomorphic-git
+  // returns the `url` key present and holding `undefined`, which its declared
+  // `url: string` cannot express.
+  interface OriginSectionShape {
+    readonly title: string;
+    readonly config: string;
+    readonly libraryRemotes: unknown;
+    readonly wrapperResult: GitPlatform.ListRemotesResult;
+  }
+
+  const ORIGIN_SECTION_SHAPES: readonly OriginSectionShape[] = [
+    {
+      title: "reports no-origin for an origin section with a fetch line but no url",
+      config:
+        '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n',
+      libraryRemotes: [{ remote: "origin", url: undefined }],
+      wrapperResult: { kind: "no-origin" },
+    },
+    {
+      title: "reports no-origin for an origin section with no keys",
+      config: '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n',
+      libraryRemotes: [{ remote: "origin", url: undefined }],
+      wrapperResult: { kind: "no-origin" },
+    },
+    {
+      title: "reports the empty url of an origin section whose url value is empty",
+      config: '[remote "origin"]\n\turl =\n',
+      libraryRemotes: [{ remote: "origin", url: "" }],
+      wrapperResult: { kind: "origin", url: "" },
+    },
+  ];
+
+  for (const { title, config, libraryRemotes, wrapperResult } of ORIGIN_SECTION_SHAPES) {
+    test(title, async (t) => {
+      // arrange
+      const repository = await createGitTestRepository(t, { boundary: "local" });
+      await writeFile(path.join(repository.dir, ".git", "config"), config);
+
+      // act
+      const remotes = await listRemotes({ dir: repository.dir });
+
+      // assert
+      // Proves the fixture reproduces the shape, so a mis-authored config
+      // cannot pass through the empty-remote-list path.
+      assert.deepStrictEqual(await git.listRemotes({ fs, dir: repository.dir }), libraryRemotes);
+      assert.deepStrictEqual(remotes, wrapperResult);
+    });
+  }
 });
 
 describe("GitOps contract", () => {

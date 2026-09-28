@@ -27,6 +27,7 @@ import { listRemotes } from "../../../extensions/pi-claude-marketplace/platform/
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   MarketplaceDuplicateNameError,
+  StaleSourceCloneError,
   UnsupportedSourceError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -694,6 +695,35 @@ test("MA-13 / ATTR-07: a leftover whose origin section names no url refuses as s
       schemaVersion: 2,
       marketplaces: {},
     });
+  });
+});
+
+test("MA-13 / RECON-03: orchestrated mode reports a leftover whose origin section names no url as stale clone", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, pi, notifications } = makeCtx(0);
+    const { finalDir, configPath, gitOps } = await arrangeLeftoverWithoutOriginUrl(locations);
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "stale clone",
+      error: new StaleSourceCloneError(finalDir, "valid-marketplace"),
+      cause: `stale source clone at ${finalDir}`,
+    });
+    assert.deepStrictEqual(notifications, []);
+    assert.strictEqual(await readFile(configPath, "utf8"), ORIGIN_WITHOUT_URL_CONFIG);
   });
 });
 
