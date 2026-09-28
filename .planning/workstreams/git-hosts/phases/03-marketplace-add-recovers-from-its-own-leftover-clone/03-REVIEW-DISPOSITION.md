@@ -3,6 +3,18 @@ phase: 03
 review: 03-REVIEW.md
 titles: json
 findings:
+  - id: WR-11
+    severity: warning
+    disposition: open
+    title: "a multi-valued `remote.origin.url` is read as its LAST value, while git fetches from the FIRST, so a tree git treats as foreign can be recognized and removed"
+  - id: IN-07
+    severity: info
+    disposition: open
+    title: "the new inline comment uses the banned \"X, not Y\" framing"
+  - id: IN-08
+    severity: info
+    disposition: open
+    title: "the orchestrated url-less case does not check that state stays empty, though its standalone sibling does"
   - id: CR-01
     severity: critical
     disposition: open
@@ -71,32 +83,35 @@ findings:
     severity: info
     disposition: open
     title: "`pathExists` and `listRemotes` are two reads of the same destination"
-open: 17
-total: 17
-recorded: 2026-09-27T16:55:33.923Z
+open: 20
+total: 20
+recorded: 2026-09-28T03:10:59.759Z
 ---
 
 # Phase 03: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-01 | critical | open | - |
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| WR-03 | warning | open | - |
-| WR-04 | warning | open | - |
-| WR-05 | warning | open | - |
-| WR-06 | warning | open | - |
-| WR-07 | warning | open | - |
-| WR-08 | warning | open | - |
-| WR-09 | warning | open | - |
-| WR-10 | warning | open | - |
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
-| IN-03 | info | open | - |
-| IN-04 | info | open | - |
-| IN-05 | info | open | - |
-| IN-06 | info | open | - |
+| WR-11 | warning | open | - |
+| IN-07 | info | open | - |
+| IN-08 | info | open | - |
+| CR-01 | critical | open | - (not in the current review) |
+| WR-01 | warning | open | - (not in the current review) |
+| WR-02 | warning | open | - (not in the current review) |
+| WR-03 | warning | open | - (not in the current review) |
+| WR-04 | warning | open | - (not in the current review) |
+| WR-05 | warning | open | - (not in the current review) |
+| WR-06 | warning | open | - (not in the current review) |
+| WR-07 | warning | open | - (not in the current review) |
+| WR-08 | warning | open | - (not in the current review) |
+| WR-09 | warning | open | - (not in the current review) |
+| WR-10 | warning | open | - (not in the current review) |
+| IN-01 | info | open | - (not in the current review) |
+| IN-02 | info | open | - (not in the current review) |
+| IN-03 | info | open | - (not in the current review) |
+| IN-04 | info | open | - (not in the current review) |
+| IN-05 | info | open | - (not in the current review) |
+| IN-06 | info | open | - (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
