@@ -1,18 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: none
-status: "between milestones; workflows-replay archived; npm 0.19.2 released"
-stopped_at: workflows workstream archived and GSD config pinned to the quality profile
-last_updated: "2026-09-27T23:42:24Z"
-last_activity: 2026-09-27
-last_activity_desc: archived the workflows workstream; reconciled root planning records
-state_head: 7c1c1d3bd14b838b000c4bb9bd9bdfc4091a1295
+milestone: json-output
+milestone_name: Mode-Keyed Presentation Strategies
+status: planning
+last_updated: "2026-09-28T12:24:50.992Z"
+last_activity: 2026-09-28
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 39
-  completed_plans: 39
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,21 +22,14 @@ See: `.planning/PROJECT.md` (updated 2026-09-18 after the test-backlog milestone
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone
+**Current focus:** Milestone json-output -- defining requirements
 
 ## Current Position
 
-Phase: No active milestone
+Phase: Not started (defining requirements)
 Plan: —
-Status: workflows-replay complete (9/9 phases, 39/39 plans) and archived 2026-09-27
-Last activity: 2026-09-27 — Archived the workflows workstream and reconciled the root planning records
-
-Four milestones have closed since the last root-scope milestone ran here.
-`test-backlog` and `refine-unit-tests` closed in root scope; `workflows` and
-`workflows-replay` ran in the `workflows` workstream, which was archived to
-`milestones/ws-workflows-2026-09-27/` on 2026-09-27. `.planning/workstreams/` no
-longer exists and no workstream is active, so every phase, plan and quick-task
-record for the two workflow milestones lives under that archive directory.
+Status: Defining requirements
+Last activity: 2026-09-28 — Milestone json-output started
 
 ### workflows-replay closeout
 

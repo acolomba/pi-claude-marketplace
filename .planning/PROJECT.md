@@ -10,10 +10,44 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Current Milestone: none
+## Current Milestone: json-output -- Mode-Keyed Presentation Strategies (branch: features/json, started 2026-09-28)
 
-No active milestone. test-backlog shipped 2026-09-18; the branch awaits its pull
-request. Start the next one with `/gsd-new-milestone`.
+**Goal:** `/claude:plugin` output is produced by one of two architecturally
+uniform presentation strategies selected by Pi's `ctx.mode` -- text for `tui` and
+`print`, JSON for `json` and `rpc` -- both formatting a single model that already
+carries every presentation decision.
+
+**Target features:**
+
+- Presentation model: severity, reload-needed, tally, summary, and the
+  `{requires ...}` soft-dep markers are computed upstream of rendering. The
+  per-verb `renderPluginRowBody` callbacks in orchestrators' `*.messaging.ts` and
+  the render-time `softDepStatus(pi)` probe in `shared/notification-dispatch.ts`
+  move out of the renderers.
+- Text strategy: today's output as a pure formatter of that model; byte form
+  unchanged and still locked by `docs/output-catalog.md`.
+- JSON strategy: a peer formatter emitting a versioned typebox wire schema via
+  `pi.appendEntry("claude-plugin", payload)`, which JSON and RPC consumers
+  receive as `entry_appended` session events, kept out of LLM context.
+- Total coverage: cascades, info, pending, usage errors, diagnostics, the
+  device-flow code, and the hook rewake and Stop-cap warnings.
+- Mode selection: an exhaustive switch over `ctx.mode`; any other value is a
+  typed error. `browse` outside `tui` is a typed error pointing at `list`.
+- Test enablement: a JSON capture helper for in-process tests, and test fakes
+  that carry an explicit `mode`.
+
+**Key context:** Verified against the pinned Pi 0.86.1. In `print` and `json`
+modes Pi installs a no-op UI stub, so `ctx.ui.notify` discards everything
+(`core/extensions/runner.js:114-118`), and non-interactive modes take over stdout
+(`core/output-guard.js`). `pi.appendEntry` emits `{type: "entry_appended"}`
+(`core/agent-session.js:2135`), which the JSON writer and the RPC forwarder both
+serialize. Print mode therefore stays silent -- a Pi limitation, accepted;
+scripted use is `--mode json`. Pi exits 0 in print/json regardless, so JSON
+consumers judge success from payload severity. No per-command `--json` flag
+(upstream has one on the `claude plugin` CLI, not on `/plugin`). Out of scope:
+browse TUI polish, migrating existing suites to JSON assertions, and writing new
+behavioral suites. Closes backlog MRO-01 and corrects two of its claims.
+Phase numbering restarts at 1.
 
 ## Previous Milestone: workflows-replay -- Workflow Bridge Replay onto main (workstream: workflows, branch: features/workflow, completed 2026-09-21, not merged, no npm release)
 
@@ -381,7 +415,7 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ## Requirements
 
-### Active — test-backlog
+### Active — json-output
 
 See [REQUIREMENTS.md](REQUIREMENTS.md) for the current milestone requirements.
 All prior validated requirements below remain historical completed work.
@@ -578,7 +612,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 - **Custom component-path arrays as supplemental** -- explicit declaration replaces the default
 - **Mutating LLM tools for install/update/remove** -- only listing tools exposed
 - **Rich interactive selectors** -- backlog
-- **JSON output / dry-run modes** -- backlog
+- **Dry-run modes** -- backlog (JSON output moved into scope with milestone json-output)
 - **Session-start autoupdate run** -- Claude Code parity, deferred
 - **`--force` install with `incomplete` state** -- deferred
 - **Managed/allowlist/blocklist policies** -- no Pi equivalent
@@ -623,7 +657,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 - **Network policy (NFR-5, amended by url-source):** Network is required only for git-source `marketplace add`/`update`, and for `install`/`update`/`reinstall` of git-source plugins **on cache miss only** — warm sha-pinned cache operations stay offline. `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations MUST NOT touch the network
 - **Containment (NFR-10, re-anchored by url-source):** Refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json`; plugin roots must resolve inside their **owning clone root** (marketplace clone for `path` sources, `plugin-clones/<key>/` for git sources)
 - **Quality bar:** `npm run check` must stay green -- typecheck + ESLint + `fallow` (dead code, health, duplication) + Prettier + unit tests + integration tests (NFR-6)
-- **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code (IL-2). Single sanctioned `console.warn` is the load-time legacy migration save failure (IL-3)
+- **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code (IL-2). Single sanctioned `console.warn` is the load-time legacy migration save failure (IL-3). Amended by milestone json-output: in `json`/`rpc` modes the JSON strategy emits through `pi.appendEntry`; direct stdout/stderr writes stay forbidden
 - **No telemetry V1:** No metrics, no event sink, no analytics endpoint (IL-4)
 - **English only V1:** No message catalog, no locale negotiation (IL-1)
 - **Scope model:** Exactly two scopes -- `user` (`~/.pi/agent/`) and `project` (`<cwd>/.pi/`). Claude Code's `local` scope is not introduced (SC-1). Marketplace records and plugin install records are scoped independently per D-29 / CMP-1..8.
@@ -834,3 +868,5 @@ _Last updated: 2026-09-18 after the test-backlog milestone closed. Eight phases,
 _Last updated: 2026-09-14 after starting test-backlog._
 
 _Last updated: 2026-09-21 after the workflows-replay milestone closed in workstream `workflows`. Nine phases, 39 plans, 46/46 requirements; the `workflows` bridge replayed onto main on `features/workflow` and hardened; audit `tech_debt` cleared or carried before the archive; unmerged._
+
+_Last updated: 2026-09-28 after starting json-output._
