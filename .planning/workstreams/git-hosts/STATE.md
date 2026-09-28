@@ -5,11 +5,11 @@ milestone_name: Any Git Host
 current_phase: 01
 current_phase_name: Private repos on any git host
 current_plan: 4
-status: "Executing Phase 1 gap closure 01-04 (G-01-4 redirect credential leak, found by Phase 1 UAT). Phase 3 COMPLETE (re-verified 7/7 after gap closure 03-04)"
-stopped_at: "Phase 1 gap closure 01-04 executed (96c9eb13, c9c21446, d2deadd3; CHECK_EXIT=0); awaiting code review and re-verification"
+status: "Phase 1 gap closure 01-04 executed; re-verification human_needed (4/5) pending UAT test 16. Phase 3 COMPLETE (re-verified 7/7 after gap closure 03-04)"
+stopped_at: "Phase 1 gap closure 01-04 executed and re-verified: human_needed 4/5 (UAT test 16, the credential-bearing POST redirect leg); review 0C/4W/5I open"
 last_updated: "2026-09-28T12:29:46.273Z"
 last_activity: 2026-09-28
-last_activity_desc: "Phase 1 gap closure 01-04 executed; redirect credential leak closed"
+last_activity_desc: "Phase 1 re-verified after gap closure 01-04: human_needed (UAT test 16)"
 state_head: 248746a3c16a2b607bc78ce53903d3773e5eda4b
 progress:
   total_phases: 3
@@ -37,7 +37,7 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 01 (Private repos on any git host) — EXECUTING gap closure 01-04
+Phase: 01 (Private repos on any git host) — gap closure 01-04 executed, re-verification human_needed
 
 **Phase 1 gap closure executing (2026-09-28).** UAT (`79884d8a`, 14 passed, 1 issue) found G-01-4:
 a credential bound to one host reaches a redirect target on the same hostname but another port (or
@@ -51,6 +51,13 @@ a credential bound to one host reaches a redirect target on the same hostname bu
 `CHECK_EXIT=0`, 7381/7381 unit tests, 36/36 integration, 100% coverage, 108 contract entries, fallow
 audit `pass`. Residual parity gap (DD-3): a cross-origin redirect target that needs its own
 credential fails clean, since isomorphic-git calls `onAuth` with the original URL only.
+
+**Re-verified 2026-09-28: `human_needed`, 4/5** (`7354649c`). The `info/refs` leg is proven at the
+wire, but no test drives the credential-bearing `git-upload-pack` POST through a cross-origin
+redirect (UAT saw the leak on both legs; code review WR-02). Added as `01-UAT.md` test 16. Code
+review of the closure (`64b0ade9`, disposition `0f31176c`): 0 critical, 4 warning, 5 info, all open;
+WR-01 (a cross-origin 401 can evict the bound host's stored credential on `evictOnFailure` hosts) is
+judged availability, not disclosure. Next: `/gsd-verify-work 1 --ws git-hosts`.
 
 **Phase 3 complete.** Re-verification passed 7/7: CR-01 is fixed by 03-04 and confirmed by a follow-up
 code review (03-REVIEW.md; CR-01 and WR-10 recorded `fixed` in 03-REVIEW-DISPOSITION.md). That review
@@ -403,14 +410,14 @@ workstream's documents are archived.
 **Current Plan:** 4
 
 ```
-Phase 1  [==========]  4/4 executed; gap closure awaiting re-verification
+Phase 1  [==========]  4/4 executed; re-verified human_needed (UAT test 16)
 Phase 2  [==========]  verified 9/9, live canary deferred
 Phase 3  [==========]  4/4 executed; gap closure awaiting re-verification
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | 4/4 executed; gap closure 01-04 awaiting code review and re-verification |
+| 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | 4/4 executed; re-verified human_needed 4/5, UAT test 16 pending |
 | 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Verified 9/9, live canary deferred |
 | 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | 4/4 executed; gap closure awaiting code review and re-verification |
 
