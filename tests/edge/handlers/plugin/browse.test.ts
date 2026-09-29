@@ -20,9 +20,11 @@ import {
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/browse.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { PickerResult } from "../../../../extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts";
+import type { SubcommandHandler } from "../../../../extensions/pi-claude-marketplace/edge/router.ts";
 import type { ExtensionState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionAPI,
@@ -73,34 +75,34 @@ async function seedMarketplace(
 
 function createMockActionHandlers(): {
   readonly handlers: BrowseActionHandlers;
-  readonly mockList: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly mockInstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly mockUninstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly mockPluginInfo: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly mockEnable: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly mockDisable: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  readonly mockList: SubcommandHandler;
+  readonly mockInstall: SubcommandHandler;
+  readonly mockUninstall: SubcommandHandler;
+  readonly mockPluginInfo: SubcommandHandler;
+  readonly mockEnable: SubcommandHandler;
+  readonly mockDisable: SubcommandHandler;
 } {
-  const mockList = mock<(args: string, ctx: ExtensionCommandContext) => Promise<void>>({
+  const mockList = mock<SubcommandHandler>({
     exactParams: true,
     name: "list handler",
   });
-  const mockInstall = mock<(args: string, ctx: ExtensionCommandContext) => Promise<void>>({
+  const mockInstall = mock<SubcommandHandler>({
     exactParams: true,
     name: "install handler",
   });
-  const mockUninstall = mock<(args: string, ctx: ExtensionCommandContext) => Promise<void>>({
+  const mockUninstall = mock<SubcommandHandler>({
     exactParams: true,
     name: "uninstall handler",
   });
-  const mockPluginInfo = mock<(args: string, ctx: ExtensionCommandContext) => Promise<void>>({
+  const mockPluginInfo = mock<SubcommandHandler>({
     exactParams: true,
     name: "pluginInfo handler",
   });
-  const mockEnable = mock<(args: string, ctx: ExtensionCommandContext) => Promise<void>>({
+  const mockEnable = mock<SubcommandHandler>({
     exactParams: true,
     name: "enable handler",
   });
-  const mockDisable = mock<(args: string, ctx: ExtensionCommandContext) => Promise<void>>({
+  const mockDisable = mock<SubcommandHandler>({
     exactParams: true,
     name: "disable handler",
   });
@@ -137,7 +139,7 @@ test("browse rejects non-empty arguments with usage error", async () => {
   const browseHandler = makeBrowseHandler(pi, handlers);
 
   // act
-  await browseHandler("foo", ctx);
+  await browseHandler("foo", ctx, runWithNothingLoaded());
 
   // assert
   verify(ctx);
@@ -146,16 +148,17 @@ test("browse rejects non-empty arguments with usage error", async () => {
 
 test("non-TUI mode falls back to the list subcommand handler", async () => {
   // arrange
+  const run = runWithNothingLoaded();
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const { handlers, mockList } = createMockActionHandlers();
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
   when(() => ctx.mode).thenReturn("json");
-  when(() => mockList("", ctx)).thenResolve(undefined);
+  when(() => mockList("", ctx, run)).thenResolve(undefined);
 
   const browseHandler = makeBrowseHandler(pi, handlers);
 
   // act
-  await browseHandler("", ctx);
+  await browseHandler("", ctx, run);
 
   // assert
   verify(ctx);
@@ -165,6 +168,7 @@ test("non-TUI mode falls back to the list subcommand handler", async () => {
 
 test("TUI mode with no marketplaces emits structured (no marketplaces) notification", async (t) => {
   // arrange
+  const run = runWithNothingLoaded();
   const scope = await createHermeticScope(t, "no-marketplaces");
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const { handlers } = createMockActionHandlers();
@@ -185,7 +189,7 @@ test("TUI mode with no marketplaces emits structured (no marketplaces) notificat
   const browseHandler = makeBrowseHandler(pi, handlers);
 
   // act
-  await browseHandler("", ctx);
+  await browseHandler("", ctx, run);
 
   // assert
   verify(ctx);
@@ -195,6 +199,7 @@ test("TUI mode with no marketplaces emits structured (no marketplaces) notificat
 
 test("TUI mode with cancel (null result) invokes no action handler", async (t) => {
   // arrange
+  const run = runWithNothingLoaded();
   const scope = await createHermeticScope(t, "tui-cancel");
   await seedMarketplace(scope.cwd, "official");
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
@@ -213,7 +218,7 @@ test("TUI mode with cancel (null result) invokes no action handler", async (t) =
   const browseHandler = makeBrowseHandler(pi, handlers);
 
   // act
-  await browseHandler("", ctx);
+  await browseHandler("", ctx, run);
 
   // assert
   verify(ctx);
@@ -261,6 +266,7 @@ for (const { action, local, expectedHandler, expectedArgs } of [
 ]) {
   test(`TUI mode action dispatch: ${action} (local: ${String(local)}) dispatches to ${expectedHandler}`, async (t) => {
     // arrange
+    const run = runWithNothingLoaded();
     const scope = await createHermeticScope(t, `dispatch-${action}-${String(local)}`);
     await seedMarketplace(scope.cwd, "official");
     const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
@@ -284,12 +290,12 @@ for (const { action, local, expectedHandler, expectedArgs } of [
     const customFactory = It.willCapture<Parameters<ExtensionCommandContext["ui"]["custom"]>[0]>();
     when(() => ui.custom(customFactory)).thenResolve(pickerResult);
 
-    when(() => actionMocks[expectedHandler](expectedArgs, ctx)).thenResolve(undefined);
+    when(() => actionMocks[expectedHandler](expectedArgs, ctx, run)).thenResolve(undefined);
 
     const browseHandler = makeBrowseHandler(pi, actionMocks.handlers);
 
     // act
-    await browseHandler("", ctx);
+    await browseHandler("", ctx, run);
 
     // assert
     verify(ctx);
@@ -301,6 +307,7 @@ for (const { action, local, expectedHandler, expectedArgs } of [
 
 test("TUI mode when loadMarketplaceEntries throws emits structured failure notification", async (t) => {
   // arrange
+  const run = runWithNothingLoaded();
   const scope = await createHermeticScope(t, "load-err");
   const locations = locationsFor("project", scope.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -326,7 +333,7 @@ test("TUI mode when loadMarketplaceEntries throws emits structured failure notif
   const browseHandler = makeBrowseHandler(pi, handlers);
 
   // act
-  await browseHandler("", ctx);
+  await browseHandler("", ctx, run);
 
   // assert
   assert.ok(capturedNotify.value?.includes("(browse)"));
@@ -338,6 +345,7 @@ test("TUI mode when loadMarketplaceEntries throws emits structured failure notif
 
 test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and pluginLoader", async (t) => {
   // arrange
+  const run = runWithNothingLoaded();
   const scope = await createHermeticScope(t, "factory-exercise");
   const pluginRecord = buildInstalledPluginRecord(
     { version: "1.0.0" },
@@ -364,7 +372,7 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
   const browseHandler = makeBrowseHandler(pi, handlers);
 
   // act
-  await browseHandler("", ctx);
+  await browseHandler("", ctx, run);
 
   // assert custom UI factory execution
   const factory = customFactory.value;
@@ -412,6 +420,7 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
 
 test("TUI mode pluginLoader fallback when marketplace block is missing", async (t) => {
   // arrange
+  const run = runWithNothingLoaded();
   const scope = await createHermeticScope(t, "loader-fallback");
   await seedMarketplace(scope.cwd, "ghost");
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
@@ -429,7 +438,7 @@ test("TUI mode pluginLoader fallback when marketplace block is missing", async (
   when(() => ui.custom(customFactory)).thenResolve(null);
 
   const browseHandler = makeBrowseHandler(pi, handlers);
-  await browseHandler("", ctx);
+  await browseHandler("", ctx, run);
 
   const factory = customFactory.value;
   assert.ok(factory !== undefined);

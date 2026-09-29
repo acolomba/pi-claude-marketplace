@@ -154,6 +154,18 @@ interface CommandUnderTest {
   readonly verifyRegistrar: () => void;
 }
 
+/**
+ * The `getAllTools()` reads a registered command promises, stated as two
+ * counts. `runs` is the number of handler invocations: each opens one
+ * notification run whose snapshot reads the inventory three times (D-05).
+ * `probingEmissions` is the number of notifications from surfaces that still
+ * probe the Pi handle once per emission, three reads each.
+ */
+interface CommandProbes {
+  readonly runs: number;
+  readonly probingEmissions: number;
+}
+
 interface WrapperUnderTest {
   readonly wrap: AutocompleteProviderFactory;
   readonly verifyBoundary: () => void;
@@ -277,7 +289,7 @@ function registerCommandWithCache(
   completionCache: CompletionCache,
   hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson }),
   importClaudeSettings?: ImportDelegate,
-  expectedNotifications = 0,
+  probes: CommandProbes = { runs: 0, probingEmissions: 0 },
   gitOps?: EdgeDeps["gitOps"],
 ): CommandUnderTest {
   const pi = mock<PiRegistrar>({ exactParams: true, name: "extension API" });
@@ -293,10 +305,11 @@ function registerCommandWithCache(
   })
     .thenReturn()
     .times(1);
-  if (expectedNotifications > 0) {
+  const toolReads = (probes.runs + probes.probingEmissions) * 3;
+  if (toolReads > 0) {
     when(() => pi.getAllTools())
       .thenReturn([])
-      .times(expectedNotifications * 3);
+      .times(toolReads);
   }
 
   registerClaudePluginCommand(
@@ -321,8 +334,8 @@ function registerCommandWithCache(
   };
 }
 
-function registerCommandUnderTest(): CommandUnderTest {
-  return registerCommandWithCache(createCompletionCache());
+function registerCommandUnderTest(probes: CommandProbes): CommandUnderTest {
+  return registerCommandWithCache(createCompletionCache(), undefined, undefined, probes);
 }
 
 function createBootstrapGitOps(sourceTree: string): EdgeDeps["gitOps"] {
@@ -345,7 +358,10 @@ function createBootstrapGitOps(sourceTree: string): EdgeDeps["gitOps"] {
  * hand back the provider factory it installed.
  */
 function installAutocompleteWrapper(): WrapperUnderTest {
-  const { sessionStart, verifyRegistrar } = registerCommandUnderTest();
+  const { sessionStart, verifyRegistrar } = registerCommandUnderTest({
+    runs: 0,
+    probingEmissions: 0,
+  });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "session UI" });
   const providerFactory = It.willCapture<AutocompleteProviderFactory>("provider factory");
   when(() => {
@@ -382,7 +398,10 @@ describe("registerClaudePluginCommand", () => {
     const expectedDescription = EXPECTED_COMMAND_DESCRIPTION;
 
     // act
-    const { registration, verifyRegistrar } = registerCommandUnderTest();
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 0,
+      probingEmissions: 0,
+    });
 
     // assert
     assert.deepStrictEqual(registration.description, expectedDescription);
@@ -393,7 +412,11 @@ describe("registerClaudePluginCommand", () => {
     // arrange
     await createHermeticScope(t, "command-handler");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-    const { registration, verifyRegistrar } = registerCommandUnderTest();
+    // One run per invocation, usage errors included; the usage error probes nothing.
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 1,
+      probingEmissions: 0,
+    });
     const expectedNotifications: readonly Notification[] = [
       {
         message: `Unknown subcommand: "frobnicate".\n\n${EXPECTED_TOP_LEVEL_USAGE}`,
@@ -435,10 +458,12 @@ describe("registerClaudePluginCommand", () => {
       });
     };
 
+    // The one run is the only probe: import emits nothing here.
     const { registration, verifyRegistrar } = registerCommandWithCache(
       createCompletionCache(),
       hooksRouting,
       importClaudeSettings,
+      { runs: 1, probingEmissions: 0 },
     );
 
     // act
@@ -460,7 +485,10 @@ describe("registerClaudePluginCommand", () => {
     });
     await seedProjectMarketplace(scope.cwd, "registration-mp");
     await seedProjectMarketplace(laterRoot, "invocation-mp");
-    const { registration, verifyRegistrar } = registerCommandUnderTest();
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 0,
+      probingEmissions: 0,
+    });
     const expectedCandidates = [{ label: "invocation-mp", value: "list invocation-mp " }];
     process.chdir(laterRoot);
 
@@ -554,11 +582,12 @@ describe("registerClaudePluginCommand", () => {
       () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
     );
     await rm(path.dirname(path.dirname(pluginCachePath)), { force: true, recursive: true });
+    // One run, plus the add and autoupdate notifications, which still probe per emission.
     const owner = registerCommandWithCache(
       completionCache,
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       undefined,
-      2,
+      { runs: 1, probingEmissions: 2 },
       createBootstrapGitOps(sourceTree),
     );
     const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -679,11 +708,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-stale", status: "available" }]),
   );
   await rm(cachePath, { force: true });
+  // One run, plus the add notification, which still probes per emission.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    1,
+    { runs: 1, probingEmissions: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -769,11 +799,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
+  // One run, plus the remove notification, which still probes per emission.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    1,
+    { runs: 1, probingEmissions: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -877,11 +908,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
+  // One run, plus the update notification, which still probes per emission.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    1,
+    { runs: 1, probingEmissions: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -981,11 +1013,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
+  // One run, plus the install severity probe and the notification probe.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    2,
+    { runs: 1, probingEmissions: 2 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -1097,11 +1130,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-stale", status: "available" }]),
   );
   await rm(cachePath, { force: true });
+  // One run, plus the reinstall notification, which still probes per emission.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    1,
+    { runs: 1, probingEmissions: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -1201,11 +1235,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
+  // One run, plus the uninstall notification, which still probes per emission.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    1,
+    { runs: 1, probingEmissions: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -1685,7 +1720,11 @@ for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_A
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-arguments");
         const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-        const { registration, verifyRegistrar } = registerCommandUnderTest();
+        // One run per invocation, usage errors included; the usage error probes nothing.
+        const { registration, verifyRegistrar } = registerCommandUnderTest({
+          runs: 1,
+          probingEmissions: 0,
+        });
 
         // act
         await registration.handler(`${spelling} ${operand} ${invalid}`, ctx);
@@ -1714,7 +1753,11 @@ for (const { verb, aliases = [], operand, usage } of COMMAND_ARGUMENT_CASES.filt
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-empty-scope");
         const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-        const { registration, verifyRegistrar } = registerCommandUnderTest();
+        // One run per invocation, usage errors included; the usage error probes nothing.
+        const { registration, verifyRegistrar } = registerCommandUnderTest({
+          runs: 1,
+          probingEmissions: 0,
+        });
 
         // act
         await registration.handler(`${spelling} ${operand} --scope ${emptyValue} project`, ctx);

@@ -12,7 +12,7 @@
 //   const scopes: Scope[] = opts.scope !== undefined ? [opts.scope] : ["project", "user"];
 //   for each scope: loadState(locationsFor(scope, cwd).extensionRoot)
 //     -> accumulate one MarketplaceNotificationMessage per state.marketplaces[<name>]
-//   notify(opts.ctx, opts.pi, { marketplaces: <built array> });
+//   notify(opts.ctx, opts.run, { marketplaces: <built array> });
 // An empty top-level marketplaces array renders the `(no marketplaces)`
 //   sentinel through renderMarketplaceList. CMC-10.
 // Caller-supplied order is honored end-to-end (no internal sort); the outer
@@ -28,15 +28,14 @@ import { notifyWithContext, type MarketplaceRows } from "../../shared/notify-con
 
 import { LIST_CONTEXT } from "./list.messaging.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface ListMarketplacesOptions {
   readonly ctx: ExtensionContext;
-  /**
-   * Required by `notify(ctx, pi, message)` for soft-dep probing.
-   */
-  readonly pi: ExtensionAPI;
+  /** D-05: the command's notification run; its snapshot drives the markers. */
+  readonly run: NotificationRun;
   /** When omitted, SC-6 mandates enumeration of BOTH scopes. */
   readonly scope?: Scope;
   /** Project-scope cwd (ignored for user scope). */
@@ -64,7 +63,7 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
     for (const record of Object.values(state.marketplaces)) {
       // NotificationMessage construction recipe.
       // - One MarketplaceNotificationMessage per record, emitted via one
-      //   notify(opts.ctx, opts.pi, ...) call below; `plugins: []` is required.
+      //   notify(opts.ctx, opts.run, ...) call below; `plugins: []` is required.
       // - Discriminator here: `mp.status === undefined` (list-surface arm of
       //   renderMpHeader). Unique to this orchestrator in the marketplace family.
       // - `details: MarketplaceDetails` is OPTIONAL and INDEPENDENT of status
@@ -103,5 +102,5 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
   // OUT-07 / D-12: the inventory is a bulk surface -> Plural cardinality. The
   // list-arm headers render via the central renderMpHeader seam the spine
   // reuses; LIST_CONTEXT carries the localized list vocabulary.
-  notifyWithContext(opts.ctx, opts.pi, LIST_CONTEXT, marketplaces, undefined, "plural");
+  notifyWithContext(opts.ctx, opts.run, LIST_CONTEXT, marketplaces, undefined, "plural");
 }

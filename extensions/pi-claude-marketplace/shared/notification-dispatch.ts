@@ -27,6 +27,7 @@ import type {
   ResolvedMarketplace,
   ResolvedRow,
 } from "./notification-resolve.ts";
+import type { NotificationRun } from "./notification-run.ts";
 import type { StandaloneKind } from "./notification-summary.ts";
 import type {
   CascadeNotificationMessage,
@@ -54,11 +55,12 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  *
  * Public API:
  *
- *  - notify(ctx, pi, NotificationMessage)
+ *  - notify(ctx, source, NotificationMessage)
  *  Single state-change entry. Renders the marketplace/plugin tree
  *  to a single string and routes through ctx.ui.notify with computed
- *  severity, a computed reload-hint trailer, and a single
- *  softDepStatus(pi) probe at entry. `resolveRows` composes the per-row
+ *  severity, a computed reload-hint trailer, and one soft-dep snapshot:
+ *  the notification run's own, or a single probe of a tool inventory
+ *  at entry. `resolveRows` composes the per-row
  *  {requires pi-subagents} / {requires pi-mcp} markers from that probe
  *  under `CENTRAL_MARKER_POLICY` (D-12).
  *  - notifyUsageError(ctx, UsageErrorMessage)
@@ -269,19 +271,29 @@ function dispatchInfoMessage(
 }
 
 /**
+ * The soft-dependency snapshot an emission reads. A notification run carries
+ * its own snapshot (D-05) and is never probed again; a tool inventory is
+ * probed once for this emission.
+ */
+function snapshotOf(source: NotificationRun | ToolInventory): SoftDepStatus {
+  return "softDeps" in source ? source.softDeps : softDepStatus(source);
+}
+
+/**
  * Structured-notification entry point. Sole public surface for state-change
  * notifications (SNM-12). Severity, reload-hint, and soft-dep probe are
  * computed from contents at notify time (SNM-14, SNM-15, SNM-16).
  */
 export function notify(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  source: NotificationRun | ToolInventory,
   message: NotificationMessage,
 ): void {
-  // Single soft-dep probe per invocation. `resolveRows` composes the row
-  // markers from it (cascade and reconcile-applied arms); no renderer reads
-  // it. Info messages never emit soft-dep markers.
-  const probe = softDepStatus(pi);
+  // One soft-dep snapshot per emission: a run's own snapshot, or a probe of a
+  // tool inventory. `resolveRows` composes the row markers from it (cascade
+  // and reconcile-applied arms); no renderer reads it. Info messages never
+  // emit soft-dep markers.
+  const probe = snapshotOf(source);
 
   // Dispatch standalone-dispatched kinds through `dispatchInfoMessage` so the
   // cascade arm below stays under the cognitive-complexity budget. The single
@@ -339,7 +351,7 @@ export function notify(
  * simple `(message, severity?) => void` callback rather than the structured
  * NotificationMessage surface. This is the ONLY sanctioned way to derive
  * a raw callback from ctx.ui.notify outside of notification-dispatch.ts itself --
- * all other code must use notify(ctx, pi, NotificationMessage) directly.
+ * all other code must use notify(ctx, source, NotificationMessage) directly.
  */
 export function makeRawNotifyFn(
   ctx: NotificationContext,
@@ -386,7 +398,7 @@ function composeContextBlocks(
 
 function emitCascadeWith(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  source: NotificationRun | ToolInventory,
   message: CascadeNotificationMessage | ReconcileAppliedCascadeMessage,
   renderPluginRowBody: (p: ResolvedRow, mpScope: Scope) => string,
   markers: MarkerPolicy,
@@ -396,7 +408,7 @@ function emitCascadeWith(
   // member stays on the two shapes that can actually produce one.
   advisories: readonly string[] | undefined,
 ): void {
-  const probe = softDepStatus(pi);
+  const probe = snapshotOf(source);
   const marketplaces = resolveRows(message.marketplaces, probe, markers, hasRenderArm);
   const envelope = resolveEnvelope(message);
   const blocks = composeContextBlocks(marketplaces, renderPluginRowBody);
@@ -417,13 +429,21 @@ function emitCascadeWith(
  */
 export function emitContextCascade(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  source: NotificationRun | ToolInventory,
   message: CascadeNotificationMessage,
   renderPluginRowBody: (p: ResolvedRow, mpScope: Scope) => string,
   markers: MarkerPolicy,
   hasRenderArm: (status: string) => boolean,
 ): void {
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, markers, hasRenderArm, message.advisories);
+  emitCascadeWith(
+    ctx,
+    source,
+    message,
+    renderPluginRowBody,
+    markers,
+    hasRenderArm,
+    message.advisories,
+  );
 }
 
 /**
@@ -433,13 +453,13 @@ export function emitContextCascade(
  */
 export function emitUpdateNoOpCascade(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  source: NotificationRun | ToolInventory,
   message: CascadeNotificationMessage,
   renderPluginRowBody: (p: ResolvedRow, mpScope: Scope) => string,
   markers: MarkerPolicy,
   hasRenderArm: (status: string) => boolean,
 ): void {
-  const probe = softDepStatus(pi);
+  const probe = snapshotOf(source);
   const marketplaces = resolveRows(message.marketplaces, probe, markers, hasRenderArm);
   const envelope = resolveUpdateNoOpEnvelope(message);
   const blocks = composeContextBlocks(marketplaces, renderPluginRowBody);
@@ -457,11 +477,11 @@ export function emitUpdateNoOpCascade(
  */
 export function emitReconcileAppliedContextCascade(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  source: NotificationRun | ToolInventory,
   message: ReconcileAppliedCascadeMessage,
   renderPluginRowBody: (p: ResolvedRow, mpScope: Scope) => string,
   markers: MarkerPolicy,
   hasRenderArm: (status: string) => boolean,
 ): void {
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, markers, hasRenderArm, undefined);
+  emitCascadeWith(ctx, source, message, renderPluginRowBody, markers, hasRenderArm, undefined);
 }

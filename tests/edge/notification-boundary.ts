@@ -4,7 +4,9 @@
 // types. The contract they encode is not theirs -- it belongs to
 // `shared/notification-dispatch.ts`: `notify()` runs one soft-dependency probe
 // per emission, and that probe reads `pi.getAllTools()` once per companion
-// target, so three times over the closed `Dependency` set. When the probe count changes,
+// target, so three times over the closed `Dependency` set. A surface that reads a
+// notification run instead renders from the run's snapshot and probes nothing
+// (D-05), so its cases state zero probes. When the probe count changes,
 // one shared definition breaks once instead of four suites drifting apart, and a
 // drifted `times()` count weakens the IL-2 sizing proof silently rather than
 // failing loudly.

@@ -29,25 +29,28 @@ import {
 } from "../../browser/plugin-browser.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { NotificationRun } from "../../../shared/notification-run.ts";
 import type {
   PluginFailedMessage,
   PluginNotificationMessage,
 } from "../../../shared/notification-types.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin browse";
 
 /**
  * The existing subcommand handlers the browser dispatches into. Passed in by
  * `register.ts` so the browse handler does not reconstruct the handler map
- * (no circular factory). `list` is the non-TUI fallback.
+ * (no circular factory). `list` is the non-TUI fallback. Each handler
+ * receives the browse command's own notification run.
  */
 export interface BrowseActionHandlers {
-  readonly list: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly install: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly uninstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly pluginInfo: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly enable: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly disable: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  readonly list: SubcommandHandler;
+  readonly install: SubcommandHandler;
+  readonly uninstall: SubcommandHandler;
+  readonly pluginInfo: SubcommandHandler;
+  readonly enable: SubcommandHandler;
+  readonly disable: SubcommandHandler;
 }
 
 /**
@@ -104,32 +107,34 @@ async function dispatch(
   handlers: BrowseActionHandlers,
   result: PickerResult,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
 ): Promise<void> {
   const args = actionArgs(result);
   switch (result.action) {
     case "install":
-      return handlers.install(args, ctx);
+      return handlers.install(args, ctx, run);
     case "uninstall":
-      return handlers.uninstall(args, ctx);
+      return handlers.uninstall(args, ctx, run);
     case "info":
-      return handlers.pluginInfo(args, ctx);
+      return handlers.pluginInfo(args, ctx, run);
     case "enable":
-      return handlers.enable(args, ctx);
+      return handlers.enable(args, ctx, run);
     case "disable":
-      return handlers.disable(args, ctx);
+      return handlers.disable(args, ctx, run);
   }
 }
 
 /**
  * Factory: returns the async handler closed over `pi` (needed by the
- * plugin loader's `loadPluginListPayload` soft-dep probe) and the action
- * handlers.
+ * plugin loader's `loadPluginListPayload` soft-dep probe and the browser's
+ * own notifications) and the action handlers. The handler forwards its
+ * notification run to every action handler it calls.
  */
 export function makeBrowseHandler(
   pi: ExtensionAPI,
   handlers: BrowseActionHandlers,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     if (args.trim() !== "") {
       notifyUsageError(ctx, { message: "browse takes no arguments.", usage: USAGE });
       return;
@@ -138,7 +143,7 @@ export function makeBrowseHandler(
     // Non-TUI modes have no terminal for `ctx.ui.custom`; fall back to the
     // inventory surface so `browse` is never a no-op.
     if (ctx.mode !== "tui") {
-      await handlers.list("", ctx);
+      await handlers.list("", ctx, run);
       return;
     }
 
@@ -203,6 +208,6 @@ export function makeBrowseHandler(
       return;
     }
 
-    await dispatch(handlers, result, ctx);
+    await dispatch(handlers, result, ctx, run);
   };
 }

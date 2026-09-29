@@ -15,14 +15,12 @@ import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistenc
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ListMarketplacesOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
@@ -38,7 +36,6 @@ interface CapturedNotification {
 interface NotificationBoundary {
   readonly ctx: ExtensionContext;
   readonly notifications: CapturedNotification[];
-  readonly pi: ExtensionAPI;
   readonly ui: NotificationUi;
 }
 
@@ -55,20 +52,16 @@ interface WorkspaceSnapshot {
 
 function notificationBoundary(name: string, expectsNotification: boolean): NotificationBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: `${name} context` });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: `${name} extension API` });
   const ui = mock<NotificationUi>({ exactParams: true, name: `${name} UI` });
   const notifications: CapturedNotification[] = [];
   if (expectsNotification) {
     when(() => ctx.ui).thenReturn(ui);
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
     when(() => ui.notify).thenReturn((message, severity) => {
       notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
     });
   }
 
-  return { ctx, notifications, pi, ui };
+  return { ctx, notifications, ui };
 }
 
 async function seedAutoupdate(
@@ -149,7 +142,7 @@ test("bare list emits only the empty-state sentinel without creating scope data"
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
 
@@ -160,7 +153,6 @@ test("bare list emits only the empty-state sentinel without creating scope data"
     assert.deepStrictEqual(boundary.notifications, [{ message: "(no marketplaces)" }]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -184,7 +176,7 @@ test("explicit project list renders the exact one-row path-source notification",
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -198,7 +190,6 @@ test("explicit project list renders the exact one-row path-source notification",
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -222,7 +213,7 @@ test("explicit project list renders one GitHub source without a source suffix", 
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -236,7 +227,6 @@ test("explicit project list renders one GitHub source without a source suffix", 
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -268,7 +258,7 @@ test("local config overrides base config and renders the exact autoupdate marker
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -282,7 +272,6 @@ test("local config overrides base config and renders the exact autoupdate marker
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -307,7 +296,7 @@ test("lastUpdatedAt remains stored but renders no timestamp or status marker", a
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -321,7 +310,6 @@ test("lastUpdatedAt remains stored but renders no timestamp or status marker", a
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -345,7 +333,7 @@ test("explicit user list renders only the user scope", async () => {
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "user",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -359,7 +347,6 @@ test("explicit user list renders only the user scope", async () => {
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -431,7 +418,7 @@ test("bare list emits the exact many-row notification in project-then-user inser
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
 
@@ -447,7 +434,6 @@ test("bare list emits the exact many-row notification in project-then-user inser
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -479,7 +465,7 @@ test("invalid local config is ignored while the valid base autoupdate value rend
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -495,7 +481,6 @@ test("invalid local config is ignored while the valid base autoupdate value rend
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -510,7 +495,7 @@ test("unsupported state schema rejects exactly without notifying or mutating the
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -534,7 +519,6 @@ test("unsupported state schema rejects exactly without notifying or mutating the
     assert.deepStrictEqual(boundary.notifications, []);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });

@@ -36,6 +36,7 @@
 
 import { makeLocationsResolver } from "../orchestrators/edge-deps.ts";
 import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall-flow.ts";
+import { openNotificationRun } from "../shared/notification-run.ts";
 
 import {
   isClaudePluginCommandLine,
@@ -113,7 +114,7 @@ export function registerClaudePluginCommand(
     import: makeImportHandler(pi, deps, hooksRouting),
     marketplaceAdd: makeAddHandler(pi, deps),
     marketplaceRemove: makeRemoveHandler(pi, deps),
-    marketplaceList: makeMarketplaceListHandler(pi),
+    marketplaceList: makeMarketplaceListHandler(),
     marketplaceInfo: makeMarketplaceInfoHandler(pi),
     marketplaceUpdate: makeMarketplaceUpdateHandler(pi, {
       completionCache: deps.completionCache,
@@ -128,7 +129,10 @@ export function registerClaudePluginCommand(
 
   pi.registerCommand("claude:plugin", {
     description: COMMAND_DESCRIPTION,
-    handler: (args, ctx) => routeClaudePlugin(args, handlers, ctx),
+    // D-05 / D-07: one notification run per command invocation, opened
+    // before routing, so every emission of the command reads one snapshot.
+    // A usage error opens its run too.
+    handler: (args, ctx) => routeClaudePlugin(args, handlers, ctx, openNotificationRun(pi)),
     // This `process.cwd()` is the single sanctioned site.
     // The arrow body runs per completion lookup and reads
     // `process.cwd()` there, so a fresh `makeLocationsResolver` is

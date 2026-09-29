@@ -12,6 +12,7 @@ import {
 } from "./notification-types.ts";
 
 import type { ResolvedRow } from "./notification-resolve.ts";
+import type { NotificationRun } from "./notification-run.ts";
 import type { Scope } from "./types.ts";
 import type { NotificationContext, ToolInventory } from "../platform/pi-api.ts";
 
@@ -25,7 +26,7 @@ import type { NotificationContext, ToolInventory } from "../platform/pi-api.ts";
  * the shared severity/summary/reload + single `ctx.ui.notify` seam in
  * `notification-dispatch.ts` (`emitContextCascade`).
  *
- * The legacy `notify(ctx, pi, message)` in `notification-dispatch.ts` keeps serving
+ * The legacy `notify(ctx, source, message)` in `notification-dispatch.ts` keeps serving
  * not-yet-migrated call sites (it still drives the central renderPluginRow /
  * renderMpHeader switches) until every command routes through this module;
  * removing those central switches is a later plan. Both paths share the same
@@ -140,7 +141,7 @@ export function notifyWithContext<
   Msg extends PluginNotificationMessage & { status: Status },
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  source: NotificationRun | ToolInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
   kind: "cascade" | undefined,
@@ -175,7 +176,7 @@ export function notifyWithContext<
 
   emitContextCascade(
     ctx,
-    pi,
+    source,
     message,
     (row, mpScope) => dispatchRow(context, row, mpScope),
     context.markers,
@@ -202,7 +203,7 @@ export function notifyUpdateWithContext<
   Msg extends PluginNotificationMessage & { status: Status },
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  source: NotificationRun | ToolInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
   cardinality: "single" | "plural",
@@ -220,7 +221,7 @@ export function notifyUpdateWithContext<
 
   emitContextCascade(
     ctx,
-    pi,
+    source,
     message,
     (row, mpScope) => dispatchRow(context, row, mpScope),
     context.markers,
@@ -246,7 +247,7 @@ export function notifyUpdateNoOpWithContext<
   Msg extends PluginNotificationMessage & { status: Status },
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  source: NotificationRun | ToolInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
   cardinality: "single" | "plural",
@@ -262,7 +263,7 @@ export function notifyUpdateNoOpWithContext<
 
   emitUpdateNoOpCascade(
     ctx,
-    pi,
+    source,
     message,
     (row, mpScope) => dispatchRow(context, row, mpScope),
     context.markers,
@@ -285,7 +286,7 @@ export function notifyReconcileAppliedWithContext<
   Msg extends Extract<PluginNotificationMessage, { status: Status }>,
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  source: NotificationRun | ToolInventory,
   context: CommandContext<Status, Msg>,
   message: ReconcileAppliedCascadeMessage,
 ): void {
@@ -303,7 +304,7 @@ export function notifyReconcileAppliedWithContext<
 
   emitReconcileAppliedContextCascade(
     ctx,
-    pi,
+    source,
     labeled,
     (row, mpScope) => dispatchRow(context, row, mpScope),
     context.markers,

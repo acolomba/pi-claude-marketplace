@@ -15,6 +15,8 @@ import {
   notifyUsageInfo,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 
+import { runWithAllLoaded, runWithNothingLoaded } from "./notification-run-seeds.ts";
+
 import type { ResolvedRow } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
   CascadeNotificationMessage,
@@ -155,6 +157,66 @@ test("notify renders installed plugin with agents dep + probe unloaded (soft-dep
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● demo [user] (added)\n  ● commit-commands v1.0.0 (installed) {requires pi-subagents}\n\n/reload to pick up changes`,
   ]);
+});
+
+function agentsRowMessage(): NotificationMessage {
+  return {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            severity: "info",
+            needsReload: true,
+            name: "commit-commands",
+            version: "1.0.0",
+            dependencies: ["agents"],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+test("D-05: notify reads a run's snapshot and marks an agents row when no companion is loaded", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const run = runWithNothingLoaded();
+
+  // act
+  notify(ctx as never, run, agentsRowMessage());
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        `● demo [user] (added)\n  ● commit-commands v1.0.0 (installed) {requires pi-subagents}\n\n/reload to pick up changes`,
+      ],
+    ],
+  );
+});
+
+test("D-05: notify reads a run's snapshot and leaves an agents row unmarked when every companion is loaded", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const run = runWithAllLoaded();
+
+  // act
+  notify(ctx as never, run, agentsRowMessage());
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        `● demo [user] (added)\n  ● commit-commands v1.0.0 (installed)\n\n/reload to pick up changes`,
+      ],
+    ],
+  );
 });
 
 test("notify renders updated plugin with version arrow + mcp dep marker", (t) => {

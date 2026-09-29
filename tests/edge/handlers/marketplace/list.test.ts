@@ -16,6 +16,9 @@
 // count and `verifyBoundary()` reports it. Both scopes are seeded in that case
 // too, so a workflow that did run would have rows to emit.
 //
+// D-05: the handler renders from the command's notification run, so every case
+// hands it a run literal and sizes the boundary at zero tool probes.
+//
 // Every seeded record omits `lastUpdatedAt` and declares no autoupdate entry, so
 // the renderer emits the bare `<glyph> <name> [<scope>]` header row. The detail
 // tokens and the empty-state sentinel belong to
@@ -45,6 +48,7 @@ import { test, type TestContext } from "node:test";
 import { makeMarketplaceListHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/list.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -116,14 +120,14 @@ test("lists every scope project-first when no scope flag narrows the listing", a
   // arrange
   const { cwd } = await createHermeticScope(t, "both-scopes");
   await seedBothScopes(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: cwd,
     reads: 1,
   });
-  const marketplaceListHandler = makeMarketplaceListHandler(pi);
+  const marketplaceListHandler = makeMarketplaceListHandler();
 
   // act
-  await marketplaceListHandler("", ctx);
+  await marketplaceListHandler("", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: BOTH_SCOPE_ROWS }]);
@@ -138,11 +142,11 @@ for (const { args, label, surplus } of [
     // arrange
     const { cwd } = await createHermeticScope(t, label);
     await seedBothScopes(cwd);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const marketplaceListHandler = makeMarketplaceListHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const marketplaceListHandler = makeMarketplaceListHandler();
 
     // act
-    await marketplaceListHandler(args, ctx);
+    await marketplaceListHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -160,14 +164,14 @@ for (const { row, scope } of [
     // arrange
     const { cwd } = await createHermeticScope(t, `scope-${scope}`);
     await seedBothScopes(cwd);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: cwd,
       reads: 1,
     });
-    const marketplaceListHandler = makeMarketplaceListHandler(pi);
+    const marketplaceListHandler = makeMarketplaceListHandler();
 
     // act
-    await marketplaceListHandler(`--scope ${scope}`, ctx);
+    await marketplaceListHandler(`--scope ${scope}`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: `${row}\n\nMarketplace list: 1 success` }]);
@@ -180,11 +184,11 @@ for (const args of ["--local", "--local --scope project", "--scope project --loc
     // arrange
     const { cwd } = await createHermeticScope(t, "local-flag");
     await seedBothScopes(cwd);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const marketplaceListHandler = makeMarketplaceListHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const marketplaceListHandler = makeMarketplaceListHandler();
 
     // act
-    await marketplaceListHandler(args, ctx);
+    await marketplaceListHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -198,11 +202,11 @@ test("reports an unrecognised scope value with the list usage block and never li
   // arrange
   const { cwd } = await createHermeticScope(t, "invalid-scope");
   await seedBothScopes(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const marketplaceListHandler = makeMarketplaceListHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const marketplaceListHandler = makeMarketplaceListHandler();
 
   // act
-  await marketplaceListHandler("--scope bogus", ctx);
+  await marketplaceListHandler("--scope bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -227,14 +231,14 @@ test("list --scope project keeps shared, local, and overridden entries with unch
     '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
   await writeFile(locations.configJsonPath, sharedBytes);
   await writeFile(locations.configLocalJsonPath, localBytes);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: cwd,
     reads: 1,
   });
-  const handler = makeMarketplaceListHandler(pi);
+  const handler = makeMarketplaceListHandler();
 
   // act
-  await handler("--scope project", ctx);
+  await handler("--scope project", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -257,11 +261,11 @@ test("list rejects unknown flags before reading state", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "unknown-flag");
   await seedBothScopes(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const handler = makeMarketplaceListHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const handler = makeMarketplaceListHandler();
 
   // act
-  await handler("--bogus", ctx);
+  await handler("--bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [

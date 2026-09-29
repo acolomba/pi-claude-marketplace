@@ -2,8 +2,9 @@
 //
 // AP-3: the subcommand router is a pure function over the handler record it is
 // handed, so that record is a strict mock and every dispatch case states the one
-// call it promises with both arguments written out. A misrouted subcommand fails
-// on the unexpected member instead of passing quietly.
+// call it promises with all three arguments written out: the remaining text, the
+// context, and the command's notification run (D-05). A misrouted subcommand
+// fails on the unexpected member instead of passing quietly.
 //
 // D-116-06: every usage-error case builds the handler record with no stated
 // expectation at all. A strict mock with nothing stated throws on its first
@@ -42,6 +43,7 @@ import {
   TOP_LEVEL_SUBCOMMANDS,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import { createNotificationBoundary } from "./notification-boundary.ts";
 
@@ -123,11 +125,12 @@ for (const { subcommand, handler } of TOP_LEVEL_DISPATCH) {
   test(`dispatches ${subcommand} to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const run = runWithNothingLoaded();
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-    when(() => handlers[handler]("alpha@official --scope user", ctx)).thenResolve(undefined);
+    when(() => handlers[handler]("alpha@official --scope user", ctx, run)).thenResolve(undefined);
 
     // act
-    await routeClaudePlugin(`${subcommand} alpha@official --scope user`, handlers, ctx);
+    await routeClaudePlugin(`${subcommand} alpha@official --scope user`, handlers, ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, []);
@@ -140,13 +143,14 @@ for (const { subcommand, handler, expectedArgs, operand } of MARKETPLACE_DISPATC
   test(`dispatches the marketplace ${subcommand} subcommand to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const run = runWithNothingLoaded();
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
     const driven = operand ?? "official --scope user";
     const forwardArg = expectedArgs ?? driven;
-    when(() => handlers[handler](forwardArg, ctx)).thenResolve(undefined);
+    when(() => handlers[handler](forwardArg, ctx, run)).thenResolve(undefined);
 
     // act
-    await routeClaudePlugin(`marketplace ${subcommand} ${driven}`, handlers, ctx);
+    await routeClaudePlugin(`marketplace ${subcommand} ${driven}`, handlers, ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, []);
@@ -184,11 +188,12 @@ test("accepts exactly the marketplace names its dispatch rows serve", () => {
 test("routes the marketplace help subcommand to handlers.help with marketplace topic", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-  when(() => handlers.help("marketplace", ctx)).thenResolve(undefined);
+  when(() => handlers.help("marketplace", ctx, run)).thenResolve(undefined);
 
   // act
-  await routeClaudePlugin("marketplace help", handlers, ctx);
+  await routeClaudePlugin("marketplace help", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, []);
@@ -199,14 +204,15 @@ test("routes the marketplace help subcommand to handlers.help with marketplace t
 test("routes the ls alias and the list subcommand to one and the same plugin list handler", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-  when(() => handlers.list("official --scope user", ctx))
+  when(() => handlers.list("official --scope user", ctx, run))
     .thenResolve(undefined)
     .times(2);
 
   // act
-  await routeClaudePlugin("list official --scope user", handlers, ctx);
-  await routeClaudePlugin("ls official --scope user", handlers, ctx);
+  await routeClaudePlugin("list official --scope user", handlers, ctx, run);
+  await routeClaudePlugin("ls official --scope user", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, []);
@@ -217,14 +223,15 @@ test("routes the ls alias and the list subcommand to one and the same plugin lis
 test("routes the marketplace rm alias and the remove subcommand to one and the same handler", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-  when(() => handlers.marketplaceRemove("official --scope user", ctx))
+  when(() => handlers.marketplaceRemove("official --scope user", ctx, run))
     .thenResolve(undefined)
     .times(2);
 
   // act
-  await routeClaudePlugin("marketplace remove official --scope user", handlers, ctx);
-  await routeClaudePlugin("marketplace rm official --scope user", handlers, ctx);
+  await routeClaudePlugin("marketplace remove official --scope user", handlers, ctx, run);
+  await routeClaudePlugin("marketplace rm official --scope user", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, []);
@@ -235,14 +242,15 @@ test("routes the marketplace rm alias and the remove subcommand to one and the s
 test("routes the marketplace ls alias and the list subcommand to one and the same handler", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-  when(() => handlers.marketplaceList("--scope user", ctx))
+  when(() => handlers.marketplaceList("--scope user", ctx, run))
     .thenResolve(undefined)
     .times(2);
 
   // act
-  await routeClaudePlugin("marketplace list --scope user", handlers, ctx);
-  await routeClaudePlugin("marketplace ls --scope user", handlers, ctx);
+  await routeClaudePlugin("marketplace list --scope user", handlers, ctx, run);
+  await routeClaudePlugin("marketplace ls --scope user", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, []);
@@ -265,13 +273,14 @@ for (const { subcommand, topLevelHandler, marketplaceHandler } of [
   test(`reads ${subcommand} as the ${topLevelHandler} handler at the top level and as the ${marketplaceHandler} handler behind the marketplace token`, async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const run = runWithNothingLoaded();
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-    when(() => handlers[topLevelHandler]("official", ctx)).thenResolve(undefined);
-    when(() => handlers[marketplaceHandler]("official", ctx)).thenResolve(undefined);
+    when(() => handlers[topLevelHandler]("official", ctx, run)).thenResolve(undefined);
+    when(() => handlers[marketplaceHandler]("official", ctx, run)).thenResolve(undefined);
 
     // act
-    await routeClaudePlugin(`${subcommand} official`, handlers, ctx);
-    await routeClaudePlugin(`marketplace ${subcommand} official`, handlers, ctx);
+    await routeClaudePlugin(`${subcommand} official`, handlers, ctx, run);
+    await routeClaudePlugin(`marketplace ${subcommand} official`, handlers, ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, []);
@@ -283,11 +292,12 @@ for (const { subcommand, topLevelHandler, marketplaceHandler } of [
 test("strips the whitespace run after the subcommand and leaves the interior of the remainder alone", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-  when(() => handlers.install("alpha@official   --scope   user", ctx)).thenResolve(undefined);
+  when(() => handlers.install("alpha@official   --scope   user", ctx, run)).thenResolve(undefined);
 
   // act
-  await routeClaudePlugin("install   alpha@official   --scope   user", handlers, ctx);
+  await routeClaudePlugin("install   alpha@official   --scope   user", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, []);
@@ -298,11 +308,12 @@ test("strips the whitespace run after the subcommand and leaves the interior of 
 test("strips whitespace that precedes the subcommand", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-  when(() => handlers.install("alpha@official", ctx)).thenResolve(undefined);
+  when(() => handlers.install("alpha@official", ctx, run)).thenResolve(undefined);
 
   // act
-  await routeClaudePlugin("   install alpha@official", handlers, ctx);
+  await routeClaudePlugin("   install alpha@official", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, []);
@@ -313,13 +324,14 @@ test("strips whitespace that precedes the subcommand", async () => {
 test("hands the quotes and flags of the remainder to the handler untouched", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-  when(() => handlers.install('"my plugin"@official --scope user --local', ctx)).thenResolve(
+  when(() => handlers.install('"my plugin"@official --scope user --local', ctx, run)).thenResolve(
     undefined,
   );
 
   // act
-  await routeClaudePlugin('install "my plugin"@official --scope user --local', handlers, ctx);
+  await routeClaudePlugin('install "my plugin"@official --scope user --local', handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, []);
@@ -330,11 +342,12 @@ test("hands the quotes and flags of the remainder to the handler untouched", asy
 test("hands the handler an empty argument text when the subcommand carries no remainder", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-  when(() => handlers.bootstrap("", ctx)).thenResolve(undefined);
+  when(() => handlers.bootstrap("", ctx, run)).thenResolve(undefined);
 
   // act
-  await routeClaudePlugin("bootstrap", handlers, ctx);
+  await routeClaudePlugin("bootstrap", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, []);
@@ -345,11 +358,12 @@ test("hands the handler an empty argument text when the subcommand carries no re
 test("hands the handler an empty argument text when the subcommand is followed only by whitespace", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-  when(() => handlers.bootstrap("", ctx)).thenResolve(undefined);
+  when(() => handlers.bootstrap("", ctx, run)).thenResolve(undefined);
 
   // act
-  await routeClaudePlugin("bootstrap   ", handlers, ctx);
+  await routeClaudePlugin("bootstrap   ", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, []);
@@ -360,11 +374,14 @@ test("hands the handler an empty argument text when the subcommand is followed o
 test("peels the marketplace token and its subcommand in turn, keeping the interior of what is left", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-  when(() => handlers.marketplaceAdd("gh:owner/repo   --scope user", ctx)).thenResolve(undefined);
+  when(() => handlers.marketplaceAdd("gh:owner/repo   --scope user", ctx, run)).thenResolve(
+    undefined,
+  );
 
   // act
-  await routeClaudePlugin("marketplace   add   gh:owner/repo   --scope user", handlers, ctx);
+  await routeClaudePlugin("marketplace   add   gh:owner/repo   --scope user", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, []);
@@ -379,11 +396,12 @@ for (const { input, shape } of [
   test(`dispatches to the browse handler for input with ${shape} (AP-3)`, async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const run = runWithNothingLoaded();
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-    when(() => handlers.browse("", ctx)).thenResolve(undefined);
+    when(() => handlers.browse("", ctx, run)).thenResolve(undefined);
 
     // act
-    await routeClaudePlugin(input, handlers, ctx);
+    await routeClaudePlugin(input, handlers, ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, []);
@@ -395,10 +413,11 @@ for (const { input, shape } of [
 test("names an unrecognized top-level token back to the operator with the top-level usage block (AP-3)", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
 
   // act
-  await routeClaudePlugin("unknownverb alpha@official", handlers, ctx);
+  await routeClaudePlugin("unknownverb alpha@official", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -418,10 +437,11 @@ for (const { input, shape } of [
   test(`reports that marketplace needs a subcommand, with the marketplace usage block, for input with ${shape} (AP-3)`, async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const run = runWithNothingLoaded();
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
 
     // act
-    await routeClaudePlugin(input, handlers, ctx);
+    await routeClaudePlugin(input, handlers, ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -438,10 +458,11 @@ for (const { input, shape } of [
 test("refuses an argument after marketplace help rather than discarding it (AP-3)", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
 
   // act
-  await routeClaudePlugin("marketplace help official", handlers, ctx);
+  await routeClaudePlugin("marketplace help official", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -457,10 +478,11 @@ test("refuses an argument after marketplace help rather than discarding it (AP-3
 test("names an unrecognized marketplace token back to the operator with the marketplace usage block (AP-3)", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
 
   // act
-  await routeClaudePlugin("marketplace bogus official", handlers, ctx);
+  await routeClaudePlugin("marketplace bogus official", handlers, ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, [

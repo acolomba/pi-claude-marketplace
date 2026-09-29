@@ -14,45 +14,58 @@
 // `routeClaudePlugin` accepts `ls` as an alias for `list`; `routeMarketplace`
 // accepts `rm` and `ls` as aliases for `remove` and `list`.
 //
-// Router signature is pure-functional (`routeClaudePlugin(args, handlers, ctx)`)
-// so handlers + ctx can be mocked without an `ExtensionAPI` instance.
-// `register.ts` builds the `SubcommandHandlers` record from `EdgeDeps` and
-// passes it in.
+// Router signature is pure-functional
+// (`routeClaudePlugin(args, handlers, ctx, run)`) so handlers, ctx, and the
+// notification run can be mocked without an `ExtensionAPI` instance.
+// `register.ts` builds the `SubcommandHandlers` record from `EdgeDeps`, opens
+// one notification run per command invocation (D-05, D-07), and passes both
+// in. The router hands that run to whichever handler it dispatches.
 
 import { notifyUsageError } from "../shared/notification-dispatch.ts";
 
 import type { ExtensionCommandContext } from "../platform/pi-api.ts";
+import type { NotificationRun } from "../shared/notification-run.ts";
+
+/**
+ * One subcommand handler: the argument text after the subcommand, the Pi
+ * command context, and the command's notification run.
+ */
+export type SubcommandHandler = (
+  args: string,
+  ctx: ExtensionCommandContext,
+  run: NotificationRun,
+) => Promise<void>;
 
 export interface SubcommandHandlers {
-  bootstrap: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  install: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  uninstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  update: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  bootstrap: SubcommandHandler;
+  install: SubcommandHandler;
+  uninstall: SubcommandHandler;
+  update: SubcommandHandler;
   // FTCH-01: pi-only `fetch` verb (upstream `/plugin` has no fetch). Warms a
   // git-source plugin's clone/mirror cache without installing.
-  fetch: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  reinstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  list: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  fetch: SubcommandHandler;
+  reinstall: SubcommandHandler;
+  list: SubcommandHandler;
   // Named `pluginInfo` (NOT `info`) to disambiguate from
   // `marketplaceInfo`. The router dispatches `"info"` here.
-  pluginInfo: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  pluginInfo: SubcommandHandler;
   // DIFF-01 SC #2 / D-53-01: `/claude:plugin pending` read-only diff command.
-  pending: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  pending: SubcommandHandler;
   // D-54-01 / ENBL-01..04: enable/disable commands.
-  enable: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  disable: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  import: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  marketplaceAdd: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  marketplaceRemove: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  marketplaceList: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  marketplaceInfo: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  marketplaceUpdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  marketplaceAutoupdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  marketplaceNoautoupdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  enable: SubcommandHandler;
+  disable: SubcommandHandler;
+  import: SubcommandHandler;
+  marketplaceAdd: SubcommandHandler;
+  marketplaceRemove: SubcommandHandler;
+  marketplaceList: SubcommandHandler;
+  marketplaceInfo: SubcommandHandler;
+  marketplaceUpdate: SubcommandHandler;
+  marketplaceAutoupdate: SubcommandHandler;
+  marketplaceNoautoupdate: SubcommandHandler;
   // Interactive SelectList browser (TUI-only). Falls back to `list` in
   // non-TUI modes.
-  browse: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  help: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  browse: SubcommandHandler;
+  help: SubcommandHandler;
 }
 
 /**
@@ -146,6 +159,7 @@ export async function routeClaudePlugin(
   args: string,
   handlers: SubcommandHandlers,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
 ): Promise<void> {
   const [head, rest] = peelToken(args);
 
@@ -153,41 +167,41 @@ export async function routeClaudePlugin(
     // Bare `/claude:plugin` opens the interactive browser (TUI) or falls
     // back to the inventory list (non-TUI), matching Claude Code's
     // `/plugin` UX. `rest` is "" here (peelToken of empty input).
-    return handlers.browse(rest, ctx);
+    return handlers.browse(rest, ctx, run);
   }
 
   switch (head) {
     case "bootstrap":
-      return handlers.bootstrap(rest, ctx);
+      return handlers.bootstrap(rest, ctx, run);
     case "install":
-      return handlers.install(rest, ctx);
+      return handlers.install(rest, ctx, run);
     case "uninstall":
-      return handlers.uninstall(rest, ctx);
+      return handlers.uninstall(rest, ctx, run);
     case "update":
-      return handlers.update(rest, ctx);
+      return handlers.update(rest, ctx, run);
     case "fetch":
-      return handlers.fetch(rest, ctx);
+      return handlers.fetch(rest, ctx, run);
     case "reinstall":
-      return handlers.reinstall(rest, ctx);
+      return handlers.reinstall(rest, ctx, run);
     case "list":
     case "ls":
-      return handlers.list(rest, ctx);
+      return handlers.list(rest, ctx, run);
     case "info":
-      return handlers.pluginInfo(rest, ctx);
+      return handlers.pluginInfo(rest, ctx, run);
     case "pending":
-      return handlers.pending(rest, ctx);
+      return handlers.pending(rest, ctx, run);
     case "enable":
-      return handlers.enable(rest, ctx);
+      return handlers.enable(rest, ctx, run);
     case "disable":
-      return handlers.disable(rest, ctx);
+      return handlers.disable(rest, ctx, run);
     case "import":
-      return handlers.import(rest, ctx);
+      return handlers.import(rest, ctx, run);
     case "marketplace":
-      return routeMarketplace(rest, handlers, ctx);
+      return routeMarketplace(rest, handlers, ctx, run);
     case "browse":
-      return handlers.browse(rest, ctx);
+      return handlers.browse(rest, ctx, run);
     case "help":
-      return handlers.help(rest, ctx);
+      return handlers.help(rest, ctx, run);
     default:
       notifyUsageError(ctx, { message: `Unknown subcommand: "${head}".`, usage: TOP_LEVEL_USAGE });
       return;
@@ -200,6 +214,7 @@ async function routeMarketplace(
   args: string,
   handlers: SubcommandHandlers,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
 ): Promise<void> {
   const [head, rest] = peelToken(args);
 
@@ -213,21 +228,21 @@ async function routeMarketplace(
 
   switch (head) {
     case "add":
-      return handlers.marketplaceAdd(rest, ctx);
+      return handlers.marketplaceAdd(rest, ctx, run);
     case "remove":
     case "rm":
-      return handlers.marketplaceRemove(rest, ctx);
+      return handlers.marketplaceRemove(rest, ctx, run);
     case "list":
     case "ls":
-      return handlers.marketplaceList(rest, ctx);
+      return handlers.marketplaceList(rest, ctx, run);
     case "info":
-      return handlers.marketplaceInfo(rest, ctx);
+      return handlers.marketplaceInfo(rest, ctx, run);
     case "update":
-      return handlers.marketplaceUpdate(rest, ctx);
+      return handlers.marketplaceUpdate(rest, ctx, run);
     case "autoupdate":
-      return handlers.marketplaceAutoupdate(rest, ctx);
+      return handlers.marketplaceAutoupdate(rest, ctx, run);
     case "noautoupdate":
-      return handlers.marketplaceNoautoupdate(rest, ctx);
+      return handlers.marketplaceNoautoupdate(rest, ctx, run);
     case "help":
       // The topic is fixed by the spelling, so there is nothing left to
       // consume. Every sibling verb rejects what it cannot use; silently
@@ -241,7 +256,7 @@ async function routeMarketplace(
         return;
       }
 
-      return handlers.help("marketplace", ctx);
+      return handlers.help("marketplace", ctx, run);
     default:
       notifyUsageError(ctx, {
         message: `Unknown marketplace subcommand: "${head}".`,
