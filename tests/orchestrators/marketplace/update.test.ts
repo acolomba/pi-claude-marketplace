@@ -754,25 +754,13 @@ test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow rend
       evictOnFailure: false,
       onAuthRequired: fetchedAuth?.onAuthRequired,
     });
-    assert.equal(notifications.length, 1);
-    const first = notifications[0];
-    assert.ok(first !== undefined);
-    assert.equal(first.severity, "error");
-    assert.match(first.message, /^⊘ urlmp-private \[project\] \(failed\)$/m);
-    // D-79-03: the existing closed-set token -- NO new REASONS token. It also
-    // proves the cause rides the chain TAIL: transportReason still finds the
-    // code-bearing transport error at cause-depth 1.
-    assert.ok(
-      first.message.includes("{authentication required}"),
-      `expected the authentication-required child row, got: ${first.message}`,
-    );
-    assert.equal(first.message.includes("{network unreachable}"), false);
-    // D-1-02: exactly one new cause line, riding the synthetic failed-plugin
-    // child's cause-chain trailer.
-    assert.match(
-      first.message,
-      /cause:.*no credential was obtained for gitlab\.example\.com; store one with: printf /,
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n⊘ urlmp-private [project] (failed)\n  ⊘ urlmp-private (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-private\". -> cancelled -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -804,18 +792,13 @@ test("GAUTH-04: a 401 challenge on a host with no Device Flow carries the same s
     });
 
     // assert
-    assert.equal(notifications.length, 1);
-    const first = notifications[0];
-    assert.ok(first !== undefined);
-    assert.equal(first.severity, "error");
-    assert.ok(
-      first.message.includes("{authentication required}"),
-      `expected the authentication-required child row, got: ${first.message}`,
-    );
-    assert.match(
-      first.message,
-      /cause:.*no credential was obtained for gitlab\.example\.com; store one with: printf /,
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n⊘ urlmp-401 [project] (failed)\n  ⊘ urlmp-401 (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-401\". -> HTTP 401 from fetch -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -885,17 +868,15 @@ test("GAUTH-05: a cancelled Device Flow on a github.com url refresh renders {aut
       evictOnFailure: true,
       onAuthRequired: fetchedAuth?.onAuthRequired,
     });
-    assert.equal(notifications.length, 1);
-    const first = notifications[0];
-    assert.ok(first !== undefined);
-    assert.equal(first.severity, "error");
-    assert.ok(
-      first.message.includes("{authentication required}"),
-      `expected the authentication-required child row, got: ${first.message}`,
-    );
     // On a registry host the story is a declined or expired Device Flow, not a
     // missing stored credential, so no cause line is attached.
-    assert.equal(first.message.includes("no credential was obtained for"), false);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ urlmp-github [project] (failed)\n  ⊘ urlmp-github (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-github". -> cancelled',
+        severity: "error",
+      },
+    ]);
   });
 });
 

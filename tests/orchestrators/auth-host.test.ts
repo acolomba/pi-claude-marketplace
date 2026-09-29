@@ -864,7 +864,7 @@ describe("buildAuthForHost", () => {
     });
     const attempt = await auth.onAuthRequired();
 
-    // assert -- this is the graceful-decline branch: RESOLVES, never throws.
+    // assert
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
@@ -876,9 +876,8 @@ describe("buildAuthForHost", () => {
       reason: NO_STORED_CREDENTIAL_CAUSE("github.com"),
       authAttempted: true,
     });
-    // No Device Flow HTTP collaborator was called -- the widened guard never
-    // reaches makeRawNotifyFn(ctx), so no user code is minted and no
-    // notification is raised.
+    // The decline never reaches the Device Flow HTTP collaborator, so no user
+    // code is minted and no notification is raised.
     assert.deepStrictEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
     assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
   });

@@ -903,13 +903,7 @@ void test("MURL-09: resolvePluginPin makes exactly one resolveRemoteRef attempt 
 
   await assert.rejects(
     () => resolvePluginPin({ source, gitOps }),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.equal(error.message, "HTTP Error: 404");
-      assert.equal((error as { code?: unknown }).code, "HttpError");
-      assert.equal((error as { data?: { statusCode?: unknown } }).data?.statusCode, 404);
-      return true;
-    },
+    (error: unknown) => error === notFound,
   );
   assert.equal(state.resolveRemoteRefCalls.length, 1, "no retry after the 404");
   assert.equal(state.resolveRemoteRefCalls[0]?.url, "https://example.com/repo");
@@ -954,13 +948,7 @@ void test("MURL-09: materializePluginClone makes exactly one clone attempt and a
         pin: PIN_40,
         gitOps,
       }),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.equal(error.message, "HTTP Error: 401");
-      assert.equal((error as { code?: unknown }).code, "HttpError");
-      assert.equal((error as { data?: { statusCode?: unknown } }).data?.statusCode, 401);
-      return true;
-    },
+    (error: unknown) => error === unauthorized,
   );
   assert.equal(state.cloneCalls.length, 1, "no retry after the 401");
   assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
@@ -1045,13 +1033,7 @@ void test("MURL-09: materializeOrRefreshPluginMirror makes exactly one clone att
         networkUrl: "https://example.com/repo",
         gitOps,
       }),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.equal(error.message, "HTTP Error: 404");
-      assert.equal((error as { code?: unknown }).code, "HttpError");
-      assert.equal((error as { data?: { statusCode?: unknown } }).data?.statusCode, 404);
-      return true;
-    },
+    (error: unknown) => error === notFound,
   );
   assert.equal(state.cloneCalls.length, 1, "no retry after the 404");
   assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");

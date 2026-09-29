@@ -657,7 +657,8 @@ test("passes authenticated clone context and refs through both clone arms", asyn
 });
 
 test("D-3-04: authenticates the autoupdate cascade against github.com with no notification context", async (t) => {
-  // arrange -- the cascade shape: prepare() with `ctx` OMITTED, mirroring
+  // arrange
+  // The cascade shape: prepare() with `ctx` omitted, mirroring
   // update-flow.ts's PluginUpdateFn, which never threads one through.
   const sha = "9999999999999999999999999999999999999999";
   const pinned = await seedUpdate({
@@ -699,8 +700,7 @@ test("D-3-04: authenticates the autoupdate cascade against github.com with no no
     },
   };
 
-  // act -- no ctx: the registry-host cascade case, proving both clone-cache
-  // seam arms authenticate instead of the pre-fix code's silent authless clone.
+  // act
   const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam, credentialOps });
   const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam, credentialOps });
 

@@ -199,13 +199,12 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
       return { cancel: true };
     } catch (err) {
       // CP-10: catch ANY thrown error from the URL parse / fill /
-      // onAuthRequired and turn
-      // it into a cancel; isomorphic-git never sees the raw error. The
-      // caught message is still routed through hookDebugLog rather than
-      // dropped -- platform/git-credential.ts's own docstring pins that
-      // CredentialOps Error messages reference only the subcommand name +
-      // timeout-ms/exit code, never a credential field, so this stays
-      // AUTH-09-safe.
+      // onAuthRequired and turn it into a cancel; isomorphic-git never sees
+      // the raw error. The caught message is still routed through
+      // hookDebugLog rather than dropped -- platform/git-credential.ts's own
+      // docstring pins that CredentialOps Error messages reference only the
+      // subcommand name + timeout-ms/exit code, never a credential field, so
+      // this stays AUTH-09-safe.
       hookDebugLog(`onAuth threw for ${opts.host}: ${errorMessage(err)}`, "auth");
       return { cancel: true };
     }

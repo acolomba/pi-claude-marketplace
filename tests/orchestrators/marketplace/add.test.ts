@@ -532,11 +532,9 @@ test("MA-12: a leftover clone whose origin names the same source recovers", asyn
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // MA-13: every non-matching listRemotes arm still refuses as stale clone, and
 // the leftover tree stays on disk. Recognition compares WHOLE strings
 // (D-3-01), so a near-miss origin refuses exactly like a foreign tree.
-// ───────────────────────────────────────────────────────────────────────────
 
 interface Ma13RefusalArm {
   readonly title: string;
@@ -611,27 +609,17 @@ for (const { title, listRemotesResult } of MA13_REFUSAL_ARMS) {
         listRemotesResult,
       });
 
-      let threw = false;
       // act
-      try {
-        await addMarketplace({
-          ctx,
-          pi,
-          scope: "project",
-          cwd,
-          rawSource: "anthropics/claude-plugins-official",
-          gitOps,
-        });
-      } catch {
-        threw = true;
-      }
+      await addMarketplace({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        rawSource: "anthropics/claude-plugins-official",
+        gitOps,
+      });
 
       // assert
-      assert.equal(
-        threw,
-        false,
-        "a near-miss or unreadable origin must classify through notify(), never throw",
-      );
       const note = notifications[0];
       assert.ok(note);
       assert.equal(
@@ -793,8 +781,8 @@ test("MA-8: a matching leftover still yields (failed) {duplicate name}, not {sta
       gitOps: gitOps2,
     });
 
-    const note = n2[0];
     // assert
+    const note = n2[0];
     assert.ok(note);
     assert.equal(
       note.message,
@@ -804,11 +792,9 @@ test("MA-8: a matching leftover still yields (failed) {duplicate name}, not {sta
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // MA-14: a RECOGNIZED leftover (origin matches) whose removal itself leaks
 // still fails as stale, with the leak appended and no partially-removed
 // destination recorded in state.
-// ───────────────────────────────────────────────────────────────────────────
 
 test("MA-14: an unremovable recognized leftover fails as stale, with the leak appended and no recorded destination", async () => {
   await withTmpScope(async ({ cwd, locations }) => {

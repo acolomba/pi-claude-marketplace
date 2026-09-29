@@ -475,6 +475,7 @@ export async function listRemotes(opts: ListRemotesOptions): Promise<ListRemotes
   try {
     await fs.promises.readFile(path.join(opts.dir, ".git", "config"));
   } catch (err) {
+    // `readFile` rejects only with a `NodeJS.ErrnoException`.
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT" || code === "ENOTDIR") {
       return { kind: "not-a-repo" };

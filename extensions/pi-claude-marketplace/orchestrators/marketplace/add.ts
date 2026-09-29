@@ -687,19 +687,6 @@ async function runAddOutcome(
 }
 
 /**
- * Shared clone-into-guard body for git-cloned marketplace sources (github and
- * url). Owns everything from staging-dir creation through the clone, manifest
- * read, MA-8 duplicate check, MA-6 stale-clone check, atomic rename, state
- * mutation, and the MA-9 append-leak-not-mask cleanup catch. The only per-kind
- * differences are the parsed `source` (from which the clone url is derived)
- * and the optional `auth` bundle, so that subtle MA-9 discipline lives in
- * exactly one place.
- *
- * MURL-01 / GAUTH-03: every git-cloned source carries a host-keyed `auth`
- * bundle, so the clone consults the user's git credential helper when the
- * server challenges. A public clone never challenges, so nothing is consulted.
- */
-/**
  * MA-12/MA-13 (D-3-01, D-3-02): recognize whether `finalDir` is the
  * extension's own leftover clone of `source` and, if so, remove it so the
  * caller's atomic rename can proceed. Throws `StaleSourceCloneError` for a
@@ -736,6 +723,19 @@ async function recognizeLeftover(
   }
 }
 
+/**
+ * Shared clone-into-guard body for git-cloned marketplace sources (github and
+ * url). Owns everything from staging-dir creation through the clone, manifest
+ * read, MA-8 duplicate check, MA-6 stale-clone check, atomic rename, state
+ * mutation, and the MA-9 append-leak-not-mask cleanup catch. The only per-kind
+ * differences are the parsed `source` (from which the clone url is derived)
+ * and the `auth` bundle, so that subtle MA-9 discipline lives in
+ * exactly one place.
+ *
+ * MURL-01 / GAUTH-03: every git-cloned source carries a host-keyed `auth`
+ * bundle, so the clone consults the user's git credential helper when the
+ * server challenges. A public clone never challenges, so nothing is consulted.
+ */
 async function addGitClonedInGuard(args: {
   state: ExtensionState;
   removalOps: RemovalOps;
@@ -783,7 +783,7 @@ async function addGitClonedInGuard(args: {
     // the IDENTITY, `.git`-insensitive, not the wire form -- D-3-01) is the
     // extension's own leftover from a prior crash-window failure or a state
     // rebuild; it is removed so a partial tree cannot leak into installed
-    // state (D-3-02). Every other outcome throws exactly as before (MA-13).
+    // state (D-3-02). Every other outcome throws (MA-13).
     finalDir = await locations.sourceCloneDir(derivedName);
     if (await pathExists(finalDir)) {
       leftoverLeak = await recognizeLeftover(finalDir, derivedName, source, gitOps, removalOps);
