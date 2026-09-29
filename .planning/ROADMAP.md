@@ -47,14 +47,14 @@ re-opened.
 4. Failure detail reaches the renderer as a serialized `causeChain: string[]` with a `truncated` flag, plus per-phase rollback entries and manual-recovery leaks as strings. No live `Error` crosses into rendering, and the cause-chain text is byte-identical to the baseline.
 5. The probe-to-marker derivation has its own owner test that states the per-verb suppression table as data. `workflows-marker-coverage` scans the new derivation site and is not deleted.
 
-**Plans:** 1/16 plans executed, sequential (waves 1-16)
+**Plans:** 2/16 plans executed, sequential (waves 1-16)
 
 Plans:
 **Wave 1**
 - [x] 01-01-PLAN.md — Notify wire-corpus capture tool, negative controls, and committed baseline (D-01..D-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-02-PLAN.md — Envelope decisions (severity, summary line, needsReload, tally, no-op) resolve before the text strategy (D-09, D-10)
+- [x] 01-02-PLAN.md — Envelope decisions (severity, summary line, needsReload, tally, no-op) resolve before the text strategy (D-09, D-10)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-03-PLAN.md — Failure detail serialized in resolve, missing-arm floor, row hints and not-added reason as ids (D-11, PMOD-03)
@@ -200,7 +200,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Presentation Model | 1/16 | In Progress | - |
+| 1. Presentation Model | 2/16 | In Progress | - |
 | 2. Row Policies | 0/TBD | Not started | - |
 | 3. Typed Raw Surfaces | 0/TBD | Not started | - |
 | 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |
