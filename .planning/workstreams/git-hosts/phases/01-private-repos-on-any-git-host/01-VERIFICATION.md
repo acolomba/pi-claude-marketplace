@@ -1,11 +1,9 @@
 ---
 phase: 01-private-repos-on-any-git-host
-verified: 2026-09-28T16:30:00Z
+verified: 2026-09-28T22:50:00Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
-  - .planning/workstreams/git-hosts/REQUIREMENTS.md
-  - .planning/workstreams/git-hosts/ROADMAP.md
   - .planning/workstreams/git-hosts/phases/01-private-repos-on-any-git-host/01-01-PLAN.md
   - .planning/workstreams/git-hosts/phases/01-private-repos-on-any-git-host/01-01-SUMMARY.md
   - .planning/workstreams/git-hosts/phases/01-private-repos-on-any-git-host/01-02-PLAN.md
@@ -32,14 +30,13 @@ covered_files:
   - extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts
   - extensions/pi-claude-marketplace/platform/git.ts
   - tests/platform/git.test.ts
-covered_digest: "v2:sha256:17835298461cfaff42a98d9a3d63ff029bcd3f45ce09cfbbaeb48c7ed1b31ce4"
+covered_digest: "v2:sha256:7ddb6ca42cbc64964d87ee002efc3e390e2b08b134e7583d24231f5c392f2f46"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
   previous_status: "passed"
   previous_score: "5/5"
-  gaps_closed:
-    - "No gaps were open in the prior report (it was already `passed`). This round closes the prior report's one recorded Advisory recommendation: commit a2db444e adds 5 automated wire-level tests to tests/platform/git.test.ts that drive the credential-bearing git-upload-pack POST leg of a cross-origin redirect directly (port, hostname, scheme, and a 302 POST→GET variant, plus a same-origin 307 control) — the exact gap the prior report's WR-02 disposition and Advisory section named as still resting on live-UAT-only evidence."
+  gaps_closed: []
   gaps_remaining: []
   regressions: []
 gaps: []
@@ -47,15 +44,21 @@ human_verification: []
 ---
 
 > **Re-verification, triggered by staleness only.** The prior report (`passed`, 5/5, dated
-> 2026-09-28T15:35:00Z, committed at `538eedfe`) went `stale` because its `covered_files` list
-> includes files that changed afterward: `git diff --stat 538eedfe..HEAD -- extensions/` is empty
-> (confirmed below) — **no production file changed**. Three commits landed after it: two doc-only
-> commits (`3c07b6eb` 01-VALIDATION.md, `6403aa37` 01-SECURITY.md) and one test-only commit
-> (`a2db444e`, +127 lines to `tests/platform/git.test.ts`) that adds automated coverage for exactly
-> the gap the prior report's Advisory section flagged as open: proof that the redirect guard also
-> covers the credential-bearing `git-upload-pack` POST leg, not just the `info/refs` discovery GET
-> leg. This report re-verifies from scratch rather than assume the prior narrative, and records the
-> WR-02 disposition change the new test closes.
+> 2026-09-28T16:30:00Z, committed at `9de84814`) went `stale` because a covered file
+> (`extensions/pi-claude-marketplace/platform/git.ts`) changed afterward. Quick task
+> `260928-tt9` landed two production commits after `9de84814`:
+> `1cc96c97` (`domain/source.ts` — a url object source's `raw` must now name the same
+> repository as its `url`, T-2-10) and `add75890` (`platform/git.ts::listRemotes` now reads
+> every `remote.origin.url` value and reports `origin` only for exactly one, WR-11/T-3-05),
+> plus one doc-only commit (`2ffb5fcb`) and one further doc-only commit affecting phases 2/3
+> only (`0aeb92d2`, not phase 1). Neither production commit touches the credential/redirect
+> surface phase 1's must-haves depend on: `1cc96c97` is entirely inside `domain/source.ts`
+> (a layer phase 1's must-haves do not cover), and `add75890`'s only production edit is
+> `listRemotes`, a clone-reuse-detection function separate from `sendHop`/`nextHop`/
+> `requestWithinOrigin`/the module-private `HttpClient` (the redirect-following, origin-scoped
+> transport `GAUTH-06` depends on) and from `buildAuthCallbacks`/`onAuth` (`GAUTH-06`'s
+> caller-side guard). This report re-verifies from scratch rather than assume the prior
+> narrative, and confirms no regression.
 
 # Phase 1: Private repos on any git host — Verification Report (re-verification)
 
@@ -64,27 +67,52 @@ host using a credential already in their git credential helper — no hostname i
 registry for it to work — and that credential is never offered to a host other than the one it was
 resolved for.
 
-**Verified:** 2026-09-28T16:30:00Z
+**Verified:** 2026-09-28T22:50:00Z
 **Status:** passed
-**Re-verification:** Yes — staleness only (no production code changed since the prior `passed`
-report; new automated test coverage landed for a previously-live-only-verified path)
+**Re-verification:** Yes — staleness only (a covered file changed, but the change is confined to a
+function outside the scope of every must-have; no regression found)
 
 ## Goal Achievement
 
 ROADMAP Success Criteria are the contract (`.planning/workstreams/git-hosts/ROADMAP.md`, Phase 1,
-5 criteria). `git diff --stat 538eedfe..HEAD -- extensions/` returns nothing — confirmed empty —
-so no production behavior changed since the prior verification. Every gate below was re-run fresh
-on the current tree.
+5 criteria). Scope determined via `git diff --stat 9de84814..HEAD -- extensions/ tests/ scripts/`
+(see full change inventory below) and a direct read of every changed line inside the two files
+that intersect phase 1's covered-file set.
+
+### Change inventory since the prior `passed` report (commit `9de84814`)
+
+| Commit | Files | In phase 1 scope? | Effect |
+|--------|-------|--------------------|--------|
+| `1cc96c97` fix(source): require a url source's raw to name its url's repository | `domain/source.ts` (+13), `tests/domain/source.test.ts` (+50) | No — `domain/source.ts` is not a phase 1 covered file and no phase 1 truth depends on url/raw identity matching (that's T-2-10, a Phase 2/url-source concern) | None |
+| `add75890` fix(git): refuse a leftover origin that records more than one url | `platform/git.ts` (`listRemotes` only, ~30 net lines), `tests/orchestrators/marketplace/add.test.ts`, `tests/platform/git.test.ts` (`listRemotes` test block) | Partially — `platform/git.ts` IS a phase 1 covered file, but the edited function (`listRemotes`) is outside every phase 1 must-have's scope (see below) | None on phase 1 truths; confirmed by direct read |
+| `2ffb5fcb` docs(quick-260928-tt9) | `.planning/quick-tasks.jsonl`-family docs only | No | None |
+| `0aeb92d2` docs(02,03): add security threat verification | `02-SECURITY.md`, `03-SECURITY.md` | No — phases 2/3, not phase 1 | None |
+
+**Why `listRemotes` is out of scope for phase 1's must-haves:** phase 1's 5 success criteria are
+about (a) reaching `credentialOps.fill(host)` for any host, (b) the no-stored-credential cause
+line, (c) `github.com`/`gitlab.com` Device Flow parity, (d) the credential never crossing an
+origin boundary (caller-side `onAuth` host compare + the redirect-following transport), and (e)
+`npm run check` green with the credential-leak/no-orchestrator-network gates. `listRemotes` reads
+an existing clone's recorded `origin` remote to decide whether a cached clone is stale
+(`orchestrators/marketplace/add.ts`'s clone-reuse check) — it never touches an HTTP request, never
+carries a credential, and is not called from `install-clone-probe.ts`/`reinstall-clone-probe.ts`
+(confirmed by `grep -rn "listRemotes" extensions/` — the only production call site is
+`orchestrators/marketplace/add.ts:722`, via the `GitOps` interface in
+`orchestrators/marketplace/shared.ts`). A direct read of the current `platform/git.ts` (lines
+1–345) confirms `sendHop`, `nextHop`, `requestWithinOrigin`, `withoutHeaders`,
+`CROSS_ORIGIN_HEADERS`, and the module-private `http: HttpClient` binding — the whole GAUTH-06
+redirect guard — are byte-identical to the prior verification; only the `listRemotes` function
+body and its docstring changed.
 
 ### Observable Truths
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | With a PAT stored in their helper, a user can `marketplace add` / `plugin install` a private https source on a host the registry does not claim, and the clone succeeds | ✓ VERIFIED | Carried forward — no production change. `node --test tests/orchestrators/auth-host.test.ts tests/orchestrators/marketplace/add.test.ts` re-run green as part of the full `npm run check` below. Live evidence: 01-UAT.md test 2 |
-| 2 | When nothing is stored for such a host, the command fails with a cause line naming `git credential approve` (scoped to `update`, per the recorded 2026-07-11 checkpoint deferred to Phase 3 SC5) | ✓ VERIFIED | Carried forward — no production change. `tests/orchestrators/marketplace/update.test.ts` green in the full run. Live evidence: 01-UAT.md test 3 |
-| 3 | `github.com` and `gitlab.com` behave exactly as they do today — same Device Flow prompt, same memoization, no stored-credential cause line on a declined flow | ✓ VERIFIED | `grep -rn "NO_PROVIDER_CAUSE\|isAuthChallengeError" extensions/ tests/` — no matches (retired). Domain/auth-registry untouched |
-| 4 | A credential resolved for one host is never sent to another: the caller-side `onAuth` host compare holds, AND a same-origin-only rule holds across redirects — no `Authorization` reaches a hop whose `URL.origin` (scheme + host + port) differs from the original request's, on any request the operation sends (GET discovery leg AND the credential-bearing POST leg) | ✓ VERIFIED | Caller-side compare: `tests/platform/git-auth-callbacks.test.ts`, `tests/orchestrators/auth-host.test.ts` — green. Redirect guard, GET/discovery leg: unchanged, part of `tests/platform/git.test.ts`. Redirect guard, credential-bearing POST leg: **now closed by automated test, not just live UAT.** Commit `a2db444e` adds `authenticatedPostRedirectServer` plus 5 new named tests to `tests/platform/git.test.ts` — read in full (see below) — that drive `resolveRemoteRef` through a bound-origin, authenticated `git-upload-pack` POST that is then redirected: 3 cross-origin 307 rows (another port, `http:` on the same host, another host) plus one 302 POST→GET cross-origin row all assert the redirect target's `wireCredentials` entry is `authorization: null` while the bound-origin requests before it carry the real `BASIC_CREDENTIAL`; a same-origin 307 control asserts the opposite (`authorization: BASIC_CREDENTIAL` at the renamed same-origin URL) and the clone succeeds. All 5 run and pass by name (`node --test --test-name-pattern="git-upload-pack POST redirect"` → 5/5). Live evidence (01-UAT.md test 16) still stands as independent, directly-observed corroboration against a real server |
-| 5 | `npm run check` is green, including `tests/architecture/no-credential-leak.test.ts` and the no-orchestrator-network gate; no new export from `platform/git.ts`; no coverage-direct pin; no new type-member contract | ✓ VERIFIED | Fresh full run for this report: `npm run check > check2.log 2>&1; echo CHECK_EXIT=$?` (unpiped) → `CHECK_EXIT=0`. `all files` coverage `100.00 \| 100.00 \| 100.00`. Unit `7386/7386` pass (5 more than the prior report's 7381 — exactly the 5 new GAUTH-06 POST tests); integration `36/36` pass. `lint:type-members` — 4 pre-existing exceptions, unchanged. `grep -c "^export" platform/git.ts` = 19 (unchanged); `test-coverage-direct.pin.json` `.rows` = 0 (unchanged); `check-unused-type-members.contracts.json` `.contracts` length = 108 (unchanged). `npx fallow audit --format json --quiet --explain --gate-marker agent` → `AUDIT_EXIT=0`, `"verdict":"pass"` (re-run independently for this report). `node --test tests/architecture/no-credential-leak.test.ts tests/architecture/no-orchestrator-network.test.ts tests/architecture/import-boundaries.test.ts` — 22/22 pass |
+| 1 | With a PAT stored in their helper, a user can `marketplace add` / `plugin install` a private https source on a host the registry does not claim, and the clone succeeds | ✓ VERIFIED | Carried forward — no code in scope for this truth changed. `node --test tests/orchestrators/auth-host.test.ts` re-run green (part of the combined run below). Live evidence: 01-UAT.md test 2 |
+| 2 | When nothing is stored for such a host, the command fails with a cause line naming `git credential approve` (scoped to `update`, per the 2026-07-11 checkpoint deferred to Phase 3 SC5) | ✓ VERIFIED | Carried forward — no code in scope changed. Live evidence: 01-UAT.md test 3 |
+| 3 | `github.com` and `gitlab.com` behave exactly as they do today — same Device Flow prompt, same memoization, no stored-credential cause line on a declined flow | ✓ VERIFIED | `grep -rn "NO_PROVIDER_CAUSE\|isAuthChallengeError" extensions/ tests/` — no matches (retired, unchanged). Domain/auth-registry untouched since prior verification |
+| 4 | A credential resolved for one host is never sent to another: the caller-side `onAuth` host compare holds, AND a same-origin-only rule holds across redirects — no `Authorization` reaches a hop whose `URL.origin` differs from the original request's, on any request the operation sends (GET discovery leg AND the credential-bearing POST leg) | ✓ VERIFIED | Direct read confirms `sendHop`/`nextHop`/`requestWithinOrigin`/`http` binding unchanged since `9de84814`. Re-run: `node --test --test-name-pattern="git-upload-pack POST redirect" tests/platform/git.test.ts` → 5/5 pass. `node --test tests/platform/git.test.ts tests/platform/git-auth-callbacks.test.ts tests/orchestrators/auth-host.test.ts tests/architecture/no-credential-leak.test.ts` → 114/114 pass |
+| 5 | `npm run check` is green, including `tests/architecture/no-credential-leak.test.ts` and the no-orchestrator-network gate; no new export from `platform/git.ts`; no coverage-direct pin; no new type-member contract | ✓ VERIFIED | Executor's log (`/tmp/.../scratchpad/check.log`) at HEAD `add75890` (code-identical to current HEAD `0aeb92d2` — `git diff --stat add75890..HEAD -- extensions tests scripts package.json` is empty, confirmed) shows `CHECK_EXIT=0`; unit `7396/7396` pass (10 more than the prior report's 7386, matching exactly the new tests added by `1cc96c97`+`add75890`); integration `36/36` pass; coverage `git.ts` / `auth-host.ts` / `git-auth-callbacks.ts` all `100.00/100.00/100.00`; `lint:type-members` 4 pre-existing exceptions unchanged, negative controls 7/7 pass |
 
 **Score:** 5/5 truths verified (0 present-behavior-unverified)
 
@@ -92,45 +120,42 @@ on the current tree.
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `extensions/pi-claude-marketplace/platform/git.ts` | module-private redirect-following `HttpClient`, origin-scoped header scrub | ✓ VERIFIED | Unchanged since `538eedfe` (no production diff). `sendHop`'s origin compare (`git.ts:199`, `target.origin === origin ? headers : withoutHeaders(...)`) sits before any method-specific branch — confirmed by direct read, and now exercised by name against a POST hop, not just inferred from code inspection. 100% direct coverage in the fresh coverage table |
-| `tests/platform/git.test.ts` | wire-level double reproducing the leak, proving the fix | ✓ VERIFIED for both the GET/discovery leg and the credential-bearing POST leg | 56/56 pass (was 51/51). New: `authenticatedPostRedirectServer` helper (line ~617) plus `CROSS_ORIGIN_POST_REDIRECTS` table and two standalone tests (302 POST→GET cross-origin, same-origin 307 control) drive the POST leg directly. Reviewed the diff in full — assertions are non-vacuous: each row asserts the exact `wireCredentials` sequence (URL + `authorization` value, `null` vs the real `BASIC_CREDENTIAL`) rather than a bare "did not throw" |
-| `extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts` | docstring no longer credits `simple-get` | ✓ VERIFIED | Unchanged since `538eedfe` |
-| `extensions/pi-claude-marketplace/orchestrators/auth-host.ts` | docstring no longer credits `simple-get` | ✓ VERIFIED | Unchanged since `538eedfe` |
-| `.planning/workstreams/git-hosts/REQUIREMENTS.md` | GAUTH-06 amendment paragraph | ✓ VERIFIED | "Amended during Phase 1 gap closure (G-01-4)" present; GAUTH-03..06 all marked `[x]`; coverage table (lines 119-122) lists all four `Complete` |
-| `.planning/workstreams/git-hosts/ROADMAP.md` | Phase 1 SC4 restated | ✓ VERIFIED | "compares the hostname only" present; SC4 states the origin-scoped transport guard; all 4 phase plans marked `[x]` |
-| `.planning/workstreams/git-hosts/phases/.../01-UAT.md` | 16/16 human tests pass, gap G-01-4 resolved | ✓ VERIFIED | `total: 16 / passed: 16 / issues: 0`; `gaps:` entry for G-01-4 has `status: resolved`, `resolved_by: 01-04-PLAN.md` |
-| `.planning/workstreams/git-hosts/phases/.../01-VALIDATION.md` | validation strategy reconstructed post-execution | ✓ VERIFIED | `status: validated`, `nyquist_compliant: true`; documents the same test infrastructure/commands used in this re-verification |
-| `.planning/workstreams/git-hosts/phases/.../01-SECURITY.md` | threat register, threats_open = 0 | ✓ VERIFIED | `threats_open: 0`; T-01-15/T-01-16 (redirect-forwarded credential threats) already cite `a2db444e`'s wire tests plus UAT 4/16 as mitigation evidence, consistent with this report |
+| `extensions/pi-claude-marketplace/platform/git.ts` | module-private redirect-following `HttpClient`, origin-scoped header scrub | ✓ VERIFIED | The GAUTH-06 surface (`sendHop`/`nextHop`/`requestWithinOrigin`/`http`) is byte-identical to the prior verification; only `listRemotes` (an unrelated clone-reuse-detection function) changed in this file. 100% direct coverage confirmed in the fresh coverage table |
+| `tests/platform/git.test.ts` | wire-level double reproducing the leak, proving the fix, for both GET and POST legs | ✓ VERIFIED | 5 named GAUTH-06 POST-redirect tests still pass; the file's other diff since `9de84814` is a new `listRemotes` describe block (6 new cases: no-keys origin, empty-url origin, foreign-first-of-two, foreign-second-of-two, two-origin-sections, capitalized-section-name) — additive test coverage for the WR-11 fix, does not touch or weaken the GAUTH-06 assertions |
+| `extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts` | docstring no longer credits `simple-get` | ✓ VERIFIED | Unchanged since `9de84814` (fallow's hotspot-churn listing shows commit/fan-in metadata drift only, not a source diff — confirmed no diff via `git diff --stat`) |
+| `extensions/pi-claude-marketplace/orchestrators/auth-host.ts` | docstring no longer credits `simple-get` | ✓ VERIFIED | Unchanged since `9de84814` |
+| `.planning/workstreams/git-hosts/REQUIREMENTS.md` | GAUTH-06 amendment paragraph, GAUTH-03..06 marked complete | ✓ VERIFIED | Unchanged; all four still `[x]` and `Complete` in the coverage table |
+| `.planning/workstreams/git-hosts/ROADMAP.md` | Phase 1 SC4 restated (origin-scoped transport guard) | ✓ VERIFIED | Unchanged; wording re-read and confirmed to match the current `platform/git.ts` behavior |
+| `.planning/workstreams/git-hosts/phases/.../01-UAT.md` | 16/16 human tests pass, gap G-01-4 resolved | ✓ VERIFIED | `total: 16 / passed: 16 / issues: 0`, unchanged |
+| `.planning/workstreams/git-hosts/phases/.../01-SECURITY.md` | threat register, threats_open = 0 | ✓ VERIFIED | `threats_open: 0`, unchanged |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| `platform/git.ts::clone/fetch/listServerRefs` | `platform/git.ts::requestWithinOrigin` | the module-private `http: HttpClient` binding | ✓ WIRED | Unchanged; all 3 isomorphic-git call sites pass the same `http` object |
-| `sendHop` → `nextHop` | cross-origin header scrub | `target.origin === origin ? headers : withoutHeaders(headers, CROSS_ORIGIN_HEADERS)` | ✓ WIRED, now proven for both the GET/discovery leg and the POST leg by automated test | The POST leg is no longer inferred from "no method branch precedes the origin compare" alone — it is now directly exercised by 5 named tests in `a2db444e`, all passing |
-| `update.ts` cause attachment | `NO_STORED_CREDENTIAL_CAUSE` / `hasDeviceFlowProvider` | `err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host))` guarded by `!hasDeviceFlowProvider(host)` | ✓ WIRED | Unchanged; `tests/orchestrators/marketplace/update.test.ts` green in the full run |
+| `platform/git.ts::clone/fetch/listServerRefs` | `platform/git.ts::requestWithinOrigin` | the module-private `http: HttpClient` binding | ✓ WIRED | Unchanged; direct read of lines 269 (`const http: HttpClient = { request: requestWithinOrigin }`) and its three call sites confirms no diff |
+| `sendHop` → `nextHop` | cross-origin header scrub | `target.origin === origin ? headers : withoutHeaders(headers, CROSS_ORIGIN_HEADERS)` | ✓ WIRED | Unchanged; still proven by the 5 named POST-redirect tests, re-run green this round |
+| `update.ts` cause attachment | `NO_STORED_CREDENTIAL_CAUSE` / `hasDeviceFlowProvider` | `err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host))` guarded by `!hasDeviceFlowProvider(host)` | ✓ WIRED | Unchanged; `orchestrators/marketplace/update.ts` not touched by either new commit |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |----------|---------------|--------|--------------------|--------|
-| `git.ts::sendHop` wire log | recorded `Authorization` header per hop, GET/discovery leg | `installWireTransport`'s `https.request`/`nodeHttp.request` mock, driving the real `simple-get` | Yes — observed at the true socket-request boundary | ✓ FLOWING |
-| `git.ts::sendHop` wire log | recorded `Authorization` header per hop, credential-bearing `git-upload-pack` POST leg | Same wire-transport mock, driven through `authenticatedPostRedirectServer` (new in `a2db444e`) | Yes — observed at the true socket-request boundary, automated | ✓ FLOWING (newly automated; previously human-only) |
-| Live-server `Authorization` header log | per-request auth state on an instrumented HTTPS/HTTP server | operator-run harness (`01-UAT.md` test 16) | Yes — real socket traffic, human-observed | ✓ FLOWING (independent corroboration, unchanged) |
+| `git.ts::sendHop` wire log | recorded `Authorization` header per hop, GET/discovery leg | `installWireTransport`'s `https.request`/`nodeHttp.request` mock | Yes — unchanged | ✓ FLOWING |
+| `git.ts::sendHop` wire log | recorded `Authorization` header per hop, credential-bearing `git-upload-pack` POST leg | Same wire-transport mock, driven through `authenticatedPostRedirectServer` | Yes — unchanged, re-run green | ✓ FLOWING |
+| Live-server `Authorization` header log | per-request auth state on an instrumented HTTPS/HTTP server | operator-run harness (`01-UAT.md` test 16) | Yes — real socket traffic, human-observed, unchanged | ✓ FLOWING |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
 | Named POST-redirect GAUTH-06 tests pass | `node --test --test-name-pattern="git-upload-pack POST redirect" tests/platform/git.test.ts` | 5/5 pass | ✓ PASS |
-| Full `tests/platform/git.test.ts` | `node --test tests/platform/git.test.ts` | 56/56 pass (was 51/51) | ✓ PASS |
-| `sendHop` origin compare precedes any method branch (code read, not inferred) | `sed -n '196,232p' extensions/pi-claude-marketplace/platform/git.ts` | line 199 origin compare unconditional; line 200 POST→GET conversion only follows it | ✓ PASS |
-| No residual `simple-get`-credit claim / retired constants | `grep -rn "NO_PROVIDER_CAUSE\|isAuthChallengeError\|cross-host redirect" extensions/ tests/` | no matches | ✓ PASS |
-| `platform/git.ts` 100% direct coverage | via the full `npm run check` coverage table | branches/functions/lines all 100.00 | ✓ PASS |
-| No new export / pin / contract | `grep -c '^export'` = 19; `.pin.json .rows` = 0; `.contracts.json .contracts` length = 108, 4 lint:type-members exceptions unchanged | all match prior baseline | ✓ PASS |
-| Combined auth/credential-leak/architecture suites | `node --test tests/architecture/no-credential-leak.test.ts tests/architecture/no-orchestrator-network.test.ts tests/architecture/import-boundaries.test.ts` | 22/22 pass | ✓ PASS |
-| Full `npm run check` | `npm run check > check2.log 2>&1; echo CHECK_EXIT=$?` (not piped) | `CHECK_EXIT=0`; unit 7386/7386, integration 36/36, coverage 100.00/100.00/100.00 | ✓ PASS |
-| `fallow audit` | `npx fallow audit --format json --quiet --explain --gate-marker agent` | `AUDIT_EXIT=0`, `"verdict":"pass"` | ✓ PASS |
+| Combined phase 1 suites | `node --test tests/platform/git.test.ts tests/platform/git-auth-callbacks.test.ts tests/orchestrators/auth-host.test.ts tests/architecture/no-credential-leak.test.ts` | 114/114 pass, 13 suites | ✓ PASS |
+| Redirect-guard source unchanged (code read, not inferred) | `sed -n '1,269p' extensions/pi-claude-marketplace/platform/git.ts` | `sendHop`/`nextHop`/`requestWithinOrigin`/`http` binding byte-identical to prior verification | ✓ PASS |
+| No production diff between the executor's check-log HEAD and current HEAD | `git diff --stat add75890..HEAD -- extensions tests scripts package.json` | empty | ✓ PASS |
+| Full production diff since the prior `passed` report, scoped | `git diff --stat 9de84814..HEAD -- extensions/ tests/ scripts/` | `domain/source.ts` (+13), `platform/git.ts` (`listRemotes` only), plus corresponding test files | ✓ PASS (reviewed in full above, confirmed out of phase 1 scope except the confirmed-unaffected `listRemotes` edit) |
+| Full `npm run check` (executor's log, cited not re-run per instructions) | `check.log`: `npm run check > check2.log 2>&1; echo CHECK_EXIT=$?` | `CHECK_EXIT=0`; unit 7396/7396, integration 36/36, coverage 100.00/100.00/100.00 for `git.ts`/`auth-host.ts`/`git-auth-callbacks.ts` | ✓ PASS |
+| Debt markers on changed phase 1 file | `grep -n -E "TBD\|FIXME\|XXX\|TODO\|HACK\|PLACEHOLDER" extensions/pi-claude-marketplace/platform/git.ts extensions/pi-claude-marketplace/domain/source.ts` | no matches | ✓ PASS |
 
 ### Probe Execution
 
@@ -145,18 +170,17 @@ on the current tree.
 | GAUTH-03 | 01-01, 01-03 | Clone a private source on any git host from a stored credential, no host-specific code, no registry literal | ✓ SATISFIED | Truth 1 |
 | GAUTH-04 | 01-01 | No-stored-credential miss fails with a cause line naming `git credential approve` | ✓ SATISFIED on `update` | Truth 2; add/install deferred to Phase 3 SC5 (carried forward, unaffected) |
 | GAUTH-05 | 01-01, 01-03 | `github.com` / `gitlab.com` keep today's Device Flow behavior byte-for-behavior | ✓ SATISFIED | Truth 3 |
-| GAUTH-06 | 01-01, 01-02, 01-04 | A credential resolved for one host is never offered to another, including across a redirect, on every leg of the request | ✓ SATISFIED | Truth 4 — GET leg and POST leg both now covered by automated test; UAT test 16 is independent corroboration |
+| GAUTH-06 | 01-01, 01-02, 01-04 | A credential resolved for one host is never offered to another, including across a redirect, on every leg of the request | ✓ SATISFIED | Truth 4 — GET leg and POST leg both automated; UAT test 16 is independent corroboration |
 
 No orphaned requirements: REQUIREMENTS.md maps exactly GAUTH-03..06 to Phase 1, and all four appear
-in the plans' `requirements:` fields (01-01: GAUTH-03/04/05; 01-02: GAUTH-06; 01-03: GAUTH-03/05;
-01-04: GAUTH-06, gap closure). All four are marked `[x]` in REQUIREMENTS.md and `Complete` in its
-coverage table.
+in the plans' `requirements:` fields. All four are marked `[x]` in REQUIREMENTS.md and `Complete`
+in its coverage table (unchanged since prior verification).
 
 ### Advisory (New Scope, Unevidenced)
 
-This verifier's own Step 7 anti-pattern scan (debt markers, stub patterns, hollow props) over the
-14 phase-touched source/test files (13 from the prior report plus `01-VALIDATION.md`/`01-SECURITY.md`
-added this round) produced zero new-scope 🛑 Blocker findings.
+Step 7 anti-pattern scan (debt markers, stub patterns, hollow props) over the two production files
+touched since the prior report (`domain/source.ts`, `platform/git.ts`) produced zero new 🛑 Blocker
+findings.
 
 | # | Finding | Category | Why Advisory |
 |---|---------|----------|--------------|
@@ -166,61 +190,40 @@ added this round) produced zero new-scope 🛑 Blocker findings.
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| — | — | `TBD` / `FIXME` / `XXX` / `TODO` / `HACK` / `PLACEHOLDER` across all phase-touched source/test files | none | Zero matches — no debt-marker gate trigger |
+| — | — | `TBD` / `FIXME` / `XXX` / `TODO` / `HACK` / `PLACEHOLDER` in the two files changed since the prior report | none | Zero matches |
 
 ### Code Review Disposition (01-REVIEW.md / 01-REVIEW-DISPOSITION.md)
 
-`01-REVIEW-DISPOSITION.md` still records all 9 findings (4 warning, 5 info) `open` — the file itself
-was not edited this round (out of scope for this verification pass; only VERIFICATION.md was
-written). This verifier's own judgment, updated for WR-02:
-
-- **WR-01 (warning)** — unchanged from the prior report. A foreign-origin 401 during a redirect
-  still enters the bound host's auth loop and can evict a stored credential or trigger a spurious
-  Device Flow on Device-Flow hosts. Does not break the phase goal or GAUTH-06 (credential is sent
-  only to the bound origin). Outside the 5 stated success criteria. Recommend filing as follow-up
-  work.
-- **WR-02 (warning)** — **the disposition file's own stated closing condition is now met.** Its
-  title reads "No test covers a redirect of the credential-bearing `git-upload-pack` POST" — commit
-  `a2db444e` adds exactly that test, reviewed above and confirmed non-vacuous and passing by name.
-  The must-have this gap concerned (Truth 4 / GAUTH-06 on the POST leg) was already `✓ VERIFIED` in
-  the prior report via live UAT; this round adds durable automated regression coverage for the same
-  guarantee, closing the durability recommendation the prior report's Advisory section raised. The
-  disposition file's `open` status is stale bookkeeping, not a live gap — flagged here for whoever
-  next edits `01-REVIEW-DISPOSITION.md`, not corrected by this verifier (scope limits this pass to
-  `VERIFICATION.md` only).
-- **WR-03 (warning)** — unchanged. Denylist vs. allowlist header scrub; latent, no current producer
-  of `GitCredentials.headers`. Advisory.
-- **WR-04 (warning)** — unchanged. An empty `Location` header loops to the redirect cap instead of
-  returning the response unchanged; fails clean, discloses nothing. Advisory.
-- **IN-01 through IN-05 (info)** — unchanged. Docstring precision, error typing, test-file
-  organization. Do not affect the credential-disclosure guarantee. Advisory.
+Unchanged since the prior verification (this pass edits only `01-VERIFICATION.md`). WR-01, WR-03,
+WR-04 (warning) and IN-01..05 (info) remain recorded `open`, none describing a credential
+disclosure and none affected by the `listRemotes`/`domain/source.ts` changes reviewed above.
+WR-02's disposition entry was already noted stale (closed by `a2db444e`, prior to this round) —
+unaffected by this round's changes.
 
 ### Human Verification Required
 
-None. All 5 truths are automated-test-verified (Truth 4's previously live-only leg is now also
-covered by `a2db444e`'s named tests). `01-UAT.md`'s 16/16 pass remains as independent corroborating
-evidence, not the sole proof for any must-have.
+None. All 5 truths remain automated-test-verified; the two production commits landing since the
+prior `passed` report do not touch the credential-redirect surface any must-have depends on.
+`01-UAT.md`'s 16/16 pass remains as independent corroborating evidence, not the sole proof for any
+must-have.
 
 ### Gaps Summary
 
-None. All 5 ROADMAP success criteria for Phase 1 are verified: no truth failed, no artifact is
-missing or a stub, every key link is wired, and the whole gate (`npm run check`, `fallow audit`,
-architecture tests) is green on a fresh run against the current tree. `git diff --stat
-538eedfe..HEAD -- extensions/` is empty, confirming no production behavior changed since the prior
-`passed` verification — this report re-verifies fresh rather than trusting that narrative, and the
-only material change found is a strict improvement: 5 new automated tests closing the one
-durability recommendation (WR-02 automated coverage) the prior report left open as an Advisory item.
-
-Three non-blocking, out-of-scope-for-this-phase findings remain recorded `open` in
-`01-REVIEW-DISPOSITION.md` (WR-01, WR-03, WR-04 — none describe a credential disclosure) plus 5
-info-level notes, unchanged from the prior report. WR-02's disposition entry is stale relative to
-this report's evidence (see Code Review Disposition above) but that is a bookkeeping note for the
-disposition file's next edit, not a phase-blocking gap.
+None. All 5 ROADMAP success criteria for Phase 1 remain verified: no truth failed, no artifact is
+missing or a stub, every key link is wired, and the executor's fresh `npm run check` run (cited,
+not re-run per instructions — two sibling verifiers running in parallel) is green with `CHECK_EXIT=0`
+at a commit code-identical to current HEAD. The prior report went stale purely because
+`platform/git.ts` — a covered file — changed; a full read of that change (`listRemotes`, WR-11)
+confirms it is confined to a clone-reuse-detection function entirely outside the scope of every
+phase 1 must-have, and the GAUTH-06 redirect-guard surface (`sendHop`/`nextHop`/
+`requestWithinOrigin`/`http`) is byte-identical to the version already verified. No regression
+found.
 
 ---
 
-_Verified: 2026-09-28T16:30:00Z_
+_Verified: 2026-09-28T22:50:00Z_
 _Verifier: Claude (gsd-verifier)_
-_Re-verification of: 01-VERIFICATION.md (passed, 5/5, 2026-09-28T15:35:00Z, committed 538eedfe) —
-went stale due to covered-file changes (a2db444e test additions, 3c07b6eb/6403aa37 doc additions),
-not due to any finding in this re-verification_
+_Re-verification of: 01-VERIFICATION.md (passed, 5/5, 2026-09-28T16:30:00Z, committed 9de84814) —
+went stale due to a covered-file change (`platform/git.ts::listRemotes`, commit `add75890`,
+WR-11/T-3-05) confirmed out of scope for every phase 1 must-have; a second production commit
+(`1cc96c97`, `domain/source.ts`, T-2-10) is outside the covered-file set entirely._

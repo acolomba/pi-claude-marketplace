@@ -1,6 +1,6 @@
 ---
 phase: 02-endpoints-that-answer-only-at-the-verbatim-url
-verified: 2026-09-28T21:15:00Z
+verified: 2026-09-29T00:00:00Z
 status: passed
 score: 9/9 must-haves verified
 covered_files:
@@ -19,8 +19,10 @@ covered_files:
   - .planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-REVIEW-FIX.md
   - .planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-REVIEW.iter1-superseded.md
   - .planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-REVIEW.md
+  - .planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-SECURITY.md
   - .planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-UAT.md
   - .planning/workstreams/git-hosts/phases/02-endpoints-that-answer-only-at-the-verbatim-url/02-VALIDATION.md
+  - .planning/workstreams/git-hosts/quick/260928-tt9-fix-url-raw-identity-mismatch-and-duplic/260928-tt9-SUMMARY.md
   - extensions/pi-claude-marketplace/domain/clone-key.ts
   - extensions/pi-claude-marketplace/domain/source.ts
   - extensions/pi-claude-marketplace/orchestrators/auth-host.ts
@@ -51,122 +53,132 @@ covered_files:
   - tests/orchestrators/plugin/update-flow.test.ts
   - tests/orchestrators/reconcile/apply.test.ts
   - tests/platform/git.test.ts
-covered_digest: "v2:sha256:c3b42736e52a3231c316826390469ef089b7625244ff3b0f6d7cc927f1340a13"
+covered_digest: "v2:sha256:7fb6d578c73415ec779d60e4314be692222736eaeba6b7360741b1a82f119601"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
-  previous_status: human_needed
+  previous_status: passed
   previous_score: 9/9
-  gaps_closed:
-    - "The single carried-forward human-verification item (live verbatim-only smart-HTTP endpoint, MURL-08) is now CLOSED by 02-UAT.md (committed 4dc8177b): a local instrumented HTTPS server driven through real pi RPC mode confirmed exactly one info/refs GET + one upload-pack POST per operation, both verbatim, on both add and a later update; controls (missing repo, explicit .git form) each made exactly one request and failed as themselves."
+  gaps_closed: []
   gaps_remaining: []
   regressions: []
+advisory: []
 ---
 
 # Phase 2: Endpoints that answer only at the verbatim URL Verification Report
 
 **Phase Goal:** A Pi user can add a `url` marketplace source whose smart-HTTP endpoint serves at the URL they typed and returns 404 for the conventional `.git`-suffixed form, and a repository that is genuinely missing or genuinely forbidden still fails as itself.
 
-**Verified:** 2026-09-28T21:15:00Z
+**Verified:** 2026-09-29T00:00:00Z
 **Status:** passed
-**Re-verification:** Yes — the prior `02-VERIFICATION.md` (verified 2026-09-27T11:56:55Z at commit `4d530bfb`, `human_needed`, 9/9 must-haves) went stale: Phase 1's gap-closure plan 01-04 (`96c9eb13`/`c9c21446`, plus test coverage `a2db444e`) landed a redirect-following `HttpClient` and a new `listRemotes` primitive in `platform/git.ts` after that report was written, and Phase 3 landed leftover-clone recognition in `orchestrators/marketplace/add.ts` that reuses `domain/source.ts::stripGitSuffix` (newly exported) and `canonicalCloneUrl`. All of these touch files this phase's `covered_files` list depends on, so the prior verdict on those files could not be trusted without re-reading the code. This session also closes the one item the prior report left as `human_needed`: the live smart-HTTP canary, now evidenced by `02-UAT.md`.
+**Re-verification:** Yes — the prior `02-VERIFICATION.md` (verified 2026-09-28T21:15:00Z, `passed`, 9/9)
+went stale: quick task 260928-tt9 landed two commits after that report was written —
+`1cc96c97` (`domain/source.ts::urlObjectSource`, T-2-10: a url object source's `raw` is now admitted
+only when its gated parse names the same repository as `url`) and `add75890`
+(`platform/git.ts::listRemotes`, WR-11/T-3-05: refuses a leftover origin recording zero or two-plus
+`remote.origin.url` values). Both files are in this phase's `covered_files` list, so the prior verdict
+on them could not be carried forward without re-reading the changed code.
 
 ## Why this is a re-verification
 
-Diffed `4d530bfb..HEAD` scoped to `extensions/` and `tests/` (54 commits). Of the files this phase's
-`covered_files` list names, four production files actually changed:
+Diffed `ab72dba0..HEAD` (the commit the prior `02-VERIFICATION.md` was itself verified at) scoped to
+`extensions/` and `tests/`. Of the files this phase's `covered_files` list names, two production files
+changed:
 
-- `extensions/pi-claude-marketplace/platform/git.ts` — Phase 1 gap closure 01-04 added a
-  module-private, origin-aware redirect-following `HttpClient` (`requestWithinOrigin`/`sendHop`) that
-  `clone`/`fetch`/`resolveRemoteRef` now route through instead of `isomorphic-git/http/node` directly,
-  plus a new `listRemotes` primitive (Phase 3, MA-12/MA-13, local filesystem read only — no network).
-- `extensions/pi-claude-marketplace/domain/source.ts` — `stripGitSuffix` changed from a private
-  function to an exported one (no logic change), for Phase 3's leftover-clone identity comparison.
-- `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` — Phase 3 added
-  `recognizeLeftover` (MA-12/MA-13/MA-14), which calls the new `gitOps.listRemotes` (a local FS read)
-  before the existing rename step; it does not touch the `networkCloneUrl`/clone call site this phase
-  owns.
-- `extensions/pi-claude-marketplace/orchestrators/auth-host.ts` and
-  `orchestrators/marketplace/shared.ts` and `orchestrators/plugin/update-preflight.ts` — Phase 3
-  changes (`buildCloneAuth`'s optional `ctx`, the `GitOps` interface's eighth member) that leave
-  `networkCloneUrl(gitSource)` call sites unchanged.
+- `extensions/pi-claude-marketplace/domain/source.ts` — `urlObjectSource` gained a new rejection arm
+  (T-2-10, security audit finding W-1): after the existing scheme gates on both the `url` and `raw`
+  object fields, a `raw` that parses to a DIFFERENT repository than `url` now parses `unknown` through
+  the existing `unknownObjectSource` rejection path, instead of being carried over verbatim. A `raw`
+  that differs from `url` only by D-2-05 decoration (trailing slash, `#<ref>`, `.git`) is still
+  admitted — the new check compares `gatedRaw.url` (the parse-time identity) against `identity.url`,
+  not the raw strings.
+- `extensions/pi-claude-marketplace/platform/git.ts` — `listRemotes` (Phase 3's MA-12/MA-13 leftover
+  recognition, WR-11) was rewritten to read every `remote.origin.url` value via `git.getConfigAll`
+  instead of the library's per-remote `git.listRemotes` enumeration, and now reports `origin` only
+  when there is exactly one value. This is the SAME function Phase 3's `recognizeLeftover` calls; it
+  is local-filesystem-only (`fs.promises.readFile` of `.git/config`, no network) and does not touch
+  `clone`/`fetch`/`resolveRemoteRef` — the three functions Phase 2's MURL-08/MURL-09 truths depend on.
 
-None of `domain/clone-key.ts`, `orchestrators/plugin/clone-cache.ts`, `orchestrators/plugin/fetch.ts`,
-`orchestrators/plugin/info.ts`, `orchestrators/plugin/install-clone-probe.ts`, or
-`orchestrators/plugin/reinstall-clone-probe.ts` changed since `4d530bfb`.
+None of `domain/clone-key.ts`, `orchestrators/marketplace/add.ts` (the clone-call-site wiring),
+`orchestrators/marketplace/shared.ts`, `orchestrators/auth-host.ts`,
+`orchestrators/plugin/{clone-cache,fetch,info,install-clone-probe,reinstall-clone-probe,
+update-preflight}.ts` changed since `ab72dba0`.
 
 ## How this was verified
 
-Not from SUMMARY.md, prior VERIFICATION.md, or 02-UAT.md narration alone. Independently, in this
-session:
+Not from SUMMARY.md, the quick-task SUMMARY, or the prior VERIFICATION.md's narration alone.
+Independently, in this session:
 
-- Read `extensions/pi-claude-marketplace/platform/git.ts` (503 lines) in full at HEAD and traced
-  `clone()`, `fetch()`, and `resolveRemoteRef()` — all three still pass `opts.url` verbatim into
-  `git.clone`/`git.fetch`/`git.listServerRefs` unchanged; the only new indirection is the module-private
-  `http: HttpClient = { request: requestWithinOrigin }` object those calls thread through instead of
-  `isomorphic-git/http/node` directly.
-- Read `sendHop`/`nextHop`/`redirectLocation` in full: `redirectLocation` triggers only on
-  `300 <= statusCode < 400` **with** a `Location` header; every other status (including every 4xx/5xx)
-  returns the response unchanged with no further request. There is no branch anywhere in this file that
-  re-sends a request based on a 404/401/403/5xx status or on any URL-shape heuristic — confirmed by
-  reading the function bodies directly, not by trusting a docstring.
-- Cross-referenced `02-CONTEXT.md`'s own definition of what D-2-01's "no retry" forbids: re-deriving
-  and re-sending a **different URL** after the first one fails (e.g., appending `.git` after a bare-path
-  404). The redirect follow is categorically different: it is triggered only by a server-issued 3xx +
-  `Location`, never by an error status, and it follows to wherever the *server* directs — not a
-  client-decided alternate URL shape. It is also not new behavior this phase's tests need to account
-  for: `simple-get` (the library `isomorphic-git/http/node` wraps) already followed redirects by
-  default before 01-04; 01-04 changed only which headers survive a cross-origin hop, not whether a hop
-  happens.
-- Confirmed this redirect logic lives **below** the abstraction boundary Phase 2's own tests mock: every
-  MURL-09 call-count assertion (`state.cloneCalls.length === 1` / `resolveRemoteRefCalls.length === 1`)
-  is asserted against `createGitOpsFake`, which fakes the entire `GitOps.clone`/`resolveRemoteRef`
-  function — the fake never reaches `platform/git.ts`'s real implementation, so the redirect client is
-  invisible to and cannot perturb those counts.
-- Read `tests/platform/git.test.ts`'s redirect suite directly: `"rejects an eleventh consecutive
-  redirect with too many redirects"` asserts the 11-request cap is reached only via a run of 3xx
-  responses; no test exercises a 4xx/5xx triggering a second request. Ran this file directly — 56/56
-  pass.
-- Independently confirmed via `02-UAT.md` (evidence, not narration re-quoted): a live instrumented HTTPS
-  server, driven through real pi RPC mode with the branch's extension (not the offline fake), recorded
-  wire traffic for both `marketplace add` and a later `marketplace update` — exactly one
-  `GET .../info/refs` + one `POST .../git-upload-pack` per operation, both against the verbatim URL, no
-  `.git` form ever requested. The two negative controls (a genuinely missing repo, and the explicit
-  `.git` form against a verbatim-only endpoint) each made exactly one request and failed as
-  `{source missing}`. This is the real-transport confirmation of SC1 and SC3 that the offline fake by
-  itself cannot provide, and it exercises the actual redirect-capable `HttpClient`, not a stand-in.
-- Read `domain/clone-key.ts` (106 lines) and re-confirmed `networkCloneUrl`/`canonicalCloneUrl` are
-  byte-identical to the prior verification's read (no diff since `4d530bfb`).
-- Read `orchestrators/marketplace/add.ts`'s new `recognizeLeftover` function in full: it calls
-  `gitOps.listRemotes({ dir: finalDir })` — a local `fs.promises.readFile` of `<dir>/.git/config`
-  wrapped by `git.listRemotes`, no network — strictly before the existing clone-and-rename path, to
-  decide whether an *already-present* leftover directory is safe to remove. It does not add a call to
-  `gitOps.clone` or `gitOps.resolveRemoteRef`, so it cannot affect the SC3 attempt count for either.
+- Ran `git diff ab72dba0..HEAD -- extensions/ tests/` and confirmed the file-level change set: 2
+  production files (`domain/source.ts`, `platform/git.ts`) and 3 test files (`tests/domain/source.test.ts`,
+  `tests/platform/git.test.ts`, `tests/orchestrators/marketplace/add.test.ts`). Confirmed via a second,
+  targeted diff that every other file this phase's `covered_files` list names (`domain/clone-key.ts`,
+  `orchestrators/marketplace/add.ts`, `orchestrators/marketplace/shared.ts`, `orchestrators/auth-host.ts`,
+  and all six `orchestrators/plugin/*.ts` probe/cache/fetch/info files) has an EMPTY diff since `ab72dba0`
+  — byte-identical to what the prior verification already read.
+- Read `domain/source.ts` in full (745 lines) and traced `urlObjectSource` line by line: the new arm
+  (lines 224-233) sits strictly AFTER the existing scheme gates on both `url` (line 204) and `raw`
+  (line 219) — it cannot loosen either gate, only add a further rejection. It compares
+  `gatedRaw.url !== identity.url` (the parse-time D-2-05 identity of each field), not the raw input
+  strings, so a `raw` that differs from `url` only by trailing slash / `#<ref>` / `.git` still passes
+  (confirmed against the new admission test case below). Confirmed the CR-02 https-only scheme gate
+  (D-76-01) is unaffected: for any rejected scheme, `gatedUrlField` already returns `kind: "unknown"`
+  and the function returns at the EARLIER `identity.kind === "unknown"` (line 205) or
+  `gatedRaw.kind === "unknown"` (line 220) check, before the new T-2-10 arm is ever reached.
+- Read `tests/domain/source.test.ts`'s diff: 5 new rows in `URL_OBJECT_GATE_CASES` — 4 rejection cases
+  (foreign host via both `source`- and `kind`-tagged object forms, a github-hosted raw behind a
+  non-github identity, and a same-host-different-path raw) plus 1 admission case (`raw` differing from
+  `url` only by trailing slash + `.git`, still admitted). Ran this file directly this session: 149/149
+  pass (up from 145 at the prior verification's read — the 4 new rejection cases plus 1 new admission
+  case, all additive, none retitled or removed). The quick task's own SUMMARY records the RED evidence
+  (145 pass / 4 fail against the unfixed parser, the exact 4 new rejection titles failing) — independently
+  corroborated by reading the diff and re-running the suite GREEN.
+- Read `platform/git.ts`'s `listRemotes` diff: it now calls `git.getConfigAll({ fs, dir, path:
+  "remote.origin.url" })` (a local `fs.promises.readFile`-backed config read, same file
+  `git.getConfigAll`/`git.listRemotes` both parse) instead of `git.listRemotes`, and reports
+  `{ kind: "origin", url }` only when exactly one value is returned. Confirmed this function has NO
+  caller in the MURL-08/MURL-09 clone/resolveRemoteRef path: its sole caller is
+  `orchestrators/marketplace/add.ts::recognizeLeftover` (Phase 3, MA-12/MA-13), itself unchanged since
+  the prior verification (confirmed via the empty targeted diff above) — `recognizeLeftover` runs
+  strictly before the existing clone-and-rename path and adds no `gitOps.clone`/`resolveRemoteRef` call.
+- Read `clone()`, `fetch()`, and `resolveRemoteRef()` in `platform/git.ts` directly (unchanged since the
+  prior verification's full read): all three still pass `opts.url` verbatim into
+  `git.clone`/`git.fetch`/`git.listServerRefs`, threaded through the same module-private,
+  redirect-following `HttpClient` the prior verification traced in full (`sendHop`/`redirectLocation`,
+  triggered only on 3xx+`Location`, never on 4xx/5xx or a URL-shape heuristic). No diff touches this
+  code path.
 - Ran every phase-2-relevant suite directly in this session (not reused from any prior run):
-  `tests/edge/handlers/marketplace/add.test.ts tests/orchestrators/marketplace/add.test.ts
-  tests/domain/source.test.ts tests/domain/clone-key.test.ts` → 256/256 pass (up from 238/238 at the
-  prior verification — the 18 new cases are Phase 3's MA-12/13/14 leftover-recognition suite, additive,
-  none retitled or removed);
-  `tests/orchestrators/plugin/{clone-cache,install-clone-probe,reinstall-clone-probe,fetch,info,
-  update-preflight}.test.ts` → 275/275 pass; `tests/platform/git.test.ts` → 56/56 pass;
-  `tests/orchestrators/plugin/{install-flow,update-flow,reinstall-flow}.test.ts
-  tests/integration/marketplace-add-seed-mirrors.test.ts tests/architecture/{no-credential-leak,
-  import-boundaries,no-stale-test-citations,no-orchestrator-network}.test.ts` → 500/500 pass. Total:
-  1087/1087 directly run this session, 0 failures.
-- Ran `npm run check` end-to-end in this session, to completion, launched once, not reused or piped:
-  `CHECK_EXIT=0` — typecheck, lint, lint:workflows(+negative), fallow (all four sub-gates exit 0; the
-  `fallow dupes` red summary glyph with a clean exit is the known non-blocking display quirk, confirmed
-  by the captured exit code, not the glyph), format:check, test:corresponding(+negative),
-  test:coverage:direct:negative, test:coverage:unit (7386/7386 pass, 100.00/100.00/100.00
-  lines/functions/branches over `extensions/**`), test:integration (36/36 pass), lint:type-members
-  (passed, 4 recorded exceptions — the same four the prior verification recorded, none newly added by
-  this phase's files), lint:type-members:negative (7 of 7 negative controls passed).
-- Confirmed `scripts/check-unused-type-members.contracts.json` still holds no pin naming
-  `domain/source.ts` or `domain/clone-key.ts` (the file has line:col drift since the prior verification
-  — 12 lines changed — from Phase 3's edits elsewhere in the file; still 108 entries).
+  `tests/domain/source.test.ts tests/domain/clone-key.test.ts tests/orchestrators/marketplace/add.test.ts
+  tests/orchestrators/plugin/clone-cache.test.ts tests/platform/git.test.ts` → 369/369 pass, 0 failures.
+- Confirmed `npm run check` ran to completion at the current HEAD's code with `CHECK_EXIT=0`, from the
+  saved log at `/tmp/claude-1000/.../scratchpad/check.log` (this verifier did not re-run the suite, per
+  the parallel-sibling-verifier instruction): 7396/7396 unit tests, 100.00/100.00/100.00
+  lines/functions/branches over `extensions/**`, 36/36 integration, `lint:type-members` 4 recorded
+  exceptions (unchanged from the prior verification) / 7 of 7 negative controls passed, `fallow` all 4
+  sub-gates exit 0 (log's `fallow dupes` red glyph confirmed non-blocking via the recorded
+  `CHECK_EXIT=0`, not the glyph).
+- Confirmed the code tree is unchanged since the log's `npm run check` run: `git diff --stat
+  add75890..HEAD -- extensions tests scripts package.json` is EMPTY (the one commit after `add75890`,
+  `2ffb5fcb`, is docs-only). `add75890` is the last code commit in the log, so `CHECK_EXIT=0` covers the
+  current HEAD's actual code.
+- Confirmed `scripts/check-unused-type-members.contracts.json` still holds 108 entries and no pin
+  naming `domain/source.ts` or `domain/clone-key.ts` (unchanged from the prior verification).
 - Confirmed zero stale test titles (`grep -rn "keeps a path slash" tests/` → 0 hits) and zero debt
-  markers (`TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER`) in any of the four production files that
-  changed since the prior verification.
+  markers (`TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER`) in either of the two changed production
+  files (`domain/source.ts`, `platform/git.ts`).
+- Confirmed no docstring under `extensions/` states the inverse of D-2-02
+  (`grep -rn "does not resolve against a host that serves ONLY" extensions/` still returns only the
+  correct D-2-02-matching direction).
+- Read `02-UAT.md`: unchanged, still `status: complete`, 1/1 pass, the live smart-HTTP round trip closed
+  2026-09-28 — no diff to this file since the prior verification.
+- Read the new `02-SECURITY.md` (did not exist at the prior verification): `status: verified`,
+  `threats_open: 0`, 11 threats registered and closed, including T-2-10 (this quick task's own fix,
+  registered from audit finding W-1 and disposed "mitigate...closed") and a documented, explicitly
+  non-phase-2 backlog note (`gitSubdirObjectSource` has no scheme gate — pre-existing, `git-subdir`
+  kind, out of this phase's `url`-kind scope). Nothing in it names an open Phase 2 gap.
+- Confirmed REQUIREMENTS.md still marks MURL-08 and MURL-09 `Complete` and ROADMAP.md's Phase 2 entry
+  is still `[x]` with its 5 success criteria matching the prior verification's read (unchanged since
+  `ab72dba0`).
 
 ## Goal Achievement
 
@@ -174,15 +186,15 @@ session:
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | A `marketplace add` of a `url` source sends the URL the user typed, with trailing slashes and `#<ref>` stripped and the `.git` decision left exactly as typed, against a git port that admits ONLY the verbatim form (MURL-08, D-2-01). | ✓ VERIFIED | `networkCloneUrl`'s `url` arm unchanged (`clone-key.ts:101`); `256/256` add-seam tests pass, run directly this session; **now also confirmed against a real HTTPS server through the actual redirect-capable transport** (`02-UAT.md`: wire = verbatim GET info/refs + POST upload-pack, no `.git` form ever sent). |
-| 2 | A `github` source still sends `https://github.com/<owner>/<repo>.git`, byte-identical to today (SC4). | ✓ VERIFIED | `networkCloneUrl`'s `github` arm unchanged; no diff in `clone-key.ts` since the prior verification. |
-| 3 | A `url` source whose typed input ended in `.git` still sends `.git`, deriving from `source.raw` not the parse-time-stripped `source.url` (SC4, D-2-03). | ✓ VERIFIED | `tests/domain/clone-key.test.ts`'s `networkCloneUrl` block, run directly this session, still asserts the raw-ends-`.git`-while-url-does-not case by exact string. |
-| 4 | `canonicalCloneUrl` returns the same string for every source kind as before this plan, with the sanctioned D-2-05 trailing-slash-before-`#<ref>` exception as a fixed point (SC4, D-2-05). | ✓ VERIFIED | `canonicalCloneUrl` unchanged since the prior verification's independent re-derivation (`IDENTITY_DIFFS=6`, all sanctioned shape; `FIXED_POINT_VIOLATIONS=0`); not touched by any commit since `4d530bfb`. |
-| 5 | `marketplace add` makes exactly ONE clone attempt per operation on both the success and failure path, URL asserted by value (MURL-09, SC3, D-2-04). | ✓ VERIFIED | Same 3 MURL-09 fake-port cases pass (404, 401, D-2-02 suffix-only refusal), each asserting `state.cloneCalls.length === 1` plus the exact URL string; **independently re-derived that the new redirect-following `HttpClient` in `platform/git.ts` cannot add a second attempt at this level** — it triggers only on 3xx+Location (never on 4xx/5xx or a URL-shape heuristic) and operates entirely inside a single `clone()`/`resolveRemoteRef()` call, below the `GitOps` boundary these tests mock. A redirect hop is a server-directed continuation of the ONE attempt, not a client-initiated retry with a different URL — the distinction D-2-01 actually draws. Corroborated live: `02-UAT.md`'s two negative controls (missing repo, explicit `.git` form) each made exactly one request and failed as themselves. |
-| 6 | A 401/403/404/5xx from the clone keeps its original error identity and message through the add seam (SC2). | ✓ VERIFIED | Same cases assert `err === cloneThrows` by reference plus `.message`/`.code`/`.data.statusCode`; `handleAddFailure` unchanged since prior verification. |
-| 7 | `networkCloneUrl` is a pure function of `source` — no process/fs/network state (MURL-08 concurrency edge). | ✓ VERIFIED | Read directly: unchanged 3-arm switch over pure string ops; no diff since prior verification. |
+| 1 | A `marketplace add` of a `url` source sends the URL the user typed, with trailing slashes and `#<ref>` stripped and the `.git` decision left exactly as typed, against a git port that admits ONLY the verbatim form (MURL-08, D-2-01). | ✓ VERIFIED | `networkCloneUrl`'s `url` arm unchanged (`clone-key.ts`, no diff since `ab72dba0`); 369/369 relevant tests pass, run directly this session; carried forward: the live-server evidence in `02-UAT.md` (unchanged, still complete). |
+| 2 | A `github` source still sends `https://github.com/<owner>/<repo>.git`, byte-identical to today (SC4). | ✓ VERIFIED | `networkCloneUrl`'s `github` arm unchanged; no diff in `clone-key.ts` since `ab72dba0`. Carried forward unchanged. |
+| 3 | A `url` source whose typed input ended in `.git` still sends `.git`, deriving from `source.raw` not the parse-time-stripped `source.url` (SC4, D-2-03). | ✓ VERIFIED | `tests/domain/clone-key.test.ts`'s `networkCloneUrl` block (unchanged since `ab72dba0`), run directly this session, still asserts the raw-ends-`.git`-while-url-does-not case by exact string. The new T-2-10 gate in `urlObjectSource` does not touch this code path (it constrains which OBJECT-form sources are admitted, not what `networkCloneUrl` reads off an admitted one), and the fixed-point admission case added by 260928-tt9 confirms a `.git`-suffixed `raw` differing from `url` only by decoration is still admitted. |
+| 4 | `canonicalCloneUrl` returns the same string for every source kind as before this plan, with the sanctioned D-2-05 trailing-slash-before-`#<ref>` exception as a fixed point (SC4, D-2-05). | ✓ VERIFIED | `canonicalCloneUrl` (`clone-key.ts`) unchanged since `ab72dba0`; not touched by either commit this re-verification round covers. |
+| 5 | `marketplace add` makes exactly ONE clone attempt per operation on both the success and failure path, URL asserted by value (MURL-09, SC3, D-2-04). | ✓ VERIFIED | Same 3 MURL-09 fake-port cases pass (404, 401, D-2-02 suffix-only refusal), each asserting `state.cloneCalls.length === 1` plus the exact URL string, re-run directly this session as part of 369/369. `recognizeLeftover`'s use of the rewritten `listRemotes` sits strictly before the clone-and-rename path and adds no `gitOps.clone`/`resolveRemoteRef` call — confirmed by reading `orchestrators/marketplace/add.ts` (unchanged since `ab72dba0`). |
+| 6 | A 401/403/404/5xx from the clone keeps its original error identity and message through the add seam (SC2). | ✓ VERIFIED | Same cases assert `err === cloneThrows` by reference plus `.message`/`.code`/`.data.statusCode`; `handleAddFailure` unchanged since `ab72dba0`. |
+| 7 | `networkCloneUrl` is a pure function of `source` — no process/fs/network state (MURL-08 concurrency edge). | ✓ VERIFIED | Read directly: unchanged 3-arm switch over pure string ops; no diff since `ab72dba0`. |
 | 8 | Exactly-one-attempt is per OPERATION, not per process (MURL-09 concurrency edge). | ✓ VERIFIED | `state.cloneCalls`/`resolveRemoteRefCalls` remain per-fixture-instance arrays; unchanged fake, unchanged tests, all pass. |
-| 9 | CR-02's https-only scheme gate rejects through BOTH the `url` and `raw` object fields, and D-2-05's slash normalization does NOT widen what a `github` url accepts (D-76-01, D-2-05 scope boundary). | ✓ VERIFIED | `source.ts`'s scheme-gate and the two-composition split (`stripUrlDecorations`/`stripGitHubUrlDecorations`) are unchanged except for the `stripGitSuffix` export (no logic change, confirmed by diff); `tests/domain/source.test.ts` (37 new lines, additive — Phase 3 fixed-point cases for the leftover comparison, not a rewrite of the existing scheme-gate assertions) still passes in full. |
+| 9 | CR-02's https-only scheme gate rejects through BOTH the `url` and `raw` object fields, and D-2-05's slash normalization does NOT widen what a `github` url accepts (D-76-01, D-2-05 scope boundary). | ✓ VERIFIED | Re-read `urlObjectSource` in full at HEAD (not carried forward — this function DID change): the scheme gate on both fields (lines 199-221) is structurally unchanged and still returns on either field's rejection BEFORE the new T-2-10 identity check can run; `stripUrlDecorations`/`stripGitHubUrlDecorations` remain the two undisturbed compositions. The new T-2-10 arm is a further, narrower rejection (raw must ALSO name the same repository as url) — it cannot widen acceptance, only narrow it, and 5 new test rows (4 reject, 1 admit-by-decoration) in `tests/domain/source.test.ts` prove both directions non-vacuously (RED against the unfixed parser per the quick-task SUMMARY, GREEN now). |
 
 **Score:** 9/9 truths verified (0 present-but-behavior-unverified).
 
@@ -190,58 +202,58 @@ session:
 
 | SC | Text | Status |
 |----|------|--------|
-| SC1 | verbatim-path `clone` AND `resolveRemoteRef` both resolve | ✓ — proven offline (all seam tests) AND now proven live against a real smart-HTTP server through the real (redirect-capable) transport (`02-UAT.md`). |
+| SC1 | verbatim-path `clone` AND `resolveRemoteRef` both resolve | ✓ — unchanged code path (`clone`/`fetch`/`resolveRemoteRef` in `platform/git.ts` untouched by this round's diff); carried-forward live-server evidence (`02-UAT.md`, unchanged). |
 | SC2 | 401/403/404/5xx keeps original error identity | ✓ — truth 6 above; unchanged code, all tests pass. |
-| SC3 | exactly ONE network attempt per operation, both paths, no status-gated retry | ✓ — truth 5 above; the new redirect client does not introduce a second attempt or a status-gated retry — it is a server-directed continuation gated only by 3xx+`Location`, invisible to and non-interfering with the orchestrator-level call-count guard, and now corroborated live (one GET + one POST per operation, no `.git` form ever requested). |
-| SC4 | `.git` only where Claude Code appends it; `canonicalCloneUrl` unchanged | ✓ with the D-2-05 sanctioned exception, unchanged since prior verification. |
-| SC5 | `npm run check` green, 100% on every new arm, `test:corresponding` | ✓ — this session's own `npm run check` ran end-to-end, `CHECK_EXIT=0`: 7386/7386 unit tests, 100.00/100.00/100.00 lines/functions/branches on `extensions/**`, 36/36 integration, `lint:type-members` 4 recorded exceptions / 7 of 7 negative controls passed. |
+| SC3 | exactly ONE network attempt per operation, both paths, no status-gated retry | ✓ — truth 5 above; the `listRemotes` rewrite is local-FS-only and sits before, not inside, the clone call; no new attempt is introduced. |
+| SC4 | `.git` only where Claude Code appends it; `canonicalCloneUrl` unchanged | ✓ with the D-2-05 sanctioned exception, unchanged since `ab72dba0`. |
+| SC5 | `npm run check` green, 100% on every new arm, `test:corresponding` | ✓ — saved log confirms `CHECK_EXIT=0` at the last code commit (`add75890`), and the working tree's code is byte-identical to that commit (`git diff --stat add75890..HEAD -- extensions tests scripts package.json` empty): 7396/7396 unit tests, 100% coverage on `extensions/**`, 36/36 integration. |
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `extensions/pi-claude-marketplace/domain/source.ts` | `stripUrlDecorations`/`stripGitHubUrlDecorations` remain separate compositions per D-2-05 | ✓ VERIFIED | Only diff since prior verification: `stripGitSuffix` made `export` (no logic change) for Phase 3's leftover-identity comparison; the two-composition structure is untouched. |
-| `extensions/pi-claude-marketplace/domain/clone-key.ts` | `networkCloneUrl(source)`, 3-arm switch, no `default` | ✓ VERIFIED | Byte-identical since prior verification (no diff since `4d530bfb`). |
-| `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` | seam wired to `networkCloneUrl` | ✓ VERIFIED | `networkCloneUrl(source)` clone-call-site wiring unchanged; the new `recognizeLeftover` function (Phase 3) sits earlier in the flow and does not touch this wiring. |
-| `extensions/pi-claude-marketplace/platform/git.ts` | `clone`/`fetch`/`resolveRemoteRef` still send `opts.url` verbatim as the first request | ✓ VERIFIED | Read in full; all three functions pass `opts.url` unchanged into isomorphic-git; the new module-private `HttpClient` only changes what happens on a server-issued 3xx after that first request. |
-| `extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts` | `networkUrl: string` required (×2), disk key still hashes `cloneUrl` | ✓ VERIFIED | No diff since prior verification. |
-| `scripts/check-unused-type-members.contracts.json` | 108 entries, 4 recorded exceptions, no pin on the two changed domain files | ✓ VERIFIED | `contracts.length === 108`; zero entries reference `domain/source.ts` or `domain/clone-key.ts`; the 12-line coordinate drift since the prior verification comes from Phase 3 edits elsewhere in the file and does not affect this phase's pins. |
-| `.planning/.../02-UAT.md` | closes the one carried-forward human-verification item | ✓ VERIFIED | `status: complete`, 1/1 pass, evidence names exact wire traffic (verbatim GET+POST, no `.git` form, controls fail-as-themselves). |
+| `extensions/pi-claude-marketplace/domain/source.ts` | `stripUrlDecorations`/`stripGitHubUrlDecorations` remain separate compositions per D-2-05; `urlObjectSource`'s scheme gate on both `url`/`raw` fields is intact | ✓ VERIFIED | Read in full at HEAD. The T-2-10 identity check is additive and sits after the existing gates; no composition was merged or widened. |
+| `extensions/pi-claude-marketplace/domain/clone-key.ts` | `networkCloneUrl(source)`, 3-arm switch, no `default` | ✓ VERIFIED | Byte-identical since `ab72dba0` (empty diff). |
+| `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` | seam wired to `networkCloneUrl`; `recognizeLeftover` does not add a clone attempt | ✓ VERIFIED | Byte-identical since `ab72dba0` (empty diff) — the `listRemotes` rewrite lives entirely inside `platform/git.ts`; `add.ts`'s own code is untouched this round. |
+| `extensions/pi-claude-marketplace/platform/git.ts` | `clone`/`fetch`/`resolveRemoteRef` still send `opts.url` verbatim as the first request | ✓ VERIFIED | Read in full; the only diff this round is inside `listRemotes` (Phase 3's local-FS-only leftover probe); the three MURL-08/09 functions are untouched. |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts` | `networkUrl: string` required (×2), disk key still hashes `cloneUrl` | ✓ VERIFIED | No diff since `ab72dba0`. |
+| `scripts/check-unused-type-members.contracts.json` | 108 entries, 4 recorded exceptions, no pin on the two changed domain files | ✓ VERIFIED | Unchanged since `ab72dba0` per the quick-task SUMMARY's own scope-fence check, independently spot-confirmed. |
+| `.planning/.../02-UAT.md` | closes the one carried-forward human-verification item | ✓ VERIFIED | Unchanged since `ab72dba0`: `status: complete`, 1/1 pass. |
+| `.planning/.../02-SECURITY.md` (new this round) | Registers and disposes T-2-10 | ✓ VERIFIED | `threats_open: 0`, T-2-10 disposed "mitigate...closed", citing the exact fix commit `1cc96c97` and the 5 new test rows. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|-----|-----|--------|---------|
-| `networkCloneUrl`'s github arm | `ensureGitSuffix` | function call | ✓ WIRED | Unchanged since prior verification. |
-| `stripUrlDecorations` / `stripGitHubUrlDecorations` | shared leaf primitives only, no shared composition | function structure | ✓ WIRED (deliberately decoupled) | Unchanged; `stripGitSuffix`'s export does not create a new call edge between the two compositions. |
+| `networkCloneUrl`'s github arm | `ensureGitSuffix` | function call | ✓ WIRED | Unchanged since `ab72dba0`. |
+| `stripUrlDecorations` / `stripGitHubUrlDecorations` | shared leaf primitives only, no shared composition | function structure | ✓ WIRED (deliberately decoupled) | Unchanged; the T-2-10 gate calls `gatedUrlField` (which itself calls these) on the `raw` field the same way it already did on `url` — no new shared composition introduced. |
 | `add.ts` / `clone-cache.ts` seams | `networkCloneUrl(source)` | clone/resolveRemoteRef call `url`/`networkUrl` field | ✓ WIRED | Unchanged; re-confirmed passing via this session's direct test runs. |
-| `platform/git.ts`'s `clone`/`fetch`/`resolveRemoteRef` | the module-private `http` client | `git.clone({ http, ... })` etc. | ✓ WIRED | Read directly; all three isomorphic-git calls thread the same `http` object; the redirect logic is internal to that object and does not create any new call from the orchestrator layer. |
-| `orchestrators/marketplace/add.ts::recognizeLeftover` | `gitOps.listRemotes` (local FS only) | new `GitOps` 8th member | ✓ WIRED, and confirmed NOT a network call | Read `platform/git.ts::listRemotes` directly: `fs.promises.readFile` + `git.listRemotes({ fs, dir })`, no `http`/`git.clone`/`git.fetch`/`git.listServerRefs` reference anywhere in the function. |
+| `platform/git.ts`'s `clone`/`fetch`/`resolveRemoteRef` | the module-private `http` client | `git.clone({ http, ... })` etc. | ✓ WIRED | Read directly; unchanged this round. |
+| `orchestrators/marketplace/add.ts::recognizeLeftover` | `gitOps.listRemotes` (rewritten this round, still local FS only) | new `GitOps` 8th member | ✓ WIRED, and confirmed NOT a network call | Read `platform/git.ts::listRemotes` directly at HEAD: `fs.promises.readFile` + `git.getConfigAll({ fs, dir, path })`, no `http`/`git.clone`/`git.fetch`/`git.listServerRefs` reference anywhere in the function. |
 
 ### Data-Flow Trace (Level 4)
 
 `networkCloneUrl(source)` → `gitOps.clone({ url: ... })` / `gitOps.resolveRemoteRef({ url: ... })`:
-traced end-to-end through the real edge handler in `tests/edge/handlers/marketplace/add.test.ts` (run
-directly this session, 256/256 pass) against the offline fake, AND through the real transport in
-`02-UAT.md`'s live run (wire-logged GET/POST pair matching the derivation exactly). Status: ✓ FLOWING.
+unchanged code path this round; traced end-to-end through the real edge handler in
+`tests/edge/handlers/marketplace/add.test.ts` (not re-run this session — file unchanged since
+`ab72dba0` and covered by the saved `npm run check` log's 7396/7396) and through the real transport in
+`02-UAT.md`'s live run (unchanged, carried forward). Status: ✓ FLOWING.
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| MURL-08/MURL-09 add-seam suite | `node --experimental-strip-types --test tests/edge/handlers/marketplace/add.test.ts tests/orchestrators/marketplace/add.test.ts tests/domain/source.test.ts tests/domain/clone-key.test.ts` | 256/256 pass | ✓ PASS |
-| Plugin clone-cache + probe suites | `node --experimental-strip-types --test tests/orchestrators/plugin/{clone-cache,install-clone-probe,reinstall-clone-probe,fetch,info,update-preflight}.test.ts` | 275/275 pass | ✓ PASS |
-| Platform redirect-client suite (the file this re-verification is specifically about) | `node --experimental-strip-types --test tests/platform/git.test.ts` | 56/56 pass | ✓ PASS |
-| Plugin flow + seed-mirrors + architecture suites | `node --experimental-strip-types --test tests/orchestrators/plugin/{install-flow,update-flow,reinstall-flow}.test.ts tests/integration/marketplace-add-seed-mirrors.test.ts tests/architecture/{no-credential-leak,import-boundaries,no-stale-test-citations,no-orchestrator-network}.test.ts` | 504/504 pass | ✓ PASS |
-| Live smart-HTTP round trip (real server, real transport) | `02-UAT.md` test 1 — pi RPC mode against a local instrumented HTTPS server | 1/1 pass — verbatim-only wire traffic confirmed for add AND update, controls fail as themselves | ✓ PASS |
-| `npm run check` | this verifier, end-to-end, launched once this session, ran to completion | `CHECK_EXIT=0`: typecheck, lint, lint:workflows(+neg), fallow (4 sub-gates), format:check, test:corresponding(+neg), test:coverage:direct:negative, test:coverage:unit (7386/7386, 100.00/100.00/100.00 over `extensions/**`), test:integration (36/36), lint:type-members (4 exceptions) + negative (7/7) | ✓ PASS |
+| Phase-2-relevant suites (source, clone-key, marketplace/add, clone-cache, platform/git) | `node --experimental-strip-types --test tests/domain/source.test.ts tests/domain/clone-key.test.ts tests/orchestrators/marketplace/add.test.ts tests/orchestrators/plugin/clone-cache.test.ts tests/platform/git.test.ts` | 369/369 pass | ✓ PASS |
+| `npm run check` (saved log, this verifier did not re-run — parallel-sibling-verifier instruction) | log at `/tmp/claude-1000/.../scratchpad/check.log`, `CHECK_EXIT=0` | typecheck, lint, lint:workflows(+neg), fallow (4 sub-gates), format:check, test:corresponding(+neg), test:coverage:direct:negative, test:coverage:unit (7396/7396, 100.00/100.00/100.00 over `extensions/**`), test:integration (36/36), lint:type-members (4 exceptions) + negative (7/7) | ✓ PASS |
+| Code-tree-unchanged-since-log check | `git diff --stat add75890..HEAD -- extensions tests scripts package.json` | empty | ✓ PASS |
+| Live smart-HTTP round trip (real server, real transport, carried forward) | `02-UAT.md` test 1 — pi RPC mode against a local instrumented HTTPS server | 1/1 pass — verbatim-only wire traffic confirmed for add AND update, controls fail as themselves | ✓ PASS |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|--------------|--------|----------|
-| MURL-08 | 01, 02, 03 | verbatim-URL smart-HTTP endpoint resolves clone + resolveRemoteRef | ✓ SATISFIED | Truths 1-4, 7, 9; now also proven live (`02-UAT.md`); REQUIREMENTS.md marks Complete. |
-| MURL-09 | 01, 02, 03 | sent URL == typed URL modulo decoration; exactly one attempt, no status-gated retry | ✓ SATISFIED | Truths 5, 6, 8; redirect-client classification above; REQUIREMENTS.md marks Complete. |
+| MURL-08 | 01, 02, 03 | verbatim-URL smart-HTTP endpoint resolves clone + resolveRemoteRef | ✓ SATISFIED | Truths 1-4, 7, 9; carried-forward live evidence (`02-UAT.md`); REQUIREMENTS.md marks Complete (re-confirmed this session). |
+| MURL-09 | 01, 02, 03 | sent URL == typed URL modulo decoration; exactly one attempt, no status-gated retry | ✓ SATISFIED | Truths 5, 6, 8; REQUIREMENTS.md marks Complete (re-confirmed this session). |
 
 No orphaned requirements: `grep -n "Phase 2" REQUIREMENTS.md` maps only MURL-08/MURL-09 to this
 phase, and both appear in all three plans' `requirements:` frontmatter.
@@ -252,52 +264,51 @@ phase, and both appear in all three plans' `requirements:` frontmatter.
 |---|-----------|--------|----------|
 | 1 | No test case may keep a name/title/comment promising the pre-phase `.git`-for-every-host rule while asserting the verbatim rule, or the reverse (all 3 plans). | ✓ HOLDS | `grep -rn "keeps a path slash" tests/` → 0 hits this session. |
 | 2 | A source that stops working under the accepted D-2-02 regression must fail with the URL that was actually sent named in the failure. | ✓ HOLDS | Unchanged; the D-2-02 fixture case still passes with `rawSource` named in the failure. |
-| 3 (02-02) | A pass-through wire-URL test must not merely re-assert the caller's own value; `networkUrl` must DIFFER from `cloneUrl` in at least one assertion. | ✓ HOLDS | `clone-cache.ts` unchanged since prior verification; `materializePluginClone forwards the caller's wire url and keys the dir off the identity url` still uses genuinely different `cloneUrl`/`wireUrl` values. |
-| 4 (02-03) | No remote allowlist anywhere admits BOTH the verbatim and the `.git`-suffixed form of the same URL for a `url`-kind source. | ✓ HOLDS | `tests/integration/marketplace-add-seed-mirrors.test.ts` unchanged since prior verification (no diff since `4d530bfb`); still admits a single form. |
-| 5 (02-03) | No docstring in `extensions/` still states the inverse of D-2-02. | ✓ HOLDS | `grep -rn "does not resolve against a host that serves ONLY" extensions/` returns the correct (D-2-02-matching) direction; no inverse phrasing found. |
+| 3 (02-02) | A pass-through wire-URL test must not merely re-assert the caller's own value; `networkUrl` must DIFFER from `cloneUrl` in at least one assertion. | ✓ HOLDS | `clone-cache.ts` unchanged since `ab72dba0`. |
+| 4 (02-03) | No remote allowlist anywhere admits BOTH the verbatim and the `.git`-suffixed form of the same URL for a `url`-kind source. | ✓ HOLDS | `tests/integration/marketplace-add-seed-mirrors.test.ts` unchanged since `ab72dba0`; still admits a single form. |
+| 5 (02-03) | No docstring in `extensions/` still states the inverse of D-2-02. | ✓ HOLDS | `grep -rn "does not resolve against a host that serves ONLY" extensions/` returns only the correct (D-2-02-matching) direction this session. |
 
 ### Anti-Patterns Found
 
-No `TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` markers in any file this phase's `covered_files`
-names, including the four production files that changed since the prior verification
-(`platform/git.ts`, `domain/source.ts`, `orchestrators/marketplace/add.ts`,
-`orchestrators/marketplace/shared.ts`) — checked directly with `grep`.
+No `TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` markers found in either of the two production files
+that changed this round (`domain/source.ts`, `platform/git.ts`) — checked directly with `grep`. No
+regression: neither file was previously flagged and both remain clean.
 
-**Documentation drift noted, not a code gap:** `.planning/workstreams/git-hosts/ROADMAP.md` still
-shows Phase 2 as `[ ]` unchecked with status "In Progress" in its Progress table, and its
-"Milestone-wide constraints" section still lists the live-smart-HTTP-canary blocker with "Resume:
-`/gsd-verify-work 2`" — pre-dating `02-UAT.md`'s closure of that item (committed 4dc8177b, same day as
-this re-verification). ROADMAP.md is not in this phase's `covered_files` and this verifier was
-instructed not to edit anything but `02-VERIFICATION.md`; flagging so the next roadmap-touching commit
-reconciles the checkbox, Progress table, and constraints section with the now-closed UAT.
+No stale-rule test titles (see Prohibitions #1 above). No inverse-D-2-02 docstring (Prohibitions #5).
 
-No stale-rule test titles (see Prohibitions #1 above). No `typescript-comments` skill violations
-(historical-narration phrasing) found in the four changed production files.
+**02-SECURITY.md non-blocking note carried into this report:** the security audit trail records one
+pre-existing, out-of-phase-scope backlog item — `gitSubdirObjectSource` (the `git-subdir` kind, not
+`url`) has no `https://`-only scheme gate, so it would accept an `http://` URL (no credential is
+offered because `onAuth` requires `https:`, so the practical exposure is limited to an unauthenticated
+plaintext clone attempt). This is explicitly disposed as pre-existing and out of this phase's scope
+(Phase 2 covers the `url` kind) in `02-SECURITY.md`'s own audit note — not a Phase 2 regression, not
+a new-scope finding introduced by this re-verification round, and not tied to any file this phase's
+`covered_files` list names. Recorded here for visibility; does not affect this phase's status.
 
 ### Coincidental Reliance
 
-None flagged. The redirect-classification evidence (truth 5 / SC3) is derived by directly reading the
-`sendHop`/`redirectLocation` control flow and the live UAT wire log — not from a fixture-only
-precondition or an incidental ordering the production code does not itself establish. All other truths
-carry forward the prior verification's own coincidental-reliance analysis (none flagged there either),
-re-confirmed against unchanged code.
+None flagged. The T-2-10 gate's evidence (truth 9) is derived from directly reading the control flow
+of `urlObjectSource` at HEAD and from 5 new, non-vacuous test rows (4 reject, 1 admit) whose RED/GREEN
+transition the quick-task SUMMARY records and this session independently re-ran GREEN — not a
+fixture-only precondition or an incidental ordering the production code does not itself establish. All
+other truths carry forward the prior verification's own coincidental-reliance analysis (none flagged
+there either), re-confirmed against unchanged code.
 
 ### Human Verification Required
 
-None. The one item carried forward from the prior verification (the live smart-HTTP endpoint canary,
-MURL-08) is now closed — see `02-UAT.md` (status: complete, 1/1 pass, committed `4dc8177b`) and the
-"How this was verified" section above.
+None. The one item carried forward from two verifications ago (the live smart-HTTP endpoint canary,
+MURL-08) remains closed — see `02-UAT.md` (status: complete, 1/1 pass, unchanged this round).
 
 ### Gaps Summary
 
-None. All 9 must-have truths verified, all 5 ROADMAP success criteria hold (including SC3's
-no-status-gated-retry clause, explicitly re-examined against the new redirect-following HTTP client and
-found not to introduce a second attempt), all 5 plan prohibitions hold, no debt markers, no orphaned
-requirements, `npm run check` green at `CHECK_EXIT=0` (7386/7386 unit tests, 100% coverage on
-`extensions/**`, 36/36 integration), and the previously-open human-verification item is now closed with
-live evidence. Status changes from `human_needed` to `passed`.
+None. All 9 must-have truths verified, all 5 ROADMAP success criteria hold, all 5 plan prohibitions
+hold, no debt markers in either file this round's diff touched, no orphaned requirements, `npm run
+check` green at `CHECK_EXIT=0` against a code tree confirmed byte-identical to the log's run (7396/7396
+unit tests, 100% coverage on `extensions/**`, 36/36 integration), and the security audit's T-2-10
+finding (the reason this re-verification was requested) is confirmed fixed, tested non-vacuously, and
+disposed closed in `02-SECURITY.md`. Status stays `passed`.
 
 ---
 
-_Verified: 2026-09-28T21:15:00Z_
+_Verified: 2026-09-29T00:00:00Z_
 _Verifier: Claude (gsd-verifier)_
