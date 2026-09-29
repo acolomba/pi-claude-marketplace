@@ -610,20 +610,20 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:567:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:694:7",
+      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:695:7",
       "owner": "applyMarketplaceOutcomeToBlock.outcome",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PerEntryOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:691:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:692:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:790:7",
+      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:791:7",
       "owner": "applyPluginOutcomeToBlock.outcome",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PerEntryOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:787:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:788:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/locations.ts:41:3",
@@ -668,20 +668,20 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:216:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1567:46",
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1525:32",
       "owner": "isDescriptionBearingRow",
       "key": "status",
       "category": "type-selection",
-      "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1567:9"
+      "purpose": "Selects within ResolvedRow by status, so this position accepts one variant group rather than the whole union.",
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1525:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:843:7",
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:849:7",
       "owner": "renderPendingRow.p",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:841:6"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:847:6"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-summary.ts:41:40",
@@ -700,12 +700,12 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-types.ts:459:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:285:52",
+      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:272:52",
       "owner": "notifyReconcileAppliedWithContext",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:285:15"
+      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:272:15"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:348:29",
@@ -716,12 +716,12 @@
       "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:348:14"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:66:61",
+      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:65:61",
       "owner": "CommandContext.render",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:66:46"
+      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:65:46"
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:106:3",

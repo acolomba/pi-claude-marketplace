@@ -20,7 +20,6 @@ import {
   type Plural,
   type RenderFn,
   type Single,
-  type WithPlugins,
 } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 
 import type {
@@ -32,11 +31,6 @@ import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.
 
 type ControlledMessage = PluginAvailableMessage | PluginDisabledMessage;
 type ControlledStatus = ControlledMessage["status"];
-interface SimpleMarketplace {
-  readonly name: string;
-  readonly scope: Scope;
-  readonly plugins: readonly PluginNotificationMessage[];
-}
 
 void (((row: PluginAvailableMessage, probe: SoftDepStatus, scope: Scope) =>
   `${row.name}:${probe.piSubagentsLoaded.toString()}:${scope}`) satisfies RenderFn<PluginAvailableMessage>);
@@ -52,11 +46,6 @@ void ([
   { status: "available", name: "alpha" },
   { status: "available", name: "beta" },
 ] as const satisfies Plural<PluginAvailableMessage>);
-void ({
-  name: "official",
-  scope: "user",
-  plugins: [{ status: "available", name: "alpha" }],
-} satisfies WithPlugins<SimpleMarketplace, PluginAvailableMessage>);
 void ({
   name: "official",
   scope: "user",

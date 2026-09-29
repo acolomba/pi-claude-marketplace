@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   composeMarketplaceBlock,
   composePluginLinesWith,
@@ -35,6 +34,11 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
 import type {
+  ResolvedMarketplace,
+  ResolvedRow,
+} from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import type {
+  PluginFailedMessage,
   PluginNotificationMessage,
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
@@ -302,19 +306,25 @@ for (const { plugin, expected } of ROW_CASES) {
 
 test("composes descriptions, hints, causes, leaks, and rollback failures in order", () => {
   // arrange
-  const cause = new ManualRecoveryError("outer", ["/tmp/leak"], { cause: new Error("inner") });
   const plugin = {
     status: "failed",
+    severity: "error",
     name: "alpha",
     reasons: ["rollback partial"],
     partialHint: true,
-    cause,
-    rollbackPartial: [{ phase: "skills", cause: new Error("rollback") }, { phase: "commands" }],
-  };
+    failure: {
+      cause: { causeChain: ["outer", "inner"], truncated: false },
+      leaks: ["/tmp/leak"],
+      rollbackPartial: [
+        { phase: "skills", cause: { causeChain: ["rollback"], truncated: false } },
+        { phase: "commands" },
+      ],
+    },
+  } satisfies ResolvedRow<PluginFailedMessage>;
 
   // act
   const lines = composePluginLinesWith(
-    plugin as never,
+    plugin,
     bothLoadedProbe(),
     "user",
     () => "⊘ alpha (failed) {rollback partial}",
@@ -602,13 +612,14 @@ for (const { message, expected } of [
 
 test("reconcile applied body preserves empty and caller-ordered blocks", () => {
   // arrange
-  const message = {
-    marketplaces: [MARKETPLACE_BASE, { ...MARKETPLACE_BASE, name: "second", scope: "project" }],
-  };
+  const marketplaces = [
+    MARKETPLACE_BASE,
+    { ...MARKETPLACE_BASE, name: "second", scope: "project" },
+  ] as const satisfies readonly ResolvedMarketplace[];
 
   // act
-  const empty = composeReconcileAppliedBody({ marketplaces: [] } as never, bothLoadedProbe());
-  const many = composeReconcileAppliedBody(message as never, bothLoadedProbe());
+  const empty = composeReconcileAppliedBody([], bothLoadedProbe());
+  const many = composeReconcileAppliedBody(marketplaces, bothLoadedProbe());
 
   // assert
   assert.equal(empty, "(no marketplaces)");
@@ -684,7 +695,13 @@ test("optional dependency and empty cause branches collapse without extra tokens
     neitherLoadedProbe(),
   );
   const failed = composePluginLinesWith(
-    { status: "failed", name: "alpha", cause: null } as never,
+    {
+      status: "failed",
+      severity: "error",
+      name: "alpha",
+      reasons: [],
+      failure: { leaks: [], rollbackPartial: [] },
+    } satisfies ResolvedRow<PluginFailedMessage>,
     bothLoadedProbe(),
     "user",
     () => "row",

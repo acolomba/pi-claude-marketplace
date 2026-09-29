@@ -1,16 +1,41 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   resolveEnvelope,
+  resolveRows,
   resolveUpdateNoOpEnvelope,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
-import type { ResolvedEnvelope } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import type {
+  ResolvedEnvelope,
+  ResolvedMarketplace,
+  ResolvedRow,
+} from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
   CascadeNotificationMessage,
+  MarketplaceNotificationMessage,
   NotificationMessage,
+  PluginFailedMessage,
+  PluginNotificationMessage,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+void ({
+  status: "failed",
+  severity: "error",
+  name: "alpha",
+  reasons: [],
+  failure: { leaks: [], rollbackPartial: [] },
+} satisfies ResolvedRow<PluginFailedMessage>);
+void ({
+  status: "failed",
+  severity: "error",
+  name: "alpha",
+  reasons: [],
+  // @ts-expect-error a resolved failed row carries no live Error
+  cause: new Error("x"),
+} satisfies ResolvedRow<PluginFailedMessage>);
 
 describe("resolveEnvelope", () => {
   for (const { name, message, expectedEnvelope } of [
@@ -493,5 +518,222 @@ describe("resolveUpdateNoOpEnvelope", () => {
       needsReload: false,
       noOp: true,
     });
+  });
+});
+
+/** One marketplace holding `plugins`, in the shape `resolveRows` reads. */
+function marketplaceWith(
+  plugins: readonly PluginNotificationMessage[],
+): readonly MarketplaceNotificationMessage[] {
+  return [{ name: "official", scope: "user", plugins }];
+}
+
+describe("resolveRows", () => {
+  test("serializes a failed row's cause chain and rollback phases", () => {
+    // arrange
+    const marketplaces = marketplaceWith([
+      {
+        status: "failed",
+        severity: "error",
+        name: "alpha",
+        reasons: ["rollback partial"],
+        cause: new Error("outer", { cause: new Error("inner") }),
+        rollbackPartial: [
+          { phase: "skills", cause: new Error("undo failed") },
+          { phase: "commands" },
+        ],
+      },
+    ]);
+
+    // act
+    const resolved = resolveRows(marketplaces);
+
+    // assert
+    assert.deepStrictEqual(resolved, [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "failed",
+            severity: "error",
+            name: "alpha",
+            reasons: ["rollback partial"],
+            failure: {
+              cause: { causeChain: ["outer", "inner"], truncated: false },
+              leaks: [],
+              rollbackPartial: [
+                { phase: "skills", cause: { causeChain: ["undo failed"], truncated: false } },
+                { phase: "commands" },
+              ],
+            },
+          },
+        ],
+      },
+    ] satisfies readonly ResolvedMarketplace[]);
+  });
+
+  test("resolves a failed row without a cause to empty failure facts", () => {
+    // arrange
+    const marketplaces = marketplaceWith([
+      { status: "failed", severity: "warning", name: "alpha", reasons: ["not found"] },
+    ]);
+
+    // act
+    const resolved = resolveRows(marketplaces);
+
+    // assert
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      {
+        status: "failed",
+        severity: "warning",
+        name: "alpha",
+        reasons: ["not found"],
+        failure: { leaks: [], rollbackPartial: [] },
+      },
+    ]);
+  });
+
+  test("reads the leaked paths of a ManualRecoveryError cause", () => {
+    // arrange
+    const marketplaces = marketplaceWith([
+      {
+        status: "failed",
+        severity: "error",
+        name: "alpha",
+        reasons: ["rollback partial"],
+        cause: new ManualRecoveryError("stuck", ["/tmp/a", "/tmp/b"]),
+      },
+    ]);
+
+    // act
+    const resolved = resolveRows(marketplaces);
+
+    // assert
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      {
+        status: "failed",
+        severity: "error",
+        name: "alpha",
+        reasons: ["rollback partial"],
+        failure: {
+          cause: { causeChain: ["stuck"], truncated: false },
+          leaks: ["/tmp/a", "/tmp/b"],
+          rollbackPartial: [],
+        },
+      },
+    ]);
+  });
+
+  test("resolves a manual-recovery row with its leaks and no rollback phases", () => {
+    // arrange
+    const marketplaces = marketplaceWith([
+      {
+        status: "manual recovery",
+        severity: "error",
+        name: "alpha",
+        reasons: ["rollback partial"],
+        cause: new ManualRecoveryError("stuck", ["/tmp/leak"], { cause: new Error("inner") }),
+      },
+    ]);
+
+    // act
+    const resolved = resolveRows(marketplaces);
+
+    // assert
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      {
+        status: "manual recovery",
+        severity: "error",
+        name: "alpha",
+        reasons: ["rollback partial"],
+        failure: {
+          cause: { causeChain: ["stuck", "inner"], truncated: false },
+          leaks: ["/tmp/leak"],
+          rollbackPartial: [],
+        },
+      },
+    ]);
+  });
+
+  test("copies a non-failure row without a failure key", () => {
+    // arrange
+    const marketplaces = marketplaceWith([
+      {
+        status: "installed",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        dependencies: [],
+      },
+    ]);
+
+    // act
+    const resolved = resolveRows(marketplaces);
+
+    // assert
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      { status: "installed", severity: "info", needsReload: true, name: "alpha", dependencies: [] },
+    ]);
+  });
+
+  test("leaves the input row unchanged when every status has a render arm", () => {
+    // arrange
+    const cause = new Error("outer");
+    const row = {
+      status: "failed",
+      severity: "warning",
+      name: "alpha",
+      reasons: ["not found"],
+      cause,
+    } satisfies PluginFailedMessage;
+
+    // act
+    resolveRows(marketplaceWith([row]), () => true);
+
+    // assert
+    assert.deepStrictEqual(row, {
+      status: "failed",
+      severity: "warning",
+      name: "alpha",
+      reasons: ["not found"],
+      cause,
+    });
+  });
+
+  test("floors the input row to error when its status has no render arm", () => {
+    // arrange
+    const row = {
+      status: "disabled",
+      severity: "info",
+      needsReload: false,
+      name: "orphan",
+    } satisfies PluginNotificationMessage;
+
+    // act
+    const resolved = resolveRows(marketplaceWith([row]), () => false);
+
+    // assert
+    assert.deepStrictEqual(row, {
+      status: "disabled",
+      severity: "error",
+      needsReload: false,
+      name: "orphan",
+    });
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      { status: "disabled", severity: "error", needsReload: false, name: "orphan" },
+    ]);
+  });
+
+  test("keeps a frozen row's severity and adds no name to its resolved copy", () => {
+    // arrange
+    const row = Object.freeze({ status: "unknown", severity: "info" });
+
+    // act
+    const resolved = resolveRows(marketplaceWith([row as never]), () => false);
+
+    // assert
+    assert.deepStrictEqual(row, { status: "unknown", severity: "info" });
+    assert.deepStrictEqual(resolved[0]!.plugins, [{ status: "unknown", severity: "info" }]);
   });
 });

@@ -53,6 +53,7 @@ import {
   type PluginPartiallyInstalledMessage,
   type Reason,
   type ReconcileAppliedCascadeMessage,
+  type WithPlugins,
 } from "../../shared/notification-types.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -70,7 +71,7 @@ import type {
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
-import type { MarketplaceRows, WithPlugins } from "../../shared/notify-context.ts";
+import type { MarketplaceRows } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**

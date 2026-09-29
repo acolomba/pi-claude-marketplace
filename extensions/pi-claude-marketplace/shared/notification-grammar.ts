@@ -1,11 +1,18 @@
 import { appendHooksBlock } from "./concerns/hooks.ts";
 import { softDepMarkers } from "./concerns/soft-dep.ts";
-import { causeChainTrailer, manualRecoveryLeaks } from "./errors.ts";
+import { formatCauseChain } from "./errors.ts";
 import { tallyCategory } from "./notification-summary.ts";
 
 import type { SoftDepStatus } from "../platform/pi-api.ts";
 import type { Dependency } from "./concerns/soft-dep.ts";
-import type { ResolvedEnvelope, ResolvedTally } from "./notification-resolve.ts";
+import type { SerializedCauseChain } from "./errors.ts";
+import type {
+  ResolvedEnvelope,
+  ResolvedFailure,
+  ResolvedMarketplace,
+  ResolvedRow,
+  ResolvedTally,
+} from "./notification-resolve.ts";
 import type {
   ContentReason,
   MarketplaceDetails,
@@ -24,7 +31,6 @@ import type {
   PluginRemoteMessage,
   PluginUnavailableMessage,
   PluginUninstalledMessage,
-  ReconcileAppliedCascadeMessage,
   Reason,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
@@ -1064,58 +1070,13 @@ const STALE_GATE_UPDATE_HINT_TRAILER = "Run update --partial on this plugin, the
 const ENABLE_HINT_TRAILER = "Run enable on this plugin to use its components.";
 
 /**
- * Render the depth-5 cause-chain trailer at the requested space-indent
- * prefix when `cause` is defined and the walker returns a non-empty string.
- * Returns `""` otherwise so callers can `if (trailer !== "") lines.push(...)`.
- * Centralizes the "guard + walker + indent" composition reused for both the
- * per-plugin cause (4-space indent) and the per-rollback-phase
- * cause (6-space indent).
- */
-function renderIndentedCauseChain(cause: unknown, indent: string): string {
-  if (cause === undefined) {
-    return "";
-  }
-
-  const trailer = causeChainTrailer(cause);
-  return trailer === "" ? "" : `${indent}${trailer}`;
-}
-
-/**
- * Render the rollbackPartial child rows for a failed-variant plugin.
- * Each phase emits a 4-space-indented row plus an optional 6-space-indented
- * cause-chain trailer when `phase.cause` is set. Returns an empty array when
- * the plugin has no `rollbackPartial`, so callers can spread the result
- * unconditionally.
- */
-function composeRollbackPartialLines(p: PluginNotificationMessage): string[] {
-  if (p.status !== "failed" || p.rollbackPartial === undefined) {
-    return [];
-  }
-
-  const lines: string[] = [];
-  for (const phase of p.rollbackPartial) {
-    lines.push(`    [${phase.phase}] (rollback failed)`);
-    const phaseTrailer = renderIndentedCauseChain(phase.cause, "      ");
-    if (phaseTrailer !== "") {
-      lines.push(phaseTrailer);
-    }
-  }
-
-  return lines;
-}
-
-/**
  * Compose the multi-line block for a single plugin row: the 2-space-indented
  * plugin row, the optional 4-space-indented cause-chain trailer, the AS-7
- * leaked-paths child rows when the cause is a ManualRecoveryError, and any
- * rollbackPartial child rows + nested phase-cause trailers. The caller pushes
- * these lines into the marketplace block's accumulator in order.
+ * leaked-paths child rows, and any rollbackPartial child rows + nested
+ * phase-cause trailers. The caller pushes these lines into the marketplace
+ * block's accumulator in order.
  */
-function composePluginLines(
-  p: PluginNotificationMessage,
-  probe: SoftDepStatus,
-  mpScope: Scope,
-): string[] {
+function composePluginLines(p: ResolvedRow, probe: SoftDepStatus, mpScope: Scope): string[] {
   // Byte-identical to dispatching through the central `renderPluginRow` switch:
   // delegate to the body-parameterized variant with `renderPluginRow` as the
   // row renderer, so the PL-4 description line, the cause-chain / AS-7
@@ -1490,10 +1451,7 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
  * with `\n` to produce the block string that `notify` then joins with
  * `\n\n` between marketplaces.
  */
-export function composeMarketplaceBlock(
-  mp: MarketplaceNotificationMessage,
-  probe: SoftDepStatus,
-): string {
+export function composeMarketplaceBlock(mp: ResolvedMarketplace, probe: SoftDepStatus): string {
   // Pass the threaded soft-dep probe into renderMpHeader so the "skipped" arm
   // can reuse composeReasons. The mp-skipped arm passes (false, false, false)
   // for the three declares-flags; no soft-dep marker can leak onto an mp-level row.
@@ -1515,10 +1473,10 @@ export function composeMarketplaceBlock(
  * `(no marketplaces)` sentinel for parity with the cascade arm.
  */
 export function composeReconcileAppliedBody(
-  message: ReconcileAppliedCascadeMessage,
+  marketplaces: readonly ResolvedMarketplace[],
   probe: SoftDepStatus,
 ): string {
-  const blocks = message.marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
+  const blocks = marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
   return blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
 }
 
@@ -1563,8 +1521,8 @@ type DescriptionBearingStatus = {
 
 /** Narrow to the rows whose variant carries an optional `description`. */
 function isDescriptionBearingRow(
-  p: PluginNotificationMessage,
-): p is Extract<PluginNotificationMessage, { status: DescriptionBearingStatus }> {
+  p: ResolvedRow,
+): p is Extract<ResolvedRow, { status: DescriptionBearingStatus }> {
   return DESCRIPTION_BEARING_STATUS[p.status];
 }
 
@@ -1619,10 +1577,10 @@ function partialHintTrailerFor(p: PluginNotificationMessage): string | undefined
  * path-redaction seam, NFR-9).
  */
 export function composePluginLinesWith(
-  p: PluginNotificationMessage,
+  p: ResolvedRow,
   probe: SoftDepStatus,
   mpScope: Scope,
-  renderRow: (p: PluginNotificationMessage, probe: SoftDepStatus, mpScope: Scope) => string,
+  renderRow: (p: ResolvedRow, probe: SoftDepStatus, mpScope: Scope) => string,
 ): string[] {
   const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
 
@@ -1644,19 +1602,42 @@ export function composePluginLinesWith(
     lines.push(`    ${ENABLE_HINT_TRAILER}`);
   }
 
-  if (p.status === "failed" || p.status === "manual recovery") {
-    const trailer = renderIndentedCauseChain(p.cause, "    ");
-    if (trailer !== "") {
-      lines.push(trailer);
-    }
-
-    for (const leak of manualRecoveryLeaks(p.cause)) {
-      lines.push(`    leaked: ${leak}`);
-    }
+  if (p.failure !== undefined) {
+    lines.push(...composeFailureLines(p.failure));
   }
 
-  lines.push(...composeRollbackPartialLines(p));
   return lines;
+}
+
+/**
+ * D-11 / PMOD-03: the failure lines of a failed or manual-recovery row, in
+ * order: the 4-space cause line, one `    leaked: <path>` line per AS-7 leak,
+ * then each rollback phase as a 4-space `[<phase>] (rollback failed)` row with
+ * its optional 6-space cause line.
+ */
+function composeFailureLines(failure: ResolvedFailure): string[] {
+  const lines: string[] = [];
+  pushCauseLine(lines, failure.cause, "    ");
+  for (const leak of failure.leaks) {
+    lines.push(`    leaked: ${leak}`);
+  }
+
+  for (const entry of failure.rollbackPartial) {
+    lines.push(`    [${entry.phase}] (rollback failed)`);
+    pushCauseLine(lines, entry.cause, "      ");
+  }
+
+  return lines;
+}
+
+function pushCauseLine(
+  lines: string[],
+  chain: SerializedCauseChain | undefined,
+  indent: string,
+): void {
+  if (chain !== undefined) {
+    lines.push(`${indent}${formatCauseChain(chain)}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

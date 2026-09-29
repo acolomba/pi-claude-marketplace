@@ -12,10 +12,10 @@ import {
   renderPluginInfo,
   renderPluginInfoCascade,
 } from "./notification-grammar.ts";
-import { resolveEnvelope, resolveUpdateNoOpEnvelope } from "./notification-resolve.ts";
+import { resolveEnvelope, resolveRows, resolveUpdateNoOpEnvelope } from "./notification-resolve.ts";
 import { isInfoKind } from "./notification-summary.ts";
 
-import type { ResolvedEnvelope } from "./notification-resolve.ts";
+import type { ResolvedEnvelope, ResolvedMarketplace } from "./notification-resolve.ts";
 import type { StandaloneKind } from "./notification-summary.ts";
 import type {
   CascadeNotificationMessage,
@@ -77,9 +77,9 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  * advisory lines; the tally, the no-op headline, the reload trailer, and the
  * summary line all come from the envelope.
  *
- * Each caller renders `body` BEFORE it resolves the envelope. The context
- * renderer (`dispatchRow` in notify-context.ts) floors a row with no render arm
- * to error while rendering, and the envelope must read that floored stamp.
+ * Each cascade caller runs `resolveRows` before it resolves the envelope.
+ * `resolveRows` floors a row with no render arm to error, and the envelope
+ * must read that floored stamp.
  *
  * Module-private: the state-change dispatch paths -- `notify`,
  * `emitContextCascade`, `emitUpdateNoOpCascade`, and
@@ -249,7 +249,7 @@ function dispatchInfoMessage(
       // reconcile already ran ON /reload). OUT-03/OUT-06/D-03/D-04: a reconcile
       // apply is a plural mixed-subject operation, so its envelope carries the
       // tally, exactly as on the `emitReconcileAppliedContextCascade` path.
-      body = composeReconcileAppliedBody(message, probe);
+      body = composeReconcileAppliedBody(resolveRows(message.marketplaces), probe);
       break;
   }
 
@@ -301,11 +301,15 @@ export function notify(
       break;
   }
 
+  // D-11: the rows resolve first, then the envelope, then the body text.
+  const marketplaces = resolveRows(message.marketplaces);
+  const envelope = resolveEnvelope(message);
+
   // Cascade body. Caller-supplied order honored end-to-end (no internal
   // sort). An empty top-level marketplaces array renders the
   // "(no marketplaces)" sentinel rather than the empty string; one blank
   // line between marketplace blocks.
-  const blocks = message.marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
+  const blocks = marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
   const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
   // WR-06: advisory body lines sit between the body and the tally.
   const body = foldAdvisories(composed, message.advisories);
@@ -315,7 +319,7 @@ export function notify(
   // reload decision, and the text strategy folds them as
   // `{summary}\n\n{cascade body}\n\n{tally}\n\n{reload-hint}` (UXG-07 / GRAM-01 /
   // OUT-03).
-  emitWithSummary(ctx, resolveEnvelope(message), body);
+  emitWithSummary(ctx, envelope, body);
 }
 
 /**
@@ -351,6 +355,29 @@ function foldAdvisories(body: string, advisories: readonly string[] | undefined)
   return lines.length === 0 ? body : `${body}\n\n${lines.join("\n")}`;
 }
 
+/**
+ * Render one block per resolved marketplace: the header, then each plugin's
+ * lines with the row body from the caller's render map.
+ */
+function composeContextBlocks(
+  marketplaces: readonly ResolvedMarketplace[],
+  probe: SoftDepStatus,
+  renderPluginRowBody: (
+    p: PluginNotificationMessage,
+    probe: SoftDepStatus,
+    mpScope: Scope,
+  ) => string,
+): string[] {
+  return marketplaces.map((mp) => {
+    const lines: string[] = [renderMpHeader(mp, probe)];
+    for (const p of mp.plugins) {
+      lines.push(...composePluginLinesWith(p, probe, mp.scope, renderPluginRowBody));
+    }
+
+    return lines.join("\n");
+  });
+}
+
 function emitCascadeWith(
   ctx: NotificationContext,
   pi: ToolInventory,
@@ -360,30 +387,29 @@ function emitCascadeWith(
     probe: SoftDepStatus,
     mpScope: Scope,
   ) => string,
+  hasRenderArm: (status: string) => boolean,
   // WR-06: caller-composed advisory body lines. Only the plain cascade carrier
   // declares them; the reconcile-applied carrier passes `undefined`, so the
   // member stays on the two shapes that can actually produce one.
   advisories: readonly string[] | undefined,
 ): void {
-  const probe = softDepStatus(pi);
-  const blocks = message.marketplaces.map((mp) => {
-    const lines: string[] = [renderMpHeader(mp, probe)];
-    for (const p of mp.plugins) {
-      lines.push(...composePluginLinesWith(p, probe, mp.scope, renderPluginRowBody));
-    }
-
-    return lines.join("\n");
-  });
+  const marketplaces = resolveRows(message.marketplaces, hasRenderArm);
+  const envelope = resolveEnvelope(message);
+  const blocks = composeContextBlocks(marketplaces, softDepStatus(pi), renderPluginRowBody);
   const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
   // WR-06: advisory body lines sit between the body and the tally, exactly as
   // they do on the central dispatch, so a command that can emit either arm
   // renders the identical trailer from either one.
   const body = foldAdvisories(composed, advisories);
 
-  emitWithSummary(ctx, resolveEnvelope(message), body);
+  emitWithSummary(ctx, envelope, body);
 }
 
-/** Dispatch a state-change cascade with its stamped reload decision. */
+/**
+ * Dispatch a state-change cascade with its stamped reload decision.
+ * `hasRenderArm` reports whether the caller's render map covers a row status;
+ * `resolveRows` floors an uncovered row to error.
+ */
 export function emitContextCascade(
   ctx: NotificationContext,
   pi: ToolInventory,
@@ -393,11 +419,15 @@ export function emitContextCascade(
     probe: SoftDepStatus,
     mpScope: Scope,
   ) => string,
+  hasRenderArm: (status: string) => boolean,
 ): void {
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, message.advisories);
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, hasRenderArm, message.advisories);
 }
 
-/** Dispatch the never-silent zero-transition update result. */
+/**
+ * Dispatch the never-silent zero-transition update result. `hasRenderArm` is
+ * the render-map coverage predicate `emitContextCascade` takes.
+ */
 export function emitUpdateNoOpCascade(
   ctx: NotificationContext,
   pi: ToolInventory,
@@ -407,24 +437,23 @@ export function emitUpdateNoOpCascade(
     probe: SoftDepStatus,
     mpScope: Scope,
   ) => string,
+  hasRenderArm: (status: string) => boolean,
 ): void {
-  const probe = softDepStatus(pi);
-  const blocks = message.marketplaces.map((mp) => {
-    const lines: string[] = [renderMpHeader(mp, probe)];
-    for (const p of mp.plugins) {
-      lines.push(...composePluginLinesWith(p, probe, mp.scope, renderPluginRowBody));
-    }
-
-    return lines.join("\n");
-  });
+  const marketplaces = resolveRows(message.marketplaces, hasRenderArm);
+  const envelope = resolveUpdateNoOpEnvelope(message);
+  const blocks = composeContextBlocks(marketplaces, softDepStatus(pi), renderPluginRowBody);
   // No `(no marketplaces)` sentinel here: an empty no-op renders the headline
   // alone.
   const body = blocks.join("\n\n");
 
-  emitWithSummary(ctx, resolveUpdateNoOpEnvelope(message), body);
+  emitWithSummary(ctx, envelope, body);
 }
 
-/** Dispatch an applied reconcile cascade without a redundant reload hint. */
+/**
+ * Dispatch an applied reconcile cascade without a redundant reload hint.
+ * `hasRenderArm` is the render-map coverage predicate `emitContextCascade`
+ * takes.
+ */
 export function emitReconcileAppliedContextCascade(
   ctx: NotificationContext,
   pi: ToolInventory,
@@ -434,6 +463,7 @@ export function emitReconcileAppliedContextCascade(
     probe: SoftDepStatus,
     mpScope: Scope,
   ) => string,
+  hasRenderArm: (status: string) => boolean,
 ): void {
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, undefined);
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, hasRenderArm, undefined);
 }

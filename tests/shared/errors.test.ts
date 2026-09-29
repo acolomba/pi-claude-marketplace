@@ -15,6 +15,7 @@ import {
   errorWithCleanupFailures,
   errorWithManualRecovery,
   findManualRecoveryError,
+  formatCauseChain,
   InvalidMarketplaceManifestError,
   isErrnoException,
   ManualRecoveryError,
@@ -25,6 +26,7 @@ import {
   PluginShapeError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  serializeCauseChain,
   StaleSourceCloneError,
   StateLockHeldError,
   UnsupportedSourceError,
@@ -273,6 +275,139 @@ describe("causeChainTrailer", () => {
 
     // assert
     assert.strictEqual(trailer, "cause: first -> second -> first -> second -> first (truncated)");
+  });
+});
+
+describe("serializeCauseChain", () => {
+  for (const { title, thrownValue } of [
+    { title: "undefined", thrownValue: undefined },
+    { title: "null", thrownValue: null },
+  ]) {
+    test(`returns no chain for ${title}`, () => {
+      // arrange
+      const expectedChain = undefined;
+
+      // act
+      const chain = serializeCauseChain(thrownValue);
+
+      // assert
+      assert.strictEqual(chain, expectedChain);
+    });
+  }
+
+  test("serializes one Error as a single untruncated link", () => {
+    // arrange
+    const error = new Error("outer");
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, { causeChain: ["outer"], truncated: false });
+  });
+
+  test("keeps five links of a six-deep chain and marks it truncated", () => {
+    // arrange
+    const error = new Error("link-1", {
+      cause: new Error("link-2", {
+        cause: new Error("link-3", {
+          cause: new Error("link-4", {
+            cause: new Error("link-5", { cause: new Error("link-6") }),
+          }),
+        }),
+      }),
+    });
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: ["link-1", "link-2", "link-3", "link-4", "link-5"],
+      truncated: true,
+    });
+  });
+
+  test("stops at one link for a self-referencing cause", () => {
+    // arrange
+    const error = new Error("loop");
+    error.cause = error;
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, { causeChain: ["loop"], truncated: false });
+  });
+
+  test("keeps a string cause verbatim", () => {
+    // arrange
+    const error = new Error("outer", { cause: "  inner text  " });
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, { causeChain: ["outer", "  inner text  "], truncated: false });
+  });
+
+  test("renders a plain-object cause through Object.prototype.toString", () => {
+    // arrange
+    const error = new Error("outer", { cause: { detail: "inner" } });
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, { causeChain: ["outer", "[object Object]"], truncated: false });
+  });
+
+  test("keeps the basename-only cleanup suffix of a CleanupContextError link", () => {
+    // arrange
+    const error = new CleanupContextError(new Error("state save failed"), [
+      {
+        phase: "abort",
+        artifact: "commands",
+        path: "/scope/commands-staging/uuid",
+        cause: new Error("EACCES: /scope/commands-staging/uuid"),
+      },
+    ]);
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: [
+        "state save failed (cleanup: abort commands uuid: EACCES: uuid)",
+        "state save failed",
+      ],
+      truncated: false,
+    });
+  });
+});
+
+describe("formatCauseChain", () => {
+  test("joins the links after the cause prefix", () => {
+    // arrange
+    const chain = { causeChain: ["outer", "inner"], truncated: false };
+
+    // act
+    const line = formatCauseChain(chain);
+
+    // assert
+    assert.strictEqual(line, "cause: outer -> inner");
+  });
+
+  test("appends the truncation marker after the last link", () => {
+    // arrange
+    const chain = { causeChain: ["link-1", "link-5"], truncated: true };
+
+    // act
+    const line = formatCauseChain(chain);
+
+    // assert
+    assert.strictEqual(line, "cause: link-1 -> link-5 (truncated)");
   });
 });
 

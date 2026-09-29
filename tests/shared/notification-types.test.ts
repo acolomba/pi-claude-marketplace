@@ -9,6 +9,7 @@ import {
   type MarketplaceNotificationMessage,
   type MarketplaceStatus,
   type NotificationMessage,
+  type PluginAvailableMessage,
   type PluginInstalledMessage,
   type PluginNotificationMessage,
   type PluginSkippedMessage,
@@ -16,7 +17,10 @@ import {
   type Reason,
   type Severity,
   type StatusToken,
+  type WithPlugins,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
  * The four closed vocabularies are declared privately by their owner and reach
@@ -242,6 +246,18 @@ void ({
 // @ts-expect-error structural marketplace absence is not a content reason
 const structuralReason: ContentReason = "marketplace not added";
 void structuralReason;
+
+interface SimpleMarketplace {
+  readonly name: string;
+  readonly scope: Scope;
+  readonly plugins: readonly PluginNotificationMessage[];
+}
+
+void ({
+  name: "official",
+  scope: "user",
+  plugins: [{ status: "available", name: "alpha" }],
+} satisfies WithPlugins<SimpleMarketplace, PluginAvailableMessage>);
 
 // Each public union holds EXACTLY the members its list above names. Adding a
 // member to the owner's vocabulary without adding it here, or removing one,

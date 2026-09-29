@@ -39,7 +39,7 @@ function hasOnwardCause(err: unknown): boolean {
  *
  * The SOLE traversal primitive: the depth bound and the self-reference cycle
  * guard live here once, so a change to either lands in one place. Callers
- * differ only in what they look for -- `causeChainTrailer` renders every link,
+ * differ only in what they look for -- `serializeCauseChain` renders every link,
  * `findManualRecoveryError` takes the first link of a class, and
  * `manualRecoveryLeaks` takes the first link that carries a payload.
  *
@@ -120,50 +120,71 @@ export function cleanupFailuresFromError(err: unknown): readonly CleanupFailure[
 }
 
 /**
- * MSG-CC-1 (CMC-18): depth-5 Error.cause walker rendered as
- * `cause: <l1> -> <l2> -> ... [(truncated)]`. Returns `""` when `err` is
- * `undefined` or `null` so callers can compose `body + (trailer === "" ? "" :
- * "\n\n" + trailer)` without extra guards.
+ * D-11: one `Error.cause` chain as display data. `causeChain` holds the
+ * rendered text of each link, head first. `truncated` is set when the walk
+ * stopped at the depth bound and the last link still carries an onward cause.
+ */
+export interface SerializedCauseChain {
+  readonly causeChain: readonly string[];
+  readonly truncated: boolean;
+}
+
+/**
+ * D-11 / MSG-CC-1: serializes the depth-5 `Error.cause` walk of `err`, or
+ * returns `undefined` when `err` is `undefined` or `null`. A present value
+ * always yields at least one link.
  *
  * Walker contract:
  *   - Depth bound 5 prevents pathological cycles (T-13-04 DoS mitigation).
  *   - Cycle detection: `current.cause !== current` -- an Error whose own
  *     `.cause` is itself terminates the walk at depth 1.
- *   - Non-Error fallback: `string` causes render verbatim; any other
- *     `unknown` cause renders via `Object.prototype.toString.call(c)` (so a
- *     `{x: 1}` cause renders as `[object Object]`, never `[object Object]`
- *     with `String()` coercion that the ESLint rule
- *     `@typescript-eslint/no-base-to-string` forbids on unknown-with-toString).
- *   - When the loop exits at the depth bound AND the chain continues
- *     (`current` is still non-null/undefined and would have walked further),
- *     append ` (truncated)` to the LAST link.
+ *   - Each link is its `Error.message` verbatim. A `CleanupContextError` link
+ *     appends its `(cleanup: ...)` facts with every path reduced to its
+ *     basename. A `string` cause renders verbatim; any other value renders
+ *     via `Object.prototype.toString.call(c)`, so a `{x: 1}` cause renders as
+ *     `[object Object]` without the `String()` coercion the ESLint rule
+ *     `@typescript-eslint/no-base-to-string` forbids.
+ *   - `truncated` is set when the walk stopped at the depth bound while the
+ *     last link still has an onward cause.
  *
- * NFR-9: surfaces only `Error.message` (or `String`/
+ * NFR-9: surfaces only `Error.message` (or the `String` /
  * `Object.prototype.toString` fallback for non-Error). No `.stack`, no
- * absolute paths. `shared/notification-grammar.ts` consumes this walker via
- * `renderIndentedCauseChain` so the trailer lands automatically below every
- * failed / manual-recovery plugin row.
- *
- * Single canonical implementation in `shared/errors.ts` (D-11 layering).
+ * absolute cleanup paths. This is the single serialization site for cause
+ * chains, and PMOD-04 credential redaction lands here.
  */
-export function causeChainTrailer(err: unknown): string {
+export function serializeCauseChain(err: unknown): SerializedCauseChain | undefined {
   if (err === undefined || err === null) {
-    return "";
+    return undefined;
   }
 
-  const PREFIX = "cause: ";
-  const JOINER = " -> ";
-  const links = [...causeChain(err)];
   // The walk stops either because the chain ended or because it hit the depth
   // bound. Only the second case leaves the LAST yielded link still carrying an
-  // onward cause, which is exactly the truncation condition -- so it is read
-  // off the walk's result rather than tracked inside a hand-rolled loop.
-  const rendered = links.map(linkMessage);
-  if (hasOnwardCause(links.at(-1))) {
-    rendered[rendered.length - 1] = `${rendered.at(-1)} (truncated)`;
-  }
+  // onward cause, which is exactly the truncation condition.
+  const links = [...causeChain(err)];
+  return { causeChain: links.map(linkMessage), truncated: hasOnwardCause(links.at(-1)) };
+}
 
-  return `${PREFIX}${rendered.join(JOINER)}`;
+/**
+ * MSG-CC-1 (CMC-18): the one cause-line format,
+ * `cause: <l1> -> <l2> -> ... [(truncated)]`. The ` (truncated)` suffix
+ * follows the last link.
+ */
+export function formatCauseChain(chain: SerializedCauseChain): string {
+  const suffix = chain.truncated ? " (truncated)" : "";
+  return `cause: ${chain.causeChain.join(" -> ")}${suffix}`;
+}
+
+/**
+ * MSG-CC-1 (CMC-18): the cause line of `err` as `formatCauseChain` writes it.
+ * Returns `""` when `err` is `undefined` or `null` so callers can compose
+ * `body + (trailer === "" ? "" : "\n\n" + trailer)` without extra guards.
+ * The notification renderer reads the serialized chain from the resolved row
+ * instead; producer-side callers that compose text outside the notify path use
+ * this.
+ */
+export function causeChainTrailer(err: unknown): string {
+  const chain = serializeCauseChain(err);
+  return chain === undefined ? "" : formatCauseChain(chain);
 }
 
 function linkMessage(link: unknown): string {

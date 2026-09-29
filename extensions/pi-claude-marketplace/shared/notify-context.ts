@@ -1,5 +1,3 @@
-import { hookDebugLog } from "./debug-log.ts";
-import { errorMessage } from "./errors.ts";
 import {
   emitContextCascade,
   emitReconcileAppliedContextCascade,
@@ -10,6 +8,7 @@ import {
   type MarketplaceNotificationMessage,
   type PluginNotificationMessage,
   type ReconcileAppliedCascadeMessage,
+  type WithPlugins,
 } from "./notification-types.ts";
 
 import type { Scope } from "./types.ts";
@@ -78,30 +77,6 @@ export interface CommandContext<Status extends string, Msg extends PluginNotific
  */
 export type Single<Row> = readonly [Row];
 export type Plural<Row> = readonly Row[];
-
-/**
- * WR-01 / D-10: the marketplace-row shape `notifyWithContext` accepts, with its
- * `plugins` slot narrowed to the command's OWN `Msg`. This DISTRIBUTES over the
- * real `MarketplaceNotificationMessage` union (one mapped member per arm),
- * preserving each arm's per-status constraints (e.g. `MpFailed`'s REQUIRED
- * `severity: "error" | "warning"`, `MpSkipped`'s reachable `reasons?`, `MpList`'s
- * reachable `details?`), and replaces ONLY the `plugins` child slot with the
- * command's `Msg`. Because it is built FROM the union, assigning a value of this
- * type back to `readonly MarketplaceNotificationMessage[]` is a genuine
- * assignability relationship -- the `notifyWithContext` widening seam is a single
- * safe upcast, not an `as unknown as` reinterpretation, so a status-drift between
- * a producer and the render map surfaces as a real compile error rather than a
- * runtime `TypeError` inside `dispatchRow`.
- *
- * Combined with the `Msg extends { status: Status }` bound on
- * `notifyWithContext`, a call site that pushes a plugin row whose `status` the
- * context's render map does not declare is a compile error at the call site --
- * the design's stated exhaustiveness guarantee in BOTH directions (render map
- * total over `Status`, AND rows carry only `Status`).
- */
-export type WithPlugins<MP, Msg> = MP extends unknown
-  ? Omit<MP, "plugins"> & { readonly plugins: readonly Msg[] }
-  : never;
 
 /**
  * The marketplace-row shape `notifyWithContext` accepts: the broad
@@ -188,8 +163,12 @@ export function notifyWithContext<
     ...(advisories !== undefined && { advisories }),
   };
 
-  emitContextCascade(ctx, pi, message, (row, probe, mpScope) =>
-    dispatchRow(context, row, probe, mpScope),
+  emitContextCascade(
+    ctx,
+    pi,
+    message,
+    (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    hasRenderArmFor(context),
   );
 }
 
@@ -228,8 +207,12 @@ export function notifyUpdateWithContext<
     tally,
   };
 
-  emitContextCascade(ctx, pi, message, (row, probe, mpScope) =>
-    dispatchRow(context, row, probe, mpScope),
+  emitContextCascade(
+    ctx,
+    pi,
+    message,
+    (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    hasRenderArmFor(context),
   );
 }
 
@@ -265,8 +248,12 @@ export function notifyUpdateNoOpWithContext<
     cardinality,
   };
 
-  emitUpdateNoOpCascade(ctx, pi, message, (row, probe, mpScope) =>
-    dispatchRow(context, row, probe, mpScope),
+  emitUpdateNoOpCascade(
+    ctx,
+    pi,
+    message,
+    (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    hasRenderArmFor(context),
   );
 }
 
@@ -301,19 +288,30 @@ export function notifyReconcileAppliedWithContext<
     cardinality: "plural",
   };
 
-  emitReconcileAppliedContextCascade(ctx, pi, labeled, (row, probe, mpScope) =>
-    dispatchRow(context, row, probe, mpScope),
+  emitReconcileAppliedContextCascade(
+    ctx,
+    pi,
+    labeled,
+    (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    hasRenderArmFor(context),
   );
 }
 
 /**
- * A writable view of a row's own `severity` slot. The slot's type is read off
- * the declared field rather than spelled again here, so a change to the
- * severity vocabulary reaches the one localized write in `dispatchRow` instead
- * of being asserted past by a hand-written literal. A mapped type declares no
- * members of its own.
+ * WR-02: whether `context` declares a render arm for a row status. The
+ * emitters hand this to `resolveRows`, which floors a row with no arm to error
+ * before the envelope resolves.
  */
-type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMessage[K] };
+function hasRenderArmFor<Status extends string, Msg extends PluginNotificationMessage>(
+  context: CommandContext<Status, Msg>,
+): (status: string) => boolean {
+  // The lookup is read as possibly-`undefined`, exactly as `dispatchRow` reads
+  // it, because an out-of-band row can carry a status the map omits.
+  return (status) => {
+    const arm: unknown = context.render[status as Status];
+    return arm !== undefined;
+  };
+}
 
 /**
  * Dispatch a single plugin row through the command's render map. The row's
@@ -336,7 +334,9 @@ type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMes
  * AND escape before the single `ctx.ui.notify` seam, so a future projection
  * drift would surface as an uncaught exception with no output. The fallback
  * degrades gracefully -- the row still flows through the cascade and reaches the
- * user, carrying a self-describing diagnostic instead of vanishing.
+ * user, carrying a self-describing diagnostic instead of vanishing. The row's
+ * error severity is decided earlier, in `resolveRows`, through the
+ * `hasRenderArmFor` the emitters receive.
  */
 function dispatchRow<Status extends string, Msg extends PluginNotificationMessage>(
   context: CommandContext<Status, Msg>,
@@ -347,21 +347,6 @@ function dispatchRow<Status extends string, Msg extends PluginNotificationMessag
   const arm = context.render[row.status as Status] as
     RenderFn<Extract<Msg, { status: Status }>> | undefined;
   if (arm === undefined) {
-    // WR-02 / SEV-02: the fallback is an internal-drift error condition, so it
-    // must not surface as a quiet `info`. `cascadeSeverity` MAX-reduces the
-    // stamped `severity` of every row downstream of this seam (it reads the SAME
-    // row objects this dispatch walks), so stamp this row to `error` here to
-    // floor the envelope at error. The field is declared `readonly`; this single
-    // localized write is the seam that lets the fallback contribute its severity.
-    try {
-      (row as WritableRowSeverity).severity = "error";
-    } catch (err) {
-      // A frozen/sealed out-of-band row rejects the write in ESM strict mode. The
-      // throw must not escape the single `ctx.ui.notify` seam, so degrade: keep
-      // whatever severity was already stamped and still render the diagnostic.
-      hookDebugLog(`dispatchRow: severity write rejected for frozen row: ${errorMessage(err)}`);
-    }
-
     return `${"name" in row ? row.name : "?"} (failed) {internal: no render arm for "${row.status}"}`;
   }
 

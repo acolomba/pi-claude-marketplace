@@ -580,6 +580,30 @@ export type MarketplaceNotificationMessage =
   | MpSkipped
   | MpList;
 
+/**
+ * WR-01 / D-10: the marketplace-row shape `notifyWithContext` accepts, with its
+ * `plugins` slot narrowed to the command's OWN `Msg`. This DISTRIBUTES over the
+ * real `MarketplaceNotificationMessage` union (one mapped member per arm),
+ * preserving each arm's per-status constraints (e.g. `MpFailed`'s REQUIRED
+ * `severity: "error" | "warning"`, `MpSkipped`'s reachable `reasons?`, `MpList`'s
+ * reachable `details?`), and replaces ONLY the `plugins` child slot with the
+ * command's `Msg`. Because it is built FROM the union, assigning a value of this
+ * type back to `readonly MarketplaceNotificationMessage[]` is a genuine
+ * assignability relationship -- the `notifyWithContext` widening seam is a single
+ * safe upcast, not an `as unknown as` reinterpretation, so a status-drift between
+ * a producer and the render map surfaces as a real compile error rather than a
+ * runtime `TypeError` inside `dispatchRow`.
+ *
+ * Combined with the `Msg extends { status: Status }` bound on
+ * `notifyWithContext`, a call site that pushes a plugin row whose `status` the
+ * context's render map does not declare is a compile error at the call site --
+ * the design's stated exhaustiveness guarantee in BOTH directions (render map
+ * total over `Status`, AND rows carry only `Status`).
+ */
+export type WithPlugins<MP, Msg> = MP extends unknown
+  ? Omit<MP, "plugins"> & { readonly plugins: readonly Msg[] }
+  : never;
+
 /** Standard marketplace/plugin notification cascade. */
 export interface CascadeNotificationMessage {
   readonly kind?: "cascade";

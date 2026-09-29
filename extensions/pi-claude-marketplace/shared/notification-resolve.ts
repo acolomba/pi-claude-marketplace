@@ -1,3 +1,5 @@
+import { hookDebugLog } from "./debug-log.ts";
+import { errorMessage, manualRecoveryLeaks, serializeCauseChain } from "./errors.ts";
 import {
   buildSummaryLine,
   computeSeverity,
@@ -5,10 +7,14 @@ import {
   shouldEmitReloadHint,
 } from "./notification-summary.ts";
 
+import type { SerializedCauseChain } from "./errors.ts";
 import type {
   CascadeNotificationMessage,
   MarketplaceNotificationMessage,
   NotificationMessage,
+  PluginFailedMessage,
+  PluginNotificationMessage,
+  WithPlugins,
 } from "./notification-types.ts";
 
 /**
@@ -25,6 +31,10 @@ import type {
  * (`formatNotificationText` in notification-grammar.ts) reads the summary line
  * verbatim and composes the tally sentence, the no-op headline, and the reload
  * trailer from these facts.
+ *
+ * D-11: `resolveRows` serializes each failed row's cause chain, manual-recovery
+ * leaks, and rollback phases here, once. No resolved row carries a live
+ * `Error`, so the text strategy formats failure detail without walking one.
  */
 
 /**
@@ -215,4 +225,122 @@ function resolveTallySuccess(
   }
 
   return undefined;
+}
+
+/** D-11: one rollback phase that failed to undo, with its serialized cause. */
+export interface ResolvedRollbackPhase {
+  readonly phase: string;
+  readonly cause?: SerializedCauseChain;
+}
+
+/**
+ * D-11 / PMOD-03: the failure detail of a failed or manual-recovery row.
+ * `cause` is absent when the row carries no cause. `leaks` names the paths the
+ * user must clean up by hand. `rollbackPartial` lists the phases whose undo
+ * failed; it is empty on a manual-recovery row.
+ */
+export interface ResolvedFailure {
+  readonly cause?: SerializedCauseChain;
+  readonly leaks: readonly string[];
+  readonly rollbackPartial: readonly ResolvedRollbackPhase[];
+}
+
+/** The per-row facts `resolveRows` adds to a producer row. */
+export interface ResolvedRowFacts {
+  readonly failure?: ResolvedFailure;
+}
+
+/**
+ * A producer row with its live failure detail replaced by resolved facts. The
+ * conditional distributes over the row union, so each member keeps its own
+ * `status` discriminant.
+ */
+export type ResolvedRow<M extends PluginNotificationMessage = PluginNotificationMessage> =
+  M extends unknown ? Omit<M, "cause" | "rollbackPartial"> & ResolvedRowFacts : never;
+
+/** A marketplace row whose plugin rows are resolved. */
+export type ResolvedMarketplace = WithPlugins<MarketplaceNotificationMessage, ResolvedRow>;
+
+/**
+ * A writable view of a row's own `severity` slot. The slot's type is read off
+ * the declared field rather than spelled again here, so a change to the
+ * severity vocabulary reaches the one localized write in `resolveRows` instead
+ * of being asserted past by a hand-written literal. A mapped type declares no
+ * members of its own.
+ */
+type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMessage[K] };
+
+/**
+ * Resolves the plugin rows of `marketplaces` before any text is composed.
+ *
+ * WR-02 / SEV-02: when `hasRenderArm` reports that a row's status has no
+ * render arm, the row is an internal-drift error. `resolveRows` stamps
+ * `severity: "error"` on the INPUT row, so the envelope, which MAX-reduces the
+ * same row objects, floors at error. A frozen out-of-band row rejects the
+ * write; it keeps its stamped severity, and the rejection goes to the debug
+ * log so the throw cannot escape the single `ctx.ui.notify` seam.
+ *
+ * D-11: each resolved row is a new object without `cause` and
+ * `rollbackPartial`. A failed or manual-recovery row gains a `failure` member
+ * that holds the serialized cause chain, the manual-recovery leaks, and the
+ * rollback phases. No other key is added, so a row the producer left without a
+ * `name` stays without one.
+ */
+export function resolveRows(
+  marketplaces: readonly MarketplaceNotificationMessage[],
+  hasRenderArm?: (status: string) => boolean,
+): readonly ResolvedMarketplace[] {
+  return marketplaces.map((mp) => ({
+    ...mp,
+    plugins: mp.plugins.map((row) => {
+      if (hasRenderArm !== undefined && !hasRenderArm(row.status)) {
+        floorMissingArmSeverity(row);
+      }
+
+      return resolveRow(row);
+    }),
+  }));
+}
+
+function floorMissingArmSeverity(row: PluginNotificationMessage): void {
+  // The field is declared `readonly`; this single localized write is the seam
+  // that lets a row with no render arm contribute its severity.
+  try {
+    (row as WritableRowSeverity).severity = "error";
+  } catch (err) {
+    // A frozen/sealed out-of-band row rejects the write in ESM strict mode.
+    // Keep whatever severity was already stamped.
+    hookDebugLog(`resolveRows: severity write rejected for frozen row: ${errorMessage(err)}`);
+  }
+}
+
+function resolveRow(row: PluginNotificationMessage): ResolvedRow {
+  if (row.status === "failed") {
+    const { cause, rollbackPartial, ...rest } = row;
+    return { ...rest, failure: resolveFailure(cause, rollbackPartial ?? []) };
+  }
+
+  if (row.status === "manual recovery") {
+    const { cause, ...rest } = row;
+    return { ...rest, failure: resolveFailure(cause, []) };
+  }
+
+  return { ...row };
+}
+
+function resolveFailure(
+  cause: Error | undefined,
+  rollbackPartial: NonNullable<PluginFailedMessage["rollbackPartial"]>,
+): ResolvedFailure {
+  const chain = serializeCauseChain(cause);
+  return {
+    ...(chain === undefined ? {} : { cause: chain }),
+    leaks: manualRecoveryLeaks(cause),
+    rollbackPartial: rollbackPartial.map((entry) => {
+      const phaseChain = serializeCauseChain(entry.cause);
+      return phaseChain === undefined
+        ? { phase: entry.phase }
+        : { phase: entry.phase, cause: phaseChain };
+    }),
+  };
 }

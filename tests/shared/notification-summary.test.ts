@@ -33,6 +33,11 @@ function createContext(t: TestContext): NotificationContext {
   return { ui: { notify: t.mock.fn() } };
 }
 
+/** A render map that covers every row status, so no row is floored to error. */
+function hasRenderArm(): boolean {
+  return true;
+}
+
 function notificationApi(): NotificationApi {
   return { getAllTools: () => [{ name: "subagent" }, { name: "mcp" }] };
 }
@@ -47,7 +52,7 @@ function renderRow(
 function emitContext(t: TestContext, message: CascadeNotificationMessage): readonly unknown[] {
   const ctx = createContext(t);
 
-  emitContextCascade(ctx as never, notificationApi(), message, renderRow);
+  emitContextCascade(ctx as never, notificationApi(), message, renderRow, hasRenderArm);
 
   assert.equal(ctx.ui.notify.mock.callCount(), 1);
   return ctx.ui.notify.mock.calls[0]!.arguments;
@@ -546,8 +551,20 @@ test("update no-op fold preserves empty and non-empty bodies", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitUpdateNoOpCascade(emptyContext as never, notificationApi(), emptyMessage, renderRow);
-  emitUpdateNoOpCascade(bodyContext as never, notificationApi(), bodyMessage, renderRow);
+  emitUpdateNoOpCascade(
+    emptyContext as never,
+    notificationApi(),
+    emptyMessage,
+    renderRow,
+    hasRenderArm,
+  );
+  emitUpdateNoOpCascade(
+    bodyContext as never,
+    notificationApi(),
+    bodyMessage,
+    renderRow,
+    hasRenderArm,
+  );
 
   // assert
   assert.deepStrictEqual(emptyContext.ui.notify.mock.calls[0]!.arguments, [
@@ -583,7 +600,13 @@ test("reconcile applied fold suppresses reload while preserving severity and tal
   } satisfies Parameters<typeof emitReconcileAppliedContextCascade>[2];
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, notificationApi(), message, renderRow);
+  emitReconcileAppliedContextCascade(
+    ctx as never,
+    notificationApi(),
+    message,
+    renderRow,
+    hasRenderArm,
+  );
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [

@@ -31,6 +31,11 @@ function createContext(t: TestContext): NotificationContext {
   return { ui: { notify: t.mock.fn() } };
 }
 
+/** A render map that covers every row status, so no row is floored to error. */
+function hasRenderArm(): boolean {
+  return true;
+}
+
 interface ToolDefinition {
   readonly name?: string;
   readonly sourceInfo?: { readonly source?: string };
@@ -5163,7 +5168,7 @@ test("context emission renders the disabled enable hint", (t) => {
   } satisfies Parameters<typeof emitContextCascade>[2];
 
   // act
-  emitContextCascade(ctx as never, pi, message, renderRow);
+  emitContextCascade(ctx as never, pi, message, renderRow, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5256,7 +5261,7 @@ for (const { name, message, expected } of [
     const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(() => "unused");
 
     // act
-    emitContextCascade(ctx as never, pi, message as never, renderRow);
+    emitContextCascade(ctx as never, pi, message as never, renderRow, hasRenderArm);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, expected);
@@ -5800,7 +5805,7 @@ test("context dispatch preserves ordered rows and stamped reload hint", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, pi, message, renderRow);
+  emitContextCascade(ctx as never, pi, message, renderRow, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5843,7 +5848,7 @@ test("context dispatch forwards the row, the probe, and the enclosing marketplac
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, pi, message, renderRow);
+  emitContextCascade(ctx as never, pi, message, renderRow, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5869,10 +5874,10 @@ test("context dispatch keeps independent parallel captures", async (t) => {
   // act
   await Promise.all([
     Promise.resolve().then(() => {
-      emitContextCascade(first as never, pi, message, renderRow);
+      emitContextCascade(first as never, pi, message, renderRow, hasRenderArm);
     }),
     Promise.resolve().then(() => {
-      emitContextCascade(second as never, pi, message, renderRow);
+      emitContextCascade(second as never, pi, message, renderRow, hasRenderArm);
     }),
   ]);
 
@@ -5910,8 +5915,8 @@ test("update no-op dispatch preserves empty and non-empty folds", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitUpdateNoOpCascade(empty as never, pi, emptyMessage, emptyRenderRow);
-  emitUpdateNoOpCascade(nonEmpty as never, pi, message, nonEmptyRenderRow);
+  emitUpdateNoOpCascade(empty as never, pi, emptyMessage, emptyRenderRow, hasRenderArm);
+  emitUpdateNoOpCascade(nonEmpty as never, pi, message, nonEmptyRenderRow, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(empty.ui.notify.mock.calls[0]!.arguments, [
@@ -5947,7 +5952,7 @@ test("reconcile context dispatch keeps its tally and omits reload", (t) => {
   } as const;
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow);
+  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5990,7 +5995,7 @@ test("reconcile context dispatch suppresses reload and stamps error severity", (
   } satisfies Parameters<typeof emitReconcileAppliedContextCascade>[2];
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow);
+  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6035,7 +6040,13 @@ test("a mixed actionable-skip cascade emits the plural attention summary", (t) =
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, pi, message, (row) => `${row.name} (${row.status})`);
+  emitContextCascade(
+    ctx as never,
+    pi,
+    message,
+    (row) => `${row.name} (${row.status})`,
+    hasRenderArm,
+  );
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6055,7 +6066,13 @@ test("a marketplace-only failure cascade emits the marketplace failure summary",
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, pi, message, (row) => `${row.name} (${row.status})`);
+  emitContextCascade(
+    ctx as never,
+    pi,
+    message,
+    (row) => `${row.name} (${row.status})`,
+    hasRenderArm,
+  );
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6077,7 +6094,13 @@ test("an unstamped cascade plugin defaults to info severity and a success tally"
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, pi, message, (row) => `${row.name} (${row.status})`);
+  emitContextCascade(
+    ctx as never,
+    pi,
+    message,
+    (row) => `${row.name} (${row.status})`,
+    hasRenderArm,
+  );
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
