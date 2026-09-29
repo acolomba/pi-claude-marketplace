@@ -586,6 +586,12 @@ Phase 3  [==========]  4/4 executed; gap closure awaiting re-verification
 
 None.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260928-tt9 | Fix T-2-10 (url/raw identity mismatch) and T-3-05/WR-11 (duplicate origin url) before ship | 2026-09-28 | add75890 | [260928-tt9-fix-url-raw-identity-mismatch-and-duplic](./quick/260928-tt9-fix-url-raw-identity-mismatch-and-duplic/) |
+
 ## Session Continuity
 
 **Last session:** 2026-09-28T20:45:00.000Z
@@ -594,7 +600,7 @@ None.
 
 **Resume File:** None.
 
-**Next Action:** `/gsd-complete-milestone --ws git-hosts`. Optionally fix WR-11 (read
+**Next Action:** re-verify phases 1-3 (stale after quick task 260928-tt9), write phase 2/3 SECURITY.md, then ship. Optionally fix WR-11 (read
 `remote.origin.url` with `getConfigAll`, refuse unless exactly one url) before closing.
 
 ### What this run completed
