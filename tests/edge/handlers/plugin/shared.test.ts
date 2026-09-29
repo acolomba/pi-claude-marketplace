@@ -2,7 +2,7 @@
 //
 // D-116-07: this is the plugin tier's argument helper. Nine plugin handlers
 // parse through it, and one of its exports -- `withParsedArgs(parse, usage,
-// run)` -- takes its delegate through the public interface, so the
+// operation)` -- takes its delegate through the public interface, so the
 // exact-argument interaction proof lives here. Those nine handler owners assert
 // only that they supplied the right usage string and delegate; they restate none
 // of the splitting, flag scanning, or prelude behavior proved below.
@@ -41,9 +41,10 @@ import {
   type ParsedPluginMarketplaceRef,
   type PluginMarketplaceRef,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts";
+import { runWithAllLoaded, runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
-type PreludeRun<P> = Parameters<typeof withParsedArgs<P>>[2];
+type PreludeOperation<P> = Parameters<typeof withParsedArgs<P>>[2];
 type Scope = NonNullable<ParsedMapModelArgs["scope"]>;
 
 const INSTALL_USAGE =
@@ -379,62 +380,76 @@ describe("parseRequiredPluginMarketplaceRef", () => {
 });
 
 describe("withParsedArgs", () => {
-  test("calls the run delegate once with the parsed command and the context", async () => {
+  test("calls the operation once with the parsed command, the context, and the notification run (D-05)", async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
-    const run = mock<PreludeRun<PluginMarketplaceRef>>({ exactParams: true, name: "plugin run" });
-    when(() => run({ marketplace: "official", plugin: "alpha" }, ctx)).thenResolve(undefined);
+    const run = runWithAllLoaded();
+    const operation = mock<PreludeOperation<PluginMarketplaceRef>>({
+      exactParams: true,
+      name: "plugin operation",
+    });
+    when(() => operation({ marketplace: "official", plugin: "alpha" }, ctx, run)).thenResolve(
+      undefined,
+    );
     const handler = withParsedArgs(
       () => ({ marketplace: "official", plugin: "alpha" }),
       INSTALL_USAGE,
-      run,
+      operation,
     );
 
     // act
-    await handler("alpha@official", ctx);
+    await handler("alpha@official", ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, []);
     verifyBoundary();
-    verify(run);
+    verify(operation);
   });
 
   test("hands the raw argument string to the supplied parse function", async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
-    const run = mock<PreludeRun<PluginMarketplaceRef>>({ exactParams: true, name: "plugin run" });
-    when(() => run({ marketplace: "official", plugin: "alpha@official" }, ctx)).thenResolve(
-      undefined,
-    );
+    const run = runWithNothingLoaded();
+    const operation = mock<PreludeOperation<PluginMarketplaceRef>>({
+      exactParams: true,
+      name: "plugin operation",
+    });
+    when(() =>
+      operation({ marketplace: "official", plugin: "alpha@official" }, ctx, run),
+    ).thenResolve(undefined);
     const handler = withParsedArgs(
       (args) => ({ marketplace: "official", plugin: args }),
       INSTALL_USAGE,
-      run,
+      operation,
     );
 
     // act
-    await handler("alpha@official", ctx);
+    await handler("alpha@official", ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, []);
     verifyBoundary();
-    verify(run);
+    verify(operation);
   });
 
-  test("reports a parse failure with the usage block and never reaches the run delegate (MSG-NC-2)", async () => {
+  test("reports a parse failure with the usage block and never reaches the operation (MSG-NC-2)", async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-    const run = mock<PreludeRun<PluginMarketplaceRef>>({ exactParams: true, name: "plugin run" });
+    const run = runWithNothingLoaded();
+    const operation = mock<PreludeOperation<PluginMarketplaceRef>>({
+      exactParams: true,
+      name: "plugin operation",
+    });
     const handler = withParsedArgs<PluginMarketplaceRef>(
       () => {
         throw new Error('Invalid --scope value: "global". Must be "user" or "project".');
       },
       INSTALL_USAGE,
-      run,
+      operation,
     );
 
     // act
-    await handler("alpha@official --scope global", ctx);
+    await handler("alpha@official --scope global", ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -445,24 +460,28 @@ describe("withParsedArgs", () => {
       },
     ]);
     verifyBoundary();
-    verify(run);
+    verify(operation);
   });
 
   test("reports a thrown value that is not an error through its string form (MSG-NC-2)", async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-    const run = mock<PreludeRun<PluginMarketplaceRef>>({ exactParams: true, name: "plugin run" });
+    const run = runWithNothingLoaded();
+    const operation = mock<PreludeOperation<PluginMarketplaceRef>>({
+      exactParams: true,
+      name: "plugin operation",
+    });
     const parseFailure: unknown = "the plugin ref is unusable";
     const handler = withParsedArgs<PluginMarketplaceRef>(
       () => {
         throw parseFailure;
       },
       INSTALL_USAGE,
-      run,
+      operation,
     );
 
     // act
-    await handler("alpha@official", ctx);
+    await handler("alpha@official", ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -473,26 +492,30 @@ describe("withParsedArgs", () => {
       },
     ]);
     verifyBoundary();
-    verify(run);
+    verify(operation);
   });
 
-  test("lets a rejection from the run delegate reach the caller", async () => {
+  test("lets a rejection from the operation reach the caller", async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
     const orchestratorFailure = new Error("the install orchestrator failed");
-    const run = mock<PreludeRun<PluginMarketplaceRef>>({ exactParams: true, name: "plugin run" });
-    when(() => run({ marketplace: "official", plugin: "alpha" }, ctx)).thenReject(
+    const run = runWithNothingLoaded();
+    const operation = mock<PreludeOperation<PluginMarketplaceRef>>({
+      exactParams: true,
+      name: "plugin operation",
+    });
+    when(() => operation({ marketplace: "official", plugin: "alpha" }, ctx, run)).thenReject(
       orchestratorFailure,
     );
     const handler = withParsedArgs(
       () => ({ marketplace: "official", plugin: "alpha" }),
       INSTALL_USAGE,
-      run,
+      operation,
     );
 
     // act & assert
     await assert.rejects(
-      () => handler("alpha@official", ctx),
+      () => handler("alpha@official", ctx, run),
       (error: unknown) => {
         assert.strictEqual(error, orchestratorFailure);
         return true;
@@ -500,6 +523,6 @@ describe("withParsedArgs", () => {
     );
     assert.deepStrictEqual(notifications, []);
     verifyBoundary();
-    verify(run);
+    verify(operation);
   });
 });

@@ -103,6 +103,7 @@ import { test, type TestContext } from "node:test";
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makeListHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -426,7 +427,7 @@ for (const { args, expectedBlocks, label, summary } of [
     const listHandler = makeListHandler(pi);
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(projectListing(notifications), expectedBlocks);
@@ -472,7 +473,7 @@ for (const { args, expectedBlocks, label } of [
     const listHandler = makeListHandler(pi);
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(projectListing(notifications), expectedBlocks);
@@ -559,7 +560,7 @@ for (const { anchor, args, expectedBlocks, label } of [
     const listHandler = makeListHandler(pi);
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(projectListing(notifications), expectedBlocks);
@@ -618,7 +619,7 @@ for (const { args, expectedBlocks, label, summary } of [
     const listHandler = makeListHandler(pi);
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(projectListing(notifications), expectedBlocks);
@@ -677,7 +678,7 @@ for (const { args, expectedBlocks, label, summary } of [
     const listHandler = makeListHandler(pi);
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(projectListing(notifications), expectedBlocks);
@@ -709,7 +710,7 @@ for (const { args, label, summary } of [
     const listHandler = makeListHandler(pi);
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -745,7 +746,7 @@ for (const { args, label, summary } of [
     const listHandler = makeListHandler(pi);
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -778,7 +779,7 @@ for (const { args, label, summary } of [
     const listHandler = makeListHandler(pi);
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -816,7 +817,7 @@ for (const { args, expectedSentence, label, summary } of [
     const listHandler = makeListHandler(pi);
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [

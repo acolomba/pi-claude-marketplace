@@ -75,6 +75,7 @@ import { test, type TestContext } from "node:test";
 import { parseFlagNames } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makePluginInfoHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -201,7 +202,7 @@ for (const { args, expectedMessage, label, summary } of [
     const infoHandler = makePluginInfoHandler(pi);
 
     // act
-    await infoHandler(args, ctx);
+    await infoHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -220,7 +221,7 @@ test("reads a git-source plugin from disk alone while the fetch flag is absent, 
   const infoHandler = makePluginInfoHandler(pi);
 
   // act
-  await infoHandler("gitp@mp", ctx);
+  await infoHandler("gitp@mp", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -248,7 +249,7 @@ for (const { args, label, position } of [
     const infoHandler = makePluginInfoHandler(pi);
 
     // act
-    await infoHandler(args, ctx);
+    await infoHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -279,7 +280,7 @@ for (const { args, label, summary } of [
     const infoHandler = makePluginInfoHandler(pi);
 
     // act
-    await infoHandler(args, ctx);
+    await infoHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -331,7 +332,7 @@ for (const { args, expectedMessage, label, summary } of [
     const infoHandler = makePluginInfoHandler(pi);
 
     // act
-    await infoHandler(args, ctx);
+    await infoHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -370,7 +371,7 @@ for (const { args, expectedMessage, label, summary } of [
     const infoHandler = makePluginInfoHandler(pi);
 
     // act
-    await infoHandler(args, ctx);
+    await infoHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -386,7 +387,7 @@ test("carries the tokenizer's own sentence for an unrecognised scope value and n
   const infoHandler = makePluginInfoHandler(pi);
 
   // act
-  await infoHandler("alpha@mp --scope bogus", ctx);
+  await infoHandler("alpha@mp --scope bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [

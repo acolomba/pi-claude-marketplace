@@ -42,10 +42,13 @@
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` THREE times, on every scope and fixture combination.
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
+//     writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, on every
+//     scope and fixture combination.
+// Neither path reads `pi.getAllTools()`. The handler renders from the
+// notification run the router hands it (D-05), so every case states zero
+// probes.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -95,6 +98,7 @@ import { test, type TestContext } from "node:test";
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makePendingHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 const PENDING_USAGE = "Usage: /claude:plugin pending [--scope user|project]";
@@ -229,14 +233,14 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const expectedListings = await bothTreeListings(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const pendingHandler = makePendingHandler(pi);
+    const pendingHandler = makePendingHandler();
 
     // act
-    await pendingHandler(args, ctx);
+    await pendingHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -295,14 +299,14 @@ test("previews a planned install of a cold git source without opening a connecti
     configBytes("mp", "./mp-src", ["far@mp", "near@mp"]),
   );
   const expectedListings = await bothTreeListings(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const pendingHandler = makePendingHandler(pi);
+  const pendingHandler = makePendingHandler();
 
   // act
-  await pendingHandler("--scope project", ctx);
+  await pendingHandler("--scope project", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -340,11 +344,11 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const pendingHandler = makePendingHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const pendingHandler = makePendingHandler();
 
     // act
-    await pendingHandler(args, ctx);
+    await pendingHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -397,11 +401,11 @@ for (const { args, label, offendingToken, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const pendingHandler = makePendingHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const pendingHandler = makePendingHandler();
 
     // act
-    await pendingHandler(args, ctx);
+    await pendingHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -435,11 +439,11 @@ for (const { args, expectedSentence, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const pendingHandler = makePendingHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const pendingHandler = makePendingHandler();
 
     // act
-    await pendingHandler(args, ctx);
+    await pendingHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [

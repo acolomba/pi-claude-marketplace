@@ -108,7 +108,7 @@ export function registerClaudePluginCommand(
     reinstall: makeReinstallHandler(pi, reinstallPlugins),
     list,
     pluginInfo,
-    pending: makePendingHandler(pi),
+    pending: makePendingHandler(),
     enable,
     disable,
     import: makeImportHandler(pi, deps, hooksRouting),

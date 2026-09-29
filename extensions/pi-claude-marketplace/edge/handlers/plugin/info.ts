@@ -14,7 +14,8 @@ import { parseFlagNames } from "../../flag-catalog.ts";
 
 import { splitPluginMarketplaceRef, withParsedArgs } from "./shared.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionAPI } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]";
 
@@ -26,9 +27,7 @@ const ACCEPTED_FLAGS = parseFlagNames("info");
  * `notify()` for the soft-dep probe). `register.ts` wires this into
  * the `SubcommandHandlers` map under the `pluginInfo` key.
  */
-export function makePluginInfoHandler(
-  pi: ExtensionAPI,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
+export function makePluginInfoHandler(pi: ExtensionAPI): SubcommandHandler {
   return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
     // FTCH-03: `info` accepts the single boolean `--fetch` flag (the catalog-owned
     // accepted set); every other long flag is rejected inline.

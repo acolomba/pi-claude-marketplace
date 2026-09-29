@@ -61,13 +61,15 @@ import { PENDING_CONTEXT, type PendingMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ReconcilePendingEmptyMessage } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface PendingReconcileOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  /** D-05: the command's run; both pending notifications render from its snapshot. */
+  readonly run: NotificationRun;
   /** Project-scope cwd (ignored for user scope). */
   readonly cwd: string;
   /** When omitted, fan-out across BOTH scopes (project-first per MSG-GR-3). */
@@ -261,7 +263,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // routing through notify() exactly once. WR-06: the retained-tree lines ride
   // the same variant, so the steady-state reader meets the identical trailer.
   if (invalidBlocks.length === 0 && isReconcilePlanListEmpty(plans)) {
-    notify(opts.ctx, opts.pi, pendingEmptyMessage(advisories));
+    notify(opts.ctx, opts.run, pendingEmptyMessage(advisories));
     return;
   }
 
@@ -317,7 +319,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // carries, from the one render site that composes both.
   notifyWithContext(
     opts.ctx,
-    opts.pi,
+    opts.run,
     PENDING_CONTEXT,
     marketplaces,
     undefined,

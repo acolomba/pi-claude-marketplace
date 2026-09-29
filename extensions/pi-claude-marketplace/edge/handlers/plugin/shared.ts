@@ -13,7 +13,9 @@ import { parseArgs } from "../../args.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { NotificationRun } from "../../../shared/notification-run.ts";
 import type { Scope } from "../../../shared/types.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 export interface PluginMarketplaceRef {
   readonly marketplace: string;
@@ -181,13 +183,17 @@ export function parseRequiredPluginMarketplaceRef(
  *
  * Every `/claude:plugin` subcommand handler opens this way, so the prelude
  * lives here rather than being restated per handler.
+ *
+ * The returned handler takes the router's notification run and hands it to
+ * `operation` beside the parsed arguments and the context (D-05). An operation
+ * that renders no notification from the run may declare two parameters.
  */
 export function withParsedArgs<P>(
   parse: (args: string) => P,
   usage: string,
-  run: (parsed: P, ctx: ExtensionCommandContext) => Promise<void>,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+  operation: (parsed: P, ctx: ExtensionCommandContext, run: NotificationRun) => Promise<void>,
+): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     let parsed: P;
     try {
       parsed = parse(args);
@@ -196,6 +202,6 @@ export function withParsedArgs<P>(
       return;
     }
 
-    await run(parsed, ctx);
+    await operation(parsed, ctx, run);
   };
 }

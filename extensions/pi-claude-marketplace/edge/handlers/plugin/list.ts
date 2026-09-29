@@ -18,7 +18,8 @@ import { parseFlagNames } from "../../flag-catalog.ts";
 
 import { withParsedArgs } from "./shared.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionAPI } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE =
   "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user|project]";
@@ -35,9 +36,7 @@ const BOOLEAN_FLAGS = parseFlagNames("list");
  * the orchestrator constructs a `SoftDepProbe` via `softDepStatus(pi)` and
  * forwards it to the renderer).
  */
-export function makeListHandler(
-  pi: ExtensionAPI,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
+export function makeListHandler(pi: ExtensionAPI): SubcommandHandler {
   return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
     // Data-driven scan: a token in BOOLEAN_FLAGS is a recognized filter flag;
     // any other `--` token is an unknown long flag; everything else is a
