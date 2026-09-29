@@ -44,9 +44,9 @@
 // have returned (`agent-session.js`: bindExtensions emits session_start,
 // then `extendResourcesFromExtensions` checks
 // `hasHandlers("resources_discover")` -- handlers come from each extension's
-// `pi.on(...)` registration during its factory call). softDepStatus(pi) at
-// apply time therefore observes a stable pi-subagents / pi-mcp-adapter
-// status.
+// `pi.on(...)` registration during its factory call). The soft-dependency
+// snapshot is the run that index.ts opens at the start of the pass (D-05,
+// D-07), so it observes a stable pi-subagents / pi-mcp-adapter status.
 
 import path from "node:path";
 
@@ -857,7 +857,7 @@ async function applyReconcileWithReader(
   // (its content-derived severity + the load-time silence contract) stays
   // central and byte-identical via emitReconcileAppliedContextCascade.
   const message = buildReconcileAppliedCascade(outcomes);
-  notifyReconcileAppliedWithContext(opts.ctx, opts.pi, RECONCILE_APPLIED_CONTEXT, message);
+  notifyReconcileAppliedWithContext(opts.ctx, opts.run, RECONCILE_APPLIED_CONTEXT, message);
 
   // S2 / PR #51: post-cascade hygiene warnings. The cascade carries plugin
   // transition rows (installed/uninstalled/failed) under IL-2's single-

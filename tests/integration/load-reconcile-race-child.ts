@@ -20,6 +20,7 @@ import {
 import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import { makeNotifyCollectingCtx, makeStubPi, type NotificationRecord } from "./ipc-child.ts";
 
@@ -67,6 +68,7 @@ async function handleMessage(message: unknown): Promise<void> {
   try {
     await applyReconcile({
       ctx,
+      run: runWithNothingLoaded(),
       pi: makeStubPi(),
       cwd: message.cwd,
       scope: "project",

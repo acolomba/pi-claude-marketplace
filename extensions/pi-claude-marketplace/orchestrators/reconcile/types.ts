@@ -44,6 +44,7 @@ import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
@@ -257,6 +258,16 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
  */
 export interface ApplyReconcileOptions {
   readonly ctx: NotificationContext;
+  /**
+   * D-05 / D-07: the load pass's run, opened once per `resources_discover`.
+   * The reconcile-applied cascade renders from its soft-dependency snapshot.
+   */
+  readonly run: NotificationRun;
+  /**
+   * The tool inventory forwarded to the nested remove, add, uninstall,
+   * install, enable, and backfill orchestrators, which do not take a run yet.
+   * Reconcile's own emission reads `run`.
+   */
   readonly pi: ToolInventory;
   /** Project-scope cwd (ignored for the user scope). */
   readonly cwd: string;

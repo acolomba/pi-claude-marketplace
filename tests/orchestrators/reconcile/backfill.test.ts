@@ -38,6 +38,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
@@ -318,6 +319,7 @@ function backfillOptionsWithRouting(
 ): ApplyReconcileOptions {
   return {
     ctx,
+    run: runWithNothingLoaded(),
     pi,
     cwd,
     scope: "project",

@@ -74,8 +74,9 @@ export interface NotificationBoundary {
  *   raises `emissions` without raising `toolProbes`.
  * - An emission routed through a caller-supplied `ui` (see `tests/index.test.ts`'s
  *   `contextNotifyingThrough`) never reaches this boundary's `ui` mock, so it does
- *   not count toward `emissions` at all while still probing through `pi`. Those
- *   cases state `emissions` of 0 beside a non-zero `toolProbes`.
+ *   not count toward `emissions` at all. The `resources_discover` pass still opens
+ *   its notification run through `pi`, so those cases state `emissions` of 0
+ *   beside a non-zero `toolProbes`.
  *
  * So state the count the case actually observes, and when it moves, find out WHY
  * before changing the number: refitting it until the case goes green turns the

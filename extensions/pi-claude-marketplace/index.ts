@@ -19,6 +19,7 @@ import { createCompletionCache } from "./shared/completion-cache.ts";
 import { hookDebugLog } from "./shared/debug-log.ts";
 import { errorMessage } from "./shared/errors.ts";
 import { makeRawNotifyFn } from "./shared/notification-dispatch.ts";
+import { openNotificationRun } from "./shared/notification-run.ts";
 import { applySessionEnv } from "./shared/session-env.ts";
 
 import type {
@@ -113,8 +114,18 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       // throw NEVER blocks Pi load -- it surfaces as a single last-ditch
       // notify (inside its own try/catch so a UI failure can't propagate
       // either) and aggregateDiscoveredResources still runs.
+      //
+      // D-05 / D-07: the load pass opens one notification run, inside this try,
+      // so its tool-inventory probe is covered by the same NFR-2 boundary.
       try {
-        await applyReconcile({ ctx, pi, cwd: event.cwd, hooksRouting, completionCache });
+        await applyReconcile({
+          ctx,
+          run: openNotificationRun(pi),
+          pi,
+          cwd: event.cwd,
+          hooksRouting,
+          completionCache,
+        });
       } catch (err) {
         try {
           // AUTH-01 / IL-2 escape: makeRawNotifyFn is the sanctioned raw-text

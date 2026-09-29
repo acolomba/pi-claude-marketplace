@@ -147,6 +147,16 @@ const CWD_READ_RECONCILE = 2;
 const CWD_READ_PLUGIN_PATH_RECOMPUTE = 3;
 const CWD_READS_PER_DISCOVER = 4;
 
+/**
+ * `pi.getAllTools()` reads per `resources_discover` pass. The pass opens one
+ * notification run inside the reconcile try, before the reconcile reads its
+ * `cwd`, and the run probes each of the three companion targets once (D-05,
+ * D-07). The reconcile cascade renders from that run, and the last-ditch and
+ * plugin PATH lines are raw text, so no emission adds a read. A case that runs
+ * two passes states twice this count.
+ */
+const TOOL_READS_PER_DISCOVER = 3;
+
 /** The cascade the reconcile renders for a project scope whose state is unreadable. */
 const RECONCILE_CASCADE_FOR_UNREADABLE_STATE =
   "Some operations have failed.\n\n" +
@@ -891,7 +901,7 @@ test("discovers prompts under the working directory the event names, not the one
   const scope = await createHermeticScope(t, "invocation-cwd");
   const eventPromptPath = await seedPrompt(scope.cwd, "event-cwd.md");
   await seedPrompt(process.cwd(), "process-cwd.md");
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 0);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, TOOL_READS_PER_DISCOVER);
   const expectedDiscovery: ResourcesDiscoverResult = {
     skillPaths: [],
     promptPaths: [eventPromptPath],
@@ -908,7 +918,10 @@ test("discovers prompts under the working directory the event names, not the one
 test("leaves both scope roots untouched and emits nothing when a pristine workspace reconciles (WR-05)", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "pristine");
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    0,
+    TOOL_READS_PER_DISCOVER,
+  );
 
   // act
   const discovered = await discover(discoverEvent(scope.cwd), ctx);
@@ -927,7 +940,7 @@ test("appends the recorded plugin's binaries to the process PATH and records the
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
   const binDir = path.join(resolvedSource, "bin");
   await seedEnabledPlugin(scope.cwd, resolvedSource);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 0);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, TOOL_READS_PER_DISCOVER);
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
   const expectedPath = `/usr/bin${path.delimiter}${binDir}`;
@@ -961,7 +974,10 @@ test(
     );
     await mkdir(skillPath, { recursive: true });
     await writeFile(path.join(skillPath, "SKILL.md"), "---\nname: recovered-skill\n---\nbody\n");
-    const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
+    const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+      0,
+      2 * TOOL_READS_PER_DISCOVER,
+    );
     process.env.PATH = "/usr/bin";
     Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
     const invalidProjectCwd = `${scope.cwd}\0`;
@@ -1050,7 +1066,10 @@ test("reports the scope whose install state it cannot read once as a reconcile f
   // arrange
   const scope = await createHermeticScope(t, "path-warning");
   const statePath = await seedUnreadableState(scope.cwd);
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(2, 3);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    2,
+    TOOL_READS_PER_DISCOVER,
+  );
   const expectedNotifications: readonly Notification[] = [
     { message: RECONCILE_CASCADE_FOR_UNREADABLE_STATE, severity: "error" },
     {
@@ -1096,7 +1115,10 @@ test("converges silently over a recorded plugin whose marketplace source is abse
   // swallow every throw, including the boundary's own refusal of an unexpected
   // emission, so the empty array below bounds what reached the user without
   // bounding what the scan produced. The landed stamp is what carries the claim.
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    0,
+    TOOL_READS_PER_DISCOVER,
+  );
   const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
 
   // act
@@ -1127,7 +1149,10 @@ test("still answers when the deferred project-scope hydrate fails (NFR-2)", asyn
   // reconcile that never runs is silent and a reconcile with nothing to report
   // is silent too.
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(1, 3);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    1,
+    TOOL_READS_PER_DISCOVER,
+  );
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
   const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_DEFERRED_HYDRATE);
@@ -1158,7 +1183,10 @@ test("still answers when the reconcile fails (NFR-2)", async (t) => {
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
   const binDir = path.join(resolvedSource, "bin");
   await seedEnabledPlugin(scope.cwd, resolvedSource);
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(1, 0);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    1,
+    TOOL_READS_PER_DISCOVER,
+  );
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
   const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_RECONCILE);
@@ -1191,7 +1219,10 @@ test("still answers when the plugin PATH recompute fails (NFR-2)", async (t) => 
   const scope = await createHermeticScope(t, "recompute-refused");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
   await seedEnabledPlugin(scope.cwd, resolvedSource);
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    0,
+    TOOL_READS_PER_DISCOVER,
+  );
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
   const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_PLUGIN_PATH_RECOMPUTE);
@@ -1214,7 +1245,7 @@ test("reports an aborted reconcile as one raw error line and still answers (NFR-
   // arrange
   const scope = await createHermeticScope(t, "reconcile-aborted");
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, TOOL_READS_PER_DISCOVER);
   const recorded: Notification[] = [];
   let attempts = 0;
   const refusing = contextNotifyingThrough(ctx, (message, severity) => {
@@ -1242,7 +1273,7 @@ test("still answers when the last-ditch reconcile notification is also refused (
   // arrange
   const scope = await createHermeticScope(t, "last-ditch-refused");
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, TOOL_READS_PER_DISCOVER);
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [
@@ -1263,7 +1294,7 @@ test("still answers when the plugin PATH warning notification is refused (NFR-2)
   // arrange
   const scope = await createHermeticScope(t, "warning-refused");
   const statePath = await seedUnreadableState(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, TOOL_READS_PER_DISCOVER);
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [
@@ -1303,7 +1334,7 @@ test("attempts every skipped-scope PATH warning when every host notification thr
   const staleProjectBin = path.join(scope.cwd, "stale-project", "bin");
   process.env.PATH = ["/usr/bin", staleUserBin, staleProjectBin].join(path.delimiter);
   process.env.PI_CLAUDE_MARKETPLACE_PATH = [staleUserBin, staleProjectBin].join(path.delimiter);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 2 * TOOL_READS_PER_DISCOVER);
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [

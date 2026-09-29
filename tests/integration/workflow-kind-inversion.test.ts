@@ -16,6 +16,7 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../extensions/pi-claude-marketplace/shared/extension-version.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -295,6 +296,7 @@ test("RECON-05: two consecutive reconciles leave a workflow envelope untouched",
       const first = makeCtx();
       await applyReconcile({
         ctx: first.ctx,
+        run: runWithNothingLoaded(),
         pi: first.pi,
         cwd,
         scope: "project",
@@ -307,6 +309,7 @@ test("RECON-05: two consecutive reconciles leave a workflow envelope untouched",
       const second = makeCtx();
       await applyReconcile({
         ctx: second.ctx,
+        run: runWithNothingLoaded(),
         pi: second.pi,
         cwd,
         scope: "project",
@@ -392,6 +395,7 @@ test("RECON-05 negative control: a forced-open gate over a grown set DOES rewrit
       const reconciled = makeCtx();
       await applyReconcile({
         ctx: reconciled.ctx,
+        run: runWithNothingLoaded(),
         pi: reconciled.pi,
         cwd,
         scope: "project",
@@ -462,6 +466,7 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
       const first = makeCtx();
       await applyReconcile({
         ctx: first.ctx,
+        run: runWithNothingLoaded(),
         pi: first.pi,
         cwd,
         scope: "project",
@@ -512,6 +517,7 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
       const second = makeCtx();
       await applyReconcile({
         ctx: second.ctx,
+        run: runWithNothingLoaded(),
         pi: second.pi,
         cwd,
         scope: "project",

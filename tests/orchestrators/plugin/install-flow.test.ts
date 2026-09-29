@@ -62,6 +62,7 @@ import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -2055,6 +2056,7 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
           const reload = makeCtx();
           await applyReconcile({
             ctx: reload.ctx,
+            run: runWithNothingLoaded(),
             pi: reload.pi,
             cwd,
             scope: "project",
@@ -2388,6 +2390,7 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
       const reload = makeCtx();
       await applyReconcile({
         ctx: reload.ctx,
+        run: runWithNothingLoaded(),
         pi: reload.pi,
         cwd,
         scope: "project",

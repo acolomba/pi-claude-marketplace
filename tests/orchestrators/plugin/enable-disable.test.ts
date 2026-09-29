@@ -43,6 +43,7 @@ import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketpl
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
@@ -4460,6 +4461,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
     const declaringConfig = await readConfig(configPath);
     await applyReconcile({
       ctx: firstReload.ctx,
+      run: runWithNothingLoaded(),
       cwd,
       pi,
       scope: "user",
@@ -4499,6 +4501,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
     const afterReinstall = await observe();
     await applyReconcile({
       ctx: secondReload.ctx,
+      run: runWithNothingLoaded(),
       cwd,
       pi,
       scope: "user",
@@ -4597,6 +4600,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     const baseExistsAfterEnable = await fileExists(configPath);
     await applyReconcile({
       ctx: firstReload.ctx,
+      run: runWithNothingLoaded(),
       cwd,
       pi,
       scope: "user",
@@ -4638,6 +4642,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     const afterReinstall = await observe();
     await applyReconcile({
       ctx: secondReload.ctx,
+      run: runWithNothingLoaded(),
       cwd,
       pi,
       scope: "user",

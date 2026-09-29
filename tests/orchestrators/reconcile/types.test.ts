@@ -27,6 +27,7 @@ import {
   type ScopeReadResult,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -123,6 +124,7 @@ void ({
 
 void ({
   ctx: extensionContext,
+  run: runWithNothingLoaded(),
   pi: extensionApi,
   cwd: "/work/project",
   completionCache,
@@ -130,6 +132,7 @@ void ({
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
+  run: runWithNothingLoaded(),
   pi: extensionApi,
   cwd: "/work/project",
   completionCache,
@@ -287,6 +290,7 @@ void ({
   // @ts-expect-error reconcile plans always expose their mismatch bucket
 } satisfies ReconcilePlan);
 void ({
+  run: runWithNothingLoaded(),
   pi: extensionApi,
   cwd: "/work/project",
   completionCache,
@@ -299,11 +303,21 @@ void ({
   cwd: "/work/project",
   completionCache,
   hooksRouting,
+  // @ts-expect-error apply options always carry the load pass's notification run
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  run: runWithNothingLoaded(),
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
   scope: undefined,
   // @ts-expect-error exact optional properties reject an explicitly undefined scope
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
+  run: runWithNothingLoaded(),
   pi: extensionApi,
   cwd: "/work/project",
   completionCache,
