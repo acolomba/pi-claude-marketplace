@@ -165,8 +165,8 @@ async function checkoutPinWithRefetch(
  * `auth` is forwarded to `gitOps.clone`, and the bundle's credentials thread
  * into the clone so a private source on the bundle's own host authenticates,
  * whichever host that is (PROV-03/D-79-01, GAUTH-03). Every install, reinstall,
- * fetch, and `info --fetch` caller passes one; the parameter stays optional for
- * the `ctx`-less cascade arm of `update-preflight.ts`, which supplies none.
+ * fetch, `info --fetch`, and update caller passes one; the parameter is
+ * optional only so unit tests can exercise the public-clone path without one.
  *
  * `networkUrl` is caller-computed (D-2-03): the `url` arm of the derivation
  * needs `source.raw`, which is not recoverable from `cloneUrl` once the

@@ -6,8 +6,7 @@ import nodeHttpClient from "isomorphic-git/http/node";
 
 import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
 
-import type { OnAuthRequiredFn } from "./git-auth-callbacks.ts";
-import type { CredentialOps } from "./git-credential.ts";
+import type { BuildAuthCallbacksOpts } from "./git-auth-callbacks.ts";
 import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git/http/node";
 
 /**
@@ -33,12 +32,7 @@ import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git
  *
  * The wrapper is the canonical platform-git surface; the optional-auth
  * callbacks are consumed by isomorphic-git's onAuth / onAuthFailure hooks.
- * `OnAuthRequiredFn` is re-exported because the three option bundles below
- * name it, so a consumer of those options reads the seam from the same
- * module (D-13 boundary) rather than reaching past it.
  */
-
-export type { OnAuthRequiredFn };
 
 export interface CloneOptions {
   /**
@@ -51,8 +45,9 @@ export interface CloneOptions {
    * `domain/clone-key.ts::networkCloneUrl`: github sources reconstruct their
    * suffixed canonical `https://github.com/<owner>/<repo>.git` form, while
    * url and git-subdir sources supply the verbatim form the user typed. The
-   * stored identity form is `.git`-stripped; the wire form is not. Auth is
-   * omitted for public url clones (D-76-07); see `opts.auth` below.
+   * stored identity form is `.git`-stripped; the wire form is not. Callers
+   * pass a host-keyed `opts.auth` bundle (GAUTH-03); a public clone never
+   * challenges, so the bundle is not consulted.
    */
   url: string;
   /** Optional ref (branch/tag/SHA) to check out. If omitted, the default branch. */
@@ -67,12 +62,7 @@ export interface CloneOptions {
    * public-only path (no network policy change for public clones; NFR-5
    * surfaces untouched).
    */
-  auth?: {
-    credentialOps: CredentialOps;
-    host: string;
-    onAuthRequired: OnAuthRequiredFn;
-    evictOnFailure: boolean;
-  };
+  auth?: BuildAuthCallbacksOpts;
 }
 
 export interface FetchOptions {
@@ -81,12 +71,7 @@ export interface FetchOptions {
    * fetch() builds the callbacks when present and behaves as the
    * public-only path when omitted.
    */
-  auth?: {
-    credentialOps: CredentialOps;
-    host: string;
-    onAuthRequired: OnAuthRequiredFn;
-    evictOnFailure: boolean;
-  };
+  auth?: BuildAuthCallbacksOpts;
   dir: string;
   /** Default "origin". */
   remote?: string;
@@ -123,12 +108,7 @@ export interface ResolveRemoteRefOptions {
    * unpinned private-repo HEAD resolution can authenticate (PROV-03). When
    * omitted, the resolution behaves identically to the public-only path.
    */
-  auth?: {
-    credentialOps: CredentialOps;
-    host: string;
-    onAuthRequired: OnAuthRequiredFn;
-    evictOnFailure: boolean;
-  };
+  auth?: BuildAuthCallbacksOpts;
 }
 
 export interface ForceUpdateRefOptions {
@@ -151,7 +131,7 @@ export interface ListRemotesOptions {
  *   - `origin`: a readable repo whose `origin` remote records exactly one
  *     url; `url` is that value, verbatim.
  *   - `no-origin`: a readable repo whose `origin` remote records no url or
- *     more than one (WR-11).
+ *     more than one.
  *   - `not-a-repo`: `dir` has no `.git/config` (ENOENT/ENOTDIR).
  *   - `unreadable`: `dir/.git/config` exists but could not be read.
  */
@@ -461,7 +441,7 @@ export async function currentBranch(opts: CurrentBranchOptions): Promise<string 
  * every `remote.origin.url` value, in file order, across every
  * `[remote "origin"]` section, and reports `origin` only for exactly one
  * value. No value and two or more values report `no-origin`, which the caller
- * refuses (D-3-03, MA-13, T-3-05, WR-11). The check is on the value's type
+ * refuses (D-3-03, MA-13). The check is on the value's type
  * because the library declares the values `any`, so any string, including an
  * empty one, reaches the caller verbatim. The read folds the section name's
  * case as git does, so a capitalized `Remote` section names the origin remote.

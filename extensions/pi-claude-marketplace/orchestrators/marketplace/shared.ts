@@ -53,8 +53,8 @@ import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { ListRemotesResult, OnAuthRequiredFn } from "../../platform/git.ts";
+import type { BuildAuthCallbacksOpts } from "../../platform/git-auth-callbacks.ts";
+import type { ListRemotesResult } from "../../platform/git.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -108,36 +108,26 @@ export class WorkflowsUnstageFailureError extends Error {
  * site behaves identically to the public-only path.
  *
  * D-13 boundary: this re-exports only TYPES from the platform tier
- * (`CredentialOps`, `OnAuthRequiredFn`) -- no isomorphic-git symbol
+ * (`BuildAuthCallbacksOpts`) -- no isomorphic-git symbol
  * crosses into the orchestrator tier.
  */
-export interface GitAuthBundle {
-  readonly credentialOps: CredentialOps;
-  readonly host: string;
-  readonly onAuthRequired: OnAuthRequiredFn;
-  /**
-   * Whether `platform/git-auth-callbacks.ts::onAuthFailure` may evict a
-   * server-rejected credential for `host` from the user's keychain. True only
-   * when `onAuthRequired` can mint a replacement (AUTH-07, GAUTH-04).
-   */
-  readonly evictOnFailure: boolean;
-}
+export type GitAuthBundle = Readonly<BuildAuthCallbacksOpts>;
 
 /**
  * D-12, D-13: marketplace orchestrator git surface.
  *
- * Seven primitives. The 5 base primitives (clone / fetch / forceUpdateRef
- * / checkout / resolveRef) cover the standard D-14 sequence. CR-01
- * added a 6th -- `currentBranch` -- because the D-14 default-branch
- * tracking path needs to distinguish "what is the symbolic name of the
- * local branch" from "what SHA does HEAD point at". `resolveRef('HEAD')`
- * returns a SHA; using that SHA as the `ref` to forceUpdateRef writes a
- * meaningless `refs/<40-hex>` -- the local branch never advances.
- * D-77-05 added a 7th -- `resolveRemoteRef` -- so the plugin clone-cache
- * seam can pin an unpinned source's remote HEAD to a SHA without a full
- * clone at install time. D-3-03 added an 8th -- `listRemotes` -- so the
- * `marketplace add` leftover-clone guard can tell its own leftover clone
- * apart from a foreign or unreadable tree (MA-12, MA-13).
+ * Eight primitives. The 5 base primitives (clone / fetch / forceUpdateRef
+ * / checkout / resolveRef) cover the standard D-14 sequence.
+ * `currentBranch` (CR-01) exists because the D-14 default-branch tracking
+ * path needs to distinguish "what is the symbolic name of the local branch"
+ * from "what SHA does HEAD point at". `resolveRef('HEAD')` returns a SHA;
+ * using that SHA as the `ref` to forceUpdateRef writes a meaningless
+ * `refs/<40-hex>` -- the local branch never advances.
+ * `resolveRemoteRef` (D-77-05) lets the plugin clone-cache seam pin an
+ * unpinned source's remote HEAD to a SHA without a full clone at install
+ * time. `listRemotes` (D-3-03; MA-12, MA-13) lets the `marketplace add`
+ * leftover-clone guard tell its own leftover clone apart from a foreign or
+ * unreadable tree.
  *
  * No `pull` -- D-14 requires the three-step force-overwrite path
  * (fetch → forceUpdateRef → checkout) that `pull --ff-only` cannot

@@ -29,11 +29,9 @@ import { createGitTestDirectory, createGitTestRepository } from "./git-test-repo
 import type { CredentialOpsFake } from "./credential-ops-fake.ts";
 import type { GitOpsContractParticipant } from "./git-ops-contract.ts";
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { OnAuthRequiredFn } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type * as GitPlatform from "../../extensions/pi-claude-marketplace/platform/git.ts";
-import type {
-  GitCredentials,
-  OnAuthRequiredFn,
-} from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
 
 // The authentication-callback protocol lives in platform/git-auth-callbacks.ts;
