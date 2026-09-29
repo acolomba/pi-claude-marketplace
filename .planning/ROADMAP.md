@@ -26,8 +26,9 @@ Phases run in order, 1 through 7.
 boundaries and production dead-code with no new suppression, the
 unused-type-member gate, and 100% coverage. Each phase also leaves the text byte
 form unchanged. `docs/output-catalog.md` diffs empty, and the wire corpus
-captured in Phase 1 re-diffs empty, except for PMOD-04 credential redaction. A
-new type member lands with its first reader. The locked decisions D1-D8 are not
+captured in Phase 1 re-diffs empty, except for PMOD-04 credential redaction.
+Phase 7's close-out amends one piece of catalog prose, with no fenced-block
+changes. A new type member lands with its first reader. The locked decisions D1-D8 are not
 re-opened.
 
 ## Phase Details
@@ -191,6 +192,7 @@ Plans:
 3. A schema reference documents every kind and field, with a `jq` example. It states the compatibility policy: additive changes (a new optional field, kind, or closed-set member) keep `schemaVersion`, and removals, renames, and type or meaning changes bump it. It also states the verdict rule: the maximum severity over command-origin entries.
 4. The documented limitations cover these points. Print mode is silent, so scripts use `--mode json`. Pi exits 0 regardless. Startup entries are not streamed in `json` or `rpc`, and RPC clients can use `get_entries`. RPC front-ends must render `claude-plugin` entries, the device-flow prompt at minimum. A slash-command-only run writes no session file.
 5. The IL-2 output-channel line in AGENTS.md matches PROJECT.md (D8). Backlog MRO-01 is closed, and its two wrong claims are corrected.
+6. Milestone close-out for the Phase 1 corpus tool. After the final corpus re-diff comes back empty, the three `scripts/notify-corpus*.mjs` files are deleted (Phase 1 D-01), and no file outside `.planning/` names them. The `docs/output-catalog.md` prose that says `composeReasons` appends the soft-dep markers is amended to name the resolve step. This is the milestone's one sanctioned catalog edit: prose only, no fenced block changes, and `EXPECTED_STATE_COUNT` / `EXPECTED_UTF8_BYTES` do not move.
 
 **Plans:** TBD
 
