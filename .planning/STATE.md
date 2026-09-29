@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 01
 current_phase_name: Presentation Model
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-09-29T20:34:16.455Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-09-29T21:52:33.330Z"
 last_activity: 2026-09-29
-last_activity_desc: Completed 01-05 probe-free text strategy
-state_head: 72c1dc877818baa5926b263194595bc9c97121d9
+last_activity_desc: Completed 01-06 command-root notification run
+state_head: 0f2bfb57811502cf7a5b7f8c268b808d5ab581fd
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 16
-  completed_plans: 5
+  completed_plans: 6
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Presentation Model) — EXECUTING
-Plan: 6 of 16
+Plan: 7 of 16
 Status: Ready to execute
-Last activity: 2026-09-29 — Completed 01-05 (probe-free text strategy)
+Last activity: 2026-09-29 — Completed 01-06 (command-root notification run)
 
-Progress: [███░░░░░░░] 31% (5 of 16 plans)
+Progress: [████░░░░░░] 38% (6 of 16 plans)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,8 +168,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-29T20:34:09.722Z
-**Stopped at:** Completed 01-05-PLAN.md
+**Last session:** 2026-09-29T21:52:15.115Z
+**Stopped at:** Completed 01-06-PLAN.md
 **Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
@@ -204,6 +204,7 @@ archived milestone artifacts.
 | Phase 01 P03 | 67 min | 2 tasks | 15 files |
 | Phase 01 P04 | 122 min | 2 tasks | 42 files |
 | Phase 01 P05 | 73 min | 2 tasks | 37 files |
+| Phase 01 P06 | 74 min | 2 tasks | 25 files |
 
 ## Decisions
 
@@ -218,3 +219,5 @@ archived milestone artifacts.
 - [Phase 01]: Each context emitter reads softDepStatus(pi) once, before resolveRows, and reuses that snapshot for the renderers; renderMpHeader takes a ResolvedMarketplace
 - [Phase 01]: RenderFn is (row, mpScope) and composeReasons(reasons) only formats a resolved list; the one softDepStatus(pi) snapshot per emission feeds resolveRows and no renderer (D-13)
 - [Phase 01]: softDepMarkers is called only from notification-resolve.ts, pinned by a filesMatching scan whose planted control copies a real registered orchestrator, because gate files may not name an unregistered production path (D-12, SC-5)
+- [Phase 01]: The /claude:plugin closure opens one NotificationRun per invocation and routes it as every SubcommandHandler's third argument; marketplace list and info render from run.softDeps with no emission-time probe (D-05, D-07 Option A)
+- [Phase 01]: The notify family takes NotificationRun | ToolInventory until 01-16; module-private snapshotOf discriminates on softDeps. register.test.ts states tool reads as { runs, probingEmissions }
