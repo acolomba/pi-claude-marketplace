@@ -22,6 +22,12 @@ export interface GitOpsFakeOptions {
   readonly fetchError?: Error;
   readonly checkoutError?: Error;
   readonly resolveRemoteRefError?: Error;
+  /**
+   * Remote entries returned by `listRemotes`. Unset = [] (a non-clone tree),
+   * which the MA-6 adopt check treats as foreign.
+   */
+  readonly listRemotesResult?: readonly { remote: string; url: string }[];
+  readonly listRemotesError?: Error;
 }
 
 export interface GitOpsFakeCalls {
@@ -51,6 +57,7 @@ export interface GitOpsFakeCalls {
     readonly ref?: string;
     readonly auth?: GitAuthBundle;
   }>;
+  readonly listRemotes: Array<{ readonly dir: string }>;
 }
 
 export interface GitOpsFakeState {
@@ -121,6 +128,7 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
     resolveRef: [],
     currentBranch: [],
     resolveRemoteRef: [],
+    listRemotes: [],
   };
   const state: GitOpsFakeState = {
     calls,
@@ -241,6 +249,15 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       }
 
       return oid;
+    },
+    async listRemotes(listOptions) {
+      calls.listRemotes.push(structuredClone(listOptions));
+      if (options.listRemotesError !== undefined) {
+        throw options.listRemotesError;
+      }
+
+      await Promise.resolve();
+      return [...(options.listRemotesResult ?? [])];
     },
   };
 

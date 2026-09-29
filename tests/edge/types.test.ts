@@ -44,6 +44,7 @@ const gitOps = {
   currentBranch: () => Promise.resolve("main"),
   fetch: () => Promise.resolve(),
   forceUpdateRef: () => Promise.resolve(),
+  listRemotes: () => Promise.resolve([] as { remote: string; url: string }[]),
   resolveRef: () => Promise.resolve("a1b2c3d"),
   resolveRemoteRef: () => Promise.resolve("a1b2c3d"),
 } satisfies GitOps;

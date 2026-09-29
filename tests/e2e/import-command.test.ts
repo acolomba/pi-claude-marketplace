@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { cp, readFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   createHooksRouting,
@@ -20,7 +21,7 @@ import { makeCtx, makeMockPi } from "./_helpers.ts";
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 
 const FIXTURE_ROOT = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   "../fixtures/import-command",
 );
 
@@ -99,6 +100,9 @@ function fixtureGitOps(): GitOps {
     },
     resolveRemoteRef(): Promise<string> {
       return Promise.resolve("0000000000000000000000000000000000000001");
+    },
+    listRemotes(): Promise<{ remote: string; url: string }[]> {
+      return Promise.resolve([]);
     },
   };
 }

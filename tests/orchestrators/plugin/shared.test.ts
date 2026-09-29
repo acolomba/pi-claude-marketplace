@@ -1306,6 +1306,26 @@ describe("resolvePluginVersion", () => {
     });
   });
 
+  test("falls back to .codex-plugin/plugin.json when .claude-plugin is absent", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(path.join(pluginRoot, ".codex-plugin"), { recursive: true });
+      await writeFile(
+        path.join(pluginRoot, ".codex-plugin", "plugin.json"),
+        JSON.stringify({ version: "2.1.0" }),
+      );
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(entry, installable);
+
+      // assert
+      assert.equal(version, "2.1.0");
+    });
+  });
+
   test("uses the marketplace entry when the manifest version is not a string", async () => {
     // arrange
     await withTempScopes(async ({ root }) => {

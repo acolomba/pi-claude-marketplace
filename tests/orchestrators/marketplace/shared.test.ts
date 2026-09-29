@@ -140,6 +140,10 @@ function createGitOps(scenario: GitScenario): {
     resolveRemoteRef(): Promise<string> {
       return Promise.reject(new Error("unexpected remote ref resolution"));
     },
+    async listRemotes(): Promise<{ remote: string; url: string }[]> {
+      await Promise.resolve();
+      return [];
+    },
   };
 
   return { gitOps, calls };

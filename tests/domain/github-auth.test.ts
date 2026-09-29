@@ -21,7 +21,7 @@ import {
 } from "./device-flow-contract.ts";
 import { createDeviceFlowFake } from "./device-flow-fake.ts";
 
-import type { GitAuthProvider } from "../../extensions/pi-claude-marketplace/domain/auth-registry.ts";
+import type { DeviceFlowProvider } from "../../extensions/pi-claude-marketplace/domain/auth-registry.ts";
 import type { CredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 
 function deviceCode(overrides: Partial<DeviceCodeResponse> = {}): DeviceCodeResponse {
@@ -35,9 +35,10 @@ function deviceCode(overrides: Partial<DeviceCodeResponse> = {}): DeviceCodeResp
   };
 }
 
-function authProvider(): GitAuthProvider {
+function authProvider(): DeviceFlowProvider {
   return {
     id: "example",
+    kind: "device-flow",
     hostMatch: (host) => host === "auth.example",
     deviceCodeUrl: "https://auth.example/device",
     tokenUrl: "https://auth.example/token",

@@ -1261,6 +1261,29 @@ test("MCPR-02 plugin.json string mcpServers reference resolves at parity (via re
   }
 });
 
+test("readManifest falls back to .codex-plugin/plugin.json when .claude-plugin/plugin.json is absent", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".codex-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: false }),
+    },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+  requireInstallable(resolvedPlugin);
+  assert.strictEqual(resolvedPlugin.defaultEnabled, false);
+});
+
 test("MCPR-03 missing reference file -> unavailable + malformed mcp reference note", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });

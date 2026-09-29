@@ -1,20 +1,29 @@
 /**
  * Git auth provider registry (D-79-04).
  *
- * A `GitAuthProvider` descriptor carries everything the RFC-8628 Device Flow
- * engine (domain/github-auth.ts) needs to authenticate against a given host:
- * the two OAuth endpoints, the public OAuth App client_id, the requested
+ * A `DeviceFlowProvider` descriptor carries everything the RFC-8628 Device
+ * Flow engine (domain/github-auth.ts) needs to authenticate against a given
+ * host: the two OAuth endpoints, the public OAuth App client_id, the requested
  * scope, a host-match predicate, and a pure `credentialFrom` mapping from an
  * access token to the isomorphic-git credential shape.
+ *
+ * A `StoredCredentialProvider` descriptor claims a host with no RFC-8628
+ * Device Authorization Grant. Authentication there rides the git credential
+ * helper's stored entry (AUTH-02 silent reuse): platform/git.ts's
+ * `buildAuthCallbacks` consults `credentialOps.fill(host)` before any flow,
+ * so a stored PAT authenticates with no interaction, and a fill miss fails
+ * clean instead of prompting.
  *
  * Descriptors are COMPILE-TIME constants; there is no runtime provider
  * configuration in v1 (PROV-07 per-source declarations deferred to v2). The
  * GitHub descriptor supplies today's exact literals so github.com behavior is
  * byte-identical when the engine defaults to GITHUB_PROVIDER.
  *
- * The registry carries two descriptors: GITHUB_PROVIDER and GITLAB_PROVIDER
- * (GAUTH-02). GitLab's Device Authorization Grant matches GitHub's on field
- * names, error codes and request bodies, so both hosts share one engine.
+ * The registry carries three descriptors: GITHUB_PROVIDER and GITLAB_PROVIDER
+ * (GAUTH-02) as device-flow providers, GITEA_PROVIDER (GAUTH-03) as a
+ * stored-credential provider. GitLab's Device Authorization Grant matches
+ * GitHub's on field names, error codes and request bodies, so both hosts share
+ * one engine.
  *
  * AUTH-09 discipline: no credential field is ever interpolated into an
  * Error/notify here; enforced by tests/architecture/no-credential-leak.test.ts
@@ -23,11 +32,12 @@
 
 import type { GitCredentials } from "../platform/git.ts";
 
-export interface GitAuthProvider {
+export interface DeviceFlowProvider {
   /** Stable descriptor id (e.g. "github"). */
   readonly id: string;
   /** True when this provider authenticates the given bare hostname. */
   hostMatch(host: string): boolean;
+  readonly kind: "device-flow";
   /** RFC-8628 device-code endpoint. */
   readonly deviceCodeUrl: string;
   /** RFC-8628 access-token (poll) endpoint. */
@@ -43,14 +53,25 @@ export interface GitAuthProvider {
   credentialFrom(accessToken: string): GitCredentials;
 }
 
+export interface StoredCredentialProvider {
+  /** Stable descriptor id (e.g. "gitea"). */
+  readonly id: string;
+  /** True when this provider authenticates the given bare hostname. */
+  hostMatch(host: string): boolean;
+  readonly kind: "stored-credential";
+}
+
+export type GitAuthProvider = DeviceFlowProvider | StoredCredentialProvider;
+
 /**
  * GitHub descriptor carrying today's exact literals (byte-identity source for
  * the engine's default path). deviceCodeUrl/tokenUrl/clientId/scope and the
  * `x-access-token` credential mapping are GitHub's real Device Flow values,
  * injected into the generic engine in domain/github-auth.ts.
  */
-export const GITHUB_PROVIDER: GitAuthProvider = {
+export const GITHUB_PROVIDER: DeviceFlowProvider = {
   id: "github",
+  kind: "device-flow",
   hostMatch: (host) => host === "github.com",
   deviceCodeUrl: "https://github.com/login/device/code",
   tokenUrl: "https://github.com/login/oauth/access_token",
@@ -87,8 +108,9 @@ export const GITHUB_PROVIDER: GitAuthProvider = {
  *    `marketplace update`/`install`/etc. invocation re-runs Device Flow.
  *    There is no refresh or expiry-tracking logic here by design.
  */
-const GITLAB_PROVIDER: GitAuthProvider = {
+const GITLAB_PROVIDER: DeviceFlowProvider = {
   id: "gitlab",
+  kind: "device-flow",
   hostMatch: (host) => host === "gitlab.com",
   deviceCodeUrl: "https://gitlab.com/oauth/authorize_device",
   tokenUrl: "https://gitlab.com/oauth/token",
@@ -97,7 +119,31 @@ const GITLAB_PROVIDER: GitAuthProvider = {
   credentialFrom: (accessToken) => ({ username: "oauth2", password: accessToken }),
 };
 
-const PROVIDERS: readonly GitAuthProvider[] = [GITHUB_PROVIDER, GITLAB_PROVIDER];
+/**
+ * Gitea descriptor (GAUTH-03). Two things about it are deliberate:
+ *
+ * 1. `kind: "stored-credential"` -- Gitea's OAuth2 server offers only the
+ *    `authorization_code` and `refresh_token` grants (its discovery document
+ *    lists no RFC-8628 Device Authorization Grant), so there is no Device
+ *    Flow to run. Authentication instead rides the git credential helper's
+ *    stored entry: `platform/git.ts::buildAuthCallbacks` consults
+ *    `credentialOps.fill(host)` before any interactive step, so a stored PAT
+ *    authenticates silently and a fill miss fails clean with
+ *    NO_STORED_CREDENTIAL_CAUSE. Registering the host at all is what threads
+ *    the auth bundle (PROV-02 otherwise drops it entirely and the clone runs
+ *    authless against a private repo).
+ * 2. `hostMatch` claims the bare self-managed host with exact equality, the
+ *    same lookalike-host discipline as GITLAB_PROVIDER. Gitea instances are
+ *    self-hosted and detectable only by their known hostname; add another
+ *    descriptor per instance rather than loosening this to a suffix match.
+ */
+const GITEA_PROVIDER: StoredCredentialProvider = {
+  id: "gitea",
+  kind: "stored-credential",
+  hostMatch: (host) => host === "gitea.nucleix.io",
+};
+
+const PROVIDERS: readonly GitAuthProvider[] = [GITHUB_PROVIDER, GITLAB_PROVIDER, GITEA_PROVIDER];
 
 /**
  * PROV-01: return the provider whose hostMatch accepts `host`, or undefined

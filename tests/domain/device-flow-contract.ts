@@ -9,7 +9,7 @@ import {
   type PollResult,
 } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 
-import type { GitAuthProvider } from "../../extensions/pi-claude-marketplace/domain/auth-registry.ts";
+import type { DeviceFlowProvider } from "../../extensions/pi-claude-marketplace/domain/auth-registry.ts";
 import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 
 export interface DeviceFlowContractScenario {
@@ -64,13 +64,14 @@ export const DEVICE_FLOW_CASE_NAMES = [
 
 const provider = {
   id: "contract",
+  kind: "device-flow",
   hostMatch: (host) => host === "auth.example",
   deviceCodeUrl: "https://auth.example/device",
   tokenUrl: "https://auth.example/token",
   clientId: "client-1",
   scope: "read_repository",
   credentialFrom: (accessToken) => ({ username: "oauth2", password: accessToken }),
-} satisfies GitAuthProvider;
+} satisfies DeviceFlowProvider;
 
 function deviceCode(overrides: Partial<DeviceCodeResponse> = {}): DeviceCodeResponse {
   return {

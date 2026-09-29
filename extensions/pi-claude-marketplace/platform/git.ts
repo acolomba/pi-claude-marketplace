@@ -122,6 +122,25 @@ export interface CurrentBranchOptions {
   dir: string;
 }
 
+/**
+ * Some smart-HTTP git servers (e.g. Bifrost's /skills/serve/* endpoints) only
+ * answer at the verbatim URL and 404 the conventional `.git` suffix. Callers
+ * pass the conventional suffixed form; try the suffix-less form first and
+ * fall back to the URL as given.
+ */
+function desuffixGitUrl(url: string): string {
+  return url.endsWith(".git") ? url.slice(0, -".git".length) : url;
+}
+
+function isSuffixHttpError(err: unknown): boolean {
+  if (err instanceof git.Errors.HttpError) {
+    return err.data.statusCode === 404 || err.data.statusCode === 400;
+  }
+
+  const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
+  return statusCode === 404 || statusCode === 400;
+}
+
 export async function clone(opts: CloneOptions): Promise<void> {
   // When opts.auth is provided, build the isomorphic-git callbacks
   // up-front and conditionally spread them. When omitted, the public-only
@@ -137,19 +156,33 @@ export async function clone(opts: CloneOptions): Promise<void> {
   // it only takes the `url: string` parameter -- no contravariant
   // GitAuth-typed slot.
   const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  await git.clone({
-    fs,
-    http,
-    dir: opts.dir,
-    url: opts.url,
-    ...(opts.ref !== undefined && { ref: opts.ref }),
-    ...(opts.singleBranch !== undefined && { singleBranch: opts.singleBranch }),
-    ...(authCbs !== undefined && {
-      onAuth: authCbs.onAuth,
-      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
-    }),
-    // No depth (full history is kept). No corsProxy (Node only).
-  });
+  const doClone = (url: string) =>
+    git.clone({
+      fs,
+      http,
+      dir: opts.dir,
+      url,
+      ...(opts.ref !== undefined && { ref: opts.ref }),
+      ...(opts.singleBranch !== undefined && { singleBranch: opts.singleBranch }),
+      ...(authCbs !== undefined && {
+        onAuth: authCbs.onAuth,
+        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+      }),
+      // No depth (full history is kept). No corsProxy (Node only).
+    });
+
+  try {
+    await doClone(opts.url);
+  } catch (err) {
+    const bare = desuffixGitUrl(opts.url);
+
+    if (bare !== opts.url && isSuffixHttpError(err)) {
+      await fs.promises.rm(opts.dir, { recursive: true, force: true }).catch(() => {});
+      await doClone(bare);
+    } else {
+      throw err;
+    }
+  }
 }
 
 export async function fetch(opts: FetchOptions): Promise<void> {
@@ -215,17 +248,32 @@ export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<s
   // top of this file: build the callbacks only when opts.auth is defined so the
   // public-only resolution stays byte-identical.
   const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  const refs = await git.listServerRefs({
-    http,
-    url: opts.url,
-    protocolVersion: 2,
-    symrefs: true,
-    peelTags: true,
-    ...(authCbs !== undefined && {
-      onAuth: authCbs.onAuth,
-      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
-    }),
-  });
+  const listRefs = (url: string) =>
+    git.listServerRefs({
+      http,
+      url,
+      protocolVersion: 2,
+      symrefs: true,
+      peelTags: true,
+      ...(authCbs !== undefined && {
+        onAuth: authCbs.onAuth,
+        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+      }),
+    });
+
+  let refs: Awaited<ReturnType<typeof listRefs>> | undefined;
+
+  try {
+    refs = await listRefs(opts.url);
+  } catch (err) {
+    const bare = desuffixGitUrl(opts.url);
+
+    if (bare !== opts.url && isSuffixHttpError(err)) {
+      refs = await listRefs(bare);
+    } else {
+      throw err;
+    }
+  }
 
   if (opts.ref === undefined) {
     const head = refs.find((r) => r.ref === "HEAD");
@@ -288,6 +336,30 @@ export async function currentBranch(opts: CurrentBranchOptions): Promise<string 
   // undefined.
   const branch = await git.currentBranch({ fs, dir: opts.dir });
   return branch ?? undefined;
+}
+
+export interface ListRemotesOptions {
+  dir: string;
+  /** Optional gitdir (defaults to `<dir>/.git`); typically omitted. */
+  gitdir?: string;
+}
+
+/**
+ * NFR-3: list the `git remote` entries of an existing working tree. The
+ * marketplace orchestrator's MA-6 adopt check consumes it to recognize a
+ * leftover clone of the same source; non-git trees reject (isomorphic-git
+ * NotFoundError) and the caller treats them as foreign.
+ *
+ * Source: node_modules/isomorphic-git/index.d.ts listRemotes.
+ */
+export async function listRemotes(
+  opts: ListRemotesOptions,
+): Promise<{ remote: string; url: string }[]> {
+  return git.listRemotes({
+    fs,
+    dir: opts.dir,
+    ...(opts.gitdir !== undefined && { gitdir: opts.gitdir }),
+  });
 }
 
 /**

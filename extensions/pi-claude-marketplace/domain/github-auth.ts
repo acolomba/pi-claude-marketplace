@@ -15,7 +15,7 @@
  *     RFC 8628 §3.1 and GitHub OAuth Apps docs). It now lives on the
  *     GITHUB_PROVIDER descriptor in domain/auth-registry.ts (D-79-04).
  *   - D-79-04: endpoints/clientId/scope/credentialFrom are read from a
- *     GitAuthProvider descriptor; `provider` defaults to GITHUB_PROVIDER so
+ *     DeviceFlowProvider descriptor; `provider` defaults to GITHUB_PROVIDER so
  *     the github.com path is byte-identical.
  *   - D-32-04: notifyFn callback (no `ctx` import; preserves the
  *     shared/notification-dispatch.ts chokepoint at the boundary).
@@ -46,7 +46,7 @@
 
 import { setTimeout as sleepMs } from "node:timers/promises";
 
-import { GITHUB_PROVIDER, type GitAuthProvider } from "./auth-registry.ts";
+import { GITHUB_PROVIDER, type DeviceFlowProvider } from "./auth-registry.ts";
 
 import type { CredentialOps } from "../platform/git-credential.ts";
 import type { GitCredentials } from "../platform/git.ts";
@@ -128,7 +128,7 @@ export interface InitiateDeviceFlowOpts {
    * (D-79-04). Defaults to GITHUB_PROVIDER so existing github.com call sites
    * compile and behave byte-identically.
    */
-  provider?: GitAuthProvider;
+  provider?: DeviceFlowProvider;
   /** Optional abort signal for the polling wait. */
   signal?: AbortSignal;
   /** Optional polling wait. Defaults to the Node timer implementation. */
@@ -346,7 +346,7 @@ async function waitForPoll(milliseconds: number, signal?: AbortSignal): Promise<
 
 async function runPollLoop(
   http: DeviceFlowHttp,
-  provider: GitAuthProvider,
+  provider: DeviceFlowProvider,
   deviceCode: DeviceCodeResponse,
   opts: InitiateDeviceFlowOpts,
 ): Promise<DeviceFlowResult> {

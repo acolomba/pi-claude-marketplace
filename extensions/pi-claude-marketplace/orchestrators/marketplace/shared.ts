@@ -173,6 +173,13 @@ export interface GitOps {
    * resolution can authenticate (PROV-03); omitted = public-only.
    */
   resolveRemoteRef(opts: { url: string; ref?: string; auth?: GitAuthBundle }): Promise<string>;
+  /**
+   * NFR-3: list the `git remote` entries of an existing working tree. Used
+   * by the MA-6 adopt check to recognize a leftover clone of the same
+   * source. Non-git trees throw (platform NotFoundError) and are treated as
+   * foreign by the caller.
+   */
+  listRemotes(opts: { dir: string }): Promise<{ remote: string; url: string }[]>;
 }
 
 /**
@@ -193,6 +200,7 @@ export const DEFAULT_GIT_OPS: GitOps = {
   resolveRef: defaultGit.resolveRef,
   currentBranch: defaultGit.currentBranch,
   resolveRemoteRef: defaultGit.resolveRemoteRef,
+  listRemotes: defaultGit.listRemotes,
 };
 
 /**
