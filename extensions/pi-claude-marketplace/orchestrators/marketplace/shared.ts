@@ -103,13 +103,14 @@ export class WorkflowsUnstageFailureError extends Error {
 
 /**
  * Optional auth bundle passed through GitOps.clone / GitOps.fetch and
- * refreshGitHubClone. Mirrors the shape accepted by platform/git.ts
+ * refreshGitHubClone: the readonly form of the platform's
+ * `BuildAuthCallbacksOpts`, which is also the type of
  * `CloneOptions.auth?` / `FetchOptions.auth?`. When undefined, every call
  * site behaves identically to the public-only path.
  *
- * D-13 boundary: this re-exports only TYPES from the platform tier
- * (`BuildAuthCallbacksOpts`) -- no isomorphic-git symbol
- * crosses into the orchestrator tier.
+ * D-13 boundary: this names only a TYPE from the platform tier
+ * (`BuildAuthCallbacksOpts`) -- no isomorphic-git symbol crosses into the
+ * orchestrator tier.
  */
 export type GitAuthBundle = Readonly<BuildAuthCallbacksOpts>;
 

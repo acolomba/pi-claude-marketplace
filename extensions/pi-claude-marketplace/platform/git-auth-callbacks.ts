@@ -52,10 +52,11 @@ export type AuthAttemptResult =
 export type OnAuthRequiredFn = () => Promise<AuthAttemptResult>;
 
 /**
- * Input bundle for `buildAuthCallbacks`. The same shape is reused by
- * `CloneOptions.auth?` and `FetchOptions.auth?`, so a single
- * `{ credentialOps, host, onAuthRequired }` literal threads through from
- * the orchestrator into clone/fetch without re-bundling.
+ * Input bundle for `buildAuthCallbacks`. The same type is used by
+ * `CloneOptions.auth?`, `FetchOptions.auth?`, and
+ * `ResolveRemoteRefOptions.auth?`, and its readonly form is the
+ * orchestrators' `GitAuthBundle`, so a single bundle threads through from
+ * the orchestrator into clone/fetch/resolveRemoteRef without re-bundling.
  */
 export interface BuildAuthCallbacksOpts {
   credentialOps: CredentialOps;
