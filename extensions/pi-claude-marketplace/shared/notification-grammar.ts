@@ -4,6 +4,7 @@ import { causeChainTrailer, manualRecoveryLeaks } from "./errors.ts";
 
 import type { SoftDepStatus } from "../platform/pi-api.ts";
 import type { Dependency } from "./concerns/soft-dep.ts";
+import type { ResolvedEnvelope } from "./notification-resolve.ts";
 import type {
   ContentReason,
   MarketplaceDetails,
@@ -27,7 +28,10 @@ import type {
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
 
-/** Exact notification grammar. Severity and summary policy live in notification-summary.ts. */
+/**
+ * Exact notification grammar. Severity and the summary line are resolved in
+ * notification-resolve.ts; this module only formats them.
+ */
 
 // ---------------------------------------------------------------------------
 // Grammar rendering helpers -- file-private.
@@ -1652,4 +1656,15 @@ export function composePluginLinesWith(
 
   lines.push(...composeRollbackPartialLines(p));
   return lines;
+}
+
+/**
+ * D-10 text strategy: formats one resolved envelope around a rendered body.
+ * An info envelope returns `body` unchanged. A warning or error envelope
+ * prepends its summary line as its own block (GRAM-01): one blank line, never a
+ * single `\n`, which would glue the host `Error:` / `Warning:` label onto the
+ * first detail row.
+ */
+export function formatNotificationText(envelope: ResolvedEnvelope, body: string): string {
+  return envelope.severity === "info" ? body : `${envelope.summary}\n\n${body}`;
 }

@@ -8,6 +8,7 @@ import {
   composeReconcileAppliedBody,
   composeReasons,
   composeVersionArrow,
+  formatNotificationText,
   ICON_AVAILABLE,
   ICON_DISABLED,
   ICON_INSTALLED,
@@ -1032,5 +1033,29 @@ for (const { name, row, expected } of [
 
     // assert
     assert.equal(renderedRow, expectedRow);
+  });
+}
+
+test("formatNotificationText returns an info body byte for byte", () => {
+  // arrange
+  const body = "● official [user]\n  alpha (installed)";
+
+  // act
+  const text = formatNotificationText({ severity: "info" }, body);
+
+  // assert
+  assert.equal(text, "● official [user]\n  alpha (installed)");
+});
+
+for (const severity of ["warning", "error"] as const) {
+  test(`formatNotificationText prepends a ${severity} summary as its own block`, () => {
+    // arrange
+    const envelope = { severity, summary: "A plugin operation has failed." };
+
+    // act
+    const text = formatNotificationText(envelope, "● official [user]\n  alpha (failed)");
+
+    // assert
+    assert.equal(text, "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)");
   });
 }

@@ -4,6 +4,7 @@ import {
   composeMarketplaceBlock,
   composePluginLinesWith,
   composeReconcileAppliedBody,
+  formatNotificationText,
   renderMarketplaceInfo,
   renderMarketplaceInfoCascade,
   renderMarketplaceNotAdded,
@@ -11,9 +12,9 @@ import {
   renderPluginInfo,
   renderPluginInfoCascade,
 } from "./notification-grammar.ts";
+import { resolveEnvelope } from "./notification-resolve.ts";
 import {
   composeTally,
-  composeWithSummary,
   foldTallyAndHint,
   isInfoKind,
   RELOAD_HINT_TRAILER,
@@ -75,7 +76,14 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  */
 
 /**
- * Emit one summary-composed payload at the sole Pi notification boundary.
+ * Emit one summary-composed payload at the sole Pi notification boundary:
+ * resolve the envelope, format the text, then make one `ctx.ui.notify` call.
+ * An info envelope passes one argument and a warning or error envelope passes
+ * its severity as the second.
+ *
+ * The caller renders `body` BEFORE this runs. The context renderer
+ * (`dispatchRow` in notify-context.ts) floors a row with no render arm to error
+ * while rendering, and the envelope must read that floored stamp.
  *
  * Module-private: the state-change dispatch paths -- `notify`,
  * `emitContextCascade`, `emitUpdateNoOpCascade`, and
@@ -92,11 +100,12 @@ function emitWithSummary(
   message: NotificationMessage,
   body: string,
 ): void {
-  const notification = composeWithSummary(message, body);
-  if (notification.length === 1) {
-    ctx.ui.notify(notification[0]);
+  const envelope = resolveEnvelope(message);
+  const text = formatNotificationText(envelope, body);
+  if (envelope.severity === "info") {
+    ctx.ui.notify(text);
   } else {
-    ctx.ui.notify(notification[0], notification[1]);
+    ctx.ui.notify(text, envelope.severity);
   }
 }
 

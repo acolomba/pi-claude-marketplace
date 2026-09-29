@@ -167,7 +167,11 @@ function cascadeSeverity(message: {
   return rank === 1 ? "warning" : "error";
 }
 
-function computeSeverity(message: NotificationMessage): ComputedSeverity {
+/**
+ * SEV-02: the severity of `message`, as the second `ctx.ui.notify` argument
+ * wants it. `undefined` means info.
+ */
+export function computeSeverity(message: NotificationMessage): "warning" | "error" | undefined {
   // SEV-02: the cascade severity is the MAX over the rows' caller-stamped
   // `severity` (see `cascadeSeverity`), NOT content inference.
   //
@@ -350,8 +354,9 @@ function buildSummaryLineForCascade(
 
 /**
  * UXG-07 / GRAM-01 / GRAM-02 (D-29-02/03/04): build the human-readable summary
- * line that `emitWithSummary` prepends before the body for `error` and
- * `warning` severity. It gives the host `Error:` / `Warning:` prefix a
+ * line for `error` and `warning` severity. `resolveEnvelope`
+ * (notification-resolve.ts) carries it, and the text strategy prepends it
+ * before the body. It gives the host `Error:` / `Warning:` prefix a
  * meaningful, contextual sentence to introduce ("focus on the operation, not
  * what happened to each plugin -- the body already shows that").
  *
@@ -369,7 +374,10 @@ function buildSummaryLineForCascade(
  * when a matching row exists) the function degrades gracefully to the
  * plugin-only plural form rather than crashing.
  */
-function buildSummaryLine(message: NotificationMessage, severity: "error" | "warning"): string {
+export function buildSummaryLine(
+  message: NotificationMessage,
+  severity: "error" | "warning",
+): string {
   // GRAM-02: the standalone-dispatched kinds derive their summary from the
   // FAILED ROW's subject, not the invoking command. The two error-severity
   // standalone kinds carry a hard-count-1 summary (one absent marketplace /
@@ -387,8 +395,8 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
       case "reconcile-applied-cascade":
         // RECON-04: at error/warning severity reuse the cascade-arm counting
         // helpers over the same per-status `marketplaces` shape; at info
-        // severity buildSummaryLine isn't called (emitWithSummary short-
-        // circuits) so the empty arm below is unreachable in practice.
+        // severity `resolveEnvelope` does not call buildSummaryLine, so the
+        // empty arm below is unreachable in practice.
         return buildSummaryLineForCascade(message.marketplaces, severity);
       case "marketplace-info":
       case "marketplace-info-cascade":
@@ -623,30 +631,4 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
   }
 
   return false;
-}
-
-/**
- * GRAM-04: the single summary-composition seam shared by the standalone arm
- * and the cascade arm of the dispatcher. Computing the
- * severity and prepending the summary in ONE place is the structural
- * anti-divergence guarantee -- no caller can re-introduce a summary-less
- * error/warning emission like the v1.10 standalone-arm defect.
- *
- * GRAM-01: at error/warning severity the summary is prepended as its own
- * block, separated from the body by `\n\n` (never a single `\n`, which would
- * re-glue the host `Error:` / `Warning:` label onto the detail row). At info
- * severity the body is returned unchanged (no summary -- the operation-count
- * semantics do not apply to read-only results). The dispatch owner consumes
- * this exact tuple and performs the single Pi notification call.
- */
-export function composeWithSummary(
-  message: NotificationMessage,
-  body: string,
-): readonly [message: string] | readonly [message: string, severity: "warning" | "error"] {
-  const severity = computeSeverity(message);
-  if (severity === undefined) {
-    return [body];
-  }
-
-  return [`${buildSummaryLine(message, severity)}\n\n${body}`, severity];
 }
