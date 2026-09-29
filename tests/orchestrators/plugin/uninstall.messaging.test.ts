@@ -6,6 +6,7 @@ import { type PluginFailedMessage } from "../../../extensions/pi-claude-marketpl
 import { type PluginUninstalledMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 test("exports the complete uninstall command context", () => {
   // arrange
@@ -16,7 +17,7 @@ test("exports the complete uninstall command context", () => {
   const renderKeys = Object.keys(UNINSTALL_CONTEXT.render);
 
   // assert
-  assert.deepEqual(contextKeys, ["Messaging", "render"]);
+  assert.deepEqual(contextKeys, ["Messaging", "render", "markers"]);
   assert.deepEqual(UNINSTALL_CONTEXT.Messaging, { label: "Plugin uninstall" });
   assert.deepEqual(renderKeys, expectedRenderKeys);
 });
@@ -30,7 +31,8 @@ test("renders a complete cross-scope uninstalled transition row", () => {
     name: "alpha",
     version: "1.2.3",
     scope: "project",
-  } as const satisfies PluginUninstalledMessage;
+    reasons: [],
+  } as const satisfies ResolvedRow<PluginUninstalledMessage>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -49,14 +51,18 @@ test("renders a complete cross-scope uninstalled transition row", () => {
     name: "alpha",
     version: "1.2.3",
     scope: "project",
+    reasons: [],
   });
-  assert.equal(Object.hasOwn(row, "reasons"), false);
-  assert.equal(Object.hasOwn(row, "cause"), false);
+  assert.equal(Object.hasOwn(row, "failure"), false);
 });
 
-test("renders a failed uninstall row without leaking its cause into the row body", () => {
+test("renders a failed uninstall row without leaking its failure detail into the row body", () => {
   // arrange
-  const cause = new Error("unstage failed");
+  const failure = {
+    cause: { causeChain: ["unstage failed"], truncated: false },
+    leaks: [],
+    rollbackPartial: [],
+  };
   const row = {
     status: "failed",
     severity: "error",
@@ -65,8 +71,8 @@ test("renders a failed uninstall row without leaking its cause into the row body
     version: "2.0.0",
     scope: "user",
     reasons: ["permission denied", "rollback partial"],
-    cause,
-  } as const satisfies PluginFailedMessage;
+    failure,
+  } as const satisfies ResolvedRow<PluginFailedMessage>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
@@ -86,6 +92,6 @@ test("renders a failed uninstall row without leaking its cause into the row body
     version: "2.0.0",
     scope: "user",
     reasons: ["permission denied", "rollback partial"],
-    cause,
+    failure,
   });
 });

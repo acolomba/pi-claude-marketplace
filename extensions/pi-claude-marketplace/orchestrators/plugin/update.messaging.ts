@@ -37,7 +37,7 @@ type UpdateStatus =
 /**
  * update's row message union -- the subset of central plugin shapes whose
  * status update emits. `dependencies` stays REQUIRED on the `updated` arm so
- * the soft-dep marker injection fires for exactly that arm (D-06 / TYPE-04).
+ * `resolveRows` can compose its soft-dep markers (D-06 / TYPE-04 / D-12).
  */
 export type UpdateMsg =
   | PluginUpdatedMessage
@@ -49,10 +49,9 @@ export type UpdateMsg =
 /**
  * Render map total over update's OWN statuses (D-10): a missing arm is a TS2741
  * compile error at the `satisfies` site. Arm bodies are byte-identical to the
- * central `renderPluginRow` switch. The `updated` arm threads
- * `dependencies.includes(...)` into `composeReasons` so a companion-extension
- * soft-dep marker can append; `skipped` / `failed` route through `pluginRow`
- * (both declares-flags hard-`false`).
+ * central `renderPluginRow` switch. The `updated` arm renders its resolved
+ * `reasons`, which can end with a companion-extension soft-dep marker (D-12);
+ * `skipped` / `failed` route through `pluginRow`.
  */
 const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status: K }>> } = {
   // WR-12: thread the optional `reasons` brace. This map -- not the central
@@ -70,9 +69,9 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
       probe,
     ),
   // FSTAT-07 / D-66-04: a partial update whose candidate re-resolved `partially-available`
-  // reports (partially-installed) with the dropped-component detail. WR-03: the
-  // shared `partiallyInstalledRow` threads `dependencies` so the soft-dep markers
-  // fire on a degraded update exactly as on a clean `(updated)` row.
+  // reports (partially-installed) with the dropped-component detail. WR-03 /
+  // D-12: its marker policy is on, so the soft-dep markers appear on a degraded
+  // update exactly as on a clean `(updated)` row.
   "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   // XSURF-03: the partially-upgradable manual update-decline row. Byte-identical to
@@ -91,4 +90,11 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
 export const UPDATE_CONTEXT = {
   Messaging: { label: "Plugin update" },
   render: UPDATE_RENDER,
+  markers: {
+    updated: true,
+    "partially-installed": true,
+    skipped: false,
+    "partially-upgradable": false,
+    failed: false,
+  },
 } as const satisfies CommandContext<UpdateStatus, UpdateMsg>;

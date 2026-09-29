@@ -7,6 +7,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts";
 
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({ status: "skipped", name: "alpha", reasons: [] } satisfies PluginInfoCascadeMsg);
 
@@ -23,7 +24,7 @@ void ({
 
 test("exports the complete plugin-info cascade context", () => {
   // arrange
-  const expectedContextKeys = ["Messaging", "render"];
+  const expectedContextKeys = ["Messaging", "render", "markers"];
   const expectedRenderKeys = ["skipped"];
 
   // act
@@ -42,7 +43,7 @@ test("renders a bare skipped row with truly omitted optional fields", () => {
     status: "skipped",
     name: "alpha",
     reasons: [],
-  } as const satisfies PluginInfoCascadeMsg;
+  } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -70,7 +71,7 @@ test("folds a same-scope skipped row and preserves version and ordered reasons",
     scope: "project",
     version: "1.2.3",
     reasons: ["already disabled", "up-to-date"],
-  } as const satisfies PluginInfoCascadeMsg;
+  } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
@@ -91,7 +92,7 @@ test("folds a same-scope skipped row and preserves version and ordered reasons",
   assert.strictEqual(renderedRow, "⊘ beta v1.2.3 (skipped) {already disabled, up-to-date}");
 });
 
-test("renders a cross-scope skipped row without soft-dependency markers", () => {
+test("renders a cross-scope skipped row with its resolved reasons", () => {
   // arrange
   const row = {
     status: "skipped",
@@ -99,7 +100,7 @@ test("renders a cross-scope skipped row without soft-dependency markers", () => 
     scope: "project",
     version: "hash-2ea95f85703d",
     reasons: ["not in manifest"],
-  } as const satisfies PluginInfoCascadeMsg;
+  } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,

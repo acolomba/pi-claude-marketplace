@@ -7,6 +7,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.messaging.ts";
 
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({
   status: "uninstalled",
@@ -47,7 +48,7 @@ void failedWithInfoSeverity;
 
 test("exports the complete marketplace-remove command context", () => {
   // arrange
-  const expectedContextKeys = ["Messaging", "render"];
+  const expectedContextKeys = ["Messaging", "render", "markers"];
   const expectedRenderKeys = ["uninstalled", "failed"];
 
   // act
@@ -67,7 +68,8 @@ test("renders an uninstalled row with truly omitted optional fields", () => {
     name: "helper",
     severity: "info",
     needsReload: true,
-  } as const satisfies RemoveRowMsg;
+    reasons: [],
+  } as const satisfies ResolvedRow<RemoveRowMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -83,8 +85,15 @@ test("renders an uninstalled row with truly omitted optional fields", () => {
     name: "helper",
     severity: "info",
     needsReload: true,
+    reasons: [],
   });
-  assert.deepStrictEqual(Object.keys(row), ["status", "name", "severity", "needsReload"]);
+  assert.deepStrictEqual(Object.keys(row), [
+    "status",
+    "name",
+    "severity",
+    "needsReload",
+    "reasons",
+  ]);
   assert.strictEqual(renderedRow, "○ helper (uninstalled)");
 });
 
@@ -97,7 +106,8 @@ test("folds an uninstalled row scope into its marketplace and preserves its vers
     scope: "project",
     severity: "info",
     needsReload: true,
-  } as const satisfies RemoveRowMsg;
+    reasons: [],
+  } as const satisfies ResolvedRow<RemoveRowMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
@@ -115,6 +125,7 @@ test("folds an uninstalled row scope into its marketplace and preserves its vers
     scope: "project",
     severity: "info",
     needsReload: true,
+    reasons: [],
   });
   assert.strictEqual(renderedRow, "○ helper v1.2.3 (uninstalled)");
 });
@@ -127,7 +138,7 @@ test("renders a failed row with truly omitted optional fields", () => {
     reasons: ["plugins remain"],
     severity: "error",
     needsReload: false,
-  } as const satisfies RemoveRowMsg;
+  } as const satisfies ResolvedRow<RemoveRowMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -155,19 +166,23 @@ test("renders a failed row with truly omitted optional fields", () => {
   assert.strictEqual(renderedRow, "⊘ tool (failed) {plugins remain}");
 });
 
-test("renders a cross-scope failed row without consuming its cause or lifecycle stamps", () => {
+test("renders a cross-scope failed row without consuming its failure detail or lifecycle stamps", () => {
   // arrange
-  const cause = new Error("EACCES: permission denied");
+  const failure = {
+    cause: { causeChain: ["EACCES: permission denied"], truncated: false },
+    leaks: [],
+    rollbackPartial: [],
+  };
   const row = {
     status: "failed",
     name: "tool",
     version: "2.0.0",
     scope: "project",
     reasons: ["permission denied", "source missing"],
-    cause,
+    failure,
     severity: "error",
     needsReload: false,
-  } as const satisfies RemoveRowMsg;
+  } as const satisfies ResolvedRow<RemoveRowMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
@@ -184,7 +199,7 @@ test("renders a cross-scope failed row without consuming its cause or lifecycle 
     version: "2.0.0",
     scope: "project",
     reasons: ["permission denied", "source missing"],
-    cause,
+    failure,
     severity: "error",
     needsReload: false,
   });

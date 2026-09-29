@@ -89,8 +89,8 @@ export interface EntityErrorRow {
 /**
  * install's row message union -- the subset of the central plugin message
  * shapes whose status install actually emits. `dependencies` stays REQUIRED on
- * the `installed` arm so the soft-dep marker injection in `composeReasons`
- * fires for exactly that arm (D-06 / TYPE-04 gating).
+ * the `installed` arm so `resolveRows` can compose its soft-dep markers
+ * (D-06 / TYPE-04 / D-12).
  */
 export type InstallMsg =
   | PluginInstalledMessage
@@ -117,9 +117,9 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
       probe,
     ),
   // FSTAT-07 / D-66-04: a partial install that re-resolves `partially-available` reports
-  // (partially-installed) with the dropped-component detail. WR-03: the shared
-  // `partiallyInstalledRow` threads `dependencies` so the soft-dep markers fire on a
-  // degraded install exactly as on a clean `(installed)` row.
+  // (partially-installed) with the dropped-component detail. WR-03 / D-12: its
+  // marker policy is on, so the soft-dep markers appear on a degraded install
+  // exactly as on a clean `(installed)` row.
   "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
   unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
   // XSURF-01: the partially-available install-failure arm. Byte-identical to the
@@ -145,6 +145,14 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
 export const INSTALL_CONTEXT = {
   Messaging: { label: "Plugin install" },
   render: INSTALL_RENDER,
+  markers: {
+    installed: true,
+    "partially-installed": true,
+    failed: false,
+    unavailable: false,
+    "partially-available": false,
+    disabled: false,
+  },
 } as const satisfies CommandContext<InstallStatus, InstallMsg>;
 
 /**

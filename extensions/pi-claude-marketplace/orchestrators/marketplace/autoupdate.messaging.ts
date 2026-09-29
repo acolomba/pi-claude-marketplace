@@ -46,6 +46,9 @@ export const AUTOUPDATE_CONTEXT = {
   render: {
     failed: renderFailedRow,
   },
+  markers: {
+    failed: false,
+  },
 } as const satisfies CommandContext<AutoupdateRowStatus, PluginFailedMessage>;
 
 /**
@@ -58,5 +61,8 @@ export const NOAUTOUPDATE_CONTEXT = {
   Messaging: { label: "Marketplace noautoupdate" },
   render: {
     failed: renderFailedRow,
+  },
+  markers: {
+    failed: false,
   },
 } as const satisfies CommandContext<AutoupdateRowStatus, PluginFailedMessage>;

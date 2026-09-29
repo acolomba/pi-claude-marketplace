@@ -16,6 +16,7 @@ import type {
   InstallMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type { ContentReason } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 describe("INSTALL_CONTEXT", () => {
@@ -43,18 +44,17 @@ describe("INSTALL_CONTEXT", () => {
     });
   });
 
-  test("renders an installed row with reasons and both missing companions", () => {
+  test("renders an installed row with its resolved reasons and markers", () => {
     // arrange
     const message = {
       status: "installed",
       name: "helper",
-      dependencies: ["agents", "mcp"],
       version: "1.2.3",
       scope: "user",
-      reasons: ["orphan rewake"],
+      reasons: ["orphan rewake", "requires pi-subagents", "requires pi-mcp"],
       severity: "warning",
       needsReload: true,
-    } satisfies InstallMsg;
+    } satisfies ResolvedRow<InstallMsg>;
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
@@ -71,18 +71,17 @@ describe("INSTALL_CONTEXT", () => {
     );
   });
 
-  test("renders a partially-installed row with cross-scope and dependency markers", () => {
+  test("renders a partially-installed row with a cross-scope bracket and resolved markers", () => {
     // arrange
     const message = {
       status: "partially-installed",
       name: "helper",
-      reasons: ["lsp"],
-      dependencies: ["agents"],
+      reasons: ["lsp", "requires pi-subagents"],
       version: "2.0.0",
       scope: "project",
       severity: "warning",
       needsReload: true,
-    } satisfies InstallMsg;
+    } satisfies ResolvedRow<InstallMsg>;
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
@@ -106,7 +105,7 @@ describe("INSTALL_CONTEXT", () => {
       name: "helper",
       reasons: ["unsupported source"],
       severity: "error",
-    } satisfies InstallMsg;
+    } satisfies ResolvedRow<InstallMsg>;
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
@@ -128,8 +127,8 @@ describe("INSTALL_CONTEXT", () => {
       reasons: ["unsupported hooks", "lsp"],
       version: "3.1.0",
       severity: "error",
-      partialHint: true,
-    } satisfies InstallMsg;
+      hint: "partial-install",
+    } satisfies ResolvedRow<InstallMsg>;
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
@@ -153,7 +152,7 @@ describe("INSTALL_CONTEXT", () => {
       scope: "project",
       severity: "error",
       needsReload: false,
-    } satisfies InstallMsg;
+    } satisfies ResolvedRow<InstallMsg>;
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
@@ -167,7 +166,7 @@ describe("INSTALL_CONTEXT", () => {
     assert.strictEqual(row, "⊘ helper [project] v1.0.0 (failed) {permission denied}");
   });
 
-  test("renders a disabled row without soft-dependency markers", () => {
+  test("renders a disabled row with its resolved reasons", () => {
     // arrange
     const message = {
       status: "disabled",
@@ -175,10 +174,10 @@ describe("INSTALL_CONTEXT", () => {
       version: "4.0.0",
       scope: "user",
       reasons: ["installs disabled", "malformed skill"],
-      enableHint: true,
+      hint: "enable",
       severity: "warning",
       needsReload: false,
-    } satisfies InstallMsg;
+    } satisfies ResolvedRow<InstallMsg>;
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,

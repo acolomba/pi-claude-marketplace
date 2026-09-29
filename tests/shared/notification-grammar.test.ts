@@ -151,7 +151,9 @@ const ROW_CASES = [
       name: "alpha",
       scope: "user",
       version: "1.0.0",
-      dependencies: [],
+      reasons: [],
+      severity: "info",
+      needsReload: true,
     },
     expected: "● alpha v1.0.0 (installed)",
   },
@@ -162,13 +164,22 @@ const ROW_CASES = [
       scope: "project",
       from: "1",
       to: "2",
-      dependencies: [],
       reasons: ["lsp"],
+      severity: "info",
+      needsReload: true,
     },
     expected: "● alpha [project] v1 → v2 (updated) {lsp}",
   },
   {
-    plugin: { status: "reinstalled", name: "alpha", scope: "user", version: "2", dependencies: [] },
+    plugin: {
+      status: "reinstalled",
+      name: "alpha",
+      scope: "user",
+      version: "2",
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
     expected: "● alpha v2 (reinstalled)",
   },
   {
@@ -179,14 +190,18 @@ const ROW_CASES = [
       version: "1",
       needsReload: true,
       severity: "info",
+      reasons: [],
     },
     expected: "○ alpha [project] v1 (uninstalled)",
   },
   {
-    plugin: { status: "available", name: "alpha", version: "1" },
+    plugin: { status: "available", name: "alpha", version: "1", reasons: [] },
     expected: "○ alpha v1 (available)",
   },
-  { plugin: { status: "remote", name: "alpha", version: "1" }, expected: "◌ alpha v1 (remote)" },
+  {
+    plugin: { status: "remote", name: "alpha", version: "1", reasons: [] },
+    expected: "◌ alpha v1 (remote)",
+  },
   {
     plugin: { status: "unavailable", name: "alpha", version: "1", reasons: ["invalid manifest"] },
     expected: "⊘ alpha v1 (unavailable) {invalid manifest}",
@@ -202,7 +217,6 @@ const ROW_CASES = [
       scope: "user",
       version: "2",
       reasons: [],
-      dependencies: [],
     },
     expected: "● alpha v2 (upgradable)",
   },
@@ -213,7 +227,6 @@ const ROW_CASES = [
       scope: "user",
       version: "1",
       reasons: ["lsp"],
-      dependencies: [],
     },
     expected: "◉ alpha v1 (partially-installed) {lsp}",
   },
@@ -224,7 +237,6 @@ const ROW_CASES = [
       scope: "user",
       version: "2",
       reasons: ["lsp"],
-      dependencies: [],
     },
     expected: "● alpha v2 (partially-upgradable) {lsp}",
   },
@@ -245,6 +257,7 @@ const ROW_CASES = [
       scope: "user",
       version: "1",
       reasons: ["not found"],
+      severity: "error",
     },
     expected: "⊘ alpha v1 (failed) {not found}",
   },
@@ -259,23 +272,23 @@ const ROW_CASES = [
     expected: "⊘ alpha v1 (manual recovery) {rollback partial}",
   },
   {
-    plugin: { status: "will install", name: "alpha", scope: "user" },
+    plugin: { status: "will install", name: "alpha", scope: "user", reasons: [] },
     expected: "● alpha (will install)",
   },
   {
-    plugin: { status: "will install", name: "alpha", scope: "user", partial: true },
+    plugin: { status: "will install", name: "alpha", scope: "user", partial: true, reasons: [] },
     expected: "● alpha (will partially install)",
   },
   {
-    plugin: { status: "will uninstall", name: "alpha", scope: "user" },
+    plugin: { status: "will uninstall", name: "alpha", scope: "user", reasons: [] },
     expected: "○ alpha (will uninstall)",
   },
   {
-    plugin: { status: "will enable", name: "alpha", scope: "user" },
+    plugin: { status: "will enable", name: "alpha", scope: "user", reasons: [] },
     expected: "● alpha (will enable)",
   },
   {
-    plugin: { status: "will disable", name: "alpha", scope: "user" },
+    plugin: { status: "will disable", name: "alpha", scope: "user", reasons: [] },
     expected: "◍ alpha (will disable)",
   },
   {
@@ -290,7 +303,7 @@ const ROW_CASES = [
     },
     expected: "◍ alpha v1 (disabled)",
   },
-] as const;
+] as const satisfies readonly { plugin: ResolvedRow; expected: string }[];
 
 for (const { plugin, expected } of ROW_CASES) {
   test(`renders exact ${plugin.status} row through the marketplace block`, () => {
@@ -298,7 +311,7 @@ for (const { plugin, expected } of ROW_CASES) {
     const marketplace = { ...MARKETPLACE_BASE, plugins: [plugin] };
 
     // act
-    const rendered = composeMarketplaceBlock(marketplace as never, bothLoadedProbe());
+    const rendered = composeMarketplaceBlock(marketplace, bothLoadedProbe());
 
     // assert
     assert.equal(rendered, `● official [user]\n  ${expected}`);
@@ -379,6 +392,7 @@ for (const { plugin, expectedLines } of [
       needsReload: true,
       name: "alpha",
       description: "summary",
+      reasons: [],
       hint: "enable",
     },
     expectedLines: ["  row", "    summary", "    Run enable on this plugin to use its components."],
@@ -812,7 +826,7 @@ test("the remote and partially-available glyphs preserve exact values on their r
   // act
   const glyphs = [
     renderRemoteRow(
-      { status: "remote", name: "alpha" },
+      { status: "remote", name: "alpha", reasons: [] },
       bothLoadedProbe(),
       "user",
       undefined,
@@ -990,13 +1004,13 @@ test("pluginRow composes scope, version, label, and reasons exactly", () => {
   assert.equal(row, expectedRow);
 });
 
-test("partiallyInstalledRow composes dropped kinds before companion markers", () => {
+test("partiallyInstalledRow composes its resolved reasons in order", () => {
   // arrange
   const expectedRow = "◉ alpha v1.0.0 (partially-installed) {lsp, requires pi-subagents}";
 
   // act
   const row = partiallyInstalledRow(
-    { name: "alpha", version: "1.0.0", reasons: ["lsp"], dependencies: ["agents"] },
+    { name: "alpha", version: "1.0.0", reasons: ["lsp", "requires pi-subagents"] },
     "user",
     neitherLoadedProbe(),
   );
@@ -1012,7 +1026,7 @@ test("installedLikeRow composes an exact transition row", () => {
   // act
   const row = installedLikeRow(
     "●",
-    { name: "alpha", scope: "project", dependencies: [] },
+    { name: "alpha", scope: "project" },
     "user",
     "v1.0.0",
     "(installed)",
@@ -1036,6 +1050,7 @@ for (const { name, row, expected } of [
           version: "1.0.0",
           severity: "info",
           needsReload: true,
+          reasons: [],
         },
         bothLoadedProbe(),
         "user",
@@ -1046,7 +1061,7 @@ for (const { name, row, expected } of [
     name: "renderAvailableRow renders an entry-derived reason",
     row: () =>
       renderAvailableRow(
-        { status: "available", name: "alpha", version: "1.0.0" },
+        { status: "available", name: "alpha", version: "1.0.0", reasons: [] },
         bothLoadedProbe(),
         "user",
         ["installs disabled"],
@@ -1057,7 +1072,7 @@ for (const { name, row, expected } of [
     name: "renderRemoteRow renders an entry-derived reason",
     row: () =>
       renderRemoteRow(
-        { status: "remote", name: "alpha", version: "1.0.0" },
+        { status: "remote", name: "alpha", version: "1.0.0", reasons: [] },
         bothLoadedProbe(),
         "user",
         ["installs disabled"],

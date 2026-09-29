@@ -54,8 +54,8 @@ type ReinstallStatus = "reinstalled" | "skipped" | "failed" | "manual recovery";
 
 /**
  * reinstall's row message union. `dependencies` stays REQUIRED on the
- * `reinstalled` arm so the soft-dep marker injection fires for exactly that arm
- * (D-06 / TYPE-04).
+ * `reinstalled` arm so `resolveRows` can compose its soft-dep markers
+ * (D-06 / TYPE-04 / D-12).
  */
 type ReinstallMsg =
   | PluginReinstalledMessage
@@ -99,6 +99,12 @@ const REINSTALL_RENDER: {
 export const REINSTALL_CONTEXT = {
   Messaging: { label: "Plugin reinstall" },
   render: REINSTALL_RENDER,
+  markers: {
+    reinstalled: true,
+    skipped: false,
+    failed: false,
+    "manual recovery": false,
+  },
 } as const satisfies CommandContext<ReinstallStatus, ReinstallMsg>;
 
 // ───────────────────────────────────────────────────────────────────────────

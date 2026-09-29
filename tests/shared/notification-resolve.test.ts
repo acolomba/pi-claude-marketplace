@@ -9,7 +9,10 @@ import {
   resolveUpdateNoOpEnvelope,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
+import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { Dependency } from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
 import type {
+  MarkerPolicy,
   ResolvedEnvelope,
   ResolvedMarketplace,
   ResolvedRow,
@@ -21,6 +24,7 @@ import type {
   NotificationMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
+  Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 void ({
@@ -530,6 +534,16 @@ function marketplaceWith(
   return [{ name: "official", scope: "user", plugins }];
 }
 
+/** A snapshot in which every companion extension is loaded. */
+function allLoaded(): SoftDepStatus {
+  return { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: true };
+}
+
+/** A snapshot in which no companion extension is loaded. */
+function noneLoaded(): SoftDepStatus {
+  return { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false };
+}
+
 describe("resolveRows", () => {
   test("serializes a failed row's cause chain and rollback phases", () => {
     // arrange
@@ -548,7 +562,7 @@ describe("resolveRows", () => {
     ]);
 
     // act
-    const resolved = resolveRows(marketplaces);
+    const resolved = resolveRows(marketplaces, allLoaded(), {});
 
     // assert
     assert.deepStrictEqual(resolved, [
@@ -582,7 +596,7 @@ describe("resolveRows", () => {
     ]);
 
     // act
-    const resolved = resolveRows(marketplaces);
+    const resolved = resolveRows(marketplaces, allLoaded(), {});
 
     // assert
     assert.deepStrictEqual(resolved[0]!.plugins, [
@@ -609,7 +623,7 @@ describe("resolveRows", () => {
     ]);
 
     // act
-    const resolved = resolveRows(marketplaces);
+    const resolved = resolveRows(marketplaces, allLoaded(), {});
 
     // assert
     assert.deepStrictEqual(resolved[0]!.plugins, [
@@ -640,7 +654,7 @@ describe("resolveRows", () => {
     ]);
 
     // act
-    const resolved = resolveRows(marketplaces);
+    const resolved = resolveRows(marketplaces, allLoaded(), {});
 
     // assert
     assert.deepStrictEqual(resolved[0]!.plugins, [
@@ -658,7 +672,7 @@ describe("resolveRows", () => {
     ]);
   });
 
-  test("copies a non-failure row without a failure key", () => {
+  test("copies a non-failure row without a failure or dependencies key", () => {
     // arrange
     const marketplaces = marketplaceWith([
       {
@@ -671,11 +685,11 @@ describe("resolveRows", () => {
     ]);
 
     // act
-    const resolved = resolveRows(marketplaces);
+    const resolved = resolveRows(marketplaces, allLoaded(), {});
 
     // assert
     assert.deepStrictEqual(resolved[0]!.plugins, [
-      { status: "installed", severity: "info", needsReload: true, name: "alpha", dependencies: [] },
+      { status: "installed", severity: "info", needsReload: true, name: "alpha", reasons: [] },
     ]);
   });
 
@@ -691,7 +705,7 @@ describe("resolveRows", () => {
     } satisfies PluginFailedMessage;
 
     // act
-    resolveRows(marketplaceWith([row]), () => true);
+    resolveRows(marketplaceWith([row]), allLoaded(), {}, () => true);
 
     // assert
     assert.deepStrictEqual(row, {
@@ -713,7 +727,7 @@ describe("resolveRows", () => {
     } satisfies PluginNotificationMessage;
 
     // act
-    const resolved = resolveRows(marketplaceWith([row]), () => false);
+    const resolved = resolveRows(marketplaceWith([row]), allLoaded(), {}, () => false);
 
     // assert
     assert.deepStrictEqual(row, {
@@ -723,7 +737,7 @@ describe("resolveRows", () => {
       name: "orphan",
     });
     assert.deepStrictEqual(resolved[0]!.plugins, [
-      { status: "disabled", severity: "error", needsReload: false, name: "orphan" },
+      { status: "disabled", severity: "error", needsReload: false, name: "orphan", reasons: [] },
     ]);
   });
 
@@ -732,11 +746,13 @@ describe("resolveRows", () => {
     const row = Object.freeze({ status: "unknown", severity: "info" });
 
     // act
-    const resolved = resolveRows(marketplaceWith([row as never]), () => false);
+    const resolved = resolveRows(marketplaceWith([row as never]), allLoaded(), {}, () => false);
 
     // assert
     assert.deepStrictEqual(row, { status: "unknown", severity: "info" });
-    assert.deepStrictEqual(resolved[0]!.plugins, [{ status: "unknown", severity: "info" }]);
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      { status: "unknown", severity: "info", reasons: [] },
+    ]);
   });
 
   for (const { row, expectedRow } of [
@@ -797,6 +813,7 @@ describe("resolveRows", () => {
         severity: "info",
         needsReload: true,
         name: "alpha",
+        reasons: [],
         hint: "enable",
       },
     },
@@ -806,7 +823,7 @@ describe("resolveRows", () => {
   }[]) {
     test(`resolves the ${expectedRow.hint} hint on a flagged ${row.status} row`, () => {
       // act
-      const resolved = resolveRows(marketplaceWith([row]));
+      const resolved = resolveRows(marketplaceWith([row]), allLoaded(), {});
 
       // assert
       assert.deepStrictEqual(resolved[0]!.plugins, [expectedRow]);
@@ -833,7 +850,13 @@ describe("resolveRows", () => {
         name: "alpha",
         enableHint: false,
       },
-      expectedRow: { status: "disabled", severity: "info", needsReload: true, name: "alpha" },
+      expectedRow: {
+        status: "disabled",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        reasons: [],
+      },
     },
   ] as const satisfies readonly {
     flag: string;
@@ -842,7 +865,7 @@ describe("resolveRows", () => {
   }[]) {
     test(`resolves no hint from ${flag} on a ${row.status} row`, () => {
       // act
-      const resolved = resolveRows(marketplaceWith([row]));
+      const resolved = resolveRows(marketplaceWith([row]), allLoaded(), {});
 
       // assert
       assert.deepStrictEqual(resolved[0]!.plugins, [expectedRow]);
@@ -854,13 +877,217 @@ describe("resolveRows", () => {
     const row = { status: "upgradable", name: "alpha", reasons: [], partialHint: true };
 
     // act
-    const resolved = resolveRows(marketplaceWith([row as never]));
+    const resolved = resolveRows(marketplaceWith([row as never]), allLoaded(), {});
 
     // assert
     assert.deepStrictEqual(resolved[0]!.plugins, [
       { status: "upgradable", name: "alpha", reasons: [], partialHint: true },
     ]);
   });
+
+  for (const { dependency, policy, companion, snapshot, expectedReasons } of [
+    {
+      dependency: "agents",
+      policy: "on",
+      companion: "missing",
+      snapshot: noneLoaded(),
+      expectedReasons: ["orphan rewake", "requires pi-subagents"],
+    },
+    {
+      dependency: "agents",
+      policy: "on",
+      companion: "loaded",
+      snapshot: allLoaded(),
+      expectedReasons: ["orphan rewake"],
+    },
+    {
+      dependency: "agents",
+      policy: "off",
+      companion: "missing",
+      snapshot: noneLoaded(),
+      expectedReasons: ["orphan rewake"],
+    },
+    {
+      dependency: "agents",
+      policy: "off",
+      companion: "loaded",
+      snapshot: allLoaded(),
+      expectedReasons: ["orphan rewake"],
+    },
+    {
+      dependency: "mcp",
+      policy: "on",
+      companion: "missing",
+      snapshot: noneLoaded(),
+      expectedReasons: ["orphan rewake", "requires pi-mcp"],
+    },
+    {
+      dependency: "mcp",
+      policy: "on",
+      companion: "loaded",
+      snapshot: allLoaded(),
+      expectedReasons: ["orphan rewake"],
+    },
+    {
+      dependency: "mcp",
+      policy: "off",
+      companion: "missing",
+      snapshot: noneLoaded(),
+      expectedReasons: ["orphan rewake"],
+    },
+    {
+      dependency: "mcp",
+      policy: "off",
+      companion: "loaded",
+      snapshot: allLoaded(),
+      expectedReasons: ["orphan rewake"],
+    },
+    {
+      dependency: "workflows",
+      policy: "on",
+      companion: "missing",
+      snapshot: noneLoaded(),
+      expectedReasons: ["orphan rewake", "requires pi-dynamic-workflows"],
+    },
+    {
+      dependency: "workflows",
+      policy: "on",
+      companion: "loaded",
+      snapshot: allLoaded(),
+      expectedReasons: ["orphan rewake"],
+    },
+    {
+      dependency: "workflows",
+      policy: "off",
+      companion: "missing",
+      snapshot: noneLoaded(),
+      expectedReasons: ["orphan rewake"],
+    },
+    {
+      dependency: "workflows",
+      policy: "off",
+      companion: "loaded",
+      snapshot: allLoaded(),
+      expectedReasons: ["orphan rewake"],
+    },
+  ] as const satisfies readonly {
+    dependency: Dependency;
+    policy: "on" | "off";
+    companion: "loaded" | "missing";
+    snapshot: SoftDepStatus;
+    expectedReasons: readonly Reason[];
+  }[]) {
+    test(`D-12: a ${dependency} dependency with the policy ${policy} and its companion ${companion} resolves reasons ${expectedReasons.join(", ")}`, () => {
+      // arrange
+      const row = {
+        status: "installed",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        dependencies: [dependency],
+        reasons: ["orphan rewake"],
+      } satisfies PluginNotificationMessage;
+      const markers = { installed: policy === "on" };
+
+      // act
+      const resolved = resolveRows(marketplaceWith([row]), snapshot, markers);
+
+      // assert
+      assert.deepStrictEqual(resolved[0]!.plugins, [
+        {
+          status: "installed",
+          severity: "info",
+          needsReload: true,
+          name: "alpha",
+          reasons: expectedReasons,
+        },
+      ]);
+    });
+  }
+
+  for (const { title, row, markers, expectedRow } of [
+    {
+      title: "PMOD-01: puts content reasons first, then the agents, mcp, workflows markers",
+      row: {
+        status: "updated",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        from: "1.0.0",
+        to: "2.0.0",
+        dependencies: ["workflows", "mcp", "agents"],
+        reasons: ["orphan rewake", "malformed skill"],
+      },
+      markers: { updated: true },
+      expectedRow: {
+        status: "updated",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        from: "1.0.0",
+        to: "2.0.0",
+        reasons: [
+          "orphan rewake",
+          "malformed skill",
+          "requires pi-subagents",
+          "requires pi-mcp",
+          "requires pi-dynamic-workflows",
+        ],
+      },
+    },
+    {
+      title: "PMOD-01: keeps duplicate content reasons ahead of the markers",
+      row: {
+        status: "partially-installed",
+        name: "alpha",
+        dependencies: ["mcp"],
+        reasons: ["lsp", "lsp"],
+      },
+      markers: { "partially-installed": true },
+      expectedRow: {
+        status: "partially-installed",
+        name: "alpha",
+        reasons: ["lsp", "lsp", "requires pi-mcp"],
+      },
+    },
+    {
+      title: "D-12: a row without dependencies gets no marker with the policy on",
+      row: { status: "partially-installed", name: "alpha", reasons: ["lsp"] },
+      markers: { "partially-installed": true },
+      expectedRow: { status: "partially-installed", name: "alpha", reasons: ["lsp"] },
+    },
+    {
+      title: "D-12: a status the policy does not name gets no marker",
+      row: {
+        status: "reinstalled",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        dependencies: ["agents"],
+      },
+      markers: { installed: true },
+      expectedRow: {
+        status: "reinstalled",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        reasons: [],
+      },
+    },
+  ] as const satisfies readonly {
+    title: string;
+    row: PluginNotificationMessage;
+    markers: MarkerPolicy;
+    expectedRow: ResolvedRow;
+  }[]) {
+    test(title, () => {
+      // act
+      const resolved = resolveRows(marketplaceWith([row]), noneLoaded(), markers);
+
+      // assert
+      assert.deepStrictEqual(resolved[0]!.plugins, [expectedRow]);
+    });
+  }
 });
 
 describe("resolveNotAddedReason", () => {

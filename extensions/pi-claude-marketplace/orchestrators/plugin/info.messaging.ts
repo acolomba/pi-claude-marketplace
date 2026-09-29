@@ -78,4 +78,7 @@ const PLUGIN_INFO_RENDER: {
 export const PLUGIN_INFO_CONTEXT = {
   Messaging: { label: "Plugin info" },
   render: PLUGIN_INFO_RENDER,
+  markers: {
+    skipped: false,
+  },
 } as const satisfies CommandContext<PluginInfoStatus, PluginInfoCascadeMsg>;

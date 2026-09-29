@@ -21,8 +21,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 
 /**
  * uninstall's private status set: a success `uninstalled` row or a `failed`
- * row. NO soft-dep marker ever appears on either row (MSG-SD-3) -- neither arm
- * declares `dependencies`, so `composeReasons` receives both flags `false`.
+ * row. NO soft-dep marker ever appears on either row (MSG-SD-3) -- neither row
+ * declares `dependencies`, and the marker policy is off for both.
  */
 type UninstallStatus = "uninstalled" | "failed";
 
@@ -52,4 +52,8 @@ const UNINSTALL_RENDER: {
 export const UNINSTALL_CONTEXT = {
   Messaging: { label: "Plugin uninstall" },
   render: UNINSTALL_RENDER,
+  markers: {
+    uninstalled: false,
+    failed: false,
+  },
 } as const satisfies CommandContext<UninstallStatus, UninstallMsg>;

@@ -7,6 +7,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts";
 
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 test("exports the complete fetch command context", () => {
   // arrange
@@ -24,7 +25,7 @@ test("exports the complete fetch command context", () => {
   const renderKeys = Object.keys(FETCH_CONTEXT.render);
 
   // assert
-  assert.deepEqual(contextKeys, ["Messaging", "render"]);
+  assert.deepEqual(contextKeys, ["Messaging", "render", "markers"]);
   assert.deepEqual(FETCH_CONTEXT.Messaging, { label: "Plugin fetch" });
   assert.deepEqual(renderKeys, expectedRenderKeys);
 });
@@ -36,7 +37,7 @@ test("renders an available post-fetch row without candidate reasons or scope", (
     name: "alpha",
     version: "1.2.3",
     reasons: ["installs disabled"],
-  } as const satisfies FetchMsg;
+  } as const satisfies ResolvedRow<FetchMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -58,7 +59,7 @@ test("renders a partially-available post-fetch row with complete reasons", () =>
     name: "beta",
     version: "2.0.0",
     reasons: ["unsupported hooks"],
-  } as const satisfies FetchMsg;
+  } as const satisfies ResolvedRow<FetchMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
@@ -79,7 +80,7 @@ test("renders an unavailable post-fetch row without a scope bracket", () => {
     status: "unavailable",
     name: "gamma",
     reasons: ["permission denied"],
-  } as const satisfies FetchMsg;
+  } as const satisfies ResolvedRow<FetchMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: true,
@@ -100,7 +101,7 @@ test("renders a bare remote post-fetch row without candidate reasons", () => {
     status: "remote",
     name: "delta",
     reasons: ["installs disabled"],
-  } as const satisfies FetchMsg;
+  } as const satisfies ResolvedRow<FetchMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: false,
@@ -123,7 +124,7 @@ test("renders a skipped no-op row with scope, version, and reason", () => {
     scope: "project",
     version: "3.1.4",
     reasons: ["up-to-date"],
-  } as const satisfies FetchMsg;
+  } as const satisfies ResolvedRow<FetchMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -138,7 +139,7 @@ test("renders a skipped no-op row with scope, version, and reason", () => {
   assert.equal(Object.hasOwn(row, "needsReload"), false);
 });
 
-test("renders a failed fetch row without leaking its cause into the row body", () => {
+test("renders a failed fetch row without leaking its failure detail into the row body", () => {
   // arrange
   const row = {
     status: "failed",
@@ -146,8 +147,12 @@ test("renders a failed fetch row without leaking its cause into the row body", (
     name: "zeta",
     version: "4.0.0",
     reasons: ["network unreachable"],
-    cause: new Error("socket closed"),
-  } as const satisfies FetchMsg;
+    failure: {
+      cause: { causeChain: ["socket closed"], truncated: false },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  } as const satisfies ResolvedRow<FetchMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,

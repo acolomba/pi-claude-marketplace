@@ -6,6 +6,7 @@ import { mock, verify, when } from "strong-mock";
 import { type PluginAvailableMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import {
   type PluginDisabledMessage,
+  type PluginInstalledMessage,
   type PluginNotificationMessage,
   type ReconcileAppliedCascadeMessage,
   type Severity,
@@ -27,12 +28,14 @@ import type {
   ExtensionContext,
   SoftDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type ControlledMessage = PluginAvailableMessage | PluginDisabledMessage;
 type ControlledStatus = ControlledMessage["status"];
+type ResolvedAvailableRow = ResolvedRow<PluginAvailableMessage>;
 
-void (((row: PluginAvailableMessage, probe: SoftDepStatus, scope: Scope) =>
+void (((row: ResolvedAvailableRow, probe: SoftDepStatus, scope: Scope) =>
   `${row.name}:${probe.piSubagentsLoaded.toString()}:${scope}`) satisfies RenderFn<PluginAvailableMessage>);
 void ({
   Messaging: { label: "Plugin inspect" },
@@ -40,6 +43,7 @@ void ({
     available: (row) => row.name,
     disabled: (row) => row.name,
   },
+  markers: { available: false, disabled: false },
 } satisfies CommandContext<ControlledStatus, ControlledMessage>);
 void ([{ status: "available", name: "alpha" }] as const satisfies Single<PluginAvailableMessage>);
 void ([
@@ -54,12 +58,19 @@ void ({
 
 void (
   // @ts-expect-error render functions return strings
-  ((row: PluginAvailableMessage) => row.name.length) satisfies RenderFn<PluginAvailableMessage>
+  ((row: ResolvedAvailableRow) => row.name.length) satisfies RenderFn<PluginAvailableMessage>
 );
 void ({
   Messaging: { label: "Plugin inspect" },
   // @ts-expect-error every declared status requires a render arm
   render: {},
+  markers: { available: false },
+} satisfies CommandContext<"available", PluginAvailableMessage>);
+void ({
+  Messaging: { label: "Plugin inspect" },
+  render: { available: (row) => row.name },
+  // @ts-expect-error every declared status requires a marker policy value
+  markers: {},
 } satisfies CommandContext<"available", PluginAvailableMessage>);
 void (
   // @ts-expect-error Single requires exactly one row
@@ -76,6 +87,7 @@ void ({
 void ({
   Messaging: { label: "Plugin inspect" },
   render: { available: () => "row" },
+  markers: { available: false },
 } satisfies CommandContext<
   "available",
   // @ts-expect-error the context message parameter is bounded by the plugin row union
@@ -163,6 +175,7 @@ function createControlledContext(t: TestContext, label: string): ControlledConte
   const context = {
     Messaging: { label },
     render: { available, disabled },
+    markers: { available: false, disabled: false },
   } satisfies CommandContext<ControlledStatus, ControlledMessage>;
   return { context, calls };
 }
@@ -444,6 +457,86 @@ test("the no-op update wrapper dispatches surviving rows before its headline", (
   verify(harness.ui);
 });
 
+for (const { entry, emit, expectedMessage } of [
+  {
+    entry: "notifyWithContext",
+    emit: (harness, context, rows) => {
+      notifyWithContext(harness.ctx, harness.pi, context, rows, undefined, "single");
+    },
+    expectedMessage: "● official [user]\n  alpha {requires pi-subagents}",
+  },
+  {
+    entry: "notifyUpdateWithContext",
+    emit: (harness, context, rows) => {
+      notifyUpdateWithContext(harness.ctx, harness.pi, context, rows, "single", {
+        verb: "updated",
+        count: 1,
+      });
+    },
+    expectedMessage: "● official [user]\n  alpha {requires pi-subagents}",
+  },
+  {
+    entry: "notifyUpdateNoOpWithContext",
+    emit: (harness, context, rows) => {
+      notifyUpdateNoOpWithContext(harness.ctx, harness.pi, context, rows, "single");
+    },
+    expectedMessage:
+      "● official [user]\n  alpha {requires pi-subagents}\n\nPlugin update: nothing to update",
+  },
+  {
+    entry: "notifyReconcileAppliedWithContext",
+    emit: (harness, context, rows) => {
+      notifyReconcileAppliedWithContext(harness.ctx, harness.pi, context, {
+        kind: "reconcile-applied-cascade",
+        marketplaces: rows,
+      });
+    },
+    expectedMessage:
+      "● official [user]\n  alpha {requires pi-subagents}\n\nPlugin inspect: 1 success",
+  },
+] satisfies readonly {
+  entry: string;
+  emit: (
+    harness: Harness,
+    context: CommandContext<"installed", PluginInstalledMessage>,
+    rows: readonly MarketplaceRows<PluginInstalledMessage>[],
+  ) => void;
+  expectedMessage: string;
+}[]) {
+  test(`D-12: ${entry} composes row markers under the context's marker policy`, () => {
+    // arrange
+    const harness = createHarness({ message: expectedMessage });
+    const context = {
+      Messaging: { label: "Plugin inspect" },
+      render: { installed: (row) => `${row.name} {${row.reasons.join(", ")}}` },
+      markers: { installed: true },
+    } satisfies CommandContext<"installed", PluginInstalledMessage>;
+    const rows: readonly MarketplaceRows<PluginInstalledMessage>[] = [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            dependencies: ["agents"],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
+      },
+    ];
+
+    // act
+    emit(harness, context, rows);
+
+    // assert
+    verify(harness.ctx);
+    verify(harness.pi);
+    verify(harness.ui);
+  });
+}
+
 test("a missing render arm reports its named row before the adjacent present arm", (t) => {
   // arrange
   const harness = createHarness({
@@ -464,6 +557,7 @@ test("a missing render arm reports its named row before the adjacent present arm
   const context = {
     Messaging: { label: "Broken command" },
     render: { available },
+    markers: { available: false },
   } as CommandContext<string, PluginNotificationMessage>;
   const missing = disabledRow("orphan");
   const rows: readonly MarketplaceRows<PluginNotificationMessage>[] = [
@@ -518,6 +612,7 @@ test("a frozen unnamed missing-arm row still precedes the adjacent present arm",
   const context = {
     Messaging: { label: "Broken command" },
     render: { available },
+    markers: { available: false },
   } as CommandContext<string, PluginNotificationMessage>;
   const missing = Object.freeze({ status: "unknown" }) as never;
   const rows: readonly MarketplaceRows<PluginNotificationMessage>[] = [

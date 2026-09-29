@@ -44,4 +44,8 @@ export const REMOVE_CONTEXT = {
     uninstalled: (p, probe, mpScope) => renderUninstalledRow(p, probe, mpScope),
     failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
   },
+  markers: {
+    uninstalled: false,
+    failed: false,
+  },
 } as const satisfies CommandContext<RemoveRowStatus, RemoveRowMsg>;

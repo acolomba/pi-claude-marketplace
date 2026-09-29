@@ -91,4 +91,12 @@ const FETCH_RENDER: { [K in FetchStatus]: RenderFn<Extract<FetchMsg, { status: K
 export const FETCH_CONTEXT = {
   Messaging: { label: "Plugin fetch" },
   render: FETCH_RENDER,
+  markers: {
+    available: false,
+    "partially-available": false,
+    unavailable: false,
+    remote: false,
+    skipped: false,
+    failed: false,
+  },
 } as const satisfies CommandContext<FetchStatus, FetchMsg>;

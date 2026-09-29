@@ -125,6 +125,13 @@ export const PENDING_CONTEXT = {
     "will disable": renderWillDisable,
     failed: renderFailed,
   },
+  markers: {
+    "will install": false,
+    "will uninstall": false,
+    "will enable": false,
+    "will disable": false,
+    failed: false,
+  },
 } as const satisfies CommandContext<PendingStatus, PendingMsg>;
 
 // ---------------------------------------------------------------------------
@@ -154,8 +161,8 @@ export type ReconcileAppliedMsg =
   | PluginPartiallyInstalledMessage;
 
 /**
- * `(installed)` -- realized install row. Only this arm reads `dependencies` for
- * the soft-dep marker brace; it also folds in any `reasons`. Lifted verbatim
+ * `(installed)` -- realized install row. Its resolved `reasons` carry any
+ * soft-dep marker the context's marker policy allows (D-12). Lifted verbatim
  * from the central `renderPluginRow` `installed` arm.
  */
 const renderInstalled: RenderFn<PluginInstalledMessage> = (p, probe, mpScope) =>
@@ -188,8 +195,8 @@ const renderUninstalled: RenderFn<PluginUninstalledMessage> = (p, probe, mpScope
  * `(partially-installed)` -- BFILL-01 / D-68-04 realized partial-backfill row. A
  * load-time backfill re-materialized the plugin's now-supported components but
  * its re-resolved unsupported set is still non-empty, so it stays degraded.
- * Routes through the SOLE `partiallyInstalledRow` composition site (the `◉` glyph),
- * threading `dependencies` so the soft-dep markers fire exactly as on a clean
+ * Routes through the SOLE `partiallyInstalledRow` composition site (the `◉` glyph);
+ * its marker policy is on, so the soft-dep markers appear exactly as on a clean
  * `(installed)` row. The byte-exact token is frozen later; severity is a
  * sensible default here.
  */
@@ -225,5 +232,12 @@ export const RECONCILE_APPLIED_CONTEXT = {
     disabled: renderDisabled,
     failed: renderFailed,
     "partially-installed": renderForceInstalled,
+  },
+  markers: {
+    installed: true,
+    "partially-installed": true,
+    uninstalled: false,
+    disabled: false,
+    failed: false,
   },
 } as const satisfies CommandContext<ReconcileAppliedStatus, ReconcileAppliedMsg>;

@@ -3,8 +3,6 @@ import { softDepMarkers } from "./concerns/soft-dep.ts";
 import { formatCauseChain } from "./errors.ts";
 import { tallyCategory } from "./notification-summary.ts";
 
-import type { SoftDepStatus } from "../platform/pi-api.ts";
-import type { Dependency } from "./concerns/soft-dep.ts";
 import type { SerializedCauseChain } from "./errors.ts";
 import type {
   ResolvedEnvelope,
@@ -15,12 +13,10 @@ import type {
   RowHint,
 } from "./notification-resolve.ts";
 import type {
-  ContentReason,
   MarketplaceDetails,
   MarketplaceInfoCascadeMessage,
   MarketplaceInfoMessage,
   MarketplaceNotAddedMessage,
-  MarketplaceNotificationMessage,
   PluginAvailableMessage,
   PluginDisabledMessage,
   PluginInfoCascadeMessage,
@@ -35,6 +31,7 @@ import type {
   Reason,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
+import type { SoftDepStatus } from "../platform/pi-api.ts";
 
 /**
  * Exact notification grammar. Severity and the summary line are resolved in
@@ -238,7 +235,7 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  * (guarantees no soft-dep marker leaks onto mp-skipped rows). Every call site
  * in this file MUST pass the probe.
  */
-export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus): string {
+export function renderMpHeader(mp: ResolvedMarketplace, probe: SoftDepStatus): string {
   switch (mp.status) {
     case "added":
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (added)`;
@@ -345,8 +342,9 @@ export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDe
 // legacy envelope the deferred-central standalone surfaces still depend on, so
 // it stays until those surfaces relocate.
 //
-// SNM-16: soft-dep markers are injected at render time from the per-row
-// `dependencies?` declaration + the threaded `SoftDepStatus` probe. The
+// SNM-16 / D-12: soft-dep markers are composed in `resolveRows` from the
+// per-row `dependencies?` declaration, the `SoftDepStatus` snapshot, and the
+// command's marker policy, so each row arrives with its final `reasons`. The
 // switch lists every status and has no default arm, so a future
 // `PluginNotificationMessage` variant becomes a type and lint error at this
 // switch.
@@ -490,8 +488,10 @@ export function composeVersionArrow(from: string, to: string): string {
 }
 
 /**
- * Compose the MSG-GR-4 reasons-block, injecting soft-dep markers from
- * the per-row `dependencies?` declaration + the threaded probe.
+ * Compose the MSG-GR-4 reasons-block, appending the soft-dep markers the
+ * declares-flags and the threaded probe call for. Plugin rows reach their
+ * renderers resolved, with the markers already in `reasons` (D-12), so every
+ * plugin-row caller passes three `false` flags.
  *
  *  - Starts from the caller-provided `reasons` array (or `[]` when the
  *  variant lacks a reasons field).
@@ -535,14 +535,12 @@ export function composeReasons(
  * INCLUDING the parens, so the `"(manual recovery)"` literal keeps its space
  * verbatim). The `p` param is the structural subset those variants share: a
  * required `name` and an optional `scope` / `version` / `reasons`. All three
- * declares-flags are `false` (these arms never carry `dependencies`).
+ * declares-flags are `false`: a resolved row's `reasons` already carries any
+ * marker its command's policy allows.
  *
- * `reasons` is OPTIONAL because `PluginDisabledMessage` declares it so;
- * `composeReasons` already treats `undefined` as the empty list, so a required
- * `readonly ContentReason[]` caller is unaffected. This is what lets the
- * `disabled` arm share this composer instead of restating its body -- the four
- * command-local copies were byte-identical to it, which is exactly the
- * property their comments asked a reader to maintain by hand.
+ * `reasons` is OPTIONAL so the composer accepts any row shape;
+ * `composeReasons` treats `undefined` as the empty list. This is what lets the
+ * `disabled` arm share this composer instead of restating its body.
  */
 export function pluginRow(
   icon: string,
@@ -550,7 +548,7 @@ export function pluginRow(
     readonly name: string;
     readonly scope?: Scope;
     readonly version?: string;
-    readonly reasons?: readonly ContentReason[];
+    readonly reasons?: readonly Reason[];
   },
   mpScope: Scope,
   label: string,
@@ -571,24 +569,18 @@ export function pluginRow(
  * central `renderPluginRow` switch AND the install / update command-local
  * render maps, so the bytes stay identical across surfaces (D-11 "call, never
  * duplicate"). Uses the dedicated `ICON_PARTIALLY_INSTALLED` (`◉`) glyph; the
- * reasons brace carries the dropped-component detail. Unlike `pluginRow` it
- * threads the optional `dependencies` so the `{requires pi-subagents}` /
- * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` soft-dep markers
- * compose into the SAME brace AFTER the
- * dropped-component reasons (MSG-GR-4) -- exactly like the `installed` arm. The
- * partially-available arm still stages the SUPPORTED components, so a
- * partial-install/update success row legitimately carries `dependencies` and the
- * marker is most relevant precisely there. The list/info INVENTORY partial rows
- * omit `dependencies`, so the markers never fire (the row renders
- * byte-identically to a bare `(partially-installed)` row).
+ * reasons brace carries the dropped-component detail. A partial-install or
+ * partial-update success row still stages the SUPPORTED components, so its
+ * resolved `reasons` can end with the `{requires pi-subagents}` /
+ * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` markers, after the
+ * dropped-component reasons (MSG-GR-4).
  */
 export function partiallyInstalledRow(
   p: {
     readonly name: string;
     readonly scope?: Scope;
     readonly version?: string;
-    readonly reasons: readonly ContentReason[];
-    readonly dependencies?: readonly Dependency[];
+    readonly reasons: readonly Reason[];
   },
   mpScope: Scope,
   probe: SoftDepStatus,
@@ -599,37 +591,24 @@ export function partiallyInstalledRow(
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(partially-installed)",
-    composeReasons(
-      p.reasons,
-      p.dependencies?.includes("agents") ?? false,
-      p.dependencies?.includes("mcp") ?? false,
-      p.dependencies?.includes("workflows") ?? false,
-      probe,
-    ),
+    composeReasons(p.reasons, false, false, false, probe),
   ]);
 }
 
 /**
  * WR-03: SOLE composition site for the soft-dep-bearing
- * `installed` / `updated` / `reinstalled` plugin rows. Folds the
- * 7 command-arm copies that each repeated the same
- * `joinTokens([icon, name, scope, versionToken, label,
- * composeReasons(reasons, dependencies.includes("agents"),
- * dependencies.includes("mcp"), dependencies.includes("workflows"),
- * probe)])` block, differing ONLY in their
- * version token (`renderVersion(p.version)` vs `composeVersionArrow(p.from,
- * p.to)`), their parenthesized `label`, and whether they thread `p.reasons` or
- * `undefined`. Those three remain caller-supplied so the byte form is verbatim;
- * the `dependencies.includes(...)` soft-dep gate + `composeReasons`
- * composition is owned here (D-11 "call, never duplicate"), keeping every
- * soft-dep arm byte-identical to one another and to the central
- * `renderPluginRow` `installed` arm.
+ * `installed` / `updated` / `reinstalled` plugin rows. The command arms differ
+ * ONLY in their version token (`renderVersion(p.version)` vs
+ * `composeVersionArrow(p.from, p.to)`), their parenthesized `label`, and the
+ * reasons they thread. Those three remain caller-supplied so the byte form is
+ * verbatim; the `composeReasons` composition is owned here (D-11 "call, never
+ * duplicate"), keeping every soft-dep arm byte-identical to one another and to
+ * the central `renderPluginRow` `installed` arm.
  *
  * `versionToken` is the already-rendered version slot (the caller passes
- * `renderVersion(...)` or `composeVersionArrow(...)`); `reasons` is the optional
- * reason set; `dependencies` drives the `{requires pi-subagents}` /
- * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` markers via
- * `composeReasons`.
+ * `renderVersion(...)` or `composeVersionArrow(...)`); `reasons` is the
+ * resolved reason list, which already ends with any `{requires pi-subagents}` /
+ * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` marker (D-12).
  *
  * WR-13 / WR-12: which callers thread `reasons`, over the seven command arms
  * folded here -- ALL of them now pass `p.reasons`: the five `(installed)` arms
@@ -647,12 +626,11 @@ export function installedLikeRow(
   p: {
     readonly name: string;
     readonly scope?: Scope;
-    readonly dependencies: readonly Dependency[];
   },
   mpScope: Scope,
   versionToken: string,
   label: string,
-  reasons: readonly ContentReason[] | undefined,
+  reasons: readonly Reason[] | undefined,
   probe: SoftDepStatus,
 ): string {
   return joinTokens([
@@ -661,13 +639,7 @@ export function installedLikeRow(
     renderScopeBracket(p.scope, mpScope),
     versionToken,
     label,
-    composeReasons(
-      reasons,
-      p.dependencies.includes("agents"),
-      p.dependencies.includes("mcp"),
-      p.dependencies.includes("workflows"),
-      probe,
-    ),
+    composeReasons(reasons, false, false, false, probe),
   ]);
 }
 
@@ -679,7 +651,7 @@ export function installedLikeRow(
  * and every command map cannot drift.
  */
 export function renderUninstalledRow(
-  p: PluginUninstalledMessage,
+  p: ResolvedRow<PluginUninstalledMessage>,
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
@@ -713,10 +685,10 @@ export function renderUninstalledRow(
  * carve-out family never emits soft-dependency markers.
  */
 export function renderAvailableRow(
-  p: PluginAvailableMessage,
+  p: ResolvedRow<PluginAvailableMessage>,
   probe: SoftDepStatus,
   mpScope: Scope,
-  reasons: readonly ContentReason[] | undefined,
+  reasons: readonly Reason[] | undefined,
 ): string {
   return joinTokens([
     ICON_AVAILABLE,
@@ -746,10 +718,10 @@ export function renderAvailableRow(
  * each surface states its own answer at the call site.
  */
 export function renderRemoteRow(
-  p: PluginRemoteMessage,
+  p: ResolvedRow<PluginRemoteMessage>,
   probe: SoftDepStatus,
   mpScope: Scope,
-  reasons: readonly ContentReason[] | undefined,
+  reasons: readonly Reason[] | undefined,
 ): string {
   return joinTokens([
     ICON_REMOTE,
@@ -763,7 +735,7 @@ export function renderRemoteRow(
 
 /** MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field. */
 export function renderUnavailableRow(
-  p: PluginUnavailableMessage,
+  p: ResolvedRow<PluginUnavailableMessage>,
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
@@ -783,7 +755,7 @@ export function renderUnavailableRow(
  * MSG-PL-6 / SNM-11 carve-out: no `scope?` field.
  */
 export function renderPartiallyAvailableRow(
-  p: PluginPartiallyAvailableMessage,
+  p: ResolvedRow<PluginPartiallyAvailableMessage>,
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
@@ -808,7 +780,7 @@ export function renderPartiallyAvailableRow(
  * the record retained.
  */
 export function renderDisabledRow(
-  p: PluginDisabledMessage,
+  p: ResolvedRow<PluginDisabledMessage>,
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
@@ -845,9 +817,11 @@ export function renderDisabledRow(
  * type-complete.
  */
 function renderPendingRow(
-  p: Extract<
-    PluginNotificationMessage,
-    { status: "will install" | "will uninstall" | "will enable" | "will disable" }
+  p: ResolvedRow<
+    Extract<
+      PluginNotificationMessage,
+      { status: "will install" | "will uninstall" | "will enable" | "will disable" }
+    >
   >,
   mpScope: Scope,
 ): string {
@@ -886,14 +860,10 @@ function renderPendingRow(
  * -> here so every per-arm bracket call has the parent marketplace's scope
  * available.
  *
- * Soft-dep marker injection: only the `installed` / `updated` / `reinstalled` /
- * `partially-installed` arms declare `dependencies`; those arms pass
- * `p.dependencies.includes("agents")` / `p.dependencies.includes("mcp")` /
- * `p.dependencies.includes("workflows")` to `composeReasons`. The other 15
- * arms pass `false` for all three declares-flags so the soft-dep markers
- * cannot leak onto rows that structurally never declare a soft dep.
- * `partially-installed` is the one arm whose field is OPTIONAL (WR-03): the
- * success cascades thread the staged counts, the inventory rows omit them.
+ * Soft-dep markers: `p` is a resolved row, so its `reasons` already ends with
+ * the markers `CENTRAL_MARKER_POLICY` allows for the `installed` / `updated` /
+ * `reinstalled` / `partially-installed` rows (D-12). Every arm passes `false`
+ * for all three declares-flags.
  *
  * Per-variant `composeReasons` first argument, over the 19 plugin statuses:
  *  - 7 reasons-less variants (uninstalled, available, remote,
@@ -902,25 +872,19 @@ function renderPendingRow(
  *  pending-tense rows), drop the call entirely;
  *  - 12 reasons-bearing variants (installed, updated, reinstalled, disabled,
  *  unavailable, upgradable, failed, skipped, manual recovery, partially-installed,
- *  partially-upgradable, partially-available) pass `p.reasons`. `installed`,
- *  `updated`, `reinstalled`, and `disabled` are the four arms whose field is
- *  OPTIONAL, so they pass a possibly-undefined value.
+ *  partially-upgradable, partially-available) pass `p.reasons`, which a
+ *  resolved row always carries (empty when it has no reason).
  *
  * NOT rendered here (`notify` composes them as additional
  * indented lines AFTER the row):
  *  - `failed.cause` / `manual recovery.cause` cause-chain trailers.
  *  - `failed.rollbackPartial[]` child rows.
  */
-function renderPluginRow(
-  p: PluginNotificationMessage,
-  probe: SoftDepStatus,
-  mpScope: Scope,
-): string {
+function renderPluginRow(p: ResolvedRow, probe: SoftDepStatus, mpScope: Scope): string {
   switch (p.status) {
     // `installed` (cascade transition AND the list-surface inventory row) --
-    // SURF-05 / D-63-08 threads the optional `reasons` brace through
-    // composeReasons; soft-dep markers append into the SAME brace block per
-    // MSG-GR-4 (a plugin with orphan-rewake AND a missing companion extension
+    // SURF-05 / D-63-08 threads the `reasons` brace through composeReasons;
+    // the resolved soft-dep markers sit in the SAME brace block per MSG-GR-4 (a plugin with orphan-rewake AND a missing companion extension
     // renders as `(installed) {orphan rewake, requires pi-subagents}`). BOTH
     // surfaces can carry a brace: INV-01 stamps `{not in manifest}` on the
     // list inventory row. The brace is omitted only when the composed list is
@@ -933,18 +897,12 @@ function renderPluginRow(
         renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(installed)",
-        composeReasons(
-          p.reasons,
-          p.dependencies.includes("agents"),
-          p.dependencies.includes("mcp"),
-          p.dependencies.includes("workflows"),
-          probe,
-        ),
+        composeReasons(p.reasons, false, false, false, probe),
       ]);
     // `updated` -- WR-12 threads the optional `reasons` brace exactly as the
     // `installed` and `reinstalled` arms do, so an update that degraded a
     // component names the kind instead of rendering a bare success row over it.
-    // Soft-dep markers append into the SAME brace per MSG-GR-4.
+    // The resolved soft-dep markers sit in the SAME brace per MSG-GR-4.
     case "updated":
       return joinTokens([
         ICON_INSTALLED,
@@ -952,18 +910,12 @@ function renderPluginRow(
         renderScopeBracket(p.scope, mpScope),
         composeVersionArrow(p.from, p.to),
         "(updated)",
-        composeReasons(
-          p.reasons,
-          p.dependencies.includes("agents"),
-          p.dependencies.includes("mcp"),
-          p.dependencies.includes("workflows"),
-          probe,
-        ),
+        composeReasons(p.reasons, false, false, false, probe),
       ]);
     // `reinstalled` -- WR-09 threads the optional `reasons` brace exactly as the
     // `installed` arm above, so a reinstall that degraded a component names the
-    // kind instead of rendering a bare success row over it. Soft-dep markers
-    // append into the SAME brace per MSG-GR-4.
+    // kind instead of rendering a bare success row over it. The resolved
+    // soft-dep markers sit in the SAME brace per MSG-GR-4.
     case "reinstalled":
       return joinTokens([
         ICON_INSTALLED,
@@ -971,13 +923,7 @@ function renderPluginRow(
         renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(reinstalled)",
-        composeReasons(
-          p.reasons,
-          p.dependencies.includes("agents"),
-          p.dependencies.includes("mcp"),
-          p.dependencies.includes("workflows"),
-          probe,
-        ),
+        composeReasons(p.reasons, false, false, false, probe),
       ]);
     case "uninstalled":
       return renderUninstalledRow(p, probe, mpScope);

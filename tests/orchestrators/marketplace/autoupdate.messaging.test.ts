@@ -8,10 +8,11 @@ import {
 import { type PluginFailedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 test("exports complete and distinct autoupdate command contexts", () => {
   // arrange
-  const expectedAutoupdateKeys = ["Messaging", "render"];
+  const expectedAutoupdateKeys = ["Messaging", "render", "markers"];
   const expectedRenderKeys = ["failed"];
 
   // act
@@ -37,8 +38,12 @@ test("renders an autoupdate failure with cross-scope, version, and ordered reaso
     scope: "project",
     version: "1.2.3",
     reasons: ["lock held", "permission denied"],
-    cause: new Error("settings write failed"),
-  } as const satisfies PluginFailedMessage;
+    failure: {
+      cause: { causeChain: ["settings write failed"], truncated: false },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  } as const satisfies ResolvedRow<PluginFailedMessage>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -59,7 +64,7 @@ test("renders a noautoupdate failure without an inherited scope or optional vers
     severity: "warning",
     name: "beta",
     reasons: ["lock held"],
-  } as const satisfies PluginFailedMessage;
+  } as const satisfies ResolvedRow<PluginFailedMessage>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,

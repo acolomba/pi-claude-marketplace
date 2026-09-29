@@ -16,6 +16,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
   CascadeNotificationMessage,
   NotificationMessage,
@@ -5168,7 +5169,7 @@ test("context emission renders the disabled enable hint", (t) => {
   } satisfies Parameters<typeof emitContextCascade>[2];
 
   // act
-  emitContextCascade(ctx as never, pi, message, renderRow, hasRenderArm);
+  emitContextCascade(ctx as never, pi, message, renderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5261,7 +5262,7 @@ for (const { name, message, expected } of [
     const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(() => "unused");
 
     // act
-    emitContextCascade(ctx as never, pi, message as never, renderRow, hasRenderArm);
+    emitContextCascade(ctx as never, pi, message as never, renderRow, {}, hasRenderArm);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, expected);
@@ -5768,10 +5769,7 @@ test("raw dispatch preserves absent and explicit severity once each", (t) => {
   );
 });
 
-function renderOwnedRow(
-  row: Parameters<typeof emitContextCascade>[2]["marketplaces"][number]["plugins"][number],
-  _probe: SoftDepStatus,
-): string {
+function renderOwnedRow(row: ResolvedRow, _probe: SoftDepStatus): string {
   return `${row.name} (${row.status})`;
 }
 
@@ -5805,7 +5803,7 @@ test("context dispatch preserves ordered rows and stamped reload hint", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, pi, message, renderRow, hasRenderArm);
+  emitContextCascade(ctx as never, pi, message, renderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5848,7 +5846,7 @@ test("context dispatch forwards the row, the probe, and the enclosing marketplac
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, pi, message, renderRow, hasRenderArm);
+  emitContextCascade(ctx as never, pi, message, renderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5863,6 +5861,54 @@ test("context dispatch forwards the row, the probe, and the enclosing marketplac
   ]);
 });
 
+test("D-12: context dispatch composes each row's markers under the caller's marker policy", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const pi = piWithNothingLoaded();
+  const renderedReasons: (readonly string[])[] = [];
+  const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>((row) => {
+    renderedReasons.push(row.reasons);
+    return `${row.name} (${row.status})`;
+  });
+  const message = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            dependencies: ["agents"],
+            severity: "info",
+            needsReload: false,
+          },
+          {
+            status: "reinstalled",
+            name: "beta",
+            dependencies: ["mcp"],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  } satisfies CascadeNotificationMessage;
+
+  // act
+  emitContextCascade(
+    ctx as never,
+    pi,
+    message,
+    renderRow,
+    { installed: true, reinstalled: false },
+    hasRenderArm,
+  );
+
+  // assert
+  assert.deepStrictEqual(renderedReasons, [["requires pi-subagents"], []]);
+});
+
 test("context dispatch keeps independent parallel captures", async (t) => {
   // arrange
   const first = createContext(t);
@@ -5874,10 +5920,10 @@ test("context dispatch keeps independent parallel captures", async (t) => {
   // act
   await Promise.all([
     Promise.resolve().then(() => {
-      emitContextCascade(first as never, pi, message, renderRow, hasRenderArm);
+      emitContextCascade(first as never, pi, message, renderRow, {}, hasRenderArm);
     }),
     Promise.resolve().then(() => {
-      emitContextCascade(second as never, pi, message, renderRow, hasRenderArm);
+      emitContextCascade(second as never, pi, message, renderRow, {}, hasRenderArm);
     }),
   ]);
 
@@ -5915,8 +5961,8 @@ test("update no-op dispatch preserves empty and non-empty folds", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitUpdateNoOpCascade(empty as never, pi, emptyMessage, emptyRenderRow, hasRenderArm);
-  emitUpdateNoOpCascade(nonEmpty as never, pi, message, nonEmptyRenderRow, hasRenderArm);
+  emitUpdateNoOpCascade(empty as never, pi, emptyMessage, emptyRenderRow, {}, hasRenderArm);
+  emitUpdateNoOpCascade(nonEmpty as never, pi, message, nonEmptyRenderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(empty.ui.notify.mock.calls[0]!.arguments, [
@@ -5952,7 +5998,7 @@ test("reconcile context dispatch keeps its tally and omits reload", (t) => {
   } as const;
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow, hasRenderArm);
+  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5995,7 +6041,7 @@ test("reconcile context dispatch suppresses reload and stamps error severity", (
   } satisfies Parameters<typeof emitReconcileAppliedContextCascade>[2];
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow, hasRenderArm);
+  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6045,6 +6091,7 @@ test("a mixed actionable-skip cascade emits the plural attention summary", (t) =
     pi,
     message,
     (row) => `${row.name} (${row.status})`,
+    {},
     hasRenderArm,
   );
 
@@ -6071,6 +6118,7 @@ test("a marketplace-only failure cascade emits the marketplace failure summary",
     pi,
     message,
     (row) => `${row.name} (${row.status})`,
+    {},
     hasRenderArm,
   );
 
@@ -6099,6 +6147,7 @@ test("an unstamped cascade plugin defaults to info severity and a success tally"
     pi,
     message,
     (row) => `${row.name} (${row.status})`,
+    {},
     hasRenderArm,
   );
 

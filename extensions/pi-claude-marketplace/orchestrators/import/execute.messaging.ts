@@ -56,10 +56,10 @@ export type ImportMsg =
   PluginInstalledMessage | PluginSkippedMessage | PluginFailedMessage | PluginUnavailableMessage;
 
 /**
- * `(installed)` -- cascade install row. Only the `installed` arm reads
- * `dependencies` for the soft-dep marker brace (agents / mcp companion-
- * extension gating); the brace also folds in any `reasons` (e.g. orphan
- * rewake). Lifted verbatim from the central `renderPluginRow` `installed` arm.
+ * `(installed)` -- cascade install row. Only the `installed` status has its
+ * marker policy on, so its resolved `reasons` can end with the agents / mcp
+ * companion-extension markers after any content reason (e.g. orphan rewake).
+ * Lifted verbatim from the central `renderPluginRow` `installed` arm.
  */
 const renderInstalled: RenderFn<PluginInstalledMessage> = (p, probe, mpScope) =>
   installedLikeRow(
@@ -117,5 +117,11 @@ export const IMPORT_CONTEXT = {
     skipped: renderSkipped,
     failed: renderFailed,
     unavailable: renderUnavailable,
+  },
+  markers: {
+    installed: true,
+    skipped: false,
+    failed: false,
+    unavailable: false,
   },
 } as const satisfies CommandContext<ImportStatus, ImportMsg>;

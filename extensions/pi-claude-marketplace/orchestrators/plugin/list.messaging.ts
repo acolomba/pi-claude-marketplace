@@ -159,4 +159,16 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
 export const LIST_CONTEXT = {
   Messaging: { label: "Plugin list" },
   render: LIST_RENDER,
+  markers: {
+    installed: true,
+    available: false,
+    "partially-available": false,
+    unavailable: false,
+    upgradable: false,
+    "partially-installed": false,
+    "partially-upgradable": false,
+    disabled: false,
+    failed: false,
+    remote: false,
+  },
 } as const satisfies CommandContext<ListStatus, ListMsg>;

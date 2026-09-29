@@ -8,6 +8,7 @@ test("exports the complete marketplace-add command context", () => {
   const expected = {
     Messaging: { label: "Marketplace add" },
     render: {},
+    markers: {},
   } as const;
 
   // act
@@ -15,7 +16,7 @@ test("exports the complete marketplace-add command context", () => {
 
   // assert
   assert.deepStrictEqual(context, expected);
-  assert.deepStrictEqual(Object.keys(context), ["Messaging", "render"]);
+  assert.deepStrictEqual(Object.keys(context), ["Messaging", "render", "markers"]);
   assert.deepStrictEqual(Object.keys(context.Messaging), ["label"]);
   assert.deepStrictEqual(Object.keys(context.render), []);
 });

@@ -7,6 +7,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
 
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({
   status: "available",
@@ -27,7 +28,7 @@ void ({ status: "partially-upgradable", name: "alpha" } satisfies ListMsg);
 
 test("exports the complete plugin-list command context", () => {
   // arrange
-  const expectedContextKeys = ["Messaging", "render"];
+  const expectedContextKeys = ["Messaging", "render", "markers"];
   const expectedRenderKeys = [
     "installed",
     "available",
@@ -59,7 +60,7 @@ test("renders an available row without scope, reload state, or description bytes
     version: "1.0.0",
     description: "Available description stays outside the command-owned row.",
     reasons: ["installs disabled"],
-  } as const satisfies ListMsg;
+  } as const satisfies ResolvedRow<ListMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -81,7 +82,7 @@ test("renders an available row without scope, reload state, or description bytes
   assert.strictEqual(Object.hasOwn(row, "needsReload"), false);
 });
 
-test("renders a disabled row without soft-dependency markers", () => {
+test("renders a disabled row with its resolved reasons", () => {
   // arrange
   const row = {
     status: "disabled",
@@ -92,7 +93,7 @@ test("renders a disabled row without soft-dependency markers", () => {
     reasons: ["not in manifest"],
     severity: "info",
     needsReload: false,
-  } as const satisfies ListMsg;
+  } as const satisfies ResolvedRow<ListMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -116,18 +117,22 @@ test("renders a disabled row without soft-dependency markers", () => {
   assert.strictEqual(renderedRow, "◍ beta [project] v2.0.0 (disabled) {not in manifest}");
 });
 
-test("renders a failed row without consuming its cause or lifecycle fields", () => {
+test("renders a failed row without consuming its failure detail or lifecycle fields", () => {
   // arrange
-  const cause = new Error("EACCES: private path");
+  const failure = {
+    cause: { causeChain: ["EACCES: private path"], truncated: false },
+    leaks: [],
+    rollbackPartial: [],
+  };
   const row = {
     status: "failed",
     name: "delta",
     version: "4.0.0",
     scope: "project",
     reasons: ["permission denied", "source missing"],
-    cause,
+    failure,
     severity: "error",
-  } as const satisfies ListMsg;
+  } as const satisfies ResolvedRow<ListMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
@@ -144,7 +149,7 @@ test("renders a failed row without consuming its cause or lifecycle fields", () 
     version: "4.0.0",
     scope: "project",
     reasons: ["permission denied", "source missing"],
-    cause,
+    failure,
     severity: "error",
   });
   assert.strictEqual(
@@ -154,19 +159,18 @@ test("renders a failed row without consuming its cause or lifecycle fields", () 
   assert.strictEqual(Object.hasOwn(row, "needsReload"), false);
 });
 
-test("renders an installed row with durable and missing-companion reasons", () => {
+test("renders an installed row with its durable reasons and resolved markers", () => {
   // arrange
   const row = {
     status: "installed",
     name: "epsilon",
-    dependencies: ["agents", "mcp"],
     version: "sha-123456789abc",
     scope: "project",
-    reasons: ["not in manifest"],
+    reasons: ["not in manifest", "requires pi-subagents", "requires pi-mcp"],
     description: "Installed description stays outside the command-owned row.",
     severity: "info",
     needsReload: false,
-  } as const satisfies ListMsg;
+  } as const satisfies ResolvedRow<ListMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -180,10 +184,9 @@ test("renders an installed row with durable and missing-companion reasons", () =
   assert.deepStrictEqual(row, {
     status: "installed",
     name: "epsilon",
-    dependencies: ["agents", "mcp"],
     version: "sha-123456789abc",
     scope: "project",
-    reasons: ["not in manifest"],
+    reasons: ["not in manifest", "requires pi-subagents", "requires pi-mcp"],
     description: "Installed description stays outside the command-owned row.",
     severity: "info",
     needsReload: false,
@@ -202,7 +205,7 @@ test("renders a partially-available row without a scope or reload stamp", () => 
     version: "5.0.0",
     description: "Partial candidate description stays outside the row.",
     reasons: ["unsupported hooks", "lsp"],
-  } as const satisfies ListMsg;
+  } as const satisfies ResolvedRow<ListMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
@@ -224,17 +227,16 @@ test("renders a partially-available row without a scope or reload stamp", () => 
   assert.strictEqual(Object.hasOwn(row, "needsReload"), false);
 });
 
-test("renders a partially-installed row without inventory soft-dependency markers", () => {
+test("renders a partially-installed row with its resolved reasons", () => {
   // arrange
   const row = {
     status: "partially-installed",
     name: "iota",
-    dependencies: ["agents", "mcp"],
     version: "6.0.0",
     scope: "project",
     description: "Partial installation description stays outside the row.",
     reasons: ["unsupported hooks"],
-  } as const satisfies ListMsg;
+  } as const satisfies ResolvedRow<ListMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -248,7 +250,6 @@ test("renders a partially-installed row without inventory soft-dependency marker
   assert.deepStrictEqual(row, {
     status: "partially-installed",
     name: "iota",
-    dependencies: ["agents", "mcp"],
     version: "6.0.0",
     scope: "project",
     description: "Partial installation description stays outside the row.",
@@ -270,7 +271,7 @@ test("renders a partially-upgradable row in its marketplace scope", () => {
     scope: "user",
     description: "Partial upgrade description stays outside the row.",
     reasons: ["unsupported component"],
-  } as const satisfies ListMsg;
+  } as const satisfies ResolvedRow<ListMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: true,
@@ -293,7 +294,7 @@ test("renders a partially-upgradable row in its marketplace scope", () => {
   assert.strictEqual(Object.hasOwn(row, "needsReload"), false);
 });
 
-test("renders a remote row without scope, reload state, or probe-derived reasons", () => {
+test("renders a remote row without scope or reload state", () => {
   // arrange
   const row = {
     status: "remote",
@@ -301,7 +302,7 @@ test("renders a remote row without scope, reload state, or probe-derived reasons
     version: "8.0.0",
     description: "Remote description stays outside the command-owned row.",
     reasons: ["installs disabled"],
-  } as const satisfies ListMsg;
+  } as const satisfies ResolvedRow<ListMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -331,7 +332,7 @@ test("renders an unavailable row without a scope or reload stamp", () => {
     version: "9.0.0",
     description: "Unavailable description stays outside the row.",
     reasons: ["unsupported source", "permission denied"],
-  } as const satisfies ListMsg;
+  } as const satisfies ResolvedRow<ListMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -365,7 +366,7 @@ test("renders an upgradable row with cross-scope attribution", () => {
     scope: "project",
     description: "Upgrade description stays outside the row.",
     reasons: ["source mismatch"],
-  } as const satisfies ListMsg;
+  } as const satisfies ResolvedRow<ListMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,

@@ -64,8 +64,7 @@ export type DisableMsg = PluginDisabledMessage | PluginSkippedMessage | PluginFa
 /**
  * Render map total over enable's OWN statuses (D-10). The fresh `installed` arm
  * is byte-identical to install's installed arm -- the enable verb constructs the
- * row with `dependencies: []`, so the soft-dep markers never append, but the
- * `dependencies.includes(...)` gating is preserved verbatim for byte parity.
+ * row with `dependencies: []`, so `resolveRows` appends no soft-dep marker.
  *
  * ENBL-07 / FSTAT-07 / D-66-04: the `partially-installed` arm CALLS the shared
  * `partiallyInstalledRow` composition site (D-11), so a re-enable that drops
@@ -115,6 +114,12 @@ const DISABLE_RENDER: { [K in DisableStatus]: RenderFn<Extract<DisableMsg, { sta
 export const ENABLE_CONTEXT = {
   Messaging: { label: "Plugin enable" },
   render: ENABLE_RENDER,
+  markers: {
+    installed: true,
+    "partially-installed": true,
+    skipped: false,
+    failed: false,
+  },
 } as const satisfies CommandContext<EnableStatus, EnableMsg>;
 
 /**
@@ -124,6 +129,11 @@ export const ENABLE_CONTEXT = {
 export const DISABLE_CONTEXT = {
   Messaging: { label: "Plugin disable" },
   render: DISABLE_RENDER,
+  markers: {
+    disabled: false,
+    skipped: false,
+    failed: false,
+  },
 } as const satisfies CommandContext<DisableStatus, DisableMsg>;
 
 // ───────────────────────────────────────────────────────────────────────────

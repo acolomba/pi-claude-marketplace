@@ -16,6 +16,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
 
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
   CascadeNotificationMessage,
   NotificationMessage,
@@ -42,17 +43,14 @@ function notificationApi(): NotificationApi {
   return { getAllTools: () => [{ name: "subagent" }, { name: "mcp" }] };
 }
 
-function renderRow(
-  row: Parameters<typeof emitContextCascade>[2]["marketplaces"][number]["plugins"][number],
-  _probe: SoftDepStatus,
-): string {
+function renderRow(row: ResolvedRow, _probe: SoftDepStatus): string {
   return `${row.name} (${row.status})`;
 }
 
 function emitContext(t: TestContext, message: CascadeNotificationMessage): readonly unknown[] {
   const ctx = createContext(t);
 
-  emitContextCascade(ctx as never, notificationApi(), message, renderRow, hasRenderArm);
+  emitContextCascade(ctx as never, notificationApi(), message, renderRow, {}, hasRenderArm);
 
   assert.equal(ctx.ui.notify.mock.callCount(), 1);
   return ctx.ui.notify.mock.calls[0]!.arguments;
@@ -556,6 +554,7 @@ test("update no-op fold preserves empty and non-empty bodies", (t) => {
     notificationApi(),
     emptyMessage,
     renderRow,
+    {},
     hasRenderArm,
   );
   emitUpdateNoOpCascade(
@@ -563,6 +562,7 @@ test("update no-op fold preserves empty and non-empty bodies", (t) => {
     notificationApi(),
     bodyMessage,
     renderRow,
+    {},
     hasRenderArm,
   );
 
@@ -605,6 +605,7 @@ test("reconcile applied fold suppresses reload while preserving severity and tal
     notificationApi(),
     message,
     renderRow,
+    {},
     hasRenderArm,
   );
 

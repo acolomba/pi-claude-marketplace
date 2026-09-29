@@ -7,6 +7,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
 
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({
   status: "updated",
@@ -44,7 +45,7 @@ void ({
 test("exports the complete update command context in declared order", () => {
   // arrange
   const expectedContext = {
-    keys: ["Messaging", "render"],
+    keys: ["Messaging", "render", "markers"],
     label: "Plugin update",
     renderKeys: ["updated", "partially-installed", "skipped", "partially-upgradable", "failed"],
   };
@@ -67,10 +68,10 @@ test("renders a bare updated transition with true optional omission", () => {
     name: "alpha",
     from: "1.0.0",
     to: "1.1.0",
-    dependencies: [],
+    reasons: [],
     severity: "info",
     needsReload: true,
-  } as const satisfies UpdateMsg;
+  } as const satisfies ResolvedRow<UpdateMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -87,27 +88,25 @@ test("renders a bare updated transition with true optional omission", () => {
     name: "alpha",
     from: "1.0.0",
     to: "1.1.0",
-    dependencies: [],
+    reasons: [],
     severity: "info",
     needsReload: true,
   });
-  assert.equal(Object.hasOwn(message, "reasons"), false);
   assert.equal(Object.hasOwn(message, "scope"), false);
 });
 
-test("renders updated reasons before both missing companion markers", () => {
+test("renders updated content reasons before the resolved markers", () => {
   // arrange
   const message = {
     status: "updated",
     name: "beta",
     from: "hash-2ea95f85703d",
     to: "hash-1c3d9a0bbef1",
-    dependencies: ["agents", "mcp"],
     scope: "project",
-    reasons: ["orphan rewake", "malformed skill"],
+    reasons: ["orphan rewake", "malformed skill", "requires pi-subagents", "requires pi-mcp"],
     severity: "warning",
     needsReload: true,
-  } as const satisfies UpdateMsg;
+  } as const satisfies ResolvedRow<UpdateMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -127,26 +126,24 @@ test("renders updated reasons before both missing companion markers", () => {
     name: "beta",
     from: "hash-2ea95f85703d",
     to: "hash-1c3d9a0bbef1",
-    dependencies: ["agents", "mcp"],
     scope: "project",
-    reasons: ["orphan rewake", "malformed skill"],
+    reasons: ["orphan rewake", "malformed skill", "requires pi-subagents", "requires pi-mcp"],
     severity: "warning",
     needsReload: true,
   });
 });
 
-test("renders a partially-installed transition with ordered reasons and an MCP marker", () => {
+test("renders a partially-installed transition with ordered resolved reasons", () => {
   // arrange
   const message = {
     status: "partially-installed",
     name: "gamma",
-    reasons: ["malformed command", "unsupported component"],
-    dependencies: ["mcp"],
+    reasons: ["malformed command", "unsupported component", "requires pi-mcp"],
     version: "2.0.0",
     scope: "project",
     severity: "warning",
     needsReload: true,
-  } as const satisfies UpdateMsg;
+  } as const satisfies ResolvedRow<UpdateMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: false,
@@ -164,8 +161,7 @@ test("renders a partially-installed transition with ordered reasons and an MCP m
   assert.deepStrictEqual(message, {
     status: "partially-installed",
     name: "gamma",
-    reasons: ["malformed command", "unsupported component"],
-    dependencies: ["mcp"],
+    reasons: ["malformed command", "unsupported component", "requires pi-mcp"],
     version: "2.0.0",
     scope: "project",
     severity: "warning",
@@ -183,7 +179,7 @@ test("renders an actionable skipped row with a folded marketplace scope", () => 
     scope: "user",
     severity: "error",
     needsReload: false,
-  } as const satisfies UpdateMsg;
+  } as const satisfies ResolvedRow<UpdateMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -204,10 +200,10 @@ test("renders an actionable skipped row with a folded marketplace scope", () => 
     severity: "error",
     needsReload: false,
   });
-  assert.equal(Object.hasOwn(message, "cause"), false);
+  assert.equal(Object.hasOwn(message, "failure"), false);
 });
 
-test("preserves partial-update hint metadata while rendering its row body", () => {
+test("preserves the partial-update hint while rendering its row body", () => {
   // arrange
   const message = {
     status: "partially-upgradable",
@@ -215,10 +211,10 @@ test("preserves partial-update hint metadata while rendering its row body", () =
     reasons: ["unsupported hooks", "lsp"],
     version: "4.0.0",
     scope: "project",
-    partialHint: true,
+    hint: "partial-update",
     severity: "info",
     needsReload: false,
-  } as const satisfies UpdateMsg;
+  } as const satisfies ResolvedRow<UpdateMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
@@ -236,27 +232,35 @@ test("preserves partial-update hint metadata while rendering its row body", () =
     reasons: ["unsupported hooks", "lsp"],
     version: "4.0.0",
     scope: "project",
-    partialHint: true,
+    hint: "partial-update",
     severity: "info",
     needsReload: false,
   });
 });
 
-test("preserves failed causes and rollback partials while rendering the owned row body", () => {
+test("preserves failure detail while rendering the owned row body", () => {
   // arrange
-  const cause = new Error("update failed");
-  const rollbackCause = new Error("remove staged agent failed");
+  const failure = {
+    cause: { causeChain: ["update failed"], truncated: false },
+    leaks: [],
+    rollbackPartial: [
+      {
+        phase: "phase3a",
+        cause: { causeChain: ["remove staged agent failed"], truncated: false },
+      },
+      { phase: "phase3b" },
+    ],
+  };
   const message = {
     status: "failed",
     name: "zeta",
     reasons: ["rollback partial"],
     version: "5.0.0",
     scope: "project",
-    cause,
-    rollbackPartial: [{ phase: "phase3a", cause: rollbackCause }, { phase: "phase3b" }],
+    failure,
     severity: "error",
     needsReload: false,
-  } as const satisfies UpdateMsg;
+  } as const satisfies ResolvedRow<UpdateMsg>;
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
@@ -274,10 +278,8 @@ test("preserves failed causes and rollback partials while rendering the owned ro
     reasons: ["rollback partial"],
     version: "5.0.0",
     scope: "project",
-    cause,
-    rollbackPartial: [{ phase: "phase3a", cause: rollbackCause }, { phase: "phase3b" }],
+    failure,
     severity: "error",
     needsReload: false,
   });
-  assert.equal(Object.hasOwn(message.rollbackPartial[1], "cause"), false);
 });

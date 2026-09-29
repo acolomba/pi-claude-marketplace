@@ -49,6 +49,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type { CommandContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -1821,7 +1822,7 @@ describe("emitMarketplaceNotAdded", () => {
 describe("emitMarketplaceNotAddedSignal", () => {
   test("renders the plugin row when nothing of the container is installed at the named scope", async () => {
     // arrange
-    const renderedRows: PluginSkippedMessage[] = [];
+    const renderedRows: ResolvedRow<PluginSkippedMessage>[] = [];
     const context = {
       Messaging: { label: "Plugin reinstall" },
       render: {
@@ -1830,6 +1831,7 @@ describe("emitMarketplaceNotAddedSignal", () => {
           return `⊘ ${row.name} (skipped)`;
         },
       },
+      markers: { skipped: false },
     } satisfies CommandContext<"skipped", PluginSkippedMessage>;
     const notifications: { message: string; severity?: string }[] = [];
     const { ctx, pi } = makeRecordingBoundary(notifications);
@@ -1874,6 +1876,7 @@ describe("emitMarketplaceNotAddedSignal", () => {
         render: {
           skipped: (row) => `⊘ ${row.name} (skipped)`,
         },
+        markers: { skipped: false },
       } satisfies CommandContext<"skipped", PluginSkippedMessage>;
       const notifications: { message: string; severity?: string }[] = [];
       const { ctx, pi } = makeRecordingBoundary(notifications);

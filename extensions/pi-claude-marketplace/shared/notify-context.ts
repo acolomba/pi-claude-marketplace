@@ -11,6 +11,7 @@ import {
   type WithPlugins,
 } from "./notification-types.ts";
 
+import type { ResolvedRow } from "./notification-resolve.ts";
 import type { Scope } from "./types.ts";
 import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platform/pi-api.ts";
 
@@ -33,13 +34,18 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  */
 
 /**
- * The per-row render signature lifted verbatim from the central
- * `renderPluginRow` / `renderMpHeader` switch params: a row plus the threaded
- * soft-dep probe plus the parent marketplace scope produce the single row line.
- * A command's render map reproduces the EXACT bytes of the central switch arm
- * it lifts, so dispatching through it is byte-identical to the legacy path.
+ * The per-row render signature: a resolved row plus the threaded soft-dep
+ * probe plus the parent marketplace scope produce the single row line.
+ * D-13: the row is resolved, so its `reasons` already carry any soft-dependency
+ * markers and the arm composes them as they stand. A command's render map
+ * reproduces the EXACT bytes of the central switch arm it lifts, so
+ * dispatching through it is byte-identical to the legacy path.
  */
-export type RenderFn<M> = (row: M, probe: SoftDepStatus, mpScope: Scope) => string;
+export type RenderFn<M extends PluginNotificationMessage> = (
+  row: ResolvedRow<M>,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+) => string;
 
 /**
  * D-04 / D-05: the shared command-context shape. Every command exposes a const
@@ -59,10 +65,15 @@ export type RenderFn<M> = (row: M, probe: SoftDepStatus, mpScope: Scope) => stri
  * counterpart of the central `renderPluginRow` exhaustive switch. The
  * `Extract<Msg, { status: K }>` narrows each arm to exactly the message shape
  * that carries status `K`.
+ *
+ * D-12: `markers` is the command's marker policy, total over its own statuses
+ * beside `render`. A status mapped to `true` lets `resolveRows` append the
+ * `{requires ...}` markers the row's `dependencies` call for.
  */
 export interface CommandContext<Status extends string, Msg extends PluginNotificationMessage> {
   readonly Messaging: { readonly label: string };
   readonly render: { [K in Status]: RenderFn<Extract<Msg, { status: K }>> };
+  readonly markers: Readonly<Record<Status, boolean>>;
 }
 
 /**
@@ -168,6 +179,7 @@ export function notifyWithContext<
     pi,
     message,
     (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    context.markers,
     hasRenderArmFor(context),
   );
 }
@@ -212,6 +224,7 @@ export function notifyUpdateWithContext<
     pi,
     message,
     (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    context.markers,
     hasRenderArmFor(context),
   );
 }
@@ -253,6 +266,7 @@ export function notifyUpdateNoOpWithContext<
     pi,
     message,
     (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    context.markers,
     hasRenderArmFor(context),
   );
 }
@@ -293,6 +307,7 @@ export function notifyReconcileAppliedWithContext<
     pi,
     labeled,
     (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    context.markers,
     hasRenderArmFor(context),
   );
 }
@@ -340,7 +355,7 @@ function hasRenderArmFor<Status extends string, Msg extends PluginNotificationMe
  */
 function dispatchRow<Status extends string, Msg extends PluginNotificationMessage>(
   context: CommandContext<Status, Msg>,
-  row: PluginNotificationMessage,
+  row: ResolvedRow,
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string {

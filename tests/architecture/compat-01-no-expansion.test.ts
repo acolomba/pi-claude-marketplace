@@ -457,7 +457,7 @@ test("COMPAT-01: the two module-private glyphs reach the output on their own row
   // act
   const rows = [
     renderRemoteRow(
-      { status: "remote", name: "alpha", version: "1.0.0" },
+      { status: "remote", name: "alpha", version: "1.0.0", reasons: [] },
       ALL_COMPANIONS_LOADED,
       "user",
       undefined,

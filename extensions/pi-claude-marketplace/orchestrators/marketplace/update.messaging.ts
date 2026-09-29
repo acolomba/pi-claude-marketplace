@@ -76,13 +76,8 @@ export const UPDATE_CONTEXT = {
         renderScopeBracket(p.scope, mpScope),
         composeVersionArrow(p.from, p.to),
         "(updated)",
-        composeReasons(
-          p.reasons,
-          p.dependencies.includes("agents"),
-          p.dependencies.includes("mcp"),
-          p.dependencies.includes("workflows"),
-          probe,
-        ),
+        // D-12: `p.reasons` already ends with the resolved soft-dep markers.
+        composeReasons(p.reasons, false, false, false, probe),
       ]),
     // SEV-03 / D-69-01: an autoupdate cascade candidate that re-resolved
     // `partially-available` degraded via the partial path. Reuse `partiallyInstalledRow` --
@@ -92,6 +87,12 @@ export const UPDATE_CONTEXT = {
     "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
     skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
     failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+  },
+  markers: {
+    updated: true,
+    "partially-installed": true,
+    skipped: false,
+    failed: false,
   },
 } as const satisfies CommandContext<UpdateRowStatus, UpdateRowMsg>;
 
@@ -103,9 +104,9 @@ export const UPDATE_CONTEXT = {
 
 /**
  * Map a `PluginUpdateOutcome` to a discriminated `UpdateRowMsg`.
- * The renderer (`renderPluginRow` in shared/notification-grammar.ts) owns the icon
- * dispatch, the version-arrow composition, the reasons-brace composition, and
- * the per-row soft-dep marker injection. The mapper's job is structural --
+ * The renderer owns the icon dispatch, the version-arrow composition, and the
+ * reasons-brace composition; `resolveRows` composes the per-row soft-dep
+ * markers (D-12). The mapper's job is structural --
  * pick the variant that matches the partition and forward the
  * partition-specific fields.
  *
@@ -113,8 +114,8 @@ export const UPDATE_CONTEXT = {
  *  - `updated`   -> `PluginUpdatedMessage{ from, to, dependencies }`. Renderer
  *                   composes `<name> v<from> → v<to> (updated)`; MSG-SD-3
  *                   allows the soft-dep marker, and `dependencies` carries the
- *                   declared kinds the notify-time probe combines with
- *                   `softDepStatus(pi)`.
+ *                   declared kinds `resolveRows` combines with the
+ *                   `softDepStatus(pi)` snapshot.
  *  - `unchanged` -> `PluginSkippedMessage{ reasons: ["up-to-date"] }`. The
  *                   `skipped` status routes through the warning severity
  *                   ladder -> ⊘ glyph.

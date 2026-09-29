@@ -1,3 +1,4 @@
+import { softDepMarkers } from "./concerns/soft-dep.ts";
 import { hookDebugLog } from "./debug-log.ts";
 import { errorMessage, manualRecoveryLeaks, serializeCauseChain } from "./errors.ts";
 import {
@@ -7,6 +8,7 @@ import {
   shouldEmitReloadHint,
 } from "./notification-summary.ts";
 
+import type { Dependency } from "./concerns/soft-dep.ts";
 import type { SerializedCauseChain } from "./errors.ts";
 import type {
   CascadeNotificationMessage,
@@ -18,6 +20,7 @@ import type {
   Reason,
   WithPlugins,
 } from "./notification-types.ts";
+import type { SoftDepStatus } from "../platform/pi-api.ts";
 
 /**
  * PMOD-01: the single resolve step upstream of the text strategy. It turns a
@@ -40,6 +43,10 @@ import type {
  *
  * D-10: each row's hint and the `marketplace-not-added` reason token are chosen
  * here as data. The text strategy maps a hint id to its frozen literal.
+ *
+ * D-12: each row's final reasons are composed here: its content reasons, then
+ * the `{requires ...}` soft-dependency markers its command's marker policy
+ * allows for the row's status.
  */
 
 /**
@@ -256,21 +263,65 @@ export interface ResolvedFailure {
  */
 export type RowHint = "partial-install" | "partial-update" | "stale-gate-update" | "enable";
 
-/** The per-row facts `resolveRows` adds to a producer row. */
+/**
+ * The per-row facts `resolveRows` adds to a producer row. `reasons` is the
+ * final reason list: the row's content reasons, then its soft-dependency
+ * markers.
+ */
 export interface ResolvedRowFacts {
+  readonly reasons: readonly Reason[];
   readonly failure?: ResolvedFailure;
   readonly hint?: RowHint;
 }
 
 /**
- * A producer row with its live failure detail and its hint flags replaced by
- * resolved facts. The conditional distributes over the row union, so each
- * member keeps its own `status` discriminant.
+ * A producer row with its reasons, dependencies, live failure detail, and hint
+ * flags replaced by resolved facts. The conditional distributes over the row
+ * union, so each member keeps its own `status` discriminant.
  */
 export type ResolvedRow<M extends PluginNotificationMessage = PluginNotificationMessage> =
   M extends unknown
-    ? Omit<M, "cause" | "rollbackPartial" | "partialHint" | "enableHint"> & ResolvedRowFacts
+    ? Omit<
+        M,
+        "reasons" | "dependencies" | "cause" | "rollbackPartial" | "partialHint" | "enableHint"
+      > &
+        ResolvedRowFacts
     : never;
+
+/**
+ * D-12: a command's marker policy. A status mapped to `true` lets its rows
+ * carry the `{requires ...}` markers their `dependencies` call for; a status
+ * mapped to `false` or not named carries none.
+ */
+export type MarkerPolicy = Partial<Readonly<Record<PluginNotificationMessage["status"], boolean>>>;
+
+/**
+ * D-12: the marker policy of the legacy central `notify()` path and the
+ * standalone `reconcile-applied-cascade` arm. Markers are on for the four
+ * statuses whose row can declare `dependencies`. MSG-SD-3 keeps removal rows
+ * marker-free, and ENBL-15 keeps `disabled` rows marker-free.
+ */
+export const CENTRAL_MARKER_POLICY = {
+  installed: true,
+  updated: true,
+  reinstalled: true,
+  "partially-installed": true,
+  uninstalled: false,
+  disabled: false,
+  available: false,
+  remote: false,
+  unavailable: false,
+  "partially-available": false,
+  upgradable: false,
+  "partially-upgradable": false,
+  failed: false,
+  skipped: false,
+  "manual recovery": false,
+  "will install": false,
+  "will uninstall": false,
+  "will enable": false,
+  "will disable": false,
+} as const satisfies Record<PluginNotificationMessage["status"], boolean>;
 
 /** A marketplace row whose plugin rows are resolved. */
 export type ResolvedMarketplace = WithPlugins<MarketplaceNotificationMessage, ResolvedRow>;
@@ -286,6 +337,13 @@ type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMes
 
 /**
  * Resolves the plugin rows of `marketplaces` before any text is composed.
+ *
+ * D-12 / PMOD-01: each row's `reasons` is its content reasons followed by the
+ * soft-dependency markers `softDepMarkers` derives from `snapshot` and from the
+ * row's declared `dependencies`. The markers apply only when `markers` maps the
+ * row's status to `true`. The two lists are concatenated as they stand, never
+ * sorted or de-duplicated, so the brace keeps producer order and then the
+ * agents, mcp, workflows marker order.
  *
  * WR-02 / SEV-02: when `hasRenderArm` reports that a row's status has no
  * render arm, the row is an internal-drift error. `resolveRows` stamps
@@ -315,6 +373,8 @@ type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMes
  */
 export function resolveRows(
   marketplaces: readonly MarketplaceNotificationMessage[],
+  snapshot: SoftDepStatus,
+  markers: MarkerPolicy,
   hasRenderArm?: (status: string) => boolean,
 ): readonly ResolvedMarketplace[] {
   return marketplaces.map((mp) => ({
@@ -324,10 +384,43 @@ export function resolveRows(
         floorMissingArmSeverity(row);
       }
 
-      return resolveRow(row);
+      // A status the policy does not name counts as off.
+      const on = markers[row.status] === true;
+      return resolveRow(row, (content, dependencies) =>
+        composeRowReasons(content ?? [], on ? (dependencies ?? []) : [], snapshot),
+      );
     }),
   }));
 }
+
+/**
+ * Composes a row's content reasons, then the markers `dependencies` call for.
+ * `dependencies` is empty when the row's marker policy is off.
+ */
+function composeRowReasons(
+  content: readonly Reason[],
+  dependencies: readonly Dependency[],
+  snapshot: SoftDepStatus,
+): readonly Reason[] {
+  return [
+    ...content,
+    ...softDepMarkers(
+      dependencies.includes("agents"),
+      dependencies.includes("mcp"),
+      dependencies.includes("workflows"),
+      snapshot,
+    ),
+  ];
+}
+
+/**
+ * Composes the final reasons of a row from its content reasons and its
+ * declared dependencies; either is `undefined` when the row has none.
+ */
+type ReasonComposer = (
+  content: readonly Reason[] | undefined,
+  dependencies: readonly Dependency[] | undefined,
+) => readonly Reason[];
 
 function floorMissingArmSeverity(row: PluginNotificationMessage): void {
   // The field is declared `readonly`; this single localized write is the seam
@@ -341,37 +434,62 @@ function floorMissingArmSeverity(row: PluginNotificationMessage): void {
   }
 }
 
-function resolveRow(row: PluginNotificationMessage): ResolvedRow {
+/**
+ * The resolved copy of `row`: its content reasons and dependencies replaced by
+ * the final `reasons` from `compose`, and its failure detail and hint flags by
+ * resolved facts. A row whose status no branch names (an out-of-band row, or a
+ * pending-tense row) keeps its own keys and gains `reasons`.
+ */
+function resolveRow(row: PluginNotificationMessage, compose: ReasonComposer): ResolvedRow {
   if (row.status === "failed") {
-    const { cause, rollbackPartial, partialHint, ...rest } = row;
+    const { cause, rollbackPartial, partialHint, reasons, ...rest } = row;
     return {
       ...rest,
+      reasons: compose(reasons, undefined),
       ...hintFor(partialHint, "stale-gate-update"),
       failure: resolveFailure(cause, rollbackPartial ?? []),
     };
   }
 
   if (row.status === "manual recovery") {
-    const { cause, ...rest } = row;
-    return { ...rest, failure: resolveFailure(cause, []) };
+    const { cause, reasons, ...rest } = row;
+    return { ...rest, reasons: compose(reasons, undefined), failure: resolveFailure(cause, []) };
   }
 
   if (row.status === "unavailable" || row.status === "partially-available") {
-    const { partialHint, ...rest } = row;
-    return { ...rest, ...hintFor(partialHint, "partial-install") };
+    const { partialHint, reasons, ...rest } = row;
+    return {
+      ...rest,
+      reasons: compose(reasons, undefined),
+      ...hintFor(partialHint, "partial-install"),
+    };
   }
 
   if (row.status === "partially-upgradable") {
-    const { partialHint, ...rest } = row;
-    return { ...rest, ...hintFor(partialHint, "partial-update") };
+    const { partialHint, reasons, ...rest } = row;
+    return {
+      ...rest,
+      reasons: compose(reasons, undefined),
+      ...hintFor(partialHint, "partial-update"),
+    };
   }
 
   if (row.status === "disabled") {
-    const { enableHint, ...rest } = row;
-    return { ...rest, ...hintFor(enableHint, "enable") };
+    const { enableHint, reasons, ...rest } = row;
+    return { ...rest, reasons: compose(reasons, undefined), ...hintFor(enableHint, "enable") };
   }
 
-  return { ...row };
+  if ("dependencies" in row) {
+    const { reasons, dependencies, ...rest } = row;
+    return { ...rest, reasons: compose(reasons, dependencies) };
+  }
+
+  if ("reasons" in row) {
+    const { reasons, ...rest } = row;
+    return { ...rest, reasons: compose(reasons, undefined) };
+  }
+
+  return { ...row, reasons: compose(undefined, undefined) };
 }
 
 /** The `hint` member for a row whose producer set `flag`, or no member. */

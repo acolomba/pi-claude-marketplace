@@ -282,20 +282,20 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:701:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:105:78",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:104:78",
       "owner": "DISABLE_RENDER",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within DisableMsg by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:105:56"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:104:56"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:76:75",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:75:75",
       "owner": "ENABLE_RENDER",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within EnableMsg by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:76:54"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:75:54"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1072:42",
@@ -498,12 +498,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:109:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:213:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:219:42",
       "owner": "isManualRecoveryOutcome",
       "key": "failureClass",
       "category": "type-refinement",
       "purpose": "Narrows failureClass at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:213:15"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:219:15"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:73:60",
@@ -594,12 +594,12 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:137:19"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:75",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:56:75",
       "owner": "UPDATE_RENDER",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within UpdateMsg by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:54"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:56:54"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:567:49",
@@ -660,28 +660,28 @@
       "necessity": "extensions/pi-claude-marketplace/index.ts:91:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:221:43",
+      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:226:43",
       "owner": "dispatchInfoMessage.message",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:221:12"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:226:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1514:32",
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1460:32",
       "owner": "isDescriptionBearingRow",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within ResolvedRow by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1514:9"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1460:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:850:7",
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:823:9",
       "owner": "renderPendingRow.p",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:848:6"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:821:5"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-summary.ts:41:40",
@@ -700,28 +700,28 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-types.ts:459:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:272:52",
+      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:286:52",
       "owner": "notifyReconcileAppliedWithContext",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:272:15"
+      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:286:15"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:348:29",
+      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:363:29",
       "owner": "arm",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:348:14"
+      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:363:14"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:65:61",
+      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:75:61",
       "owner": "CommandContext.render",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:65:46"
+      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:75:46"
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:106:3",

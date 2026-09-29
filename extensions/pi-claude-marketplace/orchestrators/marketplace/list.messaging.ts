@@ -22,4 +22,5 @@ import type { CommandContext } from "../../shared/notify-context.ts";
 export const LIST_CONTEXT = {
   Messaging: { label: "Marketplace list" },
   render: {},
+  markers: {},
 } as const satisfies CommandContext<never, never>;
