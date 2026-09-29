@@ -47,7 +47,7 @@ re-opened.
 4. Failure detail reaches the renderer as a serialized `causeChain: string[]` with a `truncated` flag, plus per-phase rollback entries and manual-recovery leaks as strings. No live `Error` crosses into rendering, and the cause-chain text is byte-identical to the baseline.
 5. The probe-to-marker derivation has its own owner test that states the per-verb suppression table as data. `workflows-marker-coverage` scans the new derivation site and is not deleted.
 
-**Plans:** 4/16 plans executed, sequential (waves 1-16)
+**Plans:** 5/16 plans executed, sequential (waves 1-16)
 
 Plans:
 **Wave 1**
@@ -63,7 +63,7 @@ Plans:
 - [x] 01-04-PLAN.md — Soft-dep markers compose in resolve from per-context marker policy; SC-5 table test (D-12)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 01-05-PLAN.md — Text strategy renders resolved rows with no probe; marker-coverage gate re-pointed (D-13)
+- [x] 01-05-PLAN.md — Text strategy renders resolved rows with no probe; marker-coverage gate re-pointed (D-13)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 01-06-PLAN.md — Per-invocation run object built at the command root; marketplace list and info (D-05..D-07)
@@ -200,7 +200,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Presentation Model | 4/16 | In Progress | - |
+| 1. Presentation Model | 5/16 | In Progress | - |
 | 2. Row Policies | 0/TBD | Not started | - |
 | 3. Typed Raw Surfaces | 0/TBD | Not started | - |
 | 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |
