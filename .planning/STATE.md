@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 01
 current_phase_name: Presentation Model
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-09-29T12:00:31.961Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-09-29T12:54:46.280Z"
 last_activity: 2026-09-29
-last_activity_desc: Phase 01 execution started
-state_head: 3a5c6d87d4d3e798ac00e47a8ba4610d3fcfc322
+last_activity_desc: Completed 01-01 notify wire-corpus baseline
+state_head: adc97d12caaf30a1ca1f9f1d2dc7e99fd3254a41
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 16
-  completed_plans: 0
+  completed_plans: 1
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Presentation Model) — EXECUTING
-Plan: 1 of 16
-Status: Executing Phase 01
-Last activity: 2026-09-29 — Phase 01 execution started
+Plan: 2 of 16
+Status: Ready to execute
+Last activity: 2026-09-29 — Completed 01-01 (notify wire-corpus baseline)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 6% (1 of 16 plans)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,9 +168,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-29T02:10:21.506Z
-**Stopped at:** Phase 1 context gathered
-**Resume file:** .planning/phases/01-presentation-model/01-CONTEXT.md
+**Last session:** 2026-09-29T12:54:40.334Z
+**Stopped at:** Completed 01-01-PLAN.md
+**Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
 the roadmap are written (36 requirements, 7 phases, all mapped). No phase has
@@ -194,3 +194,13 @@ archived milestone artifacts.
 - `BACKLOG.md` still holds the six carriers the workflows-replay close named
   (VSTALE-01, WLREC-01, RLHINT-01, PCERR-01, WSTOR-01, WPIN-01). This
   milestone closes MRO-01 in Phase 7.
+
+## Performance Metrics
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 50 min | 3 tasks | 5 files |
+
+## Decisions
+
+- [Phase 01]: Notify corpus scripts carry file-level fallow-ignore markers (unused-file; unused-export on notify-corpus.mjs) instead of a package.json entry, since D-03 keeps the tool out of package.json and npm run check
