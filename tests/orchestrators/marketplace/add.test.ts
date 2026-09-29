@@ -647,16 +647,23 @@ for (const { title, listRemotesResult } of MA13_REFUSAL_ARMS) {
 const ORIGIN_WITHOUT_URL_CONFIG =
   '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n';
 
-// The fake's canned `listRemotesResult` is typed `ListRemotesResult`, which
-// cannot express an `origin` section without a url. This helper composes the
-// real `listRemotes` so it reads a hand-written `.git/config` in the destination.
-async function arrangeLeftoverWithoutOriginUrl(
+// WR-11: git fetches from the first url, and the last one is the source
+// identity plus `.git`.
+const ORIGIN_WITH_TWO_URLS_CONFIG =
+  '[remote "origin"]\n\turl = https://github.com/anthropics/other-repo.git\n\turl = https://github.com/anthropics/claude-plugins-official.git\n';
+
+// The fake's canned `listRemotesResult` cannot express a url-less origin
+// section and skips the config read that decides a multi-url origin (WR-11).
+// This helper composes the real `listRemotes` so it reads the given
+// `.git/config` in the destination.
+async function arrangeLeftoverWithOriginConfig(
   locations: ScopedLocations,
+  config: string,
 ): Promise<{ finalDir: string; configPath: string; gitOps: GitOps }> {
   const finalDir = await locations.sourceCloneDir("valid-marketplace");
   const configPath = path.join(finalDir, ".git", "config");
   await mkdir(path.join(finalDir, ".git"), { recursive: true });
-  await writeFile(configPath, ORIGIN_WITHOUT_URL_CONFIG);
+  await writeFile(configPath, config);
   const gitOps: GitOps = {
     ...createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") }).gitOps,
     listRemotes,
@@ -665,44 +672,65 @@ async function arrangeLeftoverWithoutOriginUrl(
   return { finalDir, configPath, gitOps };
 }
 
-test("MA-13 / ATTR-07: a leftover whose origin section names no url refuses as stale clone", async () => {
-  await withTmpScope(async ({ cwd, locations }) => {
-    // arrange
-    const { ctx, pi, notifications } = makeCtx();
-    const { configPath, gitOps } = await arrangeLeftoverWithoutOriginUrl(locations);
+interface LeftoverOriginConfig {
+  readonly title: string;
+  readonly config: string;
+}
 
-    // act
-    const outcome = await addMarketplace({
-      ctx,
-      pi,
-      scope: "project",
-      cwd,
-      rawSource: "anthropics/claude-plugins-official",
-      gitOps,
-    });
+const LEFTOVER_ORIGIN_CONFIGS: readonly LeftoverOriginConfig[] = [
+  {
+    title: "MA-13 / ATTR-07: a leftover whose origin section names no url refuses as stale clone",
+    config: ORIGIN_WITHOUT_URL_CONFIG,
+  },
+  {
+    title: "MA-13 / WR-11: a leftover whose origin section names two urls refuses as stale clone",
+    config: ORIGIN_WITH_TWO_URLS_CONFIG,
+  },
+];
 
-    // assert
-    assert.strictEqual(outcome, undefined);
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
-        severity: "error",
-      },
-    ]);
-    assert.strictEqual(await readFile(configPath, "utf8"), ORIGIN_WITHOUT_URL_CONFIG);
-    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
-      marketplaces: {},
+for (const { title, config } of LEFTOVER_ORIGIN_CONFIGS) {
+  test(title, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, pi, notifications } = makeCtx();
+      const { configPath, gitOps } = await arrangeLeftoverWithOriginConfig(locations, config);
+
+      // act
+      const outcome = await addMarketplace({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        rawSource: "anthropics/claude-plugins-official",
+        gitOps,
+      });
+
+      // assert
+      assert.strictEqual(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
+          severity: "error",
+        },
+      ]);
+      assert.strictEqual(await readFile(configPath, "utf8"), config);
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+        schemaVersion: 2,
+        marketplaces: {},
+      });
     });
   });
-});
+}
 
 test("MA-13 / RECON-03: orchestrated mode reports a leftover whose origin section names no url as stale clone", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx(0);
-    const { finalDir, configPath, gitOps } = await arrangeLeftoverWithoutOriginUrl(locations);
+    const { finalDir, configPath, gitOps } = await arrangeLeftoverWithOriginConfig(
+      locations,
+      ORIGIN_WITHOUT_URL_CONFIG,
+    );
 
     // act
     const outcome = await addMarketplace({

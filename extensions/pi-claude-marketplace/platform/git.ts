@@ -148,10 +148,10 @@ export interface ListRemotesOptions {
 /**
  * D-3-03 / MA-12 / MA-13: whether `dir` holds a readable git clone and, if so,
  * what its `origin` remote names. Four arms:
- *   - `origin`: a readable repo whose `origin` remote records a url; `url` is
- *     the remote's wire-form value, verbatim.
- *   - `no-origin`: a readable repo with no `origin` remote, or with an
- *     `origin` section that records no url.
+ *   - `origin`: a readable repo whose `origin` remote records exactly one
+ *     url; `url` is that value, verbatim.
+ *   - `no-origin`: a readable repo whose `origin` remote records no url or
+ *     more than one (WR-11).
  *   - `not-a-repo`: `dir` has no `.git/config` (ENOENT/ENOTDIR).
  *   - `unreadable`: `dir/.git/config` exists but could not be read.
  */
@@ -445,23 +445,26 @@ export async function currentBranch(opts: CurrentBranchOptions): Promise<string 
  * not look at all", and a catch block collapses that distinction.
  *
  * The function reads `<dir>/.git/config` itself, BEFORE calling
- * `git.listRemotes`, and uses that read alone to choose between the
+ * `git.getConfigAll`, and uses that read alone to choose between the
  * `not-a-repo` and `unreadable` arms. This ordering is required, not
  * stylistic: isomorphic-git's internal filesystem wrapper
  * (node_modules/isomorphic-git/index.js, the `read` helper backing
  * `GitConfigManager.get`) catches every filesystem error and resolves `null`,
- * so `git.listRemotes({ fs, dir })` returns `[]` identically for a missing
- * `.git`, an unreadable `.git/config`, and a real repo with zero remotes --
- * wrapping the library call in a `try`/`catch` would be unreachable code, and
- * the 100%-branch gate would have no way to cover it. The probe read doubles
- * as the existence check, so no separate `stat` is needed.
+ * so `git.getConfigAll({ fs, dir, path })` returns `[]` identically for a
+ * missing `.git`, an unreadable `.git/config`, and a real repo with no origin
+ * url -- wrapping the library call in a `try`/`catch` would be unreachable
+ * code, and the 100%-branch gate would have no way to cover it. The probe
+ * read doubles as the existence check, so no separate `stat` is needed.
  *
- * isomorphic-git enumerates `[remote "<name>"]` sections and resolves each
- * url separately, so a section with no `url` key comes back holding
- * `undefined`, although the library declares `url` a string. Such a section
- * names no remote, so it reports `no-origin` and the caller refuses it
- * (D-3-03, MA-13). The check is on the value's type, so any string, including
- * an empty one, reaches the caller verbatim.
+ * git fetches from the FIRST `url` under `origin`, and the library's
+ * single-value config read returns the LAST. The function therefore reads
+ * every `remote.origin.url` value, in file order, across every
+ * `[remote "origin"]` section, and reports `origin` only for exactly one
+ * value. No value and two or more values report `no-origin`, which the caller
+ * refuses (D-3-03, MA-13, T-3-05, WR-11). The check is on the value's type
+ * because the library declares the values `any`, so any string, including an
+ * empty one, reaches the caller verbatim. The read folds the section name's
+ * case as git does, so a capitalized `Remote` section names the origin remote.
  *
  * The returned `url`, when present, is the wire form stored on disk,
  * verbatim. This tier may not import `domain/` (the `platform` zone's
@@ -480,12 +483,15 @@ export async function listRemotes(opts: ListRemotesOptions): Promise<ListRemotes
     return { kind: "unreadable" };
   }
 
-  const remotes = await git.listRemotes({ fs, dir: opts.dir });
-  const origin = remotes.find((r) => r.remote === "origin");
-  // `unknown`, not the library's declared `string`: see the url-less section
-  // paragraph above.
-  const url: unknown = origin?.url;
-  return typeof url === "string" ? { kind: "origin", url } : { kind: "no-origin" };
+  const urls: readonly unknown[] = await git.getConfigAll({
+    fs,
+    dir: opts.dir,
+    path: "remote.origin.url",
+  });
+  const url = urls[0];
+  return urls.length === 1 && typeof url === "string"
+    ? { kind: "origin", url }
+    : { kind: "no-origin" };
 }
 
 /**

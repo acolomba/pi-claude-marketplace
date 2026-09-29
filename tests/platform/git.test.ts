@@ -1453,14 +1453,17 @@ describe("listRemotes", () => {
     }
   });
 
-  // D-3-03 / MA-13: the `origin` section shapes an interrupted config rewrite
-  // leaves behind. `libraryRemotes` is `unknown` because isomorphic-git
-  // returns the `url` key present and holding `undefined`, which its declared
-  // `url: string` cannot express.
+  // D-3-03 / MA-13: the origin shapes an interrupted rewrite or a hand edit
+  // leaves behind. `libraryRemotes` is the library's per-section enumeration:
+  // it is `unknown` because a url-less section comes back holding `undefined`,
+  // and it reports the LAST url of a multi-valued origin. `libraryUrls` is
+  // every `remote.origin.url` value in file order, which is the read
+  // `listRemotes` makes; git fetches from the first (WR-11, T-3-05).
   interface OriginSectionShape {
     readonly title: string;
     readonly config: string;
     readonly libraryRemotes: unknown;
+    readonly libraryUrls: readonly string[];
     readonly wrapperResult: GitPlatform.ListRemotesResult;
   }
 
@@ -1470,23 +1473,63 @@ describe("listRemotes", () => {
       config:
         '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n',
       libraryRemotes: [{ remote: "origin", url: undefined }],
+      libraryUrls: [],
       wrapperResult: { kind: "no-origin" },
     },
     {
       title: "reports no-origin for an origin section with no keys",
       config: '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n',
       libraryRemotes: [{ remote: "origin", url: undefined }],
+      libraryUrls: [],
       wrapperResult: { kind: "no-origin" },
     },
     {
       title: "reports the empty url of an origin section whose url value is empty",
       config: '[remote "origin"]\n\turl =\n',
       libraryRemotes: [{ remote: "origin", url: "" }],
+      libraryUrls: [""],
       wrapperResult: { kind: "origin", url: "" },
+    },
+    {
+      title: "reports no-origin for an origin section whose first of two urls is foreign",
+      config: `[remote "origin"]\n\turl = ${OTHER_REMOTE_URL}\n\turl = ${REMOTE_URL}\n`,
+      libraryRemotes: [{ remote: "origin", url: REMOTE_URL }],
+      libraryUrls: [OTHER_REMOTE_URL, REMOTE_URL],
+      wrapperResult: { kind: "no-origin" },
+    },
+    {
+      title: "reports no-origin for an origin section whose second of two urls is foreign",
+      config: `[remote "origin"]\n\turl = ${REMOTE_URL}\n\turl = ${OTHER_REMOTE_URL}\n`,
+      libraryRemotes: [{ remote: "origin", url: OTHER_REMOTE_URL }],
+      libraryUrls: [REMOTE_URL, OTHER_REMOTE_URL],
+      wrapperResult: { kind: "no-origin" },
+    },
+    {
+      title: "reports no-origin for two origin sections that each record a url",
+      config: `[remote "origin"]\n\turl = ${OTHER_REMOTE_URL}\n[remote "origin"]\n\turl = ${REMOTE_URL}\n`,
+      libraryRemotes: [
+        { remote: "origin", url: REMOTE_URL },
+        { remote: "origin", url: REMOTE_URL },
+      ],
+      libraryUrls: [OTHER_REMOTE_URL, REMOTE_URL],
+      wrapperResult: { kind: "no-origin" },
+    },
+    {
+      title: "reports the origin url of an origin section whose section name is capitalized",
+      config: `[Remote "origin"]\n\turl = ${REMOTE_URL}\n`,
+      libraryRemotes: [],
+      libraryUrls: [REMOTE_URL],
+      wrapperResult: { kind: "origin", url: REMOTE_URL },
     },
   ];
 
-  for (const { title, config, libraryRemotes, wrapperResult } of ORIGIN_SECTION_SHAPES) {
+  for (const {
+    title,
+    config,
+    libraryRemotes,
+    libraryUrls,
+    wrapperResult,
+  } of ORIGIN_SECTION_SHAPES) {
     test(title, async (t) => {
       // arrange
       const repository = await createGitTestRepository(t, { boundary: "local" });
@@ -1499,6 +1542,10 @@ describe("listRemotes", () => {
       // Proves the fixture reproduces the shape, so a mis-authored config
       // cannot pass through the empty-remote-list path.
       assert.deepStrictEqual(await git.listRemotes({ fs, dir: repository.dir }), libraryRemotes);
+      assert.deepStrictEqual(
+        await git.getConfigAll({ fs, dir: repository.dir, path: "remote.origin.url" }),
+        libraryUrls,
+      );
       assert.deepStrictEqual(remotes, wrapperResult);
     });
   }
