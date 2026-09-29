@@ -5,7 +5,7 @@ milestone_name: Any Git Host
 current_phase: 2
 current_phase_name: Endpoints that answer only at the verbatim URL
 current_plan: 4
-status: "All 3 phases complete and verified passed at ab72dba0; both live canaries closed. Ready for milestone close"
+status: "Shipped as PR #221: all 3 phases verified passed and threat-secured after quick task 260928-tt9; awaiting merge, then milestone close"
 stopped_at: "All phases verified passed; ready for /gsd-complete-milestone"
 last_updated: "2026-09-28T21:22:05.298Z"
 last_activity: 2026-09-28
@@ -600,7 +600,7 @@ None.
 
 **Resume File:** None.
 
-**Next Action:** re-verify phases 1-3 (stale after quick task 260928-tt9), write phase 2/3 SECURITY.md, then ship. Optionally fix WR-11 (read
+**Next Action:** shipped as PR #221 (2026-09-28); after it merges, `/gsd-complete-milestone --ws git-hosts`. Optionally fix WR-11 (read
 `remote.origin.url` with `getConfigAll`, refuse unless exactly one url) before closing.
 
 ### What this run completed

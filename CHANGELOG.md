@@ -2,15 +2,15 @@
 
 ## [Unreleased]
 
-- A private marketplace or plugin source on any git host now clones with a credential that is already in your git credential helper. Before, only `github.com` and `gitlab.com` authenticated. Thanks to @jstillwa, who found this defect and the next two in #153.
+- A private marketplace or plugin source on any git host now clones with a credential that is already in your git credential helper. Before, only `github.com` and `gitlab.com` authenticated. Thanks to @jstillwa, who found this defect and the next two in #153. (#221)
 
   - If no credential is stored for the host, the error tells you to store one with `git credential approve`.
   - A credential goes only to the host it was stored for. When a server redirects to another scheme, host, or port, the extension follows the redirect without the credential, as git does.
   - The marketplace autoupdate now authenticates on every host too.
 
-- A `url` marketplace source is now fetched at the exact URL you typed. A server that serves only that URL, and returns 404 for the `.git` form, now works. The extension adds `.git` only to a `github.com` `owner/repo` URL, as Claude Code does. It makes one request per operation, so a missing or forbidden repository fails with its own error.
+- A `url` marketplace source is now fetched at the exact URL you typed. A server that serves only that URL, and returns 404 for the `.git` form, now works. The extension adds `.git` only to a `github.com` `owner/repo` URL, as Claude Code does. It makes one request per operation, so a missing or forbidden repository fails with its own error. (#221)
 
-- `marketplace add` now succeeds when an earlier attempt left a clone of the same source in place, for example after a crash. Any other leftover directory is still refused. If the leftover cannot be fully removed, the add fails and reports the cleanup error.
+- `marketplace add` now succeeds when an earlier attempt left a clone of the same source in place, for example after a crash. Any other leftover directory is still refused. If the leftover cannot be fully removed, the add fails and reports the cleanup error. (#221)
 
 - A hook matcher that lists several tools now runs on the tools Pi supports and ignores the ones it does not. Pi drops the whole matcher only when it supports none of the tools in the list. Thanks to @fank, who reported #217. (#219)
 
