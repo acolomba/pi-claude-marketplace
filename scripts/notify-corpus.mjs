@@ -1,9 +1,10 @@
 // fallow-ignore-file unused-file -- operator-run corpus tool (D-01, D-03): an engineer runs it from the command line, no npm script or module imports it, and it is deleted at milestone close.
+// fallow-ignore-file unused-export -- the exports are the pure core that notify-corpus.negative.mjs plants drifts against; that script is operator-run and outside the production graph.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 /**
  * Captures every `ctx.ui.notify` call the test suites make and diffs it against a baseline, so a
@@ -13,13 +14,28 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  * call's `(message, severity, argc)` and the test file that made it. Messages are normalized so
  * two captures of an unchanged tree are identical. `diff` compares two corpora per test file as
  * multisets: a baseline entry missing from the same file's capture fails (D-02), and an entry
- * present only in the capture is listed for review.
+ * present only in the capture is listed for review. A capture with fewer entries than the
+ * baseline is refused (D-04).
  *
- * Its companion `.negative.mjs` plants a drift and proves the diff reports it.
+ * `capture` without `--files` runs the quoted `tests/` globs of the `test` and `test:integration`
+ * npm scripts. `baseline` captures them into the committed baseline and its `meta.json` (D-03).
+ * `check` captures them again and diffs the result against that baseline. `npm run check` never
+ * runs this tool.
+ *
+ * Its companion `.negative.mjs` plants a drift and a shrunken capture and proves the diff reports
+ * both.
  */
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
-const hookUrl = pathToFileURL(fileURLToPath(new URL("notify-corpus.hook.mjs", import.meta.url)));
+const hookUrl = new URL("notify-corpus.hook.mjs", import.meta.url);
+const corpusDirectory = path.join(
+  projectRoot,
+  ".planning/phases/01-presentation-model/notify-corpus",
+);
+const baselinePath = path.join(corpusDirectory, "baseline.jsonl");
+const metaPath = path.join(corpusDirectory, "meta.json");
+const testRoot = "tests";
+const suiteScripts = ["test", "test:integration"];
 const excerptLength = 120;
 const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 // write-file-atomic names its temp file `<target>.<number>`.
@@ -167,13 +183,54 @@ export function diffCorpus(baseline, capture) {
   };
 }
 
+// The quoted `tests/` globs of one npm script, read the way
+// `tests/architecture/unit-suite-glob-completeness.test.ts` reads them, so the capture runs
+// exactly the files the suite runs.
+function quotedTestGlobs(scripts, scriptName) {
+  const script = scripts[scriptName];
+
+  if (script === undefined) {
+    throw new Error(`package.json declares no "${scriptName}" script`);
+  }
+
+  const quoted = [...script.matchAll(/"([^"]*)"/g)].map((match) => match[1]);
+  const foreign = quoted.filter((candidate) => !candidate.startsWith(`${testRoot}/`));
+
+  if (foreign.length > 0) {
+    throw new Error(
+      `the "${scriptName}" script quotes an argument that is not a ${testRoot}/ glob: ` +
+        foreign.join(", "),
+    );
+  }
+
+  if (quoted.length === 0) {
+    throw new Error(`the "${scriptName}" script quotes no ${testRoot}/ glob at all`);
+  }
+
+  return quoted;
+}
+
+function suiteGlobs() {
+  const { scripts } = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8"));
+
+  return suiteScripts.flatMap((scriptName) => quotedTestGlobs(scripts, scriptName));
+}
+
+function concurrencyArgs() {
+  const concurrency = process.env.TEST_CONCURRENCY;
+
+  return concurrency === undefined || concurrency === ""
+    ? []
+    : [`--test-concurrency=${concurrency}`];
+}
+
 function captureCorpus(outPath, testPaths) {
   const outputDirectory = mkdtempSync(path.join(os.tmpdir(), "notify-corpus-"));
 
   try {
     const testRun = spawnSync(
       process.execPath,
-      ["--import", hookUrl.href, "--test", ...testPaths],
+      ["--import", hookUrl.href, "--test", ...concurrencyArgs(), ...testPaths],
       {
         cwd: projectRoot,
         env: { ...process.env, NOTIFY_CORPUS_OUT: outputDirectory },
@@ -213,7 +270,8 @@ function describeEntry({ file, message, severity, argc, count }) {
   return `${file}: ${JSON.stringify(excerpt)} (argc ${argc}, severity ${severity}) x${count}`;
 }
 
-// Prints the diff and answers whether it passes.
+// Prints the diff and answers whether it passes. A capture with fewer entries than the baseline
+// is refused outright (D-04), whatever the per-file comparison says.
 function reportDiff(result) {
   for (const entry of result.extra) {
     process.stdout.write(`extra in ${describeEntry(entry)}\n`);
@@ -223,14 +281,21 @@ function reportDiff(result) {
     process.stderr.write(`missing in ${describeEntry(entry)}\n`);
   }
 
-  return result.missing.length === 0;
+  const { baseline, capture } = result.totals;
+  const shrunk = capture < baseline;
+
+  if (shrunk) {
+    process.stderr.write(`refused: capture holds ${capture} entries, baseline holds ${baseline}\n`);
+  }
+
+  return result.missing.length === 0 && !shrunk;
 }
 
 function readCorpus(corpusPath) {
   return parseCorpus(readFileSync(corpusPath, "utf8"));
 }
 
-// `capture --out <file> --files <path> ...`
+// `capture --out <file> [--files <path> ...]`
 function parseCaptureArgs(args) {
   const outIndex = args.indexOf("--out");
   const filesIndex = args.indexOf("--files");
@@ -242,11 +307,10 @@ function parseCaptureArgs(args) {
     throw new Error("capture needs --out <file>");
   }
 
-  if (files.length === 0) {
-    throw new Error("capture needs --files <path> ...");
-  }
-
-  return { outPath: path.resolve(outPath), files: files.map((file) => path.resolve(file)) };
+  return {
+    outPath: path.resolve(outPath),
+    testPaths: files.length === 0 ? suiteGlobs() : files.map((file) => path.resolve(file)),
+  };
 }
 
 function runDiff(args) {
@@ -261,25 +325,88 @@ function runDiff(args) {
   }
 }
 
+function countWhere(entries, predicate) {
+  return entries.filter((entry) => predicate(entry)).length;
+}
+
+function writeBaseline() {
+  const entries = captureCorpus(baselinePath, suiteGlobs());
+  const meta = {
+    nodeVersion: process.version,
+    capturedAt: new Date().toISOString(),
+    entries: entries.length,
+    files: new Set(entries.map((entry) => entry.file)).size,
+    argcOne: countWhere(entries, (entry) => entry.argc === 1),
+    argcTwo: countWhere(entries, (entry) => entry.argc === 2),
+  };
+
+  writeFileSync(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
+  process.stdout.write(`Notify corpus baseline written: ${entries.length} entries.\n`);
+}
+
+function nodeMajor(version) {
+  return version.replace(/^v/, "").split(".")[0];
+}
+
+// Messages embed Node's own error text, so a baseline only diffs cleanly on its Node major.
+function warnOnNodeMismatch() {
+  const { nodeVersion } = JSON.parse(readFileSync(metaPath, "utf8"));
+
+  if (nodeMajor(nodeVersion) !== nodeMajor(process.version)) {
+    process.stderr.write(
+      `warning: baseline captured on ${nodeVersion}, running ${process.version}\n`,
+    );
+  }
+}
+
+function runCheck() {
+  warnOnNodeMismatch();
+
+  const baseline = readCorpus(baselinePath);
+  const scratch = mkdtempSync(path.join(os.tmpdir(), "notify-corpus-check-"));
+
+  try {
+    const capture = captureCorpus(path.join(scratch, "capture.jsonl"), suiteGlobs());
+    const result = diffCorpus(baseline, capture);
+
+    if (!reportDiff(result)) {
+      process.stderr.write("Notify corpus check failed.\n");
+      process.exitCode = 1;
+      return;
+    }
+
+    const extra = result.extra.reduce((sum, entry) => sum + entry.count, 0);
+
+    process.stdout.write(
+      `Notify corpus check passed: ${baseline.length} baseline entries present, ${extra} extra.\n`,
+    );
+  } finally {
+    rmSync(scratch, { force: true, recursive: true });
+  }
+}
+
 function main() {
   const [verb, ...args] = process.argv.slice(2);
 
   if (verb === "capture") {
-    const { outPath, files } = parseCaptureArgs(args);
-    const entries = captureCorpus(outPath, files);
+    const { outPath, testPaths } = parseCaptureArgs(args);
+    const entries = captureCorpus(outPath, testPaths);
 
     process.stdout.write(`Captured ${entries.length} notify entries into ${outPath}.\n`);
     return;
   }
 
-  if (verb === "diff") {
-    runDiff(args);
-    return;
+  const verbs = { diff: () => runDiff(args), baseline: writeBaseline, check: runCheck };
+  const run = Object.hasOwn(verbs, verb ?? "") ? verbs[verb] : undefined;
+
+  if (run === undefined) {
+    throw new Error(
+      "Usage: notify-corpus.mjs capture --out <file> [--files <path> ...] | diff <baseline> " +
+        "<capture> | baseline | check",
+    );
   }
 
-  throw new Error(
-    "Usage: notify-corpus.mjs capture --out <file> --files <path> ... | diff <a> <b>",
-  );
+  run();
 }
 
 const invokedPath = process.argv[1] === undefined ? undefined : path.resolve(process.argv[1]);
