@@ -9,8 +9,9 @@ import { parseArgs } from "../../args.ts";
 
 import type { GitOps } from "../../../orchestrators/marketplace/shared.ts";
 import type { InstallHooksRouting } from "../../../orchestrators/plugin/install-disable-cascade.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionAPI } from "../../../platform/pi-api.ts";
 import type { CompletionCache } from "../../../shared/completion-cache.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin import [--scope user|project]";
 
@@ -22,12 +23,17 @@ export interface ImportHandlerDeps {
   ) => Promise<ClaudeImportExecutionResult>;
 }
 
+/**
+ * Builds the `import` handler. `pi` is kept only to forward to the nested
+ * install and marketplace-add orchestrators; import's own cascade renders
+ * from the router's run.
+ */
 export function makeImportHandler(
   pi: ExtensionAPI,
   deps: ImportHandlerDeps,
   hooksRouting: InstallHooksRouting,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     let parsed: ReturnType<typeof parseArgs>;
     try {
       parsed = parseArgs(args);
@@ -49,6 +55,7 @@ export function makeImportHandler(
 
     const options: ImportClaudeSettingsOptions = {
       ctx,
+      run,
       pi,
       cwd: ctx.cwd,
       selectedScopes: parsed.scope === undefined ? ["project", "user"] : [parsed.scope],

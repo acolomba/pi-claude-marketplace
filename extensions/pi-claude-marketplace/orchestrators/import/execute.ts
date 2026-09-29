@@ -47,6 +47,7 @@ import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface MarketplaceAddedOutcome {
@@ -172,6 +173,16 @@ export interface ImportDeps {
 
 export interface ImportClaudeSettingsOptions {
   readonly ctx: ExtensionContext;
+  /**
+   * D-05 / D-07: the command's run. The import cascade renders from its
+   * soft-dependency snapshot.
+   */
+  readonly run: NotificationRun;
+  /**
+   * The inventory forwarded to the nested install and marketplace-add
+   * orchestrators, which do not take a run yet. Import's own emission reads
+   * `run`.
+   */
   readonly pi: ExtensionAPI;
   readonly cwd: string;
   readonly selectedScopes: readonly Scope[];
@@ -1304,7 +1315,7 @@ export async function importClaudeSettings(
     buildImportNotificationMarketplaces(result);
   // OUT-04 / D-04: import is a plural (bulk) operation -> emit the trailing
   // per-operation tally under the `Import` label.
-  notifyWithContext(opts.ctx, opts.pi, IMPORT_CONTEXT, marketplaces, undefined, "plural");
+  notifyWithContext(opts.ctx, opts.run, IMPORT_CONTEXT, marketplaces, undefined, "plural");
   surfaceImportDiagnostics(opts.ctx, result.diagnostics);
 
   return result;

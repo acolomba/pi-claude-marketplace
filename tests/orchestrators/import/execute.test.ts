@@ -25,6 +25,11 @@
 // `notifyDiagnostic` seam `importClaudeSettings` fires once after the
 // cascade (mirrors `reconcile/apply.ts`'s post-commit-warnings exception) --
 // every other case promises exactly one.
+//
+// D-05: the cascade renders from the command run's snapshot, so every case
+// states zero tool probes. The strict `pi` is still forwarded to the nested
+// install and marketplace add, which run orchestrated and never probe, so it
+// states no `getAllTools()` expectation and any probe fails where it happens.
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -49,6 +54,7 @@ import {
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
@@ -408,11 +414,12 @@ function emptyImportResult(): ClaudeImportExecutionResult {
 test("declares plural cardinality when import produces zero rows", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "zero-row-tally");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
 
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       loadSettings: () => Promise.resolve(claudeSettings({})),
@@ -432,7 +439,7 @@ test("declares plural cardinality when import produces zero rows", async (t) => 
 test("records a marketplace the state does not carry and installs its declared plugin", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "add-and-install");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const gitOps = createOfflineGitOps();
   const installPlugin = mock<InstallPlugin>({ exactParams: true, name: "install plugin" });
   when(() =>
@@ -471,6 +478,7 @@ test("records a marketplace the state does not carry and installs its declared p
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: () => Promise.resolve(addedOutcome("mp")),
@@ -505,8 +513,8 @@ test("records a marketplace the state does not carry and installs its declared p
 test("passes the marketplace add an options object that carries the git port only when the caller supplied one", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "git-port");
-  const withPort = createNotificationBoundary(1, 3);
-  const withoutPort = createNotificationBoundary(1, 3);
+  const withPort = createNotificationBoundary(1, 0);
+  const withoutPort = createNotificationBoundary(1, 0);
   const gitOps = createOfflineGitOps();
   const withRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const withoutRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
@@ -533,6 +541,7 @@ test("passes the marketplace add an options object that carries the git port onl
   // act
   await importClaudeSettings({
     ctx: withPort.ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators(promised()),
     gitOps,
@@ -542,6 +551,7 @@ test("passes the marketplace add an options object that carries the git port onl
   });
   await importClaudeSettings({
     ctx: withoutPort.ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators(promised()),
     pi: withoutPort.pi,
@@ -612,7 +622,7 @@ for (const { addMarketplace, cause, title } of [
   test(`ensures the rest of the batch after ${title} on the first marketplace`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScopes(t, "add-fault-first");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const expectedResult: ClaudeImportExecutionResult = {
       ...emptyImportResult(),
       addedMarketplaces: [added("mp-b", "user"), added("mp-c", "user")],
@@ -625,6 +635,7 @@ for (const { addMarketplace, cause, title } of [
     // act
     const importResult = await importClaudeSettings({
       ctx,
+      run: runWithNothingLoaded(),
       cwd,
       deps: collaborators({
         addMarketplace: (options) => addMarketplace(options.rawSource),
@@ -703,7 +714,7 @@ for (const { addMarketplace, cause, title } of [
   test(`ensures the rest of the batch after ${title} on a middle marketplace`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScopes(t, "add-fault-middle");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const expectedResult: ClaudeImportExecutionResult = {
       ...emptyImportResult(),
       addedMarketplaces: [added("mp-a", "user"), added("mp-c", "user")],
@@ -716,6 +727,7 @@ for (const { addMarketplace, cause, title } of [
     // act
     const importResult = await importClaudeSettings({
       ctx,
+      run: runWithNothingLoaded(),
       cwd,
       deps: collaborators({
         addMarketplace: (options) => addMarketplace(options.rawSource),
@@ -761,12 +773,13 @@ for (const { addMarketplace, cause, title } of [
 test("ensures every marketplace before installing any plugin and never installs under a blocked one", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "ensure-order");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const calls: string[] = [];
 
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: (options) => {
@@ -817,7 +830,7 @@ for (const { declared, stored, title } of [
   test(`skips a recorded marketplace and its recorded plugin when ${title} matches the declaration`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScopes(t, "recorded-same");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const expectedResult: ClaudeImportExecutionResult = {
       ...emptyImportResult(),
       skippedExistingMarketplaces: [skipped("mp", "user")],
@@ -827,6 +840,7 @@ for (const { declared, stored, title } of [
     // act
     const importResult = await importClaudeSettings({
       ctx,
+      run: runWithNothingLoaded(),
       cwd,
       deps: collaborators({
         loadSettings: () =>
@@ -892,7 +906,7 @@ for (const { cause, declared, stored, title } of [
   test(`reports a source mismatch on every dependent plugin when ${title}`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScopes(t, "recorded-different");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const expectedResult: ClaudeImportExecutionResult = {
       ...emptyImportResult(),
       sourceMismatches: [
@@ -904,6 +918,7 @@ for (const { cause, declared, stored, title } of [
     // act
     const importResult = await importClaudeSettings({
       ctx,
+      run: runWithNothingLoaded(),
       cwd,
       deps: collaborators({
         loadSettings: () =>
@@ -943,7 +958,7 @@ for (const { cause, declared, stored, title } of [
 test("fails a recorded marketplace whose stored source is unrecognized and renders its header", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "recorded-unknown");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 0);
   const cause = "unrecognized stored source format";
   const diagnosticMessage =
     'Marketplace "mp" has an unrecognized stored source format. ' +
@@ -966,6 +981,7 @@ test("fails a recorded marketplace whose stored source is unrecognized and rende
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       loadSettings: () =>
@@ -1010,7 +1026,7 @@ test("fails a recorded marketplace whose stored source is unrecognized and rende
 test("warns about a plugin whose marketplace declares no supported source and renders no row for it", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "unmappable");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 0);
   const unmappableDiagnosticMessage =
     'Skipping Claude marketplace "unknown-mp" because it has no supported url, github, ' +
     "or directory source (nested file/remote-marketplace.json sources are not importable).";
@@ -1039,6 +1055,7 @@ test("warns about a plugin whose marketplace declares no supported source and re
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       loadSettings: () =>
@@ -1065,7 +1082,7 @@ test("warns about a plugin whose marketplace declares no supported source and re
 test("carries the settings loader's own diagnostics onto the result", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "settings-diagnostics");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 0);
   const settingsDiagnostic: Diagnostic = {
     code: "malformed-json",
     message: "Unable to parse Claude base settings file: Unexpected token",
@@ -1081,6 +1098,7 @@ test("carries the settings loader's own diagnostics onto the result", async (t) 
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       loadSettings: () => Promise.resolve(claudeSettings({ diagnostics: [settingsDiagnostic] })),
@@ -1148,7 +1166,7 @@ for (const { cause, error, reason, title } of [
   test(`warns and keeps installing the batch when ${title}`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScopes(t, "install-warning");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const attempted: string[] = [];
     const expectedResult: ClaudeImportExecutionResult = {
       ...emptyImportResult(),
@@ -1161,6 +1179,7 @@ for (const { cause, error, reason, title } of [
     // act
     const importResult = await importClaudeSettings({
       ctx,
+      run: runWithNothingLoaded(),
       cwd,
       deps: collaborators({
         addMarketplace: () => Promise.resolve(addedOutcome("mp")),
@@ -1234,7 +1253,7 @@ for (const { error, faulted, order, title } of [
   test(`skips the plugin and keeps the batch when ${title} (${faulted} entry)`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScopes(t, "install-skip");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const surviving = order.filter((plugin) => plugin !== "target");
     const attempted: string[] = [];
     const expectedResult: ClaudeImportExecutionResult = {
@@ -1248,6 +1267,7 @@ for (const { error, faulted, order, title } of [
     // act
     const importResult = await importClaudeSettings({
       ctx,
+      run: runWithNothingLoaded(),
       cwd,
       deps: collaborators({
         addMarketplace: () => Promise.resolve(addedOutcome("mp")),
@@ -1324,7 +1344,7 @@ for (const { cause, installPlugin, order, title } of [
   test(`records an unexpected plugin failure and keeps the batch after ${title}`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScopes(t, "install-unexpected");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const surviving = order.filter((plugin) => plugin !== "target");
     const attempted: string[] = [];
     const expectedResult: ClaudeImportExecutionResult = {
@@ -1338,6 +1358,7 @@ for (const { cause, installPlugin, order, title } of [
     // act
     const importResult = await importClaudeSettings({
       ctx,
+      run: runWithNothingLoaded(),
       cwd,
       deps: collaborators({
         addMarketplace: () => Promise.resolve(addedOutcome("mp")),
@@ -1426,7 +1447,7 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
   test(`propagates declaresAgents ${declaresAgents}, declaresMcp ${declaresMcp} and declaresWorkflows ${declaresWorkflows} onto the outcome and the cascade row`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScopes(t, "declares");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const expectedResult: ClaudeImportExecutionResult = {
       ...emptyImportResult(),
       addedMarketplaces: [added("mp", "user")],
@@ -1443,6 +1464,7 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
     // act
     const importResult = await importClaudeSettings({
       ctx,
+      run: runWithNothingLoaded(),
       cwd,
       deps: collaborators({
         addMarketplace: () => Promise.resolve(addedOutcome("mp")),
@@ -1484,7 +1506,7 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
 test("records each post-commit warning the installed outcome carried as its own diagnostic", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "post-commit");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 0);
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     addedMarketplaces: [added("mp", "user")],
@@ -1511,6 +1533,7 @@ test("records each post-commit warning the installed outcome carried as its own 
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: () => Promise.resolve(addedOutcome("mp")),
@@ -1559,7 +1582,7 @@ test("records each post-commit warning the installed outcome carried as its own 
 test("reports no changed resources when every install left the Pi resource set alone", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "no-resource-change");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     addedMarketplaces: [added("mp", "user")],
@@ -1569,6 +1592,7 @@ test("reports no changed resources when every install left the Pi resource set a
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: () => Promise.resolve(addedOutcome("mp")),
@@ -1603,7 +1627,7 @@ test("reports no changed resources when every install left the Pi resource set a
 test("installs only the plugin the state does not already record under a recorded marketplace", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "mixed-plugins");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const attempted: string[] = [];
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
@@ -1616,6 +1640,7 @@ test("installs only the plugin the state does not already record under a recorde
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       installPlugin: (options) => {
@@ -1665,12 +1690,13 @@ test("installs only the plugin the state does not already record under a recorde
 test("installs every plugin in orchestrated mode and never opts in to the default-enabled policy", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "install-options");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const requested: InstallOptions[] = [];
 
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: () => Promise.resolve(addedOutcome("mp")),
@@ -1719,7 +1745,7 @@ test("installs every plugin in orchestrated mode and never opts in to the defaul
 test("abandons only the scope whose state cannot be read and records why", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "state-unreadable");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 0);
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     addedMarketplaces: [added("mp-project", "project")],
@@ -1738,6 +1764,7 @@ test("abandons only the scope whose state cannot be read and records why", async
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: () => Promise.resolve(addedOutcome("mp-project")),
@@ -1780,7 +1807,7 @@ test("abandons only the scope whose state cannot be read and records why", async
 test("keeps each selected scope's marketplaces and plugins independent and renders both blocks", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "two-scopes");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const calls: string[] = [];
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
@@ -1792,6 +1819,7 @@ test("keeps each selected scope's marketplaces and plugins independent and rende
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: (options) => {
@@ -1847,7 +1875,7 @@ function configBytes(declared: {
 test("declares every added marketplace and installed plugin in the persisted config", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "batch-happy");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const expectedBytes = configBytes({
     marketplaces: { mp1: { source: "owner/mp1" }, mp2: { source: "owner/mp2" } },
     plugins: { "p1@mp1": {}, "p2@mp1": {}, "p3@mp2": {} },
@@ -1856,6 +1884,7 @@ test("declares every added marketplace and installed plugin in the persisted con
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: (options) => Promise.resolve(addedOutcome(options.rawSource)),
@@ -1885,7 +1914,7 @@ test("declares every added marketplace and installed plugin in the persisted con
 test("leaves the config byte-identical when the batch carries nothing to declare", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "batch-empty");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   await createScopeRoots(project);
   const seededBytes = `${JSON.stringify({ schemaVersion: 1, futureKey: "preserved" }, null, 2)}\n`;
   await writeFile(project.configJsonPath, seededBytes, "utf8");
@@ -1893,6 +1922,7 @@ test("leaves the config byte-identical when the batch carries nothing to declare
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: () => Promise.resolve(undefined),
@@ -1918,7 +1948,7 @@ test("leaves the config byte-identical when the batch carries nothing to declare
 test("declares only the entries whose marketplace and install both succeeded", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "batch-mixed");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const expectedBytes = configBytes({
     marketplaces: { mp1: { source: "owner/mp1" } },
     plugins: { "p1@mp1": {} },
@@ -1927,6 +1957,7 @@ test("declares only the entries whose marketplace and install both succeeded", a
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: (options) =>
@@ -1957,7 +1988,7 @@ test("declares only the entries whose marketplace and install both succeeded", a
 test("abandons the post-pass for a scope whose config is invalid and still writes the other scope", async (t) => {
   // arrange
   const { cwd, project, user } = await createHermeticScopes(t, "batch-invalid");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 0);
   await createScopeRoots(project, user);
   const invalidBytes = "{ not valid json";
   await writeFile(user.configJsonPath, invalidBytes, "utf8");
@@ -1983,6 +2014,7 @@ test("abandons the post-pass for a scope whose config is invalid and still write
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: (options) => Promise.resolve(addedOutcome(options.rawSource)),
@@ -2026,7 +2058,7 @@ test("abandons the post-pass for a scope whose config is invalid and still write
 test("declares a missing config entry for a marketplace and plugin the state already records", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "repair");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const expectedBytes = configBytes({
     marketplaces: { mp: { source: "./mp" } },
     plugins: { "plugin@mp": {} },
@@ -2035,6 +2067,7 @@ test("declares a missing config entry for a marketplace and plugin the state alr
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       loadSettings: () =>
@@ -2069,7 +2102,7 @@ test("declares a missing config entry for a marketplace and plugin the state alr
 test("leaves an already-declared config byte-identical when every entry was a skip", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "repair-declared");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   await createScopeRoots(project);
   const seededBytes = configBytes({
     marketplaces: { mp: { source: "./mp" } },
@@ -2080,6 +2113,7 @@ test("leaves an already-declared config byte-identical when every entry was a sk
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       loadSettings: () =>
@@ -2114,7 +2148,7 @@ test("leaves an already-declared config byte-identical when every entry was a sk
 test("repairs each scope's own config and never leaks the other scope's recorded entries", async (t) => {
   // arrange
   const { cwd, project, user } = await createHermeticScopes(t, "repair-scoped");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const expectedUserBytes = configBytes({
     marketplaces: { "mp-user": { source: "./user" } },
     plugins: { "p-user@mp-user": {} },
@@ -2127,6 +2161,7 @@ test("repairs each scope's own config and never leaks the other scope's recorded
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       loadSettings: (scope) =>
@@ -2162,7 +2197,7 @@ test("repairs each scope's own config and never leaks the other scope's recorded
 test("skips a recorded marketplace the later scope plan never declared when building its patch", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "patch-undeclared-add");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const expectedBytes = configBytes({
     marketplaces: { "mp-a": { source: "./a" }, "mp-b": { source: "./b" } },
     plugins: { "a@mp-a": {}, "b@mp-b": {} },
@@ -2171,6 +2206,7 @@ test("skips a recorded marketplace the later scope plan never declared when buil
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: (options) =>
@@ -2216,7 +2252,7 @@ test("skips a recorded marketplace the later scope plan never declared when buil
 test("skips a repair for a marketplace the later scope plan never declared", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "patch-undeclared-repair");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const expectedBytes = configBytes({
     marketplaces: { "mp-a": { source: "./a" }, "mp-b": { source: "./b" } },
     plugins: { "a@mp-a": {}, "b@mp-b": {} },
@@ -2225,6 +2261,7 @@ test("skips a repair for a marketplace the later scope plan never declared", asy
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       loadSettings: settingsSequence([
@@ -2276,7 +2313,7 @@ test("skips a repair for a marketplace the later scope plan never declared", asy
 test("records a diagnostic and keeps the result when the batched config write fails", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "batch-write-fails");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 0);
   await mkdir(project.scopeRoot, { recursive: true });
   // A regular file where the extension root belongs: taking the scope lock has
   // to create that directory first, so the post-pass fails before any write.
@@ -2302,6 +2339,7 @@ test("records a diagnostic and keeps the result when the batched config write fa
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: () => Promise.resolve(addedOutcome("mp")),
@@ -2394,7 +2432,7 @@ function preToolUseRoutes(runtime: HooksRuntime): readonly {
 test("resolves every collaborator from production when the caller supplies no dependency bundle", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "no-deps");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 6);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 0);
   const ownerRuntime = createHooksRuntime();
   const peerRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
@@ -2448,6 +2486,7 @@ test("resolves every collaborator from production when the caller supplies no de
   });
   const importOptions = {
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     gitOps: createOfflineGitOps(),
     pi,
@@ -2499,7 +2538,7 @@ test("resolves every collaborator from production when the caller supplies no de
 test("declares a marketplace whose only plugin failed to install", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "marketplace-only-patch");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const expectedBytes = configBytes({
     marketplaces: { mp: { source: "./mp" } },
     plugins: {},
@@ -2508,6 +2547,7 @@ test("declares a marketplace whose only plugin failed to install", async (t) => 
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: () => Promise.resolve(addedOutcome("mp")),
@@ -2540,7 +2580,7 @@ test("declares a marketplace whose only plugin failed to install", async (t) => 
 test("declares a freshly installed plugin under a recorded marketplace that records no plugins", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "plugin-only-patch");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const expectedBytes = configBytes({
     marketplaces: { mp: { source: "./mp" } },
     plugins: { "fresh@mp": {} },
@@ -2549,6 +2589,7 @@ test("declares a freshly installed plugin under a recorded marketplace that reco
   // act
   await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       installPlugin: () => Promise.resolve(installedOutcome()),
@@ -2579,7 +2620,7 @@ test("declares a freshly installed plugin under a recorded marketplace that reco
 test("lets a later scope plan's source mismatch supersede the header an earlier add recorded", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "status-supersede");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const cause = "Existing marketplace source ./x does not match Claude settings source owner/x.";
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
@@ -2592,6 +2633,7 @@ test("lets a later scope plan's source mismatch supersede the header an earlier 
   // act
   const importResult = await importClaudeSettings({
     ctx,
+    run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
       addMarketplace: () => Promise.resolve(addedOutcome("mp-x")),

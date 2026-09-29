@@ -70,6 +70,7 @@ import { saveState } from "../../extensions/pi-claude-marketplace/persistence/st
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { runWithSoftDeps } from "../shared/notification-run-seeds.ts";
 
 import {
   EXTENSION_ROOT_REL,
@@ -427,6 +428,11 @@ const SITE_CASES = [
         // act
         await importClaudeSettings({
           ctx,
+          run: runWithSoftDeps({
+            piSubagentsLoaded: false,
+            piMcpAdapterLoaded: false,
+            workflowEngineLoaded: engineLoaded,
+          }),
           cwd,
           gitOps: createGitOpsFake({ allowedRemoteUrls: [], boundary: "memory" }).gitOps,
           pi,
