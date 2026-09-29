@@ -1,6 +1,13 @@
 /**
- * tests/architecture/workflows-marker-coverage.test.ts -- WDEP-04 / SNM-06
- * cross-site coverage gate for the `requires pi-dynamic-workflows` marker.
+ * tests/architecture/workflows-marker-coverage.test.ts -- two claims about where
+ * soft-dep markers come from.
+ *
+ * First, the WDEP-04 / SNM-06 cross-site coverage gate for the
+ * `requires pi-dynamic-workflows` marker: every `Dependency[]` derivation site
+ * renders it. Second, D-12 / SC-5: the extension calls `softDepMarkers` from
+ * exactly one module, the resolve step. A second call site would let a surface
+ * compose markers that the per-verb marker policy does not govern. The last
+ * two cases own that claim, with a planted control.
  *
  * Each derivation site's owner suite proves its own row bytes directly. This
  * suite keeps the distinct architectural invariant: EVERY `Dependency[]`
@@ -64,7 +71,13 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
+import {
+  EXTENSION_ROOT_REL,
+  SOFT_DEP_MARKER_DERIVATION_TARGETS,
+  WORKFLOWS_MARKER_COVERAGE_TARGETS,
+} from "./gate-targets.ts";
 import { filesMatching } from "./source-scan.ts";
+import { materializeTargets, plantOffender, withTempRoot } from "./temp-root-control.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -520,4 +533,51 @@ test("WDEP-04: the case list covers every Dependency[] derivation site", async (
     [...SITE_CASES].map(({ site }) => site).sort(),
     "WDEP-04: the Dependency[] derivation sites on disk no longer match SITE_CASES. A site present here and absent there renders no host-engine marker and nothing else would notice; add a case that drives its PUBLIC surface. A site absent here and present there has lost its derivation; retire the case with it.",
   );
+});
+
+/**
+ * A call to the marker helper. The lookbehind skips its declaration in
+ * `shared/concerns/soft-dep.ts`, which names the helper but derives nothing.
+ */
+const MARKER_DERIVATION_CALL = /(?<!function\s)\bsoftDepMarkers\(/;
+
+/** The real orchestrator whose copy receives the planted call. */
+const PLANTED_CALLER_HOST: (typeof WORKFLOWS_MARKER_COVERAGE_TARGETS)[number] =
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
+
+const SINGLE_DERIVATION_SITE_MESSAGE =
+  "D-12 / SC-5: softDepMarkers is called outside the resolve module, or no longer called there. A second derivation site would let a surface compose markers the policy table does not govern; route the row through resolveRows instead.";
+
+test("D-12 / SC-5: softDepMarkers is called only from the resolve module", async () => {
+  // act
+  const discovered = await filesMatching(EXTENSION_ROOT_REL, MARKER_DERIVATION_CALL);
+
+  // assert -- set equality in both directions, so a new caller and a lost
+  // resolve call are both red.
+  assert.deepEqual(
+    discovered,
+    [...SOFT_DEP_MARKER_DERIVATION_TARGETS],
+    SINGLE_DERIVATION_SITE_MESSAGE,
+  );
+});
+
+test("D-12: the derivation-site scan reports a softDepMarkers call planted in a copy of a real orchestrator", async () => {
+  await withTempRoot("marker-derivation-offender-", async (root) => {
+    // arrange
+    await materializeTargets(root, SOFT_DEP_MARKER_DERIVATION_TARGETS);
+    await plantOffender(
+      root,
+      PLANTED_CALLER_HOST,
+      "export const plantedMarkers = softDepMarkers(true, false, false, snapshot);",
+    );
+
+    // act
+    const discovered = await filesMatching(EXTENSION_ROOT_REL, MARKER_DERIVATION_CALL, { root });
+
+    // assert
+    assert.deepEqual(
+      discovered,
+      [PLANTED_CALLER_HOST, ...SOFT_DEP_MARKER_DERIVATION_TARGETS].sort(),
+    );
+  });
 });

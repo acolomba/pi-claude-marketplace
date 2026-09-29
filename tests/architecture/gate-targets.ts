@@ -620,6 +620,11 @@ export const WORKFLOWS_MARKER_COVERAGE_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts",
 ] as const;
 
+/** D-12 / SC-5: the one module that derives soft-dep markers. */
+export const SOFT_DEP_MARKER_DERIVATION_TARGETS = [
+  "extensions/pi-claude-marketplace/shared/notification-resolve.ts",
+] as const;
+
 /**
  * D-07-19 / GGAT-04: every export the repository publishes that no production
  * consumer reads, keyed by the file that publishes it.
