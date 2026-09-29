@@ -176,6 +176,8 @@ function unknownObjectSource(obj: Record<string, unknown>, reason: string): Unkn
  * two fields `urlObjectSource` reads reach different consumers: `url` becomes
  * the cache identity `canonicalCloneUrl` returns, and `raw` becomes the wire url
  * `networkCloneUrl` hands to `gitOps`. Each one is gated on its own.
+ * `urlObjectSource` then admits `raw` only when its parse-time identity equals
+ * `url`'s (T-2-10).
  *
  * D-76-02: the gate's first arm sends a github.com url through the github
  * parser, so it normalizes to `github` kind (one canonical identity per repo;
@@ -217,6 +219,17 @@ function urlObjectSource(obj: Record<string, unknown>): ParsedSource {
   const gatedRaw = gatedUrlField(obj, raw);
   if (gatedRaw.kind === "unknown") {
     return gatedRaw;
+  }
+
+  // T-2-10: `url` picks the auth host and the shared clone directory and `raw`
+  // picks what is fetched, so `raw` must parse to the identity `url` names.
+  // D-2-05's decorations strip to that identity. The ref stays out because a
+  // persisted record keeps it in its own field.
+  if (gatedRaw.kind !== "url" || gatedRaw.url !== identity.url) {
+    return unknownObjectSource(
+      obj,
+      `url source raw ${raw} does not name the same repository as url ${url}`,
+    );
   }
 
   // The gate above decides only whether `raw` is admissible; the value carried

@@ -730,7 +730,10 @@ const URL_IDENTITY_CASES: readonly ParseCase[] = [
  * identity `canonicalCloneUrl` returns, and `raw` becomes the wire url
  * `networkCloneUrl` hands to `gitOps.clone`. Each rejected scheme is therefore
  * listed twice, once per field: a gate on only one of them leaves the other as a
- * way to reach the network with an unvalidated string.
+ * way to reach the network with an unvalidated string. T-2-10: a `raw` that
+ * passes the scheme gate must still parse to the identity `url` names, because
+ * `url` picks the credential host and the shared clone directory while `raw`
+ * picks what is fetched; D-2-05's decorations are the only difference admitted.
  */
 const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
   {
@@ -862,6 +865,51 @@ const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
     name: "drops the raw field of a github object url, whose wire form never reads it",
     raw: { source: "url", url: "https://github.com/o/r", raw: "http://evil.example/x" },
     source: { kind: "github", raw: "https://github.com/o/r", owner: "o", repo: "r" },
+  },
+  {
+    name: "rejects a raw url on another host than the identity url in the object form",
+    raw: { source: "url", raw: "https://evil.example/o/r", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","raw":"https://evil.example/o/r","url":"https://gitlab.com/o/r"}',
+      reason:
+        "url source raw https://evil.example/o/r does not name the same repository as url https://gitlab.com/o/r",
+    },
+  },
+  {
+    name: "rejects a github raw url behind a non-github identity url in the object form",
+    raw: { source: "url", raw: "https://github.com/evil/x", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","raw":"https://github.com/evil/x","url":"https://gitlab.com/o/r"}',
+      reason:
+        "url source raw https://github.com/evil/x does not name the same repository as url https://gitlab.com/o/r",
+    },
+  },
+  {
+    name: "rejects a raw url on the identity host with another path in the object form",
+    raw: { source: "url", raw: "https://gitlab.com/evil/x", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","raw":"https://gitlab.com/evil/x","url":"https://gitlab.com/o/r"}',
+      reason:
+        "url source raw https://gitlab.com/evil/x does not name the same repository as url https://gitlab.com/o/r",
+    },
+  },
+  {
+    name: "rejects a raw url on another host than the identity url in a kind-tagged object",
+    raw: { kind: "url", raw: "https://evil.example/o/r", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"kind":"url","raw":"https://evil.example/o/r","url":"https://gitlab.com/o/r"}',
+      reason:
+        "url source raw https://evil.example/o/r does not name the same repository as url https://gitlab.com/o/r",
+    },
+  },
+  {
+    name: "admits a raw url that differs from the identity url only by decoration in the object form",
+    raw: { source: "url", raw: "https://gitlab.com/o/r.git/", url: "https://gitlab.com/o/r" },
+    source: { kind: "url", raw: "https://gitlab.com/o/r.git/", url: "https://gitlab.com/o/r" },
   },
 ];
 
