@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 01
 current_phase_name: Presentation Model
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-09-29T15:37:14.665Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-09-29T17:08:32.866Z"
 last_activity: 2026-09-29
-last_activity_desc: Completed 01-02 envelope resolve step
-state_head: 0e6a4917d85b6f721852e518ba6ac5ed1eb85c3b
+last_activity_desc: Completed 01-03 resolved row facts
+state_head: 1f98f34ae8509ef250cd3cfe0368c5d546e9fe07
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 16
-  completed_plans: 2
+  completed_plans: 3
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Presentation Model) — EXECUTING
-Plan: 3 of 16
+Plan: 4 of 16
 Status: Ready to execute
-Last activity: 2026-09-29 — Completed 01-02 (envelope resolve step)
+Last activity: 2026-09-29 — Completed 01-03 (resolved row facts)
 
-Progress: [█░░░░░░░░░] 13% (2 of 16 plans)
+Progress: [█░░░░░░░░░] 19% (3 of 16 plans)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,8 +168,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-29T15:37:14.602Z
-**Stopped at:** Completed 01-02-PLAN.md
+**Last session:** 2026-09-29T17:08:32.802Z
+**Stopped at:** Completed 01-03-PLAN.md
 **Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
@@ -201,9 +201,13 @@ archived milestone artifacts.
 |------|----------|-------|-------|
 | Phase 01 P01 | 50 min | 3 tasks | 5 files |
 | Phase 01 P02 | 80 min | 2 tasks | 11 files |
+| Phase 01 P03 | 67 min | 2 tasks | 15 files |
 
 ## Decisions
 
 - [Phase 01]: Notify corpus scripts carry file-level fallow-ignore markers (unused-file; unused-export on notify-corpus.mjs) instead of a package.json entry, since D-03 keeps the tool out of package.json and npm run check
 - [Phase 01]: resolveEnvelope resolves severity and the summary line before needsReload and the tally, because getter-backed kind cases in notification-dispatch.test.ts pin the bytes of that read order
 - [Phase 01]: emitWithSummary keeps its name and takes a ResolvedEnvelope; every structured emitter renders the body, resolves the envelope, then formats and notifies once
+- [Phase 01]: dispatchInfoMessage keeps rendering the standalone body before it resolves the envelope, and calls resolveRows only in the reconcile-applied arm, because getter-backed kind tests pin that read order
+- [Phase 01]: The context emitters take a required hasRenderArm predicate; resolveRows floors a row with no render arm to error on the input row before the envelope resolves
+- [Phase 01]: Row hints are RowHint ids set in resolveRows; the grammar maps them to frozen literals through a map total over RowHint
