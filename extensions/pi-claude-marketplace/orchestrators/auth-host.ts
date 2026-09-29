@@ -115,7 +115,7 @@ export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git
  * `hookDebugLog`.
  */
 export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
-  `no credential was obtained for ${host}; store one with: printf 'protocol=https\\nhost=${host}\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve`;
+  String.raw`no credential was obtained for ${host}; store one with: printf 'protocol=https\nhost=${host}\nusername=<user>\npassword=<token>\n\n' | git credential approve`;
 
 /**
  * Whether the provider registry claims `host` with a Device Flow.
