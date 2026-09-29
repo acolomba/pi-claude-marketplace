@@ -46,7 +46,61 @@ re-opened.
 4. Failure detail reaches the renderer as a serialized `causeChain: string[]` with a `truncated` flag, plus per-phase rollback entries and manual-recovery leaks as strings. No live `Error` crosses into rendering, and the cause-chain text is byte-identical to the baseline.
 5. The probe-to-marker derivation has its own owner test that states the per-verb suppression table as data. `workflows-marker-coverage` scans the new derivation site and is not deleted.
 
-**Plans:** TBD
+**Plans:** 16 plans, sequential (waves 1-16)
+
+Plans:
+**Wave 1**
+- [ ] 01-01-PLAN.md — Notify wire-corpus capture tool, negative controls, and committed baseline (D-01..D-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-02-PLAN.md — Envelope decisions (severity, summary line, needsReload, tally, no-op) resolve before the text strategy (D-09, D-10)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-03-PLAN.md — Failure detail serialized in resolve, missing-arm floor, row hints and not-added reason as ids (D-11, PMOD-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 01-04-PLAN.md — Soft-dep markers compose in resolve from per-context marker policy; SC-5 table test (D-12)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 01-05-PLAN.md — Text strategy renders resolved rows with no probe; marker-coverage gate re-pointed (D-13)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 01-06-PLAN.md — Per-invocation run object built at the command root; marketplace list and info (D-05..D-07)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 01-07-PLAN.md — Load-pass run for the reconcile cascade; pending and the shared handler prelude take the run (D-07)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 01-08-PLAN.md — Import composer and marketplace remove/update take the run
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 01-09-PLAN.md — Marketplace add, autoupdate, and bootstrap take the run
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 01-10-PLAN.md — Plugin install takes the run; SC-3 two-answer probe proof (D-08)
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 01-11-PLAN.md — Plugin enable/disable and uninstall take the run
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [ ] 01-12-PLAN.md — Plugin reinstall takes the run; the load pass carries only the run
+
+**Wave 13** *(blocked on Wave 12 completion)*
+- [ ] 01-13-PLAN.md — Plugin update family and fetch take the run
+
+**Wave 14** *(blocked on Wave 13 completion)*
+- [ ] 01-14-PLAN.md — Plugin list, info, and browse take the run; run-free list payload for tools
+
+**Wave 15** *(blocked on Wave 14 completion)*
+- [ ] 01-15-PLAN.md — Probe-shaped test boundary retired; per-command probe model stated (D-05)
+
+**Wave 16** *(blocked on Wave 15 completion)*
+- [ ] 01-16-PLAN.md — Notify family narrowed to the run; stale claims restated; phase-end gate (SC-1..SC-5)
+
+**Cross-cutting constraints:**
+- `node scripts/notify-corpus.mjs check` passes and docs/output-catalog.md has no diff from 2f173031
+- Hooks get no run object (orchestrator-resolved D-07 refinement): no file under bridges/hooks/ imports notification-run.ts
+- `openNotificationRun(` appears only in edge/register.ts and index.ts at the end of this plan
 
 ### Phase 2: Row Policies
 
@@ -144,7 +198,7 @@ re-opened.
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Presentation Model | 0/TBD | Not started | - |
+| 1. Presentation Model | 0/16 | Planned | - |
 | 2. Row Policies | 0/TBD | Not started | - |
 | 3. Typed Raw Surfaces | 0/TBD | Not started | - |
 | 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |

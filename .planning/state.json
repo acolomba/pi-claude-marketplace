@@ -2,11 +2,47 @@
   "contract": "1.0.0",
   "flavor": "core",
   "milestone": "json-output",
-  "phases": [],
+  "phases": [
+    {
+      "number": "1",
+      "name": "Presentation Model",
+      "status": "pending"
+    },
+    {
+      "number": "2",
+      "name": "Row Policies",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "Typed Raw Surfaces",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Wire Schema and JSON Strategy",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Mode-Selected JSON Sink",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Command-Run Contract",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "Mode Refusals, Real-Pi Verification, and Docs",
+      "status": "pending"
+    }
+  ],
   "next": {
-    "command": "/gsd:discuss-phase",
-    "label": "Discuss the first phase",
-    "reason": "Project initialized — plan your first phase"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 1 of 7 · executing"
   },
-  "updated_at": "2026-09-28T12:24:50.999Z"
+  "updated_at": "2026-09-29T04:27:05.016Z"
 }
