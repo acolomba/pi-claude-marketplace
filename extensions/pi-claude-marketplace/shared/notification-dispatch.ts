@@ -12,7 +12,12 @@ import {
   renderPluginInfo,
   renderPluginInfoCascade,
 } from "./notification-grammar.ts";
-import { resolveEnvelope, resolveRows, resolveUpdateNoOpEnvelope } from "./notification-resolve.ts";
+import {
+  resolveEnvelope,
+  resolveNotAddedReason,
+  resolveRows,
+  resolveUpdateNoOpEnvelope,
+} from "./notification-resolve.ts";
 import { isInfoKind } from "./notification-summary.ts";
 
 import type { ResolvedEnvelope, ResolvedMarketplace } from "./notification-resolve.ts";
@@ -234,7 +239,7 @@ function dispatchInfoMessage(
       body = renderPluginInfoCascade(message, probe);
       break;
     case "marketplace-not-added":
-      body = renderMarketplaceNotAdded(message, probe);
+      body = renderMarketplaceNotAdded(message, resolveNotAddedReason(message), probe);
       break;
     case "reconcile-pending-empty":
       // DIFF-01 SC #2: catalog-locked free-form advisory body line. Hard-coded

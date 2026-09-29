@@ -12,6 +12,7 @@ import type {
   ResolvedMarketplace,
   ResolvedRow,
   ResolvedTally,
+  RowHint,
 } from "./notification-resolve.ts";
 import type {
   ContentReason,
@@ -1070,6 +1071,18 @@ const STALE_GATE_UPDATE_HINT_TRAILER = "Run update --partial on this plugin, the
 const ENABLE_HINT_TRAILER = "Run enable on this plugin to use its components.";
 
 /**
+ * D-10: each resolved hint id mapped to its frozen trailer literal. The map is
+ * total over `RowHint`, so a new hint id fails typecheck here until it has
+ * text.
+ */
+const ROW_HINT_TRAILERS = {
+  "partial-install": PARTIAL_INSTALL_HINT_TRAILER,
+  "partial-update": PARTIAL_UPDATE_HINT_TRAILER,
+  "stale-gate-update": STALE_GATE_UPDATE_HINT_TRAILER,
+  enable: ENABLE_HINT_TRAILER,
+} as const satisfies Record<RowHint, string>;
+
+/**
  * Compose the multi-line block for a single plugin row: the 2-space-indented
  * plugin row, the optional 4-space-indented cause-chain trailer, the AS-7
  * leaked-paths child rows, and any rollbackPartial child rows + nested
@@ -1323,10 +1336,10 @@ function appendResolvedComponentLines(
  * `⊘ <name> [scope?] (failed) {marketplace not added}` with NO marketplace header (the row
  * IS the message). `name` carries the MARKETPLACE name. `scope` present =>
  * `[scope]` bracket; absent => no bracket. The version slot collapses to `""`
- * (the variant carries no version) and the brace is hard-coded via a
- * single-token literal (the variant carries no `reasons` field): `marketplace not added`,
- * or the `marketplace not added to user scope` sibling when `presentInOtherScope`
- * says the container was found in the scope the command did not target.
+ * (the variant carries no version) and the brace carries the single `reason`
+ * token `resolveNotAddedReason` chose (the variant carries no `reasons` field):
+ * `marketplace not added`, or a scope-qualified sibling such as
+ * `marketplace not added to user scope`.
  *
  * `probe` is accepted for signature parity with the other info renderers and
  * threaded into `composeReasons` with all three soft-dep declares-flags FALSE --
@@ -1334,6 +1347,7 @@ function appendResolvedComponentLines(
  */
 export function renderMarketplaceNotAdded(
   message: MarketplaceNotAddedMessage,
+  reason: Reason,
   probe: SoftDepStatus,
 ): string {
   return joinTokens([
@@ -1342,33 +1356,8 @@ export function renderMarketplaceNotAdded(
     message.scope === undefined ? "" : `[${message.scope}]`,
     renderVersion(undefined),
     "(failed)",
-    composeReasons([notAddedReasonFor(message)], false, false, false, probe),
+    composeReasons([reason], false, false, false, probe),
   ]);
-}
-
-/**
- * CMP-4 / SCOPE-01: pick the structural token the `{...}` brace carries.
- *
- * The qualified token REPLACES the plain one rather than joining it -- "the
- * container does not exist" and "it exists, but not in the scope you targeted"
- * are competing claims about one subject, so a brace carrying both would state
- * both.
- *
- * A qualified token requires a `scope`, which is what the `[scope]` bracket
- * renders from. An ABSENT bracket means the caller consulted BOTH scopes and
- * both missed (D-03), so there is no other scope left to be present in and the
- * plain token is the only truthful one.
- *
- * The scope word names the scope that MISSED, matching the bracket beside it.
- */
-function notAddedReasonFor(message: MarketplaceNotAddedMessage): Reason {
-  if (message.presentInOtherScope !== true || message.scope === undefined) {
-    return "marketplace not added";
-  }
-
-  return message.scope === "user"
-    ? "marketplace not added to user scope"
-    : "marketplace not added to project scope";
 }
 
 /**
@@ -1527,47 +1516,6 @@ function isDescriptionBearingRow(
 }
 
 /**
- * Select the 4-space-indented `--partial` hint trailer for a row, or
- * undefined when the row carries none. Exactly one can apply, because each
- * arm is keyed on a distinct status.
- *
- * SEV-02 / D-69-03 / XSURF-01: the partially-available INSTALL-failure row
- * takes the install-worded hint. That row surfaces as `unavailable` (the
- * structural arm) or `partially-available` (the resolver-state-driven token);
- * the structural `unavailable` arm omits `partialHint` because `--partial`
- * cannot help it. T-69-01: the hint names the user's own flag and
- * interpolates no plugin or marketplace identifier. D-70-01: the byte form is
- * FROZEN as the reconciled doc contract, locked byte-for-byte in
- * docs/output-catalog.md and docs/messaging-style-guide.md.
- *
- * SEV-04 / XSURF-03: the partially-upgradable manual update-decline row takes
- * the update-worded hint; the list inventory `partially-upgradable` row omits
- * `partialHint` and stays byte-frozen.
- *
- * CR-01 / D-98-03: the stale-gate ENABLE failure takes its OWN trailer. Its
- * remedy is `update --partial` too, but the failed command is `enable`, so
- * the "re-run" wording of the update hint would name a command that rejects
- * the flag it advertises. Only the enable-failure narrowing stamps
- * `partialHint` on a `failed` row, so this arm stays inert for every other
- * producer.
- */
-function partialHintTrailerFor(p: PluginNotificationMessage): string | undefined {
-  if (p.status === "unavailable" || p.status === "partially-available") {
-    return p.partialHint === true ? PARTIAL_INSTALL_HINT_TRAILER : undefined;
-  }
-
-  if (p.status === "partially-upgradable") {
-    return p.partialHint === true ? PARTIAL_UPDATE_HINT_TRAILER : undefined;
-  }
-
-  if (p.status === "failed") {
-    return p.partialHint === true ? STALE_GATE_UPDATE_HINT_TRAILER : undefined;
-  }
-
-  return undefined;
-}
-
-/**
  * `composePluginLines` parameterized over the per-row body renderer (D-02).
  * Byte-identical to `composePluginLines` except the column-0-indented row body
  * comes from `renderRow` rather than the central `renderPluginRow`. The
@@ -1588,18 +1536,10 @@ export function composePluginLinesWith(
     lines.push(`    ${truncateDescription(p.description)}`);
   }
 
-  const hint = partialHintTrailerFor(p);
-  if (hint !== undefined) {
-    lines.push(`    ${hint}`);
-  }
-
-  // OUT-04 / D-102-10: the install-disabled row carries a 4-space-indented
-  // trailer naming the `enable` verb. Only the install surface stamps
-  // `enableHint`, so the list / info inventory `(disabled)` rows and the
-  // `disable` verb's own row stay byte-frozen. The byte form is FROZEN and
-  // interpolates nothing (T-69-01).
-  if (p.status === "disabled" && p.enableHint === true) {
-    lines.push(`    ${ENABLE_HINT_TRAILER}`);
+  // D-10: the resolved hint id selects its frozen 4-space-indented trailer.
+  // The literals interpolate nothing (T-69-01).
+  if (p.hint !== undefined) {
+    lines.push(`    ${ROW_HINT_TRAILERS[p.hint]}`);
   }
 
   if (p.failure !== undefined) {

@@ -38,6 +38,7 @@ import type {
   ResolvedRow,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
+  MarketplaceNotAddedMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
   Reason,
@@ -311,7 +312,7 @@ test("composes descriptions, hints, causes, leaks, and rollback failures in orde
     severity: "error",
     name: "alpha",
     reasons: ["rollback partial"],
-    partialHint: true,
+    hint: "stale-gate-update",
     failure: {
       cause: { causeChain: ["outer", "inner"], truncated: false },
       leaks: ["/tmp/leak"],
@@ -342,26 +343,72 @@ test("composes descriptions, hints, causes, leaks, and rollback failures in orde
   ]);
 });
 
-for (const { plugin, trailer } of [
+for (const { plugin, expectedLines } of [
   {
-    plugin: { status: "partially-available", name: "alpha", partialHint: true },
-    trailer: "Re-run with --partial to install the supported components.",
+    plugin: {
+      status: "partially-available",
+      name: "alpha",
+      reasons: ["lsp"],
+      description: "summary",
+      hint: "partial-install",
+    },
+    expectedLines: [
+      "  row",
+      "    summary",
+      "    Re-run with --partial to install the supported components.",
+    ],
   },
   {
-    plugin: { status: "partially-upgradable", name: "alpha", partialHint: true },
-    trailer: "Re-run with --partial to update with the supported components.",
+    plugin: {
+      status: "partially-upgradable",
+      name: "alpha",
+      reasons: ["lsp"],
+      description: "summary",
+      hint: "partial-update",
+    },
+    expectedLines: [
+      "  row",
+      "    summary",
+      "    Re-run with --partial to update with the supported components.",
+    ],
   },
   {
-    plugin: { status: "disabled", name: "alpha", enableHint: true },
-    trailer: "Run enable on this plugin to use its components.",
+    plugin: {
+      status: "disabled",
+      severity: "info",
+      needsReload: true,
+      name: "alpha",
+      description: "summary",
+      hint: "enable",
+    },
+    expectedLines: ["  row", "    summary", "    Run enable on this plugin to use its components."],
   },
-] as const) {
-  test(`renders the exact ${plugin.status} trailer`, () => {
-    // arrange / act
-    const lines = composePluginLinesWith(plugin as never, bothLoadedProbe(), "user", () => "row");
+  {
+    plugin: {
+      status: "failed",
+      severity: "error",
+      name: "alpha",
+      reasons: [],
+      hint: "stale-gate-update",
+      failure: {
+        cause: { causeChain: ["gate"], truncated: false },
+        leaks: [],
+        rollbackPartial: [],
+      },
+    },
+    expectedLines: [
+      "  row",
+      "    Run update --partial on this plugin, then enable it again.",
+      "    cause: gate",
+    ],
+  },
+] as const satisfies readonly { plugin: ResolvedRow; expectedLines: readonly string[] }[]) {
+  test(`renders the ${plugin.hint} hint after the description and before any failure line`, () => {
+    // act
+    const lines = composePluginLinesWith(plugin, bothLoadedProbe(), "user", () => "row");
 
     // assert
-    assert.deepStrictEqual(lines, ["  row", `    ${trailer}`]);
+    assert.deepStrictEqual(lines, expectedLines);
   });
 }
 
@@ -590,20 +637,30 @@ test("plugin info cascades preserve zero and repeated-render many shapes", () =>
   assert.equal(once.split("\n\n").length, 2);
 });
 
-for (const { message, expected } of [
-  { message: { name: "missing" }, expected: "⊘ missing (failed) {marketplace not added}" },
+for (const { message, reason, expected } of [
   {
-    message: { name: "missing", scope: "user", presentInOtherScope: true },
+    message: { kind: "marketplace-not-added", name: "missing" },
+    reason: "marketplace not added",
+    expected: "⊘ missing (failed) {marketplace not added}",
+  },
+  {
+    message: { kind: "marketplace-not-added", name: "missing", scope: "user" },
+    reason: "marketplace not added to user scope",
     expected: "⊘ missing [user] (failed) {marketplace not added to user scope}",
   },
   {
-    message: { name: "missing", scope: "project", presentInOtherScope: true },
+    message: { kind: "marketplace-not-added", name: "missing", scope: "project" },
+    reason: "marketplace not added to project scope",
     expected: "⊘ missing [project] (failed) {marketplace not added to project scope}",
   },
-] as const) {
+] as const satisfies readonly {
+  message: MarketplaceNotAddedMessage;
+  reason: Reason;
+  expected: string;
+}[]) {
   test(`renders marketplace-not-added as ${expected}`, () => {
-    // arrange / act
-    const rendered = renderMarketplaceNotAdded(message as never, bothLoadedProbe());
+    // act
+    const rendered = renderMarketplaceNotAdded(message, reason, bothLoadedProbe());
 
     // assert
     assert.equal(rendered, expected);
@@ -658,7 +715,12 @@ test("covers the unavailable install hint and long single-word wrap boundaries",
 
   // act
   const hint = composePluginLinesWith(
-    { status: "unavailable", name: "alpha", partialHint: true } as never,
+    {
+      status: "unavailable",
+      name: "alpha",
+      reasons: ["unsupported source"],
+      hint: "partial-install",
+    } satisfies ResolvedRow,
     bothLoadedProbe(),
     "user",
     () => "row",

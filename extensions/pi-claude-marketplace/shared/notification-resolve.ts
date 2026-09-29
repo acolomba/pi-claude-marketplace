@@ -10,10 +10,12 @@ import {
 import type { SerializedCauseChain } from "./errors.ts";
 import type {
   CascadeNotificationMessage,
+  MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
   NotificationMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
+  Reason,
   WithPlugins,
 } from "./notification-types.ts";
 
@@ -35,6 +37,9 @@ import type {
  * D-11: `resolveRows` serializes each failed row's cause chain, manual-recovery
  * leaks, and rollback phases here, once. No resolved row carries a live
  * `Error`, so the text strategy formats failure detail without walking one.
+ *
+ * D-10: each row's hint and the `marketplace-not-added` reason token are chosen
+ * here as data. The text strategy maps a hint id to its frozen literal.
  */
 
 /**
@@ -245,18 +250,27 @@ export interface ResolvedFailure {
   readonly rollbackPartial: readonly ResolvedRollbackPhase[];
 }
 
+/**
+ * D-10: the remediation hint a row carries, as an id. The text strategy maps
+ * each id to its frozen trailer literal.
+ */
+export type RowHint = "partial-install" | "partial-update" | "stale-gate-update" | "enable";
+
 /** The per-row facts `resolveRows` adds to a producer row. */
 export interface ResolvedRowFacts {
   readonly failure?: ResolvedFailure;
+  readonly hint?: RowHint;
 }
 
 /**
- * A producer row with its live failure detail replaced by resolved facts. The
- * conditional distributes over the row union, so each member keeps its own
- * `status` discriminant.
+ * A producer row with its live failure detail and its hint flags replaced by
+ * resolved facts. The conditional distributes over the row union, so each
+ * member keeps its own `status` discriminant.
  */
 export type ResolvedRow<M extends PluginNotificationMessage = PluginNotificationMessage> =
-  M extends unknown ? Omit<M, "cause" | "rollbackPartial"> & ResolvedRowFacts : never;
+  M extends unknown
+    ? Omit<M, "cause" | "rollbackPartial" | "partialHint" | "enableHint"> & ResolvedRowFacts
+    : never;
 
 /** A marketplace row whose plugin rows are resolved. */
 export type ResolvedMarketplace = WithPlugins<MarketplaceNotificationMessage, ResolvedRow>;
@@ -285,6 +299,19 @@ type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMes
  * that holds the serialized cause chain, the manual-recovery leaks, and the
  * rollback phases. No other key is added, so a row the producer left without a
  * `name` stays without one.
+ *
+ * D-10: a row's `partialHint` or `enableHint` flag becomes a `hint` id. Each id
+ * is keyed on a distinct status, so at most one applies:
+ *   - SEV-02 / D-69-03 / XSURF-01: `partial-install` on an `unavailable` or
+ *     `partially-available` install-failure row. The structural `unavailable`
+ *     arm omits `partialHint` because `--partial` cannot help it.
+ *   - SEV-04 / XSURF-03: `partial-update` on a `partially-upgradable` manual
+ *     update-decline row; the list inventory row omits `partialHint`.
+ *   - CR-01 / D-98-03: `stale-gate-update` on a `failed` row. Only the
+ *     stale-gate enable failure stamps `partialHint` on a `failed` row, and its
+ *     remedy names `update`, because `enable` accepts no `--partial` flag.
+ *   - OUT-04 / D-102-10: `enable` on a `disabled` row. Only the install surface
+ *     stamps `enableHint`.
  */
 export function resolveRows(
   marketplaces: readonly MarketplaceNotificationMessage[],
@@ -316,8 +343,12 @@ function floorMissingArmSeverity(row: PluginNotificationMessage): void {
 
 function resolveRow(row: PluginNotificationMessage): ResolvedRow {
   if (row.status === "failed") {
-    const { cause, rollbackPartial, ...rest } = row;
-    return { ...rest, failure: resolveFailure(cause, rollbackPartial ?? []) };
+    const { cause, rollbackPartial, partialHint, ...rest } = row;
+    return {
+      ...rest,
+      ...hintFor(partialHint, "stale-gate-update"),
+      failure: resolveFailure(cause, rollbackPartial ?? []),
+    };
   }
 
   if (row.status === "manual recovery") {
@@ -325,7 +356,27 @@ function resolveRow(row: PluginNotificationMessage): ResolvedRow {
     return { ...rest, failure: resolveFailure(cause, []) };
   }
 
+  if (row.status === "unavailable" || row.status === "partially-available") {
+    const { partialHint, ...rest } = row;
+    return { ...rest, ...hintFor(partialHint, "partial-install") };
+  }
+
+  if (row.status === "partially-upgradable") {
+    const { partialHint, ...rest } = row;
+    return { ...rest, ...hintFor(partialHint, "partial-update") };
+  }
+
+  if (row.status === "disabled") {
+    const { enableHint, ...rest } = row;
+    return { ...rest, ...hintFor(enableHint, "enable") };
+  }
+
   return { ...row };
+}
+
+/** The `hint` member for a row whose producer set `flag`, or no member. */
+function hintFor(flag: boolean | undefined, hint: RowHint): Pick<ResolvedRowFacts, "hint"> {
+  return flag === true ? { hint } : {};
 }
 
 function resolveFailure(
@@ -343,4 +394,29 @@ function resolveFailure(
         : { phase: entry.phase, cause: phaseChain };
     }),
   };
+}
+
+/**
+ * CMP-4 / SCOPE-01: pick the structural token the `{...}` brace carries.
+ *
+ * The qualified token REPLACES the plain one rather than joining it -- "the
+ * container does not exist" and "it exists, but not in the scope you targeted"
+ * are competing claims about one subject, so a brace carrying both would state
+ * both.
+ *
+ * A qualified token requires a `scope`, which is what the `[scope]` bracket
+ * renders from. An ABSENT bracket means the caller consulted BOTH scopes and
+ * both missed (D-03), so there is no other scope left to be present in and the
+ * plain token is the only truthful one.
+ *
+ * The scope word names the scope that MISSED, matching the bracket beside it.
+ */
+export function resolveNotAddedReason(message: MarketplaceNotAddedMessage): Reason {
+  if (message.presentInOtherScope !== true || message.scope === undefined) {
+    return "marketplace not added";
+  }
+
+  return message.scope === "user"
+    ? "marketplace not added to user scope"
+    : "marketplace not added to project scope";
 }

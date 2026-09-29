@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   resolveEnvelope,
+  resolveNotAddedReason,
   resolveRows,
   resolveUpdateNoOpEnvelope,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -15,6 +16,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
   CascadeNotificationMessage,
+  MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
   NotificationMessage,
   PluginFailedMessage,
@@ -736,4 +738,174 @@ describe("resolveRows", () => {
     assert.deepStrictEqual(row, { status: "unknown", severity: "info" });
     assert.deepStrictEqual(resolved[0]!.plugins, [{ status: "unknown", severity: "info" }]);
   });
+
+  for (const { row, expectedRow } of [
+    {
+      row: { status: "unavailable", name: "alpha", reasons: ["lsp"], partialHint: true },
+      expectedRow: {
+        status: "unavailable",
+        name: "alpha",
+        reasons: ["lsp"],
+        hint: "partial-install",
+      },
+    },
+    {
+      row: { status: "partially-available", name: "alpha", reasons: ["lsp"], partialHint: true },
+      expectedRow: {
+        status: "partially-available",
+        name: "alpha",
+        reasons: ["lsp"],
+        hint: "partial-install",
+      },
+    },
+    {
+      row: { status: "partially-upgradable", name: "alpha", reasons: ["lsp"], partialHint: true },
+      expectedRow: {
+        status: "partially-upgradable",
+        name: "alpha",
+        reasons: ["lsp"],
+        hint: "partial-update",
+      },
+    },
+    {
+      row: {
+        status: "failed",
+        severity: "error",
+        name: "alpha",
+        reasons: ["lsp"],
+        partialHint: true,
+      },
+      expectedRow: {
+        status: "failed",
+        severity: "error",
+        name: "alpha",
+        reasons: ["lsp"],
+        hint: "stale-gate-update",
+        failure: { leaks: [], rollbackPartial: [] },
+      },
+    },
+    {
+      row: {
+        status: "disabled",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        enableHint: true,
+      },
+      expectedRow: {
+        status: "disabled",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        hint: "enable",
+      },
+    },
+  ] as const satisfies readonly {
+    row: PluginNotificationMessage;
+    expectedRow: ResolvedRow;
+  }[]) {
+    test(`resolves the ${expectedRow.hint} hint on a flagged ${row.status} row`, () => {
+      // act
+      const resolved = resolveRows(marketplaceWith([row]));
+
+      // assert
+      assert.deepStrictEqual(resolved[0]!.plugins, [expectedRow]);
+    });
+  }
+
+  for (const { flag, row, expectedRow } of [
+    {
+      flag: "a false partialHint",
+      row: { status: "unavailable", name: "alpha", reasons: ["lsp"], partialHint: false },
+      expectedRow: { status: "unavailable", name: "alpha", reasons: ["lsp"] },
+    },
+    {
+      flag: "an absent partialHint",
+      row: { status: "partially-upgradable", name: "alpha", reasons: ["lsp"] },
+      expectedRow: { status: "partially-upgradable", name: "alpha", reasons: ["lsp"] },
+    },
+    {
+      flag: "a false enableHint",
+      row: {
+        status: "disabled",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        enableHint: false,
+      },
+      expectedRow: { status: "disabled", severity: "info", needsReload: true, name: "alpha" },
+    },
+  ] as const satisfies readonly {
+    flag: string;
+    row: PluginNotificationMessage;
+    expectedRow: ResolvedRow;
+  }[]) {
+    test(`resolves no hint from ${flag} on a ${row.status} row`, () => {
+      // act
+      const resolved = resolveRows(marketplaceWith([row]));
+
+      // assert
+      assert.deepStrictEqual(resolved[0]!.plugins, [expectedRow]);
+    });
+  }
+
+  test("resolves no hint from a partialHint on a status that takes none", () => {
+    // arrange
+    const row = { status: "upgradable", name: "alpha", reasons: [], partialHint: true };
+
+    // act
+    const resolved = resolveRows(marketplaceWith([row as never]));
+
+    // assert
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      { status: "upgradable", name: "alpha", reasons: [], partialHint: true },
+    ]);
+  });
+});
+
+describe("resolveNotAddedReason", () => {
+  for (const { title, message, expectedReason } of [
+    {
+      title: "the plain token without presentInOtherScope",
+      message: { kind: "marketplace-not-added", name: "missing", scope: "user" },
+      expectedReason: "marketplace not added",
+    },
+    {
+      title: "the plain token when presentInOtherScope has no scope",
+      message: { kind: "marketplace-not-added", name: "missing", presentInOtherScope: true },
+      expectedReason: "marketplace not added",
+    },
+    {
+      title: "the user-scope token for a user-scope miss",
+      message: {
+        kind: "marketplace-not-added",
+        name: "missing",
+        scope: "user",
+        presentInOtherScope: true,
+      },
+      expectedReason: "marketplace not added to user scope",
+    },
+    {
+      title: "the project-scope token for a project-scope miss",
+      message: {
+        kind: "marketplace-not-added",
+        name: "missing",
+        scope: "project",
+        presentInOtherScope: true,
+      },
+      expectedReason: "marketplace not added to project scope",
+    },
+  ] as const satisfies readonly {
+    title: string;
+    message: MarketplaceNotAddedMessage;
+    expectedReason: string;
+  }[]) {
+    test(`resolves ${title}`, () => {
+      // act
+      const reason = resolveNotAddedReason(message);
+
+      // assert
+      assert.strictEqual(reason, expectedReason);
+    });
+  }
 });
