@@ -15,7 +15,6 @@ import {
   shouldEmitReloadHint,
 } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
 
-import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
   CascadeNotificationMessage,
@@ -43,7 +42,7 @@ function notificationApi(): NotificationApi {
   return { getAllTools: () => [{ name: "subagent" }, { name: "mcp" }] };
 }
 
-function renderRow(row: ResolvedRow, _probe: SoftDepStatus): string {
+function renderRow(row: ResolvedRow): string {
   return `${row.name} (${row.status})`;
 }
 

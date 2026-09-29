@@ -83,7 +83,7 @@ export type PendingMsg =
  * resolves `partially-available`). D-66-05: there is no `will partially update` analog --
  * the reconcile plan has no update bucket.
  */
-const renderWillInstall: RenderFn<PluginWillInstallMessage> = (p, _probe, mpScope) =>
+const renderWillInstall: RenderFn<PluginWillInstallMessage> = (p, mpScope) =>
   joinTokens([
     ICON_INSTALLED,
     p.name,
@@ -92,15 +92,15 @@ const renderWillInstall: RenderFn<PluginWillInstallMessage> = (p, _probe, mpScop
   ]);
 
 /** `(will uninstall)` -- lifted verbatim; reuses ICON_AVAILABLE (`○`). */
-const renderWillUninstall: RenderFn<PluginWillUninstallMessage> = (p, _probe, mpScope) =>
+const renderWillUninstall: RenderFn<PluginWillUninstallMessage> = (p, mpScope) =>
   joinTokens([ICON_AVAILABLE, p.name, renderScopeBracket(p.scope, mpScope), "(will uninstall)"]);
 
 /** `(will enable)` -- lifted verbatim; reuses ICON_INSTALLED. */
-const renderWillEnable: RenderFn<PluginWillEnableMessage> = (p, _probe, mpScope) =>
+const renderWillEnable: RenderFn<PluginWillEnableMessage> = (p, mpScope) =>
   joinTokens([ICON_INSTALLED, p.name, renderScopeBracket(p.scope, mpScope), "(will enable)"]);
 
 /** `(will disable)` -- lifted verbatim; uses ICON_DISABLED (`◌`). */
-const renderWillDisable: RenderFn<PluginWillDisableMessage> = (p, _probe, mpScope) =>
+const renderWillDisable: RenderFn<PluginWillDisableMessage> = (p, mpScope) =>
   joinTokens([ICON_DISABLED, p.name, renderScopeBracket(p.scope, mpScope), "(will disable)"]);
 
 /**
@@ -108,8 +108,8 @@ const renderWillDisable: RenderFn<PluginWillDisableMessage> = (p, _probe, mpScop
  * `renderPluginRow` `failed` arm (shared `pluginRow` primitive, no soft-dep
  * gating). The cause-chain trailer is composed centrally, not here.
  */
-const renderFailed: RenderFn<PluginFailedMessage> = (p, probe, mpScope) =>
-  pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe);
+const renderFailed: RenderFn<PluginFailedMessage> = (p, mpScope) =>
+  pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)");
 
 /**
  * D-04 / D-05: the pending diff's `CommandContext`. `Messaging.label` is the
@@ -165,30 +165,22 @@ export type ReconcileAppliedMsg =
  * soft-dep marker the context's marker policy allows (D-12). Lifted verbatim
  * from the central `renderPluginRow` `installed` arm.
  */
-const renderInstalled: RenderFn<PluginInstalledMessage> = (p, probe, mpScope) =>
-  installedLikeRow(
-    ICON_INSTALLED,
-    p,
-    mpScope,
-    renderVersion(p.version),
-    "(installed)",
-    p.reasons,
-    probe,
-  );
+const renderInstalled: RenderFn<PluginInstalledMessage> = (p, mpScope) =>
+  installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(installed)", p.reasons);
 
 /**
  * `(uninstalled)` -- realized uninstall row. NO soft-dep marker (uninstalled
- * rows forbid it -- the arm passes `false`/`false`). Lifted verbatim from the
- * central `renderPluginRow` `uninstalled` arm.
+ * rows forbid it -- the context's marker policy maps `uninstalled` to off).
+ * Lifted verbatim from the central `renderPluginRow` `uninstalled` arm.
  */
-const renderUninstalled: RenderFn<PluginUninstalledMessage> = (p, probe, mpScope) =>
+const renderUninstalled: RenderFn<PluginUninstalledMessage> = (p, mpScope) =>
   joinTokens([
     ICON_AVAILABLE,
     p.name,
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(uninstalled)",
-    composeReasons(undefined, false, false, false, probe),
+    composeReasons(undefined),
   ]);
 
 /**
@@ -200,8 +192,8 @@ const renderUninstalled: RenderFn<PluginUninstalledMessage> = (p, probe, mpScope
  * `(installed)` row. The byte-exact token is frozen later; severity is a
  * sensible default here.
  */
-const renderForceInstalled: RenderFn<PluginPartiallyInstalledMessage> = (p, probe, mpScope) =>
-  partiallyInstalledRow(p, mpScope, probe);
+const renderForceInstalled: RenderFn<PluginPartiallyInstalledMessage> = (p, mpScope) =>
+  partiallyInstalledRow(p, mpScope);
 
 /**
  * `(disabled)` -- realized disable row. NO dependencies. Lifted verbatim from
@@ -211,11 +203,11 @@ const renderForceInstalled: RenderFn<PluginPartiallyInstalledMessage> = (p, prob
  * cascade already stamps `reasons: ["installs disabled"]` (apply.ts). `pluginRow`
  * threads whichever `p.reasons` the producer supplies, so an absent field still
  * collapses the brace, but a reason a producer stamps cannot be dropped here
- * without a byte change anyone can see. Both soft-dep flags stay hard-coded
- * false (ENBL-15 / D-100-06).
+ * without a byte change anyone can see. The context's marker policy maps
+ * `disabled` to off (ENBL-15 / D-100-06, D-12).
  */
-const renderDisabled: RenderFn<PluginDisabledMessage> = (p, probe, mpScope) =>
-  pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe);
+const renderDisabled: RenderFn<PluginDisabledMessage> = (p, mpScope) =>
+  pluginRow(ICON_DISABLED, p, mpScope, "(disabled)");
 
 /**
  * D-04 / D-05: the applied cascade's `CommandContext`. `Messaging.label` is the

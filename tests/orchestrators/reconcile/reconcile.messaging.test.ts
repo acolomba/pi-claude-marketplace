@@ -9,7 +9,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
 
 import type * as ReconcileMessaging from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 // Both status sets are private literal unions; each render map is pinned to
@@ -19,14 +18,6 @@ import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shar
 // directive below into an unused one (TS2578).
 // @ts-expect-error reconcile.messaging.ts does not expose the pending status set
 void ({} satisfies { readonly retired?: typeof ReconcileMessaging.PENDING_STATUSES });
-
-function allSoftDependenciesLoaded(): SoftDepStatus {
-  return { piMcpAdapterLoaded: true, piSubagentsLoaded: true, workflowEngineLoaded: true };
-}
-
-function noSoftDependenciesLoaded(): SoftDepStatus {
-  return { piMcpAdapterLoaded: false, piSubagentsLoaded: false, workflowEngineLoaded: false };
-}
 
 void ({ name: "plugin", status: "will install" } satisfies PendingMsg);
 void ({ name: "plugin", status: "will uninstall" } satisfies PendingMsg);
@@ -114,11 +105,7 @@ test("pending will-install omits optional tokens when they are absent", () => {
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render["will install"](
-    message,
-    allSoftDependenciesLoaded(),
-    "user",
-  );
+  const rendered = PENDING_CONTEXT.render["will install"](message, "user");
 
   // assert
   assert.deepStrictEqual(message, { name: "alpha", status: "will install", reasons: [] });
@@ -136,11 +123,7 @@ test("pending will-install renders the partial token and cross-scope bracket", (
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render["will install"](
-    message,
-    allSoftDependenciesLoaded(),
-    "user",
-  );
+  const rendered = PENDING_CONTEXT.render["will install"](message, "user");
 
   // assert
   assert.equal(rendered, "● alpha [project] (will partially install)");
@@ -156,11 +139,7 @@ test("pending will-uninstall renders its glyph and cross-scope bracket", () => {
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render["will uninstall"](
-    message,
-    allSoftDependenciesLoaded(),
-    "project",
-  );
+  const rendered = PENDING_CONTEXT.render["will uninstall"](message, "project");
 
   // assert
   assert.equal(rendered, "○ alpha [user] (will uninstall)");
@@ -175,11 +154,7 @@ test("pending will-enable renders its exact row bytes", () => {
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render["will enable"](
-    message,
-    allSoftDependenciesLoaded(),
-    "user",
-  );
+  const rendered = PENDING_CONTEXT.render["will enable"](message, "user");
 
   // assert
   assert.equal(rendered, "● alpha (will enable)");
@@ -194,11 +169,7 @@ test("pending will-disable renders its exact row bytes", () => {
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render["will disable"](
-    message,
-    allSoftDependenciesLoaded(),
-    "user",
-  );
+  const rendered = PENDING_CONTEXT.render["will disable"](message, "user");
 
   // assert
   assert.equal(rendered, "◍ alpha (will disable)");
@@ -222,7 +193,7 @@ test("pending failed folds scope, version, and reasons while leaving failure det
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render.failed(message, noSoftDependenciesLoaded(), "user");
+  const rendered = PENDING_CONTEXT.render.failed(message, "user");
 
   // assert
   assert.equal(message.failure, failure);
@@ -240,11 +211,7 @@ test("applied installed omits optional row tokens when they are absent", () => {
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render.installed(
-    message,
-    allSoftDependenciesLoaded(),
-    "user",
-  );
+  const rendered = RECONCILE_APPLIED_CONTEXT.render.installed(message, "user");
 
   // assert
   assert.deepStrictEqual(message, {
@@ -270,11 +237,7 @@ test("applied installed renders content reasons before the resolved markers", ()
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render.installed(
-    message,
-    noSoftDependenciesLoaded(),
-    "user",
-  );
+  const rendered = RECONCILE_APPLIED_CONTEXT.render.installed(message, "user");
 
   // assert
   assert.equal(
@@ -296,11 +259,7 @@ test("applied uninstalled renders scope and version", () => {
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render.uninstalled(
-    message,
-    noSoftDependenciesLoaded(),
-    "user",
-  );
+  const rendered = RECONCILE_APPLIED_CONTEXT.render.uninstalled(message, "user");
 
   // assert
   assert.equal(rendered, "○ alpha [project] v1.2.3 (uninstalled)");
@@ -319,11 +278,7 @@ test("applied disabled renders optional reasons with its exact glyph", () => {
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render.disabled(
-    message,
-    noSoftDependenciesLoaded(),
-    "user",
-  );
+  const rendered = RECONCILE_APPLIED_CONTEXT.render.disabled(message, "user");
 
   // assert
   assert.equal(rendered, "◍ alpha [project] v1.2.3 (disabled) {not in manifest}");
@@ -346,11 +301,7 @@ test("applied failed renders the shared failure row and preserves its stamps", (
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render.failed(
-    message,
-    noSoftDependenciesLoaded(),
-    "user",
-  );
+  const rendered = RECONCILE_APPLIED_CONTEXT.render.failed(message, "user");
 
   // assert
   assert.equal(message.needsReload, false);
@@ -372,11 +323,7 @@ test("applied partially-installed renders content reasons before the resolved ma
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render["partially-installed"](
-    message,
-    noSoftDependenciesLoaded(),
-    "user",
-  );
+  const rendered = RECONCILE_APPLIED_CONTEXT.render["partially-installed"](message, "user");
 
   // assert
   assert.equal(

@@ -75,7 +75,7 @@ const REINSTALL_RENDER: {
   // WR-09: threads the optional `reasons` brace, matching the central arm. A
   // reinstall that degraded a component names the kind here; a clean one passes
   // an undefined list and renders the same brace-less row as before.
-  reinstalled: (p, probe, mpScope) =>
+  reinstalled: (p, mpScope) =>
     installedLikeRow(
       ICON_INSTALLED,
       p,
@@ -83,12 +83,10 @@ const REINSTALL_RENDER: {
       renderVersion(p.version),
       "(reinstalled)",
       p.reasons,
-      probe,
     ),
-  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
-  "manual recovery": (p, probe, mpScope) =>
-    pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)", probe),
+  skipped: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)"),
+  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
+  "manual recovery": (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)"),
 };
 
 /**
@@ -226,9 +224,9 @@ function isManualRecoveryOutcome(
  * the two surfaces cannot report the same ledger run differently (WR-09).
  *
  * CMC-13: `declaresAgents` / `declaresMcp` are required booleans, mapped to the
- * `dependencies: Dependency[]` tuple per SNM-06. The renderer's per-row soft-dep
- * probe fires `{requires pi-subagents}` / `{requires pi-mcp}` when the companion
- * extension is unloaded.
+ * `dependencies: Dependency[]` tuple per SNM-06. The row's `dependencies` feed
+ * `resolveRows`, which composes `{requires pi-subagents}` / `{requires pi-mcp}`
+ * when the companion extension is unloaded (D-12).
  *
  * WARN-01 / WR-09 / D-86-03: a component this ledger degraded names its kind and
  * takes the info -> warning raise, exactly as on the install, enable and backfill
@@ -359,11 +357,10 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
 /**
  * Map a `ReinstallReinstalledOutcome`'s `declaresAgents` / `declaresMcp` /
  * `declaresWorkflows` predicate flags to the `Dependency[]` tuple consumed by
- * `PluginReinstalledMessage.dependencies` per SNM-06. The
- * renderer's per-row soft-dep probe iterates this array to emit
- * `{requires pi-subagents}` / `{requires pi-mcp}` /
- * `{requires pi-dynamic-workflows}` markers when the companion extension is
- * unloaded (MSG-SD-1..2).
+ * `PluginReinstalledMessage.dependencies` per SNM-06. `resolveRows`
+ * iterates this array to compose the `{requires pi-subagents}` /
+ * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` markers when the
+ * companion extension is unloaded (MSG-SD-1..2, D-12).
  *
  * WDEP-02: `workflows` pushes LAST, so a reinstall that declares agents and mcp
  * renders the same two-marker brace whether or not it also declares workflows.

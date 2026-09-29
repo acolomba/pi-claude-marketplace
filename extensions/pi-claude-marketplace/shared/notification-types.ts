@@ -252,9 +252,8 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
    * renders the legacy brace-less row byte-for-byte: `composeReasons` returns
    * `""` for an undefined list and `joinTokens` collapses the empty slot.
    *
-   * MSG-SD-3 is untouched -- the render arm still passes all three
-   * soft-dependency arguments hard-coded `false`, so an `(uninstalled)` row
-   * cannot emit `{requires pi-subagents}` / `{requires pi-mcp}` /
+   * MSG-SD-3: every marker policy maps `uninstalled` to off (D-12), so an
+   * `(uninstalled)` row cannot emit `{requires pi-subagents}` / `{requires pi-mcp}` /
    * `{requires pi-dynamic-workflows}` whatever the removed record declared.
    */
   readonly reasons?: readonly ContentReason[];

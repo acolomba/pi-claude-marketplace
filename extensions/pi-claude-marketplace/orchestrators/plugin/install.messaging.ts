@@ -106,7 +106,7 @@ export type InstallMsg =
  * verbatim bytes of the matching `renderPluginRow` switch arm.
  */
 const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { status: K }>> } = {
-  installed: (p, probe, mpScope) =>
+  installed: (p, mpScope) =>
     installedLikeRow(
       ICON_INSTALLED,
       p,
@@ -114,27 +114,26 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
       renderVersion(p.version),
       "(installed)",
       p.reasons,
-      probe,
     ),
   // FSTAT-07 / D-66-04: a partial install that re-resolves `partially-available` reports
   // (partially-installed) with the dropped-component detail. WR-03 / D-12: its
   // marker policy is on, so the soft-dep markers appear on a degraded install
   // exactly as on a clean `(installed)` row.
-  "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
-  unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
+  "partially-installed": (p, mpScope) => partiallyInstalledRow(p, mpScope),
+  unavailable: (p, mpScope) => renderUnavailableRow(p, mpScope),
   // XSURF-01: the partially-available install-failure arm. Byte-identical to the
   // `unavailable` arm but with the `⊖` glyph + `(partially-available)` token; the
   // `--partial` hint trailer is composed centrally by the renderer, not here.
-  "partially-available": (p, probe, mpScope) => renderPartiallyAvailableRow(p, probe, mpScope),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+  "partially-available": (p, mpScope) => renderPartiallyAvailableRow(p, mpScope),
+  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
   // DFEN-04 / OUT-04: the install-disabled arm. Lifted verbatim from the
   // `disable` verb's own arm so an install that landed disabled and an install
-  // followed by a disable render byte-identically. ENBL-15 / D-100-06: both
-  // soft-dep flags stay hard-coded false, so the row cannot emit a
+  // followed by a disable render byte-identically. ENBL-15 / D-100-06: the
+  // marker policy maps `disabled` to off, so the row cannot emit a
   // `{requires pi-subagents}` / `{requires pi-mcp}` marker whatever inventory
   // the record retained (ENBL-18). The enable-hint trailer is composed
   // centrally by the renderer, not here.
-  disabled: (p, probe, mpScope) => pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe),
+  disabled: (p, mpScope) => pluginRow(ICON_DISABLED, p, mpScope, "(disabled)"),
 };
 
 /**

@@ -41,8 +41,8 @@ export type RemoveRowMsg = PluginUninstalledMessage | PluginFailedMessage;
 export const REMOVE_CONTEXT = {
   Messaging: { label: "Marketplace remove" },
   render: {
-    uninstalled: (p, probe, mpScope) => renderUninstalledRow(p, probe, mpScope),
-    failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+    uninstalled: (p, mpScope) => renderUninstalledRow(p, mpScope),
+    failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
   },
   markers: {
     uninstalled: false,

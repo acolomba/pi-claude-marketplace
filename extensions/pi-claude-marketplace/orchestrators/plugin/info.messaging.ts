@@ -67,7 +67,7 @@ export type PluginInfoCascadeMsg = PluginSkippedMessage;
 const PLUGIN_INFO_RENDER: {
   [K in PluginInfoStatus]: RenderFn<Extract<PluginInfoCascadeMsg, { status: K }>>;
 } = {
-  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
+  skipped: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)"),
 };
 
 /**

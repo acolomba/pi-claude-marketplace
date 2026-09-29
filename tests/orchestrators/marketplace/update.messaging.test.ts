@@ -8,7 +8,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts";
 
 import type { PluginUpdateOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({
@@ -68,14 +67,9 @@ test("renders an updated row with its ordered resolved reasons", () => {
     severity: "warning",
     needsReload: true,
   } as const satisfies ResolvedRow<UpdateRowMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const row = UPDATE_CONTEXT.render.updated(message, probe, "user");
+  const row = UPDATE_CONTEXT.render.updated(message, "user");
 
   // assert
   assert.equal(
@@ -105,14 +99,9 @@ test("renders a partially-installed row with a folded scope and its resolved mar
     severity: "warning",
     needsReload: true,
   } as const satisfies ResolvedRow<UpdateRowMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const row = UPDATE_CONTEXT.render["partially-installed"](message, probe, "user");
+  const row = UPDATE_CONTEXT.render["partially-installed"](message, "user");
 
   // assert
   assert.equal(
@@ -141,14 +130,9 @@ test("renders a skipped row without failure-only metadata", () => {
     severity: "warning",
     needsReload: false,
   } as const satisfies ResolvedRow<UpdateRowMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const row = UPDATE_CONTEXT.render.skipped(message, probe, "user");
+  const row = UPDATE_CONTEXT.render.skipped(message, "user");
 
   // assert
   assert.equal(row, "⊘ gamma [project] v3.0.0 (skipped) {not installed, concurrently uninstalled}");
@@ -187,14 +171,9 @@ test("renders a failed row while preserving its failure detail", () => {
     severity: "error",
     needsReload: false,
   } as const satisfies ResolvedRow<UpdateRowMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const row = UPDATE_CONTEXT.render.failed(message, probe, "user");
+  const row = UPDATE_CONTEXT.render.failed(message, "user");
 
   // assert
   assert.equal(row, "⊘ delta [project] v4.0.0 (failed) {rollback partial}");

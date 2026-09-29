@@ -61,24 +61,16 @@ export type ImportMsg =
  * companion-extension markers after any content reason (e.g. orphan rewake).
  * Lifted verbatim from the central `renderPluginRow` `installed` arm.
  */
-const renderInstalled: RenderFn<PluginInstalledMessage> = (p, probe, mpScope) =>
-  installedLikeRow(
-    ICON_INSTALLED,
-    p,
-    mpScope,
-    renderVersion(p.version),
-    "(installed)",
-    p.reasons,
-    probe,
-  );
+const renderInstalled: RenderFn<PluginInstalledMessage> = (p, mpScope) =>
+  installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(installed)", p.reasons);
 
 /**
  * `(skipped)` -- already-installed plugin row. No soft-dep gating (passes
  * `false`/`false` via the shared `pluginRow` primitive). Lifted verbatim from
  * the central `renderPluginRow` `skipped` arm.
  */
-const renderSkipped: RenderFn<PluginSkippedMessage> = (p, probe, mpScope) =>
-  pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe);
+const renderSkipped: RenderFn<PluginSkippedMessage> = (p, mpScope) =>
+  pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)");
 
 /**
  * `(failed)` -- per-plugin failure row (source mismatch / not-in-manifest). No
@@ -86,22 +78,22 @@ const renderSkipped: RenderFn<PluginSkippedMessage> = (p, probe, mpScope) =>
  * arm. The cause-chain trailer is composed centrally by `composePluginLinesWith`
  * (NFR-9 path redaction stays central), not here.
  */
-const renderFailed: RenderFn<PluginFailedMessage> = (p, probe, mpScope) =>
-  pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe);
+const renderFailed: RenderFn<PluginFailedMessage> = (p, mpScope) =>
+  pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)");
 
 /**
  * `(unavailable)` -- soft-unavailable plugin row. No `scope` bracket (SNM-11
  * carve-out) and no soft-dep gating; carries its own `reasons`. Lifted verbatim
  * from the central `renderPluginRow` `unavailable` arm.
  */
-const renderUnavailable: RenderFn<PluginUnavailableMessage> = (p, probe, mpScope) =>
+const renderUnavailable: RenderFn<PluginUnavailableMessage> = (p, mpScope) =>
   joinTokens([
     ICON_UNINSTALLABLE,
     p.name,
     renderScopeBracket(undefined, mpScope),
     renderVersion(p.version),
     "(unavailable)",
-    composeReasons(p.reasons, false, false, false, probe),
+    composeReasons(p.reasons),
   ]);
 
 /**

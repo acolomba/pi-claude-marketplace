@@ -73,7 +73,7 @@ export type DisableMsg = PluginDisabledMessage | PluginSkippedMessage | PluginFa
  * record.
  */
 const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status: K }>> } = {
-  installed: (p, probe, mpScope) =>
+  installed: (p, mpScope) =>
     installedLikeRow(
       ICON_INSTALLED,
       p,
@@ -81,11 +81,10 @@ const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status
       renderVersion(p.version),
       "(installed)",
       p.reasons,
-      probe,
     ),
-  "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
-  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+  "partially-installed": (p, mpScope) => partiallyInstalledRow(p, mpScope),
+  skipped: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)"),
+  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
 };
 
 /**
@@ -97,14 +96,14 @@ const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status
  * command's producer stamps none today -- a fresh disable reaches the requested
  * state, so there is nothing to report and the brace collapses -- so the
  * threading changes no byte now and cannot silently drop a reason a later
- * producer stamps. Both soft-dep flags stay hard-coded false, which keeps a
+ * producer stamps. The marker policy maps `disabled` to off, which keeps a
  * disabled row free of a soft-dep marker whatever inventory the record retained
- * (ENBL-15 / D-100-06).
+ * (ENBL-15 / D-100-06, D-12).
  */
 const DISABLE_RENDER: { [K in DisableStatus]: RenderFn<Extract<DisableMsg, { status: K }>> } = {
-  disabled: (p, probe, mpScope) => renderDisabledRow(p, probe, mpScope),
-  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+  disabled: (p, mpScope) => renderDisabledRow(p, mpScope),
+  skipped: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)"),
+  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
 };
 
 /**

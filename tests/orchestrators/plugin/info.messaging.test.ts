@@ -6,7 +6,6 @@ import {
   type PluginInfoCascadeMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({ status: "skipped", name: "alpha", reasons: [] } satisfies PluginInfoCascadeMsg);
@@ -44,14 +43,9 @@ test("renders a bare skipped row with truly omitted optional fields", () => {
     name: "alpha",
     reasons: [],
   } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, probe, "user");
+  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, "user");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -72,14 +66,9 @@ test("folds a same-scope skipped row and preserves version and ordered reasons",
     version: "1.2.3",
     reasons: ["already disabled", "up-to-date"],
   } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, probe, "project");
+  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, "project");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -101,14 +90,9 @@ test("renders a cross-scope skipped row with its resolved reasons", () => {
     version: "hash-2ea95f85703d",
     reasons: ["not in manifest"],
   } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, probe, "user");
+  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, "user");
 
   // assert
   assert.deepStrictEqual(row, {

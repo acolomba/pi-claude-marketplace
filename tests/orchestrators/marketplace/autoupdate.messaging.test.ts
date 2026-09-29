@@ -7,7 +7,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.messaging.ts";
 import { type PluginFailedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 test("exports complete and distinct autoupdate command contexts", () => {
@@ -44,14 +43,9 @@ test("renders an autoupdate failure with cross-scope, version, and ordered reaso
       rollbackPartial: [],
     },
   } as const satisfies ResolvedRow<PluginFailedMessage>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = AUTOUPDATE_CONTEXT.render.failed(row, probe, "user");
+  const actual = AUTOUPDATE_CONTEXT.render.failed(row, "user");
 
   // assert
   assert.equal(actual, "⊘ alpha [project] v1.2.3 (failed) {lock held, permission denied}");
@@ -65,14 +59,9 @@ test("renders a noautoupdate failure without an inherited scope or optional vers
     name: "beta",
     reasons: ["lock held"],
   } as const satisfies ResolvedRow<PluginFailedMessage>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = NOAUTOUPDATE_CONTEXT.render.failed(row, probe, "project");
+  const actual = NOAUTOUPDATE_CONTEXT.render.failed(row, "project");
 
   // assert
   assert.equal(actual, "⊘ beta (failed) {lock held}");

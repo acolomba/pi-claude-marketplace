@@ -6,7 +6,6 @@ import {
   type UpdateMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({
@@ -72,14 +71,9 @@ test("renders a bare updated transition with true optional omission", () => {
     severity: "info",
     needsReload: true,
   } as const satisfies ResolvedRow<UpdateMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const row = UPDATE_CONTEXT.render.updated(message, probe, "user");
+  const row = UPDATE_CONTEXT.render.updated(message, "user");
 
   // assert
   assert.equal(row, "● alpha v1.0.0 → v1.1.0 (updated)");
@@ -107,14 +101,9 @@ test("renders updated content reasons before the resolved markers", () => {
     severity: "warning",
     needsReload: true,
   } as const satisfies ResolvedRow<UpdateMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const row = UPDATE_CONTEXT.render.updated(message, probe, "user");
+  const row = UPDATE_CONTEXT.render.updated(message, "user");
 
   // assert
   assert.equal(
@@ -144,14 +133,9 @@ test("renders a partially-installed transition with ordered resolved reasons", (
     severity: "warning",
     needsReload: true,
   } as const satisfies ResolvedRow<UpdateMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const row = UPDATE_CONTEXT.render["partially-installed"](message, probe, "user");
+  const row = UPDATE_CONTEXT.render["partially-installed"](message, "user");
 
   // assert
   assert.equal(
@@ -180,14 +164,9 @@ test("renders an actionable skipped row with a folded marketplace scope", () => 
     severity: "error",
     needsReload: false,
   } as const satisfies ResolvedRow<UpdateMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const row = UPDATE_CONTEXT.render.skipped(message, probe, "user");
+  const row = UPDATE_CONTEXT.render.skipped(message, "user");
 
   // assert
   assert.equal(row, "⊘ delta v3.0.0 (skipped) {not installed, concurrently uninstalled}");
@@ -215,14 +194,9 @@ test("preserves the partial-update hint while rendering its row body", () => {
     severity: "info",
     needsReload: false,
   } as const satisfies ResolvedRow<UpdateMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const row = UPDATE_CONTEXT.render["partially-upgradable"](message, probe, "user");
+  const row = UPDATE_CONTEXT.render["partially-upgradable"](message, "user");
 
   // assert
   assert.equal(row, "● epsilon [project] v4.0.0 (partially-upgradable) {unsupported hooks, lsp}");
@@ -261,14 +235,9 @@ test("preserves failure detail while rendering the owned row body", () => {
     severity: "error",
     needsReload: false,
   } as const satisfies ResolvedRow<UpdateMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const row = UPDATE_CONTEXT.render.failed(message, probe, "user");
+  const row = UPDATE_CONTEXT.render.failed(message, "user");
 
   // assert
   assert.equal(row, "⊘ zeta [project] v5.0.0 (failed) {rollback partial}");

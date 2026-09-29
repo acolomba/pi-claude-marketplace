@@ -32,8 +32,8 @@ type AutoupdateRowStatus = "failed";
  * `renderPluginRow` `failed` arm. Both contexts reference it so the two render
  * maps stay byte-identical to each other and to the legacy path.
  */
-const renderFailedRow: RenderFn<PluginFailedMessage> = (p, probe, mpScope) =>
-  pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe);
+const renderFailedRow: RenderFn<PluginFailedMessage> = (p, mpScope) =>
+  pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)");
 
 /**
  * D-04 / D-05 / D-10 / MOD-01 / MOD-03: the `marketplace autoupdate` command

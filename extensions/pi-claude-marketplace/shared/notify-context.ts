@@ -13,7 +13,7 @@ import {
 
 import type { ResolvedRow } from "./notification-resolve.ts";
 import type { Scope } from "./types.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../platform/pi-api.ts";
 
 /**
  * shared/notify-context.ts -- the horizontal command-context spine every
@@ -34,16 +34,15 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  */
 
 /**
- * The per-row render signature: a resolved row plus the threaded soft-dep
- * probe plus the parent marketplace scope produce the single row line.
- * D-13: the row is resolved, so its `reasons` already carry any soft-dependency
- * markers and the arm composes them as they stand. A command's render map
+ * The per-row render signature: a resolved row plus the parent marketplace
+ * scope produce the single row line. D-13: the row is resolved, so its
+ * `reasons` already carry any soft-dependency markers that resolve composed,
+ * and the arm formats them as they stand. A command's render map
  * reproduces the EXACT bytes of the central switch arm it lifts, so
  * dispatching through it is byte-identical to the legacy path.
  */
 export type RenderFn<M extends PluginNotificationMessage> = (
   row: ResolvedRow<M>,
-  probe: SoftDepStatus,
   mpScope: Scope,
 ) => string;
 
@@ -178,7 +177,7 @@ export function notifyWithContext<
     ctx,
     pi,
     message,
-    (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    (row, mpScope) => dispatchRow(context, row, mpScope),
     context.markers,
     hasRenderArmFor(context),
   );
@@ -223,7 +222,7 @@ export function notifyUpdateWithContext<
     ctx,
     pi,
     message,
-    (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    (row, mpScope) => dispatchRow(context, row, mpScope),
     context.markers,
     hasRenderArmFor(context),
   );
@@ -265,7 +264,7 @@ export function notifyUpdateNoOpWithContext<
     ctx,
     pi,
     message,
-    (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    (row, mpScope) => dispatchRow(context, row, mpScope),
     context.markers,
     hasRenderArmFor(context),
   );
@@ -306,7 +305,7 @@ export function notifyReconcileAppliedWithContext<
     ctx,
     pi,
     labeled,
-    (row, probe, mpScope) => dispatchRow(context, row, probe, mpScope),
+    (row, mpScope) => dispatchRow(context, row, mpScope),
     context.markers,
     hasRenderArmFor(context),
   );
@@ -356,7 +355,6 @@ function hasRenderArmFor<Status extends string, Msg extends PluginNotificationMe
 function dispatchRow<Status extends string, Msg extends PluginNotificationMessage>(
   context: CommandContext<Status, Msg>,
   row: ResolvedRow,
-  probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
   const arm = context.render[row.status as Status] as
@@ -365,5 +363,5 @@ function dispatchRow<Status extends string, Msg extends PluginNotificationMessag
     return `${"name" in row ? row.name : "?"} (failed) {internal: no render arm for "${row.status}"}`;
   }
 
-  return (arm as unknown as RenderFn<PluginNotificationMessage>)(row, probe, mpScope);
+  return (arm as unknown as RenderFn<PluginNotificationMessage>)(row, mpScope);
 }

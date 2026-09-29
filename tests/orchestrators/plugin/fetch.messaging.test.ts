@@ -6,7 +6,6 @@ import {
   type FetchMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 test("exports the complete fetch command context", () => {
@@ -38,14 +37,9 @@ test("renders an available post-fetch row without candidate reasons or scope", (
     version: "1.2.3",
     reasons: ["installs disabled"],
   } as const satisfies ResolvedRow<FetchMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = FETCH_CONTEXT.render.available(row, probe, "project");
+  const actual = FETCH_CONTEXT.render.available(row, "project");
 
   // assert
   assert.equal(actual, "○ alpha v1.2.3 (available)");
@@ -60,14 +54,9 @@ test("renders a partially-available post-fetch row with complete reasons", () =>
     version: "2.0.0",
     reasons: ["unsupported hooks"],
   } as const satisfies ResolvedRow<FetchMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = FETCH_CONTEXT.render["partially-available"](row, probe, "user");
+  const actual = FETCH_CONTEXT.render["partially-available"](row, "user");
 
   // assert
   assert.equal(actual, "⊖ beta v2.0.0 (partially-available) {unsupported hooks}");
@@ -81,14 +70,9 @@ test("renders an unavailable post-fetch row without a scope bracket", () => {
     name: "gamma",
     reasons: ["permission denied"],
   } as const satisfies ResolvedRow<FetchMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = FETCH_CONTEXT.render.unavailable(row, probe, "project");
+  const actual = FETCH_CONTEXT.render.unavailable(row, "project");
 
   // assert
   assert.equal(actual, "⊘ gamma (unavailable) {permission denied}");
@@ -102,14 +86,9 @@ test("renders a bare remote post-fetch row without candidate reasons", () => {
     name: "delta",
     reasons: ["installs disabled"],
   } as const satisfies ResolvedRow<FetchMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = FETCH_CONTEXT.render.remote(row, probe, "user");
+  const actual = FETCH_CONTEXT.render.remote(row, "user");
 
   // assert
   assert.equal(actual, "◌ delta (remote)");
@@ -125,14 +104,9 @@ test("renders a skipped no-op row with scope, version, and reason", () => {
     version: "3.1.4",
     reasons: ["up-to-date"],
   } as const satisfies ResolvedRow<FetchMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = FETCH_CONTEXT.render.skipped(row, probe, "user");
+  const actual = FETCH_CONTEXT.render.skipped(row, "user");
 
   // assert
   assert.equal(actual, "⊘ epsilon [project] v3.1.4 (skipped) {up-to-date}");
@@ -153,14 +127,9 @@ test("renders a failed fetch row without leaking its failure detail into the row
       rollbackPartial: [],
     },
   } as const satisfies ResolvedRow<FetchMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = FETCH_CONTEXT.render.failed(row, probe, "project");
+  const actual = FETCH_CONTEXT.render.failed(row, "project");
 
   // assert
   assert.equal(actual, "⊘ zeta v4.0.0 (failed) {network unreachable}");

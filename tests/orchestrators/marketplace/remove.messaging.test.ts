@@ -6,7 +6,6 @@ import {
   type RemoveRowMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.messaging.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({
@@ -70,14 +69,9 @@ test("renders an uninstalled row with truly omitted optional fields", () => {
     needsReload: true,
     reasons: [],
   } as const satisfies ResolvedRow<RemoveRowMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = REMOVE_CONTEXT.render.uninstalled(row, probe, "user");
+  const renderedRow = REMOVE_CONTEXT.render.uninstalled(row, "user");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -108,14 +102,9 @@ test("folds an uninstalled row scope into its marketplace and preserves its vers
     needsReload: true,
     reasons: [],
   } as const satisfies ResolvedRow<RemoveRowMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = REMOVE_CONTEXT.render.uninstalled(row, probe, "project");
+  const renderedRow = REMOVE_CONTEXT.render.uninstalled(row, "project");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -139,14 +128,9 @@ test("renders a failed row with truly omitted optional fields", () => {
     severity: "error",
     needsReload: false,
   } as const satisfies ResolvedRow<RemoveRowMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = REMOVE_CONTEXT.render.failed(row, probe, "user");
+  const renderedRow = REMOVE_CONTEXT.render.failed(row, "user");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -183,14 +167,9 @@ test("renders a cross-scope failed row without consuming its failure detail or l
     severity: "error",
     needsReload: false,
   } as const satisfies ResolvedRow<RemoveRowMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = REMOVE_CONTEXT.render.failed(row, probe, "user");
+  const renderedRow = REMOVE_CONTEXT.render.failed(row, "user");
 
   // assert
   assert.deepStrictEqual(row, {

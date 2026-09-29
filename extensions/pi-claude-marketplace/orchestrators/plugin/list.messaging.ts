@@ -99,7 +99,7 @@ export type ListMsg =
  * (MSG-PL-6 / SNM-11 carve-out); that is a property of their shared helpers.
  */
 const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>> } = {
-  installed: (p, probe, mpScope) =>
+  installed: (p, mpScope) =>
     installedLikeRow(
       ICON_INSTALLED,
       p,
@@ -107,35 +107,33 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       renderVersion(p.version),
       "(installed)",
       p.reasons,
-      probe,
     ),
   // OUT-02: the shared composer threads the row's own `reasons`, and this
   // surface's producer stamps at most `installs disabled` there -- the
   // not-installed candidate row's statement about what an install WOULD do.
-  available: (p, probe, mpScope) => renderAvailableRow(p, probe, mpScope, p.reasons),
-  unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
+  available: (p, mpScope) => renderAvailableRow(p, mpScope, p.reasons),
+  unavailable: (p, mpScope) => renderUnavailableRow(p, mpScope),
   // USTAT-01 / D-64-01: not-installed, partially-available row -- the dedicated
   // ICON_PARTIALLY_AVAILABLE (`⊖`) glyph + `(partially-available)` token. The helper differs
   // from the `unavailable` one in glyph and token only (same MSG-PL-6 / SNM-11
   // no-scope carve-out and reasons composition).
-  "partially-available": (p, probe, mpScope) => renderPartiallyAvailableRow(p, probe, mpScope),
-  upgradable: (p, probe, mpScope) => pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe),
+  "partially-available": (p, mpScope) => renderPartiallyAvailableRow(p, mpScope),
+  upgradable: (p, mpScope) => pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)"),
   // FSTAT-02 / D-66-03: dedicated ICON_PARTIALLY_INSTALLED (`◉`) glyph; the reasons
   // brace carries the dropped-component detail (mirrors the `upgradable`
   // composition). Body lifted verbatim from the central renderPluginRow arm.
-  "partially-installed": (p, probe, mpScope) =>
-    pluginRow(ICON_PARTIALLY_INSTALLED, p, mpScope, "(partially-installed)", probe),
+  "partially-installed": (p, mpScope) =>
+    pluginRow(ICON_PARTIALLY_INSTALLED, p, mpScope, "(partially-installed)"),
   // FSTAT-04 / D-66-02 / D-66-03: REUSES ICON_INSTALLED (`●`) -- the row is
   // clean today -- exactly like the `upgradable` arm above.
-  "partially-upgradable": (p, probe, mpScope) =>
-    pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)", probe),
+  "partially-upgradable": (p, mpScope) =>
+    pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)"),
   // ENBL-16 / D-100-07: the shared helper threads the row's `reasons`, and the
-  // orchestrator stamps at most `not in manifest` there. Both soft-dep flags
-  // stay hard-coded false inside that helper, which is what keeps a disabled row
-  // free of a soft-dep marker whatever inventory the record retained (ENBL-15 /
-  // D-100-06).
-  disabled: (p, probe, mpScope) => renderDisabledRow(p, probe, mpScope),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+  // orchestrator stamps at most `not in manifest` there. The marker policy maps
+  // `disabled` to off, which is what keeps a disabled row free of a soft-dep
+  // marker whatever inventory the record retained (ENBL-15 / D-100-06, D-12).
+  disabled: (p, mpScope) => renderDisabledRow(p, mpScope),
+  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
   // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is not
   // materialized locally. The helper differs from the `available` one in glyph
   // (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11 carve-out:
@@ -148,7 +146,7 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
   // needs no tree at all because the marketplace entry is readable with no
   // clone (OUT-05 / DOC-02). That is what lets an unfetched row state what an
   // install would do, and this is the surface whose producer stamps it.
-  remote: (p, probe, mpScope) => renderRemoteRow(p, probe, mpScope, p.reasons),
+  remote: (p, mpScope) => renderRemoteRow(p, mpScope, p.reasons),
 };
 
 /**

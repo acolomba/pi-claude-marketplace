@@ -35,8 +35,12 @@ type ControlledMessage = PluginAvailableMessage | PluginDisabledMessage;
 type ControlledStatus = ControlledMessage["status"];
 type ResolvedAvailableRow = ResolvedRow<PluginAvailableMessage>;
 
-void (((row: ResolvedAvailableRow, probe: SoftDepStatus, scope: Scope) =>
-  `${row.name}:${probe.piSubagentsLoaded.toString()}:${scope}`) satisfies RenderFn<PluginAvailableMessage>);
+void (((row: ResolvedAvailableRow, scope: Scope) =>
+  `${row.name}:${scope}`) satisfies RenderFn<PluginAvailableMessage>);
+const renderWithProbe = (row: ResolvedAvailableRow, probe: SoftDepStatus, scope: Scope): string =>
+  `${row.name}:${probe.piSubagentsLoaded.toString()}:${scope}`;
+// @ts-expect-error D-13: a render arm takes no soft-dep probe argument
+void (renderWithProbe satisfies RenderFn<PluginAvailableMessage>);
 void ({
   Messaging: { label: "Plugin inspect" },
   render: {
@@ -108,7 +112,6 @@ interface Harness {
 interface RenderCall {
   readonly status: ControlledStatus;
   readonly name: string;
-  readonly probe: SoftDepStatus;
   readonly scope: Scope;
 }
 
@@ -164,12 +167,12 @@ function createHarness(notification: NotificationRecord): Harness {
 
 function createControlledContext(t: TestContext, label: string): ControlledContext {
   const calls: RenderCall[] = [];
-  const available = t.mock.fn<RenderFn<PluginAvailableMessage>>((row, probe, scope) => {
-    calls.push({ status: row.status, name: row.name, probe: { ...probe }, scope });
+  const available = t.mock.fn<RenderFn<PluginAvailableMessage>>((row, scope) => {
+    calls.push({ status: row.status, name: row.name, scope });
     return `controlled available ${row.name} [${scope}]`;
   });
-  const disabled = t.mock.fn<RenderFn<PluginDisabledMessage>>((row, probe, scope) => {
-    calls.push({ status: row.status, name: row.name, probe: { ...probe }, scope });
+  const disabled = t.mock.fn<RenderFn<PluginDisabledMessage>>((row, scope) => {
+    calls.push({ status: row.status, name: row.name, scope });
     return `controlled disabled ${row.name} [${scope}]`;
   });
   const context = {
@@ -229,7 +232,6 @@ test("WR-06: folds caller-supplied advisory lines before the tally", (t) => {
     {
       status: "available",
       name: "alpha",
-      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false },
       scope: "user",
     },
   ]);
@@ -256,7 +258,6 @@ test("a one-row plural cascade retains its one-success tally", (t) => {
     {
       status: "available",
       name: "alpha",
-      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false },
       scope: "user",
     },
   ]);
@@ -283,11 +284,6 @@ test("a single cascade dispatches its row without a plural tally", (t) => {
     {
       status: "available",
       name: "alpha",
-      probe: {
-        piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
-        workflowEngineLoaded: false,
-      },
       scope: "user",
     },
   ]);
@@ -328,31 +324,16 @@ test("plural marketplaces dispatch equal-status rows separately in input order",
     {
       status: "available",
       name: "alpha",
-      probe: {
-        piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
-        workflowEngineLoaded: false,
-      },
       scope: "user",
     },
     {
       status: "available",
       name: "beta",
-      probe: {
-        piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
-        workflowEngineLoaded: false,
-      },
       scope: "user",
     },
     {
       status: "disabled",
       name: "gamma",
-      probe: {
-        piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
-        workflowEngineLoaded: false,
-      },
       scope: "project",
     },
   ]);
@@ -396,11 +377,6 @@ for (const { count, expectedMessage } of [
       {
         status: "available",
         name: "alpha",
-        probe: {
-          piSubagentsLoaded: false,
-          piMcpAdapterLoaded: false,
-          workflowEngineLoaded: false,
-        },
         scope: "project",
       },
     ]);
@@ -444,11 +420,6 @@ test("the no-op update wrapper dispatches surviving rows before its headline", (
     {
       status: "disabled",
       name: "alpha",
-      probe: {
-        piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
-        workflowEngineLoaded: false,
-      },
       scope: "user",
     },
   ]);
@@ -550,8 +521,8 @@ test("a missing render arm reports its named row before the adjacent present arm
     severity: "error",
   });
   const calls: RenderCall[] = [];
-  const available = t.mock.fn<RenderFn<PluginAvailableMessage>>((row, probe, scope) => {
-    calls.push({ status: row.status, name: row.name, probe: { ...probe }, scope });
+  const available = t.mock.fn<RenderFn<PluginAvailableMessage>>((row, scope) => {
+    calls.push({ status: row.status, name: row.name, scope });
     return `controlled available ${row.name} [${scope}]`;
   });
   const context = {
@@ -582,11 +553,6 @@ test("a missing render arm reports its named row before the adjacent present arm
     {
       status: "available",
       name: "neighbor",
-      probe: {
-        piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
-        workflowEngineLoaded: false,
-      },
       scope: "user",
     },
   ]);
@@ -605,8 +571,8 @@ test("a frozen unnamed missing-arm row still precedes the adjacent present arm",
     ].join("\n"),
   });
   const calls: RenderCall[] = [];
-  const available = t.mock.fn<RenderFn<PluginAvailableMessage>>((row, probe, scope) => {
-    calls.push({ status: row.status, name: row.name, probe: { ...probe }, scope });
+  const available = t.mock.fn<RenderFn<PluginAvailableMessage>>((row, scope) => {
+    calls.push({ status: row.status, name: row.name, scope });
     return `controlled available ${row.name} [${scope}]`;
   });
   const context = {
@@ -631,11 +597,6 @@ test("a frozen unnamed missing-arm row still precedes the adjacent present arm",
     {
       status: "available",
       name: "neighbor",
-      probe: {
-        piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
-        workflowEngineLoaded: false,
-      },
       scope: "user",
     },
   ]);
@@ -664,11 +625,6 @@ test("the reconcile wrapper dispatches rows with its label and plural cardinalit
     {
       status: "available",
       name: "alpha",
-      probe: {
-        piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
-        workflowEngineLoaded: false,
-      },
       scope: "user",
     },
   ]);

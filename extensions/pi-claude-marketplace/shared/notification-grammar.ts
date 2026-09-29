@@ -1,5 +1,4 @@
 import { appendHooksBlock } from "./concerns/hooks.ts";
-import { softDepMarkers } from "./concerns/soft-dep.ts";
 import { formatCauseChain } from "./errors.ts";
 import { tallyCategory } from "./notification-summary.ts";
 
@@ -31,7 +30,6 @@ import type {
   Reason,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
-import type { SoftDepStatus } from "../platform/pi-api.ts";
 
 /**
  * Exact notification grammar. Severity and the summary line are resolved in
@@ -203,9 +201,10 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *                           never carries mp.reasons.)
  *   "skipped"            -> `${ICON_INSTALLED} ${name} [${scope}] (skipped)`
  *                           (+ ` {<reason>,...}` iff `mp.reasons` is defined
- *                           and non-empty, composed via `composeReasons` with
- *                           all three soft-dep flags FALSE; mp-level skipped
- *                           never emits soft-dep markers.) UXG-04 SPECIAL CASE: when
+ *                           and non-empty, formatted via `composeReasons`;
+ *                           mp-level skipped never emits soft-dep markers,
+ *                           because resolve composes markers on plugin rows
+ *                           only.) UXG-04 SPECIAL CASE: when
  *                           `mp.reasons` contains `"already autoupdate"` /
  *                           `"already no autoupdate"` the row renders
  *                           `... <autoupdate> {already autoupdate}` /
@@ -229,13 +228,11 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  * are the available / uninstalled / will-uninstall PLUGIN rows that
  * `renderPluginRow` owns.
  *
- * The `"skipped"` arm reuses the file-private `composeReasons` helper to
- * render the reasons brace, which requires the threaded `SoftDepStatus` probe
- * even though mp-level skipped passes all three declares-flags as `false`
- * (guarantees no soft-dep marker leaks onto mp-skipped rows). Every call site
- * in this file MUST pass the probe.
+ * The `"failed"` and `"skipped"` arms format `mp.reasons` with
+ * `composeReasons`. Soft-dep markers are composed on plugin rows only, in
+ * `resolveRows` (D-12), so no marker can reach a marketplace header.
  */
-export function renderMpHeader(mp: ResolvedMarketplace, probe: SoftDepStatus): string {
+export function renderMpHeader(mp: ResolvedMarketplace): string {
   switch (mp.status) {
     case "added":
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (added)`;
@@ -246,13 +243,12 @@ export function renderMpHeader(mp: ResolvedMarketplace, probe: SoftDepStatus): s
     case "failed": {
       // D-48-A: append the closed-set reason brace iff `mp.reasons` is present
       // and non-empty (marketplace-op precondition failure with no plugin child
-      // rows, e.g. `marketplace add`). Pass (false, false, false) for the
-      // soft-dep declares-flags -- mp-level rows never emit soft-dep markers (mirrors the
-      // "skipped" arm). composeReasons returns "" when reasons is
-      // undefined/empty, so the existing bare `(failed)` byte form
+      // rows, e.g. `marketplace add`). mp-level rows never emit soft-dep
+      // markers (mirrors the "skipped" arm). composeReasons returns "" when
+      // reasons is undefined/empty, so the bare `(failed)` byte form
       // (update/autoupdate mp-failure states that ride the cause on a child row)
       // is preserved unchanged.
-      const reasonsBrace = composeReasons(mp.reasons, false, false, false, probe);
+      const reasonsBrace = composeReasons(mp.reasons);
       return reasonsBrace === ""
         ? `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed)`
         : `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed) ${reasonsBrace}`;
@@ -272,14 +268,13 @@ export function renderMpHeader(mp: ResolvedMarketplace, probe: SoftDepStatus): s
     case "skipped": {
       // The "skipped" arm is SHARED across mp-level skips (UXG-05's
       // `(skipped) {up-to-date}`, the idempotent autoupdate no-ops, etc.). The
-      // reasons brace is composed via composeReasons reusing the helper that
-      // backs plugin-level skipped rows. CRITICAL: pass (false, false, false)
-      // for the three soft-dep declares flags -- mp-level skipped never emits
-      // {requires pi-subagents} / {requires pi-mcp} markers; those are
-      // plugin-row-only. composeReasons returns "" when mp.reasons is undefined
+      // reasons brace is formatted via composeReasons, the helper that backs
+      // plugin-level skipped rows. mp-level skipped never emits
+      // {requires pi-subagents} / {requires pi-mcp} markers; resolve composes
+      // those on plugin rows only. composeReasons returns "" when mp.reasons is undefined
       // or empty, so the conditional join collapses cleanly with no trailing
       // space.
-      const reasonsBrace = composeReasons(mp.reasons, false, false, false, probe);
+      const reasonsBrace = composeReasons(mp.reasons);
       // UXG-04: idempotent autoupdate flips render the marker as the outcome
       // (no `(skipped)` token -- the marker conveys the state, the brace
       // conveys idempotence) for byte-form parity with the fresh-flip + list
@@ -343,7 +338,7 @@ export function renderMpHeader(mp: ResolvedMarketplace, probe: SoftDepStatus): s
 // it stays until those surfaces relocate.
 //
 // SNM-16 / D-12: soft-dep markers are composed in `resolveRows` from the
-// per-row `dependencies?` declaration, the `SoftDepStatus` snapshot, and the
+// per-row `dependencies?` declaration, the soft-dep snapshot, and the
 // command's marker policy, so each row arrives with its final `reasons`. The
 // switch lists every status and has no default arm, so a future
 // `PluginNotificationMessage` variant becomes a type and lint error at this
@@ -488,42 +483,24 @@ export function composeVersionArrow(from: string, to: string): string {
 }
 
 /**
- * Compose the MSG-GR-4 reasons-block, appending the soft-dep markers the
- * declares-flags and the threaded probe call for. Plugin rows reach their
- * renderers resolved, with the markers already in `reasons` (D-12), so every
- * plugin-row caller passes three `false` flags.
- *
- *  - Starts from the caller-provided `reasons` array (or `[]` when the
- *  variant lacks a reasons field).
- *  - Appends `SOFT_DEP_MARKER_AGENTS` iff `declaresAgents && !probe.piSubagentsLoaded`.
- *  - Appends `SOFT_DEP_MARKER_MCP` iff `declaresMcp && !probe.piMcpAdapterLoaded`.
- *  - Appends `SOFT_DEP_MARKER_WORKFLOWS` iff `declaresWorkflows && !probe.workflowEngineLoaded`.
- *  - Returns `""` when the composed array is empty (MSG-GR-4 forbids `{}`).
- *  - Otherwise returns `{<r1>, <r2>,...}`.
+ * Format a resolved MSG-GR-4 reasons list as its brace: `""` when the list is
+ * undefined or empty (MSG-GR-4 forbids `{}`), otherwise `{<r1>, <r2>, ...}`.
+ * Plugin rows reach their renderers resolved, so any soft-dep marker is
+ * already in `reasons` (D-12); this helper adds nothing to the list.
  *
  * Single canonical implementation.
  *
- * The reasons array is the closed `Reason` set end-to-end: every switch arm
- * passes either `p.reasons` (a `readonly Reason[]`) or `undefined`, and the
- * appended soft-dep markers are themselves `Reason` members. Typing the
- * parameter and accumulator as `Reason` rejects out-of-set strings at the
- * call sites at compile time (CMC-11 closed-set discipline).
+ * The reasons array is the closed `Reason` set end-to-end: every caller passes
+ * either a `readonly Reason[]` or `undefined`. Typing the parameter as `Reason`
+ * rejects out-of-set strings at the call sites at compile time (CMC-11
+ * closed-set discipline).
  */
-export function composeReasons(
-  reasons: readonly Reason[] | undefined,
-  declaresAgents: boolean,
-  declaresMcp: boolean,
-  declaresWorkflows: boolean,
-  probe: SoftDepStatus,
-): string {
-  const composed: Reason[] = reasons === undefined ? [] : [...reasons];
-  composed.push(...softDepMarkers(declaresAgents, declaresMcp, declaresWorkflows, probe));
-
-  if (composed.length === 0) {
+export function composeReasons(reasons: readonly Reason[] | undefined): string {
+  if (reasons === undefined || reasons.length === 0) {
     return "";
   }
 
-  return `{${composed.join(", ")}}`;
+  return `{${reasons.join(", ")}}`;
 }
 
 /**
@@ -534,9 +511,9 @@ export function composeReasons(
  * the FULL parenthesized token (the caller passes `"(upgradable)"` etc.,
  * INCLUDING the parens, so the `"(manual recovery)"` literal keeps its space
  * verbatim). The `p` param is the structural subset those variants share: a
- * required `name` and an optional `scope` / `version` / `reasons`. All three
- * declares-flags are `false`: a resolved row's `reasons` already carries any
- * marker its command's policy allows.
+ * required `name` and an optional `scope` / `version` / `reasons`. It adds no
+ * soft-dep marker: a resolved row's `reasons` already carries any marker its
+ * command's policy allows.
  *
  * `reasons` is OPTIONAL so the composer accepts any row shape;
  * `composeReasons` treats `undefined` as the empty list. This is what lets the
@@ -552,7 +529,6 @@ export function pluginRow(
   },
   mpScope: Scope,
   label: string,
-  probe: SoftDepStatus,
 ): string {
   return joinTokens([
     icon,
@@ -560,7 +536,7 @@ export function pluginRow(
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     label,
-    composeReasons(p.reasons, false, false, false, probe),
+    composeReasons(p.reasons),
   ]);
 }
 
@@ -583,7 +559,6 @@ export function partiallyInstalledRow(
     readonly reasons: readonly Reason[];
   },
   mpScope: Scope,
-  probe: SoftDepStatus,
 ): string {
   return joinTokens([
     ICON_PARTIALLY_INSTALLED,
@@ -591,7 +566,7 @@ export function partiallyInstalledRow(
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(partially-installed)",
-    composeReasons(p.reasons, false, false, false, probe),
+    composeReasons(p.reasons),
   ]);
 }
 
@@ -631,7 +606,6 @@ export function installedLikeRow(
   versionToken: string,
   label: string,
   reasons: readonly Reason[] | undefined,
-  probe: SoftDepStatus,
 ): string {
   return joinTokens([
     icon,
@@ -639,7 +613,7 @@ export function installedLikeRow(
     renderScopeBracket(p.scope, mpScope),
     versionToken,
     label,
-    composeReasons(reasons, false, false, false, probe),
+    composeReasons(reasons),
   ]);
 }
 
@@ -652,7 +626,6 @@ export function installedLikeRow(
  */
 export function renderUninstalledRow(
   p: ResolvedRow<PluginUninstalledMessage>,
-  probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
   return joinTokens([
@@ -661,11 +634,11 @@ export function renderUninstalledRow(
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(uninstalled)",
-    // WLIF-06: the row's own `reasons`, threaded exactly as the `installed` /
-    // `updated` / `reinstalled` arms thread theirs. The three `false` arguments
-    // keep MSG-SD-3 structural: a removal row still cannot carry a soft-dep
-    // marker, whatever the removed record declared.
-    composeReasons(p.reasons, false, false, false, probe),
+    // WLIF-06: the row's own `reasons`, formatted exactly as the `installed` /
+    // `updated` / `reinstalled` arms format theirs. MSG-SD-3: every marker
+    // policy maps `uninstalled` to off (D-12), so a removal row carries no
+    // soft-dep marker, whatever the removed record declared.
+    composeReasons(p.reasons),
   ]);
 }
 
@@ -681,12 +654,12 @@ export function renderUninstalledRow(
  * required rather than optional is what forces each surface to state its own
  * answer at the call site instead of inheriting one silently.
  *
- * All soft-dep flags stay hard-coded false: the SNM-11 no-scope-bracket
- * carve-out family never emits soft-dependency markers.
+ * SNM-11: the no-scope-bracket carve-out family never emits soft-dependency
+ * markers. Every marker policy maps `available` to off (D-12), and the
+ * caller-supplied `reasons` carry only what the surface stamped.
  */
 export function renderAvailableRow(
   p: ResolvedRow<PluginAvailableMessage>,
-  probe: SoftDepStatus,
   mpScope: Scope,
   reasons: readonly Reason[] | undefined,
 ): string {
@@ -696,7 +669,7 @@ export function renderAvailableRow(
     renderScopeBracket(undefined, mpScope),
     renderVersion(p.version),
     "(available)",
-    composeReasons(reasons, false, false, false, probe),
+    composeReasons(reasons),
   ]);
 }
 
@@ -708,7 +681,7 @@ export function renderAvailableRow(
  * OUT-02 / OUT-05: D-80-03's bare-row rule NARROWS here rather than reversing.
  * What the row still refuses is every probe-derived reason and every soft-dep
  * marker -- there is no materialized tree to derive either from, which is why
- * all soft-dep flags stay hard-coded false. What it admits is the one
+ * every marker policy maps `remote` to off (D-12). What it admits is the one
  * entry-derived token, `installs disabled`, which needs no tree at all because
  * the marketplace entry is readable with no clone (DOC-02). That is what lets
  * an unfetched row state what an install would do.
@@ -719,7 +692,6 @@ export function renderAvailableRow(
  */
 export function renderRemoteRow(
   p: ResolvedRow<PluginRemoteMessage>,
-  probe: SoftDepStatus,
   mpScope: Scope,
   reasons: readonly Reason[] | undefined,
 ): string {
@@ -729,14 +701,13 @@ export function renderRemoteRow(
     renderScopeBracket(undefined, mpScope),
     renderVersion(p.version),
     "(remote)",
-    composeReasons(reasons, false, false, false, probe),
+    composeReasons(reasons),
   ]);
 }
 
 /** MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field. */
 export function renderUnavailableRow(
   p: ResolvedRow<PluginUnavailableMessage>,
-  probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
   return joinTokens([
@@ -745,7 +716,7 @@ export function renderUnavailableRow(
     renderScopeBracket(undefined, mpScope),
     renderVersion(p.version),
     "(unavailable)",
-    composeReasons(p.reasons, false, false, false, probe),
+    composeReasons(p.reasons),
   ]);
 }
 
@@ -756,7 +727,6 @@ export function renderUnavailableRow(
  */
 export function renderPartiallyAvailableRow(
   p: ResolvedRow<PluginPartiallyAvailableMessage>,
-  probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
   return joinTokens([
@@ -765,7 +735,7 @@ export function renderPartiallyAvailableRow(
     renderScopeBracket(undefined, mpScope),
     renderVersion(p.version),
     "(partially-available)",
-    composeReasons(p.reasons, false, false, false, probe),
+    composeReasons(p.reasons),
   ]);
 }
 
@@ -775,22 +745,18 @@ export function renderPartiallyAvailableRow(
  * -- the same glyph the `(will disable)` pending-tense row carries.
  *
  * ENBL-16: the caller's `reasons` are threaded and the caller stamps at most
- * `not in manifest`. ENBL-15: all soft-dep flags are hard-coded false, which
- * is what keeps a disabled row free of a soft-dep marker whatever inventory
- * the record retained.
+ * `not in manifest`. ENBL-15: every marker policy maps `disabled` to off
+ * (D-12), which is what keeps a disabled row free of a soft-dep marker
+ * whatever inventory the record retained.
  */
-export function renderDisabledRow(
-  p: ResolvedRow<PluginDisabledMessage>,
-  probe: SoftDepStatus,
-  mpScope: Scope,
-): string {
+export function renderDisabledRow(p: ResolvedRow<PluginDisabledMessage>, mpScope: Scope): string {
   return joinTokens([
     ICON_DISABLED,
     p.name,
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(disabled)",
-    composeReasons(p.reasons, false, false, false, probe),
+    composeReasons(p.reasons),
   ]);
 }
 
@@ -862,10 +828,9 @@ function renderPendingRow(
  *
  * Soft-dep markers: `p` is a resolved row, so its `reasons` already ends with
  * the markers `CENTRAL_MARKER_POLICY` allows for the `installed` / `updated` /
- * `reinstalled` / `partially-installed` rows (D-12). Every arm passes `false`
- * for all three declares-flags.
+ * `reinstalled` / `partially-installed` rows (D-12). No arm adds a marker.
  *
- * Per-variant `composeReasons` first argument, over the 19 plugin statuses:
+ * Per-variant `composeReasons` argument, over the 19 plugin statuses:
  *  - 7 reasons-less variants (uninstalled, available, remote,
  *  will install, will uninstall, will enable, will disable) pass `undefined` --
  *  or, on the arms that can carry no marker of any kind (remote and the four
@@ -880,7 +845,7 @@ function renderPendingRow(
  *  - `failed.cause` / `manual recovery.cause` cause-chain trailers.
  *  - `failed.rollbackPartial[]` child rows.
  */
-function renderPluginRow(p: ResolvedRow, probe: SoftDepStatus, mpScope: Scope): string {
+function renderPluginRow(p: ResolvedRow, mpScope: Scope): string {
   switch (p.status) {
     // `installed` (cascade transition AND the list-surface inventory row) --
     // SURF-05 / D-63-08 threads the `reasons` brace through composeReasons;
@@ -897,7 +862,7 @@ function renderPluginRow(p: ResolvedRow, probe: SoftDepStatus, mpScope: Scope): 
         renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(installed)",
-        composeReasons(p.reasons, false, false, false, probe),
+        composeReasons(p.reasons),
       ]);
     // `updated` -- WR-12 threads the optional `reasons` brace exactly as the
     // `installed` and `reinstalled` arms do, so an update that degraded a
@@ -910,7 +875,7 @@ function renderPluginRow(p: ResolvedRow, probe: SoftDepStatus, mpScope: Scope): 
         renderScopeBracket(p.scope, mpScope),
         composeVersionArrow(p.from, p.to),
         "(updated)",
-        composeReasons(p.reasons, false, false, false, probe),
+        composeReasons(p.reasons),
       ]);
     // `reinstalled` -- WR-09 threads the optional `reasons` brace exactly as the
     // `installed` arm above, so a reinstall that degraded a component names the
@@ -923,14 +888,14 @@ function renderPluginRow(p: ResolvedRow, probe: SoftDepStatus, mpScope: Scope): 
         renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(reinstalled)",
-        composeReasons(p.reasons, false, false, false, probe),
+        composeReasons(p.reasons),
       ]);
     case "uninstalled":
-      return renderUninstalledRow(p, probe, mpScope);
+      return renderUninstalledRow(p, mpScope);
     case "available":
       // OUT-02: no producer that renders through THIS arm stamps `reasons`, so
       // the `undefined` is the drop stated by construction, not an omission.
-      return renderAvailableRow(p, probe, mpScope, undefined);
+      return renderAvailableRow(p, mpScope, undefined);
     case "remote":
       // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is
       // not materialized locally. Clones the `available` arm, swapping the
@@ -940,34 +905,34 @@ function renderPluginRow(p: ResolvedRow, probe: SoftDepStatus, mpScope: Scope): 
       // soft-dep-derived reasons and admits only the entry-derived `installs
       // disabled` token. No producer that renders through THIS arm stamps it,
       // so the `undefined` is the drop stated by construction, not an omission.
-      return renderRemoteRow(p, probe, mpScope, undefined);
+      return renderRemoteRow(p, mpScope, undefined);
     case "unavailable":
-      return renderUnavailableRow(p, probe, mpScope);
+      return renderUnavailableRow(p, mpScope);
     case "partially-available":
-      return renderPartiallyAvailableRow(p, probe, mpScope);
+      return renderPartiallyAvailableRow(p, mpScope);
     case "upgradable":
-      return pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe);
+      return pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)");
     case "partially-installed":
-      return partiallyInstalledRow(p, mpScope, probe);
+      return partiallyInstalledRow(p, mpScope);
     case "partially-upgradable":
       // FSTAT-04 / D-66-02 / D-66-03: currently-clean installed plugin whose
       // newer candidate would newly degrade. REUSES ICON_INSTALLED (`●`) -- the
       // row is clean today -- exactly like the `upgradable` arm above.
-      return pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)", probe);
+      return pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)");
     case "skipped":
-      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe);
+      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)");
     case "failed":
-      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe);
+      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)");
     case "manual recovery":
       // `(manual recovery)` discriminator preserved verbatim WITH A SPACE.
-      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)", probe);
+      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)");
     case "will install":
     case "will uninstall":
     case "will enable":
     case "will disable":
       return renderPendingRow(p, mpScope);
     case "disabled":
-      return renderDisabledRow(p, probe, mpScope);
+      return renderDisabledRow(p, mpScope);
   }
 }
 
@@ -1035,13 +1000,13 @@ const ROW_HINT_TRAILERS = {
  * phase-cause trailers. The caller pushes these lines into the marketplace
  * block's accumulator in order.
  */
-function composePluginLines(p: ResolvedRow, probe: SoftDepStatus, mpScope: Scope): string[] {
+function composePluginLines(p: ResolvedRow, mpScope: Scope): string[] {
   // Byte-identical to dispatching through the central `renderPluginRow` switch:
   // delegate to the body-parameterized variant with `renderPluginRow` as the
   // row renderer, so the PL-4 description line, the cause-chain / AS-7
   // leaked-paths trailers, and the rollback-partial lines are composed in
   // exactly one place (`composePluginLinesWith`).
-  return composePluginLinesWith(p, probe, mpScope, renderPluginRow);
+  return composePluginLinesWith(p, mpScope, renderPluginRow);
 }
 
 /**
@@ -1074,15 +1039,10 @@ function composeMpInfoHeader(name: string, scope: Scope, details: MarketplaceDet
  *   - optional `description: <text>` (single attribute line, NOT wrapped
  *     -- description wrapping is `plugin info`-only per INFO-02).
  *
- * Joins all lines with `\n`. `probe` is unused on info surfaces (info
- * messages do not emit soft-dep markers) but accepted for signature parity
- * with `composeMarketplaceBlock`. File-private; sole caller is `notify()`
- * dispatcher.
+ * Joins all lines with `\n`. Info messages do not emit soft-dep markers.
+ * File-private; sole caller is `notify()` dispatcher.
  */
-export function renderMarketplaceInfo(
-  message: MarketplaceInfoMessage,
-  _probe: SoftDepStatus,
-): string {
+export function renderMarketplaceInfo(message: MarketplaceInfoMessage): string {
   const lines: string[] = [composeMpInfoHeader(message.name, message.scope, message.details)];
 
   switch (message.source.sourceKind) {
@@ -1136,15 +1096,10 @@ export function renderMarketplaceInfo(
  * the user-facing path, but the renderer keeps the edge case
  * deterministic).
  *
- * `probe` is unused on info surfaces but accepted for signature parity
- * with `renderMarketplaceInfo` (and forwarded to each per-block render).
  * File-private; sole caller is `notify()` dispatcher.
  */
-export function renderMarketplaceInfoCascade(
-  message: MarketplaceInfoCascadeMessage,
-  probe: SoftDepStatus,
-): string {
-  return message.blocks.map((b) => renderMarketplaceInfo(b, probe)).join("\n\n");
+export function renderMarketplaceInfoCascade(message: MarketplaceInfoCascadeMessage): string {
+  return message.blocks.map((b) => renderMarketplaceInfo(b)).join("\n\n");
 }
 
 /**
@@ -1163,15 +1118,10 @@ export function renderMarketplaceInfoCascade(
  * fan-out for the user-facing path, but the renderer keeps the edge
  * case deterministic).
  *
- * `probe` is unused on info surfaces but accepted for signature parity
- * with `renderPluginInfo` (and forwarded to each per-block render).
  * File-private; sole caller is the `dispatchInfoMessage` helper.
  */
-export function renderPluginInfoCascade(
-  message: PluginInfoCascadeMessage,
-  probe: SoftDepStatus,
-): string {
-  return message.blocks.map((b) => renderPluginInfo(b, probe)).join("\n\n");
+export function renderPluginInfoCascade(message: PluginInfoCascadeMessage): string {
+  return message.blocks.map((b) => renderPluginInfo(b)).join("\n\n");
 }
 
 /**
@@ -1287,14 +1237,12 @@ function appendResolvedComponentLines(
  * `marketplace not added`, or a scope-qualified sibling such as
  * `marketplace not added to user scope`.
  *
- * `probe` is accepted for signature parity with the other info renderers and
- * threaded into `composeReasons` with all three soft-dep declares-flags FALSE --
- * info-surface rows NEVER emit soft-dep markers.
+ * The brace is formatted by `composeReasons`, which adds nothing to the one
+ * token -- info-surface rows NEVER emit soft-dep markers.
  */
 export function renderMarketplaceNotAdded(
   message: MarketplaceNotAddedMessage,
   reason: Reason,
-  probe: SoftDepStatus,
 ): string {
   return joinTokens([
     ICON_UNINSTALLABLE,
@@ -1302,7 +1250,7 @@ export function renderMarketplaceNotAdded(
     message.scope === undefined ? "" : `[${message.scope}]`,
     renderVersion(undefined),
     "(failed)",
-    composeReasons([reason], false, false, false, probe),
+    composeReasons([reason]),
   ]);
 }
 
@@ -1319,8 +1267,8 @@ export function renderMarketplaceNotAdded(
  * marker line `    components: not resolved` (componentsResolved:
  * false).
  *
- * Reasons brace via `composeReasons` with all declares-flags FALSE
- * -- info messages NEVER emit soft-dep markers.
+ * Reasons brace via `composeReasons`, which formats `plugin.reasons` as
+ * given -- info messages NEVER emit soft-dep markers.
  *
  * WR-09: `notes` renders LAST -- after the component block and after any
  * `dependencies:` line -- as one `    note: <text>` line per entry. A row that
@@ -1328,11 +1276,8 @@ export function renderMarketplaceNotAdded(
  *
  * SORT PRECONDITION: per-kind arrays and `dependencies` MUST be
  * pre-sorted at message construction. The renderer does not sort.
- *
- * `probe` is accepted for signature parity with
- * `composeMarketplaceBlock` but unused on the info path.
  */
-export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatus): string {
+export function renderPluginInfo(message: PluginInfoMessage): string {
   const plugin = message.plugin;
 
   // INFO-02 standard path: marketplace header + 2-space-indent row + optional
@@ -1351,7 +1296,7 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
     renderScopeBracket(plugin.scope, message.marketplaceScope),
     renderVersion(plugin.version),
     `(${plugin.status})`,
-    composeReasons(plugin.reasons, false, false, false, probe),
+    composeReasons(plugin.reasons),
   ]);
   lines.push(`  ${pluginRowLine}`);
 
@@ -1386,13 +1331,12 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
  * with `\n` to produce the block string that `notify` then joins with
  * `\n\n` between marketplaces.
  */
-export function composeMarketplaceBlock(mp: ResolvedMarketplace, probe: SoftDepStatus): string {
-  // Pass the threaded soft-dep probe into renderMpHeader so the "skipped" arm
-  // can reuse composeReasons. The mp-skipped arm passes (false, false, false)
-  // for the three declares-flags; no soft-dep marker can leak onto an mp-level row.
-  const lines: string[] = [renderMpHeader(mp, probe)];
+export function composeMarketplaceBlock(mp: ResolvedMarketplace): string {
+  // The header formats `mp.reasons` as given; resolve composes soft-dep
+  // markers on plugin rows only, so none can leak onto an mp-level row.
+  const lines: string[] = [renderMpHeader(mp)];
   for (const p of mp.plugins) {
-    lines.push(...composePluginLines(p, probe, mp.scope));
+    lines.push(...composePluginLines(p, mp.scope));
   }
 
   return lines.join("\n");
@@ -1407,11 +1351,8 @@ export function composeMarketplaceBlock(mp: ResolvedMarketplace, probe: SoftDepS
  * invoking notify() per NFR-2 / A4); we defensively fall back to the
  * `(no marketplaces)` sentinel for parity with the cascade arm.
  */
-export function composeReconcileAppliedBody(
-  marketplaces: readonly ResolvedMarketplace[],
-  probe: SoftDepStatus,
-): string {
-  const blocks = marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
+export function composeReconcileAppliedBody(marketplaces: readonly ResolvedMarketplace[]): string {
+  const blocks = marketplaces.map((mp) => composeMarketplaceBlock(mp));
   return blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
 }
 
@@ -1472,11 +1413,10 @@ function isDescriptionBearingRow(
  */
 export function composePluginLinesWith(
   p: ResolvedRow,
-  probe: SoftDepStatus,
   mpScope: Scope,
-  renderRow: (p: ResolvedRow, probe: SoftDepStatus, mpScope: Scope) => string,
+  renderRow: (p: ResolvedRow, mpScope: Scope) => string,
 ): string[] {
-  const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
+  const lines: string[] = [`  ${renderRow(p, mpScope)}`];
 
   if (isDescriptionBearingRow(p) && p.description !== undefined && p.description.length > 0) {
     lines.push(`    ${truncateDescription(p.description)}`);

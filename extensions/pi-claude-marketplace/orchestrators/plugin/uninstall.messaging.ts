@@ -40,8 +40,8 @@ type UninstallMsg = PluginUninstalledMessage | PluginFailedMessage;
 const UNINSTALL_RENDER: {
   [K in UninstallStatus]: RenderFn<Extract<UninstallMsg, { status: K }>>;
 } = {
-  uninstalled: (p, probe, mpScope) => renderUninstalledRow(p, probe, mpScope),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+  uninstalled: (p, mpScope) => renderUninstalledRow(p, mpScope),
+  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
 };
 
 /**

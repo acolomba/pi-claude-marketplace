@@ -5,7 +5,6 @@ import { UNINSTALL_CONTEXT } from "../../../extensions/pi-claude-marketplace/orc
 import { type PluginFailedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { type PluginUninstalledMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 test("exports the complete uninstall command context", () => {
@@ -33,14 +32,9 @@ test("renders a complete cross-scope uninstalled transition row", () => {
     scope: "project",
     reasons: [],
   } as const satisfies ResolvedRow<PluginUninstalledMessage>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = UNINSTALL_CONTEXT.render.uninstalled(row, probe, "user");
+  const actual = UNINSTALL_CONTEXT.render.uninstalled(row, "user");
 
   // assert
   assert.equal(actual, "○ alpha [project] v1.2.3 (uninstalled)");
@@ -73,14 +67,9 @@ test("renders a failed uninstall row without leaking its failure detail into the
     reasons: ["permission denied", "rollback partial"],
     failure,
   } as const satisfies ResolvedRow<PluginFailedMessage>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = UNINSTALL_CONTEXT.render.failed(row, probe, "user");
+  const actual = UNINSTALL_CONTEXT.render.failed(row, "user");
 
   // assert
   assert.equal(actual, "⊘ beta v2.0.0 (failed) {permission denied, rollback partial}");

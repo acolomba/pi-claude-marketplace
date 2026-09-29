@@ -6,7 +6,6 @@ import {
   type ImportMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({
@@ -63,15 +62,10 @@ test("renders an installed row with optional fields omitted", () => {
     severity: "info",
     needsReload: true,
   };
-  const probe = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
   const expectedRow = "● alpha-plugin (installed)";
 
   // act
-  const row = IMPORT_CONTEXT.render.installed(message, probe, "project");
+  const row = IMPORT_CONTEXT.render.installed(message, "project");
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
@@ -105,16 +99,11 @@ test("renders installed content reasons before the resolved markers", () => {
     severity: "warning",
     needsReload: true,
   };
-  const probe = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
   const expectedRow =
     "● beta-plugin [user] v1.2.3 (installed) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp}";
 
   // act
-  const row = IMPORT_CONTEXT.render.installed(message, probe, "project");
+  const row = IMPORT_CONTEXT.render.installed(message, "project");
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
@@ -141,15 +130,10 @@ test("renders a skipped row with a compact hash version", () => {
     severity: "info",
     needsReload: false,
   };
-  const probe = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
   const expectedRow = "⊘ delta-plugin v#2ea95f8 (skipped) {already installed}";
 
   // act
-  const row = IMPORT_CONTEXT.render.skipped(message, probe, "project");
+  const row = IMPORT_CONTEXT.render.skipped(message, "project");
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
@@ -183,15 +167,10 @@ test("renders a failed row without composing its failure lines", () => {
     severity: "error",
     needsReload: false,
   };
-  const probe = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
   const expectedRow = "⊘ epsilon-plugin [user] v3.0.0 (failed) {not in manifest}";
 
   // act
-  const row = IMPORT_CONTEXT.render.failed(message, probe, "project");
+  const row = IMPORT_CONTEXT.render.failed(message, "project");
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
@@ -207,15 +186,10 @@ test("renders a source-mismatch failure with optional fields omitted", () => {
     severity: "error",
     needsReload: false,
   } satisfies ResolvedRow<ImportMsg>;
-  const probe = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
   const expectedRow = "⊘ zeta-plugin (failed) {source mismatch}";
 
   // act
-  const row = IMPORT_CONTEXT.render.failed(message, probe, "user");
+  const row = IMPORT_CONTEXT.render.failed(message, "user");
 
   // assert
   assert.deepStrictEqual(Object.keys(message), [
@@ -246,15 +220,10 @@ test("renders an unavailable row without a scope bracket", () => {
     severity: "warning",
     needsReload: false,
   };
-  const probe = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
   const expectedRow = "⊘ eta-plugin v4.0.0 (unavailable) {no longer installable}";
 
   // act
-  const row = IMPORT_CONTEXT.render.unavailable(message, probe, "project");
+  const row = IMPORT_CONTEXT.render.unavailable(message, "project");
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);

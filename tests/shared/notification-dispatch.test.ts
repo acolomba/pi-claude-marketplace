@@ -15,7 +15,6 @@ import {
   notifyUsageInfo,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 
-import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
   CascadeNotificationMessage,
@@ -5769,7 +5768,7 @@ test("raw dispatch preserves absent and explicit severity once each", (t) => {
   );
 });
 
-function renderOwnedRow(row: ResolvedRow, _probe: SoftDepStatus): string {
+function renderOwnedRow(row: ResolvedRow): string {
   return `${row.name} (${row.status})`;
 }
 
@@ -5812,18 +5811,16 @@ test("context dispatch preserves ordered rows and stamped reload hint", (t) => {
   assert.equal(renderRow.mock.callCount(), 2);
 });
 
-test("context dispatch forwards the row, the probe, and the enclosing marketplace scope", (t) => {
+test("context dispatch forwards the row and the enclosing marketplace scope, and no probe", (t) => {
   // arrange
-  // The renderer is an argument, so `(row, probe, mpScope)` is a contract of the
-  // emitter: the probe must be the one derived from the `pi` handle and the
-  // scope must be the ENCLOSING marketplace's, not the row's.
+  // The renderer is an argument, so `(row, mpScope)` is a contract of the
+  // emitter: the scope must be the ENCLOSING marketplace's, not the row's, and
+  // D-13 gives the renderer no probe argument.
   const ctx = createContext(t);
   const pi = piWithAllLoaded();
-  const renderCalls: Array<{ name: string; scope: string; probe: SoftDepStatus }> = [];
-  const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>((row, probe, scope) => {
-    renderCalls.push({ name: row.name, scope, probe: { ...probe } });
-    return `controlled ${row.status} ${row.name}`;
-  });
+  const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(
+    (row) => `controlled ${row.status} ${row.name}`,
+  );
   const message = {
     kind: "cascade",
     cardinality: "plural",
@@ -5852,13 +5849,10 @@ test("context dispatch forwards the row, the probe, and the enclosing marketplac
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     "● official [user]\n  controlled installed alpha\n\nPlugin install: 1 success\n\n/reload to pick up changes",
   ]);
-  assert.deepStrictEqual(renderCalls, [
-    {
-      name: "alpha",
-      scope: "user",
-      probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: true },
-    },
-  ]);
+  assert.deepStrictEqual(
+    renderRow.mock.calls.map((call) => [call.arguments[0].name, ...call.arguments.slice(1)]),
+    [["alpha", "user"]],
+  );
 });
 
 test("D-12: context dispatch composes each row's markers under the caller's marker policy", (t) => {

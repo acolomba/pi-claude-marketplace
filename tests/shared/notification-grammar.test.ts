@@ -137,7 +137,7 @@ for (const { status, extra, expected } of [
     const marketplace = { ...MARKETPLACE_BASE, status, ...extra };
 
     // act
-    const rendered = renderMpHeader(marketplace as never, bothLoadedProbe());
+    const rendered = renderMpHeader(marketplace as never);
 
     // assert
     assert.equal(rendered, expected);
@@ -311,7 +311,7 @@ for (const { plugin, expected } of ROW_CASES) {
     const marketplace = { ...MARKETPLACE_BASE, plugins: [plugin] };
 
     // act
-    const rendered = composeMarketplaceBlock(marketplace, bothLoadedProbe());
+    const rendered = composeMarketplaceBlock(marketplace);
 
     // assert
     assert.equal(rendered, `● official [user]\n  ${expected}`);
@@ -337,12 +337,7 @@ test("composes descriptions, hints, causes, leaks, and rollback failures in orde
   } satisfies ResolvedRow<PluginFailedMessage>;
 
   // act
-  const lines = composePluginLinesWith(
-    plugin,
-    bothLoadedProbe(),
-    "user",
-    () => "⊘ alpha (failed) {rollback partial}",
-  );
+  const lines = composePluginLinesWith(plugin, "user", () => "⊘ alpha (failed) {rollback partial}");
 
   // assert
   assert.deepStrictEqual(lines, [
@@ -419,7 +414,7 @@ for (const { plugin, expectedLines } of [
 ] as const satisfies readonly { plugin: ResolvedRow; expectedLines: readonly string[] }[]) {
   test(`renders the ${plugin.hint} hint after the description and before any failure line`, () => {
     // act
-    const lines = composePluginLinesWith(plugin, bothLoadedProbe(), "user", () => "row");
+    const lines = composePluginLinesWith(plugin, "user", () => "row");
 
     // assert
     assert.deepStrictEqual(lines, expectedLines);
@@ -433,13 +428,11 @@ test("truncates a long inventory description and preserves a short one", () => {
   // act
   const longLines = composePluginLinesWith(
     { status: "available", name: "alpha", description: longDescription } as never,
-    bothLoadedProbe(),
     "user",
     () => "row",
   );
   const shortLines = composePluginLinesWith(
     { status: "available", name: "alpha", description: "short" } as never,
-    bothLoadedProbe(),
     "user",
     () => "row",
   );
@@ -481,7 +474,7 @@ for (const { source, expectedSource } of [
     };
 
     // act
-    const rendered = renderMarketplaceInfo(message as never, bothLoadedProbe());
+    const rendered = renderMarketplaceInfo(message as never);
 
     // assert
     const updated = source.sourceKind === "path" ? "" : "\nlast_updated: 2025-01-02T03:04:05.000Z";
@@ -510,11 +503,8 @@ test("marketplace info cascades preserve zero and many shapes and order", () => 
   };
 
   // act
-  const empty = renderMarketplaceInfoCascade({ blocks: [] } as never, bothLoadedProbe());
-  const many = renderMarketplaceInfoCascade(
-    { blocks: [first, second] } as never,
-    bothLoadedProbe(),
-  );
+  const empty = renderMarketplaceInfoCascade({ blocks: [] } as never);
+  const many = renderMarketplaceInfoCascade({ blocks: [first, second] } as never);
 
   // assert
   assert.equal(empty, "");
@@ -544,7 +534,7 @@ for (const [status, glyph] of [
     };
 
     // act
-    const rendered = renderPluginInfo(message as never, bothLoadedProbe());
+    const rendered = renderPluginInfo(message as never);
 
     // assert
     assert.equal(
@@ -575,7 +565,7 @@ test("renders resolved plugin components and wraps descriptions without ellipsis
   };
 
   // act
-  const rendered = renderPluginInfo(message as never, bothLoadedProbe());
+  const rendered = renderPluginInfo(message as never);
 
   // assert
   assert.equal(
@@ -617,7 +607,7 @@ test("WR-09: renders one note line per entry, last, in composer order", () => {
   };
 
   // act
-  const rendered = renderPluginInfo(message as never, bothLoadedProbe());
+  const rendered = renderPluginInfo(message as never);
 
   // assert
   assert.equal(
@@ -641,9 +631,9 @@ test("plugin info cascades preserve zero and repeated-render many shapes", () =>
   };
 
   // act
-  const empty = renderPluginInfoCascade({ blocks: [] } as never, bothLoadedProbe());
-  const once = renderPluginInfoCascade({ blocks: [block, block] } as never, bothLoadedProbe());
-  const twice = renderPluginInfoCascade({ blocks: [block, block] } as never, bothLoadedProbe());
+  const empty = renderPluginInfoCascade({ blocks: [] } as never);
+  const once = renderPluginInfoCascade({ blocks: [block, block] } as never);
+  const twice = renderPluginInfoCascade({ blocks: [block, block] } as never);
 
   // assert
   assert.equal(empty, "");
@@ -674,7 +664,7 @@ for (const { message, reason, expected } of [
 }[]) {
   test(`renders marketplace-not-added as ${expected}`, () => {
     // act
-    const rendered = renderMarketplaceNotAdded(message, reason, bothLoadedProbe());
+    const rendered = renderMarketplaceNotAdded(message, reason);
 
     // assert
     assert.equal(rendered, expected);
@@ -689,8 +679,8 @@ test("reconcile applied body preserves empty and caller-ordered blocks", () => {
   ] as const satisfies readonly ResolvedMarketplace[];
 
   // act
-  const empty = composeReconcileAppliedBody([], bothLoadedProbe());
-  const many = composeReconcileAppliedBody(marketplaces, bothLoadedProbe());
+  const empty = composeReconcileAppliedBody([]);
+  const many = composeReconcileAppliedBody(marketplaces);
 
   // assert
   assert.equal(empty, "(no marketplaces)");
@@ -706,18 +696,15 @@ test("a whitespace-only description renders no description line", () => {
   };
 
   // act
-  const whitespace = renderPluginInfo(
-    {
-      ...infoBase,
-      plugin: {
-        status: "available",
-        name: "alpha",
-        description: " \t ",
-        componentsResolved: false,
-      },
-    } as never,
-    bothLoadedProbe(),
-  );
+  const whitespace = renderPluginInfo({
+    ...infoBase,
+    plugin: {
+      status: "available",
+      name: "alpha",
+      description: " \t ",
+      componentsResolved: false,
+    },
+  } as never);
 
   // assert
   assert.equal(whitespace.includes("\n     "), false);
@@ -735,25 +722,21 @@ test("covers the unavailable install hint and long single-word wrap boundaries",
       reasons: ["unsupported source"],
       hint: "partial-install",
     } satisfies ResolvedRow,
-    bothLoadedProbe(),
     "user",
     () => "row",
   );
-  const info = renderPluginInfo(
-    {
-      marketplaceName: "official",
-      marketplaceScope: "user",
-      marketplaceDetails: { autoupdate: false },
-      plugin: {
-        status: "available",
-        name: "alpha",
-        description: longWord,
-        componentsResolved: true,
-        components: {},
-      },
-    } as never,
-    bothLoadedProbe(),
-  );
+  const info = renderPluginInfo({
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "available",
+      name: "alpha",
+      description: longWord,
+      componentsResolved: true,
+      components: {},
+    },
+  } as never);
 
   // assert
   assert.deepStrictEqual(hint, [
@@ -765,11 +748,7 @@ test("covers the unavailable install hint and long single-word wrap boundaries",
 
 test("optional dependency and empty cause branches collapse without extra tokens", () => {
   // arrange / act
-  const partial = partiallyInstalledRow(
-    { name: "alpha", reasons: [] },
-    "user",
-    neitherLoadedProbe(),
-  );
+  const partial = partiallyInstalledRow({ name: "alpha", reasons: [] }, "user");
   const failed = composePluginLinesWith(
     {
       status: "failed",
@@ -778,7 +757,6 @@ test("optional dependency and empty cause branches collapse without extra tokens
       reasons: [],
       failure: { leaks: [], rollbackPartial: [] },
     } satisfies ResolvedRow<PluginFailedMessage>,
-    bothLoadedProbe(),
     "user",
     () => "row",
   );
@@ -787,16 +765,6 @@ test("optional dependency and empty cause branches collapse without extra tokens
   assert.equal(partial, "◉ alpha (partially-installed)");
   assert.deepStrictEqual(failed, ["  row"]);
 });
-
-type Probe = Parameters<typeof composeReasons>[4];
-
-function bothLoadedProbe(): Probe {
-  return { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: true };
-}
-
-function neitherLoadedProbe(): Probe {
-  return { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false };
-}
 
 test("notification glyph constants preserve exact public values", () => {
   // arrange
@@ -825,15 +793,12 @@ test("the remote and partially-available glyphs preserve exact values on their r
 
   // act
   const glyphs = [
-    renderRemoteRow(
-      { status: "remote", name: "alpha", reasons: [] },
-      bothLoadedProbe(),
-      "user",
-      undefined,
-    ).slice(0, 1),
+    renderRemoteRow({ status: "remote", name: "alpha", reasons: [] }, "user", undefined).slice(
+      0,
+      1,
+    ),
     renderPartiallyAvailableRow(
       { status: "partially-available", name: "alpha", reasons: [] },
-      bothLoadedProbe(),
       "user",
     ).slice(0, 1),
   ];
@@ -946,33 +911,21 @@ test("composeVersionArrow renders complete version bytes on both sides", () => {
   assert.equal(arrow, expectedArrow);
 });
 
-for (const { name, reasons, agents, mcp, workflows, probe, expected } of [
+for (const { name, reasons, expected } of [
   {
-    name: "omits an empty reasons block",
+    name: "omits an undefined reasons block",
     reasons: undefined,
-    agents: false,
-    mcp: false,
-    workflows: false,
-    probe: bothLoadedProbe(),
     expected: "",
   },
   {
-    name: "renders caller reasons in their supplied order",
-    reasons: ["not found", "permission denied"] satisfies readonly Reason[],
-    agents: false,
-    mcp: false,
-    workflows: false,
-    probe: bothLoadedProbe(),
-    expected: "{not found, permission denied}",
+    name: "omits an empty reasons block",
+    reasons: [] satisfies readonly Reason[],
+    expected: "",
   },
   {
-    name: "appends missing companion markers after caller reasons",
-    reasons: ["not found"] satisfies readonly Reason[],
-    agents: true,
-    mcp: true,
-    workflows: false,
-    probe: neitherLoadedProbe(),
-    expected: "{not found, requires pi-subagents, requires pi-mcp}",
+    name: "renders resolved reasons in their supplied order and adds none",
+    reasons: ["not found", "requires pi-subagents"] satisfies readonly Reason[],
+    expected: "{not found, requires pi-subagents}",
   },
 ] as const) {
   test(name, () => {
@@ -980,7 +933,7 @@ for (const { name, reasons, agents, mcp, workflows, probe, expected } of [
     const expectedReasons = expected;
 
     // act
-    const renderedReasons = composeReasons(reasons, agents, mcp, workflows, probe);
+    const renderedReasons = composeReasons(reasons);
 
     // assert
     assert.equal(renderedReasons, expectedReasons);
@@ -997,7 +950,6 @@ test("pluginRow composes scope, version, label, and reasons exactly", () => {
     { name: "alpha", scope: "project", version: "1.0.0", reasons: ["not found"] },
     "user",
     "(failed)",
-    bothLoadedProbe(),
   );
 
   // assert
@@ -1012,7 +964,6 @@ test("partiallyInstalledRow composes its resolved reasons in order", () => {
   const row = partiallyInstalledRow(
     { name: "alpha", version: "1.0.0", reasons: ["lsp", "requires pi-subagents"] },
     "user",
-    neitherLoadedProbe(),
   );
 
   // assert
@@ -1031,7 +982,6 @@ test("installedLikeRow composes an exact transition row", () => {
     "v1.0.0",
     "(installed)",
     ["orphan rewake"],
-    bothLoadedProbe(),
   );
 
   // assert
@@ -1052,7 +1002,6 @@ for (const { name, row, expected } of [
           needsReload: true,
           reasons: [],
         },
-        bothLoadedProbe(),
         "user",
       ),
     expected: "○ alpha [project] v1.0.0 (uninstalled)",
@@ -1062,7 +1011,6 @@ for (const { name, row, expected } of [
     row: () =>
       renderAvailableRow(
         { status: "available", name: "alpha", version: "1.0.0", reasons: [] },
-        bothLoadedProbe(),
         "user",
         ["installs disabled"],
       ),
@@ -1071,12 +1019,9 @@ for (const { name, row, expected } of [
   {
     name: "renderRemoteRow renders an entry-derived reason",
     row: () =>
-      renderRemoteRow(
-        { status: "remote", name: "alpha", version: "1.0.0", reasons: [] },
-        bothLoadedProbe(),
-        "user",
-        ["installs disabled"],
-      ),
+      renderRemoteRow({ status: "remote", name: "alpha", version: "1.0.0", reasons: [] }, "user", [
+        "installs disabled",
+      ]),
     expected: "◌ alpha v1.0.0 (remote) {installs disabled}",
   },
   {
@@ -1084,7 +1029,6 @@ for (const { name, row, expected } of [
     row: () =>
       renderUnavailableRow(
         { status: "unavailable", name: "alpha", version: "1.0.0", reasons: ["invalid manifest"] },
-        bothLoadedProbe(),
         "user",
       ),
     expected: "⊘ alpha v1.0.0 (unavailable) {invalid manifest}",
@@ -1094,7 +1038,6 @@ for (const { name, row, expected } of [
     row: () =>
       renderPartiallyAvailableRow(
         { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
-        bothLoadedProbe(),
         "user",
       ),
     expected: "⊖ alpha v1.0.0 (partially-available) {lsp}",
@@ -1112,7 +1055,6 @@ for (const { name, row, expected } of [
           severity: "info",
           needsReload: false,
         },
-        bothLoadedProbe(),
         "user",
       ),
     expected: "◍ alpha [project] v1.0.0 (disabled) {not in manifest}",

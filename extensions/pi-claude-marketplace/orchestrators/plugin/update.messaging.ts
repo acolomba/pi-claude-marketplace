@@ -58,7 +58,7 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
   // `renderPluginRow` arm -- is what actually renders this verb's rows, so a fix
   // applied only centrally would raise the severity while still dropping the
   // brace.
-  updated: (p, probe, mpScope) =>
+  updated: (p, mpScope) =>
     installedLikeRow(
       ICON_INSTALLED,
       p,
@@ -66,21 +66,20 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
       composeVersionArrow(p.from, p.to),
       "(updated)",
       p.reasons,
-      probe,
     ),
   // FSTAT-07 / D-66-04: a partial update whose candidate re-resolved `partially-available`
   // reports (partially-installed) with the dropped-component detail. WR-03 /
   // D-12: its marker policy is on, so the soft-dep markers appear on a degraded
   // update exactly as on a clean `(updated)` row.
-  "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
-  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
+  "partially-installed": (p, mpScope) => partiallyInstalledRow(p, mpScope),
+  skipped: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)"),
   // XSURF-03: the partially-upgradable manual update-decline row. Byte-identical to
   // the central `renderPluginRow` arm -- reuses `ICON_INSTALLED` (`●`) because
   // the installed plugin is currently clean. The `--partial` trailer is composed
   // centrally by the renderer, not here.
-  "partially-upgradable": (p, probe, mpScope) =>
-    pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)", probe),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+  "partially-upgradable": (p, mpScope) =>
+    pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)"),
+  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
 };
 
 /**

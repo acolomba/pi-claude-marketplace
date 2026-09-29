@@ -12,7 +12,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 test("exports the complete enable and disable command contexts", () => {
@@ -45,14 +44,9 @@ test("the disable context renders a complete bare disabled transition", () => {
     scope: "project",
     reasons: [],
   } as const satisfies ResolvedRow<DisableMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = DISABLE_CONTEXT.render.disabled(row, probe, "user");
+  const actual = DISABLE_CONTEXT.render.disabled(row, "user");
 
   // assert
   assert.equal(actual, "◍ alpha [project] v1.2.3 (disabled)");
@@ -86,14 +80,9 @@ test("the disable context renders a complete failed row without leaking its fail
     reasons: ["permission denied", "rollback partial"],
     failure,
   } as const satisfies ResolvedRow<DisableMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = DISABLE_CONTEXT.render.failed(row, probe, "user");
+  const actual = DISABLE_CONTEXT.render.failed(row, "user");
 
   // assert
   assert.equal(actual, "⊘ beta v2.0.0 (failed) {permission denied, rollback partial}");
@@ -121,14 +110,9 @@ test("the disable context renders a complete idempotent skipped row", () => {
     scope: "user",
     reasons: ["already disabled"],
   } as const satisfies ResolvedRow<DisableMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = DISABLE_CONTEXT.render.skipped(row, probe, "project");
+  const actual = DISABLE_CONTEXT.render.skipped(row, "project");
 
   // assert
   assert.equal(actual, "⊘ gamma [user] v3.0.0 (skipped) {already disabled}");
@@ -162,14 +146,9 @@ test("the enable context renders a complete failed stale-gate row body", () => {
     hint: "stale-gate-update",
     failure,
   } as const satisfies ResolvedRow<EnableMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = ENABLE_CONTEXT.render.failed(row, probe, "user");
+  const actual = ENABLE_CONTEXT.render.failed(row, "user");
 
   // assert
   assert.equal(actual, "⊘ delta v4.0.0 (failed) {lsp}");
@@ -196,14 +175,9 @@ test("the enable context renders a complete bare installed transition", () => {
     version: "5.0.0",
     reasons: [],
   } as const satisfies ResolvedRow<EnableMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = ENABLE_CONTEXT.render.installed(row, probe, "project");
+  const actual = ENABLE_CONTEXT.render.installed(row, "project");
 
   // assert
   assert.equal(actual, "● epsilon v5.0.0 (installed)");
@@ -230,14 +204,9 @@ test("the enable context renders installed content reasons before the resolved m
     scope: "project",
     reasons: ["malformed skill", "requires pi-subagents", "requires pi-mcp"],
   } as const satisfies ResolvedRow<EnableMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = ENABLE_CONTEXT.render.installed(row, probe, "user");
+  const actual = ENABLE_CONTEXT.render.installed(row, "user");
 
   // assert
   assert.equal(
@@ -266,14 +235,9 @@ test("the enable context renders a partially-installed row with its resolved mar
     scope: "user",
     reasons: ["lsp", "requires pi-mcp"],
   } as const satisfies ResolvedRow<EnableMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = ENABLE_CONTEXT.render["partially-installed"](row, probe, "user");
+  const actual = ENABLE_CONTEXT.render["partially-installed"](row, "user");
 
   // assert
   assert.equal(actual, "◉ theta v7.0.0 (partially-installed) {lsp, requires pi-mcp}");
@@ -299,14 +263,9 @@ test("the enable context renders a complete idempotent skipped row with optional
     scope: "project",
     reasons: ["already enabled"],
   } as const satisfies ResolvedRow<EnableMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const actual = ENABLE_CONTEXT.render.skipped(row, probe, "user");
+  const actual = ENABLE_CONTEXT.render.skipped(row, "user");
 
   // assert
   assert.equal(actual, "⊘ zeta [project] (skipped) {already enabled}");

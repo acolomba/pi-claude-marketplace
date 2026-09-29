@@ -6,7 +6,6 @@ import {
   type ListMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({
@@ -61,14 +60,9 @@ test("renders an available row without scope, reload state, or description bytes
     description: "Available description stays outside the command-owned row.",
     reasons: ["installs disabled"],
   } as const satisfies ResolvedRow<ListMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = LIST_CONTEXT.render.available(row, probe, "project");
+  const renderedRow = LIST_CONTEXT.render.available(row, "project");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -94,14 +88,9 @@ test("renders a disabled row with its resolved reasons", () => {
     severity: "info",
     needsReload: false,
   } as const satisfies ResolvedRow<ListMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = LIST_CONTEXT.render.disabled(row, probe, "user");
+  const renderedRow = LIST_CONTEXT.render.disabled(row, "user");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -133,14 +122,9 @@ test("renders a failed row without consuming its failure detail or lifecycle fie
     failure,
     severity: "error",
   } as const satisfies ResolvedRow<ListMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = LIST_CONTEXT.render.failed(row, probe, "user");
+  const renderedRow = LIST_CONTEXT.render.failed(row, "user");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -171,14 +155,9 @@ test("renders an installed row with its durable reasons and resolved markers", (
     severity: "info",
     needsReload: false,
   } as const satisfies ResolvedRow<ListMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = LIST_CONTEXT.render.installed(row, probe, "user");
+  const renderedRow = LIST_CONTEXT.render.installed(row, "user");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -206,14 +185,9 @@ test("renders a partially-available row without a scope or reload stamp", () => 
     description: "Partial candidate description stays outside the row.",
     reasons: ["unsupported hooks", "lsp"],
   } as const satisfies ResolvedRow<ListMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = LIST_CONTEXT.render["partially-available"](row, probe, "project");
+  const renderedRow = LIST_CONTEXT.render["partially-available"](row, "project");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -237,14 +211,9 @@ test("renders a partially-installed row with its resolved reasons", () => {
     description: "Partial installation description stays outside the row.",
     reasons: ["unsupported hooks"],
   } as const satisfies ResolvedRow<ListMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = LIST_CONTEXT.render["partially-installed"](row, probe, "user");
+  const renderedRow = LIST_CONTEXT.render["partially-installed"](row, "user");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -272,14 +241,9 @@ test("renders a partially-upgradable row in its marketplace scope", () => {
     description: "Partial upgrade description stays outside the row.",
     reasons: ["unsupported component"],
   } as const satisfies ResolvedRow<ListMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = LIST_CONTEXT.render["partially-upgradable"](row, probe, "user");
+  const renderedRow = LIST_CONTEXT.render["partially-upgradable"](row, "user");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -303,14 +267,9 @@ test("renders a remote row without scope or reload state", () => {
     description: "Remote description stays outside the command-owned row.",
     reasons: ["installs disabled"],
   } as const satisfies ResolvedRow<ListMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = LIST_CONTEXT.render.remote(row, probe, "project");
+  const renderedRow = LIST_CONTEXT.render.remote(row, "project");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -333,14 +292,9 @@ test("renders an unavailable row without a scope or reload stamp", () => {
     description: "Unavailable description stays outside the row.",
     reasons: ["unsupported source", "permission denied"],
   } as const satisfies ResolvedRow<ListMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = LIST_CONTEXT.render.unavailable(row, probe, "user");
+  const renderedRow = LIST_CONTEXT.render.unavailable(row, "user");
 
   // assert
   assert.deepStrictEqual(row, {
@@ -367,14 +321,9 @@ test("renders an upgradable row with cross-scope attribution", () => {
     description: "Upgrade description stays outside the row.",
     reasons: ["source mismatch"],
   } as const satisfies ResolvedRow<ListMsg>;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
 
   // act
-  const renderedRow = LIST_CONTEXT.render.upgradable(row, probe, "user");
+  const renderedRow = LIST_CONTEXT.render.upgradable(row, "user");
 
   // assert
   assert.deepStrictEqual(row, {

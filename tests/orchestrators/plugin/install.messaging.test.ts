@@ -15,7 +15,6 @@ import type {
   EntityErrorRow,
   InstallMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type { ContentReason } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
@@ -55,14 +54,9 @@ describe("INSTALL_CONTEXT", () => {
       severity: "warning",
       needsReload: true,
     } satisfies ResolvedRow<InstallMsg>;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
 
     // act
-    const row = INSTALL_CONTEXT.render.installed(message, probe, "user");
+    const row = INSTALL_CONTEXT.render.installed(message, "user");
 
     // assert
     assert.strictEqual(
@@ -82,14 +76,9 @@ describe("INSTALL_CONTEXT", () => {
       severity: "warning",
       needsReload: true,
     } satisfies ResolvedRow<InstallMsg>;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
 
     // act
-    const row = INSTALL_CONTEXT.render["partially-installed"](message, probe, "user");
+    const row = INSTALL_CONTEXT.render["partially-installed"](message, "user");
 
     // assert
     assert.strictEqual(
@@ -106,14 +95,9 @@ describe("INSTALL_CONTEXT", () => {
       reasons: ["unsupported source"],
       severity: "error",
     } satisfies ResolvedRow<InstallMsg>;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
 
     // act
-    const row = INSTALL_CONTEXT.render.unavailable(message, probe, "project");
+    const row = INSTALL_CONTEXT.render.unavailable(message, "project");
 
     // assert
     assert.strictEqual(row, "⊘ helper (unavailable) {unsupported source}");
@@ -129,14 +113,9 @@ describe("INSTALL_CONTEXT", () => {
       severity: "error",
       hint: "partial-install",
     } satisfies ResolvedRow<InstallMsg>;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
 
     // act
-    const row = INSTALL_CONTEXT.render["partially-available"](message, probe, "project");
+    const row = INSTALL_CONTEXT.render["partially-available"](message, "project");
 
     // assert
     assert.strictEqual(row, "⊖ helper v3.1.0 (partially-available) {unsupported hooks, lsp}");
@@ -153,14 +132,9 @@ describe("INSTALL_CONTEXT", () => {
       severity: "error",
       needsReload: false,
     } satisfies ResolvedRow<InstallMsg>;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
 
     // act
-    const row = INSTALL_CONTEXT.render.failed(message, probe, "user");
+    const row = INSTALL_CONTEXT.render.failed(message, "user");
 
     // assert
     assert.strictEqual(row, "⊘ helper [project] v1.0.0 (failed) {permission denied}");
@@ -178,14 +152,9 @@ describe("INSTALL_CONTEXT", () => {
       severity: "warning",
       needsReload: false,
     } satisfies ResolvedRow<InstallMsg>;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
 
     // act
-    const row = INSTALL_CONTEXT.render.disabled(message, probe, "user");
+    const row = INSTALL_CONTEXT.render.disabled(message, "user");
 
     // assert
     assert.strictEqual(row, "◍ helper v4.0.0 (disabled) {installs disabled, malformed skill}");
