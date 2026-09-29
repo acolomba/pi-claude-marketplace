@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 01
 current_phase_name: Presentation Model
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-09-29T17:08:32.866Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-09-29T19:16:25.294Z"
 last_activity: 2026-09-29
-last_activity_desc: Completed 01-03 resolved row facts
-state_head: 1f98f34ae8509ef250cd3cfe0368c5d546e9fe07
+last_activity_desc: Completed 01-04 marker policy
+state_head: 3d842f7a2cad6bac2977d38fc7c145896554cb44
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 16
-  completed_plans: 3
+  completed_plans: 4
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Presentation Model) — EXECUTING
-Plan: 4 of 16
+Plan: 5 of 16
 Status: Ready to execute
-Last activity: 2026-09-29 — Completed 01-03 (resolved row facts)
+Last activity: 2026-09-29 — Completed 01-04 (marker policy)
 
-Progress: [█░░░░░░░░░] 19% (3 of 16 plans)
+Progress: [██░░░░░░░░] 25% (4 of 16 plans)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,8 +168,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-29T17:08:32.802Z
-**Stopped at:** Completed 01-03-PLAN.md
+**Last session:** 2026-09-29T19:16:18.376Z
+**Stopped at:** Completed 01-04-PLAN.md
 **Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
@@ -202,6 +202,7 @@ archived milestone artifacts.
 | Phase 01 P01 | 50 min | 3 tasks | 5 files |
 | Phase 01 P02 | 80 min | 2 tasks | 11 files |
 | Phase 01 P03 | 67 min | 2 tasks | 15 files |
+| Phase 01 P04 | 122 min | 2 tasks | 42 files |
 
 ## Decisions
 
@@ -211,3 +212,6 @@ archived milestone artifacts.
 - [Phase 01]: dispatchInfoMessage keeps rendering the standalone body before it resolves the envelope, and calls resolveRows only in the reconcile-applied arm, because getter-backed kind tests pin that read order
 - [Phase 01]: The context emitters take a required hasRenderArm predicate; resolveRows floors a row with no render arm to error on the input row before the envelope resolves
 - [Phase 01]: Row hints are RowHint ids set in resolveRows; the grammar maps them to frozen literals through a map total over RowHint
+- [Phase 01]: MarkerPolicy and CommandContext.markers use Record spellings, because @typescript-eslint/consistent-indexed-object-style rejects the mapped-type form
+- [Phase 01]: resolveRow stays an if-chain that ends in a fallback return, so an out-of-band row whose status no branch names still resolves and reaches the missing-arm diagnostic
+- [Phase 01]: Each context emitter reads softDepStatus(pi) once, before resolveRows, and reuses that snapshot for the renderers; renderMpHeader takes a ResolvedMarketplace
