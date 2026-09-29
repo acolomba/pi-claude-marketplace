@@ -1,6 +1,6 @@
 ---
 phase: 03-marketplace-add-recovers-from-its-own-leftover-clone
-verified: 2026-09-28T00:00:00Z
+verified: 2026-09-28T21:12:00Z
 status: passed
 score: 7/7 must-haves verified
 covered_files:
@@ -31,16 +31,16 @@ covered_files:
   - "tests/platform/git-ops-fake.test.ts"
   - "tests/platform/git-ops-fake.ts"
   - "tests/platform/git.test.ts"
-covered_digest: "v2:sha256:4c69a66507ee21e4e907aeabfd753ce837d5bbba0cee351f6142bf91c4d232db"
+covered_digest: "v2:sha256:0cc9842877d40138dfdffea1169ce8c759cc1bf1dd70fe8f7cee9f3a14bf2377"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
-  previous_status: "gaps_found"
-  previous_score: "6/7"
-  gaps_closed:
-    - "SC2 / MA-13: a leftover whose `.git/config` declares an `origin` remote section with no `url` key now refuses with the MA-6 `{stale clone}` row in both standalone and orchestrated mode, instead of crashing raw (`TypeError`) or misclassifying as `{unparseable}` (CR-01, closed by plan 03-04, commits `24f2da2c`/`235fdc17`)."
+  previous_status: "passed"
+  previous_score: "7/7"
+  gaps_closed: []
   gaps_remaining: []
   regressions: []
+advisory: []
 ---
 
 # Phase 3: `marketplace add` recovers from its own leftover clone Verification Report
@@ -52,7 +52,59 @@ milestone's whole gate surface green at its final HEAD.
 
 **Verified:** 2026-09-28
 **Status:** passed
-**Re-verification:** Yes — after gap closure (plan 03-04)
+**Re-verification:** Yes — the prior `passed` (7/7) report at `2f194da8` went stale because
+`covered_files` changed under it after it was written: Phase 1's gap-closure plan (`01-04`,
+commits `96c9eb13`/`c9c21446`) landed a module-private redirect-following `HttpClient` inside
+`extensions/pi-claude-marketplace/platform/git.ts` (+115/-12 lines), plus a new test file
+`a2db444e` (`tests/platform/git.test.ts`, +544 lines), plus doc-only commits. This round
+independently re-reads the changed code this phase's must-haves depend on and re-measures the
+whole gate at the current HEAD (`ab72dba0`) rather than trusting the prior narrative.
+
+## Scope of what changed since the prior verification (`2f194da8`..`ab72dba0`)
+
+```
+git diff --stat 2f194da8..HEAD -- extensions/ tests/ scripts/
+ extensions/pi-claude-marketplace/orchestrators/auth-host.ts       |   9 +-
+ extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts   |  10 +-
+ extensions/pi-claude-marketplace/platform/git.ts                  | 115 ++-
+ tests/platform/git.test.ts                                        | 544 +++++++++++++++++++++
+ 4 files changed, 666 insertions(+), 12 deletions(-)
+```
+
+Read line-by-line, not trusted from the diffstat:
+
+- **`platform/git.ts`**: the new code (lines ~164-268) replaces the raw
+  `isomorphic-git/http/node` client with a module-private `HttpClient` that sends every hop with
+  `followRedirects: false` and follows redirects itself, dropping `authorization`/`cookie` headers
+  on any hop whose origin (scheme+host+port) differs from the original request's. This is Phase 1's
+  GAUTH-06 concern (redirect-credential-leak), **entirely orthogonal to Phase 3's `listRemotes`**.
+  `listRemotes` itself (now at lines 471-489, shifted down by the insertion but otherwise
+  byte-identical to the version this phase's prior verification measured) does its own
+  `fs.promises.readFile` probe and a `git.listRemotes({ fs, dir })` call — it touches no HTTP
+  surface. Confirmed by grep: the only 3 call sites of the new `http` constant are `clone`,
+  `fetch`, and the `resolveRemoteRef`/`listServerRefs` call — all pre-existing call sites, same
+  shape, now backed by the wrapped client.
+- **`platform/git-auth-callbacks.ts`** and **`orchestrators/auth-host.ts`**: comment-only changes
+  (rewording a docstring paragraph to describe the new redirect guard instead of `simple-get`'s
+  own). No executable-code diff in either file.
+- **`tests/platform/git.test.ts`**: 544 new lines, all new `GAUTH-06` redirect-guard cases (proven
+  in the fresh full run below). The pre-existing `ORIGIN_SECTION_SHAPES` describe block (Phase 3's
+  own MA-13 gap-closure proof) is unmoved and still passes.
+- **`scripts/check-unused-type-members.contracts.json`**: `git diff --stat` shows no change. Zero
+  entries in the file reference `platform/git.ts` (confirmed by direct grep), so the line-shift
+  inside `git.ts` created no pin-drift risk for this phase's gate.
+- **Every other file this phase's must-haves depend on is byte-unchanged**: `domain/source.ts`,
+  `orchestrators/marketplace/add.ts`, `orchestrators/marketplace/shared.ts`,
+  `orchestrators/plugin/update-preflight.ts`, `PROJECT.md`, and all of
+  `tests/{domain/source,e2e/import-command,edge/types,orchestrators/marketplace/{add,shared,update},
+  orchestrators/plugin/update-preflight,platform/git-ops-{contract,fake,fake.test}}.test.ts`
+  — every one of these returned an empty `git diff --name-only 2f194da8..HEAD -- <file>`.
+
+**Conclusion of the scope read:** the intervening commits touch Phase 1's redirect-credential
+concern only. Phase 3's own production surface (`listRemotes`, `recognizeLeftover`, the SC5 cascade
+fix, and the SC7 doc amendment) is untouched. What genuinely needs re-measurement is SC4 (the whole
+gate, at the new HEAD) and a fresh confirmation that `listRemotes`'s 100%-direct-coverage claim
+still holds now that the file around it grew — both are re-measured below, not assumed.
 
 ## Goal Achievement
 
@@ -60,190 +112,130 @@ milestone's whole gate surface green at its final HEAD.
 
 | # | Truth (SC) | Status | Evidence |
 |---|------------|--------|----------|
-| 1 | SC1 — `marketplace add` succeeds when `sources/<name>/` holds a leftover clone whose `origin` is the source being added; no manual delete needed for the WR-07 crash window or a state rebuild | ✓ VERIFIED (carried, regression check) | Re-ran `node --test tests/orchestrators/marketplace/add.test.ts` this session: `MA-12: a leftover clone whose origin names the same source recovers` passes (81/81 total). `git diff --name-only 50746b81..HEAD -- extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` is empty — the recovery code path is byte-unchanged since the prior verification round. |
-| 2 | SC2 — a leftover that is not a git clone, is unreadable, or whose `origin` names a different URL still refuses with the MA-6 `{stale clone}` row; recognition never widens into overwriting a directory the extension did not create | ✓ VERIFIED (gap closed) | See "Gap closure verification" below. The CR-01 crash and the `{unparseable}` misclassification are both eliminated; the url-less leftover now refuses as `{stale clone}` in both modes, proven end to end through the real (non-faked) adapter. A residual finding (WR-11) is discussed separately and judged not to falsify this truth — see "WR-11" section. |
-| 3 | SC3 — a recognized leftover that cannot be fully removed fails as stale with the cleanup leak appended (MA-9 discipline), and state records no destination for the partially-removed tree | ✓ VERIFIED (carried, regression check) | Both MA-14 cases (`MA-14: an unremovable recognized leftover fails as stale...` and `MA-14 double fault: ...`) re-ran green this session. `add.ts`'s `joinLeaks`/`appendLeakToError`/bottom catch are untouched by plan 03-04 (confirmed: `git diff --numstat f301135e..HEAD -- extensions/` touches only `platform/git.ts`). |
-| 4 | SC4 — every type member this milestone introduced is read by production code or recorded in the contracts file, and `npm run check` passes whole at the milestone's final HEAD | ✓ VERIFIED (gate re-measured) | `scripts/check-unused-type-members.contracts.json` holds exactly 108 entries (re-confirmed this session via direct JSON parse). `npm run lint:type-members` re-run fresh this session: `TYPE_MEMBERS_EXIT=0`, same 4 recorded exceptions. `npx tsc --noEmit` and `npx eslint` on all 3 plan-03-04 files: exit 0. `node scripts/test-coverage-direct.mjs extensions/pi-claude-marketplace/platform/git.ts`: branches 47/47, functions 11/11, lines 394/394. `git diff --name-only 235fdc17..HEAD -- ':!.planning/'` is empty, so 03-04-SUMMARY's fresh whole-gate run (`CHECK_EXIT=0`, 7369/7369 unit, `all files 100.00/100.00/100.00`, 36/36 integration, taken ON commit `235fdc17`) still describes the current tree; only three subsequent commits exist and all three are docs-only (`git log --oneline 235fdc17..HEAD -- ':!.planning/'` is empty). |
-| 5 | SC5 — the marketplace autoupdate cascade is settled: a private plugin source refreshes from the user's credential helper instead of cloning authless, on any host | ✓ VERIFIED (carried, regression check) | `git diff --name-only 50746b81..HEAD -- extensions/pi-claude-marketplace/orchestrators/auth-host.ts extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts` is empty — untouched since the prior verification confirmed `ctx?:` widening and the 3 unconditional `auth:` spreads. |
-| 6 | SC6 — Phase 1's and Phase 2's live canaries are carried forward with reasons/resume commands, never marked passed on link-by-link evidence | ✓ VERIFIED (carried, regression check) | `grep -n "GHCAN-01\|GHCAN-02"` still finds both in STATE.md/BACKLOG.md/ROADMAP.md. `git log --oneline` for `phases/01-.../` and `phases/02-.../` shows no commits since the prior verification (last touches were `dd4fefb4`/`9ddd9360`/`4d530bfb`, all pre-dating Phase 3's gap-closure work) — neither canary was silently closed. |
-| 7 | SC7 — `PROJECT.md`'s D-79-03 row rationale is amended to match the code; its OUTCOME is untouched | ✓ VERIFIED (carried, regression check) | `git diff --name-only 50746b81..HEAD -- PROJECT.md` is empty — unedited since the prior verification confirmed the amendment. |
+| 1 | SC1 — `marketplace add` succeeds when `sources/<name>/` holds a leftover clone whose `origin` is the source being added; no manual delete needed | ✓ VERIFIED | `orchestrators/marketplace/add.ts` and `shared.ts` are byte-unchanged since the prior verification (`git diff --name-only 2f194da8..HEAD` empty for both). Fresh full-suite run this session: `✔ MA-12: a leftover clone whose origin names the same source recovers` (check4.log:5381), part of a 7386/7386-pass run. |
+| 2 | SC2 — a leftover that is not a git clone, is unreadable, or whose `origin` names a different URL still refuses with the MA-6 `{stale clone}` row; recognition never widens into overwriting a directory the extension did not create | ✓ VERIFIED | `listRemotes` (the only production code this truth depends on) is byte-identical to the version the prior verification proved — confirmed by reading its current body (lines 471-489) side-by-side with the diff, which shows zero lines changed inside the function itself, only a location shift from unrelated code inserted above it. All 9 refusal-table cases plus the CR-01 gap-closure cases (`MA-13 / ATTR-07`, `MA-13 / RECON-03`) pass fresh this session (check4.log:5382-5391). Direct coverage on `platform/git.ts` re-measured at 100.00/100.00/100.00 in this run's `test:coverage:unit` report (check4.log:9684, file row confirmed present). WR-11 (see Anti-Patterns) remains a reasoned, non-blocking residual — unaffected by this round's diff, since it concerns `listRemotes`, which did not change. |
+| 3 | SC3 — a recognized leftover that cannot be fully removed fails as stale with the cleanup leak appended, and state records no destination for the partially-removed tree | ✓ VERIFIED | `add.ts`'s leak-append path (`joinLeaks`/`appendLeakToError`) is byte-unchanged (empty diff `2f194da8..HEAD`). Both MA-14 cases pass fresh this session: `✔ MA-14: an unremovable recognized leftover fails as stale...` and `✔ MA-14 double fault: ...` (check4.log:5393-5394). |
+| 4 | SC4 — every type member this milestone introduced is read by production code or recorded in the contracts file, and `npm run check` passes whole at the milestone's final HEAD | ✓ VERIFIED (gate re-measured, fresh, this HEAD) | `npm run check` run in full by this verifier from a clean tree at HEAD `ab72dba0`: `CHECK_EXIT=0`. `test:coverage:unit`: 7386/7386 pass, 0 fail, `all files \| 100.00 \| 100.00 \| 100.00` (empty uncovered-lines cell on every row under `extensions/`, including `platform/git.ts`). `test:integration`: 36/36 pass. `lint:type-members`: "Unused type member gate passed with 4 recorded exception(s)" — same 4 exceptions as before, `scripts/check-unused-type-members.contracts.json` re-confirmed at exactly 108 entries via direct JSON parse (zero of which name `platform/git.ts`, so the line-shift inside that file created no pin drift). `lint:type-members:negative`: "Unused type member negative controls passed (7 of 7)". `npx fallow audit --format json --quiet --explain --gate-marker agent` run standalone by this verifier: `verdict: "pass"`, exit 0, `dead_code_issues: 0`, `circular_dependencies: 0`, `boundary_violations: 0` (fallow's own `dupes`/`health` glyphs print a cosmetic `✗` on an otherwise-passing tree — a documented, known display quirk; the gate's actual verdict and exit code are what were checked, per this project's own "trust the exit code, not the glyph" discipline). `git status --porcelain` after the full run: clean (no side effects from verification). |
+| 5 | SC5 — the marketplace autoupdate cascade authenticates rather than cloning authless, on any host | ✓ VERIFIED (carried, regression re-confirmed) | `orchestrators/auth-host.ts`'s executable code and `orchestrators/plugin/update-preflight.ts` are both byte-unchanged since the prior verification (the only diff in `auth-host.ts` is a comment rewording of the redirect-guard paragraph). Fresh full-suite run this session shows the SC5 cases passing: `✔ resolves the stored-credential cause for an unregistered host with no notification context`, `✔ D-3-04: github.com with no notification context declines the Device Flow gracefully instead of crashing`, `✔ D-3-04: returns a bundle bound to the resolved host when ctx is omitted` (check4.log:5234-5242), and `✔ D-3-04: authenticates the autoupdate cascade against github.com with no notification context` (check4.log:7157). |
+| 6 | SC6 — Phase 1's and Phase 2's live canaries are carried forward with reasons/resume commands, never marked passed on link-by-link evidence — now CLOSED against a local stand-in, honestly distinguished from a hosted-forge run | ✓ VERIFIED | `01-UAT.md` (16/16 pass, including test 16's cross-origin POST-redirect case added by the Phase 1 gap closure this round's diff is about) and `02-UAT.md` (1/1 pass) both record closure against real local smart-HTTP servers, not a hosted forge. `.planning/BACKLOG.md`'s `GHCAN-01`/`GHCAN-02` entries (read in full) honestly state "Status (2026-09-28): closed against a local stand-in... A run against a hosted forge... is still unexercised; keep this entry only if that distinction matters." STATE.md carries the same distinction. This matches the instruction's "closed or explicitly carried" bar with the caveat recorded honestly. |
+| 7 | SC7 — `PROJECT.md`'s D-79-03 row rationale is amended to match the code; its OUTCOME is untouched | ✓ VERIFIED (carried, regression re-confirmed) | `git diff --name-only 2f194da8..HEAD -- PROJECT.md` is empty — unedited since the prior verification confirmed the amendment. |
 
 **Score:** 7/7 truths verified (0 present-but-behavior-unverified)
 
-### Gap closure verification (SC2 / MA-13, CR-01)
+### Advisory (New Scope, Unevidenced)
 
-Independently re-derived this session, not taken on SUMMARY's word:
-
-1. **Code inspection.** `extensions/pi-claude-marketplace/platform/git.ts:362-379` (`listRemotes`)
-   now reads the origin's `url` into a `const url: unknown`, and returns the `origin` arm only when
-   `typeof url === "string"`; every other case (no `origin` entry, or an `origin` entry whose parsed
-   value is not a string) returns `{ kind: "no-origin" }`, which `recognizeLeftover` (`add.ts`,
-   unedited) already routes to the `StaleSourceCloneError` refusal arm. `add.ts` itself has zero
-   diff since the pre-gap-closure baseline (`f301135e`) — the fix is confined to the one platform
-   module that talks to isomorphic-git, exactly as D-3-03 requires.
-2. **Targeted test runs (this session, not from SUMMARY).**
-   - `node --test tests/orchestrators/marketplace/add.test.ts` → `ADD_EXIT=0`, 81/81 pass, including
-     both new cases: `✔ MA-13 / ATTR-07: a leftover whose origin section names no url refuses as
-     stale clone` (standalone) and `✔ MA-13 / RECON-03: orchestrated mode reports a leftover whose
-     origin section names no url as stale clone` (orchestrated).
-   - `node --test tests/platform/git.test.ts` → `GIT_TEST_EXIT=0`, 39/39 pass, including the three
-     new `ORIGIN_SECTION_SHAPES` rows: `reports no-origin for an origin section with a fetch line
-     but no url`, `reports no-origin for an origin section with no keys`, `reports the empty url of
-     an origin section whose url value is empty` (the last one pins that an empty string is still a
-     string and stays on the `origin` arm, refused instead by `add.ts`'s byte comparison — D-3-01's
-     single refusal site is preserved).
-   - `npx tsc --noEmit` → exit 0. `npx eslint` on the 3 touched files → exit 0 (no
-     `no-unnecessary-condition`/`prefer-optional-chain`/`different-types-comparison` violations, i.e.
-     the guard is a genuine `typeof` narrowing from `unknown`, not a comparison against the library's
-     declared-but-false `string` type).
-   - `node scripts/test-coverage-direct.mjs extensions/pi-claude-marketplace/platform/git.ts` →
-     branches 47/47, functions 11/11, lines 394/394 — the new branch is exercised by a named case,
-     not merely by the coverage figure (GATE-01's own "a missing branch is proven by a named case"
-     truth).
-3. **No regression.** Both carried MA-13 refusal-table cases (ssh-form, garbage, empty-string,
-   case-differing, prefix-adjacent, no-origin, unreadable) and both MA-14 leak cases still pass, and
-   `git diff --numstat f301135e..HEAD -- tests/orchestrators/marketplace/add.test.ts` shows 0
-   deletions (additions only) — no pre-existing case was altered to make the new one pass.
-
-**Verdict: the CR-01 gap is closed.** The url-less leftover shape that previously crashed raw
-(standalone) or misclassified as `{unparseable}` (orchestrated) now refuses cleanly as `{stale
-clone}` in both modes, through the real (non-faked) adapter, with the leftover's `.git/config` bytes
-left unchanged and no state entry recorded (`MA-13 / ATTR-07`'s and `MA-13 / RECON-03`'s assertions,
-independently re-run above).
-
-### WR-11 — reasoned as a residual, non-blocking finding (not a gap)
-
-The gap-closure code review (`03-REVIEW.md`) raised a new warning after the CR-01 fix landed: when a
-`.git/config`'s `[remote "origin"]` section carries **two** `url` lines, isomorphic-git's
-`GitConfig.get` resolves the config value as the **last** one, while real git's own
-`remote get-url`/effective fetch behavior resolves the **first** one. A leftover whose first url is
-foreign but whose second (last) url happens to byte-equal the canonical url of the source being
-added would therefore be recognized as a matching leftover and removed by `recognizeLeftover`, even
-though git itself would treat that tree's origin as the foreign, first URL. I independently read
-`03-REVIEW.md`'s reproduction (a real `.git/config` with two `url` lines, real `git remote get-url`
-output, and the real `listRemotes` result) and confirmed the current code (`git.ts:362-379`) still
-uses `git.listRemotes` (last-value-wins) rather than the reviewer's suggested `getConfigAll`-based
-"refuse on ambiguity" fix — this finding is unaddressed in the code, and `03-REVIEW-DISPOSITION.md`
-correctly records it `open`.
-
-**Judgment: this does not falsify SC2 for the purposes of this phase's completion.** Reasoning:
-
-- SC2's guarantee is scoped to the recovery scenario this phase builds: the WR-07 crash window and a
-  state rebuild. Neither can produce a multi-valued `origin.url`. isomorphic-git's own config writer
-  (`GitConfigManager.save`) serializes the whole file from one parsed value per key on every clone;
-  an interrupted rewrite can leave a config truncated or absent, but it cannot leave two *different*
-  `url` lines under the same section, because no code path in this codebase (or in isomorphic-git's
-  own write path) ever emits a second one. The shape the reviewer built required hand-authoring the
-  config directly — the parenthetical in this verification's own instructions names exactly that
-  caveat ("requires a hand-edited multi-url config the extension never writes"), and it holds: I
-  confirmed `git.ts` and `add.ts` contain no code path that writes more than one `url` value per
-  remote.
-- The directory in question (`<scopeRoot>/pi-claude-marketplace/sources/<name>/`) is
-  extension-owned and extension-populated (NFR-10 containment). An actor with the local filesystem
-  write access needed to hand-author a two-`url` config inside it already has the access needed to
-  replace its contents directly — tricking recognition into a remove-then-reclone does not gain such
-  an actor anything a direct write would not already give them, and arguably works against them
-  (their planted directory gets replaced with the legitimate clone).
-  This differs from the CR-01 shape, which is the direct byproduct of the extension's own ordinary,
-  attacker-free clone-then-crash sequence.
-  - This filesystem-access framing is a supporting observation on exploitability, not the basis for
-    the "reachable from crash" verdict above, which follows from the write-path analysis alone.
-- The finding's own severity, assigned by the phase's code reviewer, is `warning` — the same tier as
-  WR-01 through WR-09, which the prior verification round already classified as non-blocking
-  maintainability/diagnosability findings distinct from CR-01's `critical` tier. WR-11 does not carry
-  the same "reachable from this phase's own recovery mechanism" property that made CR-01 a genuine
-  gap.
-
-This is a real, correctly-identified divergence between isomorphic-git's config resolution and
-git's own semantics, and it is worth hardening defensively (the reviewer's `getConfigAll`-based fix
-is narrow and additive). It is **recommended for a BACKLOG entry** so it is not lost, but it is not
-being treated as a gap blocking this phase's closure, for the reasons above. If the maintainer
-weighs the residual risk differently, this section provides the evidence needed to reopen it as a
-gap.
+None. This round's own reading of the intervening diff (Phase 1's redirect-credential guard) found
+no new finding bearing on Phase 3's must-haves — the change is orthogonal (a different production
+concern, in the same file, that Phase 3's `listRemotes` does not share any code path with). WR-11,
+the one open finding that does bear on Phase 3's scope, is a carried-forward item from the prior
+round's code review (`03-REVIEW.md`), not new to this round, and is addressed under Anti-Patterns
+below rather than here.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `extensions/pi-claude-marketplace/platform/git.ts::listRemotes` | 4-arm discriminated, own fs probe before isomorphic-git, never throws, `origin` arm carries a real string url | ✓ VERIFIED | The `origin` arm's declared type (`url: string`) is now enforced at runtime via `typeof url === "string"` narrowing from `unknown`; CR-01's falsifiable-type defect is closed. 100% direct coverage (branches 47/47, functions 11/11, lines 394/394), re-measured this session. |
-| `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts::recognizeLeftover` | recognize-remove-rename branch, single-level leak fold | ✓ VERIFIED | Unedited since `f301135e` (confirmed via empty diff); its existing refusal arm now receives a type-honest `no-origin` for the url-less shape instead of a value that violated its own contract. |
-| `tests/orchestrators/marketplace/add.test.ts` | end-to-end refusal proof, both modes, through the real adapter | ✓ VERIFIED | `MA-13 / ATTR-07` (standalone) and `MA-13 / RECON-03` (orchestrated) both compose the real, non-faked `listRemotes` into the fake-clone `GitOps` seam, against a hand-written `.git/config` — not the fake's typed canned value, which cannot express this shape. Both pass; both were observed failing pre-fix (RED evidence recorded in 03-04-SUMMARY, independently corroborated by 03-REVIEW.md's own pre-fix re-run). |
-| `tests/platform/git.test.ts` | real-repository platform-tier proof of both truncation shapes plus the empty-url boundary | ✓ VERIFIED | `ORIGIN_SECTION_SHAPES` (3 rows) run against `createGitTestRepository`-backed real repositories; each row asserts the library's own output before the wrapper's, proving the fixture reproduces the named shape. |
-| `scripts/check-unused-type-members.contracts.json` | 108 entries, 4 exceptions, unmoved | ✓ VERIFIED | Re-confirmed via direct JSON parse and a fresh `npm run lint:type-members` run this session. |
-| Planning docs (ROADMAP/STATE/BACKLOG/PROJECT, SC6/SC7) | carry-forward and amendment preserved | ✓ VERIFIED (carried) | No diff since the prior verification round. |
+| `extensions/pi-claude-marketplace/platform/git.ts::listRemotes` | 4-arm discriminated, own fs probe before isomorphic-git, never throws, `origin` arm carries a real string url | ✓ VERIFIED | Read directly at its current location (lines 471-489): byte-identical body to the version the prior verification round proved, only its line offset moved (now sits below the new, unrelated `HttpClient` code). 100% direct coverage re-confirmed in this session's fresh `test:coverage:unit` run. |
+| `extensions/pi-claude-marketplace/platform/git.ts::http` (module-private redirect-following client) | Not a Phase 3 artifact — Phase 1 gap-closure (G-01-4) | ✓ VERIFIED (out of scope, confirmed non-interfering) | Reviewed to confirm it shares no code path with `listRemotes` (which never imports or calls `http`) and does not touch any of the 3 pre-existing `http`-consuming call sites' shapes (`clone`, `fetch`, `listServerRefs`) beyond swapping the underlying implementation. |
+| `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts::recognizeLeftover` | recognize-remove-rename branch, single-level leak fold | ✓ VERIFIED | Byte-unchanged since `2f194da8` (empty diff). |
+| `tests/orchestrators/marketplace/add.test.ts` | end-to-end refusal proof, both modes, through the real adapter | ✓ VERIFIED | Byte-unchanged since `2f194da8`; all cases including `MA-13 / ATTR-07` and `MA-13 / RECON-03` pass fresh in this session's run. |
+| `tests/platform/git.test.ts` | real-repository platform-tier proof of both truncation shapes plus the empty-url boundary; now also carries the Phase 1 redirect-guard suite | ✓ VERIFIED | `ORIGIN_SECTION_SHAPES` (Phase 3's own rows) confirmed present and passing (check4.log:8076-8078), unmoved and unedited by the intervening diff. The file's +544 new lines are entirely the Phase-1-owned `GAUTH-06` redirect cases (confirmed passing, check4.log:8037-8069) — no interference with Phase 3's rows. |
+| `scripts/check-unused-type-members.contracts.json` | 108 entries, 4 exceptions, unmoved | ✓ VERIFIED | Re-confirmed via direct JSON parse (108 entries) and a fresh `npm run lint:type-members` run this session (4 exceptions, same identities). Zero entries reference `platform/git.ts`, so the file's line-shift created no drift risk. |
+| Planning docs (ROADMAP/STATE/BACKLOG/PROJECT, SC6/SC7) | carry-forward and amendment preserved | ✓ VERIFIED (carried) | `PROJECT.md` unchanged; ROADMAP/STATE/BACKLOG all show the SC6 canary-closure updates layered on top of the original carry-forward text, read in full above. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|-----|-----|--------|---------|
-| The `.git/config` on disk | `platform/git.ts::listRemotes`'s `origin` arm | the removal decision | ✓ WIRED (gap closed) | Now safe for a `.git/config` whose `origin` subsection lacks a `url` key (`typeof` guard); safe for an empty-string url (stays on the `origin` arm, refused by the caller's byte comparison, D-3-01 preserved). **Not** safe for a two-`url`-line section (WR-11, judged residual/non-blocking above). |
-| `add.ts::recognizeLeftover` | `gitOps.listRemotes(...)` | the sole production caller | ✓ WIRED (carried) | `add.ts` unedited; link unchanged since prior verification. |
-| `tests/orchestrators/marketplace/add.test.ts`'s new cases | the real (non-faked) `platform/git.ts::listRemotes` | `arrangeLeftoverWithoutOriginUrl`'s `gitOps` spread | ✓ WIRED | Confirmed by reading the helper and by the fact both new cases were observed to fail pre-fix and pass post-fix — a fake-fixture-only case could not have shown that distinction. |
+| The `.git/config` on disk | `platform/git.ts::listRemotes`'s `origin` arm | the removal decision | ✓ WIRED | Unchanged code, unchanged behavior — re-confirmed by the fresh 100%-coverage measurement and the fresh pass of all `ORIGIN_SECTION_SHAPES` rows. |
+| `add.ts::recognizeLeftover` | `gitOps.listRemotes(...)` | the sole production caller | ✓ WIRED (carried) | `add.ts` unedited since the prior verification; link unchanged. |
+| `platform/git.ts`'s 3 `http`-consuming call sites (`clone`, `fetch`, `listServerRefs`) | the new module-private redirect-following client | direct assignment (`const http: HttpClient = { request: requestWithinOrigin }`) | ✓ WIRED (Phase 1 concern, confirmed non-regressive for Phase 3) | Grepped: exactly 3 consumers, same call shape as before the diff, only the underlying implementation object changed. No new call site added, none removed. |
+| `tests/orchestrators/marketplace/add.test.ts`'s gap-closure cases | the real (non-faked) `platform/git.ts::listRemotes` | `arrangeLeftoverWithoutOriginUrl`'s `gitOps` spread | ✓ WIRED | Unchanged since prior verification; re-confirmed passing this session. |
+
+### Data-Flow Trace (Level 4)
+
+Not applicable in the UI-rendering sense (this is a CLI/backend phase, no rendered dynamic values).
+The equivalent trace for this phase — "does the `origin` url on disk actually reach the removal
+decision, not a static stub" — is covered by the Key Link table above and was already fully proven
+in the prior verification round; this round confirms the code path is unchanged.
 
 ### Behavioral Spot-Checks
 
+Rather than a handful of quick spot-checks, this round ran the **full** `npm run check` fresh
+against the current HEAD (per the task's explicit SC4 instruction), which is strictly stronger
+evidence than a spot-check subset. Individual named-test results extracted from that run:
+
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Both new MA-13 refusal cases pass | `node --test tests/orchestrators/marketplace/add.test.ts` (this session) | `ADD_EXIT=0`, 81/81, both new cases on `✔` lines | ✓ PASS |
-| Both new platform truncation rows + the empty-url boundary row pass | `node --test tests/platform/git.test.ts` (this session) | `GIT_TEST_EXIT=0`, 39/39, all three rows on `✔` lines | ✓ PASS |
-| `platform/git.ts` still typechecks and lints clean | `npx tsc --noEmit`; `npx eslint extensions/.../git.ts tests/.../add.test.ts tests/platform/git.test.ts` | both exit 0 | ✓ PASS |
-| `platform/git.ts` holds 100% direct coverage | `node scripts/test-coverage-direct.mjs extensions/pi-claude-marketplace/platform/git.ts` | `DIRECT_GIT_EXIT=0`, branches 47/47, functions 11/11, lines 394/394 | ✓ PASS |
-| `scripts/check-unused-type-members.contracts.json` still holds 108 entries, 4 exceptions | `npm run lint:type-members` (this session) | `TYPE_MEMBERS_EXIT=0`, same 4 named exceptions | ✓ PASS |
-| No source changed since the 03-04 executor's fresh `CHECK_EXIT=0` run (commit `235fdc17`) | `git diff --name-only 235fdc17..HEAD -- ':!.planning/'` | empty | ✓ PASS (whole-gate evidence still describes this tree; full suite not re-run per instructions, corroborated by the targeted re-runs above) |
-| No debt markers in the 3 gap-closure files | `grep -n -E "TBD\|FIXME\|XXX\|TODO\|HACK\|PLACEHOLDER"` | no matches | ✓ PASS |
-| Working tree is clean | `git status --porcelain` | only the untracked, expected `.planning/workstreams/git-hosts/milestone.lock` | ✓ PASS |
+| MA-12 recovery still passes | full suite (`npm run check`, this session) | `✔ MA-12: a leftover clone whose origin names the same source recovers` | ✓ PASS |
+| All 9 MA-13 refusal-table rows + both gap-closure cases still pass | full suite (this session) | 11 named `✔ MA-13...` lines, 0 fail (check4.log:5382-5391) | ✓ PASS |
+| MA-8 precedence still holds | full suite (this session) | `✔ MA-8: a matching leftover still yields (failed) {duplicate name}, not {stale clone}` | ✓ PASS |
+| Both MA-14 leak cases still pass | full suite (this session) | 2 named `✔ MA-14...` lines | ✓ PASS |
+| SC5 cascade cases still pass | full suite (this session) | 4 named `✔ D-3-04...`/stored-credential lines (check4.log:5234-5242, 7157) | ✓ PASS |
+| `ORIGIN_SECTION_SHAPES` (Phase 3's platform-tier proof) still passes | full suite (this session) | 3 named `✔ reports...` lines (check4.log:8076-8078) | ✓ PASS |
+| Phase 1's redirect-credential guard (the actual diff since prior verification) does not regress anything Phase 3 depends on | full suite (this session) | 16 named `✔ GAUTH-06...` lines, all pass, 0 interaction with `listRemotes` | ✓ PASS |
+| `platform/git.ts` holds 100% direct coverage after the redirect-client insertion | `test:coverage:unit` (this session, part of full run) | `git.ts \| 100.00 \| 100.00 \| 100.00` | ✓ PASS |
+| `scripts/check-unused-type-members.contracts.json` still holds 108 entries, 4 exceptions | `npm run lint:type-members` (this session, part of full run) | same 4 named exceptions, 108-entry count confirmed by direct JSON parse | ✓ PASS |
+| `npm run check` exits 0 as a whole, at this HEAD | `npm run check > check4.log 2>&1; echo "CHECK_EXIT=$?"` (never piped) | `CHECK_EXIT=0` | ✓ PASS |
+| `npx fallow audit` verdict, run standalone by this verifier | `npx fallow audit --format json --quiet --explain --gate-marker agent` | `{"verdict":"pass", exit 0}` | ✓ PASS |
+| No debt markers in any of this phase's 18 covered production/test files | `grep -n -E "TBD\|FIXME\|XXX\|TODO\|HACK\|PLACEHOLDER"` over the full covered-files list | no matches | ✓ PASS |
+| Working tree clean after the full verification run | `git status --porcelain` | empty | ✓ PASS |
+
+### Probe Execution
+
+SKIPPED (no probes declared for this phase — no `scripts/*/tests/probe-*.sh` referenced by any
+PLAN/SUMMARY/VERIFICATION artifact, and this is not a migration/CLI-tooling phase).
 
 ### Requirements Coverage
 
 | Requirement | Source Plan(s) | Description | Status | Evidence |
 |-------------|-----------------|--------------|--------|----------|
-| MA-12 | 03-01, 03-02 (carried) | same-origin leftover recovers | ✓ SATISFIED | MA-12 case re-run green this session; `add.ts` byte-unchanged since prior verification. |
-| MA-13 | 03-01, 03-02, 03-04 | foreign/unreadable/mismatched/url-less leftover still refuses | ✓ SATISFIED | All 9 refusal-table shapes plus the url-less shape (both modes) pass; the sole gap (CR-01) is closed. |
-| MA-14 | 03-01, 03-02 (carried) | unremovable leftover fails as stale, no state entry | ✓ SATISFIED | Both cases re-run green this session; leak path byte-unchanged since prior verification. |
-| GATE-01 | 03-03, 03-04 | type members read/pinned; whole-check green, measured fresh on the final committed tree | ✓ SATISFIED | 108 contracts/4 exceptions re-confirmed; `lint:type-members`, `tsc`, `eslint`, and direct coverage re-run green this session; the SUMMARY's fresh whole-`npm run check` (`CHECK_EXIT=0` at `235fdc17`) still describes the current tree (empty diff, docs-only commits since). |
+| MA-12 | 03-01, 03-02 (carried) | same-origin leftover recovers | ✓ SATISFIED | Re-run green fresh this session; `add.ts` byte-unchanged since prior verification. |
+| MA-13 | 03-01, 03-02, 03-04 | foreign/unreadable/mismatched/url-less leftover still refuses | ✓ SATISFIED | All 9 refusal-table shapes plus the url-less gap-closure shape (both modes) re-run green fresh this session. |
+| MA-14 | 03-01, 03-02 (carried) | unremovable leftover fails as stale, no state entry | ✓ SATISFIED | Both cases re-run green fresh this session; leak path byte-unchanged. |
+| GATE-01 | 03-03, 03-04 | type members read/pinned; whole-check green, measured fresh on the final tree | ✓ SATISFIED | `npm run check` re-run in full this session at HEAD `ab72dba0`: `CHECK_EXIT=0`, 7386/7386 unit, 100/100/100 coverage, 36/36 integration, 108 contracts/4 exceptions, `fallow audit` verdict `pass`. |
 
-No orphaned requirements: `grep -n "Phase 3" REQUIREMENTS.md` returns exactly MA-12/MA-13/MA-14/GATE-01, all four `[x]` and all four present in at least one plan's `requirements:` frontmatter (03-01 through 03-04).
+No orphaned requirements: `grep -n "Phase 3" REQUIREMENTS.md` returns exactly MA-12/MA-13/MA-14/GATE-01,
+all four `[x]` and all four present in at least one plan's `requirements:` frontmatter (03-01 through 03-04).
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| — | — | No `TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` in the 3 gap-closure files (re-scanned this session) | — | — |
-| `extensions/pi-claude-marketplace/platform/git.ts:376-377` | 376 | IN-07 (open, info): the inline comment retains the banned "X, not Y" framing the reviewer flagged | Info | Non-blocking style nit; does not affect behavior or the gate. |
-| `tests/orchestrators/marketplace/add.test.ts:701-728` | — | IN-08 (open, info): the orchestrated url-less case does not assert `loadState` stays empty, unlike its standalone sibling | Info | Non-blocking test-completeness gap; the plan's own `<behavior>` spec for this case did not require the state assertion, and no code path in `add.ts` writes state on any refusal branch, so this is a coverage-of-assertions nit, not a functional gap. |
-| `extensions/pi-claude-marketplace/platform/git.ts` (multi-url config resolution) | :362-379 | WR-11 (open, warning): reasoned above as residual/non-blocking, not a gate blocker | Warning (advisory) | See "WR-11" section — recommended for a BACKLOG entry, not blocking this phase. |
+| — | — | No `TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` in any of the 18 covered production/test files (re-scanned this session) | — | — |
+| `extensions/pi-claude-marketplace/platform/git.ts` (multi-url `origin` config resolution) | `listRemotes`, ~lines 471-489 (unchanged location content) | WR-11 (open, warning, carried from `03-REVIEW.md`): a `.git/config` with two `url =` lines under `[remote "origin"]` is resolved by isomorphic-git's LAST value; canonical git uses the FIRST. A hand-authored two-url config could therefore be recognized and removed even though git itself would treat the tree's effective origin as a different, foreign repository. | Warning (advisory, non-blocking) | Unaffected by the intervening diff — `listRemotes` did not change. Re-confirmed still valid: the reasoning that this shape cannot arise from the WR-07 crash window or a state rebuild (no code path in this codebase or in isomorphic-git's own config writer ever emits a second `url` line per section) still holds, because the writer path (`GitConfigManager.save`) is unchanged. Still recommended for a BACKLOG entry; not treated as a phase-blocking gap. |
 
-No debt-marker gate violation. WR-01 through WR-09 and IN-01 through IN-06 remain open per
-`03-REVIEW-DISPOSITION.md`, carried unchanged from the prior verification round (that round already
-judged none of them falsifies a ROADMAP success criterion); this round adds no new evidence against
-that judgment and does not re-open them.
+No new anti-pattern findings surfaced by this round's own review of the intervening diff
+(Phase 1's redirect-credential guard in `platform/git.ts`/`git-auth-callbacks.ts`): the new code is
+documented inline with a full JSDoc rationale, has 100% direct coverage, and shares no code path
+with anything Phase 3's must-haves depend on. WR-01 through WR-10 (fixed) and IN-01 through IN-08
+remain exactly as disposed in `03-REVIEW-DISPOSITION.md`, carried unchanged; none falsifies a
+ROADMAP success criterion, and this round adds no new evidence against that judgment.
 
 ### Human Verification Required
 
-None. Every ROADMAP success criterion is either programmatically verified or, in SC2's case,
-programmatically verified with a reasoned, evidence-backed disposition of the one residual finding
-(WR-11) that could plausibly bear on it. SC6's two live canaries remain explicitly out of scope for
-phase completion (carried forward per ROADMAP's own instruction) and are not re-litigated here.
+None. Every ROADMAP success criterion is either freshly re-measured (SC4) or confirmed unchanged
+by direct diff inspection plus a fresh full-suite pass (SC1, SC2, SC3, SC5, SC7), or independently
+confirmed via the UAT/BACKLOG artifacts (SC6). WR-11 is a reasoned, evidence-backed residual
+finding, not a human-verification item — the reasoning is unaffected by this round's diff and was
+already judged non-blocking in the prior round.
 
 ### Gaps Summary
 
-No gaps remain. The prior round's sole gap — SC2 / MA-13, CR-01 (a url-less `origin` section
-crashing or misclassifying `marketplace add`) — is closed by plan 03-04 and independently
-re-confirmed in this session through direct code inspection, fresh targeted test runs (not taken from
-SUMMARY.md), and fresh toolchain re-runs (`tsc`, `eslint`, direct coverage, `lint:type-members`). No
-regression was found in any of the six previously-verified truths (SC1, SC3, SC4, SC5, SC6, SC7): the
-gap-closure plan touched exactly three files (`platform/git.ts`, `tests/orchestrators/marketplace/add.test.ts`,
-`tests/platform/git.test.ts`), and every file underlying the other six truths is byte-unchanged since
-the prior verification's baseline.
+No gaps. The prior round's `passed (7/7)` verdict is re-confirmed at the current HEAD (`ab72dba0`),
+not merely re-stated: this round independently read the entire diff between the two HEADs
+(`2f194da8`..`ab72dba0`, four files, +666/-12 lines), confirmed it is Phase 1's redirect-credential
+guard and shares no code path with any of Phase 3's must-haves, and re-measured the one truth that
+genuinely depends on "whole tree, right now" evidence (SC4/GATE-01) with a fresh, from-scratch
+`npm run check` run (`CHECK_EXIT=0`, 7386/7386 unit tests, 100.00/100.00/100.00 coverage including
+`platform/git.ts`, 36/36 integration tests, 108 contract entries with the same 4 exceptions, 7/7
+negative controls) plus a standalone `fallow audit` run (`verdict: pass`). No regression was found
+in any of the six other previously-verified truths.
 
-One residual finding (WR-11, a multi-valued `origin.url` config resolved by last-value instead of
-git's first-value semantics) surfaced during the gap-closure code review and remains unaddressed in
-the code. It is reasoned above, with evidence, as **not** falsifying SC2 for this phase's completion
-— it requires a hand-authored config shape that no code path in this codebase or in isomorphic-git's
-own write path ever produces, so it cannot arise from the crash-window or state-rebuild scenarios
-SC2 is written to cover. It is recommended for a BACKLOG entry so the maintainer can weigh the
-residual risk on their own terms; this report's evidence is sufficient to reopen it as a gap if that
-judgment differs from the one made here.
+WR-11 (a multi-valued `origin.url` config resolved by last-value instead of git's first-value
+semantics) remains open and unaddressed in the code, exactly as in the prior round. It is not a
+gap for the reasons re-confirmed above (residual, non-reachable from this phase's own recovery
+scenarios, `warning` severity, recommended for a BACKLOG entry).
 
 ---
 

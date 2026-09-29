@@ -5,8 +5,8 @@ milestone_name: Any Git Host
 current_phase: 2
 current_phase_name: Endpoints that answer only at the verbatim URL
 current_plan: 4
-status: "All 3 phases complete. Phases 1-2 verified passed 2026-09-28 with live canaries closed; Phase 3 verification stale (needs a verifier re-run before milestone close)"
-stopped_at: "Phase 2 complete; Phase 3 verification stale before milestone close"
+status: "All 3 phases complete and verified passed at ab72dba0; both live canaries closed. Ready for milestone close"
+stopped_at: "All phases verified passed; ready for /gsd-complete-milestone"
 last_updated: "2026-09-28T21:22:05.298Z"
 last_activity: 2026-09-28
 last_activity_desc: Phase 2 complete
@@ -45,8 +45,9 @@ update` each made exactly one verbatim info/refs + upload-pack pair, and a missi
 form failed as `{source missing}` after one request. Re-verified `passed` 9/9 (the 01-04 redirect
 hop is a server-directed follow, not a D-2-01 retry), `npm run check` `CHECK_EXIT=0`.
 
-**Phase 3 verification is stale** (covered files changed after it, including 01-04's `platform/git.ts`).
-Re-run its verifier before `/gsd-complete-milestone`.
+**Phase 3 re-verified `passed` 7/7 (2026-09-28)** at `ab72dba0` after going stale on 01-04's
+`platform/git.ts` change (`listRemotes` byte-identical); `npm run check` `CHECK_EXIT=0`, fallow audit
+`pass`. WR-11 stays open as a non-blocking follow-up.
 
 **Phase 1 COMPLETE (2026-09-28).** UAT `01-UAT.md` 16/16 (`0876dcd1`): the live canary (tests 1-3)
 ran on an instrumented HTTPS server with a scoped `credential.helper=store`; test 4 re-run after
@@ -589,11 +590,11 @@ None.
 
 **Last session:** 2026-09-28T20:45:00.000Z
 
-**Stopped At:** Phase 2 complete; all phases complete, Phase 3 verification stale
+**Stopped At:** All phases verified passed; ready for milestone close
 
 **Resume File:** None.
 
-**Next Action:** re-run Phase 3's verifier (stale), then `/gsd-complete-milestone`. Optionally fix WR-11 (read
+**Next Action:** `/gsd-complete-milestone --ws git-hosts`. Optionally fix WR-11 (read
 `remote.origin.url` with `getConfigAll`, refuse unless exactly one url) before closing.
 
 ### What this run completed
