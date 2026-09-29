@@ -166,6 +166,27 @@ recommendations come from Pi and project constraints (per
   an export without a reader; `npm run check` is green after every plan.
 - Where the SC-3 proof test lives.
 
+### Research questions resolved by the orchestrator (2026-09-28)
+
+These follow from the milestone invariants and the decisions above. They are
+not new user decisions.
+
+- **Frozen missing-arm row (RESEARCH Pitfall A):** preserve today's behavior.
+  The guarded `severity = "error"` write in `dispatchRow` leaves a frozen row at
+  info severity, and a test pins those bytes. Flooring every fallback row to
+  error would change the corpus, and the milestone invariant forbids that.
+- **Run-object root (D-07):** Option A. There is a single construction in the
+  `/claude:plugin` command closure in `edge/register.ts`, plus the
+  `index.ts` `resources_discover` pass.
+- **Hooks (D-07 refinement):** hook callbacks get no run object in Phase 1.
+  Their only emissions are raw surfaces that read no snapshot, so the object
+  reaches them when its first reader there lands (Phase 5 sink or Phase 6
+  `origin`/`invocationId`). This follows the rule that a type member lands with
+  its first reader.
+- **Node version:** the baseline meta records the Node version. The re-diff runs
+  locally on the same major version. A CI-vs-local message difference is not
+  part of this phase's gate.
+
 </decisions>
 
 <canonical_refs>
