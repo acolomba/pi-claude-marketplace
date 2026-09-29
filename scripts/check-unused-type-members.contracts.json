@@ -660,28 +660,28 @@
       "necessity": "extensions/pi-claude-marketplace/index.ts:91:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:225:43",
+      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:216:43",
       "owner": "dispatchInfoMessage.message",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:225:12"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:216:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1566:46",
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1567:46",
       "owner": "isDescriptionBearingRow",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1566:9"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1567:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:842:7",
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:843:7",
       "owner": "renderPendingRow.p",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:840:6"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:841:6"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-summary.ts:41:40",
@@ -700,20 +700,20 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-types.ts:459:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:283:52",
+      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:285:52",
       "owner": "notifyReconcileAppliedWithContext",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:283:15"
+      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:285:15"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:346:29",
+      "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:348:29",
       "owner": "arm",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:346:14"
+      "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:348:14"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:66:61",

@@ -9,9 +9,8 @@ import {
 import {
   buildSummaryLine,
   composeRetainedWorkflowsAdvisories,
-  composeTally,
   computeSeverity,
-  foldTallyAndHint,
+  countRowsBySeverity,
   isInfoKind,
   shouldEmitReloadHint,
 } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
@@ -185,120 +184,6 @@ test("nonempty all-failure summary, tally, and reload hint retain their exact or
     "error",
   ]);
 });
-
-test("plural tally keeps failure, warning, and success categories in order", () => {
-  // arrange
-  const message = {
-    cardinality: "plural",
-    label: "Plugin update",
-    marketplaces: [
-      {
-        name: "official",
-        scope: "user",
-        status: "failed",
-        severity: "error",
-        plugins: [
-          {
-            name: "warning-row",
-            status: "skipped",
-            reasons: ["not installed"],
-            severity: "warning",
-            needsReload: false,
-          },
-          { name: "success-row", status: "available", severity: "info" },
-        ],
-      },
-    ],
-  } satisfies Parameters<typeof composeTally>[0];
-
-  // act
-  const tally = composeTally(message);
-
-  // assert
-  assert.equal(tally, "Plugin update: 1 failure, 1 warning, 1 success");
-});
-
-for (const { name, message, expected } of [
-  {
-    name: "single structural invocation suppresses its tally",
-    message: { cardinality: "single", label: "Plugin list", marketplaces: [] },
-    expected: "",
-  },
-  {
-    name: "missing operation label suppresses a plural tally",
-    message: { cardinality: "plural", marketplaces: [] },
-    expected: "",
-  },
-  {
-    name: "empty plural invocation suppresses the default success tally",
-    message: { cardinality: "plural", label: "Plugin list", marketplaces: [] },
-    expected: "",
-  },
-  {
-    name: "populated plural invocation can emit zero successes",
-    message: {
-      cardinality: "plural",
-      label: "Plugin list",
-      marketplaces: [{ name: "official", scope: "user", plugins: [] }],
-    },
-    expected: "Plugin list: 0 successes",
-  },
-  {
-    name: "positive update override emits its supplied verb",
-    message: {
-      cardinality: "plural",
-      label: "Plugin update",
-      marketplaces: [],
-      tally: { verb: "updated", count: 2 },
-    },
-    expected: "Plugin update: 2 updated",
-  },
-  {
-    name: "zero update override contributes no tally",
-    message: {
-      cardinality: "plural",
-      label: "Plugin update",
-      marketplaces: [],
-      tally: { verb: "updated", count: 0 },
-    },
-    expected: "",
-  },
-] as const) {
-  test(name, () => {
-    // act & assert
-    assert.equal(composeTally(message), expected);
-  });
-}
-
-for (const { name, body, tally, hint, expected } of [
-  {
-    name: "keeps all fold segments in order",
-    body: "body",
-    tally: "tally",
-    hint: "hint",
-    expected: "body\n\ntally\n\nhint",
-  },
-  {
-    name: "omits an empty body",
-    body: "",
-    tally: "tally",
-    hint: "hint",
-    expected: "tally\n\nhint",
-  },
-  { name: "omits an empty tally", body: "body", tally: "", hint: "hint", expected: "body\n\nhint" },
-  {
-    name: "omits an empty reload hint",
-    body: "body",
-    tally: "tally",
-    hint: "",
-    expected: "body\n\ntally",
-  },
-] as const) {
-  test(name, () => {
-    // act & assert
-    assert.equal(foldTallyAndHint(body, tally, hint), expected);
-  });
-}
 
 for (const { name, message, expected } of [
   {
@@ -575,27 +460,6 @@ for (const { name, message } of [
   });
 }
 
-test("an unstamped cascade plugin counts as one success in the tally", () => {
-  // arrange
-  const message = {
-    cardinality: "plural",
-    label: "Plugin list",
-    marketplaces: [
-      {
-        name: "official",
-        scope: "user",
-        plugins: [{ name: "alpha", status: "available" }],
-      },
-    ],
-  } satisfies NotificationMessage;
-
-  // act
-  const tally = composeTally(message);
-
-  // assert
-  assert.equal(tally, "Plugin list: 1 success");
-});
-
 for (const { name, message } of [
   {
     name: "summary composes no line for a read-only kind",
@@ -623,6 +487,40 @@ for (const { name, message } of [
     assert.equal(buildSummaryLine(message, "error"), "");
   });
 }
+
+test("countRowsBySeverity counts unstamped rows as info", () => {
+  // arrange
+  const marketplaces = [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        { name: "alpha", status: "available" },
+        { name: "beta", status: "available", severity: "info" },
+        {
+          name: "gamma",
+          status: "failed",
+          reasons: ["not found"],
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+    {
+      name: "extra",
+      scope: "project",
+      status: "failed",
+      severity: "error",
+      plugins: [],
+    },
+  ] satisfies CascadeNotificationMessage["marketplaces"];
+
+  // act
+  const counts = countRowsBySeverity(marketplaces, "info");
+
+  // assert
+  assert.deepStrictEqual(counts, { plugins: 2, marketplaces: 1 });
+});
 
 test("update no-op fold preserves empty and non-empty bodies", (t) => {
   // arrange

@@ -1041,7 +1041,7 @@ test("formatNotificationText returns an info body byte for byte", () => {
   const body = "● official [user]\n  alpha (installed)";
 
   // act
-  const text = formatNotificationText({ severity: "info" }, body);
+  const text = formatNotificationText({ severity: "info", needsReload: false, noOp: false }, body);
 
   // assert
   assert.equal(text, "● official [user]\n  alpha (installed)");
@@ -1050,12 +1050,145 @@ test("formatNotificationText returns an info body byte for byte", () => {
 for (const severity of ["warning", "error"] as const) {
   test(`formatNotificationText prepends a ${severity} summary as its own block`, () => {
     // arrange
-    const envelope = { severity, summary: "A plugin operation has failed." };
+    const envelope = {
+      severity,
+      summary: "A plugin operation has failed.",
+      needsReload: false,
+      noOp: false,
+    };
 
     // act
     const text = formatNotificationText(envelope, "● official [user]\n  alpha (failed)");
 
     // assert
     assert.equal(text, "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)");
+  });
+}
+
+for (const { name, envelope, expectedText } of [
+  {
+    name: "singular category words",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      noOp: false,
+      tally: { label: "Plugin update", failures: 1, warnings: 1, success: { count: 1 } },
+    },
+    expectedText: "body\n\nPlugin update: 1 failure, 1 warning, 1 success",
+  },
+  {
+    name: "plural category words",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      noOp: false,
+      tally: { label: "Plugin import", failures: 2, warnings: 3, success: { count: 4 } },
+    },
+    expectedText: "body\n\nPlugin import: 2 failures, 3 warnings, 4 successes",
+  },
+  {
+    name: "zero successes",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      noOp: false,
+      tally: { label: "Plugin list", failures: 0, warnings: 0, success: { count: 0 } },
+    },
+    expectedText: "body\n\nPlugin list: 0 successes",
+  },
+  {
+    name: "a success verb without a plural form",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      noOp: false,
+      tally: {
+        label: "Plugin update",
+        failures: 0,
+        warnings: 0,
+        success: { count: 2, verb: "updated" },
+      },
+    },
+    expectedText: "body\n\nPlugin update: 2 updated",
+  },
+  {
+    name: "failures only",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      noOp: false,
+      tally: { label: "Plugin install", failures: 1, warnings: 0 },
+    },
+    expectedText: "body\n\nPlugin install: 1 failure",
+  },
+] satisfies readonly {
+  readonly name: string;
+  readonly envelope: Parameters<typeof formatNotificationText>[0];
+  readonly expectedText: string;
+}[]) {
+  test(`formatNotificationText composes a tally sentence with ${name}`, () => {
+    // act
+    const text = formatNotificationText(envelope, "body");
+
+    // assert
+    assert.equal(text, expectedText);
+  });
+}
+
+for (const { name, envelope, body, expectedText } of [
+  {
+    name: "orders the body, the tally, and the reload trailer",
+    envelope: {
+      severity: "info",
+      needsReload: true,
+      noOp: false,
+      tally: { label: "Plugin install", failures: 0, warnings: 0, success: { count: 1 } },
+    },
+    body: "body",
+    expectedText: "body\n\nPlugin install: 1 success\n\n/reload to pick up changes",
+  },
+  {
+    name: "leaves one blank line between the body and the trailer without a tally",
+    envelope: { severity: "info", needsReload: true, noOp: false },
+    body: "body",
+    expectedText: "body\n\n/reload to pick up changes",
+  },
+  {
+    name: "puts the no-op headline in the tally slot",
+    envelope: { severity: "info", needsReload: false, noOp: true },
+    body: "body",
+    expectedText: "body\n\nPlugin update: nothing to update",
+  },
+  {
+    name: "renders the no-op headline alone over an empty body",
+    envelope: { severity: "info", needsReload: false, noOp: true },
+    body: "",
+    expectedText: "Plugin update: nothing to update",
+  },
+  {
+    name: "prepends the summary over the folded body",
+    envelope: {
+      severity: "error",
+      summary: "A plugin operation has failed.",
+      needsReload: true,
+      noOp: false,
+      tally: { label: "Plugin install", failures: 1, warnings: 0 },
+    },
+    body: "body",
+    expectedText:
+      "A plugin operation has failed.\n\nbody\n\nPlugin install: 1 failure\n\n/reload to pick up changes",
+  },
+] satisfies readonly {
+  readonly name: string;
+  readonly envelope: Parameters<typeof formatNotificationText>[0];
+  readonly body: string;
+  readonly expectedText: string;
+}[]) {
+  test(`formatNotificationText ${name}`, () => {
+    // act
+    const text = formatNotificationText(envelope, body);
+
+    // assert
+    assert.equal(text, expectedText);
   });
 }

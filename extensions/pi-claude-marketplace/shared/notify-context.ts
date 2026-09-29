@@ -23,7 +23,7 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  * and the `notifyWithContext` entry point that dispatches the per-row body
  * through `context.render[status]` while routing the composed cascade through
  * the shared severity/summary/reload + single `ctx.ui.notify` seam in
- * `notification-summary.ts` (`emitContextCascade`).
+ * `notification-dispatch.ts` (`emitContextCascade`).
  *
  * The legacy `notify(ctx, pi, message)` in `notification-dispatch.ts` keeps serving
  * not-yet-migrated call sites (it still drives the central renderPluginRow /
@@ -129,12 +129,13 @@ export type MarketplaceRows<Msg> = WithPlugins<MarketplaceNotificationMessage, M
  *
  * D-07: `context.render` and `Messaging.label` are the members consumed for the
  * per-row body rendering. The `severity?` / `needsReload?` row fields ARE read
- * downstream of this seam: `emitContextCascade` -> `emitWithSummary` ->
- * `computeSeverity` -> `cascadeSeverity` MAX-reduces every row's `severity` to
- * the envelope severity, and the per-row `needsReload` OR-reduce drives the
- * `/reload to pick up changes` trailer. `Messaging.label` feeds the trailing
- * tally when plural cardinality makes it eligible. An empty default result
- * suppresses the success line.
+ * downstream of this seam: `emitContextCascade` -> `resolveEnvelope`
+ * (notification-resolve.ts) -> `computeSeverity` -> `cascadeSeverity`
+ * MAX-reduces every row's `severity` to the envelope severity, and the per-row
+ * `needsReload` OR-reduce resolves the envelope's `needsReload`, which drives
+ * the `/reload to pick up changes` trailer. `Messaging.label` labels the
+ * resolved tally when plural cardinality makes it eligible. An empty default
+ * result suppresses the success line.
  *
  * RLD-05 / D-07: `kind` is `"cascade" | undefined` rather than optional. The
  * `/claude:plugin disable` command does not thread a distinguishing kind --
@@ -196,8 +197,8 @@ export function notifyWithContext<
  * UGRM-02 / WR-02: the bulk-`update` cascade emitter that owns the OPT-IN,
  * update-scoped `tally` success-category override. Mirrors `notifyWithContext`
  * but additionally threads `{ verb: "updated", count: <updatedCount> }` onto the
- * envelope, where `composeTally` reads it in place of the legacy info-row
- * success math.
+ * envelope. The tally is resolved in notification-resolve.ts, which reads the
+ * override in place of the info-row success math.
  *
  * The override lives on a dedicated wrapper -- NOT a trailing positional param
  * on `notifyWithContext` -- so it is structurally unreachable from every other
@@ -240,9 +241,10 @@ export function notifyUpdateWithContext<
  * `(partially-upgradable)` decline). Renders the surviving rows through the command's
  * render map and folds the hard-coded `Plugin update: nothing to update` headline
  * below them, so the summary line can never vanish. NO `cardinality` / `tally` --
- * the headline is a fixed constant owned by `emitUpdateNoOpCascade`, not the
- * `composeTally` success math. Cardinality remains structural metadata on the
- * envelope so every update notification retains the invocation form.
+ * the headline is a fixed constant the text strategy renders for the no-op
+ * envelope `emitUpdateNoOpCascade` resolves, not a resolved tally. Cardinality
+ * remains structural metadata on the envelope so every update notification
+ * retains the invocation form.
  */
 export function notifyUpdateNoOpWithContext<
   Status extends string,

@@ -1,10 +1,11 @@
 import { appendHooksBlock } from "./concerns/hooks.ts";
 import { softDepMarkers } from "./concerns/soft-dep.ts";
 import { causeChainTrailer, manualRecoveryLeaks } from "./errors.ts";
+import { tallyCategory } from "./notification-summary.ts";
 
 import type { SoftDepStatus } from "../platform/pi-api.ts";
 import type { Dependency } from "./concerns/soft-dep.ts";
-import type { ResolvedEnvelope } from "./notification-resolve.ts";
+import type { ResolvedEnvelope, ResolvedTally } from "./notification-resolve.ts";
 import type {
   ContentReason,
   MarketplaceDetails,
@@ -1658,13 +1659,109 @@ export function composePluginLinesWith(
   return lines;
 }
 
+// ---------------------------------------------------------------------------
+// D-10 text strategy: the trailing segments and the summary block.
+//
+// Grammar mini-spec (documented in docs/output-catalog.md per SNM-19 /
+// SNM-20). The wire format of one structured notification is:
+//
+//   [<summary line>]            <-- iff the envelope is warning or error
+//
+//   <mp-header-1>
+//     <plugin-row-1>
+//       [cause-chain at 4-space indent if (failed | manual recovery) with cause]
+//       [rollback child row at 4-space indent for each rollbackPartial phase]
+//       [phase cause-chain at 6-space indent if phase.cause set]
+//     <plugin-row-2>
+//     ...
+//
+//   <mp-header-2>
+//   ...
+//
+//   [<advisory lines>]
+//
+//   [<tally sentence> | <update no-op headline>]
+//
+//   [/reload to pick up changes]  <-- iff the envelope needsReload
+//
+// Joins / separators:
+//   - Plugin row prefix:                "  " (2 spaces)
+//   - Cause-chain trailer prefix:       "    " (4 spaces)
+//   - rollbackPartial child row prefix: "    " (4 spaces)
+//   - rollbackPartial phase cause:      "      " (6 spaces)
+//   - Between marketplace blocks:       "\n\n" (one blank line)
+//   - Between every present segment:    "\n\n" (one blank line); an absent
+//     segment is dropped before joining, so two segments are never separated
+//     by two blank lines.
+//
+// Empty-marketplaces sentinel: "(no marketplaces)" on the plain cascade and
+// the reconcile-applied cascade; the update no-op renders no sentinel.
+// ---------------------------------------------------------------------------
+
+/** Reload-hint trailer literal. */
+const RELOAD_HINT_TRAILER = "/reload to pick up changes";
+
 /**
- * D-10 text strategy: formats one resolved envelope around a rendered body.
- * An info envelope returns `body` unchanged. A warning or error envelope
- * prepends its summary line as its own block (GRAM-01): one blank line, never a
- * single `\n`, which would glue the host `Error:` / `Warning:` label onto the
- * first detail row.
+ * UGRM-01 / UGRM-02 never-silent no-op headline for a bulk `update` that
+ * realized ZERO transitions (all targets up-to-date, OR the only surviving rows
+ * are benign info skips such as a `(partially-upgradable)` decline). Hard-coded so
+ * the byte form cannot drift from `docs/output-catalog.md`'s `all-up-to-date-noop`
+ * / `skip-partially-upgradable-bulk` states -- mirrors the `reconcile-pending-empty`
+ * byte-lock precedent. Emitted in PLACE of the tally sentence (a `tally {count: 0}`
+ * override resolves to no tally), so the summary line never vanishes.
+ */
+const UPDATE_NO_OP_HEADLINE = "Plugin update: nothing to update";
+
+/**
+ * OUT-03: the tally sentence, `<Operation>: <n> failure(s), <n> warning(s),
+ * <n> success(es)`, with the categories in that order and NO terminal period.
+ * A category the resolved tally omits is omitted here. An absent tally is `""`.
+ */
+function tallySentence(tally: ResolvedTally | undefined): string {
+  if (tally === undefined) {
+    return "";
+  }
+
+  const parts: string[] = [];
+
+  if (tally.failures > 0) {
+    parts.push(tallyCategory(tally.failures, "failure", "failures"));
+  }
+
+  if (tally.warnings > 0) {
+    parts.push(tallyCategory(tally.warnings, "warning", "warnings"));
+  }
+
+  if (tally.success !== undefined) {
+    // UGRM-02: a verb has no plural-s (`1 updated`, `2 updated`).
+    const { count, verb } = tally.success;
+    parts.push(
+      verb === undefined
+        ? tallyCategory(count, "success", "successes")
+        : tallyCategory(count, verb, verb),
+    );
+  }
+
+  return `${tally.label}: ${parts.join(", ")}`;
+}
+
+/**
+ * Formats one resolved envelope around a rendered body. It folds `body`, then
+ * the no-op headline or the tally sentence, then the reload trailer, dropping
+ * each absent segment and joining the rest with one blank line. A warning or
+ * error envelope then prepends its summary line as its own block (GRAM-01):
+ * one blank line, never a single `\n`, which would glue the host `Error:` /
+ * `Warning:` label onto the first detail row. An info envelope carries no
+ * summary line.
  */
 export function formatNotificationText(envelope: ResolvedEnvelope, body: string): string {
-  return envelope.severity === "info" ? body : `${envelope.summary}\n\n${body}`;
+  const folded = [
+    body,
+    envelope.noOp ? UPDATE_NO_OP_HEADLINE : tallySentence(envelope.tally),
+    envelope.needsReload ? RELOAD_HINT_TRAILER : "",
+  ]
+    .filter((segment) => segment !== "")
+    .join("\n\n");
+
+  return envelope.severity === "info" ? folded : `${envelope.summary}\n\n${folded}`;
 }

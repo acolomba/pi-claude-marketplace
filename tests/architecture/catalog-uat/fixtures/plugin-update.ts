@@ -74,7 +74,7 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
     },
 
     // UGRM-02: the override carries a 0 success count (zero `updated` rows), so
-    // `composeTally` drops the success category and the failure math is
+    // the resolved tally drops the success category and the failure math is
     // unchanged -- the summary stays byte-identical at `Plugin update: 1
     // failure`. Proves the override does not perturb a failure-only cascade.
     "failed-with-rollback-partial": {
@@ -457,8 +457,8 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
     // `(partially-upgradable) {lsp}` body row + `--partial` trailer still render, but
     // the headline is the never-silent `Plugin update: nothing to update`
     // constant -- emitted by the ORCHESTRATOR (`notifyUpdateNoOpWithContext`),
-    // NOT by composeTally (which would collapse a `tally {count: 0}` override to
-    // `""`, dropping the line = the byte-drift defect). So this fixture drives
+    // NOT by the tally (a `tally {count: 0}` override resolves no success
+    // category, dropping the line = the byte-drift defect). So this fixture drives
     // the orchestrator no-op seam via `emit`, keeping the Phase-73 row as the
     // body. Info severity, no reload-hint.
     "skip-partially-upgradable-bulk": {

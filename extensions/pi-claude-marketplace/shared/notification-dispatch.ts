@@ -12,16 +12,10 @@ import {
   renderPluginInfo,
   renderPluginInfoCascade,
 } from "./notification-grammar.ts";
-import { resolveEnvelope } from "./notification-resolve.ts";
-import {
-  composeTally,
-  foldTallyAndHint,
-  isInfoKind,
-  RELOAD_HINT_TRAILER,
-  shouldEmitReloadHint,
-  UPDATE_NO_OP_HEADLINE,
-} from "./notification-summary.ts";
+import { resolveEnvelope, resolveUpdateNoOpEnvelope } from "./notification-resolve.ts";
+import { isInfoKind } from "./notification-summary.ts";
 
+import type { ResolvedEnvelope } from "./notification-resolve.ts";
 import type { StandaloneKind } from "./notification-summary.ts";
 import type {
   CascadeNotificationMessage,
@@ -77,13 +71,15 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
 
 /**
  * Emit one summary-composed payload at the sole Pi notification boundary:
- * resolve the envelope, format the text, then make one `ctx.ui.notify` call.
- * An info envelope passes one argument and a warning or error envelope passes
- * its severity as the second.
+ * format the resolved envelope around `body`, then make one `ctx.ui.notify`
+ * call. An info envelope passes one argument and a warning or error envelope
+ * passes its severity as the second. `body` carries the rendered rows and any
+ * advisory lines; the tally, the no-op headline, the reload trailer, and the
+ * summary line all come from the envelope.
  *
- * The caller renders `body` BEFORE this runs. The context renderer
- * (`dispatchRow` in notify-context.ts) floors a row with no render arm to error
- * while rendering, and the envelope must read that floored stamp.
+ * Each caller renders `body` BEFORE it resolves the envelope. The context
+ * renderer (`dispatchRow` in notify-context.ts) floors a row with no render arm
+ * to error while rendering, and the envelope must read that floored stamp.
  *
  * Module-private: the state-change dispatch paths -- `notify`,
  * `emitContextCascade`, `emitUpdateNoOpCascade`, and
@@ -95,12 +91,7 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  * `makeRawNotifyFn`) carry no summary/tally/reload-hint to compose, so they
  * call `ctx.ui.notify` directly instead.
  */
-function emitWithSummary(
-  ctx: NotificationContext,
-  message: NotificationMessage,
-  body: string,
-): void {
-  const envelope = resolveEnvelope(message);
+function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, body: string): void {
   const text = formatNotificationText(envelope, body);
   if (envelope.severity === "info") {
     ctx.ui.notify(text);
@@ -253,23 +244,16 @@ function dispatchInfoMessage(
       break;
     case "reconcile-applied-cascade":
       // RECON-04: compose the same cascade body the cascade arm renders
-      // (per-mp header + per-plugin row via the existing helpers). The
-      // reload-hint trailer is structurally suppressed (the reconcile already
-      // ran ON /reload); emitWithSummary handles the summary prepend at
-      // error/warning severity. OUT-03/OUT-06/D-03/D-04: a reconcile apply is a
-      // plural mixed-subject operation, so the trailing tally folds in after the
-      // body (no reload-hint segment), mirroring the
-      // `emitReconcileAppliedContextCascade` production path so the byte form is
-      // identical whichever entry composes it.
-      body = foldTallyAndHint(
-        composeReconcileAppliedBody(message, probe),
-        composeTally(message),
-        "",
-      );
+      // (per-mp header + per-plugin row via the existing helpers). The resolved
+      // envelope never requests the reload trailer for this kind (the
+      // reconcile already ran ON /reload). OUT-03/OUT-06/D-03/D-04: a reconcile
+      // apply is a plural mixed-subject operation, so its envelope carries the
+      // tally, exactly as on the `emitReconcileAppliedContextCascade` path.
+      body = composeReconcileAppliedBody(message, probe);
       break;
   }
 
-  emitWithSummary(ctx, message, body);
+  emitWithSummary(ctx, resolveEnvelope(message), body);
 }
 
 /**
@@ -326,23 +310,12 @@ export function notify(
   // WR-06: advisory body lines sit between the body and the tally.
   const body = foldAdvisories(composed, message.advisories);
 
-  // OUT-03 / OUT-04 / D-04: PLURAL cardinality makes the per-operation tally
-  // eligible. The tally sits AFTER the body and BEFORE the reload-hint trailer.
-  // It is empty for an empty default result and for single-target / legacy
-  // emissions.
-  const tally = composeTally(message);
-
-  // Compute reload-hint per the state-change trigger ladder and append it
-  // with one blank line.
-  const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
-  const withTally = foldTallyAndHint(body, tally, hint);
-
-  // Emit through the shared summary seam (GRAM-04). At info severity the body
-  // emits unchanged; at error/warning severity the summary is prepended as its
-  // own block, with the tally + reload-hint already folded last:
+  // Emit through the shared summary seam (GRAM-04). The resolved envelope
+  // carries the summary line (error/warning only), the OUT-03 tally, and the
+  // reload decision, and the text strategy folds them as
   // `{summary}\n\n{cascade body}\n\n{tally}\n\n{reload-hint}` (UXG-07 / GRAM-01 /
   // OUT-03).
-  emitWithSummary(ctx, message, withTally);
+  emitWithSummary(ctx, resolveEnvelope(message), body);
 }
 
 /**
@@ -387,7 +360,6 @@ function emitCascadeWith(
     probe: SoftDepStatus,
     mpScope: Scope,
   ) => string,
-  hint: string,
   // WR-06: caller-composed advisory body lines. Only the plain cascade carrier
   // declares them; the reconcile-applied carrier passes `undefined`, so the
   // member stays on the two shapes that can actually produce one.
@@ -407,9 +379,8 @@ function emitCascadeWith(
   // they do on the central dispatch, so a command that can emit either arm
   // renders the identical trailer from either one.
   const body = foldAdvisories(composed, advisories);
-  const withTally = foldTallyAndHint(body, composeTally(message), hint);
 
-  emitWithSummary(ctx, message, withTally);
+  emitWithSummary(ctx, resolveEnvelope(message), body);
 }
 
 /** Dispatch a state-change cascade with its stamped reload decision. */
@@ -423,9 +394,7 @@ export function emitContextCascade(
     mpScope: Scope,
   ) => string,
 ): void {
-  const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
-
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, hint, message.advisories);
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, message.advisories);
 }
 
 /** Dispatch the never-silent zero-transition update result. */
@@ -448,10 +417,11 @@ export function emitUpdateNoOpCascade(
 
     return lines.join("\n");
   });
+  // No `(no marketplaces)` sentinel here: an empty no-op renders the headline
+  // alone.
   const body = blocks.join("\n\n");
-  const withHeadline = foldTallyAndHint(body, UPDATE_NO_OP_HEADLINE, "");
 
-  emitWithSummary(ctx, message, withHeadline);
+  emitWithSummary(ctx, resolveUpdateNoOpEnvelope(message), body);
 }
 
 /** Dispatch an applied reconcile cascade without a redundant reload hint. */
@@ -465,5 +435,5 @@ export function emitReconcileAppliedContextCascade(
     mpScope: Scope,
   ) => string,
 ): void {
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, "", undefined);
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, undefined);
 }

@@ -16,8 +16,11 @@
  * header-only `(removed)` cascade with no installed plugins (WILL-03) -- the
  * rendered cascade MUST NOT contain the trailer.
  *
- * The reload-deferral oracle (`shouldEmitReloadHint`) and the trailer literal
- * (`RELOAD_HINT_TRAILER`) live in `shared/notification-summary.ts`, while
+ * The reload-deferral decision is the envelope's `needsReload`, which
+ * `shared/notification-resolve.ts` resolves from the oracle
+ * `shouldEmitReloadHint` in `shared/notification-summary.ts`. The trailer
+ * literal (`RELOAD_HINT_TRAILER`) lives in `shared/notification-grammar.ts`,
+ * whose text strategy appends it when `needsReload` is true, and
  * `shared/notification-dispatch.ts::notify()` owns their only public effect.
  * The assertion therefore observes the oracle through the trailer's presence
  * in the rendered output (WILL-02 leaves the seam to discretion). This file is
@@ -63,7 +66,7 @@ function piWithAllLoaded(): MockPi {
 }
 
 // The trailer literal independently mirrors `RELOAD_HINT_TRAILER` in
-// shared/notification-summary.ts, while the agreement is observed through the
+// shared/notification-grammar.ts, while the agreement is observed through the
 // rendered substring dispatched by shared/notification-dispatch.ts (the same
 // seam tests/architecture/notify-grammar-invariant.test.ts uses).
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
