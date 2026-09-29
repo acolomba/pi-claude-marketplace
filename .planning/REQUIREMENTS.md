@@ -190,12 +190,48 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| PMOD-01 | Phase 1 | Pending |
+| PMOD-02 | Phase 2 | Pending |
+| PMOD-03 | Phase 1 | Pending |
+| PMOD-04 | Phase 4 | Pending |
+| PMOD-05 | Phase 2 | Pending |
+| TEXT-01 | Phase 3 | Pending |
+| WIRE-01 | Phase 4 | Pending |
+| WIRE-02 | Phase 6 | Pending |
+| WIRE-03 | Phase 4 | Pending |
+| WIRE-04 | Phase 4 | Pending |
+| WIRE-05 | Phase 4 | Pending |
+| WIRE-06 | Phase 4 | Pending |
+| WIRE-07 | Phase 6 | Pending |
+| WIRE-08 | Phase 4 | Pending |
+| WIRE-09 | Phase 4 | Pending |
+| JOUT-01 | Phase 5 | Pending |
+| JOUT-02 | Phase 4 | Pending |
+| JOUT-03 | Phase 6 | Pending |
+| JOUT-04 | Phase 6 | Pending |
+| JOUT-05 | Phase 5 | Pending |
+| RAWS-01 | Phase 3 | Pending |
+| RAWS-02 | Phase 3 | Pending |
+| RAWS-03 | Phase 3 | Pending |
+| RAWS-04 | Phase 3 | Pending |
+| RAWS-05 | Phase 3 | Pending |
+| MODE-01 | Phase 5 | Pending |
+| MODE-02 | Phase 5 | Pending |
+| MODE-03 | Phase 7 | Pending |
+| MODE-04 | Phase 7 | Pending |
+| LLMT-01 | Phase 4 | Pending |
+| TENB-01 | Phase 5 | Pending |
+| TENB-02 | Phase 5 | Pending |
+| TENB-03 | Phase 7 | Pending |
+| JDOC-01 | Phase 7 | Pending |
+| JDOC-02 | Phase 7 | Pending |
+| JDOC-03 | Phase 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 36 total
-- Mapped to phases: 0
-- Unmapped: 36
+- Mapped to phases: 36
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-09-28*
-*Last updated: 2026-09-28 after initial definition*
+*Last updated: 2026-09-28 after roadmap creation (7 phases)*

@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: json-output
 milestone_name: Mode-Keyed Presentation Strategies
 status: planning
-last_updated: "2026-09-28T12:24:50.992Z"
+last_updated: "2026-09-29T01:02:56.000Z"
 last_activity: 2026-09-28
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,19 +17,27 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-18 after the test-backlog milestone)
+See: `.planning/PROJECT.md` (updated 2026-09-28 for the json-output milestone)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Milestone json-output -- defining requirements
+**Current focus:** Milestone json-output -- Phase 1 (Presentation Model) next
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 1 of 7 (Presentation Model) — not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-09-28 — Milestone json-output started
+Status: Ready to plan
+Last activity: 2026-09-28 — Roadmap created: 7 phases, 36/36 requirements mapped
+
+Progress: [░░░░░░░░░░] 0%
+
+Phase 1's first plan captures the text wire-corpus baseline (every emitted
+`(message, severity)` pair and its argument count) before any renderer change;
+every later phase re-diffs against it. Each phase leaves `npm run check` green
+and the text bytes unchanged, except for PMOD-04 credential redaction in
+Phase 4.
 
 ### workflows-replay closeout
 
@@ -156,11 +164,15 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-27
-**Stopped at:** workflows workstream archived; root planning records reconciled
+**Last session:** 2026-09-28
+**Stopped at:** json-output roadmap created (7 phases, 36/36 requirements mapped)
 **Resume file:** None
 
-**Current work:** None in flight. The 0.19.1 and 0.19.2 releases are tagged and
+**Current work:** Milestone json-output on `features/json`. Requirements and
+the roadmap are written (36 requirements, 7 phases, all mapped). No phase has
+started, and no `phases/` directory exists yet.
+
+**Release context (unchanged):** The 0.19.1 and 0.19.2 releases are tagged and
 published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218 and
 #219 landed after it. `main` carries the workflows bridge from PR #205, which no
 tag includes yet. Handoffs for the earlier milestones moved into their archives
@@ -172,6 +184,9 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Start the next milestone with `/gsd-new-milestone`; `BACKLOG.md` holds the
-  six carriers the workflows-replay close named (VSTALE-01, WLREC-01,
-  RLHINT-01, PCERR-01, WSTOR-01, WPIN-01).
+- Discuss Phase 1 with `/gsd-discuss-phase 1`, then plan it with
+  `/gsd-plan-phase 1`. Its research flag asks for the per-verb soft-dep
+  suppression table and the inventory of named-file gates to re-point.
+- `BACKLOG.md` still holds the six carriers the workflows-replay close named
+  (VSTALE-01, WLREC-01, RLHINT-01, PCERR-01, WSTOR-01, WPIN-01). This
+  milestone closes MRO-01 in Phase 7.

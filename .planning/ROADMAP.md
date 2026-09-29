@@ -2,13 +2,152 @@
 
 ## Milestones
 
+- **json-output** Mode-Keyed Presentation Strategies — in progress, Phases 1-7, branch `features/json`, started 2026-09-28
 - **workflows-replay** — completed 2026-09-21, merged to main 2026-09-24 (PR #205); [archive](milestones/ws-workflows-2026-09-27/milestones/workflows-replay-ROADMAP.md)
-- **test-backlog** — shipped 2026-09-18; [archive](milestones/test-backlog-ROADMAP.md)
-- **refine-unit-tests** — shipped 2026-09-13; [archive](milestones/refine-unit-tests-ROADMAP.md)
-- **v1.19 Unit Test Refactor** — shipped 2026-09-04; [archive](milestones/v1.19-ROADMAP.md)
+- **test-backlog** — completed 2026-09-18; [archive](milestones/test-backlog-ROADMAP.md)
+- **refine-unit-tests** — completed 2026-09-13; [archive](milestones/refine-unit-tests-ROADMAP.md)
+- **v1.19 Unit Test Refactor** — completed 2026-09-04; [archive](milestones/v1.19-ROADMAP.md)
 
 Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 
 ## Phases
 
-No active milestone. Start the next one with `/gsd-new-milestone`.
+- [ ] **Phase 1: Presentation Model** — Every presentation decision is computed once, upstream of a text renderer that no longer probes state or walks `Error` objects
+- [ ] **Phase 2: Row Policies** — Per-verb rendering differences become a total row-policy map of data instead of string render callbacks
+- [ ] **Phase 3: Typed Raw Surfaces** — Every raw-string output surface becomes a typed model kind, so text is a pure formatter of the model
+- [ ] **Phase 4: Wire Schema and JSON Strategy** — A versioned typebox wire schema and a format-only JSON strategy, validated as a pure function and first consumed by the LLM tools
+- [ ] **Phase 5: Mode-Selected JSON Sink** — `ctx.mode` selects the strategy, and `json`/`rpc` output reaches consumers through `pi.appendEntry` from every output site
+- [ ] **Phase 6: Command-Run Contract** — Payloads carry their origin and invocation, and every command run emits a complete set of payloads, even when it throws
+- [ ] **Phase 7: Mode Refusals, Real-Pi Verification, and Docs** — Browse and device-flow refuse clearly by mode, a real headless Pi run proves the contract, and the schema is documented
+
+Phases run in order, 1 through 7.
+
+**Milestone invariants.** Each phase leaves `npm run check` green: fallow
+boundaries and production dead-code with no new suppression, the
+unused-type-member gate, and 100% coverage. Each phase also leaves the text byte
+form unchanged. `docs/output-catalog.md` diffs empty, and the wire corpus
+captured in Phase 1 re-diffs empty, except for PMOD-04 credential redaction. A
+new type member lands with its first reader. The locked decisions D1-D8 are not
+re-opened.
+
+## Phase Details
+
+### Phase 1: Presentation Model
+
+**Goal:** Every presentation decision for structured notifications is computed once, in a resolve step upstream of rendering. The text renderer formats that result without probing Pi state or walking `Error` objects, and its bytes do not change.
+**Depends on:** Nothing (first phase)
+**Requirements:** PMOD-01, PMOD-03
+**Research flag:** yes. Before the first extraction plan, enumerate the per-verb soft-dep suppression table arm by arm: which arms pass hard-coded `false` flags. PITFALLS.md Pitfall 2 has only a partial list. Also inventory the named-file gates the extraction must re-point (Pitfall 9).
+**Success Criteria** (what must be TRUE):
+
+1. The first plan captures a wire-corpus baseline before the renderer changes. The baseline holds every `(message, severity)` pair, with its argument count, that `shared/notification-dispatch.ts` emits across the unit and integration suites. At phase end the corpus re-diffs empty, `docs/output-catalog.md` has an empty diff, and the catalog's byte and state counts do not move.
+2. One resolve step produces severity, `needsReload`, tally, summary facts, hints, and the final reasons list. Content reasons come first, then the `{requires ...}` markers in the fixed agents, mcp, workflows order. `shared/notification-dispatch.ts` no longer calls `softDepStatus`, and the text renderer takes no probe.
+3. One soft-dep probe per command invocation feeds both severity stamping and marker composition. A test whose probe answers differently on a second call shows that one snapshot drives both.
+4. Failure detail reaches the renderer as a serialized `causeChain: string[]` with a `truncated` flag, plus per-phase rollback entries and manual-recovery leaks as strings. No live `Error` crosses into rendering, and the cause-chain text is byte-identical to the baseline.
+5. The probe-to-marker derivation has its own owner test that states the per-verb suppression table as data. `workflows-marker-coverage` scans the new derivation site and is not deleted.
+
+**Plans:** TBD
+
+### Phase 2: Row Policies
+
+**Goal:** Per-verb rendering differences are model data: a total row-policy map per command replaces the string-returning render callbacks in the orchestrators' `*.messaging.ts` files. Every known divergence renders byte for byte as before.
+**Depends on:** Phase 1
+**Requirements:** PMOD-02, PMOD-05
+**Success Criteria** (what must be TRUE):
+
+1. Every `CommandContext` carries a total row-policy map keyed by status. The map holds data, such as marker and content-reason switches, and keeps the `satisfies` exhaustiveness anchor. The `(row, probe, mpScope) => string` render callbacks, the central `renderPluginRow` switch, and the `dispatchRow` string fallback are deleted.
+2. Each known per-command divergence has an owner test that asserts both the policy value and the rendered text. The known divergences are: `partially-installed` without markers on `plugin list`; `available` and `remote` with content reasons on `plugin list`; `uninstalled` without reasons in reconcile-applied; the two row forms of `disabled`; and pending rows that ignore the probe.
+3. The 70 direct render-arm test calls in 12 test files assert policies plus text formatting instead. No temporary adapter survives the phase.
+4. The `pending` retained-workflow-staging advisory travels as structured data (`{name, envelopeCount?}`). The text strategy composes the sentence and its indent, and the `pending` output is byte-identical to the baseline.
+5. The catalog diff and the wire-corpus diff against the Phase 1 baseline are empty.
+
+**Plans:** TBD
+
+### Phase 3: Typed Raw Surfaces
+
+**Goal:** Every raw-string output surface is a typed model kind that the text strategy formats. Text output becomes a pure formatter of the model, with its bytes unchanged, before any JSON exists.
+**Depends on:** Phase 2
+**Requirements:** RAWS-01, RAWS-02, RAWS-03, RAWS-04, RAWS-05, TEXT-01
+**Success Criteria** (what must be TRUE):
+
+1. Usage errors and help for every verb are typed kinds: `usage-error` carries the message and the usage, and help is `usage-info`. Diagnostics are `diagnostic {header, lines[]}` kinds. Each kind routes through the one presentation path, and its text and its `ctx.ui.notify` argument count do not change.
+2. The domain passes the device-flow `verificationUri` and `userCode` to a structured callback instead of a pre-formatted string, and the text strategy composes the prompt. The AUTH-09 credential-leak gate is retargeted at the new callback: the user code may appear, and the access token never does.
+3. The two load-time warnings in `index.ts` ("reconcile aborted" and "plugin PATH not refreshed") are `reconcile-aborted` and `plugin-path-skipped` kinds.
+4. Hook rewake summaries and the Stop-hook override-cap warning are hook kinds, distinct from command kinds, and the rewake text is carried as data. The `hooks-cap-notify` and `hooks-async-rewake` byte pins hold. The JSON `origin: hook` value that these kinds make derivable is emitted under WIRE-02 in Phase 6.
+5. No output surface hands the text sink a pre-composed string. The catalog diff and the full wire-corpus diff against the Phase 1 baseline are empty.
+
+**Plans:** TBD
+
+### Phase 4: Wire Schema and JSON Strategy
+
+**Goal:** A versioned typebox wire schema and a JSON strategy turn every model kind into a schema-valid payload that discloses nothing the text form does not. The JSON strategy is a format-only peer of the text strategy, and it is validated as a pure function before any sink is wired.
+**Depends on:** Phase 3
+**Requirements:** WIRE-01, WIRE-03, WIRE-04, WIRE-05, WIRE-06, WIRE-08, WIRE-09, JOUT-02, PMOD-04, LLMT-01
+**Success Criteria** (what must be TRUE):
+
+1. Each of the 205 catalog fixtures and each raw-surface kind converts to a payload with an integer `schemaVersion` and a `kind` from one typebox union, and the payload validates against that union. A planted invalid fixture fails, and a converter body that returns `{}` turns the suite red.
+2. Payload values are raw and verbatim. Status, reason, scope, and severity tokens come from the existing closed sets, with no second vocabulary. Versions and timestamps are not abbreviated. Install-scoped rows always carry `scope`. Optional fields are absent, never `null`. Empty collections are `[]`, and arrays keep model order. Plugin rows carry `id: "<name>@<marketplace>"`. Warning and error payloads carry the `summary` line, tallies are numeric, and the update no-op cascade carries `noOp`.
+3. A whole-payload walk over every fixture finds no absolute path that the text form does not show, and no live `Error`. The model redacts credentials (URL userinfo and tokens), so they are absent from both text and JSON. AUTH-09 covers the JSON path. Redaction is the only difference between the text wire corpus and the Phase 1 baseline.
+4. A JSON Schema file generated from the typebox source is committed and included in the npm package (`npm pack --dry-run` lists it). A test fails when the file drifts from the source.
+5. Both LLM tools build their `details` from the wire schema's plugin-row and marketplace-block shapes, with verbatim status tokens: `upgradable` stays `upgradable`. Their line-format text content does not change.
+
+**Note:** fallow production dead-code rejects a module that nothing in production imports, so an unwired JSON strategy cannot end this phase. The LLM tool surface (LLMT-01) is the strategy's first production consumer. If the tools cannot use the strategy's entry point, the structured-path sink wiring from Phase 5 moves forward into this phase.
+**Plans:** TBD
+
+### Phase 5: Mode-Selected JSON Sink
+
+**Goal:** In `json` and `rpc` modes, every `/claude:plugin` output reaches consumers as a `claude-plugin` session entry through `pi.appendEntry`. An exhaustive switch over `ctx.mode` makes the choice, and `tui` and `print` keep today's text.
+**Depends on:** Phase 4
+**Requirements:** MODE-01, MODE-02, JOUT-01, JOUT-05, TENB-01, TENB-02
+**Research flag:** none for planning. The startup-emission gap that SUMMARY.md flagged is decided in requirements: accepted and documented under JDOC-02, with no timer workaround.
+**Success Criteria** (what must be TRUE):
+
+1. With `mode` set to `json` or `rpc`, every output surface is recorded as an `appendEntry("claude-plugin", payload)` call and none as a `ctx.ui.notify` call. The surfaces are cascades, info, pending, usage errors and help, diagnostics, the device-flow prompt, load-time warnings, and hook summaries. With `tui` or `print`, the catalog and wire-corpus diffs stay empty, except for redaction.
+2. The strategy comes from one exhaustive switch over `ctx.mode`, read at emit time and never cached. An unknown mode given as a plain string, with no cast, raises `UnsupportedModeError` from a membership check. An ordering assertion shows that no state write happens before the error. Lifecycle handlers log the error and never rethrow it.
+3. Only the dispatch module calls `appendEntry`. A planted call in any other file fails lint, following the house planted-violation pattern.
+4. An `appendEntry` that throws before bind, or a stale `pi` or `ctx` after `/reload`, propagates nothing out of `resources_discover`, `session_start`, async-rewake, or the Stop-hook settle path.
+5. Every test fake of the notification or extension context carries an explicit `mode` that the type requires; no `as unknown as ExtensionContext` cast hides a missing one. An in-process capture helper records every `appendEntry` payload and fails the test on a schema-invalid payload.
+
+**Plans:** TBD
+
+### Phase 6: Command-Run Contract
+
+**Goal:** A JSON consumer can tell where each payload came from and which command run produced it. Every command run yields a complete set of payloads before the command settles, and at least one payload even when its handler throws.
+**Depends on:** Phase 5
+**Requirements:** WIRE-02, WIRE-07, JOUT-03, JOUT-04
+**Success Criteria** (what must be TRUE):
+
+1. Every payload carries the required fields `severity`, `needsReload`, and `origin`. Command payloads name a machine command id, so `enable` can be told apart from `install` even though both render `(installed)`. Reload-time payloads carry `origin: load`, and hook payloads carry `origin: hook`.
+2. All command-origin payloads of one run share one `invocationId` from an injectable generator. Payloads of two runs carry different ids, and tests pin the ids deterministically.
+3. Every command emits all of its payloads before its handler's promise settles. A test that awaits the handler sees the complete set, and nothing is emitted after it.
+4. In `json` and `rpc`, an unexpected throw from any command handler becomes a typed `internal-error` payload with a redacted cause chain, so every command yields at least one payload. In `tui` and `print`, the behavior does not change.
+
+**Plans:** TBD
+
+### Phase 7: Mode Refusals, Real-Pi Verification, and Docs
+
+**Goal:** A command that cannot work in the current mode refuses clearly instead of degrading. A real headless Pi run proves the JSON contract end to end, and the schema and its limitations are documented.
+**Depends on:** Phase 6
+**Requirements:** MODE-03, MODE-04, TENB-03, JDOC-01, JDOC-02, JDOC-03
+**Research flag:** yes. The e2e harness pattern for a headless `pi -p --mode json --no-session --offline` run, with stdin closed, is new to this suite.
+**Success Criteria** (what must be TRUE):
+
+1. Outside `tui`, `browse` emits an error-severity payload that names `/claude:plugin list` and no longer falls back to `list`; in `tui`, `browse` does not change. In `print` mode, an operation that needs device-flow authentication fails fast with a typed error that points at `--mode json` or `tui`, and it does not poll until the code expires.
+2. A real-Pi e2e test runs `pi -p --mode json --no-session --offline "/claude:plugin list"` and asserts a schema-valid `claude-plugin` entry on stdout. It pins `entry_appended` at the peer floor, and it pins that startup-emitted entries are not streamed.
+3. A schema reference documents every kind and field, with a `jq` example. It states the compatibility policy: additive changes (a new optional field, kind, or closed-set member) keep `schemaVersion`, and removals, renames, and type or meaning changes bump it. It also states the verdict rule: the maximum severity over command-origin entries.
+4. The documented limitations cover these points. Print mode is silent, so scripts use `--mode json`. Pi exits 0 regardless. Startup entries are not streamed in `json` or `rpc`, and RPC clients can use `get_entries`. RPC front-ends must render `claude-plugin` entries, the device-flow prompt at minimum. A slash-command-only run writes no session file.
+5. The IL-2 output-channel line in AGENTS.md matches PROJECT.md (D8). Backlog MRO-01 is closed, and its two wrong claims are corrected.
+
+**Plans:** TBD
+
+## Progress
+
+| Phase | Plans Complete | Status | Completed |
+| --- | --- | --- | --- |
+| 1. Presentation Model | 0/TBD | Not started | - |
+| 2. Row Policies | 0/TBD | Not started | - |
+| 3. Typed Raw Surfaces | 0/TBD | Not started | - |
+| 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |
+| 5. Mode-Selected JSON Sink | 0/TBD | Not started | - |
+| 6. Command-Run Contract | 0/TBD | Not started | - |
+| 7. Mode Refusals, Real-Pi Verification, and Docs | 0/TBD | Not started | - |
