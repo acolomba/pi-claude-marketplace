@@ -1,11 +1,15 @@
 // Owner for edge/handlers/marketplace/shared.ts (MOD-09).
 //
 // D-116-07: this is the marketplace tier's one helper with a real injected
-// collaborator. `makeSingleNameMarketplaceHandler(pi, usage, run)` takes `run`
-// through its public interface, so the exact-argument interaction proof lives
-// here and the `info` and `remove` handler owners stay thin -- they assert only
-// that they supplied the right usage string and delegate, and restate none of
+// collaborator. `makeSingleNameMarketplaceHandler(usage, operation)` takes
+// `operation` through its public interface, so the exact-argument interaction
+// proof lives here and the `info` handler owner stays thin -- it asserts only
+// that it supplied the right usage string and delegate, and restates none of
 // the parsing proved below.
+//
+// D-05: the handler takes the command's notification run as its third argument
+// and passes it to the operation. It never probes the tool inventory, so every
+// boundary here states zero probes.
 //
 // Every double's type is derived from the module's own signature rather than
 // restated by hand, so a change to the delegate seam is a compile error in this
@@ -35,66 +39,81 @@ import {
   makeSingleNameMarketplaceHandler,
   openMarketplaceCommand,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts";
+import { runWithAllLoaded, runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
-type MarketplaceRun = Parameters<typeof makeSingleNameMarketplaceHandler>[2];
-type MarketplaceRunOptions = Parameters<MarketplaceRun>[0];
-type Scope = NonNullable<MarketplaceRunOptions["scope"]>;
+type MarketplaceOperation = Parameters<typeof makeSingleNameMarketplaceHandler>[1];
+type MarketplaceOperationOptions = Parameters<MarketplaceOperation>[0];
+type Scope = NonNullable<MarketplaceOperationOptions["scope"]>;
 
 const INFO_USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project]";
 const ADD_USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
 
 describe("makeSingleNameMarketplaceHandler", () => {
-  test("hands the run collaborator the context, the closed-over API, the name, and the working directory", async () => {
+  test("hands the operation the context, the notification run, the name, and the working directory", async () => {
     // arrange
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
       reads: 1,
       value: "/work/project",
     });
-    const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
-    when(() => run({ ctx, cwd: "/work/project", name: "official", pi })).thenResolve(undefined);
-    const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
+    const run = runWithNothingLoaded();
+    const operation = mock<MarketplaceOperation>({
+      exactParams: true,
+      name: "marketplace operation",
+    });
+    when(() => operation({ ctx, cwd: "/work/project", name: "official", run })).thenResolve(
+      undefined,
+    );
+    const handler = makeSingleNameMarketplaceHandler(INFO_USAGE, operation);
 
     // act
-    await handler("official", ctx);
+    await handler("official", ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, []);
     verifyBoundary();
-    verify(run);
+    verify(operation);
   });
 
   for (const scope of ["project", "user"] as const satisfies readonly Scope[]) {
-    test(`adds a scope member of "${scope}" to the run collaborator's options`, async () => {
+    test(`adds a scope member of "${scope}" to the operation's options`, async () => {
       // arrange
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0, {
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
         reads: 1,
         value: "/work/project",
       });
-      const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
-      when(() => run({ ctx, cwd: "/work/project", name: "official", pi, scope })).thenResolve(
-        undefined,
-      );
-      const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
+      const run = runWithNothingLoaded();
+      const operation = mock<MarketplaceOperation>({
+        exactParams: true,
+        name: "marketplace operation",
+      });
+      when(() =>
+        operation({ ctx, cwd: "/work/project", name: "official", run, scope }),
+      ).thenResolve(undefined);
+      const handler = makeSingleNameMarketplaceHandler(INFO_USAGE, operation);
 
       // act
-      await handler(`official --scope ${scope}`, ctx);
+      await handler(`official --scope ${scope}`, ctx, run);
 
       // assert
       assert.deepStrictEqual(notifications, []);
       verifyBoundary();
-      verify(run);
+      verify(operation);
     });
   }
 
-  test("collapses the duplicated usage block to one sentence and never reaches the run collaborator (MSG-NC-2)", async () => {
+  test("collapses the duplicated usage block to one sentence and never reaches the operation (MSG-NC-2)", async () => {
     // arrange
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
-    const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const run = runWithNothingLoaded();
+    const operation = mock<MarketplaceOperation>({
+      exactParams: true,
+      name: "marketplace operation",
+    });
+    const handler = makeSingleNameMarketplaceHandler(INFO_USAGE, operation);
 
     // act
-    await handler("", ctx);
+    await handler("", ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -105,17 +124,21 @@ describe("makeSingleNameMarketplaceHandler", () => {
       },
     ]);
     verifyBoundary();
-    verify(run);
+    verify(operation);
   });
 
-  test("rejects surplus input before reading cwd or calling the run collaborator", async () => {
+  test("rejects surplus input before reading cwd or calling the operation", async () => {
     // arrange
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
-    const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const run = runWithNothingLoaded();
+    const operation = mock<MarketplaceOperation>({
+      exactParams: true,
+      name: "marketplace operation",
+    });
+    const handler = makeSingleNameMarketplaceHandler(INFO_USAGE, operation);
 
     // act
-    await handler("official surplus", ctx);
+    await handler("official surplus", ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -126,17 +149,21 @@ describe("makeSingleNameMarketplaceHandler", () => {
       },
     ]);
     verifyBoundary();
-    verify(run);
+    verify(operation);
   });
 
   test("shows a parse diagnostic other than the usage string verbatim (MSG-NC-2)", async () => {
     // arrange
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
-    const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const run = runWithNothingLoaded();
+    const operation = mock<MarketplaceOperation>({
+      exactParams: true,
+      name: "marketplace operation",
+    });
+    const handler = makeSingleNameMarketplaceHandler(INFO_USAGE, operation);
 
     // act
-    await handler("official --scope global", ctx);
+    await handler("official --scope global", ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -147,70 +174,80 @@ describe("makeSingleNameMarketplaceHandler", () => {
       },
     ]);
     verifyBoundary();
-    verify(run);
+    verify(operation);
   });
 
-  test("closes over the API its own factory call received rather than a shared one", async () => {
+  test("hands each invocation's own notification run to the operation (D-05)", async () => {
     // arrange
-    const info = createNotificationBoundary(0, 0, { reads: 1, value: "/work/info" });
-    const remove = createNotificationBoundary(0, 0, { reads: 1, value: "/work/remove" });
-    const infoRun = mock<MarketplaceRun>({ exactParams: true, name: "marketplace info run" });
-    const removeRun = mock<MarketplaceRun>({ exactParams: true, name: "marketplace remove run" });
+    const first = createNotificationBoundary(0, 0, { reads: 1, value: "/work/first" });
+    const second = createNotificationBoundary(0, 0, { reads: 1, value: "/work/second" });
+    const firstRun = runWithNothingLoaded();
+    const secondRun = runWithAllLoaded();
+    const operation = mock<MarketplaceOperation>({
+      exactParams: true,
+      name: "marketplace operation",
+    });
     when(() =>
-      infoRun({ ctx: info.ctx, cwd: "/work/info", name: "official", pi: info.pi }),
+      operation({ ctx: first.ctx, cwd: "/work/first", name: "official", run: firstRun }),
     ).thenResolve(undefined);
     when(() =>
-      removeRun({ ctx: remove.ctx, cwd: "/work/remove", name: "official", pi: remove.pi }),
+      operation({ ctx: second.ctx, cwd: "/work/second", name: "official", run: secondRun }),
     ).thenResolve(undefined);
-    const infoHandler = makeSingleNameMarketplaceHandler(info.pi, INFO_USAGE, infoRun);
-    const removeHandler = makeSingleNameMarketplaceHandler(remove.pi, INFO_USAGE, removeRun);
+    const handler = makeSingleNameMarketplaceHandler(INFO_USAGE, operation);
 
     // act
-    await infoHandler("official", info.ctx);
-    await removeHandler("official", remove.ctx);
+    await handler("official", first.ctx, firstRun);
+    await handler("official", second.ctx, secondRun);
 
     // assert
-    assert.deepStrictEqual(info.notifications, []);
-    assert.deepStrictEqual(remove.notifications, []);
-    info.verifyBoundary();
-    remove.verifyBoundary();
-    verify(infoRun);
-    verify(removeRun);
+    assert.deepStrictEqual(first.notifications, []);
+    assert.deepStrictEqual(second.notifications, []);
+    first.verifyBoundary();
+    second.verifyBoundary();
+    verify(operation);
   });
 
   test("rejects unknown flags before calling its delegate", async () => {
     // arrange
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
-    const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const run = runWithNothingLoaded();
+    const operation = mock<MarketplaceOperation>({
+      exactParams: true,
+      name: "marketplace operation",
+    });
+    const handler = makeSingleNameMarketplaceHandler(INFO_USAGE, operation);
 
     // act
-    await handler("official --bogus", ctx);
+    await handler("official --bogus", ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, [
       { message: `Unknown flag: "--bogus".\n\n${INFO_USAGE}`, severity: "error" },
     ]);
     verifyBoundary();
-    verify(run);
+    verify(operation);
   });
 
   for (const args of ["--local official", "official --local"]) {
     test(`info ${args} rejects the local flag as unknown before calling its delegate`, async () => {
       // arrange
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-      const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
-      const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const run = runWithNothingLoaded();
+      const operation = mock<MarketplaceOperation>({
+        exactParams: true,
+        name: "marketplace operation",
+      });
+      const handler = makeSingleNameMarketplaceHandler(INFO_USAGE, operation);
 
       // act
-      await handler(args, ctx);
+      await handler(args, ctx, run);
 
       // assert
       assert.deepStrictEqual(notifications, [
         { message: `Unknown flag: "--local".\n\n${INFO_USAGE}`, severity: "error" },
       ]);
       verifyBoundary();
-      verify(run);
+      verify(operation);
     });
   }
 });

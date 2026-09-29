@@ -115,7 +115,7 @@ export function registerClaudePluginCommand(
     marketplaceAdd: makeAddHandler(pi, deps),
     marketplaceRemove: makeRemoveHandler(pi, deps),
     marketplaceList: makeMarketplaceListHandler(),
-    marketplaceInfo: makeMarketplaceInfoHandler(pi),
+    marketplaceInfo: makeMarketplaceInfoHandler(),
     marketplaceUpdate: makeMarketplaceUpdateHandler(pi, {
       completionCache: deps.completionCache,
       gitOps: deps.gitOps,

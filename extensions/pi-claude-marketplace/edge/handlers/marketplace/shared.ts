@@ -5,7 +5,7 @@
 // optional `--scope` flag, routes an argument-parsing failure through
 // `notifyUsageError` (MSG-NC-2: the missing-required-positional path collapses
 // the duplicated usage block into "Missing required argument."), then delegate
-// to their orchestrator with `{ ctx, pi, name, cwd, scope? }`.
+// to their orchestrator with `{ ctx, run, name, cwd, scope? }`.
 //
 // Argument-parsing failures route through `notifyUsageError`; the orchestrator
 // owns per-scope projection / fan-out / the conditional `{marketplace not added}` forms.
@@ -15,8 +15,9 @@ import { parseCommandArgs } from "../../args-schema.ts";
 import { extractLocalFlag } from "../shared.ts";
 
 import type { GetMarketplaceInfoOptions } from "../../../orchestrators/marketplace/info.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { Scope } from "../../../shared/types.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 /**
  * Delegate shape for a `<name>`-only marketplace subcommand, named as the
@@ -31,26 +32,26 @@ import type { Scope } from "../../../shared/types.ts";
  * exercised; `Promise<unknown>` keeps the return unconstrained for a future
  * orchestrator added to this shim that does add one.
  */
-export type SingleNameMarketplaceRun = (opts: GetMarketplaceInfoOptions) => Promise<unknown>;
+export type SingleNameMarketplaceOperation = (opts: GetMarketplaceInfoOptions) => Promise<unknown>;
 
 /**
  * Build a thin-shim handler for a `<name>`-only marketplace subcommand. The
  * returned handler performs the single-`name`-positional `parseCommandArgs`
  * parse + the `message === usage ? "Missing required argument." : message`
- * error callback + the `=== undefined` guard, then delegates to `run` with
- * `{ ctx, pi, name, cwd, scope? }`. `pi` is closed over by the caller (the
- * orchestrators require it for the RH-5 soft-dep probes).
+ * error callback + the `=== undefined` guard, then delegates to `operation`
+ * with `{ ctx, run, name, cwd, scope? }`. `run` is the command's notification
+ * run, which the handler receives from the router; the orchestrator renders
+ * from its soft-dependency snapshot (D-05).
  *
  * `info` is a merged read that never writes configuration, so a write-target
  * flag has no meaning for it and `parseCommandArgs` rejects it as an unknown
  * flag like any other (AP-5).
  */
 export function makeSingleNameMarketplaceHandler(
-  pi: ExtensionAPI,
   usage: string,
-  run: SingleNameMarketplaceRun,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+  operation: SingleNameMarketplaceOperation,
+): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     const parsed = parseCommandArgs(
       args,
       {
@@ -68,9 +69,9 @@ export function makeSingleNameMarketplaceHandler(
       return;
     }
 
-    await run({
+    await operation({
       ctx,
-      pi,
+      run,
       name: parsed.name,
       cwd: ctx.cwd,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),

@@ -2,7 +2,7 @@
 //
 // The module is one factory returning the shared single-name marketplace
 // handler, so its whole promise is three things: the usage block it supplies,
-// the delegate it supplies, and the Pi handle it forwards. The parse itself,
+// the delegate it supplies, and the notification run it forwards. The parse itself,
 // the collapse of the duplicated usage block, the surplus-token drop, and the
 // options-bag shape belong to `tests/edge/handlers/marketplace/shared.test.ts`,
 // which drives `makeSingleNameMarketplaceHandler` with an injected collaborator
@@ -20,10 +20,9 @@
 // the working directory UNSTATED. `getMarketplaceInfo` reads `opts.cwd` inside
 // its scope fan-out before it can emit anything, so a workflow that ran would
 // carry strong-mock's pending-call proxy into that read and fail there. A
-// delegating case states one emission, two tool probes (one soft-dependency
-// probe reading twice), and one working-directory read -- all four counts
-// measured against the real module through a counting proxy before this file
-// was written.
+// delegating case states one emission, zero tool probes, and one
+// working-directory read. D-05: the workflow renders from the notification run
+// the case hands the handler, so no emission probes the tool inventory.
 //
 // Every case also installs a fail-fast replacement of `https.request`, the door
 // the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT, and the
@@ -57,6 +56,7 @@ import { pathSource } from "../../../../extensions/pi-claude-marketplace/domain/
 import { makeMarketplaceInfoHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/info.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -167,14 +167,14 @@ for (const { expectedMessage, flags, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "delegates");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       reads: 1,
       value: workspace.cwd,
     });
-    const infoHandler = makeMarketplaceInfoHandler(pi);
+    const infoHandler = makeMarketplaceInfoHandler();
 
     // act
-    await infoHandler(`alpha${flags}`, ctx);
+    await infoHandler(`alpha${flags}`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -186,11 +186,11 @@ test("supplies the info usage block, shown when the name positional is missing",
   // arrange
   const workspace = await createHermeticWorkspace(t, "missing-name");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const infoHandler = makeMarketplaceInfoHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const infoHandler = makeMarketplaceInfoHandler();
 
   // act
-  await infoHandler("", ctx);
+  await infoHandler("", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -203,11 +203,11 @@ test("supplies the info usage block beside a parse diagnostic the parser reports
   // arrange
   const workspace = await createHermeticWorkspace(t, "invalid-scope");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const infoHandler = makeMarketplaceInfoHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const infoHandler = makeMarketplaceInfoHandler();
 
   // act
-  await infoHandler("alpha --scope bogus", ctx);
+  await infoHandler("alpha --scope bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -223,11 +223,11 @@ test("rejects surplus input before looking up a marketplace", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const infoHandler = makeMarketplaceInfoHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const infoHandler = makeMarketplaceInfoHandler();
 
   // act
-  await infoHandler("alpha beta", ctx);
+  await infoHandler("alpha beta", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -246,11 +246,11 @@ for (const args of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "local-flag");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const infoHandler = makeMarketplaceInfoHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const infoHandler = makeMarketplaceInfoHandler();
 
     // act
-    await infoHandler(args, ctx);
+    await infoHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -281,14 +281,14 @@ for (const { name, autoupdate } of [
       '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
     await writeFile(locations.configJsonPath, sharedBytes);
     await writeFile(locations.configLocalJsonPath, localBytes);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: cwd,
       reads: 1,
     });
-    const handler = makeMarketplaceInfoHandler(pi);
+    const handler = makeMarketplaceInfoHandler();
 
     // act
-    await handler(`${name} --scope project`, ctx);
+    await handler(`${name} --scope project`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
