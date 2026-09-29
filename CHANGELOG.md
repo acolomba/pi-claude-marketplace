@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Internal: added a `new-gsd-milestone` skill that names milestones and restarts phase numbers at 1, renamed `new-workspace` to `new-gsd-workspace`, and remapped GSD's Codex model tiers. (#229)
 - A hook matcher that lists several tools now runs on the tools Pi supports and ignores the ones it does not. Pi drops the whole matcher only when it supports none of the tools in the list. Thanks to @fank, who reported #217. (#219)
 - Pi Coding Agent 0.86.1 is now required. This version supports workflow child tools with the current `@quintinshaw/pi-dynamic-workflows` engine.
 - A plugin that ships workflow scripts now installs them as workflows the Pi workflow engine can load. (#205)
