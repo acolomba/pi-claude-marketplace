@@ -50,8 +50,9 @@ import { mkdir, rename, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
+import { parsePluginSource, stripGitSuffix } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -60,6 +61,7 @@ import {
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
+  UnreadableSourceCloneError,
   UnsupportedSourceError,
   appendLeakToError,
   errorMessage,
@@ -79,7 +81,12 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import {
+  DEFAULT_CREDENTIAL_OPS,
+  GITHUB_HOST,
+  buildAuthForHost,
+  hostFromCloneUrl,
+} from "../auth-host.ts";
 import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 
 import { ADD_CONTEXT } from "./add.messaging.ts";
@@ -121,8 +128,9 @@ export type AddMarketplaceNotifications =
  * marketplace so the apply cascade can render the row.
  *
  * `failed` collapses every classified precondition failure
- * (`classifyAddError` recognized: duplicate name / stale clone / invalid
- * manifest / unsupported source / source missing / network unreachable)
+ * (`classifyAddError` recognized: duplicate name / stale clone / permission
+ * denied / unreadable / invalid manifest / unsupported source / source
+ * missing / network unreachable)
  * plus the catastrophic
  * fallback ("unparseable" -- chosen because every recognised add precondition
  * yields a typed error, so a non-enumerated throw is by construction an
@@ -216,6 +224,7 @@ function unwrapAddError(err: unknown): unknown {
   if (
     err instanceof MarketplaceDuplicateNameError ||
     err instanceof StaleSourceCloneError ||
+    err instanceof UnreadableSourceCloneError ||
     err instanceof InvalidMarketplaceManifestError ||
     err instanceof UnsupportedSourceError
   ) {
@@ -227,6 +236,26 @@ function unwrapAddError(err: unknown): unknown {
   }
 
   return err;
+}
+
+/**
+ * MA-14: join the leftover-removal leak and the staging-cleanup leak into ONE
+ * value for the single existing `appendLeakToError` call in the bottom MA-9
+ * catch. A second independent `appendLeakToError` call would build a
+ * two-level `Error.cause` chain that `unwrapAddError` cannot see through,
+ * silently breaking the `{stale clone}` classification -- so a double fault
+ * reads as one leak line instead.
+ */
+function joinLeaks(a: string | undefined, b: string | undefined): string | undefined {
+  if (a === undefined) {
+    return b;
+  }
+
+  if (b === undefined) {
+    return a;
+  }
+
+  return `${a}; ${b}`;
 }
 
 /**
@@ -244,6 +273,10 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
 
   if (err instanceof StaleSourceCloneError) {
     return "stale clone";
+  }
+
+  if (err instanceof UnreadableSourceCloneError) {
+    return err.failure === "permission-denied" ? "permission denied" : "unreadable";
   }
 
   if (err instanceof InvalidMarketplaceManifestError) {
@@ -277,12 +310,13 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
 }
 
 /**
- * ATTR-07 (A2): the marketplace subject name for a failed-add row. Post-manifest
- * failures know the derived marketplace name (`MarketplaceDuplicateNameError`
- * carries `mpName`; `StaleSourceCloneError` carries the derived `mpName`), so
- * the row renders on the real subject. Pre-clone/pre-manifest failures
- * (unsupported source, source missing, invalid manifest) have no derived name,
- * so the user-typed `rawSource` is the subject.
+ * ATTR-07 (A2): the marketplace subject name for a failed-add row.
+ * Post-manifest failures know the derived marketplace name
+ * (`MarketplaceDuplicateNameError` carries `mpName`; `StaleSourceCloneError`
+ * and `UnreadableSourceCloneError` carry the derived `mpName`), so the row
+ * renders on the real subject. Pre-clone/pre-manifest failures (unsupported
+ * source, source missing, invalid manifest) have no derived name, so the
+ * user-typed `rawSource` is the subject.
  */
 function addSubjectName(rawErr: unknown, rawSource: string): string {
   const err = unwrapAddError(rawErr);
@@ -291,6 +325,10 @@ function addSubjectName(rawErr: unknown, rawSource: string): string {
   }
 
   if (err instanceof StaleSourceCloneError && err.mpName !== undefined) {
+    return err.mpName;
+  }
+
+  if (err instanceof UnreadableSourceCloneError) {
     return err.mpName;
   }
 
@@ -378,9 +416,9 @@ async function runAddInGuard(args: {
         cwd: opts.cwd,
       });
     } else if (source.kind === "url") {
-      // MURL-01 / D-76-06: source.url is the stored canonical identity; the
-      // clone url is that value through `ensureGitSuffix`. Per-host provider
-      // lookup decides the auth bundle (PROV-02/03/04).
+      // MURL-01 / D-76-06: source.url is the stored canonical identity; the wire url derives from
+      // the source via `networkCloneUrl` (D-2-01, D-2-03). Every host carries an auth bundle; the
+      // provider lookup decides its Device Flow half (PROV-03).
       recordedName = await addUrlInGuard({
         ctx: opts.ctx,
         state,
@@ -661,15 +699,58 @@ async function runAddOutcome(
 }
 
 /**
+ * MA-12/MA-13 (D-3-01, D-3-02): recognize whether `finalDir` is the
+ * extension's own leftover clone of `source` and, if so, remove it so the
+ * caller's atomic rename can proceed. Throws `StaleSourceCloneError` for a
+ * foreign tree, or for an `origin` that does not byte-equal
+ * `canonicalCloneUrl(source)` after one trailing `.git` strip (D-3-01).
+ * Throws `UnreadableSourceCloneError` when the tree's `.git/config` cannot be
+ * read, so the row names the read failure instead of calling the tree stale.
+ * Recognition is the only authority for removal.
+ *
+ * @returns the leak message from removing a recognized leftover, or
+ *   `undefined` when the removal left nothing behind. The caller decides
+ *   what a non-undefined leak means (MA-14: a partially-removed tree must
+ *   not be renamed over).
+ */
+async function recognizeLeftover(
+  finalDir: string,
+  derivedName: string,
+  source: GitHubSource | UrlSource,
+  gitOps: GitOps,
+  removalOps: RemovalOps,
+): Promise<string | undefined> {
+  const remotes = await gitOps.listRemotes({ dir: finalDir });
+  switch (remotes.kind) {
+    case "origin":
+      if (stripGitSuffix(remotes.url) !== canonicalCloneUrl(source)) {
+        // Carry the derived name so the ATTR-07 entrypoint catch renders the
+        // `(failed) {stale clone}` row on the marketplace SUBJECT (A2).
+        throw new StaleSourceCloneError(finalDir, derivedName);
+      }
+
+      return cleanupStaging(removalOps, finalDir, `marketplace leftover clone ${finalDir}`);
+    case "no-origin":
+    case "not-a-repo":
+      throw new StaleSourceCloneError(finalDir, derivedName);
+    case "permission-denied":
+    case "unreadable":
+      throw new UnreadableSourceCloneError(finalDir, derivedName, remotes.kind);
+  }
+}
+
+/**
  * Shared clone-into-guard body for git-cloned marketplace sources (github and
  * url). Owns everything from staging-dir creation through the clone, manifest
  * read, MA-8 duplicate check, MA-6 stale-clone check, atomic rename, state
  * mutation, and the MA-9 append-leak-not-mask cleanup catch. The only per-kind
- * differences are the pre-computed `cloneUrl` and the optional `auth` bundle,
- * so that subtle MA-9 discipline lives in exactly one place.
+ * differences are the parsed `source` (from which the clone url is derived)
+ * and the `auth` bundle, so that subtle MA-9 discipline lives in
+ * exactly one place.
  *
- * MURL-01 / D-76-07: `auth` is spread into the clone options ONLY when defined,
- * so the public-only url path emits a clone call with no `auth` key at all.
+ * MURL-01 / GAUTH-03: every git-cloned source carries a host-keyed `auth`
+ * bundle, so the clone consults the user's git credential helper when the
+ * server challenges. A public clone never challenges, so nothing is consulted.
  */
 async function addGitClonedInGuard(args: {
   state: ExtensionState;
@@ -677,20 +758,19 @@ async function addGitClonedInGuard(args: {
   locations: ScopedLocations;
   source: GitHubSource | UrlSource;
   gitOps: GitOps;
-  cloneUrl: string;
-  auth?: GitAuthBundle;
+  auth: GitAuthBundle;
   cwd: string;
 }): Promise<string> {
-  const { state, locations, source, gitOps, cloneUrl, auth, cwd, removalOps } = args;
+  const { state, locations, source, gitOps, auth, cwd, removalOps } = args;
   const stagingDir = await locations.sourcesStagingDir(randomUUID());
 
   // 1. Clone into staging (NFR-5: only git-cloned kinds reach gitOps.clone).
   try {
     await gitOps.clone({
       dir: stagingDir,
-      url: ensureGitSuffix(cloneUrl),
+      url: networkCloneUrl(source),
       ...(source.ref !== undefined && { ref: source.ref, singleBranch: true }),
-      ...(auth !== undefined && { auth }),
+      auth,
     });
   } catch (err) {
     // Clone itself failed -- there is no staging dir to clean up beyond a
@@ -701,6 +781,7 @@ async function addGitClonedInGuard(args: {
 
   let stagedAtFinal = false;
   let finalDir: string | undefined;
+  let leftoverLeak: string | undefined;
   try {
     // 2. Read + validate manifest.
     const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
@@ -713,12 +794,19 @@ async function addGitClonedInGuard(args: {
       throw new MarketplaceDuplicateNameError(derivedName, locations.scope);
     }
 
-    // 4. MA-6: stale-clone refusal on the final destination.
+    // 4. MA-6/MA-12/MA-13: recognize-remove-rename on the final destination.
+    // A leftover directory whose `origin` names the same source (compared on
+    // the IDENTITY, `.git`-insensitive, not the wire form -- D-3-01) is the
+    // extension's own leftover from a prior crash-window failure or a state
+    // rebuild; it is removed so a partial tree cannot leak into installed
+    // state (D-3-02). Every other outcome throws (MA-13).
     finalDir = await locations.sourceCloneDir(derivedName);
     if (await pathExists(finalDir)) {
-      // Carry the derived name so the ATTR-07 entrypoint catch renders the
-      // `(failed) {stale clone}` row on the marketplace SUBJECT (A2).
-      throw new StaleSourceCloneError(finalDir, derivedName);
+      leftoverLeak = await recognizeLeftover(finalDir, derivedName, source, gitOps, removalOps);
+      if (leftoverLeak !== undefined) {
+        // A partially-removed tree must not be renamed over (MA-14).
+        throw new StaleSourceCloneError(finalDir, derivedName);
+      }
     }
 
     // 5. Atomic rename -- same FS by D-09 (sources-staging/ and sources/
@@ -745,7 +833,7 @@ async function addGitClonedInGuard(args: {
     let wrapped: unknown = err;
     if (!stagedAtFinal) {
       const leak = await cleanupStaging(removalOps, stagingDir, "marketplace clone staging");
-      wrapped = appendLeakToError(wrapped, leak);
+      wrapped = appendLeakToError(wrapped, joinLeaks(leftoverLeak, leak));
     } else if (finalDir !== undefined) {
       const leak = await cleanupStaging(
         removalOps,
@@ -772,7 +860,6 @@ async function addGithubInGuard(args: {
 }): Promise<string> {
   const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd, removalOps } =
     args;
-  const cloneUrl = `https://github.com/${source.owner}/${source.repo}.git`;
 
   // AUTH-01 / D-79-05: buildAuthForHost binds the GitHub provider's Device
   // Flow as the onAuthRequired closure for this clone.
@@ -781,7 +868,10 @@ async function addGithubInGuard(args: {
   // AUTH-09: the closure interpolates ONLY user_code + verification_uri
   // (via initiateDeviceFlow's notifyFn) -- the access token is acquired
   // LATER in the poll loop and is never passed back to a notify or Error.
-  const host = hostFromCloneUrl(cloneUrl, "github");
+  // D-77-06: this arm's source is statically `github`, whose host is the literal
+  // `GITHUB_HOST` -- `hostFromCloneUrl` returns it without reading a url, so
+  // there is nothing to derive here.
+  const host = GITHUB_HOST;
   const auth = buildAuthForHost({
     host,
     credentialOps,
@@ -795,8 +885,7 @@ async function addGithubInGuard(args: {
     source,
     gitOps,
     removalOps,
-    cloneUrl,
-    ...(auth !== undefined && { auth }),
+    auth,
     cwd,
   });
 }
@@ -804,14 +893,14 @@ async function addGithubInGuard(args: {
 /**
  * MURL-01 / D-76-06: url-source add. `source.url` is stored as the canonical
  * identity form (parse-time `.git`-stripped) and NOT reconstructed against
- * github.com; the url actually cloned is that value passed through
- * `ensureGitSuffix`. PROV-02/03/04: the host is extracted from the
- * url and looked up in the provider registry via buildAuthForHost -- a
- * provider-registered host authenticates host-keyed; a no-provider host gets
- * NO bundle (buildAuthForHost returns undefined), so the clone runs authless
- * and a private repo fails clean on the structural 401. The
- * undefined-for-no-provider guarantee is the cross-host leak guard: a bundle
- * for an unregistered host would key another provider's credential onto it.
+ * github.com; the url actually cloned is derived from `source.raw` via
+ * `networkCloneUrl` (D-2-01, D-2-03), preserving whatever `.git` decision the
+ * user's own input made. GAUTH-03: the host is extracted from the url and
+ * `buildAuthForHost` binds a bundle to it, so a private source on any host
+ * authenticates from the user's git credential helper; the provider registry
+ * decides only whether a Device Flow runs on a helper miss (PROV-03). The
+ * bundle's host binding is enforced by the compare in
+ * `buildAuthCallbacks.onAuth` (D-1-03, T-79-04).
  */
 async function addUrlInGuard(args: {
   ctx: NotificationContext;
@@ -840,8 +929,7 @@ async function addUrlInGuard(args: {
     source,
     gitOps,
     removalOps,
-    cloneUrl: source.url,
-    ...(auth !== undefined && { auth }),
+    auth,
     cwd,
   });
 }

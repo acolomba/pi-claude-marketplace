@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import nodeHttp from "node:http";
+import https from "node:https";
+import * as path from "node:path";
+import { Readable } from "node:stream";
 import { describe, test, type TestContext } from "node:test";
 
 import * as git from "isomorphic-git";
@@ -12,6 +17,7 @@ import {
   currentBranch,
   fetch,
   forceUpdateRef,
+  listRemotes,
   resolveRef,
   resolveRemoteRef,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -20,13 +26,12 @@ import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import { registerGitOpsContract } from "./git-ops-contract.ts";
 import { createGitTestDirectory, createGitTestRepository } from "./git-test-repository.ts";
 
+import type { CredentialOpsFake } from "./credential-ops-fake.ts";
 import type { GitOpsContractParticipant } from "./git-ops-contract.ts";
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { OnAuthRequiredFn } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type * as GitPlatform from "../../extensions/pi-claude-marketplace/platform/git.ts";
-import type {
-  GitCredentials,
-  OnAuthRequiredFn,
-} from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
 
 // The authentication-callback protocol lives in platform/git-auth-callbacks.ts;
@@ -36,21 +41,19 @@ import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
 // @ts-expect-error platform/git.ts does not expose the auth-callback factory
 void ({} satisfies { readonly retired?: typeof GitPlatform.buildAuthCallbacks });
 
-// The branch and remote enumeration wrappers had no production caller: no
-// module outside this file ever imported either, and neither appears in the
-// GitOps surface the orchestrators inject. Restoring either export makes the
-// `satisfies` resolve and turns its directive into an unused one (TS2578).
+// The branch enumeration wrapper had no production caller: no module outside
+// this file ever imported it, and it does not appear in the GitOps surface
+// the orchestrators inject. Restoring the export makes the `satisfies`
+// resolve and turns the directive into an unused one (TS2578).
 // @ts-expect-error platform/git.ts does not expose a branch-listing wrapper
 void ({} satisfies { readonly retired?: typeof GitPlatform.listBranches });
-// @ts-expect-error platform/git.ts does not expose a remote-listing wrapper
-void ({} satisfies { readonly retired?: typeof GitPlatform.listRemotes });
 // @ts-expect-error platform/git.ts does not expose branch-listing options
 void ({} satisfies { readonly retired?: GitPlatform.ListBranchesOptions });
-// @ts-expect-error platform/git.ts does not expose remote-listing options
-void ({} satisfies { readonly retired?: GitPlatform.ListRemotesOptions });
 
 const HOST = "git.example.invalid";
 const REMOTE_URL = `https://${HOST}/owner/repo.git`;
+const OTHER_HOST = "other.example.invalid";
+const OTHER_REMOTE_URL = `https://${OTHER_HOST}/owner/repo.git`;
 const OID_MAIN = "1111111111111111111111111111111111111111";
 const OID_DEV = "2222222222222222222222222222222222222222";
 const OID_TAG = "3333333333333333333333333333333333333333";
@@ -181,9 +184,10 @@ function response(
 function installRemoteTransport(
   t: TestContext,
   refs: readonly string[],
-  options: { readonly challengeOnce?: boolean } = {},
+  options: { readonly challengeOnce?: boolean; readonly remoteUrl?: string } = {},
 ): RecordedHttpRequest[] {
   const requests: RecordedHttpRequest[] = [];
+  const remoteUrl = options.remoteUrl ?? REMOTE_URL;
   let challenged = false;
 
   t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
@@ -195,7 +199,7 @@ function installRemoteTransport(
       body: withoutAgentPacket(body),
     });
 
-    const infoUrl = `${REMOTE_URL}/info/refs?service=git-upload-pack`;
+    const infoUrl = `${remoteUrl}/info/refs?service=git-upload-pack`;
     if (request.url === infoUrl && request.method === "GET") {
       if (options.challengeOnce === true && !challenged) {
         challenged = true;
@@ -211,7 +215,7 @@ function installRemoteTransport(
       );
     }
 
-    if (request.url === `${REMOTE_URL}/git-upload-pack` && request.method === "POST") {
+    if (request.url === `${remoteUrl}/git-upload-pack` && request.method === "POST") {
       return response(
         request.url,
         200,
@@ -316,6 +320,7 @@ const productionGitOps = {
   resolveRef,
   currentBranch,
   resolveRemoteRef,
+  listRemotes,
 } satisfies GitOps;
 
 async function createProductionGitOps(t: TestContext): Promise<GitOpsContractParticipant> {
@@ -381,6 +386,19 @@ function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fet
   return true;
 }
 
+function isUserCanceledError(error: unknown): boolean {
+  assert.ok(error instanceof git.Errors.UserCanceledError);
+  assert.strictEqual(error.code, "UserCanceledError");
+  return true;
+}
+
+/** The urls of the recorded requests that carried a credential header. */
+function requestsCarryingAuthorization(
+  requests: readonly RecordedHttpRequest[],
+): readonly string[] {
+  return requests.filter((r) => "Authorization" in r.headers).map((r) => r.url);
+}
+
 function expectedPublicRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
   return [
     {
@@ -411,6 +429,258 @@ function expectedDiscoveryRequest(
     headers,
     body: Buffer.alloc(0),
   };
+}
+
+const INFO_REFS_PATH = "/info/refs?service=git-upload-pack";
+const BOUND_INFO_URL = `${REMOTE_URL}${INFO_REFS_PATH}`;
+const BOUND_UPLOAD_PACK_URL = `${REMOTE_URL}/git-upload-pack`;
+const RENAMED_REMOTE_URL = `https://${HOST}/renamed/repo.git`;
+const RENAMED_INFO_URL = `${RENAMED_REMOTE_URL}${INFO_REFS_PATH}`;
+const RENAMED_UPLOAD_PACK_URL = `${RENAMED_REMOTE_URL}/git-upload-pack`;
+const OTHER_PORT_INFO_URL = `https://${HOST}:8443/owner/repo.git${INFO_REFS_PATH}`;
+const OTHER_PORT_UPLOAD_PACK_URL = `https://${HOST}:8443/owner/repo.git/git-upload-pack`;
+const HTTP_SAME_HOST_UPLOAD_PACK_URL = `http://${HOST}/owner/repo.git/git-upload-pack`;
+const OTHER_HOST_UPLOAD_PACK_URL = `${OTHER_REMOTE_URL}/git-upload-pack`;
+const BASIC_CREDENTIAL = "Basic dXNlcjpzZWNyZXQ=";
+
+/** The options `simple-get` passes to the `request` function of `node:https` and `node:http`. */
+interface WireRequestOptions {
+  readonly protocol: string;
+  readonly hostname: string;
+  readonly port: string | null;
+  readonly path: string;
+  readonly method: string;
+  readonly headers: Readonly<Record<string, string | number>>;
+}
+
+/** One request as it reaches the socket. Node lower-cases every header name. */
+interface WireRequest {
+  readonly url: string;
+  readonly method: string;
+  readonly headers: Readonly<Record<string, string | number>>;
+  readonly body: Buffer;
+}
+
+/** The answer a wire double gives to one request. */
+interface WireResponse {
+  readonly statusCode: number;
+  readonly statusMessage: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: Buffer;
+}
+
+/** A redirect case: what the redirect is about, and its `Location` header. */
+interface RedirectRow {
+  readonly kind: string;
+  readonly location: string;
+}
+
+/**
+ * Replaces the socket door of both `node:https` and `node:http`.
+ *
+ * The real `simple-get`, `isomorphic-git/http/node` and isomorphic-git all
+ * run, so every hop a redirect produces reaches `serve` as its own request.
+ * `simple-get` picks the module by scheme, which is why both are replaced.
+ */
+function installWireTransport(
+  t: TestContext,
+  serve: (request: WireRequest) => WireResponse,
+): WireRequest[] {
+  const requests: WireRequest[] = [];
+
+  function request(
+    options: WireRequestOptions,
+    onResponse: (response: Readable) => void,
+  ): EventEmitter {
+    const url = new URL(options.path, `${options.protocol}//${options.hostname}`);
+    url.port = options.port ?? "";
+
+    return Object.assign(new EventEmitter(), {
+      end(body: Buffer = Buffer.alloc(0)): void {
+        const wireRequest = {
+          url: url.href,
+          method: options.method,
+          headers: { ...options.headers },
+          body,
+        };
+        requests.push(wireRequest);
+        const answer = serve(wireRequest);
+        setImmediate(() => {
+          onResponse(
+            Object.assign(Readable.from([answer.body]), {
+              statusCode: answer.statusCode,
+              statusMessage: answer.statusMessage,
+              headers: answer.headers,
+            }),
+          );
+        });
+      },
+    });
+  }
+
+  t.mock.method(https, "request", request);
+  t.mock.method(nodeHttp, "request", request);
+  return requests;
+}
+
+function unauthorizedWireResponse(): WireResponse {
+  return { statusCode: 401, statusMessage: "Unauthorized", headers: {}, body: Buffer.alloc(0) };
+}
+
+function redirectWireResponse(statusCode: number, location: string): WireResponse {
+  return {
+    statusCode,
+    statusMessage: "Redirect",
+    headers: { location },
+    body: Buffer.from("moved"),
+  };
+}
+
+function advertisementWireResponse(): WireResponse {
+  return {
+    statusCode: 200,
+    statusMessage: "OK",
+    headers: { "content-type": "application/x-git-upload-pack-advertisement" },
+    body: advertisementBody(),
+  };
+}
+
+function refsWireResponse(): WireResponse {
+  return {
+    statusCode: 200,
+    statusMessage: "OK",
+    headers: { "content-type": "application/x-git-upload-pack-result" },
+    body: refsBody(FULL_ADVERTISEMENT),
+  };
+}
+
+function unplannedWireRequest(request: WireRequest): Error {
+  return new Error(`unplanned wire request: ${request.method} ${request.url}`);
+}
+
+/** The bound host redirects `info/refs` to `location`; every other request is challenged. */
+function crossOriginServer(location: string): (request: WireRequest) => WireResponse {
+  return (request) =>
+    request.url === BOUND_INFO_URL
+      ? redirectWireResponse(302, location)
+      : unauthorizedWireResponse();
+}
+
+/**
+ * The bound host redirects `info/refs` to `location`, inside its own origin.
+ * The renamed `info/refs` and the bound `git-upload-pack` answer only a
+ * request that carries a credential.
+ */
+function sameOriginServer(location: string): (request: WireRequest) => WireResponse {
+  return (request) => {
+    if (request.url === BOUND_INFO_URL) {
+      return redirectWireResponse(302, location);
+    }
+
+    if (request.headers.authorization === undefined) {
+      return unauthorizedWireResponse();
+    }
+
+    if (request.url === RENAMED_INFO_URL) {
+      return advertisementWireResponse();
+    }
+
+    if (request.url === BOUND_UPLOAD_PACK_URL) {
+      return refsWireResponse();
+    }
+
+    throw unplannedWireRequest(request);
+  };
+}
+
+/** The bound host redirects its `git-upload-pack` POST to the renamed repository. */
+function postRedirectServer(statusCode: number): (request: WireRequest) => WireResponse {
+  return (request) => {
+    if (request.url === BOUND_INFO_URL) {
+      return advertisementWireResponse();
+    }
+
+    if (request.url === BOUND_UPLOAD_PACK_URL) {
+      return redirectWireResponse(statusCode, RENAMED_UPLOAD_PACK_URL);
+    }
+
+    if (request.url === RENAMED_UPLOAD_PACK_URL) {
+      return refsWireResponse();
+    }
+
+    throw unplannedWireRequest(request);
+  };
+}
+
+/**
+ * The bound host challenges `info/refs`, then redirects the authenticated
+ * `git-upload-pack` POST to `location`. `respondAtLocation` answers whatever
+ * request reaches `location`, so a same-origin control can require the
+ * credential while a cross-origin row proves it never arrives (GAUTH-06).
+ */
+function authenticatedPostRedirectServer(
+  statusCode: number,
+  location: string,
+  respondAtLocation: (request: WireRequest) => WireResponse,
+): (request: WireRequest) => WireResponse {
+  return (request) => {
+    if (request.url === BOUND_INFO_URL) {
+      return request.headers.authorization === undefined
+        ? unauthorizedWireResponse()
+        : advertisementWireResponse();
+    }
+
+    if (request.url === BOUND_UPLOAD_PACK_URL) {
+      return request.headers.authorization === undefined
+        ? unauthorizedWireResponse()
+        : redirectWireResponse(statusCode, location);
+    }
+
+    if (request.url === location) {
+      return respondAtLocation(request);
+    }
+
+    throw unplannedWireRequest(request);
+  };
+}
+
+/** A credential fake whose helper holds `user:secret` for the bound host. */
+function storedCredentials(): CredentialOpsFake {
+  return createCredentialOpsFake({
+    boundary: "memory",
+    credentials: [[HOST, { username: "user", password: "secret" }]],
+  });
+}
+
+/** The auth bundle bound to `HOST`: no eviction, and no interactive fallback. */
+function boundAuth(credentials: CredentialOpsFake): NonNullable<GitPlatform.CloneOptions["auth"]> {
+  return {
+    credentialOps: credentials.credentialOps,
+    host: HOST,
+    kind: "stored-credential",
+  };
+}
+
+/** The url of each wire request and the credential header it carried, or null. */
+function wireCredentials(
+  requests: readonly WireRequest[],
+): Array<{ readonly url: string; readonly authorization: string | number | null }> {
+  return requests.map(({ url, headers }) => ({
+    url,
+    authorization: headers.authorization ?? null,
+  }));
+}
+
+/** The wire log of a challenge answered once, when `location` is on another origin. */
+function expectedCrossOriginWireLog(
+  location: string,
+): Array<{ readonly url: string; readonly authorization: string | null }> {
+  return [
+    { url: BOUND_INFO_URL, authorization: null },
+    { url: location, authorization: null },
+    { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
+    { url: location, authorization: null },
+  ];
 }
 
 describe("local Git operations", () => {
@@ -531,6 +801,7 @@ describe("clone", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
+        kind: "device-flow",
         onAuthRequired: () => {
           throw new Error("interactive auth is forbidden on a stored-credential hit");
         },
@@ -548,6 +819,24 @@ describe("clone", () => {
       expectedDiscoveryRequest(),
       expectedDiscoveryRequest({ Authorization: "Basic dXNlcjpzZWNyZXQ=" }),
     ]);
+  });
+
+  test("GAUTH-06: does not forward the credential on a redirect to another port of the same host", async (t) => {
+    // arrange
+    const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
+    const directory = await createGitTestDirectory(t, { boundary: "local" });
+    const credentials = storedCredentials();
+
+    // act
+    const cloning = clone({ dir: directory, url: REMOTE_URL, auth: boundAuth(credentials) });
+
+    // assert
+    await assert.rejects(cloning, isUserCanceledError);
+    assert.deepStrictEqual(
+      wireCredentials(requests),
+      expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
+    );
+    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
   });
 });
 
@@ -586,6 +875,7 @@ describe("fetch", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
+        kind: "device-flow",
         onAuthRequired: () => {
           throw new Error("interactive auth is forbidden on a stored-credential hit");
         },
@@ -605,6 +895,25 @@ describe("fetch", () => {
       expectedDiscoveryRequest(),
       expectedDiscoveryRequest({ Authorization: "Basic dXNlcjpzZWNyZXQ=" }),
     ]);
+  });
+
+  test("GAUTH-06: does not forward the credential on a redirect to another port of the same host", async (t) => {
+    // arrange
+    const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    const credentials = storedCredentials();
+
+    // act
+    const fetching = fetch({ dir: repository.dir, auth: boundAuth(credentials) });
+
+    // assert
+    await assert.rejects(fetching, isUserCanceledError);
+    assert.deepStrictEqual(
+      wireCredentials(requests),
+      expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
+    );
+    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
   });
 });
 
@@ -702,6 +1011,7 @@ describe("resolveRemoteRef", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
+        kind: "device-flow",
         onAuthRequired,
       },
     });
@@ -729,6 +1039,7 @@ describe("resolveRemoteRef", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
+        kind: "device-flow",
         onAuthRequired,
       },
     });
@@ -758,6 +1069,493 @@ describe("resolveRemoteRef", () => {
       },
     ]);
   });
+
+  test("cancels a challenge the bundle cannot answer and sends no credential", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT, { challengeOnce: true });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const onAuthRequired: OnAuthRequiredFn = async () => {
+      await Promise.resolve();
+      return {
+        ok: false,
+        reason: "no credential was obtained for git.example.invalid",
+        authAttempted: true,
+      };
+    };
+
+    // act
+    const resolution = resolveRemoteRef({
+      url: REMOTE_URL,
+      ref: "main",
+      auth: {
+        credentialOps: credentials.credentialOps,
+        host: HOST,
+        kind: "device-flow",
+        onAuthRequired,
+      },
+    });
+
+    // assert
+    await assert.rejects(resolution, isUserCanceledError);
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: HOST }],
+      approve: [],
+      reject: [],
+    });
+    assert.deepStrictEqual(requests, [expectedPublicRequests()[0]]);
+    assert.deepStrictEqual(requestsCarryingAuthorization(requests), []);
+  });
+
+  test("cancels a challenge from a url on another host without querying the helper", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT, {
+      challengeOnce: true,
+      remoteUrl: OTHER_REMOTE_URL,
+    });
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [[HOST, { username: "user", password: "secret" }]],
+    });
+    const onAuthRequired: OnAuthRequiredFn = () => {
+      throw new Error("interactive auth is forbidden on a host mismatch");
+    };
+
+    // act
+    const resolution = resolveRemoteRef({
+      url: OTHER_REMOTE_URL,
+      ref: "main",
+      auth: {
+        credentialOps: credentials.credentialOps,
+        host: HOST,
+        kind: "device-flow",
+        onAuthRequired,
+      },
+    });
+
+    // assert
+    await assert.rejects(resolution, isUserCanceledError);
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+    assert.deepStrictEqual(requests, [
+      {
+        ...expectedPublicRequests()[0],
+        url: `${OTHER_REMOTE_URL}/info/refs?service=git-upload-pack`,
+      },
+    ]);
+    assert.deepStrictEqual(requestsCarryingAuthorization(requests), []);
+  });
+
+  const CROSS_ORIGIN_REDIRECTS: readonly RedirectRow[] = [
+    { kind: "another port of the same host", location: OTHER_PORT_INFO_URL },
+    { kind: "http on the same host", location: `http://${HOST}/owner/repo.git${INFO_REFS_PATH}` },
+    { kind: "another host", location: `${OTHER_REMOTE_URL}${INFO_REFS_PATH}` },
+  ];
+
+  for (const { kind, location } of CROSS_ORIGIN_REDIRECTS) {
+    test(`GAUTH-06: does not forward the credential on a redirect to ${kind}`, async (t) => {
+      // arrange
+      const requests = installWireTransport(t, crossOriginServer(location));
+      const credentials = storedCredentials();
+
+      // act
+      const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+      // assert
+      await assert.rejects(resolution, isUserCanceledError);
+      assert.deepStrictEqual(wireCredentials(requests), expectedCrossOriginWireLog(location));
+      assert.deepStrictEqual(credentials.calls, {
+        fill: [{ host: HOST }],
+        approve: [],
+        reject: [],
+      });
+    });
+  }
+
+  const SAME_ORIGIN_REDIRECTS: readonly RedirectRow[] = [
+    { kind: "another path", location: RENAMED_INFO_URL },
+    { kind: "a relative location", location: `/renamed/repo.git${INFO_REFS_PATH}` },
+    {
+      kind: "an explicit default port",
+      location: `https://${HOST}:443/renamed/repo.git${INFO_REFS_PATH}`,
+    },
+  ];
+
+  for (const { kind, location } of SAME_ORIGIN_REDIRECTS) {
+    test(`GAUTH-06: forwards the credential on a redirect within its origin (${kind})`, async (t) => {
+      // arrange
+      const requests = installWireTransport(t, sameOriginServer(location));
+      const credentials = storedCredentials();
+
+      // act
+      const oid = await resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+      // assert
+      assert.strictEqual(oid, OID_MAIN);
+      assert.deepStrictEqual(wireCredentials(requests), [
+        { url: BOUND_INFO_URL, authorization: null },
+        { url: RENAMED_INFO_URL, authorization: null },
+        { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
+        { url: RENAMED_INFO_URL, authorization: BASIC_CREDENTIAL },
+        { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
+      ]);
+    });
+  }
+
+  // How `git-upload-pack` is re-sent after its POST is redirected.
+  interface PostRedirectRow {
+    readonly title: string;
+    readonly statusCode: number;
+    readonly finalMethod: string;
+    readonly finalBody: Buffer;
+    readonly finalContentHeaders: readonly string[];
+  }
+
+  const POST_REDIRECTS: readonly PostRedirectRow[] = [
+    {
+      title: "re-sends a POST answered with 302 as a GET without its body",
+      statusCode: 302,
+      finalMethod: "GET",
+      finalBody: Buffer.alloc(0),
+      finalContentHeaders: [],
+    },
+    {
+      title: "re-sends a POST answered with 307 with its body",
+      statusCode: 307,
+      finalMethod: "POST",
+      finalBody: expectedListRefsBody(),
+      finalContentHeaders: ["content-length", "content-type"],
+    },
+  ];
+
+  for (const { title, statusCode, finalMethod, finalBody, finalContentHeaders } of POST_REDIRECTS) {
+    test(title, async (t) => {
+      // arrange
+      const requests = installWireTransport(t, postRedirectServer(statusCode));
+
+      // act
+      const oid = await resolveRemoteRef({ url: REMOTE_URL });
+
+      // assert
+      assert.strictEqual(oid, OID_MAIN);
+      assert.deepStrictEqual(
+        requests.map(({ method, url }) => `${method} ${url}`),
+        [
+          `GET ${BOUND_INFO_URL}`,
+          `POST ${BOUND_UPLOAD_PACK_URL}`,
+          `${finalMethod} ${RENAMED_UPLOAD_PACK_URL}`,
+        ],
+      );
+      assert.deepStrictEqual(
+        requests.slice(-1).map(({ headers, body }) => ({
+          body: withoutAgentPacket(body),
+          contentHeaders: Object.keys(headers)
+            .filter((name) => name.startsWith("content-"))
+            .sort(),
+        })),
+        [{ body: finalBody, contentHeaders: finalContentHeaders }],
+      );
+    });
+  }
+
+  // GAUTH-06 rows: what happens to the credential when the *authenticated*
+  // git-upload-pack POST -- not just info/refs -- is redirected. A wrong
+  // `nextHop` that scrubs credential headers only on GET hops, or only on
+  // the POST->GET (302/303) arm, would leave `authorization` on the 307 row.
+  const CROSS_ORIGIN_POST_REDIRECTS: readonly RedirectRow[] = [
+    {
+      kind: "another port of the same host (POST kept, 307)",
+      location: OTHER_PORT_UPLOAD_PACK_URL,
+    },
+    { kind: "http on the same host", location: HTTP_SAME_HOST_UPLOAD_PACK_URL },
+    { kind: "another host", location: OTHER_HOST_UPLOAD_PACK_URL },
+  ];
+
+  for (const { kind, location } of CROSS_ORIGIN_POST_REDIRECTS) {
+    test(`GAUTH-06: does not forward the credential on a git-upload-pack POST redirect to ${kind}`, async (t) => {
+      // arrange
+      const requests = installWireTransport(
+        t,
+        authenticatedPostRedirectServer(307, location, () => unauthorizedWireResponse()),
+      );
+      const credentials = storedCredentials();
+
+      // act
+      const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+      // assert
+      await assert.rejects(resolution, (error: unknown) => {
+        assert.ok(error instanceof git.Errors.HttpError);
+        assert.strictEqual(error.data.statusCode, 401);
+        return true;
+      });
+      assert.deepStrictEqual(wireCredentials(requests), [
+        { url: BOUND_INFO_URL, authorization: null },
+        { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
+        { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
+        { url: location, authorization: null },
+      ]);
+    });
+  }
+
+  test("GAUTH-06: does not forward the credential on a git-upload-pack POST redirect to another port (302, POST->GET)", async (t) => {
+    // arrange
+    const requests = installWireTransport(
+      t,
+      authenticatedPostRedirectServer(302, OTHER_PORT_UPLOAD_PACK_URL, () =>
+        unauthorizedWireResponse(),
+      ),
+    );
+    const credentials = storedCredentials();
+
+    // act
+    const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof git.Errors.HttpError);
+      assert.strictEqual(error.data.statusCode, 401);
+      return true;
+    });
+    assert.deepStrictEqual(wireCredentials(requests), [
+      { url: BOUND_INFO_URL, authorization: null },
+      { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
+      { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
+      { url: OTHER_PORT_UPLOAD_PACK_URL, authorization: null },
+    ]);
+  });
+
+  test("GAUTH-06: forwards the credential on a git-upload-pack POST redirect within its origin (307)", async (t) => {
+    // arrange
+    const requests = installWireTransport(
+      t,
+      authenticatedPostRedirectServer(307, RENAMED_UPLOAD_PACK_URL, (request) =>
+        request.headers.authorization === undefined
+          ? unauthorizedWireResponse()
+          : refsWireResponse(),
+      ),
+    );
+    const credentials = storedCredentials();
+
+    // act
+    const oid = await resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+    // assert
+    assert.strictEqual(oid, OID_MAIN);
+    assert.deepStrictEqual(wireCredentials(requests), [
+      { url: BOUND_INFO_URL, authorization: null },
+      { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
+      { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
+      { url: RENAMED_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
+    ]);
+  });
+
+  test("returns a redirect without a Location header to isomorphic-git as an HttpError", async (t) => {
+    // arrange
+    const requests = installWireTransport(t, () => ({
+      statusCode: 302,
+      statusMessage: "Found",
+      headers: {},
+      body: Buffer.alloc(0),
+    }));
+
+    // act
+    const resolution = resolveRemoteRef({ url: REMOTE_URL });
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof git.Errors.HttpError);
+      assert.deepStrictEqual(error.data, {
+        statusCode: 302,
+        statusMessage: "Found",
+        response: "",
+      });
+      return true;
+    });
+    assert.deepStrictEqual(
+      requests.map(({ url }) => url),
+      [BOUND_INFO_URL],
+    );
+  });
+
+  test("rejects an eleventh consecutive redirect with too many redirects", async (t) => {
+    // arrange
+    const requests = installWireTransport(t, () => redirectWireResponse(302, BOUND_INFO_URL));
+
+    // act
+    const resolution = resolveRemoteRef({ url: REMOTE_URL });
+
+    // assert
+    await assert.rejects(resolution, { name: "Error", message: "too many redirects" });
+    assert.deepStrictEqual(
+      requests.map(({ url }) => url),
+      Array.from({ length: 11 }, () => BOUND_INFO_URL),
+    );
+  });
+});
+
+describe("listRemotes", () => {
+  test("reports the origin remote url of a real repository", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+
+    // act
+    const remotes = await listRemotes({ dir: repository.dir });
+
+    // assert
+    assert.deepStrictEqual(remotes, { kind: "origin", url: REMOTE_URL });
+  });
+
+  // The not-a-repo and no-origin arms are distinguished by the wrapper's own
+  // `.git/config` read, not by anything isomorphic-git reports -- kept
+  // adjacent so a future reader sees both cases the probe read exists for.
+  test("reports not-a-repo for a directory with no .git", async (t) => {
+    // arrange
+    const directory = await createGitTestDirectory(t, { boundary: "local" });
+
+    // act
+    const remotes = await listRemotes({ dir: directory });
+
+    // assert
+    assert.deepStrictEqual(remotes, { kind: "not-a-repo" });
+  });
+
+  test("reports no-origin for a real repository with no remote configured", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+
+    // act
+    const remotes = await listRemotes({ dir: repository.dir });
+
+    // assert
+    assert.deepStrictEqual(remotes, { kind: "no-origin" });
+  });
+
+  test("reports unreadable for a .git/config that cannot be read as a file", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const configPath = path.join(repository.dir, ".git", "config");
+    await rm(configPath);
+    await mkdir(configPath);
+
+    // act
+    const remotes = await listRemotes({ dir: repository.dir });
+
+    // assert
+    assert.deepStrictEqual(remotes, { kind: "unreadable" });
+  });
+
+  for (const code of ["EACCES", "EPERM"]) {
+    test(`reports permission-denied when reading .git/config fails with ${code}`, async (t) => {
+      // arrange
+      const repository = await createGitTestRepository(t, { boundary: "local" });
+      t.mock.method(fs.promises, "readFile", () =>
+        Promise.reject(Object.assign(new Error(`${code}: operation not permitted`), { code })),
+      );
+
+      // act
+      const remotes = await listRemotes({ dir: repository.dir });
+
+      // assert
+      assert.deepStrictEqual(remotes, { kind: "permission-denied" });
+    });
+  }
+
+  // D-3-03 / MA-13: the origin shapes an interrupted rewrite or a hand edit
+  // leaves behind. `libraryRemotes` is the library's per-section enumeration:
+  // it is `unknown` because a url-less section comes back holding `undefined`,
+  // and it reports the LAST url of a multi-valued origin. `libraryUrls` is
+  // every `remote.origin.url` value in file order, which is the read
+  // `listRemotes` makes; git fetches from the first (WR-11, T-3-05).
+  interface OriginSectionShape {
+    readonly title: string;
+    readonly config: string;
+    readonly libraryRemotes: unknown;
+    readonly libraryUrls: readonly string[];
+    readonly wrapperResult: GitPlatform.ListRemotesResult;
+  }
+
+  const ORIGIN_SECTION_SHAPES: readonly OriginSectionShape[] = [
+    {
+      title: "reports no-origin for an origin section with a fetch line but no url",
+      config:
+        '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n',
+      libraryRemotes: [{ remote: "origin", url: undefined }],
+      libraryUrls: [],
+      wrapperResult: { kind: "no-origin" },
+    },
+    {
+      title: "reports no-origin for an origin section with no keys",
+      config: '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n',
+      libraryRemotes: [{ remote: "origin", url: undefined }],
+      libraryUrls: [],
+      wrapperResult: { kind: "no-origin" },
+    },
+    {
+      title: "reports the empty url of an origin section whose url value is empty",
+      config: '[remote "origin"]\n\turl =\n',
+      libraryRemotes: [{ remote: "origin", url: "" }],
+      libraryUrls: [""],
+      wrapperResult: { kind: "origin", url: "" },
+    },
+    {
+      title: "reports no-origin for an origin section whose first of two urls is foreign",
+      config: `[remote "origin"]\n\turl = ${OTHER_REMOTE_URL}\n\turl = ${REMOTE_URL}\n`,
+      libraryRemotes: [{ remote: "origin", url: REMOTE_URL }],
+      libraryUrls: [OTHER_REMOTE_URL, REMOTE_URL],
+      wrapperResult: { kind: "no-origin" },
+    },
+    {
+      title: "reports no-origin for an origin section whose second of two urls is foreign",
+      config: `[remote "origin"]\n\turl = ${REMOTE_URL}\n\turl = ${OTHER_REMOTE_URL}\n`,
+      libraryRemotes: [{ remote: "origin", url: OTHER_REMOTE_URL }],
+      libraryUrls: [REMOTE_URL, OTHER_REMOTE_URL],
+      wrapperResult: { kind: "no-origin" },
+    },
+    {
+      title: "reports no-origin for two origin sections that each record a url",
+      config: `[remote "origin"]\n\turl = ${OTHER_REMOTE_URL}\n[remote "origin"]\n\turl = ${REMOTE_URL}\n`,
+      libraryRemotes: [
+        { remote: "origin", url: REMOTE_URL },
+        { remote: "origin", url: REMOTE_URL },
+      ],
+      libraryUrls: [OTHER_REMOTE_URL, REMOTE_URL],
+      wrapperResult: { kind: "no-origin" },
+    },
+    {
+      title: "reports the origin url of an origin section whose section name is capitalized",
+      config: `[Remote "origin"]\n\turl = ${REMOTE_URL}\n`,
+      libraryRemotes: [],
+      libraryUrls: [REMOTE_URL],
+      wrapperResult: { kind: "origin", url: REMOTE_URL },
+    },
+  ];
+
+  for (const {
+    title,
+    config,
+    libraryRemotes,
+    libraryUrls,
+    wrapperResult,
+  } of ORIGIN_SECTION_SHAPES) {
+    test(title, async (t) => {
+      // arrange
+      const repository = await createGitTestRepository(t, { boundary: "local" });
+      await writeFile(path.join(repository.dir, ".git", "config"), config);
+
+      // act
+      const remotes = await listRemotes({ dir: repository.dir });
+
+      // assert
+      // Proves the fixture reproduces the shape, so a mis-authored config
+      // cannot pass through the empty-remote-list path.
+      assert.deepStrictEqual(await git.listRemotes({ fs, dir: repository.dir }), libraryRemotes);
+      assert.deepStrictEqual(
+        await git.getConfigAll({ fs, dir: repository.dir, path: "remote.origin.url" }),
+        libraryUrls,
+      );
+      assert.deepStrictEqual(remotes, wrapperResult);
+    });
+  }
 });
 
 describe("GitOps contract", () => {

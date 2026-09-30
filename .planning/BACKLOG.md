@@ -3285,3 +3285,60 @@ without declaring the engine as a dependency, which is out of scope (a 0.x
 package with ~50 releases since May 2026 and no exported contract). The
 scratch-engine route above (WSTOR-01) is the only recorded way to reach the
 package's source from a test.
+
+## GHCAN-01: `any-git-host` Phase 1 live canary -- a real private repo clone on a non-registry host
+
+**Status (2026-09-28): closed against a local stand-in.** `01-UAT.md` tests 1-3
+ran the composed chain in one pi process against a real smart-HTTP server (git
+http-backend behind HTTPS + Basic auth on `localhost:8443`) with a real
+`credential.helper=store`: add succeeded with the helper, failed clean without
+it. A run against a hosted forge (GitLab, Gitea, Forgejo, Bitbucket) is still
+unexercised; keep this entry only if that distinction matters.
+
+Carried from the `any-git-host` milestone at Phase 3 close (ROADMAP.md Phase 3
+SC6; STATE.md § Deferred Verification).
+
+Every seam in the chain -- `buildAuthForHost`, `credentialOps.fill`, the
+`git credential fill` shell-out, `buildAuthCallbacks.onAuth`'s host-match guard
+-- is individually proven against a real component (`01-VERIFICATION.md`'s
+scoped canary at `130d68a9` closed the credential-helper-subprocess link with a
+negative control). What is not proven is their composition in one process
+against one real server: an end-to-end `marketplace add` or `plugin install` of
+a genuinely private repository on a host the provider registry does not claim
+(self-hosted GitLab, Gitea, Forgejo, Bitbucket), using an operator PAT stored in
+a real git credential helper.
+
+**Blocking reason: an environment fact, not an unfinished implementation.**
+This machine has no operator PAT and no configured credential helper for a
+non-registry host. The feature is not unproven in code -- every link is closed
+by the canary above -- only the end-to-end run against real infrastructure is
+outstanding.
+
+**To settle it:** on a machine with a PAT for a non-registry host stored via
+`git credential approve`, run `marketplace add <url>` or `plugin install` and
+confirm the clone succeeds. Resume with `/gsd-verify-work 1`.
+
+## GHCAN-02: `any-git-host` Phase 2 live canary -- a real verbatim-only smart-HTTP server
+
+**Status (2026-09-28): closed against a local stand-in.** `02-UAT.md` test 1 ran
+`marketplace add` and a later `marketplace update` through pi against a real
+smart-HTTP server (git http-backend behind HTTPS) that answers only at the
+verbatim path and 404s the `.git` form: both succeeded with no `.git` request.
+
+Carried from the `any-git-host` milestone at Phase 3 close (ROADMAP.md Phase 3
+SC6; STATE.md § Deferred Verification).
+
+Every phase-2 test proves the URL that is SENT through the offline
+`createGitOpsFake`; none exercises a real HTTP round trip. What remains is one
+`marketplace add` against a REAL smart-HTTP server that answers only at the
+verbatim path and returns 404 for the `.git`-suffixed form, plus a later
+`resolveRemoteRef` against it -- recorded in `02-UAT.md`.
+
+**Blocking reason: an environment fact, not an unfinished implementation.**
+This machine has no such server available to stand up and test against. The
+derivation (`networkCloneUrl`) is proven offline at 100% branch coverage; only
+the real-server round trip is outstanding.
+
+**To settle it:** stand up (or find) a smart-HTTP git server that serves only
+the verbatim path and 404s the suffixed form, then run `marketplace add
+<url>` and a subsequent update against it. Resume with `/gsd-verify-work 2`.

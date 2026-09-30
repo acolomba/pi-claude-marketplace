@@ -23,9 +23,14 @@ import { randomUUID } from "node:crypto";
 import { cp, mkdir, readFile, rename } from "node:fs/promises";
 import path from "node:path";
 
-import { canonicalCloneUrl, pluginCloneKey, pluginMirrorKey } from "../../domain/clone-key.ts";
+import {
+  canonicalCloneUrl,
+  networkCloneUrl,
+  pluginCloneKey,
+  pluginMirrorKey,
+} from "../../domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
+import { parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { appendLeakToError } from "../../shared/errors.ts";
 import {
@@ -102,6 +107,24 @@ async function promoteStagingToClone(
 }
 
 /**
+ * Clone `url` into `stagingDir`: a ref hint clones only that ref's branch,
+ * and no ref clones the default branch.
+ */
+async function cloneIntoStaging(
+  gitOps: GitOps,
+  stagingDir: string,
+  url: string,
+  args: { readonly ref?: string; readonly auth: GitAuthBundle },
+): Promise<void> {
+  await gitOps.clone({
+    dir: stagingDir,
+    url,
+    ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
+    auth: args.auth,
+  });
+}
+
+/**
  * Check out the exact pin, recovering from a stale ref hint.
  *
  * PURL-04: a `singleBranch` ref-hint clone fetches only that ref's closure.
@@ -116,7 +139,7 @@ async function promoteStagingToClone(
 async function checkoutPinWithRefetch(
   gitOps: GitOps,
   stagingDir: string,
-  args: { readonly pin: string; readonly ref?: string; readonly auth?: GitAuthBundle },
+  args: { readonly pin: string; readonly ref?: string; readonly auth: GitAuthBundle },
 ): Promise<void> {
   try {
     await gitOps.checkout({ dir: stagingDir, ref: args.pin });
@@ -125,11 +148,7 @@ async function checkoutPinWithRefetch(
       throw checkoutErr;
     }
 
-    await gitOps.fetch({
-      dir: stagingDir,
-      remote: "origin",
-      ...(args.auth !== undefined && { auth: args.auth }),
-    });
+    await gitOps.fetch({ dir: stagingDir, remote: "origin", auth: args.auth });
     await gitOps.checkout({ dir: stagingDir, ref: args.pin });
   }
 }
@@ -157,18 +176,23 @@ async function checkoutPinWithRefetch(
  *      staging and return cloneRoot as a warm-cache win. Any other rename
  *      errno append-leak-rethrows (MA-9).
  *
- * `auth` is an optional bundle forwarded to `gitOps.clone`. When omitted the
- * clone is byte-identical to the public-only path (PROV-02); when present the
- * provider's credentials thread into the clone so a private source on a
- * registered host authenticates (PROV-03/D-79-01).
+ * `auth` is forwarded to `gitOps.clone`, and the bundle's credentials thread
+ * into the clone so a private source on the bundle's own host authenticates,
+ * whichever host that is (PROV-03/D-79-01, GAUTH-03). Every install, reinstall,
+ * fetch, `info --fetch`, and update caller passes one.
+ *
+ * `networkUrl` is caller-computed (D-2-03): the `url` arm of the derivation
+ * needs `source.raw`, which is not recoverable from `cloneUrl` once the
+ * parse-time strip has run.
  */
 export async function materializePluginClone(args: {
   locations: ScopedLocations;
   cloneUrl: string;
+  networkUrl: string;
   pin: string;
   ref?: string;
   gitOps?: GitOps;
-  auth?: GitAuthBundle;
+  auth: GitAuthBundle;
 }): Promise<string> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -177,10 +201,9 @@ export async function materializePluginClone(args: {
   // cannot go uninjected.
   const removalOps = createRemovalOps();
   const key = pluginCloneKey(args.cloneUrl, args.pin);
-  // MURL-01 / D-77-04: the key hashes the canonical suffix-less url so a dir
-  // keyed before the suffix change still hits warm; only the wire url is
-  // `.git`-suffixed.
-  const networkUrl = ensureGitSuffix(args.cloneUrl);
+  // D-2-03: the key hashes the canonical identity url; the caller-supplied
+  // wire url is the only thing sent to the remote.
+  const networkUrl = args.networkUrl;
   const cloneRoot = await args.locations.pluginCloneDir(key);
 
   // PURL-02 / PURL-04: a present key dir is a byte-equivalent warm cache.
@@ -193,12 +216,7 @@ export async function materializePluginClone(args: {
   // Clone the ref-hint (or default branch), then checkout the exact pin so the
   // recorded commit is the pin even when a moving tag/branch ref is given.
   try {
-    await gitOps.clone({
-      dir: stagingDir,
-      url: networkUrl,
-      ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
-      ...(args.auth !== undefined && { auth: args.auth }),
-    });
+    await cloneIntoStaging(gitOps, stagingDir, networkUrl, args);
     await checkoutPinWithRefetch(gitOps, stagingDir, args);
   } catch (err) {
     const leak = await cleanupStaging(removalOps, stagingDir, "plugin clone staging");
@@ -244,13 +262,18 @@ export async function materializePluginClone(args: {
  * mirror-dir existence IS the fetched-state -- no migration stamp, no refcount.
  * All git surface (refreshGitHubClone, gitOps, resolveRef, DEFAULT_GIT_OPS)
  * stays confined to this file, never surfaced to install/list/info.
+ *
+ * `networkUrl` is caller-computed (D-2-03): the `url` arm of the derivation
+ * needs `source.raw`, which is not recoverable from `cloneUrl` once the
+ * parse-time strip has run.
  */
 export async function materializeOrRefreshPluginMirror(args: {
   locations: ScopedLocations;
   cloneUrl: string;
+  networkUrl: string;
   ref?: string;
   gitOps?: GitOps;
-  auth?: GitAuthBundle;
+  auth: GitAuthBundle;
 }): Promise<{ pluginRoot: string; resolvedSha: string }> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -259,10 +282,12 @@ export async function materializeOrRefreshPluginMirror(args: {
   // cannot go uninjected.
   const removalOps = createRemovalOps();
   const mirrorRoot = await args.locations.pluginCloneDir(pluginMirrorKey(args.cloneUrl));
-  // MURL-01 / D-77-04: same split as `materializePluginClone` -- the mirror key
-  // hashes the canonical suffix-less url (warm mirrors stay valid), the clone
-  // goes out `.git`-suffixed.
-  const networkUrl = ensureGitSuffix(args.cloneUrl);
+  // D-2-03: same split as `materializePluginClone` -- the mirror key hashes the
+  // canonical identity url, and the caller-supplied wire url is what a COLD
+  // clone sends. The refresh below fetches the `origin` remote isomorphic-git
+  // recorded at that first clone, so two sources sharing one identity share the
+  // first writer's wire url on every warm refresh.
+  const networkUrl = args.networkUrl;
 
   // MIRR-01: materialize the mirror on a cold key (no fixed-pin checkout; the
   // mirror tracks a moving ref).
@@ -270,12 +295,7 @@ export async function materializeOrRefreshPluginMirror(args: {
     const stagingDir = await args.locations.sourcesStagingDir(randomUUID());
 
     try {
-      await gitOps.clone({
-        dir: stagingDir,
-        url: networkUrl,
-        ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
-        ...(args.auth !== undefined && { auth: args.auth }),
-      });
+      await cloneIntoStaging(gitOps, stagingDir, networkUrl, args);
     } catch (err) {
       const leak = await cleanupStaging(removalOps, stagingDir, "plugin mirror staging");
       throw appendLeakToError(err, leak);
@@ -539,9 +559,9 @@ export async function resolvePluginPin(args: {
 
   const cloneUrl = canonicalCloneUrl(source);
   // MURL-01 / PURL-09: `cloneUrl` is the cache-key identity and is what this
-  // function RETURNS; `networkUrl` is the same value `.git`-suffixed and is
+  // function RETURNS; `networkUrl` is the verbatim wire form (D-2-03) and is
   // only ever sent to the remote.
-  const networkUrl = ensureGitSuffix(cloneUrl);
+  const networkUrl = networkCloneUrl(source);
 
   // PROV-03 (Q1): forward the optional auth bundle into resolveRemoteRef so an
   // unpinned PRIVATE-repo HEAD resolution authenticates; a pinned sha never
@@ -577,7 +597,7 @@ export { resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 // the git seam and the fs-only presence probe share ONE url reconstruction.
 // Re-exported here under the same name to keep install / update / reinstall /
 // fetch import sites unbroken.
-export { canonicalCloneUrl } from "../../domain/clone-key.ts";
+export { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 
 /**
  * PURL-03 / NFR-10: anchor a materialized clone to the plugin root the source

@@ -27,6 +27,7 @@ import {
   PluginUpdatePhase3Error,
   StaleSourceCloneError,
   StateLockHeldError,
+  UnreadableSourceCloneError,
   UnsupportedSourceError,
   UnsafeGeneratedNameError,
   WorkflowNameCollisionError,
@@ -444,6 +445,40 @@ describe("StaleSourceCloneError", () => {
       },
     );
   });
+});
+
+describe("UnreadableSourceCloneError", () => {
+  for (const failure of ["permission-denied", "unreadable"] as const) {
+    test(`exposes the complete ${failure} value with its marketplace`, () => {
+      // arrange
+      const absPath = "/scope/sources/official";
+
+      // act
+      const error = new UnreadableSourceCloneError(absPath, "official", failure);
+
+      // assert
+      assert.ok(error instanceof UnreadableSourceCloneError);
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          absPath: error.absPath,
+          mpName: error.mpName,
+          failure: error.failure,
+          cause: error.cause,
+        },
+        {
+          name: "UnreadableSourceCloneError",
+          message: `cannot read the source clone at /scope/sources/official: ${failure}`,
+          absPath: "/scope/sources/official",
+          mpName: "official",
+          failure,
+          cause: undefined,
+        },
+      );
+    });
+  }
 });
 
 describe("MarketplaceDuplicateNameError", () => {

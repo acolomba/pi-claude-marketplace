@@ -121,7 +121,7 @@ import {
 } from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_CREDENTIAL_OPS,
-  NO_PROVIDER_CAUSE,
+  NO_STORED_CREDENTIAL_CAUSE,
   buildAuthForHost,
   hostFromCloneUrl,
 } from "../auth-host.ts";
@@ -367,35 +367,20 @@ async function manifestContentKey(
 }
 
 /**
- * D-76-08 duck-type: an isomorphic-git `HttpError` carrying a 401/403 status
- * is an authentication challenge. Name/status duck-check keeps the
- * orchestrator tier free of an isomorphic-git import (D-13; mirrors the
- * classifyAddError arm in add.ts).
- */
-function isAuthChallengeError(err: unknown): err is Error {
-  if (!(err instanceof Error)) {
-    return false;
-  }
-
-  const code = (err as NodeJS.ErrnoException).code;
-  const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
-  return code === "HttpError" && (statusCode === 401 || statusCode === 403);
-}
-
-/**
  * MURL-03 url-source refresh via the on-disk `origin` remote (same D-14
  * sequence as github; refreshGitHubClone fetches by remote name, so the
- * original clone URL is irrelevant). PROV-02/03/04: the host extracted from
- * source.url decides the auth bundle -- a provider-registered host
- * authenticates host-keyed; a no-provider host refreshes authless and a
- * private repo fails clean on the structural 401.
+ * original clone URL is irrelevant). GAUTH-03: the host extracted from
+ * source.url carries its own auth bundle, so the user's git credential helper
+ * is consulted on every host; a registry host adds that provider's Device Flow
+ * on a helper miss (PROV-03).
  *
- * D-79-03 / PROV-04: a 401/403 challenge on a host with NO registered
- * provider carries exactly one extra cause line telling the user WHY
- * authentication cannot proceed. Attached as the chain TAIL (the challenge
- * is unresolvable BECAUSE no provider is registered), which keeps the
- * HttpError at cause-depth 1 where `transportReason`'s one-level unwrap
- * classifies it as `authentication required`.
+ * D-1-02 / GAUTH-04: an auth failure on a host whose only auth path is a
+ * stored credential carries exactly one extra cause line telling the user WHY
+ * authentication cannot proceed. Attached as the chain TAIL, which keeps the
+ * code-bearing transport error at cause-depth 1 where `transportReason`'s
+ * one-level unwrap classifies it as `authentication required`. GAUTH-05: a
+ * `device-flow` bundle is excluded -- there the story is a declined or expired
+ * Device Flow, and the bare closed-set token is the whole truth.
  */
 async function refreshUrlClone(
   cloneDir: string,
@@ -415,8 +400,13 @@ async function refreshUrlClone(
   try {
     await refreshGitHubClone(cloneDir, source.ref, gitOps, onFetchSucceeded, auth);
   } catch (err) {
-    if (auth === undefined && isAuthChallengeError(err) && err.cause === undefined) {
-      err.cause = new Error(NO_PROVIDER_CAUSE(host));
+    if (
+      err instanceof Error &&
+      err.cause === undefined &&
+      classifyGitTransportFailure(err) === "authentication required" &&
+      auth.kind === "stored-credential"
+    ) {
+      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host));
     }
 
     throw err;

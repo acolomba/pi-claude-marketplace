@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   canonicalCloneUrl,
+  networkCloneUrl,
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../extensions/pi-claude-marketplace/domain/clone-key.ts";
@@ -162,5 +163,167 @@ describe("canonicalCloneUrl", () => {
 
     // assert
     assert.strictEqual(cloneUrl, "https://example.com/mono");
+  });
+});
+
+describe("networkCloneUrl", () => {
+  test("appends .git to a GitHub repository URL", () => {
+    // arrange
+    const source = {
+      kind: "github",
+      raw: "o/r",
+      owner: "o",
+      repo: "r",
+    } as const;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://github.com/o/r.git");
+  });
+
+  test("sends a suffix-less url source unchanged", () => {
+    // arrange
+    const source = {
+      kind: "url",
+      raw: "https://gitlab.example.com/team/mp",
+      url: "https://gitlab.example.com/team/mp",
+    } as const;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://gitlab.example.com/team/mp");
+  });
+
+  test("preserves a trailing .git the user typed, even though source.url stripped it", () => {
+    // arrange
+    const source = {
+      kind: "url",
+      raw: "https://gitlab.example.com/team/mp.git",
+      url: "https://gitlab.example.com/team/mp",
+    } as const;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://gitlab.example.com/team/mp.git");
+  });
+
+  test("drops a #<ref> fragment from a url source's raw", () => {
+    // arrange
+    const source = {
+      kind: "url",
+      raw: "https://gitlab.example.com/team/mp#v1.0",
+      url: "https://gitlab.example.com/team/mp",
+      ref: "v1.0",
+    } as const;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://gitlab.example.com/team/mp");
+  });
+
+  test("drops trailing slashes from a url source's raw", () => {
+    // arrange
+    const source = {
+      kind: "url",
+      raw: "https://gitlab.example.com/team/mp///",
+      url: "https://gitlab.example.com/team/mp",
+    } as const;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://gitlab.example.com/team/mp");
+  });
+
+  test("keeps a trailing .git suffix and drops a #<ref> fragment together", () => {
+    // arrange
+    const source = {
+      kind: "url",
+      raw: "https://gitlab.example.com/team/mp.git#v1.0",
+      url: "https://gitlab.example.com/team/mp",
+      ref: "v1.0",
+    } as const;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://gitlab.example.com/team/mp.git");
+  });
+
+  test("keeps a trailing .git suffix behind a path slash that precedes a #<ref> fragment", () => {
+    // arrange
+    const source = {
+      kind: "url",
+      raw: "https://gitlab.example.com/team/mp.git/#v1.0",
+      url: "https://gitlab.example.com/team/mp",
+      ref: "v1.0",
+    } as const;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://gitlab.example.com/team/mp.git");
+  });
+
+  test("returns a git-subdir repository url verbatim, including a trailing .git", () => {
+    // arrange
+    const source = {
+      kind: "git-subdir",
+      raw: "https://example.com/mono.git",
+      url: "https://example.com/mono.git",
+      path: "plugins/p",
+    } as const;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://example.com/mono.git");
+  });
+
+  test("drops a trailing slash and a #<ref> fragment from a git-subdir url", () => {
+    // arrange
+    const source = {
+      kind: "git-subdir",
+      raw: "https://example.com/mono/#main",
+      url: "https://example.com/mono/#main",
+      path: "plugins/p",
+      ref: "main",
+    } as const;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://example.com/mono");
+  });
+
+  test("returns the identical string for two consecutive calls with the same source", () => {
+    // arrange
+    const source = {
+      kind: "url",
+      raw: "https://gitlab.example.com/team/mp",
+      url: "https://gitlab.example.com/team/mp",
+    } as const;
+
+    // act
+    const cloneUrls = [networkCloneUrl(source), networkCloneUrl(source)];
+
+    // assert
+    assert.deepStrictEqual(cloneUrls, [
+      "https://gitlab.example.com/team/mp",
+      "https://gitlab.example.com/team/mp",
+    ]);
   });
 });
