@@ -31,18 +31,11 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const extensionContext = mock<ExtensionContext>({
   exactParams: true,
   name: "extension context type evidence",
-});
-const extensionApi = mock<ExtensionAPI>({
-  exactParams: true,
-  name: "extension API type evidence",
 });
 const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
 const completionCache = createCompletionCache();
@@ -125,7 +118,6 @@ void ({
 void ({
   ctx: extensionContext,
   run: runWithNothingLoaded(),
-  pi: extensionApi,
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -133,7 +125,6 @@ void ({
 void ({
   ctx: extensionContext,
   run: runWithNothingLoaded(),
-  pi: extensionApi,
   cwd: "/work/project",
   completionCache,
   scope: "project",
@@ -291,7 +282,6 @@ void ({
 } satisfies ReconcilePlan);
 void ({
   run: runWithNothingLoaded(),
-  pi: extensionApi,
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -299,7 +289,6 @@ void ({
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -308,7 +297,6 @@ void ({
 void ({
   ctx: extensionContext,
   run: runWithNothingLoaded(),
-  pi: extensionApi,
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -318,7 +306,6 @@ void ({
 void ({
   ctx: extensionContext,
   run: runWithNothingLoaded(),
-  pi: extensionApi,
   cwd: "/work/project",
   completionCache,
   hooksRouting,

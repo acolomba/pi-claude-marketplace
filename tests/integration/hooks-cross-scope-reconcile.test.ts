@@ -194,7 +194,6 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
     await applyReconcile({
       ctx: placeholderCtx,
       run: runWithNothingLoaded(),
-      pi: makeMockPi(),
       cwd: projectCwd,
       completionCache,
       hooksRouting,

@@ -2053,7 +2053,6 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
           await applyReconcile({
             ctx: reload.ctx,
             run: runWithNothingLoaded(),
-            pi: { getAllTools: () => [] },
             cwd,
             scope: "project",
             completionCache: createCompletionCache(),
@@ -2387,7 +2386,6 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
       await applyReconcile({
         ctx: reload.ctx,
         run: runWithNothingLoaded(),
-        pi: { getAllTools: () => [] },
         cwd,
         scope: "project",
         completionCache: createCompletionCache(),

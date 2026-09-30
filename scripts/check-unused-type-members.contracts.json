@@ -729,8 +729,8 @@
       "key": "skillPaths",
       "category": "external-output",
       "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/index.ts:181:11",
-      "boundary": "extensions/pi-claude-marketplace/index.ts:180:9"
+      "origin": "extensions/pi-claude-marketplace/index.ts:180:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:179:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:107:3",
@@ -738,8 +738,8 @@
       "key": "promptPaths",
       "category": "external-output",
       "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/index.ts:182:11",
-      "boundary": "extensions/pi-claude-marketplace/index.ts:180:9"
+      "origin": "extensions/pi-claude-marketplace/index.ts:181:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:179:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:218:3",

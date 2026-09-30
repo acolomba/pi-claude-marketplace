@@ -121,7 +121,6 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
         await applyReconcile({
           ctx,
           run: openNotificationRun(pi),
-          pi,
           cwd: event.cwd,
           hooksRouting,
           completionCache,

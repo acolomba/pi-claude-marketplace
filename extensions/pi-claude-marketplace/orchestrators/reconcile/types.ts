@@ -42,7 +42,7 @@
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -263,12 +263,6 @@ export interface ApplyReconcileOptions {
    * The reconcile-applied cascade renders from its soft-dependency snapshot.
    */
   readonly run: NotificationRun;
-  /**
-   * The tool inventory forwarded to the nested backfill orchestrator, which
-   * does not take a run yet. Reconcile's own emission and the nested add,
-   * remove, install, uninstall, and enable read `run`.
-   */
-  readonly pi: ToolInventory;
   /** Project-scope cwd (ignored for the user scope). */
   readonly cwd: string;
   /** Lifecycle-owned route effects shared with registered hook callbacks. */

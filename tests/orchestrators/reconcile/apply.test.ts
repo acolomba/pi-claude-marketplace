@@ -609,11 +609,11 @@ describe("applyReconcile", () => {
   test("WR-05: leaves a scope with neither a state file nor a configuration file untouched and silent", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "pristine");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, []);
@@ -642,11 +642,11 @@ describe("applyReconcile", () => {
     await seedState(project, seeded);
     await writeUnder(project.configJsonPath, "{");
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -685,11 +685,11 @@ describe("applyReconcile", () => {
     await seedState(project, seeded);
     await writeUnder(project.configJsonPath, "{");
     await writeUnder(project.configLocalJsonPath, JSON.stringify({ schemaVersion: 1, plugins: 7 }));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -724,11 +724,11 @@ describe("applyReconcile", () => {
     });
     await writeUnder(project.configJsonPath, configBytes({ marketplaces: {} }));
     await writeUnder(project.configLocalJsonPath, JSON.stringify({ schemaVersion: 1, plugins: 7 }));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -774,11 +774,11 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -818,11 +818,11 @@ describe("applyReconcile", () => {
     t.after(async () => {
       await release();
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -861,11 +861,11 @@ describe("applyReconcile", () => {
       },
     });
     await denyWrites(project.scopeRoot);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(
@@ -918,11 +918,11 @@ describe("applyReconcile", () => {
         lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {},
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
-      await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+      await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -978,10 +978,10 @@ describe("applyReconcile", () => {
       allowedRemoteUrls: ["https://github.com/acme/remote.git"],
       cloneError: unreachable,
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1035,11 +1035,11 @@ describe("applyReconcile", () => {
       path.join(project.skillsTargetDir, "hello-tool", "SKILL.md"),
       "---\nname: hello-tool\n---\n\nbody\n",
     );
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1104,11 +1104,11 @@ describe("applyReconcile", () => {
       JSON.stringify({ PreToolUse: [] }),
     );
     await denyWrites(path.join(project.extensionRoot, "hooks", "stuck"));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1174,11 +1174,11 @@ describe("applyReconcile", () => {
       JSON.stringify({ PreToolUse: [] }),
     );
     await denyWrites(path.join(project.extensionRoot, "hooks", "stuck"));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1235,7 +1235,7 @@ describe("applyReconcile", () => {
       path.join(project.skillsTargetDir, "hello-tool", "SKILL.md"),
       "---\nname: hello-tool\n---\n\nbody\n",
     );
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
@@ -1279,7 +1279,6 @@ describe("applyReconcile", () => {
     await applyReconcileWithRouting({
       ctx,
       run: runWithNothingLoaded(),
-      pi,
       cwd,
       scope: "project",
       completionCache,
@@ -1290,7 +1289,6 @@ describe("applyReconcile", () => {
     await applyReconcileWithRouting({
       ctx,
       run: runWithNothingLoaded(),
-      pi,
       cwd,
       scope: "project",
       completionCache,
@@ -1414,14 +1412,13 @@ describe("applyReconcile", () => {
     const completionCache = createCompletionCache();
     const pluginCachePath = await project.pluginCacheFile("mp");
     await mkdir(pluginCachePath, { recursive: true });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
     await applyReconcileWithRouting({
       ctx,
       run: runWithNothingLoaded(),
-      pi,
       cwd,
       scope: "project",
       completionCache,
@@ -1526,11 +1523,11 @@ describe("applyReconcile", () => {
         JSON.stringify({ PreToolUse: [] }),
       );
       await denyWrites(path.join(project.extensionRoot, "hooks", "zulu"));
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
-      await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+      await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -1579,11 +1576,11 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1645,13 +1642,13 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
     const afterFirst = await loadState(project.extensionRoot);
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1704,11 +1701,11 @@ describe("applyReconcile", () => {
       },
     };
     await seedState(project, initialState);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1755,11 +1752,11 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1818,7 +1815,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
@@ -1828,7 +1825,6 @@ describe("applyReconcile", () => {
     await applyReconcileWithRouting({
       ctx,
       run: runWithNothingLoaded(),
-      pi,
       cwd,
       scope: "project",
       completionCache: createCompletionCache(),
@@ -1879,11 +1875,11 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1929,11 +1925,11 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1984,11 +1980,11 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2045,11 +2041,11 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2120,11 +2116,11 @@ describe("applyReconcile", () => {
           }),
         },
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
-      await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+      await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -2181,11 +2177,11 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2276,11 +2272,11 @@ describe("applyReconcile", () => {
           }),
         },
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
-      await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+      await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -2331,11 +2327,11 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2381,11 +2377,11 @@ describe("applyReconcile", () => {
       },
     };
     await seedState(project, seeded);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2452,11 +2448,11 @@ describe("applyReconcile", () => {
       JSON.stringify({ PreToolUse: [] }),
     );
     await denyWrites(path.join(project.extensionRoot, "hooks", "zulu"));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2523,11 +2519,11 @@ describe("applyReconcile", () => {
         },
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2581,12 +2577,12 @@ describe("applyReconcile", () => {
     });
     await writeUnder(path.join(project.scopeRoot, "unrelated.txt"), "project bytes\n");
     await writeUnder(path.join(user.scopeRoot, "unrelated.txt"), "user bytes\n");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const startedAt = Date.now();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, gitOps });
     const completedAt = Date.now();
 
     // assert
@@ -2693,10 +2689,10 @@ describe("applyReconcile", () => {
       allowedRemoteUrls: ["https://github.com/acme/proj.git", "https://github.com/acme/user.git"],
       fixtureSourceDir: fixture.marketplaceRoot,
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2740,11 +2736,11 @@ describe("applyReconcile", () => {
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2785,11 +2781,11 @@ describe("applyReconcile", () => {
     };
     await seedState(user, userState);
     const userStateBytes = await readFile(user.stateJsonPath, "utf8");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2821,12 +2817,12 @@ describe("applyReconcile", () => {
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
     const configModifiedAt = (await stat(project.configJsonPath)).mtimeMs;
     const stateModifiedAt = (await stat(project.stateJsonPath)).mtimeMs;
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, []);
@@ -2881,11 +2877,11 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2933,11 +2929,11 @@ describe("applyReconcile", () => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "config-only");
     await writeUnder(project.configJsonPath, configBytes({ marketplaces: {}, plugins: {} }));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, []);
@@ -2975,11 +2971,11 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -3024,11 +3020,11 @@ describe("applyReconcile", () => {
       },
     });
     const applyWithRace = applyAfterSelectedStateRace(project, "{ half written");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyWithRace({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyWithRace({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -3078,7 +3074,7 @@ describe("applyReconcile", () => {
       },
     });
     const applyWithRace = applyAfterSelectedStateRace(project, "{ half written");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const completionCache = createCompletionCache();
     const pluginCachePath = await project.pluginCacheFile("mp");
@@ -3092,7 +3088,6 @@ describe("applyReconcile", () => {
     await applyWithRace({
       ctx,
       run: runWithNothingLoaded(),
-      pi,
       cwd,
       scope: "project",
       completionCache,
@@ -3182,7 +3177,7 @@ describe("applyReconcile", () => {
       },
     };
     const applyWithReader = createApplyReconcile(reader);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     const completionCache = createCompletionCache();
@@ -3191,7 +3186,6 @@ describe("applyReconcile", () => {
     await applyWithReader({
       ctx,
       run: runWithNothingLoaded(),
-      pi,
       cwd,
       completionCache,
       gitOps,
@@ -3200,7 +3194,6 @@ describe("applyReconcile", () => {
     await applyWithReader({
       ctx,
       run: runWithNothingLoaded(),
-      pi,
       cwd,
       completionCache,
       gitOps,
@@ -3302,11 +3295,11 @@ describe("applyReconcile", () => {
       },
     });
     const applyWithRace = applyAfterSelectedStateRace(project, competingState);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyWithRace({ ctx, run: runWithNothingLoaded(), pi, cwd, scope: "project", gitOps });
+    await applyWithRace({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, []);

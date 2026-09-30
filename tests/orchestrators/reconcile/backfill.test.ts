@@ -9,7 +9,8 @@
 // Backfill never renders. `reinstallPlugin` runs with `render: "none"` and the
 // promotion rows fold into the caller's outcome array for the reconcile
 // cascade to project (RECON-04), so every case states a notification boundary
-// with no promised call: an unpromised `notify` or `getAllTools` call throws.
+// with no promised call: an unpromised `notify` call throws. The options carry
+// the load pass's run and no tool inventory, so nothing can probe (D-07).
 
 import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -51,10 +52,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { TestContext } from "node:test";
 
@@ -87,24 +85,20 @@ function createOfflineGitOps(): {
 }
 
 /**
- * Strict boundary for the Pi surfaces backfill hands to the composed
- * reinstall. No call is promised on either mock, which is the silence proof:
- * a `notify` emission or a `getAllTools` soft-dependency probe throws where it
- * is made rather than being recorded and counted afterwards.
+ * Strict boundary for the Pi context backfill hands to the composed reinstall.
+ * No call is promised on the mock, which is the silence proof: a `notify`
+ * emission throws where it is made rather than being recorded and counted
+ * afterwards.
  */
 function createSilentBoundary(): {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
   readonly verifyBoundary: () => void;
 } {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   return {
     ctx,
-    pi,
     verifyBoundary: (): void => {
       verify(ctx);
-      verify(pi);
     },
   };
 }
@@ -295,13 +289,11 @@ async function seedState(locations: ScopedLocations, state: ExtensionState): Pro
 
 function backfillOptions(
   ctx: ExtensionContext,
-  pi: ExtensionAPI,
   cwd: string,
   gitOps: GitOps,
 ): ApplyReconcileOptions {
   return backfillOptionsWithRouting(
     ctx,
-    pi,
     cwd,
     gitOps,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -311,7 +303,6 @@ function backfillOptions(
 
 function backfillOptionsWithRouting(
   ctx: ExtensionContext,
-  pi: ExtensionAPI,
   cwd: string,
   gitOps: GitOps,
   hooksRouting: HooksRouting,
@@ -320,7 +311,6 @@ function backfillOptionsWithRouting(
   return {
     ctx,
     run: runWithNothingLoaded(),
-    pi,
     cwd,
     scope: "project",
     completionCache,
@@ -411,7 +401,7 @@ describe("applyBackfillForScopeIsolated", () => {
   test("WR-05: skips a pristine scope whose read pass carried no state", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "pristine");
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const readResult: ScopeReadResult = {
       plan: undefined,
@@ -422,7 +412,7 @@ describe("applyBackfillForScopeIsolated", () => {
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResult,
       outcomes,
@@ -447,13 +437,13 @@ describe("applyBackfillForScopeIsolated", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -481,13 +471,13 @@ describe("applyBackfillForScopeIsolated", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -526,13 +516,13 @@ describe("applyBackfillForScopeIsolated", () => {
     };
     await seedState(locations, seeded);
     const seededSnapshot = await stateSnapshot(locations.stateJsonPath);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -567,13 +557,13 @@ describe("applyBackfillForScopeIsolated", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -613,13 +603,13 @@ describe("applyBackfillForScopeIsolated", () => {
         }),
       },
     };
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(snapshot, false),
       outcomes,
@@ -656,13 +646,13 @@ describe("applyBackfillForScopeIsolated", () => {
         }),
       },
     };
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(snapshot, false),
       outcomes,
@@ -706,13 +696,13 @@ describe("applyBackfillForScopeIsolated", () => {
     // partition rather than a throw.
     await mkdir(path.dirname(locations.skillsTargetDir), { recursive: true });
     await writeFile(locations.skillsTargetDir, "not a directory\n");
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -746,7 +736,7 @@ describe("applyBackfillForScopeIsolated", () => {
     };
     await seedState(locations, seeded);
     const release = await holdScopeLock(locations);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [
       { kind: "mp-added", scope: "project", marketplace: "sibling" },
@@ -754,7 +744,7 @@ describe("applyBackfillForScopeIsolated", () => {
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -830,13 +820,13 @@ describe("applyBackfillForScopeIsolated", () => {
     // cannot mask it either -- a stat failure there is a pure miss and the
     // loader's error propagates verbatim.
     await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -879,13 +869,13 @@ describe("applyBackfillForScopeIsolated", () => {
     };
     await seedState(locations, seeded);
     await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -945,13 +935,13 @@ describe("applyBackfillForScopeIsolated", () => {
     };
     await seedState(locations, seeded);
     await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1002,13 +992,13 @@ describe("applyBackfillForScopeIsolated", () => {
     };
     await seedState(locations, seeded);
     await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1101,13 +1091,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1183,13 +1173,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1274,7 +1264,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
@@ -1300,7 +1290,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptionsWithRouting(ctx, pi, cwd, gitOps, hooksRouting, ownerCache),
+      backfillOptionsWithRouting(ctx, cwd, gitOps, hooksRouting, ownerCache),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1417,13 +1407,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1498,13 +1488,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1546,14 +1536,14 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act -- the gate is deliberately left OPEN (a stale stamp), so the scan
     // does run and the skip is the growth test's doing, not the version test's.
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1598,13 +1588,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1643,7 +1633,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [
       {
@@ -1657,7 +1647,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1713,7 +1703,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     // The apply pass already emitted a transition row for this plugin on this
     // load, so the scan must neither re-materialize over it nor add a row.
@@ -1723,7 +1713,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1774,7 +1764,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, snapshot);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [
       { kind: "plugin-disabled", scope: "project", marketplace: "mp", plugin: "hello" },
@@ -1782,7 +1772,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(snapshot, true),
       outcomes,
@@ -1833,13 +1823,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -1897,13 +1887,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, stored);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(snapshot, true),
       outcomes,
@@ -1943,13 +1933,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -2033,13 +2023,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     };
     await seedState(locations, seeded);
     const release = await holdScopeLock(locations);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -2091,13 +2081,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -2186,13 +2176,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -2252,13 +2242,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -2305,13 +2295,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     // reason on the outcome rather than leaving it to the notes.
     await mkdir(path.dirname(locations.skillsTargetDir), { recursive: true });
     await writeFile(locations.skillsTargetDir, "not a directory\n");
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -2363,13 +2353,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -2420,13 +2410,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, afterConcurrentUninstall);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(snapshot, true),
       outcomes,
@@ -2462,13 +2452,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -2507,13 +2497,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
@@ -2571,13 +2561,13 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     await seedState(locations, seeded);
-    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { ctx, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     await applyBackfillForScopeIsolated(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptions(ctx, cwd, gitOps),
       "project",
       readResultFor(seeded, true),
       outcomes,
