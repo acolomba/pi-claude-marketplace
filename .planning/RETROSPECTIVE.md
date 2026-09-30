@@ -5,7 +5,7 @@
 ## Milestone: any-git-host -- Any Git Host
 
 **Completed:** 2026-09-30 on `features/git-hosts` (workstream `git-hosts`; merged to main in PR #221 as `a0d3aef1`, no npm release yet)
-**Phases:** 3 (1-3) | **Plans:** 11 | **Tasks:** 29 | **Requirements:** 10/10 | **Audit:** tech_debt (no blockers; 3/3 phases, 10/10 wired, 5/5 flows) -- review debt carried as GHRED-01 and GHADD-01
+**Phases:** 3 (1-3) | **Plans:** 11 | **Tasks:** 29 | **Requirements:** 10/10 | **Audit:** passed (no blockers; 3/3 phases, 10/10 wired, 5/5 flows) -- first `tech_debt`; the review debt (GHRED-01, GHADD-01) was closed in PR #231
 
 ### What Was Built
 - Private https sources authenticate on any git host from the git credential helper, with no hostname added to the provider registry; `github.com` / `gitlab.com` keep Device Flow.

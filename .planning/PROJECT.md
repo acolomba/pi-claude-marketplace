@@ -868,4 +868,4 @@ _Last updated: 2026-09-14 after starting test-backlog._
 
 _Last updated: 2026-09-21 after the workflows-replay milestone closed in workstream `workflows`. Nine phases, 39 plans, 46/46 requirements; the `workflows` bridge replayed onto main on `features/workflow` and hardened; audit `tech_debt` cleared or carried before the archive; unmerged._
 
-_Last updated: 2026-09-30 after the any-git-host milestone closed in workstream `git-hosts`. Three phases, 11 plans, 10/10 requirements; private repos on any git host, verbatim-URL endpoints and leftover-clone recovery, reimplemented from PR #153 and merged to main in PR #221. Audit `tech_debt`, no blockers; review debt carried as GHRED-01 and GHADD-01._
+_Last updated: 2026-09-30 after the any-git-host milestone closed in workstream `git-hosts`. Three phases, 11 plans, 10/10 requirements; private repos on any git host, verbatim-URL endpoints and leftover-clone recovery, reimplemented from PR #153 and merged to main in PR #221. Audit `passed` after PR #231 closed the review debt (GHRED-01, GHADD-01)._

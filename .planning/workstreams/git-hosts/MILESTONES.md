@@ -20,9 +20,10 @@ reads neither path. PR #153 stays open with a comment explaining what landed.
 
 **Closeout:** verified close. 10/10 requirements; all three phases re-verified
 `passed` against the final tree after post-verification review fixes made them
-stale; `threats_open: 0` on every phase; audit `tech_debt` with no blockers. The
-open code-review findings are carried by `BACKLOG.md` GHRED-01 (redirect and
-auth-callback edges) and GHADD-01 (leftover-recognition cleanups). Phases 2 and 3
-were not Nyquist-validated.
+stale; `threats_open: 0` on every phase. The audit first read `tech_debt` with
+no blockers, for the open code-review findings in `BACKLOG.md` GHRED-01 (redirect
+and auth-callback edges) and GHADD-01 (leftover-recognition cleanups). Quick task
+260930-j4y closed both in PR #231, and Phases 2 and 3 were Nyquist-validated
+there, so the audit now reads `passed` with all three phases compliant.
 
 ---
