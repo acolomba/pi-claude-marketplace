@@ -37,11 +37,11 @@
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two emission paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` THREE times -- the cascade runs ONE soft-dependency
-//     probe and that probe reads the tool list once per companion target.
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
+//     writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once.
+// Neither path reads the tool list: the cascade renders from the command run's
+// soft-dependency snapshot (D-05), so every case states zero probes.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -67,6 +67,7 @@ import { test, type TestContext } from "node:test";
 
 import { makeFetchHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -165,11 +166,11 @@ for (const { args, expectedMessage, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "validation");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const fetchHandler = makeFetchHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const fetchHandler = makeFetchHandler();
 
     // act
-    await fetchHandler(args, ctx);
+    await fetchHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -185,11 +186,11 @@ for (const { args, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "validation");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const fetchHandler = makeFetchHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const fetchHandler = makeFetchHandler();
 
     // act
-    await fetchHandler(args, ctx);
+    await fetchHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -227,11 +228,11 @@ for (const { args, expectedMessage, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "validation");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const fetchHandler = makeFetchHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const fetchHandler = makeFetchHandler();
 
     // act
-    await fetchHandler(args, ctx);
+    await fetchHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -243,11 +244,11 @@ test("carries the tokenizer's own sentence for an unrecognised scope value (FTCH
   // arrange
   const workspace = await createHermeticWorkspace(t, "validation");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const fetchHandler = makeFetchHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const fetchHandler = makeFetchHandler();
 
   // act
-  await fetchHandler("hello@mymkt --scope bogus", ctx);
+  await fetchHandler("hello@mymkt --scope bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -292,14 +293,14 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const fetchHandler = makeFetchHandler(pi);
+    const fetchHandler = makeFetchHandler();
 
     // act
-    await fetchHandler(args, ctx);
+    await fetchHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -327,14 +328,14 @@ for (const { args, expectedMessage, label, scope } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const fetchHandler = makeFetchHandler(pi);
+    const fetchHandler = makeFetchHandler();
 
     // act
-    await fetchHandler(args, ctx);
+    await fetchHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -346,11 +347,11 @@ test("reports an unknown flag and never reaches the fetch workflow (D-116-06)", 
   // arrange
   const workspace = await createHermeticWorkspace(t, "short-circuit");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const fetchHandler = makeFetchHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const fetchHandler = makeFetchHandler();
 
   // act
-  await fetchHandler("--bogus", ctx);
+  await fetchHandler("--bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [

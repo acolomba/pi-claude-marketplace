@@ -37,7 +37,6 @@ import type { ReinstallHooksRouting } from "../../../extensions/pi-claude-market
 import type { UninstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
-  ExtensionAPI,
   ExtensionContext,
   NotificationContext,
   ToolInventory,
@@ -58,29 +57,25 @@ type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
 
 interface FetchBoundary {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   readonly notifications: NotifyRecord[];
   readonly verifyBoundary: () => void;
 }
 
 /**
  * The fetch command's notification boundary. fetch is handed the whole
- * `ExtensionContext` / `ExtensionAPI` rather than the two narrow read contracts
- * `makeCtx` builds, so the members it may reach are stated as expectations and
- * verified after the call: one cascade emission and the soft-dependency probe,
- * which reads the tool list three times -- pi-subagents, mcp adapter, workflow engine.
+ * `ExtensionContext` rather than the narrow read contract `makeCtx` builds, so
+ * the members it may reach are stated as expectations and verified after the
+ * call: one cascade emission. The emission renders from the command run's
+ * snapshot (D-05), so the boundary holds no tool inventory to probe.
  */
 function makeFetchBoundary(): FetchBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "fetch context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "fetch extension API" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "fetch UI" });
   const notifications: NotifyRecord[] = [];
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push(severity === undefined ? { message } : { message, severity });
@@ -88,11 +83,10 @@ function makeFetchBoundary(): FetchBoundary {
     .once();
   return {
     ctx,
-    pi,
+    run: runWithNothingLoaded(),
     notifications,
     verifyBoundary: () => {
       verify(ctx);
-      verify(pi);
       verify(ui);
     },
   };
@@ -709,7 +703,7 @@ test("fetchPlugins answers a warm pinned source from the bound status capability
   // act
   await fetchPlugins({
     ctx: boundary.ctx,
-    pi: boundary.pi,
+    run: boundary.run,
     scope: "project",
     cwd,
     target: { kind: "plugin", marketplace: "mp", plugin: "p1" },

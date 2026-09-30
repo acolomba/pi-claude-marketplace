@@ -104,7 +104,7 @@ export function registerClaudePluginCommand(
     install,
     uninstall,
     update: makeUpdateHandler(updatePlugins),
-    fetch: makeFetchHandler(pi),
+    fetch: makeFetchHandler(),
     reinstall: makeReinstallHandler(reinstallPlugins),
     list,
     pluginInfo,

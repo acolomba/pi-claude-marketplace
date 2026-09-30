@@ -23,8 +23,9 @@ import { parseArgs } from "../../args.ts";
 import { splitPluginMarketplaceRef } from "./shared.ts";
 
 import type { FetchTarget } from "../../../orchestrators/plugin/fetch.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { Scope } from "../../../shared/types.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE =
   "Usage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]";
@@ -108,14 +109,12 @@ function toFetchTarget(
 }
 
 /**
- * Factory: returns the async handler closed over `pi` (required by `notify()`
- * for the soft-dep probe). `register.ts` wires this into `SubcommandHandlers`
+ * Factory: returns the async handler, which forwards the router's command run
+ * to `fetchPlugins` (D-05). `register.ts` wires this into `SubcommandHandlers`
  * under the `fetch` key.
  */
-export function makeFetchHandler(
-  pi: ExtensionAPI,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+export function makeFetchHandler(): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     const parsed = parseFetchTarget(args, ctx);
     if (parsed === undefined) {
       return;
@@ -123,7 +122,7 @@ export function makeFetchHandler(
 
     await fetchPlugins({
       ctx,
-      pi,
+      run,
       cwd: ctx.cwd,
       target: parsed.target,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),

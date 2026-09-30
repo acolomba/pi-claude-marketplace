@@ -59,7 +59,8 @@ import type { makePresenceProbe, probeManifestEntry } from "./git-source-probe.t
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 
@@ -104,8 +105,8 @@ export interface FetchStatus {
 
 export interface FetchPluginsOptions {
   readonly ctx: ExtensionContext;
-  /** Factory `pi` reference -- notify owns the single soft-dep probe. */
-  readonly pi: ExtensionAPI;
+  /** D-05: the command run; its soft-dependency snapshot feeds the emission. */
+  readonly run: NotificationRun;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly target: FetchTarget;
@@ -131,7 +132,7 @@ export function createFetchPlugins(
   status: FetchStatus,
 ): (opts: FetchPluginsOptions) => Promise<void> {
   return async function fetchPlugins(opts: FetchPluginsOptions): Promise<void> {
-    const { ctx, pi } = opts;
+    const { ctx, run } = opts;
 
     const { targets, manifestFailures } = await enumerateFetchTargets(opts);
 
@@ -202,7 +203,7 @@ export function createFetchPlugins(
     );
     const marketplaces: Plural<MarketplaceRows<FetchMsg>> = blocks;
 
-    notifyWithContext(ctx, pi, FETCH_CONTEXT, marketplaces, "cascade", cardinality);
+    notifyWithContext(ctx, run, FETCH_CONTEXT, marketplaces, "cascade", cardinality);
   };
 }
 
