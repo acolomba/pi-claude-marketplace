@@ -12,7 +12,7 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 
 ## Phases
 
-- [ ] **Phase 1: Presentation Model** — Every presentation decision is computed once, upstream of a text renderer that no longer probes state or walks `Error` objects
+- [x] **Phase 1: Presentation Model** — Every presentation decision is computed once, upstream of a text renderer that no longer probes state or walks `Error` objects (completed 2026-09-30)
 - [ ] **Phase 2: Row Policies** — Per-verb rendering differences become a total row-policy map of data instead of string render callbacks
 - [ ] **Phase 3: Typed Raw Surfaces** — Every raw-string output surface becomes a typed model kind, so text is a pure formatter of the model
 - [ ] **Phase 4: Wire Schema and JSON Strategy** — A versioned typebox wire schema and a format-only JSON strategy, validated as a pure function and first consumed by the LLM tools
@@ -47,7 +47,7 @@ re-opened.
 4. Failure detail reaches the renderer as a serialized `causeChain: string[]` with a `truncated` flag, plus per-phase rollback entries and manual-recovery leaks as strings. No live `Error` crosses into rendering, and the cause-chain text is byte-identical to the baseline.
 5. The probe-to-marker derivation has its own owner test that states the per-verb suppression table as data. `workflows-marker-coverage` scans the new derivation site and is not deleted.
 
-**Plans:** 16/16 plans executed, sequential (waves 1-16)
+**Plans:** 16/16 plans complete, sequential (waves 1-16)
 
 Plans:
 **Wave 1**
@@ -200,7 +200,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Presentation Model | 16/16 | In Progress | - |
+| 1. Presentation Model | 16/16 | Complete | 2026-09-30 |
 | 2. Row Policies | 0/TBD | Not started | - |
 | 3. Typed Raw Surfaces | 0/TBD | Not started | - |
 | 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |

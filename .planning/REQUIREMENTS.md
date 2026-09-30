@@ -24,7 +24,7 @@ model that already carries every presentation decision.
 
 ### Presentation Model
 
-- [ ] **PMOD-01**: Every presentation decision -- severity, `needsReload`,
+- [x] **PMOD-01**: Every presentation decision -- severity, `needsReload`,
   tally, summary line, composed reasons including `{requires ...}` soft-dep
   markers, and hints -- is computed in one model step upstream of rendering;
   neither strategy probes state or walks `Error` objects. The render-time
@@ -34,7 +34,7 @@ model that already carries every presentation decision.
   (row policies) instead of the `CommandContext` render callbacks in
   orchestrators' `*.messaging.ts`; every known per-command divergence is
   preserved.
-- [ ] **PMOD-03**: Failure detail is carried as a serialized, redacted cause
+- [x] **PMOD-03**: Failure detail is carried as a serialized, redacted cause
   chain (`causeChain: string[]` with a `truncated` flag, plus per-phase rollback
   entries), never as a live `Error`.
 - [ ] **PMOD-04**: Credentials -- URL userinfo and any token -- are absent from
@@ -190,9 +190,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PMOD-01 | Phase 1 | Pending |
+| PMOD-01 | Phase 1 | Complete |
 | PMOD-02 | Phase 2 | Pending |
-| PMOD-03 | Phase 1 | Pending |
+| PMOD-03 | Phase 1 | Complete |
 | PMOD-04 | Phase 4 | Pending |
 | PMOD-05 | Phase 2 | Pending |
 | TEXT-01 | Phase 3 | Pending |

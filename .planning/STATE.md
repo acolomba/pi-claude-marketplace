@@ -1,19 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 01
-current_phase_name: Presentation Model
-status: verifying
-stopped_at: Completed 01-16-PLAN.md
-last_updated: "2026-09-30T18:05:41.377Z"
+current_phase: 2
+current_phase_name: Row Policies
+status: planning
+stopped_at: Phase 01 complete, ready to plan Phase 2
+last_updated: "2026-09-30T18:29:25.960Z"
 last_activity: 2026-09-30
-last_activity_desc: Completed 01-16 run-only notify family and phase gate
-state_head: ffcccb652aece41db7f78011f51dc0df7f981015
+last_activity_desc: Phase 01 complete, transitioned to Phase 2
+state_head: 5491c394bc871a6617f28cba8f5b194c395603e5
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 16
   completed_plans: 16
+  percent: 14
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -30,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 01 (Presentation Model) — EXECUTING
-Plan: 16 of 16
-Status: All plans executed — ready for code review and verification
-Last activity: 2026-09-30 — Completed 01-16 (run-only notify family and phase gate)
+Phase: 2 — Row Policies
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-30 — Phase 01 complete, transitioned to Phase 2
 
-Progress: [██████████] 100% (16 of 16 plans)
+Progress: [█░░░░░░░░░] 14% (1 of 7 phases)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,7 +170,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Last session:** 2026-09-30T18:05:41.066Z
-**Stopped at:** Completed 01-16-PLAN.md
+**Stopped at:** Phase 01 complete, ready to plan Phase 2
 **Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
