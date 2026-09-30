@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 01
 current_phase_name: Presentation Model
 status: executing
-stopped_at: Completed 01-09-PLAN.md
-last_updated: "2026-09-30T01:35:53.314Z"
+stopped_at: Completed 01-10-PLAN.md
+last_updated: "2026-09-30T02:43:44.051Z"
 last_activity: 2026-09-30
-last_activity_desc: Completed 01-09 marketplace add, autoupdate, and bootstrap run
-state_head: 422cc3d51dbca9c190d81036f17ba901c5708b17
+last_activity_desc: Completed 01-10 plugin install run and SC-3 proof
+state_head: 8c4f096758fd7c30ad4a24a32dbe558fed7d2d7a
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 16
-  completed_plans: 9
+  completed_plans: 10
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Presentation Model) — EXECUTING
-Plan: 10 of 16
+Plan: 11 of 16
 Status: Ready to execute
-Last activity: 2026-09-30 — Completed 01-09 (marketplace add, autoupdate, and bootstrap run)
+Last activity: 2026-09-30 — Completed 01-10 (plugin install run and SC-3 proof)
 
-Progress: [██████░░░░] 56% (9 of 16 plans)
+Progress: [██████░░░░] 63% (10 of 16 plans)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,8 +168,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-30T01:35:53.240Z
-**Stopped at:** Completed 01-09-PLAN.md
+**Last session:** 2026-09-30T02:43:27.962Z
+**Stopped at:** Completed 01-10-PLAN.md
 **Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
@@ -208,6 +208,7 @@ archived milestone artifacts.
 | Phase 01 P07 | 71 min | 2 tasks | 25 files |
 | Phase 01 P08 | 51 min | 2 tasks | 22 files |
 | Phase 01 P09 | 70 min | 2 tasks | 24 files |
+| Phase 01 P10 | 67 min | 2 tasks | 23 files |
 
 ## Decisions
 
@@ -231,3 +232,6 @@ archived milestone artifacts.
 - [Phase 01]: The add and autoupdate orchestrator suites drop the strict pi mock: their boundaries return a run seed and have no tool inventory to probe
 - [Phase 01]: fold-adoption's shared context helper carries both pi and run; add reads run, install and list still read pi until they migrate
 - [Phase 01]: bootstrap renders its add, autoupdate flip, and its handler's failed row from the router's one run (D-05)
+- [Phase 01]: Plugin install takes InstallPluginOptions.run: the success row stamps companionSeverity from run.softDeps and notify composes the markers from the same snapshot, so one probe drives both (D-05)
+- [Phase 01]: ImportClaudeSettingsOptions carries no pi; import and reconcile hand their own run to the nested install, and reconcile keeps pi only for uninstall, enable, and backfill (D-07)
+- [Phase 01]: SC-3 is proven through the registered command with a two-answer inventory: [] for the first three reads, subagent after; the case asserts the warning summary with the marker and exactly three reads (D-08)
