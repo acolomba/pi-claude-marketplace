@@ -18,7 +18,6 @@ import { parseFlagNames } from "../../flag-catalog.ts";
 
 import { withParsedArgs } from "./shared.ts";
 
-import type { ExtensionAPI } from "../../../platform/pi-api.ts";
 import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE =
@@ -31,13 +30,12 @@ const USAGE =
 const BOOLEAN_FLAGS = parseFlagNames("list");
 
 /**
- * Factory: returns the async handler closed over `pi` (required by
- * `listPlugins` for per-row soft-dep marker probes per CMC-13 / MSG-SD-1..3 --
- * the orchestrator constructs a `SoftDepProbe` via `softDepStatus(pi)` and
- * forwards it to the renderer).
+ * Factory: returns the async handler, which forwards the router's command run
+ * to `listPlugins` (D-05). The run's soft-dependency snapshot feeds the per-row
+ * markers of CMC-13 / MSG-SD-1..3.
  */
-export function makeListHandler(pi: ExtensionAPI): SubcommandHandler {
-  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
+export function makeListHandler(): SubcommandHandler {
+  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx, run): Promise<void> => {
     // Data-driven scan: a token in BOOLEAN_FLAGS is a recognized filter flag;
     // any other `--` token is an unknown long flag; everything else is a
     // positional. Driving the recognized set from BOOLEAN_FLAGS keeps each new
@@ -64,7 +62,7 @@ export function makeListHandler(pi: ExtensionAPI): SubcommandHandler {
 
     await listPlugins({
       ctx,
-      pi,
+      run,
       cwd: ctx.cwd,
       ...(nonFlagPositionals[0] !== undefined && { marketplace: nonFlagPositionals[0] }),
       ...(parsed.scope !== undefined && { scope: parsed.scope }),

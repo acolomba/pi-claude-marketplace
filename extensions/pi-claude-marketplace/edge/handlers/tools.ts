@@ -266,16 +266,11 @@ async function marketplaceExists(params: {
 }
 
 /**
- * The tool's `pi` reference is required for the orchestrator's
- * `SoftDepProbe` construction; we pass the ExtensionContext's pi seed at
- * call time. The probe is only consulted when a PluginListRow carries
- * `declares*` predicates, which never affects the orchestrator's
- * bucketing -- so the probe choice does not change the structured tool
- * output (it only suppresses the `{requires pi-*}` reason injection on
- * the renderer side, which this tool does not call).
+ * Builds the tool's list payload. BLOCK A: the tool never notifies, so it
+ * builds no notification run, and the payload builder takes none; the
+ * `{requires pi-*}` markers belong to the slash-command surface only.
  */
 async function loadToolPluginPayload(
-  pi: ExtensionAPI,
   params: {
     marketplace?: string;
     scope?: "user" | "project";
@@ -285,7 +280,6 @@ async function loadToolPluginPayload(
 ): Promise<Awaited<ReturnType<typeof loadPluginListPayload>>> {
   return loadPluginListPayload({
     ctx,
-    pi,
     cwd: ctx.cwd,
     ...(params.scope !== undefined && { scope: params.scope }),
     ...(params.marketplace !== undefined && { marketplace: params.marketplace }),
@@ -437,7 +431,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
       let payload;
       let rendered;
       try {
-        payload = await loadToolPluginPayload(pi, params, ctx, buckets);
+        payload = await loadToolPluginPayload(params, ctx, buckets);
         rendered = renderPluginPayload(payload, buckets);
       } catch (err) {
         // TC-9: state.json error propagates as a tool error surface (the

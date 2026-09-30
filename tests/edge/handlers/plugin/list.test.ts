@@ -60,10 +60,12 @@
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` THREE times, on every filter and scope combination.
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
+//     writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, on every
+//     filter and scope combination.
+// Neither path reads the tool list: the listing renders from the command run's
+// soft-dependency snapshot (D-05), so every case states zero probes.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -420,11 +422,11 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const listHandler = makeListHandler(pi);
+    const listHandler = makeListHandler();
 
     // act
     await listHandler(args, ctx, runWithNothingLoaded());
@@ -466,11 +468,11 @@ for (const { args, expectedBlocks, label } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const listHandler = makeListHandler(pi);
+    const listHandler = makeListHandler();
 
     // act
     await listHandler(args, ctx, runWithNothingLoaded());
@@ -553,11 +555,11 @@ for (const { anchor, args, expectedBlocks, label } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const listHandler = makeListHandler(pi);
+    const listHandler = makeListHandler();
 
     // act
     await listHandler(args, ctx, runWithNothingLoaded());
@@ -612,11 +614,11 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const listHandler = makeListHandler(pi);
+    const listHandler = makeListHandler();
 
     // act
     await listHandler(args, ctx, runWithNothingLoaded());
@@ -671,11 +673,11 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const listHandler = makeListHandler(pi);
+    const listHandler = makeListHandler();
 
     // act
     await listHandler(args, ctx, runWithNothingLoaded());
@@ -706,8 +708,8 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const listHandler = makeListHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const listHandler = makeListHandler();
 
     // act
     await listHandler(args, ctx, runWithNothingLoaded());
@@ -742,8 +744,8 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const listHandler = makeListHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const listHandler = makeListHandler();
 
     // act
     await listHandler(args, ctx, runWithNothingLoaded());
@@ -775,8 +777,8 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const listHandler = makeListHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const listHandler = makeListHandler();
 
     // act
     await listHandler(args, ctx, runWithNothingLoaded());
@@ -813,8 +815,8 @@ for (const { args, expectedSentence, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const listHandler = makeListHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const listHandler = makeListHandler();
 
     // act
     await listHandler(args, ctx, runWithNothingLoaded());

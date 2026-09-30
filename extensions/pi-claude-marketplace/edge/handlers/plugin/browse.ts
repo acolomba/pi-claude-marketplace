@@ -28,7 +28,7 @@ import {
   type PickerResult,
 } from "../../browser/plugin-browser.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { NotificationRun } from "../../../shared/notification-run.ts";
 import type {
   PluginFailedMessage,
@@ -76,15 +76,14 @@ async function loadMarketplaceEntries(cwd: string): Promise<readonly Marketplace
  * `loadPluginListPayload`, selects the matching marketplace block (falling
  * back to the first block for a synthetic `(list)` failure), and returns the
  * raw `PluginNotificationMessage` rows. The browser projects them onto its
- * display entries.
+ * display entries. The loader only reads, so it takes no notification run.
  */
 function makePluginLoader(
-  pi: ExtensionAPI,
   ctx: ExtensionCommandContext,
   cwd: string,
 ): (marketplace: MarketplaceEntry) => Promise<readonly PluginNotificationMessage[]> {
   return async (mp): Promise<readonly PluginNotificationMessage[]> => {
-    const payload = await loadPluginListPayload({ ctx, pi, cwd, marketplace: mp.name });
+    const payload = await loadPluginListPayload({ ctx, cwd, marketplace: mp.name });
     const block = payload.find((b) => b.name === mp.name && b.scope === mp.scope);
     return block?.plugins ?? [];
   };
@@ -125,15 +124,11 @@ async function dispatch(
 }
 
 /**
- * Factory: returns the async handler closed over `pi` (needed by the
- * plugin loader's `loadPluginListPayload` soft-dep probe and the browser's
- * own notifications) and the action handlers. The handler forwards its
- * notification run to every action handler it calls.
+ * Factory: returns the async handler closed over the action handlers. The
+ * browser's own notifications render from the router's command run (D-05),
+ * and the handler forwards that run to every action handler it calls.
  */
-export function makeBrowseHandler(
-  pi: ExtensionAPI,
-  handlers: BrowseActionHandlers,
-): SubcommandHandler {
+export function makeBrowseHandler(handlers: BrowseActionHandlers): SubcommandHandler {
   return async (args, ctx, run): Promise<void> => {
     if (args.trim() !== "") {
       notifyUsageError(ctx, { message: "browse takes no arguments.", usage: USAGE });
@@ -161,7 +156,7 @@ export function makeBrowseHandler(
         severity: "error",
         needsReload: false,
       };
-      notify(ctx, pi, {
+      notify(ctx, run, {
         marketplaces: [
           {
             name: "(browse)",
@@ -174,11 +169,11 @@ export function makeBrowseHandler(
     }
 
     if (marketplaces.length === 0) {
-      notify(ctx, pi, { marketplaces: [] });
+      notify(ctx, run, { marketplaces: [] });
       return;
     }
 
-    const pluginLoader = makePluginLoader(pi, ctx, ctx.cwd);
+    const pluginLoader = makePluginLoader(ctx, ctx.cwd);
 
     const result = await ctx.ui.custom<PickerResult | null>((tui, theme, _kb, done) => {
       const browser = new PluginBrowser({

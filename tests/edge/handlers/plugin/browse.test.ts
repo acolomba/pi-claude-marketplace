@@ -26,10 +26,7 @@ import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../market
 import type { PickerResult } from "../../../../extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts";
 import type { SubcommandHandler } from "../../../../extensions/pi-claude-marketplace/edge/router.ts";
 import type { ExtensionState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionCommandContext,
-} from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionCommandContext } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 
@@ -127,7 +124,6 @@ function createMockActionHandlers(): {
 
 test("browse rejects non-empty arguments with usage error", async () => {
   // arrange
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const { handlers } = createMockActionHandlers();
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -136,7 +132,7 @@ test("browse rejects non-empty arguments with usage error", async () => {
     ui.notify("browse takes no arguments.\n\nUsage: /claude:plugin browse", "error");
   }).thenReturn();
 
-  const browseHandler = makeBrowseHandler(pi, handlers);
+  const browseHandler = makeBrowseHandler(handlers);
 
   // act
   await browseHandler("foo", ctx, runWithNothingLoaded());
@@ -149,20 +145,18 @@ test("browse rejects non-empty arguments with usage error", async () => {
 test("non-TUI mode falls back to the list subcommand handler", async () => {
   // arrange
   const run = runWithNothingLoaded();
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const { handlers, mockList } = createMockActionHandlers();
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
   when(() => ctx.mode).thenReturn("json");
   when(() => mockList("", ctx, run)).thenResolve(undefined);
 
-  const browseHandler = makeBrowseHandler(pi, handlers);
+  const browseHandler = makeBrowseHandler(handlers);
 
   // act
   await browseHandler("", ctx, run);
 
   // assert
   verify(ctx);
-  verify(pi);
   verify(mockList);
 });
 
@@ -170,30 +164,25 @@ test("TUI mode with no marketplaces emits structured (no marketplaces) notificat
   // arrange
   const run = runWithNothingLoaded();
   const scope = await createHermeticScope(t, "no-marketplaces");
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const { handlers } = createMockActionHandlers();
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
   when(() => ctx.mode).thenReturn("tui");
   when(() => ctx.cwd).thenReturn(scope.cwd);
   when(() => ctx.ui).thenReturn(ui);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
   when(() => {
     ui.notify("(no marketplaces)");
   })
     .thenReturn()
     .times(1);
 
-  const browseHandler = makeBrowseHandler(pi, handlers);
+  const browseHandler = makeBrowseHandler(handlers);
 
   // act
   await browseHandler("", ctx, run);
 
   // assert
   verify(ctx);
-  verify(pi);
   verify(ui);
 });
 
@@ -202,7 +191,6 @@ test("TUI mode with cancel (null result) invokes no action handler", async (t) =
   const run = runWithNothingLoaded();
   const scope = await createHermeticScope(t, "tui-cancel");
   await seedMarketplace(scope.cwd, "official");
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const { handlers } = createMockActionHandlers();
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -215,14 +203,13 @@ test("TUI mode with cancel (null result) invokes no action handler", async (t) =
   const customFactory = It.willCapture<Parameters<ExtensionCommandContext["ui"]["custom"]>[0]>();
   when(() => ui.custom(customFactory)).thenResolve(null);
 
-  const browseHandler = makeBrowseHandler(pi, handlers);
+  const browseHandler = makeBrowseHandler(handlers);
 
   // act
   await browseHandler("", ctx, run);
 
   // assert
   verify(ctx);
-  verify(pi);
   verify(ui);
 });
 
@@ -269,7 +256,6 @@ for (const { action, local, expectedHandler, expectedArgs } of [
     const run = runWithNothingLoaded();
     const scope = await createHermeticScope(t, `dispatch-${action}-${String(local)}`);
     await seedMarketplace(scope.cwd, "official");
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
     const actionMocks = createMockActionHandlers();
     const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
     const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -292,14 +278,13 @@ for (const { action, local, expectedHandler, expectedArgs } of [
 
     when(() => actionMocks[expectedHandler](expectedArgs, ctx, run)).thenResolve(undefined);
 
-    const browseHandler = makeBrowseHandler(pi, actionMocks.handlers);
+    const browseHandler = makeBrowseHandler(actionMocks.handlers);
 
     // act
     await browseHandler("", ctx, run);
 
     // assert
     verify(ctx);
-    verify(pi);
     verify(ui);
     verify(actionMocks[expectedHandler]);
   });
@@ -313,16 +298,12 @@ test("TUI mode when loadMarketplaceEntries throws emits structured failure notif
   await mkdir(locations.extensionRoot, { recursive: true });
   await writeFile(path.join(locations.extensionRoot, "state.json"), "invalid json");
 
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const { handlers } = createMockActionHandlers();
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
   when(() => ctx.mode).thenReturn("tui");
   when(() => ctx.cwd).thenReturn(scope.cwd);
   when(() => ctx.ui).thenReturn(ui);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
   const capturedNotify = It.willCapture<string>();
   when(() => {
     ui.notify(capturedNotify, "error");
@@ -330,7 +311,7 @@ test("TUI mode when loadMarketplaceEntries throws emits structured failure notif
     .thenReturn()
     .times(1);
 
-  const browseHandler = makeBrowseHandler(pi, handlers);
+  const browseHandler = makeBrowseHandler(handlers);
 
   // act
   await browseHandler("", ctx, run);
@@ -339,7 +320,6 @@ test("TUI mode when loadMarketplaceEntries throws emits structured failure notif
   assert.ok(capturedNotify.value?.includes("(browse)"));
   assert.ok(capturedNotify.value?.includes("cause:"));
   verify(ctx);
-  verify(pi);
   verify(ui);
 });
 
@@ -355,7 +335,6 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
   const manifestPath = marketplaceRecordIn(scope.cwd, "official").manifestPath;
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, JSON.stringify({ name: "official", plugins: [] }), "utf8");
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
 
   const { handlers } = createMockActionHandlers();
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
@@ -369,7 +348,7 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
   const customFactory = It.willCapture<Parameters<ExtensionCommandContext["ui"]["custom"]>[0]>();
   when(() => ui.custom(customFactory)).thenResolve(null);
 
-  const browseHandler = makeBrowseHandler(pi, handlers);
+  const browseHandler = makeBrowseHandler(handlers);
 
   // act
   await browseHandler("", ctx, run);
@@ -414,7 +393,6 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
   assert.equal(cancelResult, null);
 
   verify(ctx);
-  verify(pi);
   verify(ui);
 });
 
@@ -423,7 +401,6 @@ test("TUI mode pluginLoader fallback when marketplace block is missing", async (
   const run = runWithNothingLoaded();
   const scope = await createHermeticScope(t, "loader-fallback");
   await seedMarketplace(scope.cwd, "ghost");
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
 
   const { handlers } = createMockActionHandlers();
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
@@ -437,7 +414,7 @@ test("TUI mode pluginLoader fallback when marketplace block is missing", async (
   const customFactory = It.willCapture<Parameters<ExtensionCommandContext["ui"]["custom"]>[0]>();
   when(() => ui.custom(customFactory)).thenResolve(null);
 
-  const browseHandler = makeBrowseHandler(pi, handlers);
+  const browseHandler = makeBrowseHandler(handlers);
   await browseHandler("", ctx, run);
 
   const factory = customFactory.value;
@@ -459,6 +436,5 @@ test("TUI mode pluginLoader fallback when marketplace block is missing", async (
   await new Promise((resolve) => setTimeout(resolve, 50));
 
   verify(ctx);
-  verify(pi);
   verify(ui);
 });

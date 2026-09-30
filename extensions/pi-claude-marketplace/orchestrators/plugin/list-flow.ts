@@ -24,8 +24,8 @@
 // CMC-13 / MSG-SD-1..3 per-row soft-dep markers: each installed-variant
 // `PluginInstalledMessage` carries `dependencies: readonly Dependency[]`
 // derived from the plugin's installed resources (state-recorded).
-// `notify` owns the single softDepStatus(pi) probe per call
-// and emits the `{requires pi-subagents}` / `{requires pi-mcp}` markers
+// The command run carries the one soft-dependency snapshot (D-05), and resolve
+// composes the `{requires pi-subagents}` / `{requires pi-mcp}` markers from it
 // when (declares AND companion unloaded). RLD-04: the list orchestrator
 // stamps the steady-state inventory row `installed` with `needsReload: false`,
 // so the OR-reduce reload-hint (RLD-02) does NOT fire the `/reload to pick up
@@ -80,7 +80,8 @@ import {
 } from "./list-orphan-fold.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /** Rows actually returned by the loader; listPlugins constructs failure notifications separately. */
@@ -130,17 +131,12 @@ type PluginRenderStatus =
  * and the filter keys on their render status instead.
  */
 /**
- * Options bag for {@link listPlugins}. The edge layer constructs this
- * from `/claude:plugin list` argv parsing.
- *
- * `pi` is REQUIRED -- the `notify(ctx, pi, message)` call consumes it
- * for the single softDepStatus(pi) probe per invocation. The
- * renderer derives per-row soft-dep markers from each
- * `PluginInstalledMessage.dependencies` field plus the probe result.
+ * Options bag for {@link loadPluginListPayload}. It carries no run, because
+ * building the payload emits nothing: the LLM list tool and the browser's
+ * plugin loader build payloads without a notification run.
  */
-export interface ListPluginsOptions {
+export interface PluginListPayloadOptions {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
   readonly cwd: string;
   /** SC-6 enumeration narrowing: when undefined the cross-scope walk + fold
    *  rule applies. When set, the orchestrator STILL reads both scopes (the
@@ -168,10 +164,22 @@ export interface ListPluginsOptions {
 }
 
 /**
+ * Options bag for {@link listPlugins}. The edge layer constructs this
+ * from `/claude:plugin list` argv parsing.
+ */
+export interface ListPluginsOptions extends PluginListPayloadOptions {
+  /**
+   * D-05: the command run. Resolve composes each row's soft-dependency
+   * markers from `PluginInstalledMessage.dependencies` and the run's snapshot.
+   */
+  readonly run: NotificationRun;
+}
+
+/**
  * PL-1 / LIST-01: when ALL filter flags are absent or false, show every bucket.
  * When any one is true, show UNION of the selected buckets.
  */
-function filtersPassive(opts: ListPluginsOptions): boolean {
+function filtersPassive(opts: PluginListPayloadOptions): boolean {
   return (
     opts.installed !== true &&
     opts.available !== true &&
@@ -189,7 +197,7 @@ function filtersPassive(opts: ListPluginsOptions): boolean {
  * pass `installed-inventory` and are matched on `status`.
  */
 function shouldShow(
-  opts: ListPluginsOptions,
+  opts: PluginListPayloadOptions,
   status: PluginRenderStatus,
   bucket: FilterBucket,
 ): boolean {
@@ -300,7 +308,7 @@ type ListReason =
  * the orchestrator applies the final MSG-GR-3 sort at the block boundary.
  */
 async function enumerateMarketplacePlugins(args: {
-  opts: ListPluginsOptions;
+  opts: PluginListPayloadOptions;
   mpName: string;
   mpRecord: ExtensionState["marketplaces"][string];
   pluginScope: Scope;
@@ -507,7 +515,7 @@ const EMPTY_ORPHAN_FOLD: OrphanFold = { folded: [], foldedNames: new Set() };
  * fold-carryover" case in tests/orchestrators/plugin/list-flow.test.ts.
  */
 async function computeOrphanFold(
-  opts: ListPluginsOptions,
+  opts: PluginListPayloadOptions,
   mpName: string,
   projectMp: ExtensionState["marketplaces"][string],
   /**
@@ -531,7 +539,7 @@ async function computeOrphanFold(
 }
 
 async function buildMarketplaceMessage(args: {
-  opts: ListPluginsOptions;
+  opts: PluginListPayloadOptions;
   mpName: string;
   mpScope: Scope;
   mpRecord: ExtensionState["marketplaces"][string];
@@ -622,7 +630,7 @@ async function buildMarketplaceMessage(args: {
  * the blocks are constructed.
  */
 export async function loadPluginListPayload(
-  opts: ListPluginsOptions,
+  opts: PluginListPayloadOptions,
 ): Promise<readonly MarketplaceRows<Exclude<ListMsg, { status: "failed" }>>[]> {
   // D-13-19: read both scopes' state.
   const userLocations = locationsFor("user", opts.cwd);
@@ -730,13 +738,13 @@ function narrowListFailReason(err: unknown): ListReason {
 /**
  * D-06 orchestrator entrypoint. Read-only listing of plugins. Constructs
  * the `NotificationMessage` payload inline and forwards it to a single
- * `notify(ctx, pi, message)` call per orchestration arm (success or
- * failure). `notify()` owns the single softDepStatus(pi) probe per
- * invocation and emits per-row `{requires pi-subagents}` /
- * `{requires pi-mcp}` markers when (declares AND companion unloaded).
+ * `notifyWithContext(ctx, run, ...)` call per orchestration arm (success or
+ * failure). The command run carries the soft-dependency snapshot (D-05), and
+ * resolve composes the per-row `{requires pi-subagents}` /
+ * `{requires pi-mcp}` markers from it when (declares AND companion unloaded).
  */
 export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
-  const { ctx, pi } = opts;
+  const { ctx, run } = opts;
   try {
     // OUT-07 / D-12: the list surface is a bulk op, so its row slot is typed
     // `Plural<Row>` (a readonly array). Additive typing only.
@@ -752,7 +760,7 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     // seam (the trailer fires when at least one
     // installed/updated/reinstalled/uninstalled plugin row is present;
     // pure available/unavailable/upgradable lists emit no trailer).
-    notifyWithContext(ctx, pi, LIST_CONTEXT, marketplaces, undefined, "plural");
+    notifyWithContext(ctx, run, LIST_CONTEXT, marketplaces, undefined, "plural");
   } catch (err) {
     // Aggregate list-failure path. The list surface has no dedicated
     // catalog state for orchestrator-level failure (D-19-03 Option B):
@@ -797,7 +805,7 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     // of rows produced by this failure arm. It remains a plural operation even
     // though the synthetic failure occupies one marketplace block.
     const failureRows: Plural<MarketplaceRows<ListMsg>> = [mp];
-    notifyWithContext(ctx, pi, LIST_CONTEXT, failureRows, undefined, "plural");
+    notifyWithContext(ctx, run, LIST_CONTEXT, failureRows, undefined, "plural");
   }
 }
 

@@ -38,10 +38,11 @@
  * reached through their exported outcome-to-row composers or through a full
  * orchestrator entry point, never through an export added to serve a test.
  *
- * The engine-absent runs use the DECOY tool name `workflow` rather than an
- * empty tool list. `@nicknisi/pi-workflows` registers a tool by that name, so
- * driving the absent case through it re-proves the WDEP-01 discriminator at
- * every one of these seven surfaces for free.
+ * The engine-absent runs that probe a tool list use the DECOY tool name
+ * `workflow` rather than an empty tool list. `@nicknisi/pi-workflows` registers
+ * a tool by that name, so driving the absent case through it re-proves the
+ * WDEP-01 discriminator at each surface that probes. The surfaces that render
+ * from a notification run read the run's snapshot instead (D-05).
  */
 
 import assert from "node:assert/strict";
@@ -316,8 +317,8 @@ const SITE_CASES = [
         await runInstall(cwd, engineLoaded);
 
         // act
-        const { ctx, pi, notifications } = makeCtx(engineLoaded);
-        await listPlugins({ ctx, pi, cwd, scope: "project" });
+        const { ctx, notifications } = makeCtx(engineLoaded);
+        await listPlugins({ ctx, run: runFor(engineLoaded), cwd, scope: "project" });
 
         // assert
         const emitted = notifications[0];
