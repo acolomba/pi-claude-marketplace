@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 01
 current_phase_name: Presentation Model
 status: executing
-stopped_at: Completed 01-12-PLAN.md
-last_updated: "2026-09-30T05:13:17.936Z"
+stopped_at: Completed 01-13-PLAN.md
+last_updated: "2026-09-30T14:28:00.968Z"
 last_activity: 2026-09-30
-last_activity_desc: Completed 01-12 plugin reinstall and reconcile run
-state_head: bc6fe91979df77585e430a0f3f70acfbbd6ea77c
+last_activity_desc: Completed 01-13 plugin update and fetch run
+state_head: be51ed277b1c8d08d363311ce44a82f6f33b4a46
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 16
-  completed_plans: 12
+  completed_plans: 13
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Presentation Model) — EXECUTING
-Plan: 13 of 16
+Plan: 14 of 16
 Status: Ready to execute
-Last activity: 2026-09-30 — Completed 01-12 (plugin reinstall and reconcile run)
+Last activity: 2026-09-30 — Completed 01-13 (plugin update and fetch run)
 
-Progress: [████████░░] 75% (12 of 16 plans)
+Progress: [████████░░] 81% (13 of 16 plans)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,8 +168,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-30T05:13:17.841Z
-**Stopped at:** Completed 01-12-PLAN.md
+**Last session:** 2026-09-30T14:28:00.713Z
+**Stopped at:** Completed 01-13-PLAN.md
 **Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
@@ -211,6 +211,7 @@ archived milestone artifacts.
 | Phase 01 P10 | 67 min | 2 tasks | 23 files |
 | Phase 01 P11 | 81 min | 2 tasks | 19 files |
 | Phase 01 P12 | 62 min | 2 tasks | 27 files |
+| Phase 01 P13 | 75 min | 2 tasks | 18 files |
 
 ## Decisions
 
@@ -241,3 +242,5 @@ archived milestone artifacts.
 - [Phase 01]: Uninstall and the shared emitMarketplaceNotAdded take a run; the enable/disable and uninstall handlers take no pi, and reconcile hands its run to both nested verbs, keeping pi only for the backfill (D-07)
 - [Phase 01]: Reinstall takes ReinstallPlugin(s)Options.run and emitMarketplaceNotAddedSignal takes a run; update opens one from pi at its single signal call until it takes the router's run (D-05)
 - [Phase 01]: ApplyReconcileOptions carries no pi: the backfill hands the load pass's run to reinstall, and index.ts passes applyReconcile only the run it opens (D-07)
+- [Phase 01]: Plugin update and fetch take UpdatePluginsOptions.run and FetchPluginsOptions.run; composeUpdateCascade stamps severity from run.softDeps, the snapshot the markers come from, so no orchestrator probes the tool inventory (D-05)
+- [Phase 01]: makeUpdateHandler and makeFetchHandler take no pi; openNotificationRun is constructed only in edge/register.ts and index.ts (D-07)
