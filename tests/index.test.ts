@@ -45,7 +45,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { It, when } from "strong-mock";
+import { It, mock, verify, when } from "strong-mock";
 
 import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/index.ts";
 import * as entryModule from "../extensions/pi-claude-marketplace/index.ts";
@@ -255,10 +255,12 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
 }
 
 /**
- * Run the factory against the strict Pi boundary and hand back everything it
- * registered. Every expectation states its event, command or tool name by hand
- * and captures only the callback, so `verifyBoundary()` fails a registration
- * under any other name, an extra registration, and a missing one alike.
+ * Run the factory against a strict Pi mock and the shared notification boundary,
+ * and hand back everything it registered. Every expectation states its event,
+ * command or tool name by hand and captures only the callback, so
+ * `verifyBoundary()` fails a registration under any other name, an extra
+ * registration, and a missing one alike. It verifies this Pi mock beside the
+ * notification boundary.
  *
  * `rootReads` counts the `pi.getAllTools()` reads of the soft-dependency
  * snapshots the case's roots take. Each `resources_discover` pass that reaches
@@ -273,7 +275,8 @@ async function loadExtension(
   rootReads: number,
   cwd?: { readonly value: string; readonly reads: number },
 ): Promise<LoadedExtension> {
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(emissions, cwd);
+  const boundary = createNotificationBoundary(emissions, cwd);
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   if (rootReads > 0) {
     when(() => pi.getAllTools())
       .thenReturn([])
@@ -420,9 +423,12 @@ async function loadExtension(
     toolCall,
     command,
     tools: [firstTool.value, secondTool.value],
-    ctx,
-    notifications,
-    verifyBoundary,
+    ctx: boundary.ctx,
+    notifications: boundary.notifications,
+    verifyBoundary: (): void => {
+      boundary.verifyBoundary();
+      verify(pi);
+    },
   };
 }
 

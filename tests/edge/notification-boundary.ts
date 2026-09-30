@@ -1,34 +1,32 @@
 // The strict Pi notification boundary, shared by every suite that sizes IL-2.
 //
-// WR-08: four suites carried byte-identical copies of this factory and its four
-// types. The contract they encode is not theirs -- it belongs to
-// `shared/notification-dispatch.ts`: `notify()` runs one soft-dependency probe
-// per emission, and that probe reads `pi.getAllTools()` once per companion
-// target, so three times over the closed `Dependency` set. A surface that reads a
-// notification run instead renders from the run's snapshot and probes nothing
-// (D-05), so its cases state zero probes. When the probe count changes,
-// one shared definition breaks once instead of four suites drifting apart, and a
-// drifted `times()` count weakens the IL-2 sizing proof silently rather than
-// failing loudly.
+// WR-08: the contract this factory encodes belongs to
+// `shared/notification-dispatch.ts`, the one module that calls `ctx.ui.notify`,
+// and not to any suite that uses it. One shared definition breaks once when that
+// contract changes, so no suite keeps a copy that drifts.
 //
-// Every count is stated by the caller, never derived here. `notifyUsageError`
-// writes straight to `ctx.ui.notify` and probes nothing, so a derived probe count
-// would leave a usage-error case with an unmet `getAllTools()` expectation that
-// names nothing about the case's real mistake. `ctx.cwd` is stated the same way,
-// and only by a case whose path forwards it: a handler that rejects its input
-// before delegating never reads `cwd`, and D-116-06 wants that absence provable.
+// Soft-dependency probes are per command, never per emission (D-05, D-07). The
+// registered `/claude:plugin` command and the `resources_discover` load pass each
+// take one snapshot when they open their notification run. Handlers and
+// orchestrators receive that run and never probe. The probe count therefore
+// belongs to the tests of those two roots, tests/edge/register.test.ts and
+// tests/index.test.ts, which each build their own strict Pi mock. This boundary
+// holds no Pi mock and sizes only emissions and `cwd`.
+//
+// Every count is stated by the caller, never derived here. `ctx.cwd` is stated
+// only by a case whose path forwards it: a handler that rejects its input before
+// delegating never reads `cwd`, and D-116-06 wants that absence provable.
 //
 // A count of 0 states no expectation at all rather than `times(0)`, because
 // `strong-mock` treats `times(0)` as no limit: it installs the stub, serves every
 // call, and verifies clean. A zero written as `times(0)` therefore proves nothing,
 // which is the opposite of what a zero claims. Leaving the member unstated makes
-// the mock serve its pending-call proxy instead, so the first unwanted emission,
-// probe, or `cwd` read fails where it happens.
+// the mock serve its pending-call proxy instead, so the first unwanted emission
+// or `cwd` read fails where it happens.
 
 import { mock, verify, when } from "strong-mock";
 
 import type {
-  ExtensionAPI,
   ExtensionCommandContext,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -46,7 +44,6 @@ export interface Notification {
 
 export interface NotificationBoundary {
   readonly ctx: ExtensionCommandContext;
-  readonly pi: ExtensionAPI;
   readonly notifications: readonly Notification[];
   readonly verifyBoundary: () => void;
 }
@@ -71,7 +68,6 @@ export function createNotificationBoundary(
 ): NotificationBoundary {
   const notifications: Notification[] = [];
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
   if (emissions > 0) {
     when(() => ctx.ui)
@@ -92,11 +88,9 @@ export function createNotificationBoundary(
 
   return {
     ctx,
-    pi,
     notifications,
     verifyBoundary: (): void => {
       verify(ctx);
-      verify(pi);
       verify(ui);
     },
   };
