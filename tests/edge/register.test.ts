@@ -156,15 +156,12 @@ interface CommandUnderTest {
 }
 
 /**
- * The `getAllTools()` reads a registered command promises, stated as two
- * counts. `runs` is the number of handler invocations: each opens one
- * notification run whose snapshot reads the inventory three times (D-05).
- * `probingEmissions` is the number of notifications from surfaces that still
- * probe the Pi handle once per emission, three reads each.
+ * The `getAllTools()` reads a registered command promises. `runs` is the number
+ * of handler invocations: each opens one notification run whose snapshot reads
+ * the inventory three times (D-05).
  */
 interface CommandProbes {
   readonly runs: number;
-  readonly probingEmissions: number;
 }
 
 interface WrapperUnderTest {
@@ -308,7 +305,7 @@ function registerCommandWithCache(
   completionCache: CompletionCache,
   hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson }),
   importClaudeSettings?: ImportDelegate,
-  probes: CommandProbes = { runs: 0, probingEmissions: 0 },
+  probes: CommandProbes = { runs: 0 },
   gitOps?: EdgeDeps["gitOps"],
 ): CommandUnderTest {
   const pi = mock<PiRegistrar>({ exactParams: true, name: "extension API" });
@@ -324,7 +321,7 @@ function registerCommandWithCache(
   })
     .thenReturn()
     .times(1);
-  const toolReads = (probes.runs + probes.probingEmissions) * 3;
+  const toolReads = probes.runs * 3;
   if (toolReads > 0) {
     when(() => pi.getAllTools())
       .thenReturn([])
@@ -377,10 +374,7 @@ function createBootstrapGitOps(sourceTree: string): EdgeDeps["gitOps"] {
  * hand back the provider factory it installed.
  */
 function installAutocompleteWrapper(): WrapperUnderTest {
-  const { sessionStart, verifyRegistrar } = registerCommandUnderTest({
-    runs: 0,
-    probingEmissions: 0,
-  });
+  const { sessionStart, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "session UI" });
   const providerFactory = It.willCapture<AutocompleteProviderFactory>("provider factory");
   when(() => {
@@ -417,10 +411,7 @@ describe("registerClaudePluginCommand", () => {
     const expectedDescription = EXPECTED_COMMAND_DESCRIPTION;
 
     // act
-    const { registration, verifyRegistrar } = registerCommandUnderTest({
-      runs: 0,
-      probingEmissions: 0,
-    });
+    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
 
     // assert
     assert.deepStrictEqual(registration.description, expectedDescription);
@@ -432,10 +423,7 @@ describe("registerClaudePluginCommand", () => {
     await createHermeticScope(t, "command-handler");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     // One run per invocation, usage errors included; the usage error probes nothing.
-    const { registration, verifyRegistrar } = registerCommandUnderTest({
-      runs: 1,
-      probingEmissions: 0,
-    });
+    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
     const expectedNotifications: readonly Notification[] = [
       {
         message: `Unknown subcommand: "frobnicate".\n\n${EXPECTED_TOP_LEVEL_USAGE}`,
@@ -482,7 +470,7 @@ describe("registerClaudePluginCommand", () => {
       createCompletionCache(),
       hooksRouting,
       importClaudeSettings,
-      { runs: 1, probingEmissions: 0 },
+      { runs: 1 },
     );
 
     // act
@@ -504,10 +492,7 @@ describe("registerClaudePluginCommand", () => {
     });
     await seedProjectMarketplace(scope.cwd, "registration-mp");
     await seedProjectMarketplace(laterRoot, "invocation-mp");
-    const { registration, verifyRegistrar } = registerCommandUnderTest({
-      runs: 0,
-      probingEmissions: 0,
-    });
+    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
     const expectedCandidates = [{ label: "invocation-mp", value: "list invocation-mp " }];
     process.chdir(laterRoot);
 
@@ -606,7 +591,7 @@ describe("registerClaudePluginCommand", () => {
       completionCache,
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       undefined,
-      { runs: 1, probingEmissions: 0 },
+      { runs: 1 },
       createBootstrapGitOps(sourceTree),
     );
     const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -732,7 +717,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1, probingEmissions: 0 },
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -823,7 +808,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1, probingEmissions: 0 },
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -932,7 +917,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1, probingEmissions: 0 },
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -1038,7 +1023,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1, probingEmissions: 0 },
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -1254,7 +1239,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1, probingEmissions: 0 },
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -1359,7 +1344,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1, probingEmissions: 0 },
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -1840,10 +1825,7 @@ for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_A
         const { cwd } = await createHermeticScope(t, "reject-arguments");
         const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
         // One run per invocation, usage errors included; the usage error probes nothing.
-        const { registration, verifyRegistrar } = registerCommandUnderTest({
-          runs: 1,
-          probingEmissions: 0,
-        });
+        const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
         // act
         await registration.handler(`${spelling} ${operand} ${invalid}`, ctx);
@@ -1873,10 +1855,7 @@ for (const { verb, aliases = [], operand, usage } of COMMAND_ARGUMENT_CASES.filt
         const { cwd } = await createHermeticScope(t, "reject-empty-scope");
         const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
         // One run per invocation, usage errors included; the usage error probes nothing.
-        const { registration, verifyRegistrar } = registerCommandUnderTest({
-          runs: 1,
-          probingEmissions: 0,
-        });
+        const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
         // act
         await registration.handler(`${spelling} ${operand} --scope ${emptyValue} project`, ctx);
