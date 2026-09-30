@@ -256,6 +256,21 @@ export class StaleSourceCloneError extends Error {
 }
 
 /**
+ * MA-14: `marketplace add` recognized its own leftover clone but could not fully
+ * remove it. The add never renames over the partly removed tree, and it keeps
+ * the removal leak as data so the standalone row can report it (WR-02). The
+ * message and the `{stale clone}` classification are the parent's.
+ */
+export class UnremovableLeftoverCloneError extends StaleSourceCloneError {
+  readonly removalLeak: string;
+  constructor(absPath: string, mpName: string, removalLeak: string) {
+    super(absPath, mpName);
+    this.name = "UnremovableLeftoverCloneError";
+    this.removalLeak = removalLeak;
+  }
+}
+
+/**
  * MA-13: `marketplace add` found a directory at the destination but could not
  * read its `.git/config`, so it cannot tell whose clone the directory is.
  * `failure` records why: `permission-denied` for EACCES/EPERM, `unreadable`

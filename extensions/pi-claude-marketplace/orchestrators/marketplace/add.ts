@@ -66,6 +66,7 @@ import {
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
   UnreadableSourceCloneError,
+  UnremovableLeftoverCloneError,
   UnsupportedSourceError,
   appendLeakToError,
   errorMessage,
@@ -85,6 +86,7 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_CREDENTIAL_OPS,
@@ -496,6 +498,18 @@ async function runAddInGuard(args: {
 }
 
 /**
+ * WR-02 / MA-14 / NFR-9: the advisory line naming a leftover clone the add
+ * recognized but could not remove, with every absolute path reduced to its last
+ * segment at this composition site. Undefined for every other failure.
+ */
+function removalAdvisories(err: unknown): readonly string[] | undefined {
+  const cause = unwrapAddError(err);
+  return cause instanceof UnremovableLeftoverCloneError
+    ? [`    ${redactAbsolutePaths(cause.removalLeak)}`]
+    : undefined;
+}
+
+/**
  * RECON-03: route the catch arm of `addMarketplace` to a typed
  * `AddMarketplaceOutcome`, emitting the standalone notify() row first when the
  * caller is not orchestrated. The outcome is returned on BOTH paths; the
@@ -509,6 +523,10 @@ async function runAddInGuard(args: {
  * classified by `classifyAddError`'s errno ladder (WR-03 -- the github
  * guard's clone-catch only cleans staging and rethrows unclassified), so an
  * unrecognised throw is by construction an opaque source-tree shape.
+ *
+ * WR-02 / MA-14: the standalone row of a leftover the add could not remove
+ * carries one advisory line naming the cleanup failure; the orchestrated
+ * outcome carries the same leak in `cause`.
  */
 function handleAddFailure(
   opts: AddMarketplaceOptions,
@@ -547,7 +565,15 @@ function handleAddFailure(
         plugins: [],
       },
     ];
-    notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, failedRows, undefined, "single");
+    notifyWithContext(
+      opts.ctx,
+      opts.pi,
+      ADD_CONTEXT,
+      failedRows,
+      undefined,
+      "single",
+      removalAdvisories(err),
+    );
   }
 
   return { status: "failed", reason, error: wrapped, cause: errorMessage(err) };
@@ -739,8 +765,9 @@ async function writeOwnershipMarker(stagingDir: string): Promise<void> {
  *
  * @returns the leak message from removing a recognized leftover, or
  *   `undefined` when the removal left nothing behind or the destination no
- *   longer exists (IN-06). The caller decides what a non-undefined leak means
- *   (MA-14: a partially-removed tree must not be renamed over).
+ *   longer exists (IN-06). The caller throws `UnremovableLeftoverCloneError`
+ *   for a non-undefined leak, because a partially-removed tree must not be
+ *   renamed over (MA-14).
  */
 async function recognizeLeftover(args: {
   finalDir: string;
@@ -762,7 +789,7 @@ async function recognizeLeftover(args: {
         throw new StaleSourceCloneError(finalDir, derivedName);
       }
 
-      return cleanupStaging(removalOps, finalDir, `marketplace leftover clone ${finalDir}`);
+      return cleanupStaging(removalOps, finalDir, "marketplace leftover clone");
     case "no-origin":
       throw new StaleSourceCloneError(finalDir, derivedName);
     case "not-a-repo":
@@ -857,7 +884,7 @@ async function addGitClonedInGuard(args: {
       });
       if (leftoverLeak !== undefined) {
         // A partially-removed tree must not be renamed over (MA-14).
-        throw new StaleSourceCloneError(finalDir, derivedName);
+        throw new UnremovableLeftoverCloneError(finalDir, derivedName, leftoverLeak);
       }
     }
 

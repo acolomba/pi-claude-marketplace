@@ -30,6 +30,7 @@ import {
   StateLockHeldError,
   TooManyRedirectsError,
   UnreadableSourceCloneError,
+  UnremovableLeftoverCloneError,
   UnsupportedSourceError,
   UnsafeGeneratedNameError,
   WorkflowNameCollisionError,
@@ -444,6 +445,43 @@ describe("StaleSourceCloneError", () => {
         absPath: "/scope/sources/pending",
         mpName: undefined,
         hasMarketplaceProperty: true,
+      },
+    );
+  });
+});
+
+describe("UnremovableLeftoverCloneError", () => {
+  test("keeps the stale-clone value and carries the removal leak", () => {
+    // arrange
+    const removalLeak =
+      "failed to clean up marketplace leftover clone at /scope/sources/official: EACCES: permission denied, rm '/scope/sources/official'";
+
+    // act
+    const error = new UnremovableLeftoverCloneError(
+      "/scope/sources/official",
+      "official",
+      removalLeak,
+    );
+
+    // assert
+    assert.ok(error instanceof UnremovableLeftoverCloneError);
+    assert.ok(error instanceof StaleSourceCloneError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        absPath: error.absPath,
+        mpName: error.mpName,
+        removalLeak: error.removalLeak,
+      },
+      {
+        name: "UnremovableLeftoverCloneError",
+        message: "stale source clone at /scope/sources/official",
+        absPath: "/scope/sources/official",
+        mpName: "official",
+        removalLeak:
+          "failed to clean up marketplace leftover clone at /scope/sources/official: EACCES: permission denied, rm '/scope/sources/official'",
       },
     );
   });

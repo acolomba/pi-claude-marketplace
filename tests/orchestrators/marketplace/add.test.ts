@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
 import {
   chmod,
   cp,
@@ -14,7 +15,7 @@ import {
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
@@ -29,6 +30,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import {
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
+  UnremovableLeftoverCloneError,
   UnsupportedSourceError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -1013,33 +1015,86 @@ test("MA-8: a matching leftover still yields (failed) {duplicate name}, not {sta
   });
 });
 
-// MA-14: a RECOGNIZED leftover (origin matches) whose removal itself leaks
-// still fails as stale, with the leak appended and no partially-removed
-// destination recorded in state.
+// MA-14: a RECOGNIZED leftover (owned, origin matches) whose removal itself
+// leaks still fails as stale clone, and no partially-removed destination is
+// recorded. The fault is a stub on `fs.promises.rm`, which the composition
+// root's removal operations call, so the cases hold for any user, root too.
 
-test("MA-14: an unremovable recognized leftover fails as stale, with the leak appended and no recorded destination", async () => {
-  await withTmpScope(async ({ cwd, locations }) => {
-    // arrange
-    const finalDir = await arrangeLeftover(locations, { owned: true });
-    const matchingOrigin: ListRemotesResult = {
+interface UnremovableLeftover {
+  readonly finalDir: string;
+  readonly gitOps: GitOps;
+  /** The staging directory the add cloned into. */
+  readonly stagingDir: () => string;
+}
+
+/**
+ * Seeds an owned leftover whose origin matches the source, and makes
+ * `fs.promises.rm` fail with EACCES on that leftover and, when
+ * `faultStaging` holds, on the staging directory the add clones into. Every
+ * other path is removed for real.
+ */
+async function arrangeUnremovableLeftover(
+  t: TestContext,
+  locations: ScopedLocations,
+  options: { readonly faultStaging: boolean },
+): Promise<UnremovableLeftover> {
+  const finalDir = await arrangeLeftover(locations, { owned: true });
+  const faulted = new Set([finalDir]);
+  let cloneDir: string | undefined;
+  t.mock.method(fs.promises, "rm", async (target: fs.PathLike, rmOptions?: fs.RmOptions) => {
+    if (faulted.has(String(target))) {
+      throw Object.assign(new Error(`EACCES: permission denied, rm '${String(target)}'`), {
+        code: "EACCES",
+      });
+    }
+
+    await rm(target, rmOptions);
+  });
+  const { gitOps } = createGitOps({
+    fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    listRemotesResult: {
       kind: "origin",
       url: "https://github.com/anthropics/claude-plugins-official.git",
-    };
+    },
+    onClone: async (directory) => {
+      cloneDir = directory;
+      if (options.faultStaging) {
+        faulted.add(directory);
+      }
 
-    // WR-07's own lever: sources/ read-only, so removing the RECOGNIZED
-    // leftover (a child directory) raises EACCES, while sources-staging/ --
-    // a sibling under extensionRoot, not a child of sourcesDir -- stays
-    // writable and the fresh clone still reaches step 4.
-    await chmod(locations.sourcesDir, 0o555);
+      await Promise.resolve();
+    },
+  });
 
-    try {
+  return {
+    finalDir,
+    gitOps,
+    stagingDir: () => {
+      assert.ok(cloneDir !== undefined, "the add never cloned");
+      return cloneDir;
+    },
+  };
+}
+
+const UNREMOVABLE_LEFTOVER_NOTIFICATION = {
+  message:
+    "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}\n\n    failed to clean up marketplace leftover clone at valid-marketplace: EACCES: permission denied, rm 'valid-marketplace'",
+  severity: "error",
+};
+
+for (const { kind, faultStaging } of [
+  { kind: "the leftover", faultStaging: false },
+  { kind: "the leftover and the staging clone", faultStaging: true },
+]) {
+  test(`MA-14 / WR-02: standalone mode names only the leftover cleanup failure when removing ${kind} fails`, async (t) => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
       const { ctx, pi, notifications } = makeCtx();
-      const { gitOps } = createGitOps({
-        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-        listRemotesResult: matchingOrigin,
+      const { finalDir, gitOps } = await arrangeUnremovableLeftover(t, locations, {
+        faultStaging,
       });
 
-      // act: standalone mode renders the (failed) {stale clone} row.
+      // act
       await addMarketplace({
         ctx,
         pi,
@@ -1050,156 +1105,92 @@ test("MA-14: an unremovable recognized leftover fails as stale, with the leak ap
       });
 
       // assert
-      const note = notifications[0];
-      assert.ok(note);
-      assert.equal(
-        note.message,
-        "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
-      );
-      assert.equal(note.severity, "error");
-
-      const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx(0);
-      const { gitOps: gitOps2 } = createGitOps({
-        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-        listRemotesResult: matchingOrigin,
+      assert.deepStrictEqual(notifications, [UNREMOVABLE_LEFTOVER_NOTIFICATION]);
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+        schemaVersion: 2,
+        marketplaces: {},
       });
+      assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), true);
+    });
+  });
+}
 
-      // act: orchestrated mode surfaces the leak text the row does not carry.
-      const outcome = await addMarketplace({
-        ctx: ctx2,
-        pi: pi2,
-        scope: "project",
-        cwd,
-        rawSource: "anthropics/claude-plugins-official",
-        gitOps: gitOps2,
-        notifications: { mode: "orchestrated" },
-      });
+test("MA-14: orchestrated mode carries the leftover cleanup failure in the cause", async (t) => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, pi, notifications } = makeCtx(0);
+    const { finalDir, gitOps } = await arrangeUnremovableLeftover(t, locations, {
+      faultStaging: false,
+    });
+    const leak = `failed to clean up marketplace leftover clone at ${finalDir}: EACCES: permission denied, rm '${finalDir}'`;
+    const cause = `stale source clone at ${finalDir} (additionally: ${leak})`;
 
-      // assert
-      assert.deepStrictEqual(n2, []);
-      assert.ok(outcome);
-      assert.equal(outcome.status, "failed");
-      if (outcome.status === "failed") {
-        assert.equal(outcome.reason, "stale clone");
-        assert.ok(
-          outcome.cause.includes(`failed to clean up marketplace leftover clone ${finalDir}`),
-          `expected the leftover-removal leak text, got: ${outcome.cause}`,
-        );
-        assert.ok(
-          outcome.cause.includes(" (additionally: "),
-          `expected the appendLeakToError marker, got: ${outcome.cause}`,
-        );
-      }
-    } finally {
-      await chmod(locations.sourcesDir, 0o755);
-    }
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
 
-    // MA-14 / T-3-06: a partially-removed tree must not be recorded.
-    const persisted = await loadState(locations.extensionRoot);
-    assert.equal("valid-marketplace" in persisted.marketplaces, false);
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "stale clone",
+      error: new Error(cause, {
+        cause: new UnremovableLeftoverCloneError(finalDir, "valid-marketplace", leak),
+      }),
+      cause,
+    });
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {},
+    });
+    assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), true);
   });
 });
 
-test("MA-14 double fault: leftover removal AND staging cleanup both leak; still stale clone through one Error.cause level", async () => {
+test("MA-14: orchestrated mode joins both cleanup failures behind one Error.cause level", async (t) => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
-    const finalDir = await arrangeLeftover(locations, { owned: true });
-    const matchingOrigin: ListRemotesResult = {
-      kind: "origin",
-      url: "https://github.com/anthropics/claude-plugins-official.git",
-    };
-    const stagingRoot = path.join(locations.extensionRoot, "sources-staging");
+    const { ctx, pi, notifications } = makeCtx(0);
+    const { finalDir, gitOps, stagingDir } = await arrangeUnremovableLeftover(t, locations, {
+      faultStaging: true,
+    });
+    const leak = `failed to clean up marketplace leftover clone at ${finalDir}: EACCES: permission denied, rm '${finalDir}'`;
 
-    await chmod(locations.sourcesDir, 0o555);
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
 
-    try {
-      const { ctx, pi, notifications } = makeCtx();
-      const { gitOps } = createGitOps({
-        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-        listRemotesResult: matchingOrigin,
-        // Fault the staging removal AFTER the clone has written into it --
-        // setting this mode BEFORE the clone would fail the fake's own
-        // mkdir and route the add down the clone-failure path instead.
-        onClone: async () => {
-          await chmod(stagingRoot, 0o555);
-        },
-      });
-
-      // act: standalone mode renders the row -- the classification and
-      // subject survive both leaks joined through a single Error.cause
-      // level (unwrapAddError's one-level contract).
-      await addMarketplace({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        rawSource: "anthropics/claude-plugins-official",
-        gitOps,
-      });
-
-      // assert
-      const note = notifications[0];
-      assert.ok(note);
-      assert.equal(
-        note.message,
-        "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
-      );
-      assert.equal(note.severity, "error");
-
-      // The first call's own onClone left sources-staging/ read-only, which
-      // would fail the SECOND call's fixture-copy mkdir before it ever
-      // clones. Restore it so the second clone can create its own staging
-      // subdirectory; its own onClone re-faults it afterward.
-      await chmod(stagingRoot, 0o755);
-
-      const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx(0);
-      const { gitOps: gitOps2 } = createGitOps({
-        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-        listRemotesResult: matchingOrigin,
-        onClone: async () => {
-          await chmod(stagingRoot, 0o555);
-        },
-      });
-
-      // act: orchestrated mode surfaces both leak texts the row does not
-      // carry.
-      const outcome = await addMarketplace({
-        ctx: ctx2,
-        pi: pi2,
-        scope: "project",
-        cwd,
-        rawSource: "anthropics/claude-plugins-official",
-        gitOps: gitOps2,
-        notifications: { mode: "orchestrated" },
-      });
-
-      // assert: this is the case that fails if the two leaks were chained
-      // through two appendLeakToError calls instead of joined into one --
-      // unwrapAddError sees exactly one Error.cause level.
-      assert.deepStrictEqual(n2, []);
-      assert.ok(outcome);
-      assert.equal(outcome.status, "failed");
-      if (outcome.status === "failed") {
-        assert.equal(outcome.reason, "stale clone");
-        assert.ok(
-          outcome.cause.includes(`failed to clean up marketplace leftover clone ${finalDir}`),
-          `expected the leftover-removal leak text, got: ${outcome.cause}`,
-        );
-        assert.ok(
-          outcome.cause.includes("failed to clean up marketplace clone staging at"),
-          `expected the staging-cleanup leak text, got: ${outcome.cause}`,
-        );
-        const additionallyMarkers = outcome.cause.split(" (additionally: ").length - 1;
-        assert.equal(
-          additionallyMarkers,
-          1,
-          `expected exactly one join marker, got: ${outcome.cause}`,
-        );
-      }
-    } finally {
-      await chmod(locations.sourcesDir, 0o755);
-      await chmod(stagingRoot, 0o755);
-    }
+    // assert
+    const staging = stagingDir();
+    const cause = `stale source clone at ${finalDir} (additionally: ${leak}; failed to clean up marketplace clone staging at ${staging}: EACCES: permission denied, rm '${staging}')`;
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "stale clone",
+      error: new Error(cause, {
+        cause: new UnremovableLeftoverCloneError(finalDir, "valid-marketplace", leak),
+      }),
+      cause,
+    });
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {},
+    });
+    assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), true);
   });
 });
 
