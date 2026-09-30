@@ -1,0 +1,126 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-30T05:14:42.933Z",
+  "phase": "01",
+  "phase_name": "Presentation Model",
+  "phase_dir": ".planning/phases/01-presentation-model",
+  "plan": 13,
+  "task": 1,
+  "total_tasks": 16,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "01-01 notify wire-corpus capture tool and baseline",
+      "status": "done",
+      "commit": "89eb1fcf"
+    },
+    {
+      "id": 2,
+      "name": "01-02 envelope facts resolve first",
+      "status": "done",
+      "commit": "580f6879"
+    },
+    {
+      "id": 3,
+      "name": "01-03 failure detail serialized in resolve",
+      "status": "done",
+      "commit": "76e2383e"
+    },
+    {
+      "id": 4,
+      "name": "01-04 soft-dep markers from per-context policy",
+      "status": "done",
+      "commit": "e3044f28"
+    },
+    { "id": 5, "name": "01-05 probe-free text strategy", "status": "done", "commit": "51cb953e" },
+    {
+      "id": 6,
+      "name": "01-06 NotificationRun at the command root",
+      "status": "done",
+      "commit": "b400edd9"
+    },
+    {
+      "id": 7,
+      "name": "01-07 load-pass run; pending on the run",
+      "status": "done",
+      "commit": "fb285f55"
+    },
+    {
+      "id": 8,
+      "name": "01-08 import, marketplace remove/update on the run",
+      "status": "done",
+      "commit": "de1b5203"
+    },
+    {
+      "id": 9,
+      "name": "01-09 marketplace add, autoupdate, bootstrap on the run",
+      "status": "done",
+      "commit": "9539c751"
+    },
+    {
+      "id": 10,
+      "name": "01-10 plugin install on the run; SC-3 proof",
+      "status": "done",
+      "commit": "17fac667"
+    },
+    {
+      "id": 11,
+      "name": "01-11 enable/disable and uninstall on the run",
+      "status": "done",
+      "commit": "0112c221"
+    },
+    {
+      "id": 12,
+      "name": "01-12 reinstall on the run; load pass carries only the run",
+      "status": "done",
+      "commit": "449dbf27"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 13,
+      "name": "01-13 plugin update family and fetch take the run (also deletes the transitional openNotificationRun(pi) in update-flow.ts handleEnumerateFailure)",
+      "status": "not_started"
+    },
+    {
+      "id": 14,
+      "name": "01-14 plugin list, info, browse take the run; run-free list payload for tools",
+      "status": "not_started"
+    },
+    { "id": 15, "name": "01-15 probe-shaped test boundary retired", "status": "not_started" },
+    {
+      "id": 16,
+      "name": "01-16 notify family narrowed to the run; stale claims restated; phase-end gate",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {
+      "decision": "Execute sequentially on the features/json tree (ISOLATION=none), forcing the dispatch-isolation sentinel per plan",
+      "rationale": "Single-plan waves; executor worktrees would lack node_modules",
+      "phase": "01"
+    },
+    {
+      "decision": "Keep the four fallow-ignore-file markers on scripts/notify-corpus*.mjs",
+      "rationale": "Operator choice: tooling-only, deleted with the scripts at milestone close (ROADMAP Phase 7 criterion 6)",
+      "phase": "01"
+    },
+    {
+      "decision": "Track corpus-tool removal and the output-catalog composeReasons prose fix in ROADMAP Phase 7 criterion 6",
+      "rationale": "Operator choice; the catalog prose cannot change while every phase keeps the catalog diff empty",
+      "phase": "01"
+    },
+    {
+      "decision": "Accept advisory fallow-audit clone warnings in *.messaging.ts render maps and the handler clone family dup:c77b3abb6f87acd9",
+      "rationale": "warn, not fail; Phase 2 deletes the render arms",
+      "phase": "01"
+    }
+  ],
+  "uncommitted_files": ["?? .planning/milestone.lock"],
+  "next_action": "/clear, then /gsd-execute-phase 1 (resumes at 01-13 and runs code review, verification and the transition), then /gsd-autonomous --interactive --from 2",
+  "context_notes": "Paused only for orchestrator context pressure (auto context guard at >=70%), not for any failure. Every completed plan left npm run check green, the notify corpus with all 2622 baseline entries (8 additions), and docs/output-catalog.md with no diff from 2f173031. A background npm run check started by the 01-12 executor may still be finishing; it only writes a log in the old session scratchpad."
+}
