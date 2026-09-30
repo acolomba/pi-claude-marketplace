@@ -10,6 +10,7 @@ import {
   cleanupFailuresFromError,
   composeErrorWithCauseChain,
   ConcurrentInstallError,
+  CrossOriginChallengeError,
   CrossPluginConflictError,
   errorMessage,
   errorWithCleanupFailures,
@@ -27,6 +28,7 @@ import {
   PluginUpdatePhase3Error,
   StaleSourceCloneError,
   StateLockHeldError,
+  TooManyRedirectsError,
   UnreadableSourceCloneError,
   UnsupportedSourceError,
   UnsafeGeneratedNameError,
@@ -641,6 +643,51 @@ describe("MarketplaceUpdateError", () => {
         retryHint: "",
         cause: undefined,
       },
+    );
+  });
+});
+
+describe("CrossOriginChallengeError", () => {
+  test("names the challenging origin and why no credential is sent", () => {
+    // arrange
+    const origin = "https://sso.example.com";
+
+    // act
+    const error = new CrossOriginChallengeError(origin);
+
+    // assert
+    assert.ok(error instanceof CrossOriginChallengeError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      {
+        name: "CrossOriginChallengeError",
+        message:
+          "redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin",
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("TooManyRedirectsError", () => {
+  test("reports the redirect cap", () => {
+    // arrange
+    const expectedError = {
+      name: "TooManyRedirectsError",
+      message: "too many redirects",
+      cause: undefined,
+    };
+
+    // act
+    const error = new TooManyRedirectsError();
+
+    // assert
+    assert.ok(error instanceof TooManyRedirectsError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      expectedError,
     );
   });
 });

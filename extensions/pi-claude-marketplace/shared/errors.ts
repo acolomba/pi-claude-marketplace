@@ -312,6 +312,35 @@ export class MarketplaceUpdateError extends Error {
 }
 
 /**
+ * Q-02 / GAUTH-06: a hop reached after a redirect left the original request's
+ * origin answered 401 or 203. The HTTP client in `platform/git.ts` throws this
+ * before isomorphic-git's auth loop runs, so no credential is looked up,
+ * evicted or minted for a server the bound credential never reaches. git would
+ * ask the credential helper for the target's own credential, but isomorphic-git
+ * calls `onAuth` only with the original URL, so this stays the recorded DD-3
+ * capability gap. Classified as `{authentication required}`.
+ *
+ * AUTH-09: `origin` is a `URL.origin` value, which never carries userinfo, a
+ * path or a query.
+ */
+export class CrossOriginChallengeError extends Error {
+  constructor(origin: string) {
+    super(
+      `redirected request to ${origin} asked for credentials; a credential is not sent after a redirect to another origin`,
+    );
+    this.name = "CrossOriginChallengeError";
+  }
+}
+
+/** IN-03: the HTTP client in `platform/git.ts` met an eleventh consecutive redirect. */
+export class TooManyRedirectsError extends Error {
+  constructor() {
+    super("too many redirects");
+    this.name = "TooManyRedirectsError";
+  }
+}
+
+/**
  * D-48-B: typed marketplace-manifest parse/validation failure.
  *
  * Thrown by `domain/manifest.ts::loadMarketplaceManifestUncached` for BOTH

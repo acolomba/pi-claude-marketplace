@@ -116,10 +116,11 @@ export type BuildAuthCallbacksOpts =
  * - The host compare closes a CALLER-side host/URL mismatch: an orchestrator
  *   that builds a bundle for one host and then clones a URL on another. It is
  *   not the redirect guard. isomorphic-git invokes `onAuth` only from
- *   `discover`, on status 401 or 203, and always with the caller's own URL,
- *   so a redirect target never reaches this seam. The redirect path has its
- *   own guard: `platform/git.ts` follows redirects itself and drops the
- *   credential headers on every hop whose origin differs from the request's.
+ *   `discover`, on status 401 or 203, and always with the caller's own URL.
+ *   A 401 or 203 that arrives after a redirect left the original origin fails
+ *   in `platform/git.ts` before isomorphic-git's auth loop, so neither
+ *   `onAuth` nor `onAuthFailure` runs for it (Q-02). The redirect path keeps
+ *   only protocol headers on a hop whose origin differs from the request's.
  *   `platform/git-credential.ts::credentialFill` emits `protocol` and `host`
  *   with no `path` line, so the helper lookup is strictly host-keyed. This
  *   compare is what bounds the disclosure surface, because `buildAuthForHost`
