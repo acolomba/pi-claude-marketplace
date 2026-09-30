@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 01
 current_phase_name: Presentation Model
-status: executing
-stopped_at: Completed 01-15-PLAN.md
-last_updated: "2026-09-30T16:44:02.919Z"
+status: verifying
+stopped_at: Completed 01-16-PLAN.md
+last_updated: "2026-09-30T18:05:41.377Z"
 last_activity: 2026-09-30
-last_activity_desc: Completed 01-15 probe-free notification boundary
-state_head: 2ad7a0cc45261182e5a1a9f814ec01a2145e4198
+last_activity_desc: Completed 01-16 run-only notify family and phase gate
+state_head: ffcccb652aece41db7f78011f51dc0df7f981015
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -32,10 +32,10 @@ component as a working Pi artifact.
 
 Phase: 01 (Presentation Model) — EXECUTING
 Plan: 16 of 16
-Status: Ready to execute
-Last activity: 2026-09-30 — Completed 01-15 (probe-free notification boundary)
+Status: All plans executed — ready for code review and verification
+Last activity: 2026-09-30 — Completed 01-16 (run-only notify family and phase gate)
 
-Progress: [█████████░] 94% (15 of 16 plans)
+Progress: [██████████] 100% (16 of 16 plans)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,8 +168,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-30T16:44:02.837Z
-**Stopped at:** Completed 01-15-PLAN.md
+**Last session:** 2026-09-30T18:05:41.066Z
+**Stopped at:** Completed 01-16-PLAN.md
 **Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
@@ -214,6 +214,7 @@ archived milestone artifacts.
 | Phase 01 P13 | 75 min | 2 tasks | 18 files |
 | Phase 01 P14 | 77 min | 2 tasks | 17 files |
 | Phase 01 P15 | 50 min | 2 tasks | 32 files |
+| Phase 01 P16 | 78 min | 2 tasks | 26 files |
 
 ## Decisions
 
@@ -249,3 +250,4 @@ archived milestone artifacts.
 - [Phase 01]: list-flow.ts splits its options: PluginListPayloadOptions carries no run, and ListPluginsOptions extends it with run, so the LLM list tool and the browser's plugin loader build payloads without constructing a run (D-05, IL-2)
 - [Phase 01]: Plugin info takes GetPluginInfoOptions.run; the fan-out and the failure loop render from one snapshot per command, and makeListHandler, makePluginInfoHandler, and makeBrowseHandler take no pi, so no edge handler factory takes pi (D-05, D-07)
 - [Phase 01]: createNotificationBoundary takes (emissions, cwd?) and holds no Pi mock; the probe count belongs to the root suites register.test.ts and index.test.ts, which build their own strict Pi mocks, and loadExtension states rootReads (three per discover pass that reaches the reconcile and per registered-command run) (D-05, D-07)
+- [Phase 01]: The notify family takes run: NotificationRun only; the dispatcher reads run.softDeps and imports no probe, and the catalog driver opens one run per fixture from the fixture's inventory (SC-2, D-05, D-06)
