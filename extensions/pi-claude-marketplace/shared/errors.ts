@@ -256,6 +256,21 @@ export class StaleSourceCloneError extends Error {
 }
 
 /**
+ * MA-14: `marketplace add` recognized its own leftover clone but could not fully
+ * remove it. The add never renames over the partly removed tree, and it keeps
+ * the removal leak as data so the standalone row can report it (WR-02). The
+ * message and the `{stale clone}` classification are the parent's.
+ */
+export class UnremovableLeftoverCloneError extends StaleSourceCloneError {
+  readonly removalLeak: string;
+  constructor(absPath: string, mpName: string, removalLeak: string) {
+    super(absPath, mpName);
+    this.name = "UnremovableLeftoverCloneError";
+    this.removalLeak = removalLeak;
+  }
+}
+
+/**
  * MA-13: `marketplace add` found a directory at the destination but could not
  * read its `.git/config`, so it cannot tell whose clone the directory is.
  * `failure` records why: `permission-denied` for EACCES/EPERM, `unreadable`
@@ -308,6 +323,35 @@ export class MarketplaceUpdateError extends Error {
     super(message, opts.cause === undefined ? undefined : { cause: opts.cause });
     this.name = "MarketplaceUpdateError";
     this.retryHint = opts.retryHint ?? "";
+  }
+}
+
+/**
+ * Q-02 / GAUTH-06: a hop reached after a redirect left the original request's
+ * origin answered 401 or 203. The HTTP client in `platform/git.ts` throws this
+ * before isomorphic-git's auth loop runs, so no credential is looked up,
+ * evicted or minted for a server the bound credential never reaches. git would
+ * ask the credential helper for the target's own credential, but isomorphic-git
+ * calls `onAuth` only with the original URL, so this stays the recorded DD-3
+ * capability gap. Classified as `{authentication required}`.
+ *
+ * AUTH-09: `origin` is a `URL.origin` value, which never carries userinfo, a
+ * path or a query.
+ */
+export class CrossOriginChallengeError extends Error {
+  constructor(origin: string) {
+    super(
+      `redirected request to ${origin} asked for credentials; a credential is not sent after a redirect to another origin`,
+    );
+    this.name = "CrossOriginChallengeError";
+  }
+}
+
+/** IN-03: the HTTP client in `platform/git.ts` met an eleventh consecutive redirect. */
+export class TooManyRedirectsError extends Error {
+  constructor() {
+    super("too many redirects");
+    this.name = "TooManyRedirectsError";
   }
 }
 

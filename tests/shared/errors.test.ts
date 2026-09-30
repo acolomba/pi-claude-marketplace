@@ -10,6 +10,7 @@ import {
   cleanupFailuresFromError,
   composeErrorWithCauseChain,
   ConcurrentInstallError,
+  CrossOriginChallengeError,
   CrossPluginConflictError,
   errorMessage,
   errorWithCleanupFailures,
@@ -27,7 +28,9 @@ import {
   PluginUpdatePhase3Error,
   StaleSourceCloneError,
   StateLockHeldError,
+  TooManyRedirectsError,
   UnreadableSourceCloneError,
+  UnremovableLeftoverCloneError,
   UnsupportedSourceError,
   UnsafeGeneratedNameError,
   WorkflowNameCollisionError,
@@ -447,6 +450,43 @@ describe("StaleSourceCloneError", () => {
   });
 });
 
+describe("UnremovableLeftoverCloneError", () => {
+  test("keeps the stale-clone value and carries the removal leak", () => {
+    // arrange
+    const removalLeak =
+      "failed to clean up marketplace leftover clone at /scope/sources/official: EACCES: permission denied, rm '/scope/sources/official'";
+
+    // act
+    const error = new UnremovableLeftoverCloneError(
+      "/scope/sources/official",
+      "official",
+      removalLeak,
+    );
+
+    // assert
+    assert.ok(error instanceof UnremovableLeftoverCloneError);
+    assert.ok(error instanceof StaleSourceCloneError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        absPath: error.absPath,
+        mpName: error.mpName,
+        removalLeak: error.removalLeak,
+      },
+      {
+        name: "UnremovableLeftoverCloneError",
+        message: "stale source clone at /scope/sources/official",
+        absPath: "/scope/sources/official",
+        mpName: "official",
+        removalLeak:
+          "failed to clean up marketplace leftover clone at /scope/sources/official: EACCES: permission denied, rm '/scope/sources/official'",
+      },
+    );
+  });
+});
+
 describe("UnreadableSourceCloneError", () => {
   for (const failure of ["permission-denied", "unreadable"] as const) {
     test(`exposes the complete ${failure} value with its marketplace`, () => {
@@ -641,6 +681,51 @@ describe("MarketplaceUpdateError", () => {
         retryHint: "",
         cause: undefined,
       },
+    );
+  });
+});
+
+describe("CrossOriginChallengeError", () => {
+  test("names the challenging origin and why no credential is sent", () => {
+    // arrange
+    const origin = "https://sso.example.com";
+
+    // act
+    const error = new CrossOriginChallengeError(origin);
+
+    // assert
+    assert.ok(error instanceof CrossOriginChallengeError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      {
+        name: "CrossOriginChallengeError",
+        message:
+          "redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin",
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("TooManyRedirectsError", () => {
+  test("reports the redirect cap", () => {
+    // arrange
+    const expectedError = {
+      name: "TooManyRedirectsError",
+      message: "too many redirects",
+      cause: undefined,
+    };
+
+    // act
+    const error = new TooManyRedirectsError();
+
+    // assert
+    assert.ok(error instanceof TooManyRedirectsError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      expectedError,
     );
   });
 });

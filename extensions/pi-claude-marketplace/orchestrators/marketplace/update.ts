@@ -100,6 +100,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
+  CrossOriginChallengeError,
   InvalidMarketplaceManifestError,
   MarketplaceUpdateError,
   PluginShapeError,
@@ -380,7 +381,9 @@ async function manifestContentKey(
  * code-bearing transport error at cause-depth 1 where `transportReason`'s
  * one-level unwrap classifies it as `authentication required`. GAUTH-05: a
  * `device-flow` bundle is excluded -- there the story is a declined or expired
- * Device Flow, and the bare closed-set token is the whole truth.
+ * Device Flow, and the bare closed-set token is the whole truth. A challenge
+ * after a cross-origin redirect keeps its own cause text, because a credential
+ * stored for `host` cannot answer it (Q-02).
  */
 async function refreshUrlClone(
   cloneDir: string,
@@ -404,7 +407,8 @@ async function refreshUrlClone(
       err instanceof Error &&
       err.cause === undefined &&
       classifyGitTransportFailure(err) === "authentication required" &&
-      auth.kind === "stored-credential"
+      auth.kind === "stored-credential" &&
+      !(err instanceof CrossOriginChallengeError)
     ) {
       err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host));
     }

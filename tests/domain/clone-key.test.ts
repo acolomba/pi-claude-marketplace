@@ -4,9 +4,15 @@ import { describe, test } from "node:test";
 import {
   canonicalCloneUrl,
   networkCloneUrl,
+  originMatchesSource,
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+
+import type {
+  GitHubSource,
+  UrlSource,
+} from "../../extensions/pi-claude-marketplace/domain/source.ts";
 
 describe("pluginCloneKey", () => {
   test("returns the same clone key for identical URL and SHA inputs", () => {
@@ -326,4 +332,99 @@ describe("networkCloneUrl", () => {
       "https://gitlab.example.com/team/mp",
     ]);
   });
+});
+
+describe("originMatchesSource", () => {
+  const OFFICIAL = {
+    kind: "github",
+    raw: "anthropics/claude-plugins-official",
+    owner: "anthropics",
+    repo: "claude-plugins-official",
+  } as const satisfies GitHubSource;
+  const GITLAB_MP = {
+    kind: "url",
+    raw: "https://gitlab.example.com/team/mp",
+    url: "https://gitlab.example.com/team/mp",
+  } as const satisfies UrlSource;
+  const GITHUB_O_R = {
+    kind: "github",
+    raw: "o/r",
+    owner: "o",
+    repo: "r",
+  } as const satisfies GitHubSource;
+
+  const MATCHING_ORIGINS: ReadonlyArray<{
+    readonly originUrl: string;
+    readonly source: GitHubSource | UrlSource;
+  }> = [
+    { originUrl: "https://github.com/anthropics/claude-plugins-official.git", source: OFFICIAL },
+    { originUrl: "https://GitHub.com/anthropics/claude-plugins-official", source: OFFICIAL },
+    {
+      originUrl: "https://www.github.com/anthropics/claude-plugins-official.git",
+      source: OFFICIAL,
+    },
+    { originUrl: "https://GitLab.Example.com/team/mp.git", source: GITLAB_MP },
+  ];
+
+  for (const { originUrl, source } of MATCHING_ORIGINS) {
+    test(`Q-03: recognizes origin ${originUrl} as the ${source.raw} source`, () => {
+      // arrange
+      const expectedMatch = true;
+
+      // act
+      const matches = originMatchesSource(originUrl, source);
+
+      // assert
+      assert.strictEqual(matches, expectedMatch);
+    });
+  }
+
+  const FOREIGN_ORIGINS: ReadonlyArray<{
+    readonly kind: string;
+    readonly originUrl: string;
+    readonly source: GitHubSource | UrlSource;
+  }> = [
+    {
+      kind: "an owner that differs only by letter case",
+      originUrl: "https://github.com/Anthropics/claude-plugins-official.git",
+      source: OFFICIAL,
+    },
+    {
+      kind: "another repository",
+      originUrl: "https://github.com/anthropics/other-repo.git",
+      source: OFFICIAL,
+    },
+    {
+      kind: "the identity plus one trailing character",
+      originUrl: "https://github.com/anthropics/claude-plugins-officialx",
+      source: OFFICIAL,
+    },
+    {
+      kind: "an ssh-form remote",
+      originUrl: "git@github.com:anthropics/claude-plugins-official.git",
+      source: OFFICIAL,
+    },
+    { kind: "a string that is not a url", originUrl: "not a url", source: OFFICIAL },
+    { kind: "the empty string", originUrl: "", source: OFFICIAL },
+    { kind: "a local path", originUrl: "/srv/git/claude-plugins-official", source: OFFICIAL },
+    { kind: "a url that does not parse", originUrl: "https://exa mple/team/mp", source: GITLAB_MP },
+    {
+      kind: "an explicit non-default port",
+      originUrl: "https://github.com:8443/o/r",
+      source: GITHUB_O_R,
+    },
+  ];
+
+  for (const { kind, originUrl, source } of FOREIGN_ORIGINS) {
+    test(`Q-03: refuses an origin that is ${kind}`, () => {
+      // arrange
+      const expectedMatch = false;
+
+      // act
+      const matches = originMatchesSource(originUrl, source);
+
+      // assert
+      assert.strictEqual(matches, expectedMatch);
+    });
+  }
 });
