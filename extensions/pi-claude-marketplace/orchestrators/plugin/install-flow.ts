@@ -11,7 +11,6 @@ import path from "node:path";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { createRemovalOps } from "../../shared/fs-utils.ts";
@@ -48,9 +47,10 @@ import type {
   InstallPluginNotifications,
 } from "./install-outcome.ts";
 import type { InstallMsg } from "./install.messaging.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { runPhases } from "../../transaction/phase-ledger.ts";
@@ -61,10 +61,11 @@ import type { InstallPluginOutcome } from "../types.ts";
 /**
  * Controls how `installPlugin` surfaces notifications.
  *
- * - `"standalone"` (default): fires a SINGLE `notify(ctx, pi, ...)`
+ * - `"standalone"` (default): fires a SINGLE `notify(ctx, run, ...)`
  *   call per orchestration arm with the per-variant
- *   `PluginInstalledMessage` / `PluginFailedMessage` payload. Severity +
- *   reload-hint + soft-dep markers are computed by `notify()`.
+ *   `PluginInstalledMessage` / `PluginFailedMessage` payload. The success
+ *   row stamps severity from `run.softDeps`, and `notify()` composes the
+ *   reload hint and the soft-dep markers from the same snapshot (D-05).
  *   Use for direct `/claude:plugin install`.
  *   Per D-19-01 there are no post-state-commit `notifyWarning` sites: the
  *   user-visible warning surface for mkdir / cache-refresh /
@@ -79,8 +80,12 @@ import type { InstallPluginOutcome } from "../types.ts";
  */
 export interface InstallPluginOptions {
   readonly ctx: NotificationContext;
-  /** Factory `pi` reference -- carries `getAllTools()` for RH-3/RH-4 soft-dep probes. */
-  readonly pi: ToolInventory;
+  /**
+   * D-05 / D-07: the command's run, or the composer's run when import or
+   * reconcile drives the install. The severity stamp and the RH-3/RH-4
+   * soft-dep markers both read its one soft-dependency snapshot.
+   */
+  readonly run: NotificationRun;
   readonly scope: Scope;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
@@ -361,7 +366,7 @@ function droppedKindRowReasons(installCtx: InstallLedgerSummary): readonly Conte
   return narrowUnsupportedKinds(installCtx.resolved.unsupported);
 }
 
-function composeInstalledRow(installCtx: InstallLedgerSummary, pi: ToolInventory): InstallMsg {
+function composeInstalledRow(installCtx: InstallLedgerSummary, run: NotificationRun): InstallMsg {
   const { plugin } = installCtx;
   const declaresAgents = installCtx.stagedAgentNames.length > 0;
   const declaresMcp = installCtx.stagedMcpServerNames.length > 0;
@@ -403,7 +408,7 @@ function composeInstalledRow(installCtx: InstallLedgerSummary, pi: ToolInventory
   const severity =
     installCtx.frontmatterDegradations.length > 0
       ? "warning"
-      : companionSeverity({ declaresAgents, declaresMcp, declaresWorkflows }, softDepStatus(pi));
+      : companionSeverity({ declaresAgents, declaresMcp, declaresWorkflows }, run.softDeps);
 
   // IN-02 / IN-04: `version` passes straight through. Row-level `scope` is
   // OMITTED -- it always equals the marketplace block's scope here, and
@@ -442,7 +447,7 @@ function composeInstalledRow(installCtx: InstallLedgerSummary, pi: ToolInventory
  */
 function failedRowOutcome(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
@@ -450,7 +455,7 @@ function failedRowOutcome(args: {
   readonly reasons: readonly ContentReason[];
   readonly orchestrated: boolean;
 }): InstallPluginOutcome {
-  const { ctx, pi, marketplace, scope, plugin, error, reasons, orchestrated } = args;
+  const { ctx, run, marketplace, scope, plugin, error, reasons, orchestrated } = args;
   const cause = error.message;
   if (orchestrated) {
     return { status: "failed", error, cause };
@@ -458,7 +463,7 @@ function failedRowOutcome(args: {
 
   notifyWithContext(
     ctx,
-    pi,
+    run,
     INSTALL_CONTEXT,
     [
       {
@@ -497,14 +502,14 @@ function failedRowOutcome(args: {
 function handleInstallThrow(args: {
   readonly err: unknown;
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
   readonly capture: InstallFailureCapture;
   readonly orchestrated: boolean;
 }): InstallPluginOutcome {
-  const { err, ctx, pi, marketplace, scope, plugin, capture, orchestrated } = args;
+  const { err, ctx, run, marketplace, scope, plugin, capture, orchestrated } = args;
   const rolledBackPartial = capture.rollbackPartials.length > 0;
   const entityErrorRow = classifyEntityShapeError(err, { plugin, marketplace, scope });
   const failureMessage = composeInstallFailureMessage({
@@ -525,7 +530,7 @@ function handleInstallThrow(args: {
 
   notifyWithContext(
     ctx,
-    pi,
+    run,
     INSTALL_CONTEXT,
     [
       {
@@ -611,7 +616,7 @@ async function installPluginWithTransaction(
   completionCache: CompletionCache,
   opts: InstallPluginOptions,
 ): Promise<InstallPluginOutcome> {
-  const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
+  const { ctx, run, scope, cwd, marketplace, plugin } = opts;
   const locations = locationsFor(scope, cwd);
   const disableCascade = composeInstallDisableCascade({
     hooksRouting,
@@ -968,13 +973,13 @@ async function installPluginWithTransaction(
     );
   } catch (err) {
     // Pattern S-1 single chokepoint for user-visible errors: one
-    // notify(ctx, pi, ...) call carrying a per-variant
+    // notify(ctx, run, ...) call carrying a per-variant
     // PluginFailedMessage / PluginUnavailableMessage. Severity derives to
     // "error" structurally and neither variant triggers the reload hint.
     return handleInstallThrow({
       err,
       ctx,
-      pi,
+      run,
       marketplace,
       scope,
       plugin,
@@ -1004,7 +1009,7 @@ async function installPluginWithTransaction(
     case "invalid-config":
       return failedRowOutcome({
         ctx,
-        pi,
+        run,
         marketplace,
         scope,
         plugin,
@@ -1026,7 +1031,7 @@ async function installPluginWithTransaction(
       // carries. The probe never throws and never blocks the row (see
       // `marketplaceInOtherScope`); a `false` answer adds no field, so the row
       // renders the plain `{marketplace not added}` brace.
-      notify(ctx, pi, {
+      notify(ctx, run, {
         kind: "marketplace-not-added",
         name: marketplace,
         scope,
@@ -1052,7 +1057,7 @@ async function installPluginWithTransaction(
 
       notifyWithContext(
         ctx,
-        pi,
+        run,
         INSTALL_CONTEXT,
         [
           {
@@ -1086,11 +1091,12 @@ async function installPluginWithTransaction(
       );
 
       if (!orchestrated) {
-        // Success: one notify(ctx, pi, ...) call with a PluginInstalledMessage.
-        // The renderer probes companion-loaded state via softDepStatus(pi) and
-        // emits the per-row soft-dep markers automatically. The "/reload to pick
-        // up changes" trailer fires structurally on the status; the trigger
-        // ladder is per-variant, not per-resource-count (RH-1, PU-8 (b)).
+        // Success: one notify(ctx, run, ...) call with a PluginInstalledMessage.
+        // D-05: the renderer composes the per-row soft-dep markers from
+        // `run.softDeps`, the snapshot `composeInstalledRow` stamped severity
+        // from. The "/reload to pick up changes" trailer fires structurally on
+        // the status; the trigger ladder is per-variant, not
+        // per-resource-count (RH-1, PU-8 (b)).
         //
         // The PI-13 dependencies-declaration note is DROPPED per D-19-01: the
         // PR-5 free-form prose has no clean MarketplaceNotificationMessage
@@ -1102,7 +1108,7 @@ async function installPluginWithTransaction(
         // everything, the success row otherwise.
         notifyWithContext(
           ctx,
-          pi,
+          run,
           INSTALL_CONTEXT,
           [
             {
@@ -1119,7 +1125,7 @@ async function installPluginWithTransaction(
                       },
                       frontmatterDegradations: installCtx.frontmatterDegradations,
                     })
-                  : composeInstalledRow(installCtx, pi),
+                  : composeInstalledRow(installCtx, run),
               ],
             },
           ],

@@ -59,15 +59,14 @@
 // `verifyBoundary()`.
 //
 // Measured boundary counts, taken through a counting context before a case was
-// written, because the three paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command that MATERIALISES reads `ctx.ui` once, `ctx.cwd`
-//     once, and `pi.getAllTools()` SIX times;
-//   * a delegating command that is refused by the install gate, or that lands
-//     disabled, reads `pi.getAllTools()` THREE times.
-// The count is a property of the emission the workflow reaches, not of the
-// module, so it is stated per row rather than shared.
+// written:
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never --
+//     `notifyUsageError` writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, whether it
+//     materialises, is refused by the install gate, or lands disabled.
+// No path reads `pi.getAllTools()`, so every case states zero probes. The
+// handler hands the install no tool inventory, and D-05 has the install read
+// the router's run for both its severity stamp and its markers.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -107,6 +106,7 @@ import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persist
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -125,11 +125,8 @@ import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/
 const MAP_MODEL_FLAG = "--map-model";
 const PARTIAL_FLAG = "--partial";
 
-function makeInstallHandler(
-  pi: Parameters<typeof makeRuntimeInstallHandler>[0],
-): ReturnType<typeof makeRuntimeInstallHandler> {
+function makeInstallHandler(): ReturnType<typeof makeRuntimeInstallHandler> {
   return makeRuntimeInstallHandler(
-    pi,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
@@ -393,26 +390,23 @@ const DEGRADED_USER_DECLARATION: ScopeConfig = {
 // The flag matrix: all four combinations of the two downstream booleans.
 // ---------------------------------------------------------------------------
 
-for (const { args, expectedFootprint, label, summary, toolProbes } of [
+for (const { args, expectedFootprint, label, summary } of [
   {
     args: "degraded@mp",
     label: "matrix-neither",
     summary: "neither downstream flag",
-    toolProbes: 3,
     expectedFootprint: NOTHING_MATERIALIZED,
   },
   {
     args: `degraded@mp ${MAP_MODEL_FLAG}`,
     label: "matrix-map-model",
     summary: "the model-mapping flag alone",
-    toolProbes: 3,
     expectedFootprint: NOTHING_MATERIALIZED,
   },
   {
     args: `degraded@mp ${PARTIAL_FLAG}`,
     label: "matrix-partial",
     summary: "the gate-widening flag alone",
-    toolProbes: 6,
     expectedFootprint: {
       project: EMPTY_SCOPE,
       user: {
@@ -427,7 +421,6 @@ for (const { args, expectedFootprint, label, summary, toolProbes } of [
     args: `degraded@mp ${PARTIAL_FLAG} ${MAP_MODEL_FLAG}`,
     label: "matrix-both",
     summary: "both downstream flags",
-    toolProbes: 6,
     expectedFootprint: {
       project: EMPTY_SCOPE,
       user: {
@@ -443,20 +436,21 @@ for (const { args, expectedFootprint, label, summary, toolProbes } of [
   expectedFootprint: Footprint;
   label: string;
   summary: string;
-  toolProbes: number;
 }[]) {
   test(`forwards ${summary} to the install workflow, leaving the unsupplied one off (D-65-05)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, toolProbes, {
+    // D-05: zero tool probes. The install stamps severity and composes its
+    // markers from the run's snapshot, never from a probe of its own.
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const installHandler = makeInstallHandler(pi);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), expectedFootprint);
@@ -522,14 +516,14 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const installHandler = makeInstallHandler(pi);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), expectedFootprint);
@@ -570,14 +564,14 @@ for (const { args, expectedAgents, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const installHandler = makeInstallHandler(pi);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), {
@@ -597,14 +591,18 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+  const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const installHandler = makeInstallHandler(pi);
+  const installHandler = makeInstallHandler();
 
   // act
-  await installHandler(`alpha@mp --scope project ${SCOPE_TARGET_FLAG}`, ctx);
+  await installHandler(
+    `alpha@mp --scope project ${SCOPE_TARGET_FLAG}`,
+    ctx,
+    runWithNothingLoaded(),
+  );
 
   // assert
   assert.deepStrictEqual(await readFootprint(workspace), {
@@ -627,14 +625,14 @@ test("records a plugin declaring itself off by default as disabled, because the 
   // arrange
   const workspace = await createHermeticWorkspace(t, "default-enabled");
   await seedBothScopes(workspace);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const installHandler = makeInstallHandler(pi);
+  const installHandler = makeInstallHandler();
 
   // act
-  await installHandler("optout@mp", ctx);
+  await installHandler("optout@mp", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(await readFootprint(workspace), {
@@ -685,11 +683,11 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const installHandler = makeInstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -731,11 +729,11 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const installHandler = makeInstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -748,11 +746,11 @@ test("names an unrecognised long flag the first scan claims and never reaches th
   // arrange
   const workspace = await createHermeticWorkspace(t, "unknown-first-scan");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const installHandler = makeInstallHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const installHandler = makeInstallHandler();
 
   // act
-  await installHandler("alpha@mp --frobnicate", ctx);
+  await installHandler("alpha@mp --frobnicate", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -770,11 +768,11 @@ test("names an unrecognised long flag that survives the first scan and is claime
   // arrange
   const workspace = await createHermeticWorkspace(t, "unknown-second-scan");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const installHandler = makeInstallHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const installHandler = makeInstallHandler();
 
   // act
-  await installHandler('alpha@mp "--frobnicate"', ctx);
+  await installHandler('alpha@mp "--frobnicate"', ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -808,11 +806,11 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const installHandler = makeInstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);

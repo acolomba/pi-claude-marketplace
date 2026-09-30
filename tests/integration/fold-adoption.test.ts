@@ -190,7 +190,7 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
     });
     await installPlugin({
       ctx: installCtx.ctx,
-      pi: installCtx.pi,
+      run: installCtx.run,
       scope: "project",
       cwd: env.cwd,
       marketplace: "official",
@@ -279,7 +279,7 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     });
     await installPlugin({
       ctx: installCtx.ctx,
-      pi: installCtx.pi,
+      run: installCtx.run,
       scope: "project",
       cwd: env.cwd,
       marketplace: "official-user",

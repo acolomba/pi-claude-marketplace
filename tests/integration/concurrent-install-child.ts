@@ -5,8 +5,9 @@ import {
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
-import { makeNotifyCollectingCtx, makeStubPi, type NotificationRecord } from "./ipc-child.ts";
+import { makeNotifyCollectingCtx, type NotificationRecord } from "./ipc-child.ts";
 
 interface StartMessage {
   readonly plugin: string;
@@ -52,7 +53,7 @@ async function handleMessage(message: unknown): Promise<void> {
   try {
     await installPlugin({
       ctx,
-      pi: makeStubPi(),
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd: message.cwd,
       marketplace: message.marketplace,

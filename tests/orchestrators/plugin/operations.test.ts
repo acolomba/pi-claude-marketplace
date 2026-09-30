@@ -29,6 +29,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
@@ -42,6 +43,7 @@ import type {
   ToolInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { TestContext } from "node:test";
 
 interface NotifyRecord {
@@ -99,6 +101,7 @@ function makeFetchBoundary(): FetchBoundary {
 function makeCtx(): {
   ctx: NotificationContext;
   pi: ToolInventory;
+  run: NotificationRun;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -109,7 +112,7 @@ function makeCtx(): {
       },
     },
   };
-  return { ctx, pi: { getAllTools: () => [] }, notifications };
+  return { ctx, pi: { getAllTools: () => [] }, run: runWithNothingLoaded(), notifications };
 }
 
 /**
@@ -290,12 +293,12 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
   });
   // Pre-condition: the routing table's PreToolUse bucket is empty.
   assert.deepStrictEqual(ownerRuntime.getRoutingBucket("PreToolUse"), []);
-  const { ctx, pi, notifications } = makeCtx();
+  const { ctx, run, notifications } = makeCtx();
 
   // act
   const outcome = await installPlugin({
     ctx,
-    pi,
+    run,
     scope: "project",
     cwd,
     marketplace: "mp",
@@ -474,13 +477,13 @@ async function installHooksDeclaringPlugin(
     },
     ...(commandName !== undefined && { commandName }),
   });
-  const { ctx, pi } = makeCtx();
+  const { ctx, run } = makeCtx();
   await createInstallOperation(
     hooksRouting,
     createCompletionCache(),
   )({
     ctx,
-    pi,
+    run,
     scope: "project",
     cwd,
     marketplace: "mp",

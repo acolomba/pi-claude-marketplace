@@ -58,6 +58,7 @@ import { createNotificationBoundary } from "../../edge/notification-boundary.ts"
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
@@ -4913,7 +4914,7 @@ test("DFEN-07 / D-103-10: update against a flipped defaultEnabled moves the vers
       );
       await installPlugin({
         ctx: seed.ctx,
-        pi: seed.pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5037,7 +5038,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical update 
         const seed = makeCtx();
         await installPlugin({
           ctx: seed.ctx,
-          pi: seed.pi,
+          run: runWithNothingLoaded(),
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -8979,7 +8980,7 @@ async function seedInstalledWorkflowPlugin(opts: {
   );
   await installPlugin({
     ctx: seed.ctx,
-    pi: seed.pi,
+    run: runWithNothingLoaded(),
     scope: "project",
     cwd: opts.cwd,
     marketplace: "mp",
@@ -9486,7 +9487,7 @@ test("WR-01: a workflows staging-cleanup leak is a recorded failure over a commi
       );
       await installPlugin({
         ctx: seed.ctx,
-        pi: seed.pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9602,7 +9603,7 @@ test("CR-01: a phase-3 leak reaches the user with its path intact", async () => 
       );
       await installPlugin({
         ctx: seed.ctx,
-        pi: seed.pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         marketplace: "mp",

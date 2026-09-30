@@ -533,7 +533,6 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
     } as never);
 
     const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
     const installPlugin = createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
@@ -544,7 +543,7 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
     // (CMP-3) and clones it into project state.
     await installPlugin({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       marketplace: "mp",

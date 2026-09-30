@@ -79,6 +79,7 @@ import { createNotificationBoundary } from "../../edge/notification-boundary.ts"
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 import {
@@ -322,14 +323,18 @@ async function seedMarketplace(opts: {
   });
 
   if (opts.install === true) {
-    const { ctx, pi } = makeCtx({ toolNames: ["subagent", "mcp"] });
+    const { ctx } = makeCtx();
     const installPlugin = createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     );
     await installPlugin({
       ctx,
-      pi,
+      run: runWithSoftDeps({
+        piSubagentsLoaded: true,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      }),
       scope,
       cwd: opts.cwd,
       marketplace: marketplaceName,
@@ -3433,14 +3438,14 @@ async function seedInstalledGitSourcePlugin(opts: {
   });
 
   const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-  const { ctx, pi } = makeCtx();
+  const { ctx } = makeCtx();
   const installPlugin = createInstallOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
   await installPlugin({
     ctx,
-    pi,
+    run: runWithNothingLoaded(),
     scope: "project",
     cwd: opts.cwd,
     marketplace: opts.marketplaceName,

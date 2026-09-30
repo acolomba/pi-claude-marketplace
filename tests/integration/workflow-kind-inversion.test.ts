@@ -161,12 +161,12 @@ test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, notifications } = makeCtx();
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -280,7 +280,7 @@ test("RECON-05: two consecutive reconciles leave a workflow envelope untouched",
       const install = makeCtx();
       await installPlugin({
         ctx: install.ctx,
-        pi: install.pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -347,7 +347,7 @@ test("RECON-05 negative control: a forced-open gate over a grown set DOES rewrit
       const install = makeCtx();
       await installPlugin({
         ctx: install.ctx,
-        pi: install.pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -433,7 +433,7 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
       const install = makeCtx();
       await installPlugin({
         ctx: install.ctx,
-        pi: install.pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -497,7 +497,7 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
       // "emitted something" assertion would stay green through a regression that
       // stopped producing the outcome, or produced it under another kind.
       // The converged record now declares a `workflows` dependency, and this
-      // test's `pi` never loads the host workflow engine, so the soft-dep
+      // test's run never loads the host workflow engine, so the soft-dep
       // marker joins the convergence reason in the same brace (WDEP-01).
       assert.match(
         first.notifications.map((n) => n.message).join("\n"),

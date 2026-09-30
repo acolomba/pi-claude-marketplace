@@ -9,7 +9,6 @@ import { parseArgs } from "../../args.ts";
 
 import type { GitOps } from "../../../orchestrators/marketplace/shared.ts";
 import type { InstallHooksRouting } from "../../../orchestrators/plugin/install-disable-cascade.ts";
-import type { ExtensionAPI } from "../../../platform/pi-api.ts";
 import type { CompletionCache } from "../../../shared/completion-cache.ts";
 import type { SubcommandHandler } from "../../router.ts";
 
@@ -24,12 +23,10 @@ export interface ImportHandlerDeps {
 }
 
 /**
- * Builds the `import` handler. `pi` is kept only to forward to the nested
- * install and marketplace-add orchestrators; import's own cascade renders
- * from the router's run.
+ * Builds the `import` handler. Import's own cascade and its nested
+ * marketplace adds and plugin installs render from the router's run (D-07).
  */
 export function makeImportHandler(
-  pi: ExtensionAPI,
   deps: ImportHandlerDeps,
   hooksRouting: InstallHooksRouting,
 ): SubcommandHandler {
@@ -56,7 +53,6 @@ export function makeImportHandler(
     const options: ImportClaudeSettingsOptions = {
       ctx,
       run,
-      pi,
       cwd: ctx.cwd,
       selectedScopes: parsed.scope === undefined ? ["project", "user"] : [parsed.scope],
       gitOps: deps.gitOps,

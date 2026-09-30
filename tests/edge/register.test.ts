@@ -1013,12 +1013,13 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
-  // One run, plus the install severity probe and the notification probe.
+  // D-05: the run is the only probe; the install stamps severity and renders
+  // its markers from the run's snapshot.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1, probingEmissions: 2 },
+    { runs: 1, probingEmissions: 0 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });

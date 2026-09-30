@@ -85,6 +85,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
@@ -142,6 +143,15 @@ function makeCtx(engineLoaded: boolean): {
     getAllTools: () => toolNamesFor(engineLoaded).map(toolInfo),
   } as ExtensionAPI;
   return { ctx, pi, notifications };
+}
+
+/** The run whose snapshot reports the host engine as `engineLoaded` and no other companion. */
+function runFor(engineLoaded: boolean): NotificationRun {
+  return runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+    workflowEngineLoaded: engineLoaded,
+  });
 }
 
 /**
@@ -251,10 +261,10 @@ async function runInstall(
   cwd: string,
   engineLoaded: boolean,
 ): Promise<{ notifications: readonly NotifyRecord[] }> {
-  const { ctx, pi, notifications } = makeCtx(engineLoaded);
+  const { ctx, notifications } = makeCtx(engineLoaded);
   await installPlugin({
     ctx,
-    pi,
+    run: runFor(engineLoaded),
     scope: "project",
     cwd,
     marketplace: "mp",
@@ -423,19 +433,14 @@ const SITE_CASES = [
             extraKnownMarketplaces: { mp: { directory: marketplaceRoot } },
           }),
         );
-        const { ctx, pi, notifications } = makeCtx(engineLoaded);
+        const { ctx, notifications } = makeCtx(engineLoaded);
 
         // act
         await importClaudeSettings({
           ctx,
-          run: runWithSoftDeps({
-            piSubagentsLoaded: false,
-            piMcpAdapterLoaded: false,
-            workflowEngineLoaded: engineLoaded,
-          }),
+          run: runFor(engineLoaded),
           cwd,
           gitOps: createGitOpsFake({ allowedRemoteUrls: [], boundary: "memory" }).gitOps,
-          pi,
           selectedScopes: ["project"],
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),

@@ -427,7 +427,7 @@ async function applyPluginInstalls(
   for (const op of plan.pluginsToInstall) {
     const result = await installPlugin({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: op.scope,
       cwd: opts.cwd,
       marketplace: op.marketplace,

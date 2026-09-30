@@ -159,11 +159,11 @@ const INVOKERS: Record<string, Invoker> = {
     });
   },
   // install ALWAYS carries a resolved scope -> explicit only. install-flow.test.ts M1.
-  install: async ({ ctx, pi, cwd }) => {
+  install: async ({ ctx, run, cwd }) => {
     await createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
-    )({ ctx, pi, scope: "project", cwd, marketplace: NAME, plugin: "anything" });
+    )({ ctx, run, scope: "project", cwd, marketplace: NAME, plugin: "anything" });
   },
   // uninstall. uninstall.test.ts ATTR-04 / D-03.
   uninstall: async ({ ctx, pi, cwd, mode }) => {

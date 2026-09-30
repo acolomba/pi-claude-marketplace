@@ -44,7 +44,7 @@ import type {
 } from "../../orchestrators/marketplace/add.ts";
 import type { InstallHooksRouting } from "../../orchestrators/plugin/install-disable-cascade.ts";
 import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -174,16 +174,11 @@ export interface ImportDeps {
 export interface ImportClaudeSettingsOptions {
   readonly ctx: ExtensionContext;
   /**
-   * D-05 / D-07: the command's run. The import cascade renders from its
+   * D-05 / D-07: the command's run. The import cascade, the nested
+   * marketplace adds, and the nested plugin installs read its one
    * soft-dependency snapshot.
    */
   readonly run: NotificationRun;
-  /**
-   * The inventory forwarded to the nested install orchestrator, which does
-   * not take a run yet. Import's own emission and the nested marketplace add
-   * read `run`.
-   */
-  readonly pi: ExtensionAPI;
   readonly cwd: string;
   readonly selectedScopes: readonly Scope[];
   readonly hooksRouting: InstallHooksRouting;
@@ -770,7 +765,7 @@ async function installOnePlannedPlugin(
   try {
     outcome = await installPlugin({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: plugin.scope,
       cwd: opts.cwd,
       marketplace: plugin.ref.marketplace,

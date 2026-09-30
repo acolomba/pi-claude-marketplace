@@ -264,9 +264,9 @@ export interface ApplyReconcileOptions {
    */
   readonly run: NotificationRun;
   /**
-   * The tool inventory forwarded to the nested uninstall, install, enable,
-   * and backfill orchestrators, which do not take a run yet. Reconcile's own
-   * emission and the nested add and remove read `run`.
+   * The tool inventory forwarded to the nested uninstall, enable, and
+   * backfill orchestrators, which do not take a run yet. Reconcile's own
+   * emission and the nested add, remove, and install read `run`.
    */
   readonly pi: ToolInventory;
   /** Project-scope cwd (ignored for the user scope). */

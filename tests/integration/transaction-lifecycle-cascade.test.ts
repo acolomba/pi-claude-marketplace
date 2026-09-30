@@ -23,7 +23,9 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // LIFE-01 + LIFE-02 end-to-end integration: a hooks-declaring plugin
@@ -39,6 +41,7 @@ interface NotifyRecord {
 function makeCtx(): {
   ctx: ExtensionContext;
   pi: ExtensionAPI;
+  run: NotificationRun;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -52,7 +55,7 @@ function makeCtx(): {
   const pi = {
     getAllTools: (): unknown[] => [],
   } as ExtensionAPI;
-  return { ctx, pi, notifications };
+  return { ctx, pi, run: runWithNothingLoaded(), notifications };
 }
 
 async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
@@ -168,12 +171,12 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
       });
 
       {
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         await installPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",

@@ -91,7 +91,7 @@ export function registerClaudePluginCommand(
   updatePlugins: UpdatePluginsFn,
 ): void {
   const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
-  const install = makeInstallHandler(pi, hooksRouting, deps.completionCache);
+  const install = makeInstallHandler(hooksRouting, deps.completionCache);
   const uninstall = makeUninstallHandler(pi, hooksRouting, deps.completionCache);
   const pluginInfo = makePluginInfoHandler(pi);
   const enable = makeEnableDisableHandler(pi, true, hooksRouting);
@@ -111,7 +111,7 @@ export function registerClaudePluginCommand(
     pending: makePendingHandler(),
     enable,
     disable,
-    import: makeImportHandler(pi, deps, hooksRouting),
+    import: makeImportHandler(deps, hooksRouting),
     marketplaceAdd: makeAddHandler(deps),
     marketplaceRemove: makeRemoveHandler(deps),
     marketplaceList: makeMarketplaceListHandler(),
