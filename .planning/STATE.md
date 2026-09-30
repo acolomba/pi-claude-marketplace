@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 01
 current_phase_name: Presentation Model
 status: executing
-stopped_at: Completed 01-08-PLAN.md
-last_updated: "2026-09-30T00:22:05.446Z"
+stopped_at: Completed 01-09-PLAN.md
+last_updated: "2026-09-30T01:35:53.314Z"
 last_activity: 2026-09-30
-last_activity_desc: Completed 01-08 import and marketplace remove/update run
-state_head: 701fee50b08f3363fdfb3e35223f48c78e50be75
+last_activity_desc: Completed 01-09 marketplace add, autoupdate, and bootstrap run
+state_head: 422cc3d51dbca9c190d81036f17ba901c5708b17
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 16
-  completed_plans: 8
+  completed_plans: 9
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Presentation Model) — EXECUTING
-Plan: 9 of 16
+Plan: 10 of 16
 Status: Ready to execute
-Last activity: 2026-09-30 — Completed 01-08 (import and marketplace remove/update run)
+Last activity: 2026-09-30 — Completed 01-09 (marketplace add, autoupdate, and bootstrap run)
 
-Progress: [█████░░░░░] 50% (8 of 16 plans)
+Progress: [██████░░░░] 56% (9 of 16 plans)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,8 +168,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-30T00:22:05.373Z
-**Stopped at:** Completed 01-08-PLAN.md
+**Last session:** 2026-09-30T01:35:53.240Z
+**Stopped at:** Completed 01-09-PLAN.md
 **Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
@@ -207,6 +207,7 @@ archived milestone artifacts.
 | Phase 01 P06 | 74 min | 2 tasks | 25 files |
 | Phase 01 P07 | 71 min | 2 tasks | 25 files |
 | Phase 01 P08 | 51 min | 2 tasks | 22 files |
+| Phase 01 P09 | 70 min | 2 tasks | 24 files |
 
 ## Decisions
 
@@ -227,3 +228,6 @@ archived milestone artifacts.
 - [Phase 01]: withParsedArgs(parse, usage, operation) returns SubcommandHandler and forwards the run; pending renders from it, and the plugin list and info factories return SubcommandHandler while still ignoring the run
 - [Phase 01]: The import cascade renders from ImportClaudeSettingsOptions.run; pi stays only as the forward to the nested install and marketplace add until 01-09/01-10 (D-05)
 - [Phase 01]: marketplace remove and update, including resolveScopeOrNotifyNotAdded, take run in place of pi; their handler factories take no pi, and reconcile hands its load-pass run to the nested removeMarketplace (D-05, D-07)
+- [Phase 01]: The add and autoupdate orchestrator suites drop the strict pi mock: their boundaries return a run seed and have no tool inventory to probe
+- [Phase 01]: fold-adoption's shared context helper carries both pi and run; add reads run, install and list still read pi until they migrate
+- [Phase 01]: bootstrap renders its add, autoupdate flip, and its handler's failed row from the router's one run (D-05)
