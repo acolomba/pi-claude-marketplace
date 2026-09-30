@@ -3343,7 +3343,35 @@ the real-server round trip is outstanding.
 the verbatim path and 404s the suffixed form, then run `marketplace add
 <url>` and a subsequent update against it. Resume with `/gsd-verify-work 2`.
 
-## GHRED-01: harden the redirect and auth-callback edges left open at the `any-git-host` close
+## ~~GHRED-01: harden the redirect and auth-callback edges left open at the `any-git-host` close~~ -- CLOSED
+
+Closed 2026-09-30 by quick task 260930-j4y. Disposition per finding:
+
+- WR-01: fixed in `4f7e4f35`. A 401 or 203 on a hop reached after the redirect
+  chain left the original origin throws `CrossOriginChallengeError` before
+  isomorphic-git's auth loop runs, so no credential is filled, evicted, or
+  minted through a Device Flow (Q-02). It classifies as
+  `{authentication required}`, and `marketplace update` keeps the error's own
+  cause text instead of the stored-credential line.
+- WR-02: already fixed in `a2db444e` (the `CROSS_ORIGIN_POST_REDIRECTS` rows).
+- WR-03: fixed in `4f7e4f35`. A cross-origin hop keeps only `accept`,
+  `accept-encoding`, `content-length`, `content-type`, `git-protocol` and
+  `user-agent`. `GitCredentials.headers` stays in the type, because
+  isomorphic-git merges `auth.headers` at runtime whatever the type says; the
+  allowlist is the runtime guarantee.
+- WR-04 and IN-02: fixed in `4f7e4f35`. A 3xx whose `Location` is absent,
+  empty or not a URL goes back to isomorphic-git after one request and fails
+  as its `HttpError`; no error carries the `Location` value.
+- IN-01: fixed in `4f7e4f35`. The `http` JSDoc states the origin rule, the
+  Q-02 failure, and the parity scope (git follows redirects only on the
+  initial `info/refs` request).
+- IN-03: fixed in `4f7e4f35` (`TooManyRedirectsError`).
+- IN-04: fixed in `4f7e4f35`. New rows cover a cookie and a custom credential
+  header, a return to the original origin after a detour, a 203, and a
+  `device-flow` bundle.
+- IN-05: fixed in `4f7e4f35` (`PostRedirectRow` is at module scope).
+
+Original report follows.
 
 Carried from `any-git-host` (`01-REVIEW-DISPOSITION.md`; milestone audit, 2026-09-30).
 No credential reaches another origin today. These are the residual edges:
@@ -3360,7 +3388,35 @@ No credential reaches another origin today. These are the residual edges:
   malformed `Location`, an untyped `too many redirects`, guard-contract cases
   with no discriminating test, and a test row type declared inside `describe`.
 
-## GHADD-01: `marketplace add` leftover-recognition cleanups left open at the `any-git-host` close
+## ~~GHADD-01: `marketplace add` leftover-recognition cleanups left open at the `any-git-host` close~~ -- CLOSED
+
+Closed 2026-09-30 by quick task 260930-j4y. Disposition per finding:
+
+- WR-03: fixed in `727939fc`. `marketplace add` writes
+  `.git/pi-claude-marketplace.json` into every clone before the rename, and
+  recognizes a leftover only when that marker is present and its `origin`
+  names the source (Q-01). An unmarked tree refuses as `{stale clone}`.
+- WR-04: wrong at HEAD. `locations.sourceCloneDir` runs `assertPathInside`
+  before recognition, and its segment walk lstats `sources/<name>` and throws
+  `SymlinkRefusedError` for a symlink (`shared/path-containment.ts`). Guarded
+  by `tests/persistence/locations.test.ts` "source clones refuse a symlinked
+  marketplace component". `add.ts` now records this in a comment.
+- IN-05: fixed in `727939fc`. `domain/clone-key.ts::originMatchesSource`
+  parses the origin through the source parser and compares normalized
+  identities, so host letter case and pre-fold `github.com` spellings are
+  recognized; the cache identity is unchanged (Q-03). The path still compares
+  exactly, so an owner or repository letter-case difference refuses.
+- IN-04, IN-06, IN-08, WR-01, WR-06, WR-08 and IN-02: fixed in `727939fc`.
+- WR-02: fixed in `0476e0f9`. The standalone row carries one advisory line
+  naming the cleanup failure, with absolute paths reduced to their last
+  segment (NFR-9); the catalog state is `add-stale-clone-cleanup-leak`.
+- WR-09, IN-03 and the IN-01 remainder: fixed in `0476e0f9`. The four MA-14
+  cases act once, compare whole values, and fault `fs.promises.rm` instead of
+  using `chmod`.
+- WR-07: already fixed in `23cc2218` and `c1286475`.
+- IN-07: already fixed in `add75890`.
+
+Original report follows.
 
 Carried from `any-git-host` (`03-REVIEW-DISPOSITION.md`; milestone audit, 2026-09-30).
 
