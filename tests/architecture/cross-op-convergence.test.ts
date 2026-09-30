@@ -62,10 +62,7 @@ import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
-import type {
-  NotificationContext,
-  ToolInventory,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 // ---------------------------------------------------------------------------
@@ -99,20 +96,17 @@ function createReinstallPlugins() {
 
 function makeCtx(): {
   ctx: NotificationContext;
-  pi: ToolInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
-  const pi: ToolInventory = { getAllTools: () => [] };
   const ctx = {
     ui: {
       notify: (m: string, s?: string): void => {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
-    pi,
   };
-  return { ctx, pi, notifications };
+  return { ctx, notifications };
 }
 
 async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
@@ -135,12 +129,11 @@ interface Emission {
  * Invoke a real orchestrator against a missing marketplace and return its sole
  * notify emission. Each invoker is the EXACT call shape copied from that op's
  * own orchestrator test file. `mode` selects the explicit-scope vs bare-form
- * invocation (install has no bare form). Ops that render from the command's
- * run read `run`; the others still take the tool inventory `pi`.
+ * invocation (install has no bare form). Every op renders from the command's
+ * run.
  */
 type Invoker = (env: {
   ctx: NotificationContext;
-  pi: ToolInventory;
   run: NotificationRun;
   cwd: string;
   mode: "explicit" | "bare";
@@ -148,10 +141,10 @@ type Invoker = (env: {
 
 const INVOKERS: Record<string, Invoker> = {
   // marketplace info (the canonical model). info.test.ts (f)/(g).
-  info: async ({ ctx, pi, cwd, mode }) => {
+  info: async ({ ctx, run, cwd, mode }) => {
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: NAME,
       plugin: "ghost",
       cwd,
@@ -241,10 +234,10 @@ const INVOKERS: Record<string, Invoker> = {
 
 async function captureOp(op: string, mode: "explicit" | "bare"): Promise<Emission> {
   return withHermeticHome(async ({ cwd }) => {
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, notifications } = makeCtx();
     const invoke = INVOKERS[op];
     assert.ok(invoke !== undefined, `no invoker registered for op "${op}"`);
-    await invoke({ ctx, pi, run: runWithNothingLoaded(), cwd, mode });
+    await invoke({ ctx, run: runWithNothingLoaded(), cwd, mode });
     const first = notifications[0];
     return {
       body: first?.message ?? "",

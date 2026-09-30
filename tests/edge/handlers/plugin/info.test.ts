@@ -32,11 +32,11 @@
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two emission paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` THREE times -- the cascade runs ONE soft-dependency
-//     probe and that probe reads the tool list once per companion target.
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
+//     writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once.
+// Neither path reads the tool list: the projection renders from the command
+// run's soft-dependency snapshot (D-05), so every case states zero probes.
 //
 // NFR-5, scoped: the fetch flag exists to warm a clone cache, so this surface
 // is offline only while the flag is ABSENT, and the claim is stated that way.
@@ -195,11 +195,11 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const infoHandler = makePluginInfoHandler(pi);
+    const infoHandler = makePluginInfoHandler();
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -214,11 +214,11 @@ test("reads a git-source plugin from disk alone while the fetch flag is absent, 
   // arrange
   const workspace = await createHermeticWorkspace(t, "offline");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const infoHandler = makePluginInfoHandler(pi);
+  const infoHandler = makePluginInfoHandler();
 
   // act
   await infoHandler("gitp@mp", ctx, runWithNothingLoaded());
@@ -242,11 +242,11 @@ for (const { args, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const infoHandler = makePluginInfoHandler(pi);
+    const infoHandler = makePluginInfoHandler();
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -276,8 +276,8 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const infoHandler = makePluginInfoHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const infoHandler = makePluginInfoHandler();
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -328,8 +328,8 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const infoHandler = makePluginInfoHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const infoHandler = makePluginInfoHandler();
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -367,8 +367,8 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const infoHandler = makePluginInfoHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const infoHandler = makePluginInfoHandler();
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -383,8 +383,8 @@ test("carries the tokenizer's own sentence for an unrecognised scope value and n
   // arrange
   const workspace = await createHermeticWorkspace(t, "scope-value");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const infoHandler = makePluginInfoHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const infoHandler = makePluginInfoHandler();
 
   // act
   await infoHandler("alpha@mp --scope bogus", ctx, runWithNothingLoaded());

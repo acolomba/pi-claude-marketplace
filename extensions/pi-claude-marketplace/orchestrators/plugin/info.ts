@@ -91,8 +91,9 @@ import type {
   ResolvedPluginUnavailable,
   ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver-types.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { Dirent } from "node:fs";
@@ -105,11 +106,11 @@ const BUCKET_A_EVENTS_SET: ReadonlySet<string> = new Set<string>(BUCKET_A_EVENTS
 export interface GetPluginInfoOptions {
   readonly ctx: NotificationContext;
   /**
-   * Required by `notify(ctx, pi, message)` for the soft-dep probe (info
-   * surfaces do not emit soft-dep markers, but the probe argument is
-   * threaded for signature parity with the cascade arm).
+   * D-05: the command run. Info surfaces carry no soft-dependency markers;
+   * the run keeps every emission of the command, including the multi-block
+   * fan-out and the failure loop, on one snapshot.
    */
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly marketplace: string;
   readonly plugin: string;
   /** When omitted, fan-out across BOTH scopes (project-first per INFO-03). */
@@ -2466,7 +2467,7 @@ function emitFetchSkip(
   }
 
   const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = [first, ...remaining];
-  notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows, undefined, "single");
+  notifyWithContext(opts.ctx, opts.run, PLUGIN_INFO_CONTEXT, rows, undefined, "single");
 }
 
 async function getPluginInfoWithReader(
@@ -2518,7 +2519,7 @@ async function getPluginInfoWithReader(
         scope: opts.scope,
       })),
     };
-    notify(opts.ctx, opts.pi, message);
+    notify(opts.ctx, opts.run, message);
     return;
   }
 
@@ -2546,7 +2547,7 @@ async function getPluginInfoWithReader(
       cwd: opts.cwd,
       ...(fetchCtx !== undefined && { fetchCtx }),
     });
-    notify(opts.ctx, opts.pi, built.block);
+    notify(opts.ctx, opts.run, built.block);
     emitFetchSkip(opts, scopes, [built]);
     return;
   }
@@ -2590,9 +2591,9 @@ async function getPluginInfoWithReader(
   // proves the non-empty tuple shape the cascade type requires.
   const [firstInfo, ...remainingInfo] = infoBlocks;
   if (firstInfo !== undefined && remainingInfo.length === 0) {
-    notify(opts.ctx, opts.pi, firstInfo);
+    notify(opts.ctx, opts.run, firstInfo);
   } else if (firstInfo !== undefined) {
-    notify(opts.ctx, opts.pi, {
+    notify(opts.ctx, opts.run, {
       kind: "plugin-info-cascade",
       blocks: [firstInfo, ...remainingInfo],
     });
@@ -2607,7 +2608,7 @@ async function getPluginInfoWithReader(
 
   // Surface each failed scope as its own `error`-severity notify (GRAM-04).
   for (const failure of failedBlocks) {
-    notify(opts.ctx, opts.pi, failure);
+    notify(opts.ctx, opts.run, failure);
   }
 }
 

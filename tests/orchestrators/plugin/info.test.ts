@@ -65,10 +65,12 @@ import {
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type FaultableFsPromiseMethod = "readFile" | "readdir";
 
@@ -276,21 +278,24 @@ type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
 
 const pendingInteractionVerifications: Array<() => void> = [];
 
+/**
+ * Builds the info command's connections: a strict context whose UI takes
+ * exactly `expectedNotifications` notifications, and a run that reports no
+ * companion loaded. Every emission renders from the run's snapshot (D-05), so
+ * the command reads no tool inventory: 0 tool probes however many blocks it
+ * emits.
+ */
 function makeCtx(expectedNotifications = 1): {
   ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  run: NotificationRun;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(expectedNotifications);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(expectedNotifications * 3);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push(severity === undefined ? { message } : { message, severity });
@@ -298,10 +303,9 @@ function makeCtx(expectedNotifications = 1): {
     .times(expectedNotifications);
   pendingInteractionVerifications.push(() => {
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
-  return { ctx, pi, notifications };
+  return { ctx, run: runWithNothingLoaded(), notifications };
 }
 
 async function withHermeticHome<T>(
@@ -582,9 +586,9 @@ test("INFO-02: single-scope installed (path source) renders header + plugin row 
     // arrange
     await seedFooInstalled(home, cwd);
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -603,9 +607,9 @@ test("DFEN-01: an entry declaring defaultEnabled renders the same info message a
     // arrange
     await seedFooInstalled(home, cwd, { defaultEnabled: false });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -643,9 +647,9 @@ test("INFO-02: single-scope available (path source) renders `○ ... (available)
       componentDirs: { bar: ["skills/s1"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "bar", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "bar", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -695,9 +699,9 @@ test("INFO-02: single-scope unavailable (malformed hooks/hooks.json) renders `�
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "unavailable is info, not error");
@@ -765,9 +769,9 @@ test("D-64-05: unavailable arm derives lenient component paths from an array-for
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "unavailable is info, not error");
@@ -806,9 +810,9 @@ test("INFO-05: external source (npm) emits `    components: not resolved` marker
       installed: { remote: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -861,9 +865,9 @@ test("INFO-03: both-scopes fan-out emits ONE notify call; project block FIRST, u
       componentFiles: { foo: ["agents/a1.md"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", cwd });
     // assert
     assert.equal(notifications.length, 1, "IL-2: exactly one ctx.ui.notify call");
     assert.equal(notifications[0]!.severity, undefined);
@@ -898,11 +902,11 @@ test("INFO-04: --scope user mismatch (mp only in project) emits `⊘ <mp> [user]
       manifest: { name: "p-only", plugins: [] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "p-only",
       plugin: "ghost",
       scope: "user",
@@ -925,9 +929,9 @@ test("INFO-04: --scope user mismatch (mp only in project) emits `⊘ <mp> [user]
 test("D-03: absent from BOTH scopes with no --scope renders `(failed) {marketplace not added}` WITHOUT any [scope] bracket", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "ghost-mp", plugin: "ghost", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "ghost-mp", plugin: "ghost", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -960,9 +964,9 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
       installablePluginDirs: ["real"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ghost", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "ghost", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
@@ -1010,9 +1014,9 @@ test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT
       installablePluginDirs: ["real"],
     });
 
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ghost", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "ghost", cwd });
 
     // Two failed scopes -> two standalone error notifications (project-first),
     // NOT one info-severity cascade. The failure can never be summary-less.
@@ -1099,9 +1103,9 @@ test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{unsuppo
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     // INFO-05: path-source not-installable variant enumerates components
@@ -1155,9 +1159,9 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
       installablePluginDirs: ["degraded"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "degraded", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "degraded", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "partially-installed is info, not error");
@@ -1208,9 +1212,9 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
       installed: { remote: { version: "1.0.0", unsupported: ["lspServers"] } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "partially-installed is info, not error");
@@ -1262,9 +1266,9 @@ test("WR-02: not-installed plugin with malformed plugin.json surfaces `{unparsea
       "utf8",
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "broken", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "broken", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     // Expect `{unparseable}` because the SyntaxError is correctly
@@ -1318,10 +1322,10 @@ test("refuses an outside path source as unavailable without inspecting its plugi
     const outsideTreeBefore = (await readdir(outsideRoot, { recursive: true })).sort();
     const outsideManifestBefore = await readFile(outsideManifest);
     const outsideSkillBefore = await readFile(outsideSkill);
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "escape", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "escape", scope: "user", cwd });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1378,9 +1382,9 @@ test("WR-03: marketplace.json missing on disk surfaces `{source missing}` failur
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "x", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "x", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
@@ -1444,9 +1448,9 @@ test("BOUND-01: a manifest READ FAILURE with an installed record present still r
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
@@ -1503,11 +1507,11 @@ test("readdir EACCES on installed plugin's skills dir surfaces `{permission deni
     const permissionError = Object.assign(new Error("case-owned readdir failure"), {
       code: "EACCES",
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
-      await getInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+      await getInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
     });
 
     // assert
@@ -1543,11 +1547,11 @@ test("readdir EACCES on available plugin's skills dir surfaces `{permission deni
     const permissionError = Object.assign(new Error("case-owned readdir failure"), {
       code: "EACCES",
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
-      await getInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+      await getInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
     });
 
     // assert
@@ -1591,11 +1595,11 @@ test("OPIC-F27: required reader preserves an available-row directory failure and
       },
     };
     const before = await readdir(mpRoot, { recursive: true });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     await createGetPluginInfo(reader)({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "p",
       scope: "user",
@@ -1650,9 +1654,9 @@ test("normalizeDependencies: object-shaped `dependencies` field omits the line",
       componentDirs: { p: ["skills/s1"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.doesNotMatch(notifications[0]!.message, /dependencies:/);
@@ -1685,9 +1689,9 @@ test("normalizeDependencies: empty `dependencies: []` array omits the line", asy
       componentDirs: { p: ["skills/s1"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.doesNotMatch(notifications[0]!.message, /dependencies:/);
@@ -1728,9 +1732,9 @@ test("PR-5: orchestrator pre-sorts per-kind component arrays alphabetically befo
       componentDirs: { p: ["skills/zeta", "skills/alpha"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     // The body must show `skills: alpha, zeta` (sorted), NOT in
@@ -1769,9 +1773,9 @@ test("INFO-02: manifest entry's `dependencies: string[]` field surfaces as `    
       componentDirs: { p: ["skills/s1"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     // Sorted alphabetically: `another@aux` precedes `helper@utils-mp`.
@@ -1855,11 +1859,11 @@ test("NFR-5 end-to-end: github-source marketplace record resolves plugin info fr
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "gh-mp",
       plugin: "local-plug",
       scope: "user",
@@ -1912,9 +1916,9 @@ test("D-100-08 / ENBL-17: info on a recorded-but-disabled plugin reports its des
       componentDirs: { foo: ["skills/s1"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // One notify, the standalone `plugin-info` shape every other installed
     // record uses: the manifest header, the `(disabled)` row, the manifest
@@ -1949,9 +1953,9 @@ test("plugin info manifest absent: INFO-09: a manifest-absent enabled record ren
       installed: { alpha: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -1986,9 +1990,9 @@ test("plugin info manifest absent: INFO-10: a manifest-absent record with persis
       installed: { alpha: { version: "1.0.0", unsupported: ["lspServers"] } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2035,9 +2039,9 @@ test("plugin info manifest absent: INFO-11: the four name-list kinds render from
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2081,9 +2085,9 @@ test("plugin info manifest absent: INFO-11: a manifest-absent record with all-em
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2125,9 +2129,9 @@ test("plugin info manifest absent: INFO-11: a recorded hooks slug renders the ma
       }),
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2174,9 +2178,9 @@ test("plugin info manifest absent: INFO-11: hook entries follow the materialized
       }),
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2235,9 +2239,9 @@ test("plugin info manifest absent: D-100-03 / ENBL-12: a record carrying hookEnt
       }),
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2281,9 +2285,9 @@ test("plugin info manifest absent: D-100-03 / ENBL-12: a legacy record with no h
       }),
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2328,9 +2332,9 @@ test("plugin info manifest absent: D-100-03 / ENBL-12: a present-but-empty hookE
       }),
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2364,9 +2368,9 @@ test("plugin info manifest absent: D-96-03: a record with no recorded hooks omit
       installed: { alpha: { version: "1.0.0", resources: { hooks: [] } } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2403,9 +2407,9 @@ test("plugin info manifest absent: INFO-11: a materialized hooks config that par
     });
     await seedMaterializedHooks("user", cwd, "alpha", "{}");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2449,9 +2453,9 @@ test("plugin info manifest absent: D-96-03: a recorded hooks slug with no materi
     // Deliberately no `seedMaterializedHooks` call: the record names a slug
     // whose file the install ledger wrote and something later removed.
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2485,9 +2489,9 @@ test("plugin info manifest absent: D-96-03: a malformed materialized hooks confi
     });
     await seedMaterializedHooks("user", cwd, "alpha", "{ not json");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2532,9 +2536,9 @@ test("plugin info manifest absent: NFR-10: a traversal hooks slug is refused bef
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2580,9 +2584,9 @@ test("plugin info manifest absent: NFR-10: a refused traversal hooks slug is nam
     };
 
     try {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       // act
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+      await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
       // The rendered outcome is unchanged -- the token stays the closed-set
       // `{unreadable}` the catalog pins.
@@ -2635,11 +2639,11 @@ test("plugin info manifest absent: D-96-03: an unreadable materialized hooks con
     const permissionError = Object.assign(new Error("case-owned read failure"), {
       code: "EACCES",
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     await withFsPromiseFault("readFile", file, permissionError, async (getInfo) => {
-      await getInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+      await getInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     });
 
     // assert
@@ -2695,11 +2699,11 @@ test("OPIC-F27: required reader preserves a state-only file failure and reason o
       },
     };
     const before = await readdir(mpRoot, { recursive: true });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     await createGetPluginInfo(reader)({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -2745,9 +2749,9 @@ test("plugin info manifest absent: INFO-10 / D-96-03: a partial record with an u
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2790,9 +2794,9 @@ test("plugin info manifest absent: INFO-09 boundary: a DECLARED plugin keeps the
       componentDirs: { alpha: ["skills/alpha-src-skill"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2831,9 +2835,9 @@ test("plugin info manifest absent: D-100-08 / ENBL-17: a manifest-absent DISABLE
       installed: { alpha: { version: "1.0.0", disabled: true } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2873,9 +2877,9 @@ test("plugin info manifest absent: D-100-08 / ENBL-16 / ENBL-17: a manifest-abse
       installed: { alpha: { version: "1.0.0", disabled: true, unsupported: ["lspServers"] } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2929,9 +2933,9 @@ test("plugin info manifest absent: ENBL-16 / ENBL-17: a disabled, manifest-absen
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2983,9 +2987,9 @@ test("plugin info manifest absent: ENBL-16 / D-96-03: a DISABLED record whose re
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -3025,9 +3029,9 @@ test("plugin info manifest absent: ENBL-16 / ENBL-17: a DECLARED disabled record
       componentDirs: { alpha: ["skills/alpha-src-skill"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -3066,11 +3070,11 @@ test("plugin info manifest absent: D-96-04 / ENBL-17: `info --fetch` on a disabl
       installed: { alpha: { version: "1.0.0", disabled: true } },
     });
 
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3137,11 +3141,11 @@ test("plugin info manifest absent: ENBL-06 / D-96-04: `info --fetch` on a DISABL
       installed: { alpha: { version: "1.0.0", disabled: true, unsupported: ["lspServers"] } },
     });
 
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3194,9 +3198,9 @@ test("plugin info manifest absent: D-96-04: bare `info` on an all-disabled marke
       installed: { alpha: { version: "1.0.0", disabled: true } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1, "no flag was typed, so there is nothing to account for");
@@ -3229,9 +3233,9 @@ test("plugin info manifest absent: D-96-04: a mixed disabled + state-only `--fet
       installed: { alpha: { version: "2.0.0" } },
     });
 
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", cwd, fetch: true });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", cwd, fetch: true });
 
     // The whole sequence is pinned by index, not searched: a `find()` would
     // survive a duplicated skip notification, a lost info block, and any
@@ -3317,11 +3321,11 @@ test("plugin info manifest absent: INFO-12 / NFR-5: `info --fetch` on a manifest
 
     const { gitOps, state: gitState } = createGitOps({});
     const { credOps: credentialOps, state: credState } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3372,11 +3376,11 @@ test("plugin info manifest absent: INFO-12 / NFR-5: bare `info` on a manifest-ab
     // The seams are supplied but `fetch` is omitted: nothing may run.
     const { gitOps, state: gitState } = createGitOps({});
     const { credOps: credentialOps, state: credState } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3417,11 +3421,11 @@ test("plugin info manifest absent: INFO-12 / NFR-5: a git-source-shaped manifest
 
     const { gitOps, state: gitState } = createGitOps({});
     const { credOps: credentialOps, state: credState } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3483,11 +3487,11 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: a DISABLED manifest-absent r
 
     const { gitOps, state: gitState } = createGitOps({});
     const { credOps: credentialOps, state: credState } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3562,11 +3566,11 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: `info --fetch` on a DISABLED
 
     const { gitOps, state: gitState } = createGitOps({});
     const { credOps: credentialOps, state: credState } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3661,11 +3665,11 @@ test("plugin info manifest absent: D-96-04: `info --fetch` on a manifest-absent 
       installed: { alpha: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3705,11 +3709,11 @@ test("plugin info manifest absent: D-96-04: with autoupdate ON the skip-note hea
       autoupdate: true,
     });
 
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3754,11 +3758,11 @@ test("plugin info manifest absent: D-96-04: with autoupdate OFF the skip-note he
       autoupdate: false,
     });
 
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3789,9 +3793,9 @@ test("plugin info manifest absent: D-96-04: bare `info` on the same record emits
       installed: { alpha: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.equal(notifications.length, 1, "no flag was typed, so there is nothing to account for");
@@ -3822,11 +3826,11 @@ test("plugin info manifest absent: D-96-04: `info --fetch` on a manifest-DECLARE
       componentDirs: { alpha: ["skills/alpha-src-skill"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3858,11 +3862,11 @@ test("plugin info manifest absent: D-96-04: a `--fetch` run on a name in NEITHER
       manifest: { name: "mp", plugins: [] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3897,11 +3901,11 @@ test("plugin info manifest absent: D-96-04: a hooks-degraded state-only record u
       installed: { alpha: { version: "1.0.0", resources: { hooks: ["alpha"] } } },
     });
 
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -3946,9 +3950,9 @@ test("plugin info manifest absent: D-96-04: two state-only scopes under `--fetch
       installed: { alpha: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", cwd, fetch: true });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", cwd, fetch: true });
 
     // INFO-09 / GRAM-04 boundary: both blocks render `(installed)` rather
     // than `(failed)`, so they join ONE info-severity cascade, project-scope
@@ -4021,9 +4025,9 @@ test("D-100-08 / ENBL-17: bare info (no --scope) with a disabled record in one s
       componentDirs: { foo: ["skills/s1"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", cwd });
 
     // ONE notify: a disabled-scope row and an installed-scope row are the
     // same message kind, so both scopes ride the same cascade instead of
@@ -4108,9 +4112,9 @@ test("SURF-01 / D-63-04: installed plugin with hooks/hooks.json renders multi-li
       "utf8",
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "h", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "h", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -4158,9 +4162,9 @@ test("SURF-01 / D-63-04: unavailable plugin (malformed hooks/hooks.json) suppres
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -4195,11 +4199,11 @@ test("SURF-01 / D-63-04: installable plugin with NO hooks/hooks.json renders NO 
       componentDirs: { "no-hooks": ["skills/s1"] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "no-hooks",
       scope: "user",
@@ -4244,9 +4248,9 @@ test("SURF-01 / D-63-04: available plugin (not-installed) with hooks/hooks.json 
       "utf8",
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ah", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "ah", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -4293,9 +4297,9 @@ test("ADMIT-02: ralph-wiggum fixture (Stop-only) lists Stop as a bare supported 
       "utf8",
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ralph", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "ralph", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -4335,9 +4339,9 @@ test("ADMIT-02: hookify fixture (Stop + bucket-A events) lists Stop supported al
       "utf8",
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "hookify", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "hookify", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     // Declaration order from the fixture is preserved end-to-end. The two
@@ -4389,9 +4393,9 @@ test("ADMIT-02: a config declaring Stop + StopFailure lists both bare-supported 
       "utf8",
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "sf", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "sf", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -4445,9 +4449,9 @@ test("INFO-05: (unavailable) {unsupported hooks} path-source plugin enumerates o
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -4499,9 +4503,9 @@ test("INFO-05: (installed) {unsupported hooks} path-source plugin enumerates on-
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -4539,9 +4543,9 @@ test("INFO-05: not-installed npm-source plugin still emits `components: not reso
       // NOT installed -> buildNotInstalledRow path.
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -4592,11 +4596,11 @@ test("INFO-05: composeResolvedComponents throw on the unavailable arm falls back
     const permissionError = Object.assign(new Error("case-owned readdir failure"), {
       code: "EACCES",
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
-      await getInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+      await getInfo({ ctx, run, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     });
 
     // assert
@@ -4650,11 +4654,11 @@ test("INFO-05: composeResolvedComponents throw on the installed arm falls back t
     const permissionError = Object.assign(new Error("case-owned readdir failure"), {
       code: "EACCES",
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
-      await getInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+      await getInfo({ ctx, run, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     });
 
     // assert
@@ -4708,9 +4712,9 @@ test("INFO-05: lenient reader lists `Notification (unsupported)` on a path-resol
       "utf8",
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ralph", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "ralph", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -4756,9 +4760,9 @@ test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group
       "utf8",
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "mixed", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "mixed", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -4806,9 +4810,9 @@ test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matche
       "utf8",
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "grouped", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "grouped", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -4841,9 +4845,9 @@ test("INFO-05: invalid-JSON `hooks/hooks.json` suppresses the `hooks:` block on 
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "broken", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "broken", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -4895,11 +4899,11 @@ test("PHOOK-05: a hooks.json that mutates between resolve and the strict re-read
       listDirectory: (directoryPath) => NODE_READER.listDirectory(directoryPath),
     };
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await createGetPluginInfo(reader)({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "raced",
       scope: "user",
@@ -4950,9 +4954,9 @@ test("RSTA-01: uninstalled url-source plugin with a cold clone renders `(remote)
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -4984,9 +4988,9 @@ test("RSTA-01: uninstalled github-object-source plugin with a cold clone renders
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ghplug", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "ghplug", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -5017,9 +5021,9 @@ test("RSTA-01: uninstalled git-subdir-source plugin with a cold clone renders `(
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "subplug", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "subplug", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -5062,9 +5066,9 @@ test("RSTA-05: uninstalled url-source plugin with a WARM mirror resolves and lis
       componentFiles: ["commands/warm-cmd.md"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -5114,9 +5118,9 @@ test("RSTA-05 / D-77-03: uninstalled git-subdir plugin with a WARM mirror render
       componentFiles: ["commands/canva-cmd.md"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "canva", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "canva", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -5161,9 +5165,9 @@ test("RSTA-04: uninstalled git source with a WARM clone declaring an unsupported
       pluginJson: { name: "badplug", lspServers: { foo: {} } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "badplug", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "badplug", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -5199,9 +5203,9 @@ test("PURL-08 / D-78-04: installed git-source plugin with a missing clone keeps 
       installed: { gplug: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -5245,9 +5249,9 @@ test("RSTA-04: installed git-source plugin with a WARM mirror resolves its compo
       componentFiles: ["agents/inst-agent.md"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
@@ -5286,9 +5290,9 @@ test("NFR-5: info renders an uninstalled git plugin `(remote)` with no plugin-cl
 
     assert.equal(clonesExisted, false);
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
     const msg = notifications[0]!.message;
     // assert
     assert.match(msg, /◌ gplug v1\.0\.0 \(remote\)/, msg);
@@ -5364,11 +5368,11 @@ test("FTCH-03: info --fetch on a COLD pinned git plugin materializes the clone t
 
     const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
     const { credOps: credentialOps } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "gplug",
       scope: "user",
@@ -5413,13 +5417,13 @@ test("D-81-04: info --fetch degrades to `components: not resolved` + an existing
     });
     const { gitOps } = createGitOps({ cloneThrows: netErr });
     const { credOps: credentialOps } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // getPluginInfo MUST resolve (not reject) even though the fetch threw.
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "gplug",
       scope: "user",
@@ -5457,11 +5461,11 @@ test("NFR-5: bare info (no --fetch) on a COLD git plugin makes ZERO git-seam cal
     // The seam is provided but `fetch` is omitted: the hook must NOT run.
     const { gitOps, state: gitState } = createGitOps({});
     const { credOps: credentialOps } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "gplug",
       scope: "user",
@@ -5500,11 +5504,11 @@ test("OUT-05 / NFR-5 / OUT-03: a COLD git plugin whose entry declares `defaultEn
     // the count says the injected surface was never reached at run time.
     const { gitOps, state: gitState } = createGitOps({});
     const { credOps: credentialOps } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "gplug",
       scope: "user",
@@ -5566,11 +5570,11 @@ test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing 
     });
     const { gitOps } = createGitOps({ cloneThrows: netErr });
     const { credOps: credentialOps } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "gplug",
       scope: "user",
@@ -5632,11 +5636,11 @@ test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing 
 
     const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
     const { credOps: credentialOps } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "gplug",
       scope: "user",
@@ -5697,11 +5701,11 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source materi
       remoteRefs: { "refs/remotes/origin/HEAD": MIRROR_HEAD },
     });
     const { credOps: credentialOps } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "gplug",
       scope: "user",
@@ -5748,11 +5752,11 @@ test("FTCH-06: info --fetch folds an HttpError 401 seam throw to `{authenticatio
     });
     const { gitOps } = createGitOps({ cloneThrows: authErr });
     const { credOps: credentialOps } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "gplug",
       scope: "user",
@@ -5792,11 +5796,11 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
     });
     const { gitOps } = createGitOps({ cloneThrows: canceledErr });
     const { credOps: credentialOps } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "gplug",
       scope: "user",
@@ -5867,7 +5871,7 @@ test("OUT-03: an entry declaring `defaultEnabled: false` puts `{installs disable
     // act
     await getPluginInfo({
       ctx: declaring.ctx,
-      pi: declaring.pi,
+      run: declaring.run,
       marketplace: "mp",
       plugin: "dis",
       scope: "user",
@@ -5889,7 +5893,7 @@ test("OUT-03: an entry declaring `defaultEnabled: false` puts `{installs disable
     const declaredTrue = makeCtx();
     await getPluginInfo({
       ctx: declaredTrue.ctx,
-      pi: declaredTrue.pi,
+      run: declaredTrue.run,
       marketplace: "mp",
       plugin: "ena",
       scope: "user",
@@ -5961,9 +5965,9 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
 
     const rowFor = async (plugin: string): Promise<string> => {
       // arrange
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       // act
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin, scope: "user", cwd });
+      await getPluginInfo({ ctx, run, marketplace: "mp", plugin, scope: "user", cwd });
       // assert
       assert.equal(notifications.length, 1);
       return notifications[0]!.message.split("\n")[1]!;
@@ -6019,9 +6023,9 @@ test("OUT-03 / OUT-05 / RSTA-01: a COLD `(remote)` row whose entry declares `def
     // fetch is made to produce one. The claim can only have come from the
     // marketplace entry -- which is exactly why the entry is the single source
     // (OUT-05 / DOC-02): it reads the same warm and cold.
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -6065,9 +6069,9 @@ test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEn
       componentFiles: ["commands/warm-cmd.md"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "warmdecl", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "warmdecl", scope: "user", cwd });
     // Three things this pins, in the order they matter (OUT-05 / DOC-02):
     //
     // 1. The bare row is the CORRECT outcome, not a gap. The whole body is
@@ -6130,9 +6134,9 @@ test("OUT-03: a `(partially-available)` row appends `installs disabled` at the t
       pluginJson: { name: "lspplug", lspServers: { foo: {} } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "lspplug", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "lspplug", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -6167,11 +6171,11 @@ test("OUT-05 / OUT-03: a degraded `(remote)` row reporting a read failure carrie
     });
     const { gitOps } = createGitOps({ cloneThrows: netErr });
     const { credOps: credentialOps } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "gplug",
       scope: "user",
@@ -6236,9 +6240,9 @@ test("OUT-03: an `(unavailable)` row never acquires `installs disabled`, however
     // Nothing will install at all, so the token would describe an install that
     // cannot happen -- and the brace already carries the blocker that stops it.
     // Adding a second token here would answer a question the user cannot act on.
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -6287,9 +6291,9 @@ test("OUT-03: an `(installed)` row never acquires `installs disabled`, however t
     // edit, which is stronger than a check a later change could relax. The
     // token is also a claim about a FUTURE install, and on a record the action
     // is already taken -- the row reports what exists, not what would happen.
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -6331,9 +6335,9 @@ test("OUT-03: a `(partially-installed)` row never acquires `installs disabled`, 
     });
 
     // Clean for the reason given on the `(installed)` case above.
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "degraded", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "degraded", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -6377,9 +6381,9 @@ test("OUT-03: a `(disabled)` row never acquires `installs disabled`, however the
     // recorded fact about a record; the token is a prediction about an install
     // that, here, already happened. Clean for the structural reason given on the
     // `(installed)` case above.
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -6411,10 +6415,10 @@ test("lenient hook inventory ignores a nonobject root exactly", async () => {
     });
     await mkdir(path.join(mpRoot, "alpha", "hooks"), { recursive: true });
     await writeFile(path.join(mpRoot, "alpha", "hooks", "hooks.json"), "[]", "utf8");
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -6448,10 +6452,10 @@ test("lenient hook inventory ignores an array hooks value exactly", async () => 
       JSON.stringify({ hooks: [] }),
       "utf8",
     );
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -6485,10 +6489,10 @@ test("lenient hook inventory ignores blank events exactly", async () => {
       JSON.stringify({ hooks: { " ": [{ hooks: [{ type: "command", command: "echo" }] }] } }),
       "utf8",
     );
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -6527,10 +6531,10 @@ test("lenient hook inventory ignores empty event groups exactly", async () => {
       }),
       "utf8",
     );
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -6569,10 +6573,10 @@ test("resolved MCP inventory sorts two server names exactly", async () => {
       }),
       "utf8",
     );
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -6608,10 +6612,10 @@ test("two-scope fan-out emits one info block before one exact failed block", asy
       mpName: "mp",
       manifest: { name: "mp", plugins: [] },
     });
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -6642,12 +6646,12 @@ test("state-only fetch safely constructs default ports without invoking them", a
       manifest: { name: "mp", plugins: [] },
       installed: { alpha: { version: "1.0.0" } },
     });
-    const { ctx, pi, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2);
 
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -6714,10 +6718,10 @@ test("component discovery ignores wrong entry kinds and accepts an absolute in-r
       }),
       "utf8",
     );
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -6760,10 +6764,10 @@ test("strict hook inventory deduplicates two dropped matcher groups exactly", as
       }),
       "utf8",
     );
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -6805,10 +6809,10 @@ test("a nonarray lenient event group is ignored beside an unsupported event", as
       }),
       "utf8",
     );
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -6844,10 +6848,10 @@ test("a path source escaping the marketplace becomes an exact unavailable row", 
         ],
       },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -6885,12 +6889,12 @@ test("a generic explicit-fetch failure uses the probe fallback exactly", async (
     });
     const { gitOps } = createGitOps({ cloneThrows: new Error("fetch failed") });
     const { credOps: credentialOps } = createCredentialOps();
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -6945,10 +6949,10 @@ test("a warm unavailable git plugin lists conventional component directories exa
     const mirrorDir = await locationsFor("user", cwd).pluginCloneDir(pluginMirrorKey(cloneUrl));
     await mkdir(path.join(mirrorDir, "hooks"), { recursive: true });
     await writeFile(path.join(mirrorDir, "hooks", "hooks.json"), "{", "utf8");
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -6997,11 +7001,11 @@ test("a warm partially available git plugin folds a component read failure exact
     const permissionError = Object.assign(new Error("case-owned readdir failure"), {
       code: "EACCES",
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
-      await getInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+      await getInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     });
 
     // assert
@@ -7050,11 +7054,11 @@ test("a warm installable git plugin folds a component read failure to remote exa
     const permissionError = Object.assign(new Error("case-owned readdir failure"), {
       code: "EACCES",
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
-      await getInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+      await getInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     });
 
     // assert
@@ -7117,12 +7121,12 @@ test("an explicit fetch whose second materialization fails folds the warm resolv
         return Promise.resolve({ pluginRoot: mirrorDir, resolvedSha: "a".repeat(40) });
       },
     };
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -7165,10 +7169,10 @@ test("a path source containing a NUL byte folds the resolver failure exactly", a
         ],
       },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -7202,10 +7206,10 @@ test("a lenient hooks path targeting a directory folds the read failure exactly"
     await mkdir(hooksDir, { recursive: true });
     await mkdir(directoryTarget, { recursive: true });
     await symlink(directoryTarget, path.join(hooksDir, "hooks.json"));
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -7240,10 +7244,10 @@ test("an available path plugin renders sorted dependencies after its inventory",
       },
       installablePluginDirs: ["alpha"],
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -7293,10 +7297,10 @@ test("WFLW-04: an installed plugin lists its admitted workflows, sorted, after i
       "zeta.js": WORKFLOW_NAMED_ZETA,
       "quiet.js": WORKFLOW_NAMELESS,
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -7321,10 +7325,10 @@ test("WFLW-04: a plugin whose workflow scripts are all unadmitted renders no wor
     // arrange
     const mpRoot = await seedFooInstalled(home, cwd);
     await seedWorkflowScripts(mpRoot, "foo", { "helper.js": WORKFLOW_NO_META });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert -- no `workflows:` line, because nothing was admitted. The script
     // is not silently dropped: its own advisory line reports it.
@@ -7366,10 +7370,10 @@ test("NFR-10: a declared workflows path escaping the plugin root folds to the no
       },
       installablePluginDirs: ["alpha"],
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert -- the command reports the refusal on the row; it does not throw,
     // and it lists nothing from outside the plugin root.
@@ -7397,10 +7401,10 @@ test("WFLW-04: a manifest-absent record renders its persisted workflow inventory
         alpha: { version: "1.0.0", resources: { workflows: ["alpha:release", "alpha:changelog"] } },
       },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -7427,10 +7431,10 @@ test("WFLW-04: a manifest-absent record with an empty workflow inventory renders
       manifest: { name: "mp", plugins: [] },
       installed: { alpha: { version: "1.0.0", resources: { workflows: [] } } },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -7474,10 +7478,10 @@ test("WFLW-04: the lenient component map carries the conventional workflows dire
     );
     await mkdir(path.join(mpRoot, "alpha", "hooks"), { recursive: true });
     await writeFile(path.join(mpRoot, "alpha", "hooks", "hooks.json"), "{ not valid json", "utf8");
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -7511,10 +7515,10 @@ test("WR-09: a refused workflow script renders one preview-tense advisory line l
         "export function run() {\n  return Math.random();\n}\n",
       "zeta.js": WORKFLOW_NAMED_ZETA,
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert -- the advisory follows the `dependencies:` line, and it says what
     // WOULD happen: this plugin is installed, but that script is not.
@@ -7542,10 +7546,10 @@ test("WR-09: a plugin whose workflow scripts are all admitted renders no advisor
     // arrange
     const mpRoot = await seedFooInstalled(home, cwd);
     await seedWorkflowScripts(mpRoot, "foo", { "zeta.js": WORKFLOW_NAMED_ZETA });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert -- byte-identical to the same row before the channel existed,
     // plus the `workflows:` line the admitted script earns.
@@ -7562,10 +7566,10 @@ test("NFR-9: an advisory naming the walked directory renders it reduced to its b
     // the row's bytes vary by machine.
     const mpRoot = await seedFooInstalled(home, cwd);
     await seedWorkflowScripts(mpRoot, "foo", { "helper.js": WORKFLOW_NO_META });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert
     const message = notifications[0]!.message;
@@ -7614,10 +7618,10 @@ test("WR-09: the workflow names and the advisories come from one discovery pass"
       t.mock.restoreAll();
       syncBuiltinESMExports();
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert
     assert.equal(zetaReads, 1, "the admitted script's body is read exactly once");
@@ -7644,10 +7648,10 @@ test("WFLW-04: the state-only arm carries no advisory line, because it runs no d
       installablePluginDirs: ["alpha"],
     });
     await seedWorkflowScripts(mpRoot, "alpha", { "helper.js": WORKFLOW_NO_META });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -7700,9 +7704,9 @@ function runFooInfoWithGreetScript(source: string): Promise<NotifyRecord[]> {
   return withHermeticHome(async ({ home, cwd }) => {
     const mpRoot = await seedFooInstalled(home, cwd);
     await seedWorkflowScripts(mpRoot, "foo", { "greet.js": source });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     return notifications;
   });
@@ -7718,10 +7722,10 @@ test("WGATE-01: info names the engine check that will refuse an admitted script,
       "greet.js": WORKFLOW_GATE_NO_DESCRIPTION,
       "zeta.js": WORKFLOW_NAMED_ZETA,
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [
@@ -7770,10 +7774,10 @@ test("NFR-9: the gate note names the workflows directory by name and discloses n
     // bytes vary by machine.
     const mpRoot = await seedFooInstalled(home, cwd);
     await seedWorkflowScripts(mpRoot, "foo", { "greet.js": WORKFLOW_GATE_NO_DESCRIPTION });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert
     const message = notifications[0]!.message;
@@ -7801,10 +7805,10 @@ test("WGATE-01: a gate note takes its place among the other advisories, in direc
       "roll.js": WORKFLOW_REFUSED_SEED,
       "zeta.js": WORKFLOW_NAMED_ZETA,
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert
     assert.deepEqual(notifications, [

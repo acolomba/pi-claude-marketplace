@@ -39,7 +39,6 @@ import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/p
 import type {
   ExtensionContext,
   NotificationContext,
-  ToolInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
@@ -94,7 +93,6 @@ function makeFetchBoundary(): FetchBoundary {
 
 function makeCtx(): {
   ctx: NotificationContext;
-  pi: ToolInventory;
   run: NotificationRun;
   notifications: NotifyRecord[];
 } {
@@ -106,7 +104,7 @@ function makeCtx(): {
       },
     },
   };
-  return { ctx, pi: { getAllTools: () => [] }, run: runWithNothingLoaded(), notifications };
+  return { ctx, run: runWithNothingLoaded(), notifications };
 }
 
 /**
@@ -732,10 +730,10 @@ test("fetchPlugins answers a warm pinned source from the bound status capability
 test("getPluginInfo reports the installed plugin through the bound reader capability", async (t) => {
   // arrange
   const { cwd } = await installHooksDeclaringPlugin(t, "info-operation-", "c1");
-  const { ctx, pi, notifications } = makeCtx();
+  const { ctx, run, notifications } = makeCtx();
 
   // act
-  await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p1", scope: "project", cwd });
+  await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p1", scope: "project", cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [

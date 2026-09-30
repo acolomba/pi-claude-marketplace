@@ -14,7 +14,6 @@ import { parseFlagNames } from "../../flag-catalog.ts";
 
 import { splitPluginMarketplaceRef, withParsedArgs } from "./shared.ts";
 
-import type { ExtensionAPI } from "../../../platform/pi-api.ts";
 import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]";
@@ -23,12 +22,12 @@ const USAGE = "Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--sc
 const ACCEPTED_FLAGS = parseFlagNames("info");
 
 /**
- * Factory: returns the async handler closed over `pi` (required by
- * `notify()` for the soft-dep probe). `register.ts` wires this into
- * the `SubcommandHandlers` map under the `pluginInfo` key.
+ * Factory: returns the async handler, which forwards the router's command run
+ * to `getPluginInfo` (D-05). `register.ts` wires this into the
+ * `SubcommandHandlers` map under the `pluginInfo` key.
  */
-export function makePluginInfoHandler(pi: ExtensionAPI): SubcommandHandler {
-  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
+export function makePluginInfoHandler(): SubcommandHandler {
+  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx, run): Promise<void> => {
     // FTCH-03: `info` accepts the single boolean `--fetch` flag (the catalog-owned
     // accepted set); every other long flag is rejected inline.
     let fetch = false;
@@ -67,7 +66,7 @@ export function makePluginInfoHandler(pi: ExtensionAPI): SubcommandHandler {
 
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       marketplace: ref.marketplace,
       plugin: ref.plugin,
       cwd: ctx.cwd,
