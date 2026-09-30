@@ -75,8 +75,10 @@ helper is therefore invisible to this extension on every other host.
 - [x] **MA-12**: `marketplace add` succeeds when `sources/<name>/` already holds a leftover clone
   whose `origin` URL is the source being added — the WR-07 crash window and state rebuilds no longer
   require deleting the directory by hand before every retry.
-- [x] **MA-13**: A leftover tree that is not a git clone, is unreadable, or whose `origin` names a
-  different URL still refuses with the MA-6 `{stale clone}` row on the marketplace subject.
+- [x] **MA-13**: A leftover tree that is not a git clone, or whose `origin` names a different URL,
+  still refuses with the MA-6 `{stale clone}` row on the marketplace subject. A leftover whose
+  `.git/config` cannot be read refuses on the same subject with `{permission denied}` (EACCES or
+  EPERM) or `{unreadable}` (any other read error).
 - [x] **MA-14**: When the leftover clone cannot be fully removed, the add fails as stale with the
   cleanup leak appended (MA-9 discipline) rather than masked, and no partially-removed destination
   is left recorded in state.

@@ -363,8 +363,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
         auth: {
           credentialOps,
           host: "gitlab.example.com",
-          evictOnFailure: false,
-          onAuthRequired: state.fetchCalls[0]?.auth?.onAuthRequired,
+          kind: "stored-credential",
         },
       },
     ]);
@@ -411,8 +410,7 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
         auth: {
           credentialOps,
           host: "gitlab.example.com",
-          evictOnFailure: false,
-          onAuthRequired: state.fetchCalls[0]?.auth?.onAuthRequired,
+          kind: "stored-credential",
         },
       },
     ]);
@@ -493,8 +491,7 @@ test("marketplace update transport: leaves Device Flow idle for a public URL ref
         auth: {
           credentialOps,
           host: "gitlab.example.com",
-          evictOnFailure: false,
-          onAuthRequired: state.fetchCalls[0]?.auth?.onAuthRequired,
+          kind: "stored-credential",
         },
       },
     ]);
@@ -551,7 +548,7 @@ test("marketplace update transport: carries the GitHub auth bundle without invok
       },
       { dir: cloneDir, host: "github.com", credentialOps, ref: "main", remote: "origin" },
     );
-    assert.strictEqual(state.fetchCalls[0]?.auth?.onAuthRequired instanceof Function, true);
+    assert.strictEqual(state.fetchCalls[0]?.auth?.kind, "device-flow");
     assert.deepStrictEqual(credentialState, {
       fillCalls: [],
       approveCalls: [],
@@ -669,8 +666,7 @@ test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout car
     assert.deepStrictEqual(fetchedAuth, {
       credentialOps,
       host: "gitlab.example.com",
-      evictOnFailure: false,
-      onAuthRequired: fetchedAuth?.onAuthRequired,
+      kind: "stored-credential",
     });
   });
 });
@@ -717,8 +713,7 @@ test("MURL-03: unpinned url refresh follows the default-branch head-advance path
     assert.deepStrictEqual(fetchedAuth, {
       credentialOps,
       host: "gitlab.example.com",
-      evictOnFailure: false,
-      onAuthRequired: fetchedAuth?.onAuthRequired,
+      kind: "stored-credential",
     });
   });
 });
@@ -751,8 +746,7 @@ test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow rend
     assert.deepStrictEqual(fetchedAuth, {
       credentialOps,
       host: "gitlab.example.com",
-      evictOnFailure: false,
-      onAuthRequired: fetchedAuth?.onAuthRequired,
+      kind: "stored-credential",
     });
     assert.deepStrictEqual(notifications, [
       {
@@ -862,11 +856,12 @@ test("GAUTH-05: a cancelled Device Flow on a github.com url refresh renders {aut
 
     // assert
     const fetchedAuth = state.fetchCalls[0]?.auth;
+    assert.ok(fetchedAuth?.kind === "device-flow");
     assert.deepStrictEqual(fetchedAuth, {
       credentialOps,
       host: "github.com",
-      evictOnFailure: true,
-      onAuthRequired: fetchedAuth?.onAuthRequired,
+      kind: "device-flow",
+      onAuthRequired: fetchedAuth.onAuthRequired,
     });
     // On a registry host the story is a declined or expired Device Flow, not a
     // missing stored credential, so no cause line is attached.
@@ -3341,7 +3336,7 @@ test("AUTH-02 update: the GitAuthBundle is forwarded by reference into refreshGi
     // updateMarketplace must appear on the recorded fetch auth bundle --
     // proves no re-bundling occurred.
     assert.strictEqual(state.fetchCalls[0]?.auth?.credentialOps, credentialOps);
-    assert.equal(typeof state.fetchCalls[0]?.auth?.onAuthRequired, "function");
+    assert.equal(state.fetchCalls[0]?.auth?.kind, "device-flow");
   });
 });
 

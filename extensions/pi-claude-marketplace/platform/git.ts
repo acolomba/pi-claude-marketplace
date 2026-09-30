@@ -127,18 +127,21 @@ export interface ListRemotesOptions {
 
 /**
  * D-3-03 / MA-12 / MA-13: whether `dir` holds a readable git clone and, if so,
- * what its `origin` remote names. Four arms:
+ * what its `origin` remote names. Five arms:
  *   - `origin`: a readable repo whose `origin` remote records exactly one
  *     url; `url` is that value, verbatim.
  *   - `no-origin`: a readable repo whose `origin` remote records no url or
  *     more than one.
  *   - `not-a-repo`: `dir` has no `.git/config` (ENOENT/ENOTDIR).
- *   - `unreadable`: `dir/.git/config` exists but could not be read.
+ *   - `permission-denied`: the process may not read `dir/.git/config`
+ *     (EACCES/EPERM).
+ *   - `unreadable`: reading `dir/.git/config` failed with any other error.
  */
 export type ListRemotesResult =
   | { readonly kind: "origin"; readonly url: string }
   | { readonly kind: "no-origin" }
   | { readonly kind: "not-a-repo" }
+  | { readonly kind: "permission-denied" }
   | { readonly kind: "unreadable" };
 
 /** The redirect cap of `simple-get`, which `http` keeps. */
@@ -425,8 +428,8 @@ export async function currentBranch(opts: CurrentBranchOptions): Promise<string 
  * not look at all", and a catch block collapses that distinction.
  *
  * The function reads `<dir>/.git/config` itself, BEFORE calling
- * `git.getConfigAll`, and uses that read alone to choose between the
- * `not-a-repo` and `unreadable` arms. This ordering is required, not
+ * `git.getConfigAll`, and uses that read alone to choose among the
+ * `not-a-repo`, `permission-denied` and `unreadable` arms. This ordering is required, not
  * stylistic: isomorphic-git's internal filesystem wrapper
  * (node_modules/isomorphic-git/index.js, the `read` helper backing
  * `GitConfigManager.get`) catches every filesystem error and resolves `null`,
@@ -459,6 +462,10 @@ export async function listRemotes(opts: ListRemotesOptions): Promise<ListRemotes
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT" || code === "ENOTDIR") {
       return { kind: "not-a-repo" };
+    }
+
+    if (code === "EACCES" || code === "EPERM") {
+      return { kind: "permission-denied" };
     }
 
     return { kind: "unreadable" };

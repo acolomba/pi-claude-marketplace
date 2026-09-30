@@ -1064,12 +1064,135 @@ const URL_FIXED_POINT_CASES: readonly UrlFixedPointCase[] = [
   },
 ];
 
+/**
+ * D-76-02: an `https://` url whose authority folds to `github.com` is a `github`
+ * source, whatever case, leading `www.` labels or explicit `:443` port the user
+ * typed, and it keeps the typed `raw` verbatim. An authority carrying a
+ * non-default port or userinfo, a host that only contains `github.com`, and a
+ * host with no path after it stay generic `url` sources.
+ */
+const GITHUB_HOST_FOLD_CASES: readonly ParseCase[] = [
+  {
+    name: "folds a mixed-case GitHub host into a GitHub source",
+    raw: "https://GitHub.com/acme/repo",
+    source: { kind: "github", raw: "https://GitHub.com/acme/repo", owner: "acme", repo: "repo" },
+  },
+  {
+    name: "folds an upper-case GitHub host and strips the Git suffix from its identity",
+    raw: "https://GITHUB.COM/acme/repo.git",
+    source: {
+      kind: "github",
+      raw: "https://GITHUB.COM/acme/repo.git",
+      owner: "acme",
+      repo: "repo",
+    },
+  },
+  {
+    name: "folds a www. label on the GitHub host into a GitHub source",
+    raw: "https://www.github.com/acme/repo",
+    source: {
+      kind: "github",
+      raw: "https://www.github.com/acme/repo",
+      owner: "acme",
+      repo: "repo",
+    },
+  },
+  {
+    name: "folds repeated www. labels on the GitHub host into a GitHub source",
+    raw: "https://www.www.github.com/acme/repo",
+    source: {
+      kind: "github",
+      raw: "https://www.www.github.com/acme/repo",
+      owner: "acme",
+      repo: "repo",
+    },
+  },
+  {
+    name: "drops an explicit :443 port from the GitHub host and keeps the reference",
+    raw: "https://github.com:443/acme/repo#main",
+    source: {
+      kind: "github",
+      raw: "https://github.com:443/acme/repo#main",
+      owner: "acme",
+      repo: "repo",
+      ref: "main",
+    },
+  },
+  {
+    name: "folds an upper-case www. label, a mixed-case host and a :443 port together",
+    raw: "https://WWW.GitHub.com:443/acme/repo",
+    source: {
+      kind: "github",
+      raw: "https://WWW.GitHub.com:443/acme/repo",
+      owner: "acme",
+      repo: "repo",
+    },
+  },
+  {
+    name: "keeps a GitHub host with a non-default port as a generic URL source",
+    raw: "https://github.com:8443/acme/repo",
+    source: {
+      kind: "url",
+      raw: "https://github.com:8443/acme/repo",
+      url: "https://github.com:8443/acme/repo",
+    },
+  },
+  {
+    name: "keeps a GitHub host with userinfo as a generic URL source",
+    raw: "https://user@github.com/acme/repo",
+    source: {
+      kind: "url",
+      raw: "https://user@github.com/acme/repo",
+      url: "https://user@github.com/acme/repo",
+    },
+  },
+  {
+    name: "keeps a host that only ends in github.com as a generic URL source",
+    raw: "https://notgithub.com/acme/repo",
+    source: {
+      kind: "url",
+      raw: "https://notgithub.com/acme/repo",
+      url: "https://notgithub.com/acme/repo",
+    },
+  },
+  {
+    name: "keeps a host that only starts with github.com as a generic URL source",
+    raw: "https://github.com.evil/acme/repo",
+    source: {
+      kind: "url",
+      raw: "https://github.com.evil/acme/repo",
+      url: "https://github.com.evil/acme/repo",
+    },
+  },
+  {
+    name: "keeps a GitHub host with no path after it as a generic URL source",
+    raw: "https://github.com",
+    source: { kind: "url", raw: "https://github.com", url: "https://github.com" },
+  },
+  {
+    name: "normalizes an object URL on a mixed-case GitHub host to a GitHub source",
+    raw: { source: "url", url: "https://GitHub.com/acme/repo" },
+    source: { kind: "github", raw: "https://GitHub.com/acme/repo", owner: "acme", repo: "repo" },
+  },
+  {
+    name: "rejects a browser tree URL on a mixed-case GitHub host with a canonical hint",
+    raw: "https://GitHub.com/acme/repo/tree/main",
+    source: {
+      kind: "unknown",
+      raw: "https://GitHub.com/acme/repo/tree/main",
+      reason:
+        "https://GitHub.com/acme/repo/tree/main is a browser URL; use https://github.com/acme/repo#main instead",
+    },
+  },
+];
+
 describe("parsePluginSource", () => {
   for (const { name, raw, source } of [
     ...PARSE_CASES,
     ...URL_IDENTITY_CASES,
     ...URL_RELOAD_IDENTITY_CASES,
     ...URL_OBJECT_GATE_CASES,
+    ...GITHUB_HOST_FOLD_CASES,
     ...UNKNOWN_PARSE_CASES,
     ...INVALID_INPUT_CASES,
   ]) {

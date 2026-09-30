@@ -66,6 +66,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { retryTree } from "./scope-tree-inventory.ts";
 
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   GitAuthBundle,
   GitOps,
@@ -7121,14 +7122,14 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
       assert.deepStrictEqual(
         authCapture.calls.map(({ auth, cloneUrl }) => ({
           authHost: auth?.host,
-          authRequiredType: typeof auth?.onAuthRequired,
+          authKind: auth?.kind,
           cloneUrl,
           credentialOps: auth?.credentialOps,
         })),
         [
           {
             authHost: "github.com",
-            authRequiredType: "function",
+            authKind: "device-flow",
             cloneUrl: "https://github.com/org/repo",
             credentialOps: credentials.credentialOps,
           },
@@ -7188,14 +7189,14 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
       assert.deepStrictEqual(
         authCapture.calls.map(({ auth, cloneUrl: capturedUrl }) => ({
           authHost: auth?.host,
-          authRequiredType: typeof auth?.onAuthRequired,
+          authKind: auth?.kind,
           cloneUrl: capturedUrl,
           credentialOps: auth?.credentialOps,
         })),
         [
           {
             authHost: "gitlab.example.com",
-            authRequiredType: "function",
+            authKind: "stored-credential",
             cloneUrl,
             credentialOps: credentials.credentialOps,
           },
@@ -7329,7 +7330,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
           { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
         ],
       });
-      const authMemo = new Map<string, Awaited<ReturnType<GitAuthBundle["onAuthRequired"]>>>();
+      const authMemo = new Map<string, AuthAttemptResult>();
       const { ctx, notifications, pi } = makeCtx();
 
       // act
@@ -7359,8 +7360,11 @@ test("plugin install authentication: memoizes one Device Flow result across same
         plugin: "second",
         scope: "project",
       });
-      const firstAuthResult = await authCapture.calls[0]?.auth?.onAuthRequired();
-      const secondAuthResult = await authCapture.calls[1]?.auth?.onAuthRequired();
+      const firstAuth = authCapture.calls[0]?.auth;
+      const secondAuth = authCapture.calls[1]?.auth;
+      assert.ok(firstAuth?.kind === "device-flow" && secondAuth?.kind === "device-flow");
+      const firstAuthResult = await firstAuth.onAuthRequired();
+      const secondAuthResult = await secondAuth.onAuthRequired();
 
       // assert
       assert.deepStrictEqual(

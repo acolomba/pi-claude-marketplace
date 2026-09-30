@@ -30,7 +30,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired,
     });
 
@@ -61,7 +61,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired,
     });
 
@@ -75,6 +75,53 @@ describe("buildAuthCallbacks", () => {
       approve: [],
       reject: [],
     });
+  });
+
+  test("returns a stored credential for a stored-credential bundle", async () => {
+    // arrange
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [[HOST, { username: "stored", password: "secret" }]],
+    });
+    const callbacks = buildAuthCallbacks({
+      kind: "stored-credential",
+      credentialOps: credentials.credentialOps,
+      host: HOST,
+    });
+
+    // act
+    const credential = await callbacks.onAuth(REMOTE_URL);
+
+    // assert
+    assert.deepStrictEqual(credential, { username: "stored", password: "secret" });
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: HOST }],
+      approve: [],
+      reject: [],
+    });
+  });
+
+  test("cancels and logs a credential miss for a stored-credential bundle", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const callbacks = buildAuthCallbacks({
+      kind: "stored-credential",
+      credentialOps: credentials.credentialOps,
+      host: HOST,
+    });
+
+    // act
+    const credential = await callbacks.onAuth(REMOTE_URL);
+
+    // assert
+    assert.deepStrictEqual(credential, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: HOST }],
+      approve: [],
+      reject: [],
+    });
+    assert.deepStrictEqual(logged, [`[auth] onAuth: no stored credential for ${HOST}`]);
   });
 
   for (const reason of [
@@ -94,7 +141,7 @@ describe("buildAuthCallbacks", () => {
       const callbacks = buildAuthCallbacks({
         credentialOps: credentials.credentialOps,
         host: HOST,
-        evictOnFailure: true,
+        kind: "device-flow",
         onAuthRequired,
       });
 
@@ -126,7 +173,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired,
     });
 
@@ -155,7 +202,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired,
     });
 
@@ -186,7 +233,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired,
     });
 
@@ -215,7 +262,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired,
     });
 
@@ -240,7 +287,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired,
     });
 
@@ -263,7 +310,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: boundHost,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired: () => {
         throw new Error("interactive auth is forbidden on a host mismatch");
       },
@@ -287,7 +334,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired: () => {
         throw new Error("interactive auth is forbidden on a host mismatch");
       },
@@ -311,7 +358,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired: () => {
         throw new Error("interactive auth is forbidden on a credential hit");
       },
@@ -340,7 +387,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired: () => {
         throw new Error("interactive auth is forbidden on an unparseable url");
       },
@@ -362,7 +409,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired: async () => {
         await Promise.resolve();
         return { ok: true, cred: credential, authAttempted: true };
@@ -392,7 +439,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired: () => {
         throw new Error("interactive auth is forbidden from onAuthFailure");
       },
@@ -411,7 +458,7 @@ describe("buildAuthCallbacks", () => {
     assert.strictEqual(credentials.storedCredential(HOST), null);
   });
 
-  test("keeps a rejected credential and cancels when the bundle forbids eviction", async (t) => {
+  test("keeps a rejected credential and cancels for a stored-credential bundle", async (t) => {
     // arrange
     const logged = captureDebugLog(t);
     const credential = { username: "user", password: "irreplaceable" };
@@ -420,12 +467,9 @@ describe("buildAuthCallbacks", () => {
       credentials: [[HOST, credential]],
     });
     const callbacks = buildAuthCallbacks({
+      kind: "stored-credential",
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: false,
-      onAuthRequired: () => {
-        throw new Error("interactive auth is forbidden from onAuthFailure");
-      },
     });
 
     // act
@@ -451,7 +495,7 @@ describe("buildAuthCallbacks", () => {
     const callbacks = buildAuthCallbacks({
       credentialOps: credentials.credentialOps,
       host: HOST,
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired: () => {
         throw new Error("interactive auth is forbidden from onAuthFailure");
       },

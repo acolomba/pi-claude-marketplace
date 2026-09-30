@@ -902,7 +902,9 @@ test("memoizes one accepted Device Flow result across a same-host sweep", async 
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        authResults.push(await requiredAuth(args.auth).onAuthRequired());
+        const auth = requiredAuth(args.auth);
+        assert.ok(auth.kind === "device-flow");
+        authResults.push(await auth.onAuthRequired());
         return path.join(cwd, "not-written");
       },
       resolvePluginPin(args) {

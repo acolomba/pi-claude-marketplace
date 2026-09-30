@@ -656,7 +656,7 @@ test("passes authenticated clone context and refs through both clone arms", asyn
   assert.strictEqual(unpinnedPrepared.resolvedSha, sha);
 });
 
-test("D-3-04: authenticates the autoupdate cascade against github.com with no notification context", async (t) => {
+test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle when it has no notification context", async (t) => {
   // arrange
   // The cascade shape: prepare() with `ctx` omitted, mirroring
   // update-flow.ts's PluginUpdateFn, which never threads one through.
@@ -679,13 +679,19 @@ test("D-3-04: authenticates the autoupdate cascade against github.com with no no
   };
   const pinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: (options) => {
-      assert.strictEqual(options.auth?.host, "github.com");
-      assert.strictEqual(options.auth?.credentialOps, credentialOps);
+      assert.deepStrictEqual(options.auth, {
+        kind: "stored-credential",
+        credentialOps,
+        host: "github.com",
+      });
       return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" });
     },
     materializePluginClone: (options) => {
-      assert.strictEqual(options.auth?.host, "github.com");
-      assert.strictEqual(options.auth?.credentialOps, credentialOps);
+      assert.deepStrictEqual(options.auth, {
+        kind: "stored-credential",
+        credentialOps,
+        host: "github.com",
+      });
       return Promise.resolve(pinned.pluginRoot);
     },
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
@@ -694,8 +700,11 @@ test("D-3-04: authenticates the autoupdate cascade against github.com with no no
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
     materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
     materializeOrRefreshPluginMirror: (options) => {
-      assert.strictEqual(options.auth?.host, "github.com");
-      assert.strictEqual(options.auth?.credentialOps, credentialOps);
+      assert.deepStrictEqual(options.auth, {
+        kind: "stored-credential",
+        credentialOps,
+        host: "github.com",
+      });
       return Promise.resolve({ pluginRoot: unpinned.pluginRoot, resolvedSha: sha });
     },
   };

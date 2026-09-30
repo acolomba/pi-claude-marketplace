@@ -123,7 +123,6 @@ import {
   DEFAULT_CREDENTIAL_OPS,
   NO_STORED_CREDENTIAL_CAUSE,
   buildAuthForHost,
-  hasDeviceFlowProvider,
   hostFromCloneUrl,
 } from "../auth-host.ts";
 // WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
@@ -380,8 +379,8 @@ async function manifestContentKey(
  * authentication cannot proceed. Attached as the chain TAIL, which keeps the
  * code-bearing transport error at cause-depth 1 where `transportReason`'s
  * one-level unwrap classifies it as `authentication required`. GAUTH-05: a
- * registry host is excluded -- there the story is a declined or expired Device
- * Flow, and the bare closed-set token is the whole truth.
+ * `device-flow` bundle is excluded -- there the story is a declined or expired
+ * Device Flow, and the bare closed-set token is the whole truth.
  */
 async function refreshUrlClone(
   cloneDir: string,
@@ -405,7 +404,7 @@ async function refreshUrlClone(
       err instanceof Error &&
       err.cause === undefined &&
       classifyGitTransportFailure(err) === "authentication required" &&
-      !hasDeviceFlowProvider(host)
+      auth.kind === "stored-credential"
     ) {
       err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host));
     }

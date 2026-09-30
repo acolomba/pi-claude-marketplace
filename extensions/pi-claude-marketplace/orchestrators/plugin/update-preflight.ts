@@ -16,7 +16,12 @@ import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
+import {
+  DEFAULT_CREDENTIAL_OPS,
+  buildCloneAuth,
+  buildStoredCredentialAuth,
+  hostFromCloneUrl,
+} from "../auth-host.ts";
 
 import {
   canonicalCloneUrl,
@@ -37,7 +42,7 @@ import type { NotificationContext, ToolInventory } from "../../platform/pi-api.t
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { GitOps } from "../marketplace/shared.ts";
+import type { GitAuthBundle, GitOps } from "../marketplace/shared.ts";
 import type {
   PluginUpdateFailedOutcome,
   PluginUpdateSkippedOutcome,
@@ -147,11 +152,11 @@ interface UpdateCloneProbe {
 }
 
 /**
- * `buildCloneAuth` (`auth-host.ts`) supplies the host-bound auth bundle for
- * both arms below. No local builder is kept here: the cascade calls this
- * probe with no notification context at all, and `buildCloneAuth` accepts
- * that directly rather than needing its own undefined-returning wrapper
- * (D-3-04).
+ * `cloneAuth` supplies the host-bound auth bundle for both arms below. The
+ * autoupdate cascade calls this probe with no notification context, so it gets
+ * `buildStoredCredentialAuth`'s bundle: the Device Flow renders a user code
+ * through the context and the cascade has none (D-3-04). Every other caller
+ * gets `buildCloneAuth`'s bundle.
  */
 function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
@@ -165,9 +170,15 @@ function makeUpdateCloneProbe(
 ): UpdateCloneProbe {
   let captured: string | undefined;
 
+  function cloneAuth(cloneUrl: string, kind: GitBackedSource["kind"]): GitAuthBundle {
+    return auth.ctx === undefined
+      ? buildStoredCredentialAuth(hostFromCloneUrl(cloneUrl, kind), auth.credentialOps)
+      : buildCloneAuth(cloneUrl, kind, { ...auth, ctx: auth.ctx });
+  }
+
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
     const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, auth);
+    const authBundle = cloneAuth(cloneUrl, gitSource.kind);
     const materialized = await seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
@@ -194,7 +205,7 @@ function makeUpdateCloneProbe(
   }
 
   async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
-    const authBundle = buildCloneAuth(canonicalCloneUrl(gitSource), gitSource.kind, auth);
+    const authBundle = cloneAuth(canonicalCloneUrl(gitSource), gitSource.kind);
     const pin = await seam.resolvePluginPin({
       source: gitSource,
       auth: authBundle,

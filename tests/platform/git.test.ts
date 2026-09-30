@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
-import { chmod, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import nodeHttp from "node:http";
 import https from "node:https";
 import * as path from "node:path";
@@ -657,10 +657,7 @@ function boundAuth(credentials: CredentialOpsFake): NonNullable<GitPlatform.Clon
   return {
     credentialOps: credentials.credentialOps,
     host: HOST,
-    evictOnFailure: false,
-    onAuthRequired: () => {
-      throw new Error("interactive auth is forbidden on a stored-credential hit");
-    },
+    kind: "stored-credential",
   };
 }
 
@@ -804,7 +801,7 @@ describe("clone", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
-        evictOnFailure: true,
+        kind: "device-flow",
         onAuthRequired: () => {
           throw new Error("interactive auth is forbidden on a stored-credential hit");
         },
@@ -878,7 +875,7 @@ describe("fetch", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
-        evictOnFailure: true,
+        kind: "device-flow",
         onAuthRequired: () => {
           throw new Error("interactive auth is forbidden on a stored-credential hit");
         },
@@ -1014,7 +1011,7 @@ describe("resolveRemoteRef", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
-        evictOnFailure: true,
+        kind: "device-flow",
         onAuthRequired,
       },
     });
@@ -1042,7 +1039,7 @@ describe("resolveRemoteRef", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
-        evictOnFailure: true,
+        kind: "device-flow",
         onAuthRequired,
       },
     });
@@ -1093,7 +1090,7 @@ describe("resolveRemoteRef", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
-        evictOnFailure: true,
+        kind: "device-flow",
         onAuthRequired,
       },
     });
@@ -1130,7 +1127,7 @@ describe("resolveRemoteRef", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
-        evictOnFailure: true,
+        kind: "device-flow",
         onAuthRequired,
       },
     });
@@ -1433,23 +1430,35 @@ describe("listRemotes", () => {
     assert.deepStrictEqual(remotes, { kind: "no-origin" });
   });
 
-  test("reports unreadable for a .git/config the process cannot read", async (t) => {
+  test("reports unreadable for a .git/config that cannot be read as a file", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
     const configPath = path.join(repository.dir, ".git", "config");
-    await chmod(configPath, 0o000);
+    await rm(configPath);
+    await mkdir(configPath);
 
-    try {
+    // act
+    const remotes = await listRemotes({ dir: repository.dir });
+
+    // assert
+    assert.deepStrictEqual(remotes, { kind: "unreadable" });
+  });
+
+  for (const code of ["EACCES", "EPERM"]) {
+    test(`reports permission-denied when reading .git/config fails with ${code}`, async (t) => {
+      // arrange
+      const repository = await createGitTestRepository(t, { boundary: "local" });
+      t.mock.method(fs.promises, "readFile", () =>
+        Promise.reject(Object.assign(new Error(`${code}: operation not permitted`), { code })),
+      );
+
       // act
       const remotes = await listRemotes({ dir: repository.dir });
 
       // assert
-      assert.deepStrictEqual(remotes, { kind: "unreadable" });
-    } finally {
-      await chmod(configPath, 0o600);
-    }
-  });
+      assert.deepStrictEqual(remotes, { kind: "permission-denied" });
+    });
+  }
 
   // D-3-03 / MA-13: the origin shapes an interrupted rewrite or a hand edit
   // leaves behind. `libraryRemotes` is the library's per-section enumeration:

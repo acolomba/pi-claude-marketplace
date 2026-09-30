@@ -10,7 +10,9 @@
 
 - A `url` marketplace source is now fetched at the exact URL you typed. A server that serves only that URL, and returns 404 for the `.git` form, now works. The extension adds `.git` only to a `github.com` `owner/repo` URL, as Claude Code does. It makes one request per operation, so a missing or forbidden repository fails with its own error. (#221)
 
-- `marketplace add` now succeeds when an earlier attempt left a clone of the same source in place, for example after a crash. Any other leftover directory is still refused. If the leftover cannot be fully removed, the add fails and reports the cleanup error. (#221)
+- `marketplace add` now succeeds when an earlier attempt left a clone of the same source in place, for example after a crash. Any other leftover directory is still refused. If the leftover cannot be fully removed, the add fails and reports the cleanup error. If the extension cannot read the leftover's git configuration, the add fails with `{permission denied}` or `{unreadable}` instead of `{stale clone}`. (#221)
+
+- A `github.com` URL with capital letters in the host, a `www.` prefix, or the default `:443` port is now a GitHub source, as in Claude Code. Before, the extension treated it as a different repository, so it could clone the same repository twice. A marketplace you already added this way changes to a GitHub source the next time the extension loads. (#221)
 
 - Internal: added a `new-gsd-milestone` skill that names milestones and restarts phase numbers at 1, renamed `new-workspace` to `new-gsd-workspace`, and remapped GSD's Codex model tiers. (#229)
 

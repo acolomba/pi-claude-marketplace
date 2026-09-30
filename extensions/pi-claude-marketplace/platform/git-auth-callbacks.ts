@@ -44,10 +44,9 @@ export type AuthAttemptResult =
 /**
  * Caller-supplied closure invoked by `buildAuthCallbacks` when
  * `credentialOps.fill` returns null (no stored credential). The orchestrator
- * binds whatever the host's arm needs at the call site, so this seam takes no
- * parameters: `orchestrators/auth-host.ts`'s registry arm binds `host`,
- * `credentialOps`, and `notifyFn` for the Device Flow, and its no-provider arm
- * binds `host` alone to name the host in `NO_STORED_CREDENTIAL_CAUSE`.
+ * binds whatever the Device Flow needs at the call site, so this seam takes no
+ * parameters: `orchestrators/auth-host.ts` binds `host`, `credentialOps`, and
+ * `notifyFn`.
  */
 export type OnAuthRequiredFn = () => Promise<AuthAttemptResult>;
 
@@ -57,24 +56,31 @@ export type OnAuthRequiredFn = () => Promise<AuthAttemptResult>;
  * `ResolveRemoteRefOptions.auth?`, and its readonly form is the
  * orchestrators' `GitAuthBundle`, so a single bundle threads through from
  * the orchestrator into clone/fetch/resolveRemoteRef without re-bundling.
+ *
+ * `kind` says whether anything can mint a credential for `host`:
+ *   - `device-flow`: a helper miss runs `onAuthRequired`, and `onAuthFailure`
+ *     evicts a credential the server rejected, because the next miss mints a
+ *     replacement (AUTH-07).
+ *   - `stored-credential`: the credential in the user's helper is the host's
+ *     only source. A helper miss cancels, and a rejected credential stays
+ *     stored, because evicting it would destroy a value the user can recover
+ *     only by storing it again (GAUTH-04, D-1-01).
+ *
+ * The orchestrator picks the kind; this module holds no provider knowledge
+ * (`platform/README.md`: platform/ may import from shared/ only).
  */
-export interface BuildAuthCallbacksOpts {
-  credentialOps: CredentialOps;
-  host: string;
-  onAuthRequired: OnAuthRequiredFn;
-  /**
-   * Whether evicting a server-rejected credential for `host` is recoverable:
-   * true when `onAuthRequired` can mint a replacement, false when the only
-   * source for this host is the credential already in the user's helper.
-   * `onAuthFailure` evicts only when it is true (AUTH-07, GAUTH-04) -- on a
-   * host with no minting path the eviction is terminal and the value is
-   * generally unrecoverable, while a stale credential left in place costs the
-   * user one manual re-store. The orchestrator computes it; this module holds
-   * no provider knowledge (`platform/README.md`: platform/ may import from
-   * shared/ only).
-   */
-  evictOnFailure: boolean;
-}
+export type BuildAuthCallbacksOpts =
+  | {
+      readonly kind: "device-flow";
+      readonly credentialOps: CredentialOps;
+      readonly host: string;
+      readonly onAuthRequired: OnAuthRequiredFn;
+    }
+  | {
+      readonly kind: "stored-credential";
+      readonly credentialOps: CredentialOps;
+      readonly host: string;
+    };
 
 /**
  * Build the `{ onAuth, onAuthFailure }` pair consumed by isomorphic-git's
@@ -95,13 +101,15 @@ export interface BuildAuthCallbacksOpts {
  *   away symmetrically -- `orchestrators/auth-host.ts::hostFromCloneUrl`
  *   produces `opts.host` the same way. On a match, consult
  *   `credentialOps.fill(opts.host)`; on hit, return the stored credential
- *   (AUTH-02 silent reuse). On miss, invoke `opts.onAuthRequired()`; success
- *   returns the new credential, failure returns `{ cancel: true }`.
- * - `onAuthFailure(url, cred)`: when `opts.evictOnFailure` is true, call
+ *   (AUTH-02 silent reuse). On miss, a `stored-credential` bundle returns
+ *   `{ cancel: true }`; a `device-flow` bundle invokes
+ *   `opts.onAuthRequired()`, and success returns the new credential while
+ *   failure returns `{ cancel: true }`.
+ * - `onAuthFailure(url, cred)`: for a `device-flow` bundle, call
  *   `credentialOps.reject(opts.host, cred)` to evict the credential the server
- *   rejected (AUTH-07), then return `{ cancel: true }`. When it is false, skip
- *   the eviction -- routing the skip through `hookDebugLog` -- and return
- *   `{ cancel: true }`.
+ *   rejected (AUTH-07), then return `{ cancel: true }`. For a
+ *   `stored-credential` bundle, skip the eviction -- routing the skip through
+ *   `hookDebugLog` -- and return `{ cancel: true }`.
  *
  * Discipline:
  *
@@ -121,7 +129,7 @@ export interface BuildAuthCallbacksOpts {
  *   credential in order to evict it, which means the credential has already
  *   been sent; a compare there would change nothing about what was disclosed.
  *   What the seam does decide is what the eviction destroys, and that is
- *   `opts.evictOnFailure`: isomorphic-git routes the SECOND 401 of one
+ *   `opts.kind`: isomorphic-git routes the SECOND 401 of one
  *   operation to `onAuthFailure` rather than `onAuth`
  *   (`node_modules/isomorphic-git/index.cjs`: `providedAuthBefore ?
  *   onAuthFailure : onAuth`), so a stored credential the server declines
@@ -188,6 +196,12 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
         return filled;
       }
 
+      if (opts.kind === "stored-credential") {
+        // GAUTH-04 / D-1-01: the helper is this host's only credential source.
+        hookDebugLog(`onAuth: no stored credential for ${opts.host}`, "auth");
+        return { cancel: true };
+      }
+
       const result = await opts.onAuthRequired();
       if (result.ok) {
         return result.cred;
@@ -212,7 +226,7 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
   }
 
   async function onAuthFailure(_url: string, cred: GitCredentials): Promise<GitCredentials> {
-    if (!opts.evictOnFailure) {
+    if (opts.kind === "stored-credential") {
       // AUTH-07 / GAUTH-04: eviction is for a credential something can
       // re-mint. Here nothing can, so the stored value stays and the user
       // keeps a recoverable failure. AUTH-09: name the host only.

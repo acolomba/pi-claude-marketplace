@@ -153,7 +153,7 @@ const ALLOWED_MARKETPLACE_REMOTES = [
   "https://gitlab.example.com/team/missing-mp",
   "https://gitlab.example.com/team/flaky-mp",
   "https://gitlab.example.com/team/gone-mp",
-  "https://GitHub.com/acme/mp",
+  "https://github.com/acme/mp.git",
   "https://gitlab.com/team/mp",
   // D-2-01: the `.git` a user typed survives onto the wire. Only the suffixed
   // form is admitted, so sending the `.git`-stripped cache-key identity instead
@@ -587,12 +587,6 @@ const MA13_REFUSAL_ARMS: readonly Ma13RefusalArm[] = [
     title: "no remote is named origin",
     listRemotesResult: { kind: "no-origin" },
   },
-  {
-    // The arm exists so a permissions failure is never silently classified
-    // as a foreign tree.
-    title: "the destination could not be read",
-    listRemotesResult: { kind: "unreadable" },
-  },
 ] as const;
 
 for (const { title, listRemotesResult } of MA13_REFUSAL_ARMS) {
@@ -627,6 +621,56 @@ for (const { title, listRemotesResult } of MA13_REFUSAL_ARMS) {
         "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
       );
       assert.equal(note.severity, "error");
+      assert.equal(await pathExists(path.join(finalDir, ".leftover-marker")), true);
+    });
+  });
+}
+
+// MA-13: a destination whose `.git/config` cannot be read refuses with the
+// read failure's own reason on the marketplace subject, and the tree stays on
+// disk. A read failure is never reported as a stale clone.
+
+interface Ma13UnreadableArm {
+  readonly listRemotesResult: ListRemotesResult;
+  readonly reason: string;
+}
+
+const MA13_UNREADABLE_ARMS: readonly Ma13UnreadableArm[] = [
+  { listRemotesResult: { kind: "permission-denied" }, reason: "permission denied" },
+  { listRemotesResult: { kind: "unreadable" }, reason: "unreadable" },
+];
+
+for (const { listRemotesResult, reason } of MA13_UNREADABLE_ARMS) {
+  test(`MA-13: a destination whose config read reports ${listRemotesResult.kind} refuses as ${reason}`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, pi, notifications } = makeCtx();
+      const finalDir = await locations.sourceCloneDir("valid-marketplace");
+      await mkdir(finalDir, { recursive: true });
+      await writeFile(path.join(finalDir, ".leftover-marker"), "x");
+
+      const { gitOps } = createGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+        listRemotesResult,
+      });
+
+      // act
+      await addMarketplace({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        rawSource: "anthropics/claude-plugins-official",
+        gitOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {${reason}}`,
+          severity: "error",
+        },
+      ]);
       assert.equal(await pathExists(path.join(finalDir, ".leftover-marker")), true);
     });
   });
@@ -2211,11 +2255,7 @@ test("AUTH-01 add: the GitAuthBundle is forwarded by reference into gitOps.clone
       credentialOps,
       "credentialOps must be reference-equal (no re-bundling)",
     );
-    assert.equal(
-      typeof state.cloneCalls[0]?.auth?.onAuthRequired,
-      "function",
-      "onAuthRequired must be a function",
-    );
+    assert.equal(state.cloneCalls[0]?.auth?.kind, "device-flow");
   });
 });
 
@@ -2922,8 +2962,7 @@ test("MURL-08: url source clones the URL as typed, with a bundle bound to its ho
     assert.deepStrictEqual(cloneCall.auth, {
       credentialOps,
       host: "gitlab.example.com",
-      evictOnFailure: false,
-      onAuthRequired: cloneCall.auth?.onAuthRequired,
+      kind: "stored-credential",
     });
   });
 });
@@ -2968,8 +3007,7 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and t
     assert.deepStrictEqual(cloneCall.auth, {
       credentialOps,
       host: "gitlab.example.com",
-      evictOnFailure: false,
-      onAuthRequired: cloneCall.auth?.onAuthRequired,
+      kind: "stored-credential",
     });
   });
 });
@@ -3264,15 +3302,10 @@ test("MURL-01 regression: github source is byte-identical -- Device Flow auth st
     // github: the Device Flow auth bundle IS constructed and passed through.
     assert.ok(cloneCall.auth, "github clone must carry an auth bundle");
     assert.equal(cloneCall.auth.host, "github.com");
-    // Its callbacks are wired (buildAuthCallbacks-compatible shape).
-    assert.equal(typeof cloneCall.auth.onAuthRequired, "function");
+    // github.com runs the provider's Device Flow on a helper miss.
+    assert.equal(cloneCall.auth.kind, "device-flow");
     assert.ok(
-      buildAuthCallbacks({
-        credentialOps: cloneCall.auth.credentialOps,
-        host: cloneCall.auth.host,
-        evictOnFailure: cloneCall.auth.evictOnFailure,
-        onAuthRequired: cloneCall.auth.onAuthRequired,
-      }),
+      buildAuthCallbacks(cloneCall.auth),
       "github auth bundle must be buildAuthCallbacks-compatible",
     );
   });
@@ -3353,8 +3386,7 @@ test("PROV-02: a public url add on a host with no Device Flow carries its bundle
     assert.deepStrictEqual(cloneCall.auth, {
       credentialOps,
       host: "gitlab.example.com",
-      evictOnFailure: false,
-      onAuthRequired: cloneCall.auth?.onAuthRequired,
+      kind: "stored-credential",
     });
     // The public clone never touched the credential seam or the flow.
     assert.equal(credState.fillCalls.length, 0);
@@ -3367,7 +3399,7 @@ test("PROV-02: a public url add on a host with no Device Flow carries its bundle
   });
 });
 
-test("PROV-01: a url add whose host case-folds to github.com carries the provider auth bundle on the clone", async () => {
+test("PROV-01 / D-76-02: an add whose host case-folds to github.com clones as a github source with the provider auth bundle", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
@@ -3376,10 +3408,9 @@ test("PROV-01: a url add whose host case-folds to github.com carries the provide
     });
     const { credOps: credentialOps } = createCredentialOps();
 
-    // The case-sensitive github.com prefix check leaves this a `url` source,
-    // but URL host parsing lowercases to github.com -- a provider-registered
-    // host, so the url clone must thread the github auth bundle (unlike the
-    // no-provider gitlab.example.com adds above).
+    // D-76-02: the parser folds the host's case, so this is a `github` source
+    // and clones at the canonical github.com url with the GitHub provider's
+    // bundle (unlike the no-provider gitlab.example.com adds above).
     // act
     await addMarketplace({
       ctx,
@@ -3395,9 +3426,10 @@ test("PROV-01: a url add whose host case-folds to github.com carries the provide
     assert.equal(state.cloneCalls.length, 1);
     const cloneCall = state.cloneCalls[0];
     assert.ok(cloneCall);
-    assert.equal(cloneCall.url, "https://GitHub.com/acme/mp");
+    assert.equal(cloneCall.url, "https://github.com/acme/mp.git");
     assert.ok(cloneCall.auth, "provider-registered host must attach an auth bundle");
     assert.equal(cloneCall.auth.host, "github.com");
+    assert.equal(cloneCall.auth.kind, "device-flow");
   });
 });
 

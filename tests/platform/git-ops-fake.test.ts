@@ -106,7 +106,7 @@ describe("createGitOpsFake", () => {
     const auth = {
       credentialOps: credentials.credentialOps,
       host: "git.example.invalid",
-      evictOnFailure: true,
+      kind: "device-flow",
       onAuthRequired,
     } satisfies GitAuthBundle;
     const git = createGitOpsFake({

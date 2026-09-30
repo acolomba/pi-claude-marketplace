@@ -7520,8 +7520,8 @@ test("plugin update authentication: a pinned provider update threads auth to the
       // assert
       assert.equal(captured.cloneAuth?.credentialOps, credentialOps);
       assert.equal(captured.cloneAuth?.host, "github.com");
-      assert.equal(typeof captured.cloneAuth?.onAuthRequired, "function");
-      assert.deepEqual(await captured.cloneAuth?.onAuthRequired(), memoized);
+      assert.ok(captured.cloneAuth?.kind === "device-flow");
+      assert.deepEqual(await captured.cloneAuth.onAuthRequired(), memoized);
       assert.equal(authMemo.size, 1);
       assert.equal(notifications.length, 1);
     } finally {
@@ -7568,7 +7568,7 @@ test("plugin update authentication: an unpinned provider update threads auth to 
       // assert
       assert.equal(captured.cloneAuth?.credentialOps, credentialOps);
       assert.equal(captured.cloneAuth?.host, "github.com");
-      assert.equal(typeof captured.cloneAuth?.onAuthRequired, "function");
+      assert.equal(captured.cloneAuth?.kind, "device-flow");
       assert.equal(captured.pinAuth, undefined);
       assert.equal(notifications.length, 1);
     } finally {

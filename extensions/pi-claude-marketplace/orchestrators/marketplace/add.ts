@@ -61,6 +61,7 @@ import {
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
+  UnreadableSourceCloneError,
   UnsupportedSourceError,
   appendLeakToError,
   errorMessage,
@@ -127,8 +128,9 @@ export type AddMarketplaceNotifications =
  * marketplace so the apply cascade can render the row.
  *
  * `failed` collapses every classified precondition failure
- * (`classifyAddError` recognized: duplicate name / stale clone / invalid
- * manifest / unsupported source / source missing / network unreachable)
+ * (`classifyAddError` recognized: duplicate name / stale clone / permission
+ * denied / unreadable / invalid manifest / unsupported source / source
+ * missing / network unreachable)
  * plus the catastrophic
  * fallback ("unparseable" -- chosen because every recognised add precondition
  * yields a typed error, so a non-enumerated throw is by construction an
@@ -222,6 +224,7 @@ function unwrapAddError(err: unknown): unknown {
   if (
     err instanceof MarketplaceDuplicateNameError ||
     err instanceof StaleSourceCloneError ||
+    err instanceof UnreadableSourceCloneError ||
     err instanceof InvalidMarketplaceManifestError ||
     err instanceof UnsupportedSourceError
   ) {
@@ -272,6 +275,10 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
     return "stale clone";
   }
 
+  if (err instanceof UnreadableSourceCloneError) {
+    return err.failure === "permission-denied" ? "permission denied" : "unreadable";
+  }
+
   if (err instanceof InvalidMarketplaceManifestError) {
     return "invalid manifest";
   }
@@ -303,12 +310,13 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
 }
 
 /**
- * ATTR-07 (A2): the marketplace subject name for a failed-add row. Post-manifest
- * failures know the derived marketplace name (`MarketplaceDuplicateNameError`
- * carries `mpName`; `StaleSourceCloneError` carries the derived `mpName`), so
- * the row renders on the real subject. Pre-clone/pre-manifest failures
- * (unsupported source, source missing, invalid manifest) have no derived name,
- * so the user-typed `rawSource` is the subject.
+ * ATTR-07 (A2): the marketplace subject name for a failed-add row.
+ * Post-manifest failures know the derived marketplace name
+ * (`MarketplaceDuplicateNameError` carries `mpName`; `StaleSourceCloneError`
+ * and `UnreadableSourceCloneError` carry the derived `mpName`), so the row
+ * renders on the real subject. Pre-clone/pre-manifest failures (unsupported
+ * source, source missing, invalid manifest) have no derived name, so the
+ * user-typed `rawSource` is the subject.
  */
 function addSubjectName(rawErr: unknown, rawSource: string): string {
   const err = unwrapAddError(rawErr);
@@ -317,6 +325,10 @@ function addSubjectName(rawErr: unknown, rawSource: string): string {
   }
 
   if (err instanceof StaleSourceCloneError && err.mpName !== undefined) {
+    return err.mpName;
+  }
+
+  if (err instanceof UnreadableSourceCloneError) {
     return err.mpName;
   }
 
@@ -690,8 +702,10 @@ async function runAddOutcome(
  * MA-12/MA-13 (D-3-01, D-3-02): recognize whether `finalDir` is the
  * extension's own leftover clone of `source` and, if so, remove it so the
  * caller's atomic rename can proceed. Throws `StaleSourceCloneError` for a
- * foreign or unreadable tree, or for an `origin` that does not byte-equal
+ * foreign tree, or for an `origin` that does not byte-equal
  * `canonicalCloneUrl(source)` after one trailing `.git` strip (D-3-01).
+ * Throws `UnreadableSourceCloneError` when the tree's `.git/config` cannot be
+ * read, so the row names the read failure instead of calling the tree stale.
  * Recognition is the only authority for removal.
  *
  * @returns the leak message from removing a recognized leftover, or
@@ -718,8 +732,10 @@ async function recognizeLeftover(
       return cleanupStaging(removalOps, finalDir, `marketplace leftover clone ${finalDir}`);
     case "no-origin":
     case "not-a-repo":
-    case "unreadable":
       throw new StaleSourceCloneError(finalDir, derivedName);
+    case "permission-denied":
+    case "unreadable":
+      throw new UnreadableSourceCloneError(finalDir, derivedName, remotes.kind);
   }
 }
 

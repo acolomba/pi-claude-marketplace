@@ -3715,8 +3715,8 @@ test("plugin reinstall authentication: a bulk cold-cache sweep shares one host m
       });
       const firstBundle = bundles[0];
       const secondBundle = bundles[1];
-      if (firstBundle === undefined || secondBundle === undefined) {
-        throw new Error("expected one auth bundle for each cold-cache reinstall");
+      if (firstBundle?.kind !== "device-flow" || secondBundle?.kind !== "device-flow") {
+        throw new Error("expected one device-flow auth bundle for each cold-cache reinstall");
       }
 
       await firstBundle.onAuthRequired();

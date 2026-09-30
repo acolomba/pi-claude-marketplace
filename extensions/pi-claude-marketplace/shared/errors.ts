@@ -255,6 +255,26 @@ export class StaleSourceCloneError extends Error {
   }
 }
 
+/**
+ * MA-13: `marketplace add` found a directory at the destination but could not
+ * read its `.git/config`, so it cannot tell whose clone the directory is.
+ * `failure` records why: `permission-denied` for EACCES/EPERM, `unreadable`
+ * for any other read error. The add entrypoint renders it on the marketplace
+ * SUBJECT (`mpName`) as `{permission denied}` or `{unreadable}`.
+ */
+export class UnreadableSourceCloneError extends Error {
+  readonly absPath: string;
+  readonly mpName: string;
+  readonly failure: "permission-denied" | "unreadable";
+  constructor(absPath: string, mpName: string, failure: "permission-denied" | "unreadable") {
+    super(`cannot read the source clone at ${absPath}: ${failure}`);
+    this.name = "UnreadableSourceCloneError";
+    this.absPath = absPath;
+    this.mpName = mpName;
+    this.failure = failure;
+  }
+}
+
 /** MA-8: duplicate marketplace name in chosen scope. */
 export class MarketplaceDuplicateNameError extends Error {
   readonly mpName: string;

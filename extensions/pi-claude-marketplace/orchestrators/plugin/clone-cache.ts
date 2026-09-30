@@ -107,6 +107,24 @@ async function promoteStagingToClone(
 }
 
 /**
+ * Clone `url` into `stagingDir`: a ref hint clones only that ref's branch,
+ * and no ref clones the default branch.
+ */
+async function cloneIntoStaging(
+  gitOps: GitOps,
+  stagingDir: string,
+  url: string,
+  args: { readonly ref?: string; readonly auth: GitAuthBundle },
+): Promise<void> {
+  await gitOps.clone({
+    dir: stagingDir,
+    url,
+    ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
+    auth: args.auth,
+  });
+}
+
+/**
  * Check out the exact pin, recovering from a stale ref hint.
  *
  * PURL-04: a `singleBranch` ref-hint clone fetches only that ref's closure.
@@ -121,7 +139,7 @@ async function promoteStagingToClone(
 async function checkoutPinWithRefetch(
   gitOps: GitOps,
   stagingDir: string,
-  args: { readonly pin: string; readonly ref?: string; readonly auth?: GitAuthBundle },
+  args: { readonly pin: string; readonly ref?: string; readonly auth: GitAuthBundle },
 ): Promise<void> {
   try {
     await gitOps.checkout({ dir: stagingDir, ref: args.pin });
@@ -130,11 +148,7 @@ async function checkoutPinWithRefetch(
       throw checkoutErr;
     }
 
-    await gitOps.fetch({
-      dir: stagingDir,
-      remote: "origin",
-      ...(args.auth !== undefined && { auth: args.auth }),
-    });
+    await gitOps.fetch({ dir: stagingDir, remote: "origin", auth: args.auth });
     await gitOps.checkout({ dir: stagingDir, ref: args.pin });
   }
 }
@@ -165,8 +179,7 @@ async function checkoutPinWithRefetch(
  * `auth` is forwarded to `gitOps.clone`, and the bundle's credentials thread
  * into the clone so a private source on the bundle's own host authenticates,
  * whichever host that is (PROV-03/D-79-01, GAUTH-03). Every install, reinstall,
- * fetch, `info --fetch`, and update caller passes one; the parameter is
- * optional only so unit tests can exercise the public-clone path without one.
+ * fetch, `info --fetch`, and update caller passes one.
  *
  * `networkUrl` is caller-computed (D-2-03): the `url` arm of the derivation
  * needs `source.raw`, which is not recoverable from `cloneUrl` once the
@@ -179,7 +192,7 @@ export async function materializePluginClone(args: {
   pin: string;
   ref?: string;
   gitOps?: GitOps;
-  auth?: GitAuthBundle;
+  auth: GitAuthBundle;
 }): Promise<string> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -203,12 +216,7 @@ export async function materializePluginClone(args: {
   // Clone the ref-hint (or default branch), then checkout the exact pin so the
   // recorded commit is the pin even when a moving tag/branch ref is given.
   try {
-    await gitOps.clone({
-      dir: stagingDir,
-      url: networkUrl,
-      ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
-      ...(args.auth !== undefined && { auth: args.auth }),
-    });
+    await cloneIntoStaging(gitOps, stagingDir, networkUrl, args);
     await checkoutPinWithRefetch(gitOps, stagingDir, args);
   } catch (err) {
     const leak = await cleanupStaging(removalOps, stagingDir, "plugin clone staging");
@@ -265,7 +273,7 @@ export async function materializeOrRefreshPluginMirror(args: {
   networkUrl: string;
   ref?: string;
   gitOps?: GitOps;
-  auth?: GitAuthBundle;
+  auth: GitAuthBundle;
 }): Promise<{ pluginRoot: string; resolvedSha: string }> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -287,12 +295,7 @@ export async function materializeOrRefreshPluginMirror(args: {
     const stagingDir = await args.locations.sourcesStagingDir(randomUUID());
 
     try {
-      await gitOps.clone({
-        dir: stagingDir,
-        url: networkUrl,
-        ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
-        ...(args.auth !== undefined && { auth: args.auth }),
-      });
+      await cloneIntoStaging(gitOps, stagingDir, networkUrl, args);
     } catch (err) {
       const leak = await cleanupStaging(removalOps, stagingDir, "plugin mirror staging");
       throw appendLeakToError(err, leak);

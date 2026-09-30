@@ -367,15 +367,19 @@ function parsePathSourceForm(raw: string): ParsedSource | undefined {
  *
  * D-76-02: the github-host check MUST run BEFORE the generic-https arm so
  * github.com always normalizes to the `github` kind -- one canonical identity
- * per repo, and Device Flow auth stays applicable.
+ * per repo, and Device Flow auth stays applicable. The check folds the host the
+ * way Claude Code recognizes github.com (`gitHubUrlPath`), so
+ * `https://GitHub.com/o/r`, `https://www.github.com/o/r` and
+ * `https://github.com:443/o/r` name the same repo as `https://github.com/o/r`.
  *
  * D-76-01: `http://`, `ssh://` and the `git@host:` scp form stay rejected.
  * Only `https://` URLs and local paths are accepted, so the reject must sit
  * AFTER both https arms.
  */
 function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSource | undefined {
-  if (raw.startsWith("https://github.com/")) {
-    return parseGitHubUrl(raw);
+  const gitHubPath = gitHubUrlPath(raw);
+  if (gitHubPath !== undefined) {
+    return parseGitHubUrl(raw, gitHubPath);
   }
 
   // MURL-01 / D-76-01: any other https host is a generic `url` source.
@@ -576,10 +580,48 @@ function parseUrlSource(raw: string): UrlSource {
   return ref === undefined ? { kind: "url", raw, url: base } : { kind: "url", raw, url: base, ref };
 }
 
-function parseGitHubUrl(raw: string): GitHubSource | UnknownSource {
-  // strip prefix
-  const rest = raw.slice("https://github.com/".length);
+/**
+ * D-76-02: the path after the host when `raw` is an `https://` url on
+ * github.com, else undefined. The authority is the text between `https://` and
+ * the first `/`, and a url with no `/` after it is not a github url. The
+ * authority is folded the way Claude Code recognizes a github host: lowercased,
+ * an explicit default `:443` port dropped, and every leading `www.` label
+ * stripped. The scheme match stays case-sensitive, as Claude Code's does.
+ *
+ * A non-default port and userinfo (`user@`) are not folded, so an authority
+ * carrying either never equals `github.com` and the url stays a generic `url`
+ * source. The `github` kind rebuilds its wire url as
+ * `https://github.com/<owner>/<repo>.git` from owner/repo, so it has nowhere to
+ * keep a port or userinfo, and folding either would change where the clone goes.
+ */
+function gitHubUrlPath(raw: string): string | undefined {
+  if (!raw.startsWith("https://")) {
+    return undefined;
+  }
 
+  const rest = raw.slice("https://".length);
+  const slashIdx = rest.indexOf("/");
+  if (slashIdx === -1) {
+    return undefined;
+  }
+
+  let host = rest.slice(0, slashIdx).toLowerCase();
+  if (host.endsWith(":443")) {
+    host = host.slice(0, -":443".length);
+  }
+
+  while (host.startsWith("www.")) {
+    host = host.slice("www.".length);
+  }
+
+  return host === "github.com" ? rest.slice(slashIdx + 1) : undefined;
+}
+
+/**
+ * Parse a github.com url. `raw` is the verbatim input, echoed on the source and
+ * in every diagnostic; `rest` is the path after the host (`gitHubUrlPath`).
+ */
+function parseGitHubUrl(raw: string, rest: string): GitHubSource | UnknownSource {
   // SP-3: browser-paste /tree/<ref> URL
   const treeIdx = rest.indexOf("/tree/");
   if (treeIdx !== -1) {

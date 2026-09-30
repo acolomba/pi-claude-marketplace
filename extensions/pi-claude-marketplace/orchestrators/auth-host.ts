@@ -11,12 +11,15 @@
  * GAUTH-03 contract: EVERY host gets a bundle, so `buildAuthCallbacks` runs
  * and its fill-first path consults `credentialOps.fill(host)` on every host.
  * The provider registry gates only the interactive half:
- *   - Provider found  -> a bundle whose `onAuthRequired` runs that provider's
- *     Device Flow, host-keyed (PROV-03).
- *   - No provider     -> a bundle whose `onAuthRequired` resolves
- *     `{ ok: false, reason: NO_STORED_CREDENTIAL_CAUSE(host) }`, so a
- *     credential already in the user's helper still authenticates and a miss
- *     surfaces a cause line instead of a bare structural 401 (GAUTH-04).
+ *   - Provider found  -> a `device-flow` bundle whose `onAuthRequired` runs
+ *     that provider's Device Flow, host-keyed (PROV-03).
+ *   - No provider     -> a `stored-credential` bundle from
+ *     `buildStoredCredentialAuth`, so a credential already in the user's
+ *     helper still authenticates and a miss cancels (GAUTH-04).
+ *
+ * `buildAuthForHost` requires a notification context because the Device Flow
+ * renders a user code through it. A caller with none -- the autoupdate cascade
+ * -- asks for `buildStoredCredentialAuth` directly (D-3-04).
  *
  * Gate discipline: this module lives in the orchestrator tier but MUST NOT
  * name `gitOps` / `DEFAULT_GIT_OPS` or import `platform/git.ts` as a VALUE --
@@ -118,14 +121,20 @@ export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
   String.raw`no credential was obtained for ${host}; store one with: printf 'protocol=https\nhost=${host}\nusername=<user>\npassword=<token>\n\n' | git credential approve`;
 
 /**
- * Whether the provider registry claims `host` with a Device Flow.
+ * Build the `stored-credential` bundle for `host`: the user's git credential
+ * helper is the only credential source, a helper miss cancels, and a credential
+ * the server rejects stays stored because it is the only copy (GAUTH-04,
+ * D-1-01). It does no I/O.
  *
- * `orchestrators/marketplace/update.ts` consults it to decide whether the
- * stored-credential cause line applies, so the verb does not import the
- * registry itself (GAUTH-05).
+ * `buildAuthForHost` returns it for a host the provider registry does not
+ * claim. The autoupdate cascade asks for it on every host, because it has no
+ * notification context to render a Device Flow user code in (D-3-04).
  */
-export function hasDeviceFlowProvider(host: string): boolean {
-  return findProviderForHost(host) !== undefined;
+export function buildStoredCredentialAuth(
+  host: string,
+  credentialOps: CredentialOps,
+): GitAuthBundle {
+  return { kind: "stored-credential", credentialOps, host };
 }
 
 /**
@@ -133,17 +142,12 @@ export function hasDeviceFlowProvider(host: string): boolean {
  * `platform/git.ts` always builds auth callbacks and their fill-first path
  * consults `credentialOps.fill(host)` before anything else (GAUTH-03, D-1-01).
  *
- * A registry host's `onAuthRequired` runs that provider's Device Flow
- * (D-79-05) and, if an `authMemo` is supplied, records the result so the flow
- * runs AT MOST ONCE per host across a single command invocation (D-79-02). A
- * host the registry does not claim gets a pure closure that resolves
- * `NO_STORED_CREDENTIAL_CAUSE(host)`; it does no I/O and touches no memo.
- *
- * The same provider lookup decides `evictOnFailure`, which is the bundle's
- * answer to what `onAuthFailure` may destroy: a provider host re-mints on the
- * next fill miss, so eviction is recoverable there (AUTH-07); on every other
- * host the credential in the user's helper is the only copy, so the bundle
- * forbids the eviction (GAUTH-04).
+ * A registry host gets a `device-flow` bundle: its `onAuthRequired` runs that
+ * provider's Device Flow (D-79-05) and, if an `authMemo` is supplied, records
+ * the result so the flow runs AT MOST ONCE per host across a single command
+ * invocation (D-79-02). Its credential re-mints on the next fill miss, so
+ * evicting a rejected one is recoverable (AUTH-07). A host the registry does
+ * not claim gets `buildStoredCredentialAuth`'s bundle.
  *
  * The memo caps Device Flow round-trips and cannot cap `git credential fill`:
  * `platform/git-auth-callbacks.ts::onAuth` reaches `onAuthRequired` only AFTER
@@ -164,35 +168,15 @@ export function hasDeviceFlowProvider(host: string): boolean {
 export function buildAuthForHost(args: {
   host: string;
   credentialOps: CredentialOps;
-  ctx?: NotificationContext;
+  ctx: NotificationContext;
   deviceFlowHttp?: DeviceFlowHttp;
   authMemo?: Map<string, AuthAttemptResult>;
 }): GitAuthBundle {
   const { host, credentialOps, ctx, deviceFlowHttp, authMemo } = args;
 
   const provider = findProviderForHost(host);
-  if (provider === undefined || ctx === undefined) {
-    // D-1-02: a state producer, so no notification is raised from this seam --
-    // the reason rides the caller's error cause chain instead.
-    // D-3-04: a missing `ctx` answers the same way on ANY host, including a
-    // registry one -- the Device Flow is interactive by construction, and a
-    // caller with no notification context (the autoupdate cascade) is a
-    // background operation with nowhere to render a user code. Declining is
-    // the correct behaviour here, not a fallback.
-    const onAuthRequired: OnAuthRequiredFn = () =>
-      Promise.resolve<AuthAttemptResult>({
-        ok: false,
-        reason: NO_STORED_CREDENTIAL_CAUSE(host),
-        authAttempted: true,
-      });
-    // AUTH-07 / GAUTH-04: this closure mints nothing, so evicting a
-    // server-rejected credential here would destroy the host's only copy.
-    return {
-      credentialOps,
-      host,
-      onAuthRequired,
-      evictOnFailure: false,
-    } satisfies GitAuthBundle;
+  if (provider === undefined) {
+    return buildStoredCredentialAuth(host, credentialOps);
   }
 
   const notifyFn = makeRawNotifyFn(ctx);
@@ -214,14 +198,7 @@ export function buildAuthForHost(args: {
     return result;
   };
 
-  // AUTH-07: the provider's Device Flow re-mints on the next operation's fill
-  // miss, so evicting a credential the server rejected is recoverable.
-  return {
-    credentialOps,
-    host,
-    onAuthRequired,
-    evictOnFailure: true,
-  } satisfies GitAuthBundle;
+  return { kind: "device-flow", credentialOps, host, onAuthRequired };
 }
 
 /**
@@ -236,16 +213,15 @@ export function buildAuthForHost(args: {
  *
  * Shared by the install, reinstall, fetch, `info --fetch`, and update probes,
  * and by the pinned and unpinned arms within each, so none of those call
- * sites needs its own copy of this logic. A caller with no notification
- * context -- the autoupdate cascade -- is served by this same helper: the
- * missing `ctx` forwards to `buildAuthForHost`, which declines the Device
- * Flow gracefully instead of crashing (D-3-04).
+ * sites needs its own copy of this logic. The autoupdate cascade has no
+ * notification context, so its update probe calls `buildStoredCredentialAuth`
+ * instead (D-3-04).
  */
 export function buildCloneAuth(
   cloneUrl: string,
   kind: "url" | "git-subdir" | "github",
   auth: {
-    readonly ctx?: NotificationContext;
+    readonly ctx: NotificationContext;
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -254,7 +230,7 @@ export function buildCloneAuth(
   return buildAuthForHost({
     host: hostFromCloneUrl(cloneUrl, kind),
     credentialOps: auth.credentialOps,
-    ...(auth.ctx !== undefined && { ctx: auth.ctx }),
+    ctx: auth.ctx,
     ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
     ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
   });
