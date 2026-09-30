@@ -47,7 +47,7 @@ re-opened.
 4. Failure detail reaches the renderer as a serialized `causeChain: string[]` with a `truncated` flag, plus per-phase rollback entries and manual-recovery leaks as strings. No live `Error` crosses into rendering, and the cause-chain text is byte-identical to the baseline.
 5. The probe-to-marker derivation has its own owner test that states the per-verb suppression table as data. `workflows-marker-coverage` scans the new derivation site and is not deleted.
 
-**Plans:** 13/16 plans executed, sequential (waves 1-16)
+**Plans:** 14/16 plans executed, sequential (waves 1-16)
 
 Plans:
 **Wave 1**
@@ -90,7 +90,7 @@ Plans:
 - [x] 01-13-PLAN.md — Plugin update family and fetch take the run
 
 **Wave 14** *(blocked on Wave 13 completion)*
-- [ ] 01-14-PLAN.md — Plugin list, info, and browse take the run; run-free list payload for tools
+- [x] 01-14-PLAN.md — Plugin list, info, and browse take the run; run-free list payload for tools
 
 **Wave 15** *(blocked on Wave 14 completion)*
 - [ ] 01-15-PLAN.md — Probe-shaped test boundary retired; per-command probe model stated (D-05)
@@ -200,7 +200,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Presentation Model | 13/16 | In Progress | - |
+| 1. Presentation Model | 14/16 | In Progress | - |
 | 2. Row Policies | 0/TBD | Not started | - |
 | 3. Typed Raw Surfaces | 0/TBD | Not started | - |
 | 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |

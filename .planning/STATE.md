@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 01
 current_phase_name: Presentation Model
 status: executing
-stopped_at: Completed 01-13-PLAN.md
-last_updated: "2026-09-30T14:28:00.968Z"
+stopped_at: Completed 01-14-PLAN.md
+last_updated: "2026-09-30T15:49:27.760Z"
 last_activity: 2026-09-30
-last_activity_desc: Completed 01-13 plugin update and fetch run
-state_head: be51ed277b1c8d08d363311ce44a82f6f33b4a46
+last_activity_desc: Completed 01-14 plugin list and info run
+state_head: 27eda1ded3f2778341f9623fd71900d0cb055881
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 16
-  completed_plans: 13
+  completed_plans: 14
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Presentation Model) — EXECUTING
-Plan: 14 of 16
+Plan: 15 of 16
 Status: Ready to execute
-Last activity: 2026-09-30 — Completed 01-13 (plugin update and fetch run)
+Last activity: 2026-09-30 — Completed 01-14 (plugin list and info run)
 
-Progress: [████████░░] 81% (13 of 16 plans)
+Progress: [█████████░] 88% (14 of 16 plans)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,8 +168,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-30T14:28:00.713Z
-**Stopped at:** Completed 01-13-PLAN.md
+**Last session:** 2026-09-30T15:49:03.188Z
+**Stopped at:** Completed 01-14-PLAN.md
 **Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
@@ -212,6 +212,7 @@ archived milestone artifacts.
 | Phase 01 P11 | 81 min | 2 tasks | 19 files |
 | Phase 01 P12 | 62 min | 2 tasks | 27 files |
 | Phase 01 P13 | 75 min | 2 tasks | 18 files |
+| Phase 01 P14 | 77 min | 2 tasks | 17 files |
 
 ## Decisions
 
@@ -244,3 +245,5 @@ archived milestone artifacts.
 - [Phase 01]: ApplyReconcileOptions carries no pi: the backfill hands the load pass's run to reinstall, and index.ts passes applyReconcile only the run it opens (D-07)
 - [Phase 01]: Plugin update and fetch take UpdatePluginsOptions.run and FetchPluginsOptions.run; composeUpdateCascade stamps severity from run.softDeps, the snapshot the markers come from, so no orchestrator probes the tool inventory (D-05)
 - [Phase 01]: makeUpdateHandler and makeFetchHandler take no pi; openNotificationRun is constructed only in edge/register.ts and index.ts (D-07)
+- [Phase 01]: list-flow.ts splits its options: PluginListPayloadOptions carries no run, and ListPluginsOptions extends it with run, so the LLM list tool and the browser's plugin loader build payloads without constructing a run (D-05, IL-2)
+- [Phase 01]: Plugin info takes GetPluginInfoOptions.run; the fan-out and the failure loop render from one snapshot per command, and makeListHandler, makePluginInfoHandler, and makeBrowseHandler take no pi, so no edge handler factory takes pi (D-05, D-07)
