@@ -320,14 +320,14 @@ export function renderMpHeader(mp: ResolvedMarketplace): string {
 // ---------------------------------------------------------------------------
 // File-private renderPluginRow + supporting helpers.
 //
-// MOD-03 / D-02 / D-10: this central switch is NO LONGER the per-row dispatch
-// path for any command's cascade rows. Every state-change producer routes its
+// MOD-03 / D-02 / D-10: this central switch is not the per-row dispatch path
+// for any command's cascade rows. Every state-change producer routes its
 // rows through `notifyWithContext` / `notifyReconcileAppliedWithContext`, which
 // dispatch each per-plugin body via the command's OWN `context.render[status]`
 // map (`emitContextCascade` / `emitReconcileAppliedContextCascade`). A missing
 // or extra arm is now a per-command compile error, not a central concern.
 // This switch survives only as a STATICALLY-REFERENCED seam on the central
-// envelope: the legacy `notify(ctx, pi, message)` cascade arm (reached today
+// envelope: the central `notify(ctx, run, message)` cascade arm (reached
 // only by the `{ marketplaces: [] }` empty sentinel, which short-circuits to
 // `(no marketplaces)` before the plugin loop runs) and the
 // `composeReconcileAppliedBody` arm of `dispatchInfoMessage` (kept for the

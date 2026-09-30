@@ -129,7 +129,7 @@ export default tseslint.config(
         {
           selector: "CallExpression[callee.object.name='console'][callee.property.name='error']",
           message:
-            "console.error is forbidden in the extension (IL-2). Use notify(ctx, pi, NotificationMessage) (failed status carries cause via per-plugin cause?: Error) from shared/notification-dispatch.ts.",
+            "console.error is forbidden in the extension (IL-2). Use notify(ctx, run, NotificationMessage) (failed status carries cause via per-plugin cause?: Error) from shared/notification-dispatch.ts.",
         },
         {
           selector: "CallExpression[callee.object.name='console'][callee.property.name='info']",
@@ -140,7 +140,7 @@ export default tseslint.config(
           selector:
             "CallExpression[callee.property.name='notify'][callee.object.property.name='ui']",
           message:
-            "Direct ctx.ui.notify is forbidden -- use notify(ctx, pi, NotificationMessage) or notifyUsageError(ctx, UsageErrorMessage) from shared/notification-dispatch.ts.",
+            "Direct ctx.ui.notify is forbidden -- use notify(ctx, run, NotificationMessage) or notifyUsageError(ctx, UsageErrorMessage) from shared/notification-dispatch.ts.",
         },
       ],
       // Catches console.debug / console.trace / console.dir which the AST

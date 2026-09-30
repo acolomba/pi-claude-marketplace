@@ -419,13 +419,12 @@ export type PluginUpdateFn = (
  * the edge layer's responsibility; this orchestrator entrypoint
  * accepts already-parsed strings + the resolved scope.
  *
- * `pi` is REQUIRED -- `notify(ctx, pi, message)` consumes it for the
- * single `softDepStatus(pi)` probe per call. The renderer
- * injects per-row `{requires pi-subagents}` / `{requires pi-mcp}`
- * markers from the per-row `dependencies: readonly Dependency[]`
- * declaration combined with the threaded probe. Making `pi`
- * optional would force a runtime branch the type checker cannot reason
- * about.
+ * `run` is REQUIRED -- `notify(ctx, run, message)` reads the command run's
+ * soft-dep snapshot (D-05). Resolve composes per-row
+ * `{requires pi-subagents}` / `{requires pi-mcp}` markers from the per-row
+ * `dependencies: readonly Dependency[]` declaration combined with that
+ * snapshot. Making `run` optional would force a runtime branch the type
+ * checker cannot reason about.
  *
  * SNM-04 / D-15-02: the `"installed"` variant carries REQUIRED
  * `dependencies: readonly Dependency[]` (the closed-set

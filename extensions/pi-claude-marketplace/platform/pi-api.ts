@@ -7,11 +7,11 @@
 // The soft-dependency probes (`hasLoadedPiSubagents` /
 // `hasLoadedPiMcpAdapter` / `hasLoadedWorkflowEngine` / `softDepStatus`) live
 // here because they inspect `pi.getAllTools()`, which belongs to the external
-// Pi API surface. `softDepStatus(pi)` returns a `SoftDepStatus` snapshot that
-// `shared/notification-dispatch.ts` reads once per render to decide whether to
-// append the `requires pi-subagents` / `requires pi-mcp` /
-// `requires pi-dynamic-workflows` markers to a plugin row whose
-// `dependencies` declare the kind.
+// Pi API surface. `softDepStatus` is the probe that `openNotificationRun` takes
+// once per run (D-05). The run's `SoftDepStatus` snapshot decides whether a
+// plugin row whose `dependencies` declare a kind carries the
+// `requires pi-subagents` / `requires pi-mcp` /
+// `requires pi-dynamic-workflows` marker.
 
 export { getAgentDir } from "@earendil-works/pi-coding-agent";
 

@@ -6,22 +6,18 @@ import type { SoftDepStatus } from "../../platform/pi-api.ts";
  * shared/concerns/soft-dep.ts -- the soft-dep marker injection concern (D-01).
  * Owns the `Dependency` literal-union, the three soft-dep marker constants, and
  * the pure `softDepMarkers` helper that maps a per-row declares-flags triple + a
- * threaded `SoftDepStatus` probe to the soft-dep markers to append. The central
- * `composeReasons` (which stays in `notify.ts` as shared presentation
- * vocabulary) delegates its soft-dep branch here.
+ * `SoftDepStatus` snapshot to the soft-dep markers to append.
  *
- * The `softDepStatus(pi)` probe stays threaded by the renderer (environment is
- * the renderer's job); this module is pure given the probe result. `Reason` is
- * imported type-only from `notify.ts` -- the byte-critical `REASONS` tuple stays
- * the single source of catalog truth there, and the type-only import is the
- * cycle safeguard (no `import-x/no-cycle` rule is configured, so the
- * renderer->concern call direction plus type-only back-references prevent any
- * runtime cycle).
+ * Resolve calls `softDepMarkers` with the command run's snapshot (D-05, D-12);
+ * this module never probes and is pure given the snapshot. `Reason` is
+ * imported type-only from `notification-types.ts`, and the type-only import is
+ * the cycle safeguard: the resolve->concern call direction plus type-only
+ * back-references prevent any runtime cycle.
  */
 
 /**
- * Closed set of dependency probe targets (SNM-06). 3 members, each driving the
- * renderer's per-dependency soft-dep probe path (`requires pi-subagents` /
+ * Closed set of dependency probe targets (SNM-06). 3 members, each selecting
+ * the snapshot flag behind one soft-dep marker (`requires pi-subagents` /
  * `requires pi-mcp` / `requires pi-dynamic-workflows` reason emission).
  *
  * Spelled out as a literal union rather than a runtime `DEPENDENCIES` tuple:

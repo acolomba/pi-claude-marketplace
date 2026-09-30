@@ -115,7 +115,7 @@ export const UPDATE_CONTEXT = {
  *                   composes `<name> v<from> → v<to> (updated)`; MSG-SD-3
  *                   allows the soft-dep marker, and `dependencies` carries the
  *                   declared kinds `resolveRows` combines with the
- *                   `softDepStatus(pi)` snapshot.
+ *                   command run's soft-dep snapshot.
  *  - `unchanged` -> `PluginSkippedMessage{ reasons: ["up-to-date"] }`. The
  *                   `skipped` status routes through the warning severity
  *                   ladder -> ⊘ glyph.
