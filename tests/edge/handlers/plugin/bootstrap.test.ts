@@ -5,10 +5,9 @@
 // path rather than the usage-error path. Both facts are visible in how each case
 // sizes the shared boundary: the three rejection sentences reach
 // `notifyUsageError`, which probes nothing, so those cases state one emission and
-// ZERO probes; the delegating and failure cases reach `notify()`. D-05: the
-// workflow's add renders from the run the handler receives and probes nothing;
-// the autoupdate emission and the failure conversion each read the tool list
-// three times. Every count here was measured against the
+// ZERO probes; the delegating and failure cases reach `notify()`, and D-05
+// renders every one of those emissions from the run the handler receives, so
+// they state zero probes too. Every count here was measured against the
 // real module through a counting context before a line was written: the workflow
 // emits twice (add, then autoupdate) and the failure conversion emits once, and
 // the handler reads `ctx.cwd` exactly once on the path that reaches the workflow
@@ -255,9 +254,9 @@ function describeClones(clones: readonly GitCloneCall[], stagingRoot: string): G
 test("clones through the injected git port into the user scope at the accepted arity", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "accepted");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(2, 3, { value: cwd, reads: 1 });
+  const { ctx, verifyBoundary } = createNotificationBoundary(2, 0, { value: cwd, reads: 1 });
   const git = createGitPort(sourceTree);
-  const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+  const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
   // act
   await bootstrapHandler("", ctx, runWithNothingLoaded());
@@ -275,9 +274,9 @@ for (const { args, label, tokens } of [
   test(`rejects ${tokens} with the no-arguments sentence and never reaches the workflow`, async (t) => {
     // arrange
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `positional-${label}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+    const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(args, ctx, runWithNothingLoaded());
@@ -294,9 +293,9 @@ for (const scope of ["user", "project"] satisfies readonly Scope[]) {
   test(`rejects --scope ${scope} as never accepted, because bootstrap always targets the user scope`, async (t) => {
     // arrange
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+    const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(`--scope ${scope}`, ctx, runWithNothingLoaded());
@@ -322,9 +321,9 @@ for (const { args, label, subject } of [
   test(`takes the scope-target flag as a positional and rejects it ${subject}`, async (t) => {
     // arrange
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `scope-target-${label}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+    const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(args, ctx, runWithNothingLoaded());
@@ -348,9 +347,9 @@ for (const { args, label, subject } of [
   test(`reports an unrecognised scope value with the bootstrap usage block when ${subject}`, async (t) => {
     // arrange
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `invalid-scope-${label}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+    const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(args, ctx, runWithNothingLoaded());
@@ -366,12 +365,12 @@ for (const { args, label, subject } of [
 test("converts a thrown bootstrap failure into one failed marketplace row carrying no error text", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "failure");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: cwd,
     reads: 1,
   });
   const git = createGitPort(sourceTree, new Error(REFUSED_CLONE_MESSAGE));
-  const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+  const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
   // act
   await bootstrapHandler("", ctx, runWithNothingLoaded());

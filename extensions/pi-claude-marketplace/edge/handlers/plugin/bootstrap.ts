@@ -15,6 +15,9 @@
 // `bootstrapClaudePlugin` in a catch that routes a thrown failure through
 // the `notify` path as a failed marketplace row -- a raw stack trace
 // must never reach the user channel.
+//
+// D-05: the router's run renders the add, the autoupdate flip, and the
+// handler's own failed row from one soft-dependency snapshot.
 
 import {
   bootstrapClaudePlugin,
@@ -24,14 +27,12 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notify, notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 
-import type { ExtensionAPI } from "../../../platform/pi-api.ts";
 import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
 const USAGE = "Usage: /claude:plugin bootstrap";
 
 export function makeBootstrapHandler(
-  pi: ExtensionAPI,
   deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
 ): SubcommandHandler {
   return async (args, ctx, run): Promise<void> => {
@@ -61,7 +62,6 @@ export function makeBootstrapHandler(
       await bootstrapClaudePlugin({
         ctx,
         run,
-        pi,
         cwd: ctx.cwd,
         completionCache: deps.completionCache,
         gitOps: deps.gitOps,
@@ -76,7 +76,7 @@ export function makeBootstrapHandler(
       // (IL-2). The row stamps caller `severity: "error"` (SEV-02). The
       // marketplace-level row carries no cause chain -- SNM-10 confines
       // `cause` to plugin-level variants.
-      notify(ctx, pi, {
+      notify(ctx, run, {
         marketplaces: [
           {
             name: BOOTSTRAP_MARKETPLACE_NAME,

@@ -582,12 +582,12 @@ describe("registerClaudePluginCommand", () => {
       () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
     );
     await rm(path.dirname(path.dirname(pluginCachePath)), { force: true, recursive: true });
-    // One run, plus the autoupdate notification, which still probes per emission.
+    // The one run is the only probe: add and autoupdate render from it.
     const owner = registerCommandWithCache(
       completionCache,
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       undefined,
-      { runs: 1, probingEmissions: 1 },
+      { runs: 1, probingEmissions: 0 },
       createBootstrapGitOps(sourceTree),
     );
     const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });

@@ -100,7 +100,7 @@ export function registerClaudePluginCommand(
   const browse = makeBrowseHandler(pi, { list, install, uninstall, pluginInfo, enable, disable });
 
   const handlers: SubcommandHandlers = {
-    bootstrap: makeBootstrapHandler(pi, deps),
+    bootstrap: makeBootstrapHandler(deps),
     install,
     uninstall,
     update: makeUpdateHandler(pi, updatePlugins),
@@ -121,8 +121,8 @@ export function registerClaudePluginCommand(
       gitOps: deps.gitOps,
       pluginUpdate: deps.pluginUpdate,
     }),
-    marketplaceAutoupdate: makeAutoupdateHandler(pi, true),
-    marketplaceNoautoupdate: makeAutoupdateHandler(pi, false),
+    marketplaceAutoupdate: makeAutoupdateHandler(true),
+    marketplaceNoautoupdate: makeAutoupdateHandler(false),
     browse,
     help: makeHelpHandler(),
   };

@@ -1,7 +1,7 @@
 // Owner for edge/handlers/marketplace/autoupdate.ts (MOD-09).
 //
-// One factory serves both slash subcommands: `makeAutoupdateHandler(pi, true)`
-// backs `marketplace autoupdate` and `makeAutoupdateHandler(pi, false)` backs
+// One factory serves both slash subcommands: `makeAutoupdateHandler(true)`
+// backs `marketplace autoupdate` and `makeAutoupdateHandler(false)` backs
 // `marketplace noautoupdate`. The two forms differ only in the usage block that
 // boolean selects and in the flip the workflow records, so both arms are driven
 // wherever nothing else separates them.
@@ -26,6 +26,9 @@
 // Both scopes are seeded in every case, rejecting ones included, so a workflow
 // that did run would have marketplaces to flip and files to write.
 //
+// A delegating case also states zero tool probes: D-05 renders the workflow's
+// emission from the run the handler receives.
+//
 // The two scope roots are hand-authored -- `<cwd>/.pi` for the project scope and
 // the directory PI_CODING_AGENT_DIR pins for the user scope (SC-1). Reading the
 // footprint back from those paths keeps "which scope the record landed in" a
@@ -46,6 +49,7 @@ import { test, type TestContext } from "node:test";
 
 import { makeAutoupdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -180,11 +184,11 @@ for (const { enable, expectedMessage, subcommand } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `unknown-flag-${subcommand}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const autoupdateHandler = makeAutoupdateHandler(pi, enable);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const autoupdateHandler = makeAutoupdateHandler(enable);
 
     // act
-    await autoupdateHandler("--frobnicate", ctx);
+    await autoupdateHandler("--frobnicate", ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -201,11 +205,11 @@ for (const { rejectedToken, shape } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "invalid-scope");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const autoupdateHandler = makeAutoupdateHandler(pi, true);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const autoupdateHandler = makeAutoupdateHandler(true);
 
     // act
-    await autoupdateHandler(`--scope ${rejectedToken}`, ctx);
+    await autoupdateHandler(`--scope ${rejectedToken}`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -223,14 +227,14 @@ test("flips every marketplace in both scopes when no scope flag narrows the comm
   // arrange
   const workspace = await createHermeticWorkspace(t, "bare-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const autoupdateHandler = makeAutoupdateHandler(pi, true);
+  const autoupdateHandler = makeAutoupdateHandler(true);
 
   // act
-  await autoupdateHandler("", ctx);
+  await autoupdateHandler("", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -252,14 +256,14 @@ test("flips only the marketplace the name positional selects", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "named-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const autoupdateHandler = makeAutoupdateHandler(pi, true);
+  const autoupdateHandler = makeAutoupdateHandler(true);
 
   // act
-  await autoupdateHandler("alpha", ctx);
+  await autoupdateHandler("alpha", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: "● alpha [project] <autoupdate>" }]);
@@ -271,11 +275,11 @@ test("rejects surplus input without writing either config layer", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus-positional");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const autoupdateHandler = makeAutoupdateHandler(pi, true);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const autoupdateHandler = makeAutoupdateHandler(true);
 
   // act
-  await autoupdateHandler("alpha beta", ctx);
+  await autoupdateHandler("alpha beta", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -320,14 +324,14 @@ for (const { enable, expectedMessage, expectedProjectBase, subcommand } of [
       '{"schemaVersion":1,"marketplaces":{"alpha":{"source":"./alpha-src","autoupdate":true}}}\n',
       "utf8",
     );
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const autoupdateHandler = makeAutoupdateHandler(pi, enable);
+    const autoupdateHandler = makeAutoupdateHandler(enable);
 
     // act
-    await autoupdateHandler("alpha --scope project", ctx);
+    await autoupdateHandler("alpha --scope project", ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -362,14 +366,14 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `scope-${scopeValue}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const autoupdateHandler = makeAutoupdateHandler(pi, true);
+    const autoupdateHandler = makeAutoupdateHandler(true);
 
     // act
-    await autoupdateHandler(`--scope ${scopeValue}`, ctx);
+    await autoupdateHandler(`--scope ${scopeValue}`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -386,14 +390,14 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const autoupdateHandler = makeAutoupdateHandler(pi, true);
+    const autoupdateHandler = makeAutoupdateHandler(true);
 
     // act
-    await autoupdateHandler(args, ctx);
+    await autoupdateHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: "● alpha [project] <autoupdate>" }]);
@@ -406,14 +410,14 @@ test("accepts a scope flag beside the scope-target flag and honors both selector
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const autoupdateHandler = makeAutoupdateHandler(pi, true);
+  const autoupdateHandler = makeAutoupdateHandler(true);
 
   // act
-  await autoupdateHandler("--scope project --local", ctx);
+  await autoupdateHandler("--scope project --local", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [

@@ -12,6 +12,7 @@ import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistenc
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -19,7 +20,8 @@ import type {
   ExtensionState,
   PluginInstallRecord,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface ExactNotification {
   readonly message: string;
@@ -34,20 +36,20 @@ interface MatchedNotification {
 type NotificationExpectation = ExactNotification | MatchedNotification;
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 
+/**
+ * The strict context boundary for one emission. D-05: the emission renders
+ * from the run's snapshot, so no tool inventory is present to probe.
+ */
 function notificationBoundary(expectation: NotificationExpectation): {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   readonly ui: ExtensionContext["ui"];
 } {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
   if ("message" in expectation) {
     if (expectation.severity === undefined) {
       when(() => {
@@ -64,7 +66,7 @@ function notificationBoundary(expectation: NotificationExpectation): {
     }).thenReturn(undefined);
   }
 
-  return { ctx, pi, ui };
+  return { ctx, run: runWithNothingLoaded(), ui };
 }
 
 function marketplaceRecord(
@@ -196,7 +198,7 @@ for (const scenario of oneRowInvocationCases) {
       // act
       await setMarketplaceAutoupdate({
         ctx: boundary.ctx,
-        pi: boundary.pi,
+        run: boundary.run,
         enable: true,
         cwd,
         ...scenario.invocation,
@@ -207,7 +209,6 @@ for (const scenario of oneRowInvocationCases) {
       assert.equal(await readOptionalBytes(locations.configLocalJsonPath), undefined);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
       verify(boundary.ctx);
-      verify(boundary.pi);
       verify(boundary.ui);
     });
   });
@@ -248,7 +249,7 @@ test("disables one project marketplace when base config is enabled", async () =>
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "mp",
       enable: false,
       scope: "project",
@@ -259,7 +260,6 @@ test("disables one project marketplace when base config is enabled", async () =>
     assert.equal(await readFile(locations.configJsonPath, "utf8"), expectedConfigBytes);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -282,7 +282,7 @@ test("reports an already-enabled base entry without changing bytes or metadata",
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "mp",
       enable: true,
       scope: "project",
@@ -293,7 +293,6 @@ test("reports an already-enabled base entry without changing bytes or metadata",
     assert.deepEqual(await configSnapshot(locations.configJsonPath), configBefore);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -316,7 +315,7 @@ test("reports an already-disabled base entry without changing bytes or metadata"
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "mp",
       enable: false,
       scope: "project",
@@ -327,7 +326,6 @@ test("reports an already-disabled base entry without changing bytes or metadata"
     assert.deepEqual(await configSnapshot(locations.configJsonPath), configBefore);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -375,7 +373,7 @@ test("enables all project marketplaces in changed-before-unchanged order with on
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       enable: true,
       scope: "project",
       cwd,
@@ -385,7 +383,6 @@ test("enables all project marketplaces in changed-before-unchanged order with on
     assert.equal(await readFile(locations.configJsonPath, "utf8"), expectedConfigBytes);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -402,7 +399,7 @@ test("reports an empty implicit two-scope inventory without creating files", asy
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       enable: true,
       cwd,
     });
@@ -413,7 +410,6 @@ test("reports an empty implicit two-scope inventory without creating files", asy
     assert.equal(await readOptionalBytes(userLocations.stateJsonPath), undefined);
     assert.equal(await readOptionalBytes(userLocations.configJsonPath), undefined);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -430,7 +426,7 @@ test("finds a named user marketplace after an implicit project miss", async () =
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "only",
       enable: true,
       cwd,
@@ -444,7 +440,6 @@ test("finds a named user marketplace after an implicit project miss", async () =
     );
     assert.equal(await readFile(userLocations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -461,7 +456,7 @@ test("reports a named marketplace absent from both implicit scopes", async () =>
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "missing-mp",
       enable: true,
       cwd,
@@ -469,7 +464,6 @@ test("reports a named marketplace absent from both implicit scopes", async () =>
 
     // assert
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -486,7 +480,7 @@ test("reports a named marketplace absent from an explicit user scope", async () 
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "missing-mp",
       enable: false,
       scope: "user",
@@ -495,7 +489,6 @@ test("reports a named marketplace absent from an explicit user scope", async () 
 
     // assert
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -529,7 +522,7 @@ test("writes a user marketplace only to the local config layer", async () => {
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "mp",
       enable: true,
       scope: "user",
@@ -542,7 +535,6 @@ test("writes a user marketplace only to the local config layer", async () => {
     assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), expectedLocalBytes);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -558,7 +550,7 @@ test("orchestrated enable preserves semantic output while suppressing config wri
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "mp",
       enable: true,
       scope: "project",
@@ -571,7 +563,6 @@ test("orchestrated enable preserves semantic output while suppressing config wri
     assert.equal(await readOptionalBytes(locations.configLocalJsonPath), undefined);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -592,7 +583,7 @@ test("orchestrated enable preserves an existing config source and opposite value
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "mp",
       enable: true,
       scope: "project",
@@ -604,7 +595,6 @@ test("orchestrated enable preserves an existing config source and opposite value
     assert.deepEqual(await configSnapshot(locations.configJsonPath), configBefore);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -625,7 +615,7 @@ test("standalone enable reports an unsynthesizable source without writing config
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "odd",
       enable: true,
       scope: "project",
@@ -636,7 +626,6 @@ test("standalone enable reports an unsynthesizable source without writing config
     assert.equal(await readOptionalBytes(locations.configJsonPath), undefined);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -657,7 +646,7 @@ test("orchestrated enable reports an unsynthesizable source without writing conf
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "odd",
       enable: true,
       scope: "project",
@@ -669,7 +658,6 @@ test("orchestrated enable reports an unsynthesizable source without writing conf
     assert.equal(await readOptionalBytes(locations.configJsonPath), undefined);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -696,7 +684,7 @@ test("rejects malformed base config with a basename-only failure and unchanged s
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "mp",
       enable: true,
       scope: "project",
@@ -707,7 +695,6 @@ test("rejects malformed base config with a basename-only failure and unchanged s
     assert.equal(await readFile(locations.configJsonPath, "utf8"), configBytes);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -738,7 +725,7 @@ test("rejects schema-invalid local config with a basename-only failure and uncha
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "mp",
       enable: true,
       scope: "project",
@@ -750,7 +737,6 @@ test("rejects schema-invalid local config with a basename-only failure and uncha
     assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), configBytes);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -776,7 +762,7 @@ test("rejects a local config read failure without replacing the directory", asyn
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "mp",
       enable: true,
       scope: "project",
@@ -788,7 +774,6 @@ test("rejects a local config read failure without replacing the directory", asyn
     assert.equal((await stat(locations.configLocalJsonPath)).isDirectory(), true);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -818,7 +803,7 @@ test("reports a held named scope lock and succeeds after the lock is released", 
     // act
     await setMarketplaceAutoupdate({
       ctx: blockedBoundary.ctx,
-      pi: blockedBoundary.pi,
+      run: blockedBoundary.run,
       name: "mp",
       enable: true,
       scope: "project",
@@ -827,7 +812,7 @@ test("reports a held named scope lock and succeeds after the lock is released", 
     await release();
     await setMarketplaceAutoupdate({
       ctx: retryBoundary.ctx,
-      pi: retryBoundary.pi,
+      run: retryBoundary.run,
       name: "mp",
       enable: true,
       scope: "project",
@@ -841,10 +826,8 @@ test("reports a held named scope lock and succeeds after the lock is released", 
     );
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(blockedBoundary.ctx);
-    verify(blockedBoundary.pi);
     verify(blockedBoundary.ui);
     verify(retryBoundary.ctx);
-    verify(retryBoundary.pi);
     verify(retryBoundary.ui);
   });
 });
@@ -874,7 +857,7 @@ test("reports a held unnamed scope lock against the unknown aggregate subject", 
     // act
     await setMarketplaceAutoupdate({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       enable: false,
       scope: "project",
       cwd,
@@ -884,7 +867,6 @@ test("reports a held unnamed scope lock against the unknown aggregate subject", 
     // assert
     assert.equal(await readOptionalBytes(locations.configJsonPath), undefined);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -911,7 +893,7 @@ test("keeps config absent after an atomic write refusal and converges on retry",
     try {
       await setMarketplaceAutoupdate({
         ctx: failedBoundary.ctx,
-        pi: failedBoundary.pi,
+        run: failedBoundary.run,
         name: "mp",
         enable: true,
         scope: "project",
@@ -924,7 +906,7 @@ test("keeps config absent after an atomic write refusal and converges on retry",
     const configAfterFailure = await readOptionalBytes(locations.configJsonPath);
     await setMarketplaceAutoupdate({
       ctx: retryBoundary.ctx,
-      pi: retryBoundary.pi,
+      run: retryBoundary.run,
       name: "mp",
       enable: true,
       scope: "project",
@@ -939,10 +921,8 @@ test("keeps config absent after an atomic write refusal and converges on retry",
     );
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(failedBoundary.ctx);
-    verify(failedBoundary.pi);
     verify(failedBoundary.ui);
     verify(retryBoundary.ctx);
-    verify(retryBoundary.pi);
     verify(retryBoundary.ui);
   });
 });
@@ -981,7 +961,7 @@ test("retains a committed project flip when the user scope is locked and converg
     // act
     await setMarketplaceAutoupdate({
       ctx: partialBoundary.ctx,
-      pi: partialBoundary.pi,
+      run: partialBoundary.run,
       name: "shared",
       enable: true,
       cwd,
@@ -991,7 +971,7 @@ test("retains a committed project flip when the user scope is locked and converg
     await release();
     await setMarketplaceAutoupdate({
       ctx: retryBoundary.ctx,
-      pi: retryBoundary.pi,
+      run: retryBoundary.run,
       name: "shared",
       enable: true,
       cwd,
@@ -1010,10 +990,8 @@ test("retains a committed project flip when the user scope is locked and converg
     assert.equal(await readFile(projectLocations.stateJsonPath, "utf8"), projectStateBytes);
     assert.equal(await readFile(userLocations.stateJsonPath, "utf8"), userStateBytes);
     verify(partialBoundary.ctx);
-    verify(partialBoundary.pi);
     verify(partialBoundary.ui);
     verify(retryBoundary.ctx);
-    verify(retryBoundary.pi);
     verify(retryBoundary.ui);
   });
 });

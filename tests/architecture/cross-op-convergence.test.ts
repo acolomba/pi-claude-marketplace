@@ -211,10 +211,10 @@ const INVOKERS: Record<string, Invoker> = {
     });
   },
   // autoupdate flip. autoupdate.test.ts ATTR-05.
-  autoupdate: async ({ ctx, pi, cwd, mode }) => {
+  autoupdate: async ({ ctx, run, cwd, mode }) => {
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run,
       name: NAME,
       enable: true,
       cwd,

@@ -214,7 +214,6 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
     await mkdir(locations.extensionRoot, { recursive: true });
 
     const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -253,7 +252,7 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
     // 2. Flip autoupdate ON via the orchestrator.
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       name: "valid-marketplace",
       enable: true,
       scope: "project",
@@ -307,7 +306,6 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
     await mkdir(locations.extensionRoot, { recursive: true });
 
     const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -323,7 +321,7 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
     });
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       name: "valid-marketplace",
       enable: true,
       scope: "project",
@@ -332,7 +330,7 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
     // Now flip back OFF.
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       name: "valid-marketplace",
       enable: false,
       scope: "project",
@@ -433,7 +431,6 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
     await mkdir(locations.extensionRoot, { recursive: true });
 
     const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
 
     function mpRecord(name: string): Record<string, unknown> {
       return {
@@ -455,7 +452,7 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
     // Bare form: NO name -- every marketplace in the scope flips.
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       enable: true,
       scope: "project",
       cwd,

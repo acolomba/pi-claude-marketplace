@@ -3,7 +3,7 @@
 // MAU-1, MAU-2, MAU-3, MAU-4 + SC-6 + NFR-5.
 //
 // Each orchestration emits a single
-// notify(opts.ctx, opts.pi, { marketplaces: [...] }) call. Outcomes map to
+// notify(opts.ctx, opts.run, { marketplaces: [...] }) call. Outcomes map to
 // the 7-entry MarketplaceStatus grammar (+ optional `reasons?:`):
 //
 //  - enable fresh -> status: "autoupdate enabled"
@@ -52,7 +52,7 @@
 //  accumulate result.changed[] and result.unchanged[] across scopes
 //
 //  compose one MarketplaceNotificationMessage per outcome; emit ONE
-//  notify(opts.ctx, opts.pi,...) call. The caller-supplied order is honored
+//  notify(opts.ctx, opts.run,...) call. The caller-supplied order is honored
 //  end-to-end; the SC-6 scopes-loop order (project-then-user) is the visible
 //  iteration order. No alphabetic sort -- the renderer does not sort and the
 //  orchestrator must not re-sort.
@@ -85,7 +85,8 @@ import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging
 import { classifyAutoupdateFlip, crossScopeFlag } from "./shared.ts";
 
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -101,12 +102,11 @@ export type AutoupdateNotifications =
 export interface AutoupdateOptions {
   readonly ctx: NotificationContext;
   /**
-   * Soft-dep probe target, consumed by the `notify(ctx, pi, message)` calls
-   * below to drive the single per-invocation soft-dep probe -- even though
-   * mp-level rows never inject soft-dep markers, the probe is threaded through
-   * every notify entry for invariant symmetry.
+   * D-05 / D-07: the command's run, or the bootstrap run when bootstrap drives
+   * the flip. Every emission renders from its soft-dependency snapshot, even
+   * though marketplace-level rows never carry soft-dep markers.
    */
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   /** When undefined, flip every marketplace in target scope(s). */
   readonly name?: string;
   /** true -> autoupdate; false -> noautoupdate. */
@@ -249,7 +249,7 @@ function notifyAutoupdateScopeFailure(
   ];
   notifyWithContext(
     opts.ctx,
-    opts.pi,
+    opts.run,
     flipContextFor(opts.enable),
     failedRows,
     undefined,
@@ -551,7 +551,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
       // observed), per the RESEARCH recommendation.
       const failureName = opts.name;
       const missScope = opts.scope ?? first.scope;
-      notify(opts.ctx, opts.pi, {
+      notify(opts.ctx, opts.run, {
         kind: "marketplace-not-added",
         name: failureName,
         scope: missScope,
@@ -571,13 +571,13 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   // OUT-07 / D-12: empty inventory -> Plural (zero rows).
   if (rows.length === 0) {
     const emptyRows: Plural<MarketplaceRows<PluginFailedMessage>> = [];
-    notifyWithContext(opts.ctx, opts.pi, flipContext, emptyRows, undefined, cardinality);
+    notifyWithContext(opts.ctx, opts.run, flipContext, emptyRows, undefined, cardinality);
     return;
   }
 
   // NotificationMessage construction recipe:
   // - One MarketplaceNotificationMessage per outcome, emitted via ONE
-  //   notify(opts.ctx, opts.pi, ...) call; `plugins: []` is required.
+  //   notify(opts.ctx, opts.run, ...) call; `plugins: []` is required.
   // - Discriminator: mp.status drawn from { "autoupdate enabled",
   //   "autoupdate disabled", "skipped" }; idempotent flips additionally carry
   //   `reasons: ["already autoupdate" | "already no autoupdate"]`.
@@ -637,5 +637,5 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   // OUT-07 / D-12: bulk multi-marketplace flip cascade -> Plural. The
   // autoupdate enabled/disabled/skipped/failed headers render via the central
   // seam; the command is selected by the boolean `opts.enable` flag.
-  notifyWithContext(opts.ctx, opts.pi, flipContext, marketplaces, undefined, cardinality);
+  notifyWithContext(opts.ctx, opts.run, flipContext, marketplaces, undefined, cardinality);
 }
