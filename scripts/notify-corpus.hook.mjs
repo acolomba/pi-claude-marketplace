@@ -12,12 +12,18 @@ import path from "node:path";
  * receiver `X.ui` once and calls `ui.notify` with `this === ui`, so strict call-count mocks on
  * `ctx.ui` still pass.
  *
+ * `X` must be a bare identifier. A module that spells any other `ui.notify(` call, such as a
+ * member-access receiver (`opts.ctx.ui.notify(`) or a destructured `ui.notify(`, fails to load
+ * with an error, because the rewrite would break the first and miss the second.
+ *
  * The preload does nothing unless `NOTIFY_CORPUS_OUT` names an output directory. It records only
  * when the process entry point is a `.test.ts` file, so a child that a test forks never adds
  * entries. Each process appends to its own `<pid>.jsonl` file in that directory.
  */
 
 const outputDirectory = process.env.NOTIFY_CORPUS_OUT;
+// `X.ui.notify(` where `X` is a bare identifier: no `.`, word, or `$` character precedes it.
+const bareReceiverCall = /(?<![\w$.])([A-Za-z_$][\w$]*)\.ui\.notify\(/g;
 
 if (outputDirectory !== undefined && outputDirectory !== "") {
   const entryPoint = process.argv[1] ?? "";
@@ -50,10 +56,16 @@ if (outputDirectory !== undefined && outputDirectory !== "") {
       // The hook runs before type stripping, so the source is still TypeScript.
       const text =
         typeof result.source === "string" ? result.source : new TextDecoder().decode(result.source);
-      const source = text.replace(
-        /\b([A-Za-z_$][\w$]*)\.ui\.notify\(/g,
-        "globalThis.__corpusNotify($1.ui, ",
-      );
+      const source = text.replace(bareReceiverCall, "globalThis.__corpusNotify($1.ui, ");
+      const calls = text.split("ui.notify(").length - 1;
+      const rewritten = text.match(bareReceiverCall)?.length ?? 0;
+
+      if (rewritten !== calls) {
+        throw new Error(
+          `notify-corpus: ${url} spells ${calls} ui.notify( calls, but only ${rewritten} have ` +
+            "the bare `X.ui.notify(` receiver the hook can rewrite",
+        );
+      }
 
       return { ...result, source };
     },

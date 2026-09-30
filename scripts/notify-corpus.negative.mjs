@@ -1,7 +1,7 @@
 // fallow-ignore-file unused-file -- operator-run negative controls for notify-corpus.mjs (D-04): an engineer runs it from the command line and no npm script or module imports it.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,7 @@ import { diffCorpus, parseCorpus, serializeCorpus } from "./notify-corpus.mjs";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const toolPath = fileURLToPath(new URL("notify-corpus.mjs", import.meta.url));
+const hookUrl = new URL("notify-corpus.hook.mjs", import.meta.url).href;
 const fixtureRoot = await mkdtemp(path.join(tmpdir(), "notify-corpus-negative-"));
 const baselinePath = path.join(fixtureRoot, "baseline.jsonl");
 const scratchPath = path.join(fixtureRoot, "scratch.jsonl");
@@ -101,6 +102,37 @@ try {
 
   assert.ok(captured.length >= 1, "the capture recorded no notify call");
   assert.ok(captured.every((entry) => entry.file === endToEndTest));
+
+  // Control 5: `--files` ends at the next flag, so an existing `--out` file after it is
+  // overwritten rather than run as a test file.
+  const reorderedRun = runTool(["capture", "--files", endToEndTest, "--out", capturePath]);
+
+  assert.equal(reorderedRun.status, 0, reorderedRun.stderr);
+  assert.deepStrictEqual(parseCorpus(await readFile(capturePath, "utf8")), captured);
+
+  // Control 6: the hook loads a bare `X.ui.notify(` receiver and refuses any other spelling.
+  const plantedRoot = path.join(fixtureRoot, "extensions/pi-claude-marketplace");
+
+  await mkdir(plantedRoot, { recursive: true });
+
+  for (const { name, body, refused } of [
+    { name: "bare", body: 'ctx.ui.notify("x");', refused: false },
+    { name: "member", body: 'opts.ctx.ui.notify("x");', refused: true },
+    { name: "destructured", body: 'const { ui } = ctx;\n  ui.notify("x");', refused: true },
+  ]) {
+    const plantedPath = path.join(plantedRoot, `${name}.ts`);
+
+    await writeFile(plantedPath, `function emit(ctx, opts) {\n  ${body}\n}\n`);
+
+    const loadRun = spawnSync(process.execPath, ["--import", hookUrl, plantedPath], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      env: { ...process.env, NOTIFY_CORPUS_OUT: fixtureRoot },
+    });
+
+    assert.equal(loadRun.status === 0, !refused, `${name}: ${loadRun.stderr}`);
+    assert.equal(/notify-corpus: .* spells 1 ui\.notify\( calls/.test(loadRun.stderr), refused);
+  }
 
   process.stdout.write("Notify corpus negative controls passed.\n");
 } finally {

@@ -23,7 +23,8 @@ import { fileURLToPath } from "node:url";
  * runs this tool.
  *
  * Its companion `.negative.mjs` plants a drift and a shrunken capture and proves the diff reports
- * both.
+ * both. It also plants `ui.notify(` spellings the hook cannot rewrite and proves the hook refuses
+ * them at load.
  */
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -295,13 +296,25 @@ function readCorpus(corpusPath) {
   return parseCorpus(readFileSync(corpusPath, "utf8"));
 }
 
+// The values after `flag`, up to the next `--` flag, so flags may come in any order.
+function flagValues(args, flag) {
+  const start = args.indexOf(flag);
+
+  if (start === -1) {
+    return [];
+  }
+
+  const rest = args.slice(start + 1);
+  const end = rest.findIndex((arg) => arg.startsWith("--"));
+
+  return end === -1 ? rest : rest.slice(0, end);
+}
+
 // `capture --out <file> [--files <path> ...]`
 function parseCaptureArgs(args) {
   const outIndex = args.indexOf("--out");
-  const filesIndex = args.indexOf("--files");
   const outPath = outIndex === -1 ? undefined : args[outIndex + 1];
-  const files =
-    filesIndex === -1 ? [] : args.slice(filesIndex + 1).filter((arg) => !arg.startsWith("--"));
+  const files = flagValues(args, "--files");
 
   if (outPath === undefined || outPath.startsWith("--")) {
     throw new Error("capture needs --out <file>");
