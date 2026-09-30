@@ -44,6 +44,7 @@ import { DEFAULT_STATE } from "../../extensions/pi-claude-marketplace/persistenc
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 
@@ -389,7 +390,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
     await removeMarketplace({
       completionCache,
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       name: "valid-marketplace",
       scope: "project",
       cwd,

@@ -60,11 +60,13 @@ import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketp
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type {
   NotificationContext,
   ToolInventory,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 // ---------------------------------------------------------------------------
 // Hermetic harness -- mirrors the per-op orchestrator test idiom
@@ -133,11 +135,13 @@ interface Emission {
  * Invoke a real orchestrator against a missing marketplace and return its sole
  * notify emission. Each invoker is the EXACT call shape copied from that op's
  * own orchestrator test file. `mode` selects the explicit-scope vs bare-form
- * invocation (install has no bare form).
+ * invocation (install has no bare form). Ops that render from the command's
+ * run read `run`; the others still take the tool inventory `pi`.
  */
 type Invoker = (env: {
   ctx: NotificationContext;
   pi: ToolInventory;
+  run: NotificationRun;
   cwd: string;
   mode: "explicit" | "bare";
 }) => Promise<void>;
@@ -196,11 +200,11 @@ const INVOKERS: Record<string, Invoker> = {
     });
   },
   // marketplace remove. remove.test.ts ATTR-06 S3/S4.
-  "marketplace remove": async ({ ctx, pi, cwd, mode }) => {
+  "marketplace remove": async ({ ctx, run, cwd, mode }) => {
     await removeMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: NAME,
       cwd,
       ...(mode === "explicit" && { scope: "project" as const }),
@@ -221,12 +225,12 @@ const INVOKERS: Record<string, Invoker> = {
   // injected so a (regression) stray network call would be recorded; the
   // pre-guard miss short-circuits before it is reached (NFR-5). update-flow.test.ts
   // SC#1.
-  "marketplace update": async ({ ctx, pi, cwd, mode }) => {
+  "marketplace update": async ({ ctx, run, cwd, mode }) => {
     const { gitOps } = createGitOps();
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: NAME,
       cwd,
       gitOps,
@@ -240,7 +244,7 @@ async function captureOp(op: string, mode: "explicit" | "bare"): Promise<Emissio
     const { ctx, pi, notifications } = makeCtx();
     const invoke = INVOKERS[op];
     assert.ok(invoke !== undefined, `no invoker registered for op "${op}"`);
-    await invoke({ ctx, pi, cwd, mode });
+    await invoke({ ctx, pi, run: runWithNothingLoaded(), cwd, mode });
     const first = notifications[0];
     return {
       body: first?.message ?? "",

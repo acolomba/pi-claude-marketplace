@@ -21,16 +21,15 @@ import {
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
 const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]";
 
 export function makeMarketplaceUpdateHandler(
-  pi: ExtensionAPI,
   deps: Pick<EdgeDeps, "completionCache" | "gitOps" | "pluginUpdate">,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     const parsed = parseCommandArgs(
       args,
       {
@@ -54,7 +53,7 @@ export function makeMarketplaceUpdateHandler(
       await updateAllMarketplaces({
         completionCache: deps.completionCache,
         ctx,
-        pi,
+        run,
         cwd: ctx.cwd,
         gitOps: deps.gitOps,
         pluginUpdate: deps.pluginUpdate,
@@ -66,7 +65,7 @@ export function makeMarketplaceUpdateHandler(
     await updateMarketplace({
       completionCache: deps.completionCache,
       ctx,
-      pi,
+      run,
       name: parsed.name,
       cwd: ctx.cwd,
       gitOps: deps.gitOps,

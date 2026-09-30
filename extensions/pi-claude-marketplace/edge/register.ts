@@ -113,10 +113,10 @@ export function registerClaudePluginCommand(
     disable,
     import: makeImportHandler(pi, deps, hooksRouting),
     marketplaceAdd: makeAddHandler(pi, deps),
-    marketplaceRemove: makeRemoveHandler(pi, deps),
+    marketplaceRemove: makeRemoveHandler(deps),
     marketplaceList: makeMarketplaceListHandler(),
     marketplaceInfo: makeMarketplaceInfoHandler(),
-    marketplaceUpdate: makeMarketplaceUpdateHandler(pi, {
+    marketplaceUpdate: makeMarketplaceUpdateHandler({
       completionCache: deps.completionCache,
       gitOps: deps.gitOps,
       pluginUpdate: deps.pluginUpdate,

@@ -220,7 +220,7 @@ async function applyMarketplaceRemoves(
     try {
       const result = await removeMarketplace({
         ctx: opts.ctx,
-        pi: opts.pi,
+        run: opts.run,
         name: op.marketplace,
         completionCache: opts.completionCache,
         scope: op.scope,

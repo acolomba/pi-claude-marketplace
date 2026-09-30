@@ -55,7 +55,8 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { OnAuthRequiredFn } from "../../platform/git.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -580,11 +581,12 @@ async function resolveScopeFromState(
  * arise later inside the caller's refresh path and keep their `(failed)`
  * cascade.
  *
- * Takes the structural subset of the caller opts ({ ctx, pi, name, scope? })
+ * Takes the structural subset of the caller opts ({ ctx, run, name, scope? })
  * so both UpdateMarketplaceOptions and RemoveMarketplaceOptions satisfy it.
+ * D-05: both not-added emissions render from the command run's snapshot.
  */
 export async function resolveScopeOrNotifyNotAdded(
-  opts: { ctx: NotificationContext; pi: ToolInventory; name: string; scope?: Scope },
+  opts: { ctx: NotificationContext; run: NotificationRun; name: string; scope?: Scope },
   userLocations: ScopedLocations,
   projectLocations: ScopedLocations,
 ): Promise<{ scope: Scope; locations: ScopedLocations } | undefined> {
@@ -594,7 +596,7 @@ export async function resolveScopeOrNotifyNotAdded(
       return await resolveScopeFromState(opts.name, userLocations, projectLocations);
     } catch (err) {
       if (err instanceof MarketplaceNotFoundError) {
-        notify(opts.ctx, opts.pi, { kind: "marketplace-not-added", name: opts.name });
+        notify(opts.ctx, opts.run, { kind: "marketplace-not-added", name: opts.name });
         return undefined;
       }
 
@@ -614,7 +616,7 @@ export async function resolveScopeOrNotifyNotAdded(
       () => otherLocations,
       opts.name,
     );
-    notify(opts.ctx, opts.pi, {
+    notify(opts.ctx, opts.run, {
       kind: "marketplace-not-added",
       name: opts.name,
       scope: opts.scope,

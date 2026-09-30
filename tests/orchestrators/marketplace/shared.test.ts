@@ -30,6 +30,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type {
   AutoupdateFlipResult,
@@ -41,10 +42,8 @@ import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/pers
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -229,19 +228,20 @@ async function saveMarketplaces(
   });
 }
 
+/**
+ * The strict context boundary for `resolveScopeOrNotifyNotAdded`. D-05: the
+ * not-added emission renders from the run's snapshot, so no tool inventory
+ * is present to probe.
+ */
 function notificationBoundary(expectation?: NotificationExpectation): {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   verifyAll(): void;
 } {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
   if (expectation !== undefined) {
     when(() => ctx.ui).thenReturn(ui);
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
     when(() => {
       ui.notify(expectation.message, expectation.severity);
     }).thenReturn(undefined);
@@ -249,10 +249,9 @@ function notificationBoundary(expectation?: NotificationExpectation): {
 
   return {
     ctx,
-    pi,
+    run: runWithNothingLoaded(),
     verifyAll(): void {
       verify(ctx);
-      verify(pi);
       verify(ui);
     },
   };
@@ -1114,7 +1113,7 @@ test("resolveScopeOrNotifyNotAdded gives project scope precedence when both scop
 
   // act
   const resolved = await resolveScopeOrNotifyNotAdded(
-    { ctx: boundary.ctx, pi: boundary.pi, name: "official" },
+    { ctx: boundary.ctx, run: boundary.run, name: "official" },
     user.locations,
     project.locations,
   );
@@ -1150,7 +1149,7 @@ test("resolveScopeOrNotifyNotAdded selects the sole user-scope record", async (t
 
   // act
   const resolved = await resolveScopeOrNotifyNotAdded(
-    { ctx: boundary.ctx, pi: boundary.pi, name: "official" },
+    { ctx: boundary.ctx, run: boundary.run, name: "official" },
     user.locations,
     project.locations,
   );
@@ -1182,7 +1181,7 @@ test("resolveScopeOrNotifyNotAdded returns a bare resolved scope without notific
 
   // act
   const resolved = await resolveScopeOrNotifyNotAdded(
-    { ctx: boundary.ctx, pi: boundary.pi, name: "official" },
+    { ctx: boundary.ctx, run: boundary.run, name: "official" },
     user.locations,
     project.locations,
   );
@@ -1211,7 +1210,7 @@ test("resolveScopeOrNotifyNotAdded emits exact bytes for a bare miss", async (t)
 
   // act
   const resolved = await resolveScopeOrNotifyNotAdded(
-    { ctx: boundary.ctx, pi: boundary.pi, name: "missing" },
+    { ctx: boundary.ctx, run: boundary.run, name: "missing" },
     user.locations,
     project.locations,
   );
@@ -1241,7 +1240,7 @@ test("resolveScopeOrNotifyNotAdded rethrows a non-not-found read failure without
   // act
   try {
     await resolveScopeOrNotifyNotAdded(
-      { ctx: boundary.ctx, pi: boundary.pi, name: "official" },
+      { ctx: boundary.ctx, run: boundary.run, name: "official" },
       user.locations,
       project.locations,
     );
@@ -1270,7 +1269,7 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
 
     // act
     const resolved = await resolveScopeOrNotifyNotAdded(
-      { ctx: boundary.ctx, pi: boundary.pi, name: "official", scope },
+      { ctx: boundary.ctx, run: boundary.run, name: "official", scope },
       user.locations,
       project.locations,
     );
@@ -1296,7 +1295,7 @@ test("resolveScopeOrNotifyNotAdded emits exact scoped bytes for an explicit miss
 
   // act
   const resolved = await resolveScopeOrNotifyNotAdded(
-    { ctx: boundary.ctx, pi: boundary.pi, name: "missing", scope: "user" },
+    { ctx: boundary.ctx, run: boundary.run, name: "missing", scope: "user" },
     user.locations,
     project.locations,
   );
@@ -1319,7 +1318,7 @@ test("resolveScopeOrNotifyNotAdded names the sibling scope holding the container
 
   // act
   const resolved = await resolveScopeOrNotifyNotAdded(
-    { ctx: boundary.ctx, pi: boundary.pi, name: "official", scope: "user" },
+    { ctx: boundary.ctx, run: boundary.run, name: "official", scope: "user" },
     userLocations,
     projectLocations,
   );
@@ -1345,7 +1344,7 @@ test("resolveScopeOrNotifyNotAdded names the user scope holding the container on
 
   // act
   const resolved = await resolveScopeOrNotifyNotAdded(
-    { ctx: boundary.ctx, pi: boundary.pi, name: "official", scope: "project" },
+    { ctx: boundary.ctx, run: boundary.run, name: "official", scope: "project" },
     userLocations,
     projectLocations,
   );

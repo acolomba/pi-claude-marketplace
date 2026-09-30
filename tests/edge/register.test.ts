@@ -799,12 +799,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
-  // One run, plus the remove notification, which still probes per emission.
+  // The one run is the only probe: the remove notification renders from it.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1, probingEmissions: 1 },
+    { runs: 1, probingEmissions: 0 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -908,12 +908,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
-  // One run, plus the update notification, which still probes per emission.
+  // The one run is the only probe: the update notification renders from it.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1, probingEmissions: 1 },
+    { runs: 1, probingEmissions: 0 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });

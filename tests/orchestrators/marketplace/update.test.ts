@@ -35,6 +35,7 @@ import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type {
@@ -43,10 +44,8 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
-import type {
-  NotificationContext,
-  ToolInventory,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 function createUpdateSinglePlugin(): PluginUpdateFn {
@@ -178,9 +177,13 @@ interface NotifyRecord {
   severity?: Severity;
 }
 
+/**
+ * A recording context and the command's run. D-05: every emission renders
+ * from the run's snapshot, which reports no companion loaded.
+ */
 function makeCtx(): {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  run: NotificationRun;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -191,8 +194,7 @@ function makeCtx(): {
       },
     },
   };
-  const pi: ToolInventory = { getAllTools: () => [] };
-  return { ctx, pi, notifications };
+  return { ctx, run: runWithNothingLoaded(), notifications };
 }
 
 async function withHermeticHome<T>(
@@ -325,7 +327,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-403", ref: "main" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const transportError = Object.assign(new Error("HTTP 403 from fetch"), {
       code: "HttpError",
       data: { statusCode: 403 },
@@ -336,7 +338,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "urlmp-403",
       scope: "project",
       cwd,
@@ -359,7 +361,7 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-500", ref: "main" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const transportError = Object.assign(new Error("HTTP 500 from fetch"), {
       code: "HttpError",
       data: { statusCode: 500 },
@@ -370,7 +372,7 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "urlmp-500",
       scope: "project",
       cwd,
@@ -395,7 +397,7 @@ test("marketplace update transport: folds a non-Error rejection into network unr
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-string", ref: "main" });
     const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
     const manifestBytes = await readFile(manifestPath, "utf8");
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const git = createGitOps();
     const gitOps: GitOps = {
       ...git.gitOps,
@@ -407,7 +409,7 @@ test("marketplace update transport: folds a non-Error rejection into network unr
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "urlmp-string",
       scope: "project",
       cwd,
@@ -430,7 +432,7 @@ test("marketplace update transport: leaves Device Flow idle for a public URL ref
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-device", ref: "main" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const remoteOid = "abcdef0000000000000000000000000000000011";
     const { gitOps, state } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": remoteOid },
@@ -442,7 +444,7 @@ test("marketplace update transport: leaves Device Flow idle for a public URL ref
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "urlmp-device",
       scope: "project",
       cwd,
@@ -473,7 +475,7 @@ test("marketplace update transport: carries the GitHub auth bundle without invok
       name: "official-device",
       ref: "main",
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const remoteOid = "abcdef0000000000000000000000000000000012";
     const { gitOps, state } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": remoteOid },
@@ -485,7 +487,7 @@ test("marketplace update transport: carries the GitHub auth bundle without invok
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "official-device",
       scope: "project",
       cwd,
@@ -522,13 +524,13 @@ test("marketplace update transport: carries the GitHub auth bundle without invok
 test("CMC-10 + MU-1: bare form against empty scope succeeds with `(no marketplaces)` EmptyToken and NO reload hint", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     await updateAllMarketplaces({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       scope: "project",
       cwd,
     });
@@ -542,7 +544,7 @@ test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in 
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps, state } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
     });
@@ -551,7 +553,7 @@ test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in 
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "official",
       scope: "project",
       cwd,
@@ -592,7 +594,7 @@ test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout wit
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp", ref: "main" });
-    const { ctx, pi } = makeCtx();
+    const { ctx, run } = makeCtx();
     const { gitOps, state } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
     });
@@ -601,7 +603,7 @@ test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout wit
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "urlmp",
       scope: "project",
       cwd,
@@ -631,7 +633,7 @@ test("MURL-03: unpinned url refresh follows the default-branch head-advance path
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-default" });
-    const { ctx, pi } = makeCtx();
+    const { ctx, run } = makeCtx();
     const remoteSha = "abcdef0000000000000000000000000000000010";
     const { gitOps, state } = createGitOps({
       remoteRefs: {
@@ -646,7 +648,7 @@ test("MURL-03: unpinned url refresh follows the default-branch head-advance path
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "urlmp-default",
       scope: "project",
       cwd,
@@ -673,7 +675,7 @@ test("PROV-04 / D-79-03: a no-provider url refresh that 401s renders {authentica
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-private", ref: "main" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // Duck-typed isomorphic-git HttpError: code === "HttpError",
     // data.statusCode carries the HTTP status (mirrors D-76-08).
     const httpErr = Object.assign(new Error("HTTP 401 from fetch"), {
@@ -686,7 +688,7 @@ test("PROV-04 / D-79-03: a no-provider url refresh that 401s renders {authentica
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "urlmp-private",
       scope: "project",
       cwd,
@@ -721,7 +723,7 @@ test("GAUTH-02: a declined/failed Device Flow (UserCanceledError) on refresh ren
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "declined", ref: "main" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // A denied/expired Device Flow (or a poll network error) makes
     // platform/git.ts's onAuth return `{ cancel: true }`, which
     // isomorphic-git throws as `UserCanceledError` -- NOT an HttpError
@@ -733,7 +735,7 @@ test("GAUTH-02: a declined/failed Device Flow (UserCanceledError) on refresh ren
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "declined",
       scope: "project",
       cwd,
@@ -755,7 +757,7 @@ test("UXG-05: github-source refresh whose manifest content CHANGES renders `(upd
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { cloneDir } = await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000003" },
     });
@@ -787,7 +789,7 @@ test("UXG-05: github-source refresh whose manifest content CHANGES renders `(upd
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "official",
       scope: "project",
       cwd,
@@ -831,13 +833,13 @@ test("UXG-05: path-source refresh whose local manifest is UNCHANGED renders the 
         },
       },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "local-mp",
       scope: "project",
       cwd,
@@ -860,7 +862,7 @@ test("CR-01 / D-14 default-branch: forceUpdateRef target is refs/heads/<branch>,
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "defaultbranch" });
-    const { ctx, pi } = makeCtx();
+    const { ctx, run } = makeCtx();
     const remoteSha = "abcdef000000000000000000000000000000000a";
     const { gitOps, state } = createGitOps({
       remoteRefs: {
@@ -875,7 +877,7 @@ test("CR-01 / D-14 default-branch: forceUpdateRef target is refs/heads/<branch>,
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "defaultbranch",
       scope: "project",
       cwd,
@@ -908,7 +910,7 @@ test("CR-01 / D-14 default-branch: detached HEAD -> checkout SHA directly, no fo
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "detached" });
-    const { ctx, pi } = makeCtx();
+    const { ctx, run } = makeCtx();
     const remoteSha = "abcdef000000000000000000000000000000000b";
     const { gitOps, state } = createGitOps({
       remoteRefs: {
@@ -922,7 +924,7 @@ test("CR-01 / D-14 default-branch: detached HEAD -> checkout SHA directly, no fo
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "detached",
       scope: "project",
       cwd,
@@ -945,7 +947,7 @@ test("D-14: detached-HEAD path checks out SHA directly without forceUpdateRef", 
     // arrange
     const sha = "abcdef0000000000000000000000000000000002";
     await seedGithubMarketplace({ cwd, name: "pinned", ref: sha });
-    const { ctx, pi } = makeCtx();
+    const { ctx, run } = makeCtx();
     // Mock has the SHA available as a 40-char hex; resolveRef of
     // refs/remotes/origin/<sha> will throw (no such branch), forcing
     // the detached path.
@@ -955,7 +957,7 @@ test("D-14: detached-HEAD path checks out SHA directly without forceUpdateRef", 
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "pinned",
       scope: "project",
       cwd,
@@ -978,7 +980,7 @@ test("D-14: SHA-no-longer-exists (checkout throws) surfaces as notifyError with 
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "rewritten", ref: "deadbeef" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       checkoutThrows: new Error("mock: ref deadbeef no longer exists on remote"),
     });
@@ -987,7 +989,7 @@ test("D-14: SHA-no-longer-exists (checkout throws) surfaces as notifyError with 
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "rewritten",
       scope: "project",
       cwd,
@@ -1015,7 +1017,7 @@ test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Ret
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "offline", ref: "main" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // Simulate DNS / network-unreachable on fetch -- cloneAdvanced must
     // stay false, so the retry hint is suppressed.
     const { gitOps } = createGitOps({
@@ -1025,7 +1027,7 @@ test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Ret
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "offline",
       scope: "project",
       cwd,
@@ -1060,7 +1062,7 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
     // (mirrors the UXG-05 "changed" test's checkout-rewrite pattern).
     const { cloneDir } = await seedGithubMarketplace({ cwd, name: "broken" });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/HEAD": "abcdef0000000000000000000000000000000003" },
       localRefs: { HEAD: "abcdef0000000000000000000000000000000003" },
@@ -1080,7 +1082,7 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "broken",
       scope: "project",
       cwd,
@@ -1123,7 +1125,7 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
       "utf8",
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000123" },
     });
@@ -1131,7 +1133,7 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "corrupt",
       scope: "project",
       cwd,
@@ -1231,13 +1233,13 @@ test("ATTR-10: path-source MALFORMED-JSON manifest renders `(failed) {invalid ma
       );
       await seedPathMarketplace({ cwd, name: "bad-json", marketplaceRoot: localMpDir });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const { gitOps } = createGitOps();
       // act
       await updateMarketplace({
         completionCache: createCompletionCache(),
         ctx,
-        pi,
+        run,
         name: "bad-json",
         scope: "project",
         cwd,
@@ -1274,13 +1276,13 @@ test("ATTR-10: path-source SCHEMA-INVALID manifest renders `(failed) {invalid ma
       );
       await seedPathMarketplace({ cwd, name: "bad-schema", marketplaceRoot: localMpDir });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const { gitOps } = createGitOps();
       // act
       await updateMarketplace({
         completionCache: createCompletionCache(),
         ctx,
-        pi,
+        run,
         name: "bad-schema",
         scope: "project",
         cwd,
@@ -1317,7 +1319,7 @@ test("a pre-persistence manifest failure leaves cache rows intact and calls zero
       );
       await seedPathMarketplace({ cwd, name: "local-bad", marketplaceRoot: localMpDir });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const { gitOps, state } = createGitOps();
       const completionCache = createCompletionCache();
       const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
@@ -1325,7 +1327,7 @@ test("a pre-persistence manifest failure leaves cache rows intact and calls zero
       await updateMarketplace({
         completionCache,
         ctx,
-        pi,
+        run,
         name: "local-bad",
         scope: "project",
         cwd,
@@ -1360,7 +1362,7 @@ test("github-source no-errno refresh failure still renders `{network unreachable
     // MUST still fire. This is the regression lock proving the ATTR-10 typed
     // manifest branch did NOT swallow the github network default.
     await seedGithubMarketplace({ cwd, name: "ghnet", ref: "main" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       // Plain Error: message mentions ENETUNREACH but carries no `.code` errno,
       // so reasonsFromCascadeError returns undefined and the network default
@@ -1371,7 +1373,7 @@ test("github-source no-errno refresh failure still renders `{network unreachable
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "ghnet",
       scope: "project",
       cwd,
@@ -1400,7 +1402,7 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
       autoupdate: true,
       plugins: { hello: makePluginRecord() },
     });
-    const { ctx, pi } = makeCtx();
+    const { ctx, run } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000004" },
     });
@@ -1424,7 +1426,7 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "auto-mp",
       scope: "project",
       cwd,
@@ -1456,7 +1458,7 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
       autoupdate: false,
       plugins: { hello: makePluginRecord() },
     });
-    const { ctx, pi } = makeCtx();
+    const { ctx, run } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000005" },
     });
@@ -1480,7 +1482,7 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "manual-mp",
       scope: "project",
       cwd,
@@ -1524,7 +1526,7 @@ test("LIFE-06: cascade mapper carries a preflight `not in manifest` skip through
     const before = await readPluginRecord(locations.extensionRoot, "auto-skip", "hello");
     assert.ok(before !== undefined);
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
     });
@@ -1547,7 +1549,7 @@ test("LIFE-06: cascade mapper carries a preflight `not in manifest` skip through
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "auto-skip",
       scope: "project",
       cwd,
@@ -1616,13 +1618,13 @@ test("LIFE-06: autoupdate cascade through the REAL single-plugin update renders 
       const before = await readPluginRecord(locations.extensionRoot, "e2e-mp", "hello");
       assert.ok(before !== undefined);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const { gitOps } = createGitOps();
       // act
       await updateMarketplace({
         completionCache: createCompletionCache(),
         ctx,
-        pi,
+        run,
         name: "e2e-mp",
         scope: "user",
         cwd,
@@ -1720,13 +1722,13 @@ test("WR-10: an autoupdate cascade over a disabled record whose pin moved render
         "---\nname: tool\ndescription: A tool.\n---\n\n# Tool\n\nAfter.\n",
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const { gitOps } = createGitOps();
       // act
       await updateMarketplace({
         completionCache: createCompletionCache(),
         ctx,
-        pi,
+        run,
         name: "disabled-mp",
         scope: "user",
         cwd,
@@ -1778,7 +1780,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
         d: makePluginRecord(),
       },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000006" },
     });
@@ -1837,7 +1839,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "mixed",
       scope: "project",
       cwd,
@@ -1889,7 +1891,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
       autoupdate: true,
       plugins: { x: makePluginRecord(), a: makePluginRecord() },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000007" },
     });
@@ -1910,7 +1912,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "rh",
       scope: "project",
       cwd,
@@ -1937,7 +1939,7 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
       autoupdate: true,
       plugins: { p: makePluginRecord() },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // The mock git ops advance the ref but do NOT rewrite the seeded
     // `valid-marketplace` fixture, so the refresh re-validates byte-identical
     // manifest content -> snapshot.changed === false.
@@ -1958,7 +1960,7 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "noupd",
       scope: "project",
       cwd,
@@ -1993,7 +1995,7 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
       autoupdate: true,
       plugins: { p: makePluginRecord() },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     // Same setup as the no-op test: the mock git ops advance the ref but do
     // NOT rewrite the seeded fixture, so snapshot.changed === false. The ONLY
     // difference is the cascade outcome -- a plugin actually updated, so
@@ -2017,7 +2019,7 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "official",
       scope: "project",
       cwd,
@@ -2063,13 +2065,13 @@ test("NFR-5: path-source update calls zero gitOps methods", async () => {
           },
         },
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const { gitOps, state } = createGitOps();
       // act
       await updateMarketplace({
         completionCache: createCompletionCache(),
         ctx,
-        pi,
+        run,
         name: "local",
         scope: "project",
         cwd,
@@ -2103,7 +2105,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
       autoupdate: true,
       plugins: { alpha: makePluginRecord() },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
     });
@@ -2145,7 +2147,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
     await updateMarketplace({
       completionCache,
       ctx,
-      pi,
+      run,
       name: "official",
       scope: "project",
       cwd,
@@ -2206,14 +2208,14 @@ test("leaves completion rows intact when a marketplace refresh has no effect", a
       return Promise.resolve(expectedRows);
     });
     await rm(pluginCachePath, { force: true });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const git = makeForbiddenGitOps();
 
     // act
     await updateMarketplace({
       completionCache,
       ctx,
-      pi,
+      run,
       name: "no-effect",
       scope: "project",
       cwd,
@@ -2251,7 +2253,7 @@ test("a newly degraded autoupdate cascade emits its partial row and warning enve
       autoupdate: true,
       plugins: { hello: makePluginRecord() },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000042" },
     });
@@ -2273,7 +2275,7 @@ test("a newly degraded autoupdate cascade emits its partial row and warning enve
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "auto-mp",
       scope: "project",
       cwd,
@@ -2319,7 +2321,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> EACCES surfaces as `{permission
       autoupdate: true,
       plugins: { alpha: makePluginRecord() },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
     });
@@ -2333,7 +2335,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> EACCES surfaces as `{permission
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "official",
       scope: "project",
       cwd,
@@ -2371,7 +2373,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> ENOENT surfaces as `{source mis
       autoupdate: true,
       plugins: { alpha: makePluginRecord() },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
     });
@@ -2385,7 +2387,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> ENOENT surfaces as `{source mis
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "official",
       scope: "project",
       cwd,
@@ -2410,7 +2412,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> generic Error falls through to 
       autoupdate: true,
       plugins: { alpha: makePluginRecord() },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
     });
@@ -2421,7 +2423,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> generic Error falls through to 
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "official",
       scope: "project",
       cwd,
@@ -2453,7 +2455,7 @@ test("a non-Error cascade rejection safely renders the unreadable-manifest fallb
       autoupdate: true,
       plugins: { alpha: makePluginRecord() },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
     });
@@ -2464,7 +2466,7 @@ test("a non-Error cascade rejection safely renders the unreadable-manifest fallb
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "official",
       scope: "project",
       cwd,
@@ -2508,14 +2510,20 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) processes user-scope marketp
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000010" },
     });
 
     // Call without scope filter -- enumerates both scopes (SC-6).
     // act
-    await updateAllMarketplaces({ completionCache: createCompletionCache(), ctx, pi, cwd, gitOps });
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      cwd,
+      gitOps,
+    });
 
     // assert
 
@@ -2536,11 +2544,17 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) with both scopes empty notif
   // path that checks both scopes.
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps();
 
     // act
-    await updateAllMarketplaces({ completionCache: createCompletionCache(), ctx, pi, cwd, gitOps }); // no scope filter
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      cwd,
+      gitOps,
+    }); // no scope filter
 
     // assert
     assert.equal(notifications.length, 1);
@@ -2567,7 +2581,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
     });
     const locations = locationsFor("project", cwd);
     const configBytes = await readFile(locations.configJsonPath, "utf8");
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const deviceFlow = createDeviceFlowHttp();
     const cascadeCalls: Array<{ marketplace: string; plugin: string; scope: Scope }> = [];
     const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) => {
@@ -2587,7 +2601,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
     await updateAllMarketplaces({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       scope: "project",
       cwd,
       deviceFlowHttp: deviceFlow.http,
@@ -2660,7 +2674,7 @@ test("all-target update drops changed rows in project-before-user order and isol
         alpha: marketplaceRecord("alpha", "user", path.join(marketplaceRoot, "user-before")),
       },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const completionCache = createCompletionCache();
     const peerCache = createCompletionCache();
     const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
@@ -2690,7 +2704,7 @@ test("all-target update drops changed rows in project-before-user order and isol
     await updateAllMarketplaces({
       completionCache,
       ctx,
-      pi,
+      run,
       cwd,
     });
     const ownerRows = {
@@ -2810,14 +2824,14 @@ test("refreshRecord: unsupported source kind surfaces as notifyError (lines 219-
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps();
 
     // act
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "unsupported-mp",
       scope: "project",
       cwd,
@@ -2847,14 +2861,14 @@ test("updateMarketplace: explicit-scope missing marketplace -> standalone {marke
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     // Leave state empty -- no marketplace named "ghost".
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps();
 
     // act
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "ghost",
       scope: "project",
       cwd,
@@ -2884,13 +2898,13 @@ test("CMP-4 / SCOPE-01: explicit --scope user against a project-only marketplace
   await withHermeticHome(async ({ cwd }) => {
     // seedGithubMarketplace seeds the PROJECT scope; ask for USER explicitly.
     await seedGithubMarketplace({ cwd, name: "mp" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps();
 
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "mp",
       scope: "user",
       cwd,
@@ -2923,7 +2937,7 @@ test("CR-01 TOCTOU: refreshOneMarketplace silently no-ops on a removed marketpla
   // `{marketplace not added}` convergence row and NEVER `{network unreachable}`.
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps, state: gitState } = createGitOps();
 
     // act
@@ -2931,7 +2945,7 @@ test("CR-01 TOCTOU: refreshOneMarketplace silently no-ops on a removed marketpla
       updateMarketplace({
         completionCache: createCompletionCache(),
         ctx,
-        pi,
+        run,
         name: "vanished",
         scope: "project",
         cwd,
@@ -2973,7 +2987,7 @@ test("updateMarketplace: bare-form missing marketplace -> bracketless {marketpla
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     // Leave state empty -- no marketplace named "ghost" in either scope.
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps();
 
     // act
@@ -2981,7 +2995,7 @@ test("updateMarketplace: bare-form missing marketplace -> bracketless {marketpla
       updateMarketplace({
         completionCache: createCompletionCache(),
         ctx,
-        pi,
+        run,
         name: "ghost",
         cwd,
         gitOps,
@@ -3031,7 +3045,7 @@ test("validateManifestAtRoot: stale manifestPath and marketplaceRoot are correct
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000011" },
     });
@@ -3040,7 +3054,7 @@ test("validateManifestAtRoot: stale manifestPath and marketplaceRoot are correct
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "stale-mp",
       scope: "project",
       cwd,
@@ -3088,7 +3102,7 @@ test("AUTH-02 update: credentialOps.fill HIT yields silent reuse -- NO Device Fl
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "private-mp", ref: "main" });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // Pre-seed the credential store for github.com so fill() returns the
     // stored token without triggering Device Flow.
@@ -3104,7 +3118,7 @@ test("AUTH-02 update: credentialOps.fill HIT yields silent reuse -- NO Device Fl
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "private-mp",
       scope: "project",
       cwd,
@@ -3145,7 +3159,7 @@ test("AUTH-02 update: the GitAuthBundle is forwarded by reference into refreshGi
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "ref-mp", ref: "main" });
-    const { ctx, pi } = makeCtx();
+    const { ctx, run } = makeCtx();
 
     // Empty store: fill() returns null. Device Flow would normally trigger
     // when onAuth is invoked, but gitOps.fetch is a pure stub so the
@@ -3160,7 +3174,7 @@ test("AUTH-02 update: the GitAuthBundle is forwarded by reference into refreshGi
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "ref-mp",
       scope: "project",
       cwd,
@@ -3201,7 +3215,7 @@ test("WR-12: the autoupdate cascade row is byte-identical to the standalone upda
       autoupdate: true,
       plugins: { hello: makePluginRecord() },
     });
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000031" },
     });
@@ -3223,7 +3237,7 @@ test("WR-12: the autoupdate cascade row is byte-identical to the standalone upda
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "mp",
       scope: "project",
       cwd,
@@ -3304,7 +3318,7 @@ for (const { expectedNotification, shape, title } of [
         autoupdate: true,
         plugins: { alpha: makePluginRecord() },
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const git = makeForbiddenGitOps();
       const cascadeCalls: Array<{ marketplace: string; plugin: string; scope: Scope }> = [];
       const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) => {
@@ -3316,7 +3330,7 @@ for (const { expectedNotification, shape, title } of [
       await updateMarketplace({
         completionCache: createCompletionCache(),
         ctx,
-        pi,
+        run,
         name: "shape-mp",
         scope: "project",
         cwd,
@@ -3356,7 +3370,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
     await mkdir(pluginCachePath, { recursive: true });
     const residuePath = path.join(pluginCachePath, "residue");
     await writeFile(residuePath, "cache residue");
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const git = makeForbiddenGitOps();
     const completionCache = createCompletionCache();
     const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
@@ -3365,7 +3379,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
     await updateMarketplace({
       completionCache,
       ctx,
-      pi,
+      run,
       name: "cache-mp",
       scope: "project",
       cwd,
@@ -3377,7 +3391,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
     await updateMarketplace({
       completionCache,
       ctx,
-      pi,
+      run,
       name: "cache-mp",
       scope: "project",
       cwd,
@@ -3435,14 +3449,14 @@ test("silently stops when the marketplace vanishes after preflight", async () =>
         return await Promise.resolve({ schemaVersion: 2 as const, marketplaces: {} });
       },
     };
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
     const git = makeForbiddenGitOps();
 
     // act
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: "vanishing-mp",
       scope: "project",
       cwd,
