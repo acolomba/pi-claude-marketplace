@@ -1,3 +1,12 @@
+# Requirements Archive: any-git-host Any Git Host
+
+**Archived:** 2026-09-30
+**Status:** SHIPPED
+
+For current requirements, see `.planning/workstreams/git-hosts/REQUIREMENTS.md`.
+
+---
+
 # Requirements: any-git-host (milestone, workstream `git-hosts`)
 
 **Defined:** 2026-09-25

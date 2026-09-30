@@ -3342,3 +3342,39 @@ the real-server round trip is outstanding.
 **To settle it:** stand up (or find) a smart-HTTP git server that serves only
 the verbatim path and 404s the suffixed form, then run `marketplace add
 <url>` and a subsequent update against it. Resume with `/gsd-verify-work 2`.
+
+## GHRED-01: harden the redirect and auth-callback edges left open at the `any-git-host` close
+
+Carried from `any-git-host` (`01-REVIEW-DISPOSITION.md`; milestone audit, 2026-09-30).
+No credential reaches another origin today. These are the residual edges:
+
+- WR-01: `onAuth` sees only the caller's URL, so a 401 from a cross-origin
+  redirect target fills the bound host's credential. On a Device Flow host, a
+  second 401 evicts it.
+- WR-03: the cross-origin scrub in `platform/git.ts` is a denylist
+  (`authorization`, `cookie`). A `GitCredentials.headers` entry would survive a
+  cross-origin hop. `credentialFill` never produces one today.
+- WR-04: an empty `Location` header is followed as a redirect to the same URL
+  until `too many redirects`.
+- IN-01..IN-05: the docstring parity claim, an untyped `TypeError` on a
+  malformed `Location`, an untyped `too many redirects`, guard-contract cases
+  with no discriminating test, and a test row type declared inside `describe`.
+
+## GHADD-01: `marketplace add` leftover-recognition cleanups left open at the `any-git-host` close
+
+Carried from `any-git-host` (`03-REVIEW-DISPOSITION.md`; milestone audit, 2026-09-30).
+
+- WR-03/WR-04: a user-placed clone of the same repository under
+  `sources/<name>` is recognized and removed, and recognition follows a
+  symlinked destination that the removal does not. Both are intentional under
+  D-3-01 but unguarded.
+- IN-05: a case-differing url host cannot recognize its own leftover and
+  refuses as `{stale clone}`. `c1286475` folded `github.com`. Other hosts, and
+  leftovers from before that fold, still refuse.
+- IN-04: the `else if (finalDir !== undefined)` cleanup arm drops
+  `leftoverLeak`. WR-02: the standalone path's rendering of that leak was not
+  re-checked after the leak began joining the thrown error.
+- IN-01 (partial): the MA-14 `chmod` cases in `add.test.ts` pass vacuously as
+  root. The `listRemotes` arm no longer uses `chmod`.
+- Code hygiene: WR-01/WR-06/WR-07 (stale JSDoc and flow header), WR-08
+  (five positional parameters), WR-09, IN-02, IN-03, IN-06, IN-07, IN-08.
