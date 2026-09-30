@@ -20,11 +20,11 @@
 //
 // This is a state-changing command, so every rejecting case additionally
 // asserts the seeded records are still on disk. A rejecting case sizes the
-// boundary at one emission and zero probes and leaves the working directory
-// UNSTATED, so a workflow that ran would carry strong-mock's pending-call proxy
-// into `removeMarketplace`'s first `locationsFor(scope, opts.cwd)` call. A
-// delegating case states one emission, zero tool probes (D-05: the workflow
-// renders from the run the handler receives), and one working-directory read.
+// boundary at one emission and leaves the working directory UNSTATED, so a
+// workflow that ran would carry strong-mock's pending-call proxy into
+// `removeMarketplace`'s first `locationsFor(scope, opts.cwd)` call. A delegating
+// case states one emission and one working-directory read; D-05 has the
+// workflow render from the run the handler receives.
 //
 // The scope-target flag is observable ONLY through which config layer the
 // CFG-03 precondition validates: the removal's config write-back sweeps both
@@ -221,7 +221,7 @@ for (const { args, expectedFootprint, expectedMessage, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "delegates");
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       reads: 1,
       value: workspace.cwd,
     });
@@ -241,7 +241,7 @@ test("supplies the remove usage block, shown when the name positional is missing
   // arrange
   const workspace = await createHermeticWorkspace(t, "missing-name");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const removeHandler = makeRemoveHandler({ completionCache: createCompletionCache() });
 
   // act
@@ -259,7 +259,7 @@ test("rejects surplus input and preserves all recorded marketplaces", async (t) 
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const removeHandler = makeRemoveHandler({ completionCache: createCompletionCache() });
 
   // act
@@ -298,7 +298,7 @@ for (const { args, expectedFootprint, expectedNotification, placement } of [
     const workspace = await createHermeticWorkspace(t, "scope-target");
     await seedMarketplace(workspace.cwd, "project", "alpha");
     await seedInvalidLocalConfig(workspace.cwd, "project");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       reads: 1,
       value: workspace.cwd,
     });
@@ -318,7 +318,7 @@ test("accepts a scope flag beside the scope-target flag and honors the scope it 
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     reads: 1,
     value: workspace.cwd,
   });
@@ -337,7 +337,7 @@ test("supplies the remove usage block beside the unknown-flag sentence and remov
   // arrange
   const workspace = await createHermeticWorkspace(t, "unknown-flag");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const removeHandler = makeRemoveHandler({ completionCache: createCompletionCache() });
 
   // act
@@ -355,7 +355,7 @@ test("supplies the remove usage block beside a verbatim parse diagnostic and rem
   // arrange
   const workspace = await createHermeticWorkspace(t, "invalid-scope");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const removeHandler = makeRemoveHandler({ completionCache: createCompletionCache() });
 
   // act

@@ -11,9 +11,9 @@
 // placement row therefore asserts one identical whole value.
 //
 // `extractLocalFlag` reaches the user only through `notifyUsageError`, which
-// writes straight to the notification channel and runs no soft-dependency probe,
-// so every case sizes the boundary at zero probes. An accepting case sizes it at
-// zero emissions as well, which is what proves a successful scan is silent.
+// writes straight to the notification channel and runs no soft-dependency probe.
+// An accepting case sizes the boundary at zero emissions, which is what proves a
+// successful scan is silent.
 //
 // ER-F19: consuming the `--scope` value is load-bearing and is the one property a
 // scanner rewrite can drop while every other case here stays green. Two cases hold
@@ -42,7 +42,7 @@ const INSTALL_USAGE =
 
 test("reports the flag off and rejoins the positionals when no flag is supplied", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
   const scanned = extractLocalFlag("alpha@official beta@official", ctx, ENABLE_USAGE);
@@ -63,7 +63,7 @@ for (const { args, placement } of [
 ]) {
   test(`removes the scope-target flag from the residual when it appears ${placement} (WR-02)`, () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
     const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE);
@@ -80,7 +80,7 @@ for (const { args, placement } of [
 
 test("removes every scope-target token when the flag is supplied more than once (WR-02)", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
   const scanned = extractLocalFlag("--local alpha@official --local", ctx, ENABLE_USAGE);
@@ -96,7 +96,7 @@ test("removes every scope-target token when the flag is supplied more than once 
 
 test("leaves both tokens of a scope pair in the residual for the downstream parser", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
   const scanned = extractLocalFlag("alpha@official --scope project", ctx, ENABLE_USAGE);
@@ -112,7 +112,7 @@ test("leaves both tokens of a scope pair in the residual for the downstream pars
 
 test("passes an unrecognised scope value through instead of rejecting it", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
   const scanned = extractLocalFlag("alpha@official --scope global", ctx, ENABLE_USAGE);
@@ -128,7 +128,7 @@ test("passes an unrecognised scope value through instead of rejecting it", () =>
 
 test("consumes the token after the scope flag as its value, so a scope-target token there leaves the flag off", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
   const scanned = extractLocalFlag("--scope --local alpha@official", ctx, ENABLE_USAGE);
@@ -144,7 +144,7 @@ test("consumes the token after the scope flag as its value, so a scope-target to
 
 test("reports the flag off and raises no usage error when the scope flag has no value to consume", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
   const scanned = extractLocalFlag("--scope", ctx, ENABLE_USAGE);
@@ -160,7 +160,7 @@ test("reports the flag off and raises no usage error when the scope flag has no 
 
 test("keeps a caller-listed long flag verbatim in the residual and leaves the flag off", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const passThroughFlags = passThroughFlagNames("install");
 
   // act
@@ -182,7 +182,7 @@ test("keeps a caller-listed long flag verbatim in the residual and leaves the fl
 
 test("rejects a long flag the caller did not list, naming the offending token (MSG-NC-2)", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const passThroughFlags = passThroughFlagNames("install");
 
   // act
@@ -202,7 +202,7 @@ test("rejects a long flag the caller did not list, naming the offending token (M
 
 test("keeps scanning past an accepted scope-target token and still rejects a later unknown flag (MSG-NC-2)", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
   const scanned = extractLocalFlag("--local alpha@official --bogus", ctx, ENABLE_USAGE);
@@ -221,7 +221,7 @@ test("keeps scanning past an accepted scope-target token and still rejects a lat
 
 test("treats a single-dash token as an ordinary residual token rather than a long flag", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
   const scanned = extractLocalFlag("-x alpha@official", ctx, ENABLE_USAGE);
@@ -243,7 +243,7 @@ for (const { args, spacing } of [
 ]) {
   test(`separates the residual with single spaces and emits no empty token given ${spacing}`, () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
     const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE);
@@ -260,7 +260,7 @@ for (const { args, spacing } of [
 
 test("reports the flag off with an empty residual when no argument text is supplied", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
   const scanned = extractLocalFlag("", ctx, ENABLE_USAGE);
@@ -278,7 +278,7 @@ for (const args of [
 ]) {
   test(`preserves quoted positional spelling while extracting the flag from ${args}`, () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
     const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE);
@@ -295,7 +295,7 @@ for (const args of [
 
 test("preserves quoted whitespace and punctuation without recognizing embedded flags", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
   const scanned = extractLocalFlag("'a \"b\" --bogus 🦊' --local", ctx, ENABLE_USAGE);
@@ -316,7 +316,7 @@ for (const { args, residualArgs } of [
 ]) {
   test(`preserves supplied empty arguments while scanning ${args}`, () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
     const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE);

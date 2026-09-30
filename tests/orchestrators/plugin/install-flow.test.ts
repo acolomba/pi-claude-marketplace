@@ -7001,7 +7001,7 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
       });
       await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
 
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
       const run = runWithNothingLoaded();
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
@@ -7036,7 +7036,7 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
       });
       await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
 
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
       const run = runWithNothingLoaded();
       const outcome = await installPlugin({
         ctx,

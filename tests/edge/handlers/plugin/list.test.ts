@@ -54,9 +54,9 @@
 // negative would hold whether or not the workflow ran, because the workflow
 // never writes; an assertion whose subject cannot change proves the module
 // rather than the case. The negative half of D-116-06 is carried by the shape
-// that CAN fail: a rejecting case sizes the boundary at one emission, zero
-// probes, and NO stated `cwd`, so a workflow that did run reads an unstated
-// boundary member and dies where it happens.
+// that CAN fail: a rejecting case sizes the boundary at one emission and NO
+// stated `cwd`, so a workflow that did run reads an unstated boundary member and
+// dies where it happens.
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two paths disagree:
@@ -65,7 +65,7 @@
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, on every
 //     filter and scope combination.
 // Neither path reads the tool list: the listing renders from the command run's
-// soft-dependency snapshot (D-05), so every case states zero probes.
+// soft-dependency snapshot (D-05).
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -422,7 +422,7 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -468,7 +468,7 @@ for (const { args, expectedBlocks, label } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -555,7 +555,7 @@ for (const { anchor, args, expectedBlocks, label } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -614,7 +614,7 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -673,7 +673,7 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -690,9 +690,9 @@ for (const { args, expectedBlocks, label, summary } of [
 }
 
 // ---------------------------------------------------------------------------
-// One above the accepted arity. Rejections size the boundary at one emission,
-// zero probes, and no stated `cwd`, so a workflow that ran would read an
-// unstated boundary member.
+// One above the accepted arity. Rejections size the boundary at one emission
+// and no stated `cwd`, so a workflow that ran would read an unstated boundary
+// member.
 // ---------------------------------------------------------------------------
 
 for (const { args, label, summary } of [
@@ -708,7 +708,7 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const listHandler = makeListHandler();
 
     // act
@@ -744,7 +744,7 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const listHandler = makeListHandler();
 
     // act
@@ -777,7 +777,7 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const listHandler = makeListHandler();
 
     // act
@@ -815,7 +815,7 @@ for (const { args, expectedSentence, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const listHandler = makeListHandler();
 
     // act

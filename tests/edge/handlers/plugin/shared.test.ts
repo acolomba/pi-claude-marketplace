@@ -104,7 +104,7 @@ describe("splitPluginMarketplaceRef", () => {
 describe("parseMapModelArgs", () => {
   test("reports both downstream flags off and omits the scope member when none is supplied", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
     const parsed = parseMapModelArgs("alpha@official", ctx, INSTALL_USAGE);
@@ -138,7 +138,7 @@ describe("parseMapModelArgs", () => {
   ]) {
     test(`sets only the members named by ${supplied}`, () => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
       // act
       const parsed = parseMapModelArgs(args, ctx, INSTALL_USAGE);
@@ -157,7 +157,7 @@ describe("parseMapModelArgs", () => {
   ]) {
     test(`parses the same value with a downstream flag ${placement} the positionals`, () => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
       // act
       const parsed = parseMapModelArgs(args, ctx, INSTALL_USAGE);
@@ -176,7 +176,7 @@ describe("parseMapModelArgs", () => {
   for (const scope of ["project", "user"] as const satisfies readonly Scope[]) {
     test(`carries a supplied scope of "${scope}" through to the parsed value`, () => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
       // act
       const parsed = parseMapModelArgs(`alpha@official --scope ${scope}`, ctx, INSTALL_USAGE);
@@ -195,7 +195,7 @@ describe("parseMapModelArgs", () => {
 
   test("returns an empty positional list when no token at all is supplied", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
     const parsed = parseMapModelArgs("", ctx, INSTALL_USAGE);
@@ -212,7 +212,7 @@ describe("parseMapModelArgs", () => {
 
   test("rejects an unrecognised long flag with the unknown-flag sentence (MSG-NC-2)", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const parsed = parseMapModelArgs("alpha@official --bogus", ctx, INSTALL_USAGE);
@@ -231,7 +231,7 @@ describe("parseMapModelArgs", () => {
 
   test("reports the tokenizer's own diagnostic and never scans the positionals (MSG-NC-2)", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const parsed = parseMapModelArgs("--bogus alpha@official --scope global", ctx, INSTALL_USAGE);
@@ -252,7 +252,7 @@ describe("parseMapModelArgs", () => {
 describe("parseRequiredPluginMarketplaceRef", () => {
   test("returns both halves of the one accepted ref and omits the scope member", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
     const parsed = parseRequiredPluginMarketplaceRef("alpha@official", ctx, UNINSTALL_USAGE);
@@ -269,7 +269,7 @@ describe("parseRequiredPluginMarketplaceRef", () => {
   for (const scope of ["project", "user"] as const satisfies readonly Scope[]) {
     test(`adds a scope member of "${scope}" to the split ref`, () => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
       // act
       const parsed = parseRequiredPluginMarketplaceRef(
@@ -291,7 +291,7 @@ describe("parseRequiredPluginMarketplaceRef", () => {
 
   test("rejects a second positional without returning a partial ref", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const parsed = parseRequiredPluginMarketplaceRef(
@@ -314,7 +314,7 @@ describe("parseRequiredPluginMarketplaceRef", () => {
 
   test("collapses the duplicated usage block to one sentence when no ref is supplied (MSG-NC-2)", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const parsed = parseRequiredPluginMarketplaceRef("", ctx, UNINSTALL_USAGE);
@@ -333,7 +333,7 @@ describe("parseRequiredPluginMarketplaceRef", () => {
 
   test("shows a parse diagnostic other than the usage string verbatim (MSG-NC-2)", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const parsed = parseRequiredPluginMarketplaceRef(
@@ -361,7 +361,7 @@ describe("parseRequiredPluginMarketplaceRef", () => {
   ]) {
     test(`names the offending token when the ref carries ${shape} (PI-1)`, () => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
       // act
       const parsed = parseRequiredPluginMarketplaceRef(malformedRef, ctx, UNINSTALL_USAGE);
@@ -382,7 +382,7 @@ describe("parseRequiredPluginMarketplaceRef", () => {
 describe("withParsedArgs", () => {
   test("calls the operation once with the parsed command, the context, and the notification run (D-05)", async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
     const run = runWithAllLoaded();
     const operation = mock<PreludeOperation<PluginMarketplaceRef>>({
       exactParams: true,
@@ -408,7 +408,7 @@ describe("withParsedArgs", () => {
 
   test("hands the raw argument string to the supplied parse function", async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
     const run = runWithNothingLoaded();
     const operation = mock<PreludeOperation<PluginMarketplaceRef>>({
       exactParams: true,
@@ -434,7 +434,7 @@ describe("withParsedArgs", () => {
 
   test("reports a parse failure with the usage block and never reaches the operation (MSG-NC-2)", async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const run = runWithNothingLoaded();
     const operation = mock<PreludeOperation<PluginMarketplaceRef>>({
       exactParams: true,
@@ -465,7 +465,7 @@ describe("withParsedArgs", () => {
 
   test("reports a thrown value that is not an error through its string form (MSG-NC-2)", async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const run = runWithNothingLoaded();
     const operation = mock<PreludeOperation<PluginMarketplaceRef>>({
       exactParams: true,
@@ -497,7 +497,7 @@ describe("withParsedArgs", () => {
 
   test("lets a rejection from the operation reach the caller", async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
     const orchestratorFailure = new Error("the install orchestrator failed");
     const run = runWithNothingLoaded();
     const operation = mock<PreludeOperation<PluginMarketplaceRef>>({

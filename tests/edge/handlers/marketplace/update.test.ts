@@ -9,8 +9,8 @@
 // all-marketplaces run records three, so the recorder discriminates the two arms
 // rather than merely showing that one of them ran.
 //
-// D-05: every emission renders from the run the handler receives, so each case
-// states zero tool probes and no case builds the handler with a tool inventory.
+// D-05: every emission renders from the run the handler receives, so no case
+// builds the handler with a tool inventory.
 //
 // D-116-05 (O3) places this handler in the injected-port group: `deps.gitOps`
 // and `deps.pluginUpdate` are declared members of `EdgeDeps`, so the plugin
@@ -250,7 +250,7 @@ test("updates every recorded marketplace in both scopes when no name is supplied
   // arrange
   const { cwd, networkCallCount } = await createHermeticScope(t, "all");
   const clones = await seedThreeMarketplaces(cwd);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3, {
     value: cwd,
     reads: 1,
   });
@@ -289,7 +289,7 @@ for (const { args, label, arity } of [
     // arrange
     const { cwd, networkCallCount } = await createHermeticScope(t, label);
     const clones = await seedThreeMarketplaces(cwd);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });
@@ -337,7 +337,7 @@ for (const { emissions, rows, scope, touched } of [
     // arrange
     const { cwd, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
     const clones = await seedThreeMarketplaces(cwd);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(emissions, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(emissions, {
       value: cwd,
       reads: 1,
     });
@@ -372,7 +372,7 @@ test("reports an unrecognised scope value with the update usage block and never 
   // arrange
   const { cwd, networkCallCount } = await createHermeticScope(t, "invalid-scope");
   await seedThreeMarketplaces(cwd);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const git = createGitOpsFake({ boundary: "memory" });
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
   const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
@@ -409,7 +409,7 @@ for (const { args, diagnostic } of [
     // arrange
     const { cwd, networkCallCount } = await createHermeticScope(t, "invalid-arguments");
     await seedThreeMarketplaces(cwd);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const git = createGitOpsFake({ boundary: "memory" });
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
     const handler = makeMarketplaceUpdateHandler({
@@ -469,7 +469,7 @@ for (const { args, tally } of [
       '{ "marketplaces": { "alpha": { "source": "./alpha-local", "autoupdate": true } }, "plugins": { "keep@alpha": { "enabled": false } } }\n';
     await writeFile(locations.configJsonPath, sharedBytes);
     await writeFile(locations.configLocalJsonPath, localBytes);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });

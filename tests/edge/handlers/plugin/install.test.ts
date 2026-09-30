@@ -53,7 +53,7 @@
 // restate a fact another pair owns at full direct coverage.
 //
 // The negative half of D-116-06 is proven in full. Every rejecting case sizes
-// the boundary at one emission, zero probes, and NO stated `cwd`, seeds both
+// the boundary at one emission and NO stated `cwd`, seeds both
 // scopes so a workflow that did run would have a marketplace to install from,
 // compares the whole notification list, and asserts an empty footprint beside
 // `verifyBoundary()`.
@@ -64,9 +64,9 @@
 //     `notifyUsageError` writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, whether it
 //     materialises, is refused by the install gate, or lands disabled.
-// No path reads `pi.getAllTools()`, so every case states zero probes. The
-// handler hands the install no tool inventory, and D-05 has the install read
-// the router's run for both its severity stamp and its markers.
+// No path reads the tool list. The handler hands the install no tool
+// inventory, and D-05 has the install read the router's run for both its
+// severity stamp and its markers.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -441,9 +441,9 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    // D-05: zero tool probes. The install stamps severity and composes its
-    // markers from the run's snapshot, never from a probe of its own.
-    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+    // D-05: the install stamps severity and composes its markers from the
+    // run's snapshot, never from a probe of its own.
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -516,7 +516,7 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -564,7 +564,7 @@ for (const { args, expectedAgents, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -591,7 +591,7 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -625,7 +625,7 @@ test("records a plugin declaring itself off by default as disabled, because the 
   // arrange
   const workspace = await createHermeticWorkspace(t, "default-enabled");
   await seedBothScopes(workspace);
-  const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -683,7 +683,7 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const installHandler = makeInstallHandler();
 
     // act
@@ -729,7 +729,7 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const installHandler = makeInstallHandler();
 
     // act
@@ -746,7 +746,7 @@ test("names an unrecognised long flag the first scan claims and never reaches th
   // arrange
   const workspace = await createHermeticWorkspace(t, "unknown-first-scan");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const installHandler = makeInstallHandler();
 
   // act
@@ -768,7 +768,7 @@ test("names an unrecognised long flag that survives the first scan and is claime
   // arrange
   const workspace = await createHermeticWorkspace(t, "unknown-second-scan");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const installHandler = makeInstallHandler();
 
   // act
@@ -806,7 +806,7 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const installHandler = makeInstallHandler();
 
     // act

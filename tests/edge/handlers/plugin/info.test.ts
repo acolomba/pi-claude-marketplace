@@ -24,7 +24,7 @@
 // tests/orchestrators/plugin/info.test.ts owns that grammar.
 //
 // The negative half of D-116-06 is proven in full. Every rejecting case sizes
-// the boundary at one emission, zero probes, and NO stated `cwd`; both scopes
+// the boundary at one emission and NO stated `cwd`; both scopes
 // are seeded, so a workflow that did run would have a marketplace to project
 // and a cascade to emit. No on-disk footprint is asserted beside
 // `verifyBoundary()`: this read-only surface writes nothing at any time, so an
@@ -36,7 +36,7 @@
 //     writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once.
 // Neither path reads the tool list: the projection renders from the command
-// run's soft-dependency snapshot (D-05), so every case states zero probes.
+// run's soft-dependency snapshot (D-05).
 //
 // NFR-5, scoped: the fetch flag exists to warm a clone cache, so this surface
 // is offline only while the flag is ABSENT, and the claim is stated that way.
@@ -195,7 +195,7 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -214,7 +214,7 @@ test("reads a git-source plugin from disk alone while the fetch flag is absent, 
   // arrange
   const workspace = await createHermeticWorkspace(t, "offline");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -242,7 +242,7 @@ for (const { args, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -276,7 +276,7 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const infoHandler = makePluginInfoHandler();
 
     // act
@@ -328,7 +328,7 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const infoHandler = makePluginInfoHandler();
 
     // act
@@ -367,7 +367,7 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const infoHandler = makePluginInfoHandler();
 
     // act
@@ -383,7 +383,7 @@ test("carries the tokenizer's own sentence for an unrecognised scope value and n
   // arrange
   const workspace = await createHermeticWorkspace(t, "scope-value");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const infoHandler = makePluginInfoHandler();
 
   // act

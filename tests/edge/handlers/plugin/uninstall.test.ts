@@ -17,14 +17,10 @@
 // state-changing work ran.
 //
 // The negative half of D-116-06 is proven in full. A rejecting case sizes the
-// boundary at one emission, zero probes, and no stated working directory, then
-// calls `verifyBoundary()`. The zero-probe half is a post-hoc report rather than
-// a fail-fast -- `hasLoadedPiSubagents` and `hasLoadedPiMcpAdapter` each swallow
-// a throw from `pi.getAllTools()` and degrade to "unloaded" -- so the call is
-// mandatory and the emission count is never relied on alone. Every case states
-// zero probes: the handler holds no tool inventory, and D-05 has the workflow
-// render from the router's run. A delegating case spends one `ctx.cwd` read, a
-// rejecting case spends none.
+// boundary at one emission and no stated working directory, then calls
+// `verifyBoundary()`. The handler holds no tool inventory, and D-05 has the
+// workflow render from the router's run. A delegating case spends one `ctx.cwd`
+// read, a rejecting case spends none.
 //
 // Both scopes are seeded in every case, rejecting ones included, so a workflow
 // that did run would have a record to remove. The two scope roots are
@@ -260,7 +256,7 @@ test("removes the project-scope record when the reference alone selects the plug
   // arrange
   const workspace = await createHermeticWorkspace(t, "bare-reference");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -292,7 +288,7 @@ test("reports a missing plugin reference and removes nothing (D-116-06)", async 
   // arrange
   const workspace = await createHermeticWorkspace(t, "no-positional");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const uninstallHandler = makeHandlerUnderTest();
 
   // act
@@ -310,7 +306,7 @@ test("rejects a surplus positional token and leaves both records intact", async 
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus-positional");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const uninstallHandler = makeHandlerUnderTest();
 
   // act
@@ -333,7 +329,7 @@ for (const { malformedRef, shape } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "malformed-reference");
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const uninstallHandler = makeHandlerUnderTest();
 
     // act
@@ -367,7 +363,7 @@ for (const { expectedEffects, expectedNotification, scopeValue } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `scope-${scopeValue}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -393,7 +389,7 @@ for (const { args, placement } of [
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);
     await seedInvalidOverrideLayer(workspace.projectRoot);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -414,7 +410,7 @@ test("reads the base layer and removes the record when the scope-target flag is 
   const workspace = await createHermeticWorkspace(t, "scope-target-omitted");
   await seedBothScopes(workspace);
   await seedInvalidOverrideLayer(workspace.projectRoot);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -434,7 +430,7 @@ test("honors the scope flag and the scope-target flag together", async (t) => {
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
   await seedInvalidOverrideLayer(workspace.userRoot);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -453,7 +449,7 @@ test("reports an unknown long flag and removes nothing (D-116-06)", async (t) =>
   // arrange
   const workspace = await createHermeticWorkspace(t, "unknown-flag");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const uninstallHandler = makeHandlerUnderTest();
 
   // act
@@ -475,7 +471,7 @@ for (const { rejectedToken, shape } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "invalid-scope-value");
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const uninstallHandler = makeHandlerUnderTest();
 
     // act

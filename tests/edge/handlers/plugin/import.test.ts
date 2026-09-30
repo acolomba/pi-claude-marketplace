@@ -29,7 +29,7 @@
 // scope, so the workflow's minimal observable effect is its empty cascade
 // notification. It is not a re-derivation of the import outcome, which belongs to
 // tests/orchestrators/import/execute.test.ts. D-05: that notification renders
-// from the run the handler receives, so the case states zero tool probes.
+// from the run the handler receives.
 //
 // Arity: this handler parses raw arguments with `parseArgs` and rejects a
 // non-empty positional list itself, so the accepted arity is ZERO positionals and
@@ -154,7 +154,7 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
 test("imports the project scope before the user scope when no scope flag narrows the command", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "both-scopes");
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, {
     value: cwd,
     reads: 1,
   });
@@ -195,7 +195,7 @@ test("imports the project scope before the user scope when no scope flag narrows
 test("forwards the supplied lifecycle routing owner into import execution", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "routing-owner");
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, {
     value: cwd,
     reads: 1,
   });
@@ -229,7 +229,7 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
   test(`imports the ${scope} scope alone when --scope ${scope} narrows the command`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScope(t, `scope-${scope}`);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, {
       value: cwd,
       reads: 1,
     });
@@ -271,7 +271,7 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
 test("runs the real import workflow when the dependency object declares no delegate", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "no-delegate");
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
   });
@@ -299,7 +299,7 @@ for (const { args, label, tokens } of [
   test(`rejects ${tokens} with the import usage block and never imports`, async (t) => {
     // arrange
     await createHermeticScope(t, `positional-${label}`);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const run = runWithNothingLoaded();
     const git = createGitOpsFake({ boundary: "memory" });
     const completionCache = createCompletionCache();
@@ -326,7 +326,7 @@ for (const { args, label, tokens } of [
 test("reports an unrecognised scope value with the import usage block and never imports", async (t) => {
   // arrange
   await createHermeticScope(t, "invalid-scope");
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const run = runWithNothingLoaded();
   const git = createGitOpsFake({ boundary: "memory" });
   const completionCache = createCompletionCache();
@@ -352,7 +352,7 @@ test("reports an unrecognised scope value with the import usage block and never 
 test("takes the scope-target flag as a positional and rejects it alongside a scope flag", async (t) => {
   // arrange
   await createHermeticScope(t, "scope-target");
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const run = runWithNothingLoaded();
   const git = createGitOpsFake({ boundary: "memory" });
   const completionCache = createCompletionCache();

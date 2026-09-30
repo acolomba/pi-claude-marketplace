@@ -16,13 +16,13 @@
 // marketplace and the scope bracket it carries. That exact-argument gap is this
 // owner's recorded scope, and the negative half of D-116-06 is proven in full.
 //
-// A rejecting case sizes the boundary at one emission, zero probes, and leaves
-// the working directory UNSTATED. `getMarketplaceInfo` reads `opts.cwd` inside
-// its scope fan-out before it can emit anything, so a workflow that ran would
-// carry strong-mock's pending-call proxy into that read and fail there. A
-// delegating case states one emission, zero tool probes, and one
-// working-directory read. D-05: the workflow renders from the notification run
-// the case hands the handler, so no emission probes the tool inventory.
+// A rejecting case sizes the boundary at one emission and leaves the working
+// directory UNSTATED. `getMarketplaceInfo` reads `opts.cwd` inside its scope
+// fan-out before it can emit anything, so a workflow that ran would carry
+// strong-mock's pending-call proxy into that read and fail there. A delegating
+// case states one emission and one working-directory read. D-05: the workflow
+// renders from the notification run the case hands the handler, so no emission
+// probes the tool inventory.
 //
 // Every case also installs a fail-fast replacement of `https.request`, the door
 // the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT, and the
@@ -167,7 +167,7 @@ for (const { expectedMessage, flags, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "delegates");
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       reads: 1,
       value: workspace.cwd,
     });
@@ -186,7 +186,7 @@ test("supplies the info usage block, shown when the name positional is missing",
   // arrange
   const workspace = await createHermeticWorkspace(t, "missing-name");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const infoHandler = makeMarketplaceInfoHandler();
 
   // act
@@ -203,7 +203,7 @@ test("supplies the info usage block beside a parse diagnostic the parser reports
   // arrange
   const workspace = await createHermeticWorkspace(t, "invalid-scope");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const infoHandler = makeMarketplaceInfoHandler();
 
   // act
@@ -223,7 +223,7 @@ test("rejects surplus input before looking up a marketplace", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const infoHandler = makeMarketplaceInfoHandler();
 
   // act
@@ -246,7 +246,7 @@ for (const args of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "local-flag");
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const infoHandler = makeMarketplaceInfoHandler();
 
     // act
@@ -281,7 +281,7 @@ for (const { name, autoupdate } of [
       '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
     await writeFile(locations.configJsonPath, sharedBytes);
     await writeFile(locations.configLocalJsonPath, localBytes);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });

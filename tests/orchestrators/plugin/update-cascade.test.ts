@@ -31,7 +31,7 @@ function updated(
 
 test("renders an empty bulk cascade as the exact no-op headline", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 0);
+  const boundary = createNotificationBoundary(1);
 
   // act
   composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), [], "plural");
@@ -43,7 +43,7 @@ test("renders an empty bulk cascade as the exact no-op headline", () => {
 
 test("sorts changed marketplaces and renders the exact bulk tally and reload hint", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 0);
+  const boundary = createNotificationBoundary(1);
   const outcomes = [updated("zeta", "user", "world"), updated("alpha", "project", "hello")];
   const expectedMessage = [
     "● alpha [project]",
@@ -67,7 +67,7 @@ test("sorts changed marketplaces and renders the exact bulk tally and reload hin
 
 test("keeps an unchanged targeted result exact without a tally or reload hint", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 0);
+  const boundary = createNotificationBoundary(1);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -95,7 +95,7 @@ test("keeps an unchanged targeted result exact without a tally or reload hint", 
 
 test("renders a partial bulk decline before the exact no-op headline", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 0);
+  const boundary = createNotificationBoundary(1);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -130,7 +130,7 @@ test("renders a partial bulk decline before the exact no-op headline", () => {
 
 test("renders an absent targeted result as an exact error without a version", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 0);
+  const boundary = createNotificationBoundary(1);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -162,7 +162,7 @@ test("renders an absent targeted result as an exact error without a version", ()
 
 test("renders a failed bulk result with exact severity and tally", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 0);
+  const boundary = createNotificationBoundary(1);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -194,7 +194,7 @@ test("renders a failed bulk result with exact severity and tally", () => {
 
 test("suppresses an unchanged cascade after a separately reported failure", () => {
   // arrange
-  const boundary = createNotificationBoundary(0, 0);
+  const boundary = createNotificationBoundary(0);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -310,7 +310,7 @@ const skippedCases: readonly SkippedCase[] = [
 for (const row of skippedCases) {
   test(row.title, () => {
     // arrange
-    const boundary = createNotificationBoundary(1, 0);
+    const boundary = createNotificationBoundary(1);
     const expectedNotification =
       row.expectedSeverity === undefined
         ? { message: row.expectedMessage }
@@ -327,7 +327,7 @@ for (const row of skippedCases) {
 
 test("preserves caller order for rows in one marketplace", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 0);
+  const boundary = createNotificationBoundary(1);
   const outcomes = [updated("mp", "project", "beta"), updated("mp", "project", "alpha")];
   const expectedMessage = [
     "● mp [project]",
@@ -349,7 +349,7 @@ test("preserves caller order for rows in one marketplace", () => {
 
 test("D-05: stamps warning and composes the agents marker from one unloaded snapshot", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 0);
+  const boundary = createNotificationBoundary(1);
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: true,
@@ -388,7 +388,7 @@ test("D-05: stamps warning and composes the agents marker from one unloaded snap
 
 test("D-05: stamps info and composes no marker from one loaded snapshot", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 0);
+  const boundary = createNotificationBoundary(1);
   const run = runWithSoftDeps({
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: false,

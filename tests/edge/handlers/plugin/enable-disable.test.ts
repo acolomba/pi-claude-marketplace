@@ -14,7 +14,7 @@
 // config layer. That exact-argument gap is this owner's recorded scope.
 //
 // The negative half of D-116-06 is proven in full. A rejecting case sizes the
-// boundary at one emission, zero probes, and no stated `cwd`; both scopes are
+// boundary at one emission and no stated `cwd`; both scopes are
 // seeded, so a workflow that did run would have records to flip and files to
 // write, and every rejecting case reads the whole footprint back unchanged
 // beside `verifyBoundary()`.
@@ -25,10 +25,9 @@
 //     writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once;
 //   * the handler's own failure conversion reads `ctx.ui` once.
-// No path reads `pi.getAllTools()`, so every case states zero probes. The
-// handler holds no tool inventory: D-05 has the workflow and the handler's own
-// failure row read the router's run for both the severity stamp and the
-// markers.
+// No path reads the tool list. The handler holds no tool inventory: D-05 has
+// the workflow and the handler's own failure row read the router's run for both
+// the severity stamp and the markers.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope,
 // and `<HOME>/.pi/agent` for the user scope with the agent-directory variable
@@ -356,7 +355,7 @@ for (const { enable, expectedMessage, subcommand } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `unknown-flag-${subcommand}`);
     await seedBothScopes(workspace, false);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const enableDisableHandler = makeHandlerUnderTest(enable);
 
     // act
@@ -373,7 +372,7 @@ test("collapses a missing plugin reference into one sentence with the usage bloc
   // arrange
   const workspace = await createHermeticWorkspace(t, "missing-positional");
   await seedBothScopes(workspace, false);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const enableDisableHandler = makeHandlerUnderTest(true);
 
   // act
@@ -395,7 +394,7 @@ test("names the offending token when the plugin reference carries no separator (
   // arrange
   const workspace = await createHermeticWorkspace(t, "malformed-ref");
   await seedBothScopes(workspace, false);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const enableDisableHandler = makeHandlerUnderTest(false);
 
   // act
@@ -417,7 +416,7 @@ test("reports an unrecognised scope value and records nothing (D-116-06)", async
   // arrange
   const workspace = await createHermeticWorkspace(t, "invalid-scope");
   await seedBothScopes(workspace, false);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const enableDisableHandler = makeHandlerUnderTest(true);
 
   // act
@@ -497,7 +496,7 @@ for (const { enable, expectedFootprint, label, seedDisabled, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, seedDisabled);
-    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -516,7 +515,7 @@ test("rejects a surplus reference token and leaves both records unchanged (ENBL-
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus-positional");
   await seedBothScopes(workspace, false);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const enableDisableHandler = makeHandlerUnderTest(false);
 
   // act
@@ -546,7 +545,7 @@ for (const { args, label, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -584,7 +583,7 @@ for (const { args, label, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -639,7 +638,7 @@ for (const { args, enable, expectedMessage, failure, label, reported } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const enableDisableHandler = makeHandlerUnderTest(enable);
 
     // act
@@ -660,7 +659,7 @@ test("removes only the owning runtime route after a successful disable", async (
   const peerRuntime = createHooksRuntime();
   const ownerRouting = await populateRuntimeRoute(workspace, ownerRuntime, "echo owner");
   await populateRuntimeRoute(workspace, peerRuntime, "echo peer");
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });

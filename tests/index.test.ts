@@ -259,17 +259,27 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
  * registered. Every expectation states its event, command or tool name by hand
  * and captures only the callback, so `verifyBoundary()` fails a registration
  * under any other name, an extra registration, and a missing one alike.
+ *
+ * `rootReads` counts the `pi.getAllTools()` reads of the soft-dependency
+ * snapshots the case's roots take. Each `resources_discover` pass that reaches
+ * the reconcile takes one snapshot, and so does each registered-command
+ * invocation; a snapshot reads once per companion target, three times in all
+ * (D-05, D-07). A pass that stops before the reconcile and a case that
+ * dispatches no command read none. A count of 0 states no expectation rather
+ * than `times(0)`, so the first unwanted read fails where it happens.
  */
 async function loadExtension(
   emissions: number,
-  toolProbes: number,
+  rootReads: number,
   cwd?: { readonly value: string; readonly reads: number },
 ): Promise<LoadedExtension> {
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(
-    emissions,
-    toolProbes,
-    cwd,
-  );
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(emissions, cwd);
+  if (rootReads > 0) {
+    when(() => pi.getAllTools())
+      .thenReturn([])
+      .times(rootReads);
+  }
+
   const bridgeSessionStartListener =
     It.willCapture<BridgeSessionStartListener>("bridge session start");
   when(() => {

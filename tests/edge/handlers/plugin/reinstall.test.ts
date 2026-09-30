@@ -60,8 +60,8 @@
 //     channel writes straight to `ctx.ui`;
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, on every
 //     target form, scope and flag combination.
-// Neither path reads `pi.getAllTools()`: the command renders from the run the
-// case hands it (D-05).
+// Neither path reads the tool list: the command renders from the run the case
+// hands it (D-05).
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -362,7 +362,7 @@ test("re-materialises every installed plugin in both scopes when no positional i
   // arrange
   const workspace = await createHermeticWorkspace(t, "all-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -389,7 +389,7 @@ test("re-materialises only the named marketplace when a bare marketplace referen
   // arrange
   const workspace = await createHermeticWorkspace(t, "marketplace-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -416,7 +416,7 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
   // arrange
   const workspace = await createHermeticWorkspace(t, "plugin-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -497,7 +497,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `scope-${scopeValue}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -522,7 +522,7 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -561,7 +561,7 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -589,7 +589,7 @@ test("honours a scope flag and the scope-target flag driven together (WB-02)", a
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -644,7 +644,7 @@ test("answers a cold git source from the no-network resolver without opening a c
       ),
     },
   });
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -689,7 +689,7 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const reinstallHandler = makeReinstallHandler();
 
     // act
@@ -720,7 +720,7 @@ for (const { label, reference, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const reinstallHandler = makeReinstallHandler();
 
     // act
@@ -768,7 +768,7 @@ for (const { args, label, offendingToken, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const reinstallHandler = makeReinstallHandler();
 
     // act
@@ -788,7 +788,7 @@ test("rejects an overwrite flag (--force) as an unknown flag rather than accepti
   // arrange
   const workspace = await createHermeticWorkspace(t, "retired-overwrite-flag");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const reinstallHandler = makeReinstallHandler();
 
   // act
@@ -826,7 +826,7 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const reinstallHandler = makeReinstallHandler();
 
     // act
@@ -866,7 +866,7 @@ for (const { args, expectedSentence, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const reinstallHandler = makeReinstallHandler();
 
     // act
@@ -887,7 +887,7 @@ for (const args of ['""', "''", '--local ""', "'' --local"]) {
     // arrange
     const workspace = await createHermeticWorkspace(t, "empty-target");
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const reinstallHandler = makeReinstallHandler();
 
     // act

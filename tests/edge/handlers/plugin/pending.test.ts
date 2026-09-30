@@ -36,7 +36,7 @@
 // coverage and is not re-derived here.
 //
 // The negative half of D-116-06 is carried by the shape that CAN fail: a
-// rejecting case sizes the boundary at one emission, zero probes, and NO stated
+// rejecting case sizes the boundary at one emission and NO stated
 // `cwd`, so a workflow that did run reads an unstated boundary member and dies
 // where it happens.
 //
@@ -46,9 +46,8 @@
 //     writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, on every
 //     scope and fixture combination.
-// Neither path reads `pi.getAllTools()`. The handler renders from the
-// notification run the router hands it (D-05), so every case states zero
-// probes.
+// Neither path reads the tool list. The handler renders from the notification
+// run the router hands it (D-05).
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -233,7 +232,7 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const expectedListings = await bothTreeListings(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -299,7 +298,7 @@ test("previews a planned install of a cold git source without opening a connecti
     configBytes("mp", "./mp-src", ["far@mp", "near@mp"]),
   );
   const expectedListings = await bothTreeListings(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -322,8 +321,8 @@ test("previews a planned install of a cold git source without opening a connecti
 
 // ---------------------------------------------------------------------------
 // One above the accepted arity, first positional NOT long-flag-shaped.
-// Rejections size the boundary at one emission, zero probes, and no stated
-// `cwd`, so a workflow that ran would read an unstated boundary member.
+// Rejections size the boundary at one emission and no stated `cwd`, so a
+// workflow that ran would read an unstated boundary member.
 // ---------------------------------------------------------------------------
 
 for (const { args, label, summary } of [
@@ -344,7 +343,7 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const pendingHandler = makePendingHandler();
 
     // act
@@ -401,7 +400,7 @@ for (const { args, label, offendingToken, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const pendingHandler = makePendingHandler();
 
     // act
@@ -439,7 +438,7 @@ for (const { args, expectedSentence, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const pendingHandler = makePendingHandler();
 
     // act

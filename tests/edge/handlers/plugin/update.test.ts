@@ -58,7 +58,7 @@
 // restate a fact another pair owns.
 //
 // The negative half of D-116-06 is proven in full. Every rejecting case sizes
-// the boundary at one emission, zero probes and NO stated `cwd`, compares the
+// the boundary at one emission and NO stated `cwd`, compares the
 // whole notification list against a hand-authored value, asserts that the
 // seeded fixture is byte-unchanged, and calls `verifyBoundary()`. That
 // footprint assertion is a live gate rather than a vacuous negative: a
@@ -68,11 +68,12 @@
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two paths disagree and neither is a property of the
 // helper:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- `notifyUsageError` writes straight to the channel;
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
+//     writes straight to the channel;
 //   * every delegating case, whether the update succeeds, degrades or is
-//     refused by the candidate gate, reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` SIX times.
+//     refused by the candidate gate, reads `ctx.ui` once and `ctx.cwd` once.
+// Neither path reads the tool list: the update renders from the run the case
+// hands the handler (D-05).
 //
 // The network door is `https.request`, not `globalThis.fetch`: the git
 // transport reaches the wire through `simple-get`, and `fetch` has a single
@@ -595,7 +596,7 @@ const PROJECT_ONE_UPDATED: ScopeFootprint = {
 test("forwards the exact direct update request through the required update operation", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "forward-operation");
-  const { ctx } = createNotificationBoundary(1, 0, {
+  const { ctx } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -674,7 +675,7 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -726,7 +727,7 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -821,7 +822,7 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedDegraded(workspace);
-    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -874,7 +875,7 @@ for (const { args, expectedAgents, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -902,7 +903,7 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -942,7 +943,7 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const updateHandler = createUpdateHandler();
 
     // act
@@ -981,7 +982,7 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const updateHandler = createUpdateHandler();
 
     // act
@@ -1010,7 +1011,7 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const updateHandler = createUpdateHandler();
 
     // act
@@ -1043,7 +1044,7 @@ for (const { args, label, offending, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const updateHandler = createUpdateHandler();
 
     // act

@@ -5085,7 +5085,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
       });
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
       const run = runWithNothingLoaded();
       const outcomes = await reinstallPlugins({
         ctx,
@@ -5141,7 +5141,7 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
       // one-collision fixture leaves dark.
       await seedCollidingSkills(world.pluginRoot, "world", ["foo", "bar"]);
 
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
       const run = runWithNothingLoaded();
       await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
 
@@ -5180,7 +5180,7 @@ test("D-141-03: an orchestrated reinstall carries the discovery half on notes an
       });
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
       const run = runWithNothingLoaded();
       const outcome = await reinstallPlugin({
         ctx,

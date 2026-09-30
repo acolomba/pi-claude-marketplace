@@ -13,8 +13,7 @@
 //
 // Every dispatch case sizes the Pi boundary at zero emissions, which is what
 // makes a successful route provably silent. Every usage-error case sizes it at
-// one emission and no soft-dependency probe, because notifyUsageError writes
-// straight to the context and probes nothing.
+// one emission, because notifyUsageError writes straight to the context.
 //
 // No exhaustiveness claim. Both switch statements turn on an open string peeled
 // from raw user input and both carry a default arm, so removing an arm is a
@@ -124,7 +123,7 @@ const EXPECTED_MARKETPLACE_USAGE =
 for (const { subcommand, handler } of TOP_LEVEL_DISPATCH) {
   test(`dispatches ${subcommand} to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
     const run = runWithNothingLoaded();
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
     when(() => handlers[handler]("alpha@official --scope user", ctx, run)).thenResolve(undefined);
@@ -142,7 +141,7 @@ for (const { subcommand, handler } of TOP_LEVEL_DISPATCH) {
 for (const { subcommand, handler, expectedArgs, operand } of MARKETPLACE_DISPATCH) {
   test(`dispatches the marketplace ${subcommand} subcommand to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
     const run = runWithNothingLoaded();
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
     const driven = operand ?? "official --scope user";
@@ -187,7 +186,7 @@ test("accepts exactly the marketplace names its dispatch rows serve", () => {
 
 test("routes the marketplace help subcommand to handlers.help with marketplace topic", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
   when(() => handlers.help("marketplace", ctx, run)).thenResolve(undefined);
@@ -203,7 +202,7 @@ test("routes the marketplace help subcommand to handlers.help with marketplace t
 
 test("routes the ls alias and the list subcommand to one and the same plugin list handler", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
   when(() => handlers.list("official --scope user", ctx, run))
@@ -222,7 +221,7 @@ test("routes the ls alias and the list subcommand to one and the same plugin lis
 
 test("routes the marketplace rm alias and the remove subcommand to one and the same handler", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
   when(() => handlers.marketplaceRemove("official --scope user", ctx, run))
@@ -241,7 +240,7 @@ test("routes the marketplace rm alias and the remove subcommand to one and the s
 
 test("routes the marketplace ls alias and the list subcommand to one and the same handler", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
   when(() => handlers.marketplaceList("--scope user", ctx, run))
@@ -272,7 +271,7 @@ for (const { subcommand, topLevelHandler, marketplaceHandler } of [
 }[]) {
   test(`reads ${subcommand} as the ${topLevelHandler} handler at the top level and as the ${marketplaceHandler} handler behind the marketplace token`, async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
     const run = runWithNothingLoaded();
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
     when(() => handlers[topLevelHandler]("official", ctx, run)).thenResolve(undefined);
@@ -291,7 +290,7 @@ for (const { subcommand, topLevelHandler, marketplaceHandler } of [
 
 test("strips the whitespace run after the subcommand and leaves the interior of the remainder alone", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
   when(() => handlers.install("alpha@official   --scope   user", ctx, run)).thenResolve(undefined);
@@ -307,7 +306,7 @@ test("strips the whitespace run after the subcommand and leaves the interior of 
 
 test("strips whitespace that precedes the subcommand", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
   when(() => handlers.install("alpha@official", ctx, run)).thenResolve(undefined);
@@ -323,7 +322,7 @@ test("strips whitespace that precedes the subcommand", async () => {
 
 test("hands the quotes and flags of the remainder to the handler untouched", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
   when(() => handlers.install('"my plugin"@official --scope user --local', ctx, run)).thenResolve(
@@ -341,7 +340,7 @@ test("hands the quotes and flags of the remainder to the handler untouched", asy
 
 test("hands the handler an empty argument text when the subcommand carries no remainder", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
   when(() => handlers.bootstrap("", ctx, run)).thenResolve(undefined);
@@ -357,7 +356,7 @@ test("hands the handler an empty argument text when the subcommand carries no re
 
 test("hands the handler an empty argument text when the subcommand is followed only by whitespace", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
   when(() => handlers.bootstrap("", ctx, run)).thenResolve(undefined);
@@ -373,7 +372,7 @@ test("hands the handler an empty argument text when the subcommand is followed o
 
 test("peels the marketplace token and its subcommand in turn, keeping the interior of what is left", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
   when(() => handlers.marketplaceAdd("gh:owner/repo   --scope user", ctx, run)).thenResolve(
@@ -395,7 +394,7 @@ for (const { input, shape } of [
 ]) {
   test(`dispatches to the browse handler for input with ${shape} (AP-3)`, async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
     const run = runWithNothingLoaded();
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
     when(() => handlers.browse("", ctx, run)).thenResolve(undefined);
@@ -412,7 +411,7 @@ for (const { input, shape } of [
 
 test("names an unrecognized top-level token back to the operator with the top-level usage block (AP-3)", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
 
@@ -436,7 +435,7 @@ for (const { input, shape } of [
 ]) {
   test(`reports that marketplace needs a subcommand, with the marketplace usage block, for input with ${shape} (AP-3)`, async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const run = runWithNothingLoaded();
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
 
@@ -457,7 +456,7 @@ for (const { input, shape } of [
 
 test("refuses an argument after marketplace help rather than discarding it (AP-3)", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
 
@@ -477,7 +476,7 @@ test("refuses an argument after marketplace help rather than discarding it (AP-3
 
 test("names an unrecognized marketplace token back to the operator with the marketplace usage block (AP-3)", async () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
 

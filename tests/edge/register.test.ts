@@ -430,7 +430,7 @@ describe("registerClaudePluginCommand", () => {
   test("hands the argument text and the command context to the subcommand router (D-04)", async (t) => {
     // arrange
     await createHermeticScope(t, "command-handler");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     // One run per invocation, usage errors included; the usage error probes nothing.
     const { registration, verifyRegistrar } = registerCommandUnderTest({
       runs: 1,
@@ -455,7 +455,7 @@ describe("registerClaudePluginCommand", () => {
   test("shares the supplied lifecycle routing owner with registered import execution", async (t) => {
     // arrange
     const { cwd } = await createHermeticScope(t, "import-routing-owner");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, {
       value: cwd,
       reads: 1,
     });
@@ -1838,7 +1838,7 @@ for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_A
       test(`registered ${spelling} rejects ${kind} before reading runtime context`, async (t) => {
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-arguments");
-        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
         // One run per invocation, usage errors included; the usage error probes nothing.
         const { registration, verifyRegistrar } = registerCommandUnderTest({
           runs: 1,
@@ -1871,7 +1871,7 @@ for (const { verb, aliases = [], operand, usage } of COMMAND_ARGUMENT_CASES.filt
       test(`registered ${spelling} rejects the empty scope ${emptyValue} before a valid-looking token`, async (t) => {
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-empty-scope");
-        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
         // One run per invocation, usage errors included; the usage error probes nothing.
         const { registration, verifyRegistrar } = registerCommandUnderTest({
           runs: 1,

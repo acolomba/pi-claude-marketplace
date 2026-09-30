@@ -15,7 +15,7 @@
 //
 // The negative half of D-116-06 is proven in full, and the mechanism that fires
 // is the boundary's UNSTATED working directory, not the emission count. A
-// rejecting case sizes the boundary at one emission, zero probes, and no stated
+// rejecting case sizes the boundary at one emission and no stated
 // `cwd`. `setMarketplaceAutoupdate` reaches `locationsFor(scope, opts.cwd)`
 // before it can emit anything, so a workflow that ran would carry strong-mock's
 // pending-call proxy into `path.join` and die there. The emission count is only
@@ -26,8 +26,7 @@
 // Both scopes are seeded in every case, rejecting ones included, so a workflow
 // that did run would have marketplaces to flip and files to write.
 //
-// A delegating case also states zero tool probes: D-05 renders the workflow's
-// emission from the run the handler receives.
+// D-05 renders a delegating case's emission from the run the handler receives.
 //
 // The two scope roots are hand-authored -- `<cwd>/.pi` for the project scope and
 // the directory PI_CODING_AGENT_DIR pins for the user scope (SC-1). Reading the
@@ -184,7 +183,7 @@ for (const { enable, expectedMessage, subcommand } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `unknown-flag-${subcommand}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const autoupdateHandler = makeAutoupdateHandler(enable);
 
     // act
@@ -205,7 +204,7 @@ for (const { rejectedToken, shape } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "invalid-scope");
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const autoupdateHandler = makeAutoupdateHandler(true);
 
     // act
@@ -227,7 +226,7 @@ test("flips every marketplace in both scopes when no scope flag narrows the comm
   // arrange
   const workspace = await createHermeticWorkspace(t, "bare-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -256,7 +255,7 @@ test("flips only the marketplace the name positional selects", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "named-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -275,7 +274,7 @@ test("rejects surplus input without writing either config layer", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus-positional");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const autoupdateHandler = makeAutoupdateHandler(true);
 
   // act
@@ -324,7 +323,7 @@ for (const { enable, expectedMessage, expectedProjectBase, subcommand } of [
       '{"schemaVersion":1,"marketplaces":{"alpha":{"source":"./alpha-src","autoupdate":true}}}\n',
       "utf8",
     );
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -366,7 +365,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `scope-${scopeValue}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -390,7 +389,7 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -410,7 +409,7 @@ test("accepts a scope flag beside the scope-target flag and honors both selector
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });

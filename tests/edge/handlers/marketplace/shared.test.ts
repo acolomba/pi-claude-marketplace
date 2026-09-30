@@ -8,8 +8,7 @@
 // the parsing proved below.
 //
 // D-05: the handler takes the command's notification run as its third argument
-// and passes it to the operation. It never probes the tool inventory, so every
-// boundary here states zero probes.
+// and passes it to the operation. It never probes the tool inventory.
 //
 // Every double's type is derived from the module's own signature rather than
 // restated by hand, so a change to the delegate seam is a compile error in this
@@ -52,7 +51,7 @@ const ADD_USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|
 describe("makeSingleNameMarketplaceHandler", () => {
   test("hands the operation the context, the notification run, the name, and the working directory", async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, {
       reads: 1,
       value: "/work/project",
     });
@@ -78,7 +77,7 @@ describe("makeSingleNameMarketplaceHandler", () => {
   for (const scope of ["project", "user"] as const satisfies readonly Scope[]) {
     test(`adds a scope member of "${scope}" to the operation's options`, async () => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, {
         reads: 1,
         value: "/work/project",
       });
@@ -104,7 +103,7 @@ describe("makeSingleNameMarketplaceHandler", () => {
 
   test("collapses the duplicated usage block to one sentence and never reaches the operation (MSG-NC-2)", async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const run = runWithNothingLoaded();
     const operation = mock<MarketplaceOperation>({
       exactParams: true,
@@ -129,7 +128,7 @@ describe("makeSingleNameMarketplaceHandler", () => {
 
   test("rejects surplus input before reading cwd or calling the operation", async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const run = runWithNothingLoaded();
     const operation = mock<MarketplaceOperation>({
       exactParams: true,
@@ -154,7 +153,7 @@ describe("makeSingleNameMarketplaceHandler", () => {
 
   test("shows a parse diagnostic other than the usage string verbatim (MSG-NC-2)", async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const run = runWithNothingLoaded();
     const operation = mock<MarketplaceOperation>({
       exactParams: true,
@@ -179,8 +178,8 @@ describe("makeSingleNameMarketplaceHandler", () => {
 
   test("hands each invocation's own notification run to the operation (D-05)", async () => {
     // arrange
-    const first = createNotificationBoundary(0, 0, { reads: 1, value: "/work/first" });
-    const second = createNotificationBoundary(0, 0, { reads: 1, value: "/work/second" });
+    const first = createNotificationBoundary(0, { reads: 1, value: "/work/first" });
+    const second = createNotificationBoundary(0, { reads: 1, value: "/work/second" });
     const firstRun = runWithNothingLoaded();
     const secondRun = runWithAllLoaded();
     const operation = mock<MarketplaceOperation>({
@@ -209,7 +208,7 @@ describe("makeSingleNameMarketplaceHandler", () => {
 
   test("rejects unknown flags before calling its delegate", async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const run = runWithNothingLoaded();
     const operation = mock<MarketplaceOperation>({
       exactParams: true,
@@ -231,7 +230,7 @@ describe("makeSingleNameMarketplaceHandler", () => {
   for (const args of ["--local official", "official --local"]) {
     test(`info ${args} rejects the local flag as unknown before calling its delegate`, async () => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
       const run = runWithNothingLoaded();
       const operation = mock<MarketplaceOperation>({
         exactParams: true,
@@ -259,7 +258,7 @@ describe("openMarketplaceCommand", () => {
   ] as const) {
     test(`returns the positional under the caller-supplied name "${positionalName}"`, () => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
       // act
       const command = openMarketplaceCommand("official --local", ctx, {
@@ -280,7 +279,7 @@ describe("openMarketplaceCommand", () => {
   ]) {
     test(`parses the same command whether the scope-target flag comes ${placement} the positional (WB-01)`, () => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
       // act
       const command = openMarketplaceCommand(args, ctx, {
@@ -297,7 +296,7 @@ describe("openMarketplaceCommand", () => {
 
   test("carries the parsed scope through and reports the scope-target flag absent", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
     const command = openMarketplaceCommand("official --scope project", ctx, {
@@ -313,7 +312,7 @@ describe("openMarketplaceCommand", () => {
 
   test("rejects the scope-target flag on its own with the collapsed sentence (MSG-NC-2)", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const command = openMarketplaceCommand("--local", ctx, {
@@ -335,7 +334,7 @@ describe("openMarketplaceCommand", () => {
 
   test("returns nothing when the flag scan rejected an unknown long flag (WB-01)", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const command = openMarketplaceCommand("official --bogus", ctx, {
@@ -357,7 +356,7 @@ describe("openMarketplaceCommand", () => {
 
   test("returns nothing and shows the parse diagnostic verbatim when the flag scan succeeded", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const command = openMarketplaceCommand("official --local --scope global", ctx, {
@@ -379,7 +378,7 @@ describe("openMarketplaceCommand", () => {
 
   test("rejects empty arguments with the collapsed sentence (MSG-NC-2)", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const command = openMarketplaceCommand("", ctx, {

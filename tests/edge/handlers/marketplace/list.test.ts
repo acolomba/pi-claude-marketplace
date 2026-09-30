@@ -11,13 +11,13 @@
 // minimal effect -- the seeded marketplace appearing as a row -- rather than as a
 // stated argument list. That exact-argument gap is the recorded scope of this
 // owner. The negative half of D-116-06 is proven in full: the rejecting case
-// sizes the boundary at one emission, zero probes, and no `cwd` read, so a
+// sizes the boundary at one emission and no `cwd` read, so a
 // workflow notification would be a second `ctx.ui` access past its `times(1)`
 // count and `verifyBoundary()` reports it. Both scopes are seeded in that case
 // too, so a workflow that did run would have rows to emit.
 //
 // D-05: the handler renders from the command's notification run, so every case
-// hands it a run literal and sizes the boundary at zero tool probes.
+// hands it a run literal.
 //
 // Every seeded record omits `lastUpdatedAt` and declares no autoupdate entry, so
 // the renderer emits the bare `<glyph> <name> [<scope>]` header row. The detail
@@ -120,7 +120,7 @@ test("lists every scope project-first when no scope flag narrows the listing", a
   // arrange
   const { cwd } = await createHermeticScope(t, "both-scopes");
   await seedBothScopes(cwd);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
   });
@@ -142,7 +142,7 @@ for (const { args, label, surplus } of [
     // arrange
     const { cwd } = await createHermeticScope(t, label);
     await seedBothScopes(cwd);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const marketplaceListHandler = makeMarketplaceListHandler();
 
     // act
@@ -164,7 +164,7 @@ for (const { row, scope } of [
     // arrange
     const { cwd } = await createHermeticScope(t, `scope-${scope}`);
     await seedBothScopes(cwd);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });
@@ -184,7 +184,7 @@ for (const args of ["--local", "--local --scope project", "--scope project --loc
     // arrange
     const { cwd } = await createHermeticScope(t, "local-flag");
     await seedBothScopes(cwd);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const marketplaceListHandler = makeMarketplaceListHandler();
 
     // act
@@ -202,7 +202,7 @@ test("reports an unrecognised scope value with the list usage block and never li
   // arrange
   const { cwd } = await createHermeticScope(t, "invalid-scope");
   await seedBothScopes(cwd);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const marketplaceListHandler = makeMarketplaceListHandler();
 
   // act
@@ -231,7 +231,7 @@ test("list --scope project keeps shared, local, and overridden entries with unch
     '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
   await writeFile(locations.configJsonPath, sharedBytes);
   await writeFile(locations.configLocalJsonPath, localBytes);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
   });
@@ -261,7 +261,7 @@ test("list rejects unknown flags before reading state", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "unknown-flag");
   await seedBothScopes(cwd);
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const handler = makeMarketplaceListHandler();
 
   // act
