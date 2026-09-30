@@ -34,8 +34,10 @@ unstaged and prevents its local chained check from reaching later gates.
 from a prior close (see STATE.md Deferred Items). The new item is a successful
 live credential challenge against a private GitHub or GitLab repository in
 Phase 3 UAT. The real-wire annotated-tag and 401 paths passed, but no
-accessible private repository was supplied for the success path. The UAT
-artifact remains `testing`; the operator deferred that check to later UAT.
+accessible private repository was supplied for the success path. The
+operator deferred that check to later UAT. It passed on 2026-09-30 on the
+stored-credential path that #221 opened to every host, and the UAT artifact
+is now `complete`.
 
 **Archive:** `.planning/milestones/v1.20-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`
 and phase records under `.planning/milestones/v1.20-phases/`.

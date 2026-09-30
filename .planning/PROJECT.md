@@ -42,7 +42,8 @@ carried the open review findings to `BACKLOG.md` GHRED-01 and GHADD-01.
 milestone audit found no requirement or integration gaps; the full clean-tree
 check passed 7,760 unit and 63 integration tests. Closeout is an explicit
 override because a successful live credential challenge against a private
-GitHub or GitLab repository remains deferred in Phase 3 UAT.
+GitHub or GitLab repository was deferred in Phase 3 UAT. That check passed on
+2026-09-30, after the merge of #221, on the stored-credential path.
 
 **Goal:** Record how each installed plugin got there, so `uninstall --prune` can
 remove the ones nothing needs any more -- and close the two adjacent gaps that

@@ -26,8 +26,8 @@ See: `.planning/PROJECT.md` (updated 2026-09-24 after v1.20 closeout)
 component as a working Pi artifact.
 
 **Current focus:** Planning the next milestone. v1.20 closed with 12/12 phases
-and 45/45 requirements. The successful private-repository credential challenge
-remains deferred in Phase 3 UAT; its exception is recorded below.
+and 45/45 requirements. The private-repository credential challenge deferred
+in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 
 ## Current Position
 
@@ -588,7 +588,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 
 | Category | Item | Status | Deferred At | Milestone |
 | -------- | ---- | ------ | ----------- | --------- |
-| uat_gaps | 03/03-UAT.md: successful credential challenge against a private GitHub or GitLab repository | testing; live check deferred | 2026-09-24 | v1.20 |
+| uat_gaps | 03/03-UAT.md: successful credential challenge against a private GitHub or GitLab repository | resolved 2026-09-30 (passed on the stored-credential path; Device Flow arm not exercised) | 2026-09-24 | v1.20 |
 | Tooling | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted) | Pending | Phase 116 discussion | v1.19 |
 | quick_tasks | 260720-d8i-move-agent-provenance-from-body-comment- | unknown | 2026-09-04 | v1.19 |
 | todos | 2026-09-02-detect-unused-code-and-type-members.md | (presence-only) | 2026-09-04 | v1.19 |

@@ -1,9 +1,9 @@
 ---
-status: testing
+status: complete
 phase: 03-dependency-resolution
 source: [03-VERIFICATION.md]
 started: 2026-09-15T00:00:00Z
-updated: 2026-09-15T00:00:00Z
+updated: 2026-09-30T00:00:00Z
 audit_acknowledged:
   milestone: v1.20
   at: 2026-09-24
@@ -68,7 +68,7 @@ a private-repository credential challenge through the tag probe.
 
 expected: `listRemoteTags` (platform/git.ts) correctly reads the real wire protocol's tag advertisement and peels an annotated tag to its commit; a private source's credential challenge is answered by the existing host credential bundle with no separate prompt.
 why_human: Every `dependency-tag-probe.test.ts` and `git.test.ts` case in this phase drives a faulted/fake transport double, never a live `isomorphic-git` wire exchange. The real `listServerRefs({ prefix, peelTags })` behavior against a real remote, and a real credential challenge, are unobserved (03-04 SUMMARY D8, 03-05 SUMMARY D12, both human_judgment: true).
-result: passed_with_one_item_out_of_reach
+result: passed
 
 **Run on 2026-09-15**, operator-executed, against a real smart-HTTPS git remote
 seeded for the purpose: a bare repository served through git's own
@@ -144,6 +144,57 @@ NOT EXERCISED, and out of reach of any local fixture:
   github.com or gitlab.com. This is a gap in coverage, not a defect: the
   observed behavior is exactly what PROV-01/PROV-04 specify.
 
+**Re-run on 2026-09-30**, operator-executed in a live Pi session
+(`tmp/uat-git/launch-pi.sh`, Pi 0.86.1 as `package-lock.json` pins), to close
+the successful-challenge sub-item above. The merge of main brought in #221
+(D-1-01): every host now gets an auth bundle, and a host outside the provider
+registry answers a challenge from the git credential helper. The fixture's
+`credential.helper=store` could therefore reach the success path, and no
+private GitHub or GitLab repository was needed.
+
+Fixture changes, all under the gitignored `tmp/`:
+
+- The private mount served the `omega` repository, whose release tags are
+  `omega--v*`. The probe looks for tags named after the dependency, so
+  `omega-private` would have found no candidate once authentication worked.
+  The 401 had hidden this. A separate `omega-private` repository now carries
+  annotated tags `omega-private--v1.0.0` (commit `d7cb24f1`) and
+  `omega-private--v2.0.0` (commit `a0c4670a`), and the marketplace entry
+  points at `https://localhost:8443/private/omega-private.git`.
+- The fixture CA and server certificate had expired on 2026-09-17. Both were
+  re-issued from the retained keys, still trusted only through
+  `NODE_EXTRA_CA_CERTS` and the isolated `GIT_CONFIG_GLOBAL`.
+
+`/claude:plugin install theta@uat-fixtures --scope user` installed `theta` and
+its dependency `omega-private` with no credential prompt and no Device Flow
+code. Verified afterwards:
+
+- `state.json` records `omega-private` with
+  `resolvedSha d7cb24f1ad047c2ee204b8d3c5c0c2b253089892`, the peeled v1.0.0
+  commit, not the tag object `d03a734b` and not v2.0.0, and
+  `provenance: "dependency"`. `theta` is `provenance: "explicit"`. The
+  sandbox state migrated from schema 2 to 3 with no message.
+- The `omega-private-skill` skill is staged under the scope's resources.
+
+Server log (the first triplet is a `git ls-remote` smoke check of the fixture;
+the next two are the extension):
+
+```text
+[private] GET  /private/omega-private.git/info/refs?service=git-upload-pack
+           -> 401 challenge issued
+[private] GET  /private/omega-private.git/info/refs?service=git-upload-pack
+           -> authenticated as uatuser
+[private] POST /private/omega-private.git/git-upload-pack
+           -> authenticated as uatuser
+  (repeated twice more: the tag probe's ls-refs, then the clone)
+```
+
+Each extension operation took exactly one challenge and one authenticated
+retry, which is the stored-credential path answering the 401 with no second
+credential path. The Device Flow arm, which only `github.com` and `gitlab.com`
+reach on a helper miss, was not exercised; the operator accepted the
+stored-credential run as closing this item.
+
 ## Summary
 
 total: 2
@@ -155,15 +206,9 @@ blocked: 0
 
 ## Gaps
 
-**One sub-item of test 2 remains unexercised: a SUCCESSFUL credential
-challenge.** Everything else in both tests was observed against a running
-system. The auth registry matches only `github.com` and `gitlab.com`
-(PROV-01), so no locally-hosted remote can reach the Device Flow path --
-`buildAuthForHost` returns `undefined` for any other host and the request goes
-out unauthenticated. The 401 arm WAS verified end to end, including the
-server-side single-challenge-no-retry signature. Closing the remaining half
-needs a genuinely private repository on github.com or gitlab.com, and should be
-folded into whichever milestone next touches the auth path.
+**Resolved 2026-09-30: the successful credential challenge passed.** The
+sub-item of test 2 that the 2026-09-15 run could not reach passed in the
+re-run above, on the stored-credential path that #221 opened to every host.
 
 **Operator observation, not a defect.** Two consecutive `uninstall` commands
 rendered such that the second replaced the first's output on screen. Not
