@@ -4425,7 +4425,6 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       version: "1.0.0",
     });
     const locations = locationsFor("user", cwd);
-    const pi = makePi();
     const observe = async (): Promise<{
       enabled: boolean | undefined;
       merged: { source: "base" | "local"; declaredEnabled: boolean } | undefined;
@@ -4487,7 +4486,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
     await createUpdatePlugins()({
       ctx: updateContext.ctx,
       cwd,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "user",
       target: { kind: "plugin", marketplace: "mp", plugin: "foo" },
     });
@@ -4561,7 +4560,6 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       },
     );
     const locations = locationsFor("user", cwd);
-    const pi = makePi();
     const observe = async (): Promise<{
       enabled: boolean | undefined;
       merged: { source: "base" | "local"; declaredEnabled: boolean } | undefined;
@@ -4625,7 +4623,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     await createUpdatePlugins()({
       ctx: updateContext.ctx,
       cwd,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "user",
       target: { kind: "plugin", marketplace: "mp", plugin: "foo" },
     });

@@ -190,10 +190,10 @@ const INVOKERS: Record<string, Invoker> = {
     });
   },
   // plugin update (marketplace target). update-flow.test.ts ATTR-02.
-  "update (plugin)": async ({ ctx, pi, cwd, mode }) => {
+  "update (plugin)": async ({ ctx, run, cwd, mode }) => {
     await createUpdatePlugins()({
       ctx,
-      pi,
+      run,
       cwd,
       target: { kind: "marketplace", marketplace: NAME },
       ...(mode === "explicit" && { scope: "project" as const }),

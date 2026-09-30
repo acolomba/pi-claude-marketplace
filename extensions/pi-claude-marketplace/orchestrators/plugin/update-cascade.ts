@@ -3,7 +3,6 @@
 // Owns update result projection, marketplace grouping, exact tally selection,
 // severity, and reload-hint routing. Invocation cardinality remains structural.
 
-import { softDepStatus } from "../../platform/pi-api.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
   notifyUpdateNoOpWithContext,
@@ -18,7 +17,8 @@ import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
 import type { DirectRenderableOutcome } from "./update-swap.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateSkippedOutcome } from "../types.ts";
@@ -179,15 +179,19 @@ function groupCascadeOutcomes(
     }));
 }
 
-/** Composes and emits one exact update cascade from ordered plugin outcomes. */
+/**
+ * Composes and emits one exact update cascade from ordered plugin outcomes.
+ * D-05: the row severity stamps and the emitted markers read the run's one
+ * soft-dependency snapshot.
+ */
 export function composeUpdateCascade(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  run: NotificationRun,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   abortedByFailure = false,
 ): void {
-  const marketplaces = groupCascadeOutcomes(outcomes, softDepStatus(pi), cardinality);
+  const marketplaces = groupCascadeOutcomes(outcomes, run.softDeps, cardinality);
   const updatedCount = outcomes.filter(({ outcome }) => outcome.partition === "updated").length;
   const hasErrorOrWarningRow = marketplaces.some((marketplace) =>
     marketplace.plugins.some(
@@ -201,7 +205,7 @@ export function composeUpdateCascade(
     !hasErrorOrWarningRow &&
     !abortedByFailure
   ) {
-    notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, cardinality);
+    notifyUpdateNoOpWithContext(ctx, run, UPDATE_CONTEXT, marketplaces, cardinality);
     return;
   }
 
@@ -209,7 +213,7 @@ export function composeUpdateCascade(
     return;
   }
 
-  notifyUpdateWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, cardinality, {
+  notifyUpdateWithContext(ctx, run, UPDATE_CONTEXT, marketplaces, cardinality, {
     verb: "updated",
     count: updatedCount,
   });

@@ -103,7 +103,7 @@ export function registerClaudePluginCommand(
     bootstrap: makeBootstrapHandler(deps),
     install,
     uninstall,
-    update: makeUpdateHandler(pi, updatePlugins),
+    update: makeUpdateHandler(updatePlugins),
     fetch: makeFetchHandler(pi),
     reinstall: makeReinstallHandler(reinstallPlugins),
     list,

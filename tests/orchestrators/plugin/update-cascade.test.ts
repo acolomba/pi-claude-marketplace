@@ -6,6 +6,7 @@ import {
   type UpdateCascadeOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 function updated(
   marketplace: string,
@@ -30,10 +31,10 @@ function updated(
 
 test("renders an empty bulk cascade as the exact no-op headline", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 0);
 
   // act
-  composeUpdateCascade(boundary.ctx, boundary.pi, [], "plural");
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), [], "plural");
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [{ message: "Plugin update: nothing to update" }]);
@@ -42,7 +43,7 @@ test("renders an empty bulk cascade as the exact no-op headline", () => {
 
 test("sorts changed marketplaces and renders the exact bulk tally and reload hint", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 0);
   const outcomes = [updated("zeta", "user", "world"), updated("alpha", "project", "hello")];
   const expectedMessage = [
     "● alpha [project]",
@@ -57,7 +58,7 @@ test("sorts changed marketplaces and renders the exact bulk tally and reload hin
   ].join("\n");
 
   // act
-  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "plural");
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural");
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
@@ -66,7 +67,7 @@ test("sorts changed marketplaces and renders the exact bulk tally and reload hin
 
 test("keeps an unchanged targeted result exact without a tally or reload hint", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 0);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -83,7 +84,7 @@ test("keeps an unchanged targeted result exact without a tally or reload hint", 
   ];
 
   // act
-  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "single");
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "single");
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [
@@ -94,7 +95,7 @@ test("keeps an unchanged targeted result exact without a tally or reload hint", 
 
 test("renders a partial bulk decline before the exact no-op headline", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 0);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -120,7 +121,7 @@ test("renders a partial bulk decline before the exact no-op headline", () => {
   ].join("\n");
 
   // act
-  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "plural");
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural");
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
@@ -129,7 +130,7 @@ test("renders a partial bulk decline before the exact no-op headline", () => {
 
 test("renders an absent targeted result as an exact error without a version", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 0);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -146,7 +147,7 @@ test("renders an absent targeted result as an exact error without a version", ()
   ];
 
   // act
-  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "single");
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "single");
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [
@@ -161,7 +162,7 @@ test("renders an absent targeted result as an exact error without a version", ()
 
 test("renders a failed bulk result with exact severity and tally", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 0);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -178,7 +179,7 @@ test("renders a failed bulk result with exact severity and tally", () => {
   ];
 
   // act
-  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "plural");
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural");
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [
@@ -193,7 +194,7 @@ test("renders a failed bulk result with exact severity and tally", () => {
 
 test("suppresses an unchanged cascade after a separately reported failure", () => {
   // arrange
-  const boundary = createNotificationBoundary(0, 3);
+  const boundary = createNotificationBoundary(0, 0);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -210,7 +211,7 @@ test("suppresses an unchanged cascade after a separately reported failure", () =
   ];
 
   // act
-  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "plural", true);
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural", true);
 
   // assert
   assert.deepStrictEqual(boundary.notifications, []);
@@ -309,14 +310,14 @@ const skippedCases: readonly SkippedCase[] = [
 for (const row of skippedCases) {
   test(row.title, () => {
     // arrange
-    const boundary = createNotificationBoundary(1, 6);
+    const boundary = createNotificationBoundary(1, 0);
     const expectedNotification =
       row.expectedSeverity === undefined
         ? { message: row.expectedMessage }
         : { message: row.expectedMessage, severity: row.expectedSeverity };
 
     // act
-    composeUpdateCascade(boundary.ctx, boundary.pi, [row.outcome], row.cardinality);
+    composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), [row.outcome], row.cardinality);
 
     // assert
     assert.deepStrictEqual(boundary.notifications, [expectedNotification]);
@@ -326,7 +327,7 @@ for (const row of skippedCases) {
 
 test("preserves caller order for rows in one marketplace", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 0);
   const outcomes = [updated("mp", "project", "beta"), updated("mp", "project", "alpha")];
   const expectedMessage = [
     "● mp [project]",
@@ -339,9 +340,85 @@ test("preserves caller order for rows in one marketplace", () => {
   ].join("\n");
 
   // act
-  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "plural");
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural");
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});
+
+test("D-05: stamps warning and composes the agents marker from one unloaded snapshot", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1, 0);
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
+  });
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "mp", scope: "project" },
+      outcome: {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: true,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      },
+    },
+  ];
+
+  // act
+  composeUpdateCascade(boundary.ctx, run, outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    {
+      message:
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 → v1.1.0 (updated) {requires pi-subagents}\n\n/reload to pick up changes",
+      severity: "warning",
+    },
+  ]);
+  boundary.verifyBoundary();
+});
+
+test("D-05: stamps info and composes no marker from one loaded snapshot", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1, 0);
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: true,
+    piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
+  });
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "mp", scope: "project" },
+      outcome: {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: true,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      },
+    },
+  ];
+
+  // act
+  composeUpdateCascade(boundary.ctx, run, outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    {
+      message: "● mp [project]\n  ● hello v1.0.0 → v1.1.0 (updated)\n\n/reload to pick up changes",
+    },
+  ]);
   boundary.verifyBoundary();
 });

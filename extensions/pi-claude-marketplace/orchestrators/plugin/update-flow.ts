@@ -41,13 +41,13 @@
 // PUP-9 routing:
 //  updateSinglePlugin -- cascade path -- catches into partition='failed'
 //  updatePlugins -- direct path -- surfaces phase-2-or-earlier throws via
-//  a single notify(ctx, pi, NotificationMessage) per
+//  a single notify(ctx, run, NotificationMessage) per
 //  orchestration arm (cause threaded structurally on a
 //  PluginFailedMessage; renderer composes the 4-space
 //  cause-chain trailer).
 //
 // Success and failure notifications are a single
-//  notify(opts.ctx, opts.pi, { marketplaces: [{..., plugins: [...] }] })
+//  notify(opts.ctx, opts.run, { marketplaces: [{..., plugins: [...] }] })
 // call per orchestration arm. notify() owns severity, the reload-hint
 // trailer, and the cause-chain. The post-success completion-cache-refresh
 // warning inside dropPluginCompletionCache is NOT surfaced: the underlying
@@ -71,7 +71,6 @@ import {
   PluginUpdatePhase3Error,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
-import { openNotificationRun } from "../../shared/notification-run.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
@@ -102,8 +101,9 @@ import type {
 } from "./update-swap.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
@@ -114,7 +114,7 @@ type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
 /** Folds flow outcomes through the extracted cascade owner. */
 type UpdateCascadeComposer = (
   ctx: NotificationContext,
-  pi: ToolInventory,
+  run: NotificationRun,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   abortedByFailure?: boolean,
@@ -175,10 +175,10 @@ function buildDirectThreePhaseArgs(
     completionCache,
     cascade: false,
     ctx: opts.ctx,
-    // `pi` threads the phase-3a aggregate direct-path notify inside
+    // `run` threads the phase-3a aggregate direct-path notify inside
     // runThreePhaseUpdate. Cascade mode leaves it undefined -- the cascade
     // orchestrator owns its own notify call.
-    pi: opts.pi,
+    run: opts.run,
     cardinality,
     // AG-7 opt-in: `--map-model`. The cascade entrypoint never sets it, so
     // cascade re-installs always omit `model:`.
@@ -201,7 +201,7 @@ function buildDirectThreePhaseArgs(
     notifyPhaseFailure: (error, failures) => {
       notifyDirectFailure({
         ctx: opts.ctx,
-        pi: opts.pi,
+        run: opts.run,
         cardinality,
         marketplace: target.marketplace,
         scope: target.scope,
@@ -235,7 +235,7 @@ async function updatePluginsWith(
   runPluginUpdate: UpdatePluginRunner,
   composeCascade: UpdateCascadeComposer,
 ): Promise<void> {
-  const { ctx, pi } = opts;
+  const { ctx, run } = opts;
   // OUT-04 / D-04: cardinality belongs to the parsed invocation, including
   // enumeration failures that return before any result rows exist.
   const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
@@ -249,7 +249,7 @@ async function updatePluginsWith(
   }
 
   if (targets.length === 0) {
-    notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, [], cardinality);
+    notifyUpdateNoOpWithContext(ctx, run, UPDATE_CONTEXT, [], cardinality);
     return;
   }
 
@@ -276,7 +276,7 @@ async function updatePluginsWith(
       // trailer.
       notifyDirectFailure({
         ctx,
-        pi,
+        run,
         cardinality,
         marketplace: t.marketplace,
         scope: t.scope,
@@ -304,7 +304,7 @@ async function updatePluginsWith(
       // state and continuing risks compounding the failure.
       notifyDirectFailure({
         ctx,
-        pi,
+        run,
         cardinality,
         marketplace: t.marketplace,
         scope: t.scope,
@@ -340,14 +340,14 @@ async function updatePluginsWith(
       // outcome was `unchanged`, the bulk-suppressed cascade is empty and the
       // headline would otherwise emit a contradictory `nothing to update` line
       // directly after the failure notification.
-      renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality, composeCascade, true);
+      renderUpdateCascadeIfAny(ctx, run, outcomes, cardinality, composeCascade, true);
       return;
     }
 
     outcomes.push({ target: t, outcome });
   }
 
-  composeCascade(ctx, pi, outcomes, cardinality);
+  composeCascade(ctx, run, outcomes, cardinality);
   surfaceUpdateDiscoveryWarnings(ctx, outcomes);
 }
 
@@ -405,12 +405,12 @@ async function handleEnumerateFailure(
   err: unknown,
   cardinality: "single" | "plural",
 ): Promise<void> {
-  const { ctx, pi, cwd, target, scope: explicitScope } = opts;
+  const { ctx, run, cwd, target, scope: explicitScope } = opts;
 
   if (err instanceof MarketplaceNotAddedSignal) {
     await emitMarketplaceNotAddedSignal({
       ctx,
-      run: openNotificationRun(pi),
+      run,
       cwd,
       context: UPDATE_CONTEXT,
       cardinality,
@@ -425,7 +425,7 @@ async function handleEnumerateFailure(
   if (target.kind === "all") {
     notifyBareFormEnumerateFailure({
       ctx,
-      pi,
+      run,
       scope: explicitScope,
       err: err as Error,
       cardinality,
@@ -445,7 +445,7 @@ async function handleEnumerateFailure(
   // distinguishable from the surrounding mp header.
   notifyDirectFailure({
     ctx,
-    pi,
+    run,
     cardinality,
     marketplace: target.marketplace,
     // No state.json was read yet, so explicit scope is the best fact available;
@@ -475,7 +475,7 @@ function isPhase3aAggregateFailure(
  */
 function renderUpdateCascadeIfAny(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  run: NotificationRun,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   composeCascade: UpdateCascadeComposer,
@@ -484,7 +484,7 @@ function renderUpdateCascadeIfAny(
   abortedByFailure = false,
 ): void {
   if (outcomes.length > 0) {
-    composeCascade(ctx, pi, outcomes, cardinality, abortedByFailure);
+    composeCascade(ctx, run, outcomes, cardinality, abortedByFailure);
   }
 }
 
@@ -607,7 +607,7 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
 
 interface NotifyDirectFailureArgs {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly cardinality: "single" | "plural";
   readonly marketplace: string;
   readonly scope: Scope;
@@ -631,7 +631,7 @@ interface NotifyDirectFailureArgs {
 }
 
 function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
-  const { ctx, pi, marketplace, scope, pluginName, err } = args;
+  const { ctx, run, marketplace, scope, pluginName, err } = args;
   const cause = err instanceof Error ? err : new Error(String(err));
   const reasons: readonly ContentReason[] = [args.reasonOverride ?? narrowDirectFailReason(cause)];
   // WR-05: row-level `scope` is OMITTED -- it always matched the
@@ -659,7 +659,7 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   };
   notifyWithContext(
     ctx,
-    pi,
+    run,
     UPDATE_CONTEXT,
     [
       {
@@ -744,12 +744,12 @@ function narrowDirectFailReason(err: Error): ContentReason {
  */
 function notifyBareFormEnumerateFailure(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly scope: Scope | undefined;
   readonly err: Error;
   readonly cardinality: "single" | "plural";
 }): void {
-  const { ctx, pi, scope, err } = args;
+  const { ctx, run, scope, err } = args;
   const reasons: readonly ContentReason[] = [narrowDirectFailReason(err)];
   // WR-05: row-level `scope` is OMITTED -- the marketplace block carries
   // the same scope, and `renderScopeBracket` suppresses the per-row
@@ -766,7 +766,7 @@ function notifyBareFormEnumerateFailure(args: {
   };
   notifyWithContext(
     ctx,
-    pi,
+    run,
     UPDATE_CONTEXT,
     [
       {
