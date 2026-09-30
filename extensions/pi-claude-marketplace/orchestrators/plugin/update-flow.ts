@@ -71,6 +71,7 @@ import {
   PluginUpdatePhase3Error,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { openNotificationRun } from "../../shared/notification-run.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
@@ -409,7 +410,7 @@ async function handleEnumerateFailure(
   if (err instanceof MarketplaceNotAddedSignal) {
     await emitMarketplaceNotAddedSignal({
       ctx,
-      pi,
+      run: openNotificationRun(pi),
       cwd,
       context: UPDATE_CONTEXT,
       cardinality,

@@ -46,7 +46,7 @@ import type {
 } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
@@ -1336,18 +1336,18 @@ export function emitMarketplaceNotAdded(args: {
  */
 export async function emitMarketplaceNotAddedSignal(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly cwd: string;
   readonly context: CommandContext<"skipped", PluginSkippedMessage>;
   readonly cardinality: "single" | "plural";
   readonly err: MarketplaceNotAddedSignal;
 }): Promise<void> {
-  const { ctx, pi, cwd, context, cardinality, err } = args;
+  const { ctx, run, cwd, context, cardinality, err } = args;
 
   if (err.notInstalledAt !== undefined && err.plugin !== undefined) {
     notifyWithContext(
       ctx,
-      pi,
+      run,
       context,
       [
         {
@@ -1370,7 +1370,7 @@ export async function emitMarketplaceNotAddedSignal(args: {
     return;
   }
 
-  notify(ctx, pi, {
+  notify(ctx, run, {
     kind: "marketplace-not-added",
     name: err.marketplace,
     ...(err.requestedScope !== undefined && { scope: err.requestedScope }),

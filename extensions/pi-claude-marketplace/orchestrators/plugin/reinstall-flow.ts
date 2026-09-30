@@ -10,7 +10,7 @@
 // every bridge before physical replacement, then rolls physical resources back
 // if replacement or explicit state persistence fails.
 //
-// Each orchestration arm emits exactly one `notify(ctx, pi, ...)` call.
+// Each orchestration arm emits exactly one `notify(ctx, run, ...)` call.
 // notify() owns severity, the reload-hint trailer, and the cause-chain.
 // Manual-recovery rows are folded into the cascade `plugins[]` array as
 // `PluginManualRecoveryMessage` entries rather than emitted separately.
@@ -101,8 +101,9 @@ import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
@@ -123,7 +124,8 @@ export type ReinstallHooksRouting = Pick<
 /** Complete inputs for one installed plugin reinstall. */
 export interface ReinstallPluginOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  /** The command run. D-05: every emission renders from its one soft-dep snapshot. */
+  readonly run: NotificationRun;
   readonly scope: Scope;
   readonly cwd: string;
   readonly marketplace: string;
@@ -152,7 +154,11 @@ export interface ReinstallPluginOptions {
 /** Complete inputs for targeted or bulk plugin reinstall. */
 export interface ReinstallPluginsOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  /**
+   * The command run. D-05: every emission, including each per-plugin
+   * reinstall's, renders from its one soft-dep snapshot.
+   */
+  readonly run: NotificationRun;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly target: ReinstallPluginsTarget;
@@ -275,7 +281,7 @@ async function reinstallPluginWithTransaction(
   completionCache: CompletionCache,
   opts: ReinstallPluginOptions,
 ): Promise<ReinstallPluginOutcome> {
-  const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
+  const { ctx, run, scope, cwd, marketplace, plugin } = opts;
   const render = opts.render ?? "default";
   const locations = locationsFor(scope, cwd);
 
@@ -306,7 +312,7 @@ async function reinstallPluginWithTransaction(
       };
       notifyWithContext(
         ctx,
-        pi,
+        run,
         REINSTALL_CONTEXT,
         [{ name: marketplace, scope, plugins: [skippedRow] }],
         undefined,
@@ -376,7 +382,7 @@ async function reinstallPluginWithTransaction(
   );
   notifyWithContext(
     ctx,
-    pi,
+    run,
     REINSTALL_CONTEXT,
     [{ name: marketplace, scope, plugins: [reinstalledRow] }],
     undefined,
@@ -393,7 +399,7 @@ async function reinstallPluginWithTransaction(
     );
     notifyWithContext(
       ctx,
-      pi,
+      run,
       REINSTALL_CONTEXT,
       [
         {
@@ -449,7 +455,7 @@ function handleSinglePluginFailure(
   err: Error,
   render: "default" | "none",
 ): ReinstallFailedOutcome {
-  const { ctx, pi, scope, marketplace, plugin } = opts;
+  const { ctx, run, scope, marketplace, plugin } = opts;
   const outcome = owners.recordReinstallOutcome({
     partition: "failed",
     name: plugin,
@@ -490,7 +496,7 @@ function handleSinglePluginFailure(
         } satisfies PluginFailedMessage);
     notifyWithContext(
       ctx,
-      pi,
+      run,
       REINSTALL_CONTEXT,
       [{ name: marketplace, scope, plugins: [failureRow] }],
       undefined,
@@ -507,7 +513,7 @@ async function reinstallPluginsWith(
   opts: ReinstallPluginsOptions,
   reinstallPlugin: ReinstallPluginFn,
 ): Promise<readonly ReinstallPluginOutcome[]> {
-  const { ctx, pi, cwd } = opts;
+  const { ctx, run, cwd } = opts;
   let selection: {
     readonly cardinality: "single" | "plural";
     readonly targets: readonly SelectedReinstallTarget[];
@@ -534,7 +540,7 @@ async function reinstallPluginsWith(
     // sentinel at the top-level / standalone-cascade boundary; the closest
     // analog is the list-surface `(no marketplaces)` rendering. Severity:
     // undefined (info).
-    notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [], undefined, cardinality);
+    notifyWithContext(ctx, run, REINSTALL_CONTEXT, [], undefined, cardinality);
     return [];
   }
 
@@ -550,7 +556,7 @@ async function reinstallPluginsWith(
     outcomes.push(
       await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: target.scope,
         cwd,
         marketplace: target.marketplace,
@@ -567,7 +573,7 @@ async function reinstallPluginsWith(
     );
   }
 
-  renderReinstallPartitionAndNotify(ctx, pi, outcomes, cardinality);
+  renderReinstallPartitionAndNotify(ctx, run, outcomes, cardinality);
   surfaceReinstallDiscoveryWarnings(ctx, outcomes);
   return Object.freeze(outcomes);
 }
@@ -631,12 +637,12 @@ async function handleEnumerationFailure(
   err: Error,
   cardinality: "single" | "plural",
 ): Promise<void> {
-  const { ctx, pi, cwd } = opts;
+  const { ctx, run, cwd } = opts;
 
   if (err instanceof MarketplaceNotAddedSignal) {
     await emitMarketplaceNotAddedSignal({
       ctx,
-      pi,
+      run,
       cwd,
       context: REINSTALL_CONTEXT,
       cardinality,
@@ -662,7 +668,7 @@ async function handleEnumerationFailure(
   };
   notifyWithContext(
     ctx,
-    pi,
+    run,
     REINSTALL_CONTEXT,
     [{ name: targetingMp, scope: targetingScope, plugins: [failedRow] }],
     undefined,

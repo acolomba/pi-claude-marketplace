@@ -16,8 +16,9 @@ import {
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
 
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type {
   CommandContext,
   MarketplaceRows,
@@ -116,7 +117,7 @@ export const REINSTALL_CONTEXT = {
 // ───────────────────────────────────────────────────────────────────────────
 /**
  * Render the bulk-reinstall outcome cascade as a single
- * `notify(ctx, pi, NotificationMessage)` call per orchestration.
+ * `notify(ctx, run, NotificationMessage)` call per orchestration.
  *
  * Shape per marketplace (catalog `/claude:plugin reinstall` cascade):
  *
@@ -141,7 +142,7 @@ export const REINSTALL_CONTEXT = {
  */
 // NotificationMessage cascade recipe:
 // - One MarketplaceNotificationMessage per affected marketplace, emitted via
-//   a single notify(ctx, pi, ...) call per orchestration.
+//   a single notify(ctx, run, ...) call per orchestration.
 // - plugins: readonly PluginNotificationMessage[] in display order
 //   (orchestrator-controlled iteration; notify does not sort).
 // - Discriminators by status: "reinstalled" / "skipped" / "failed" /
@@ -152,7 +153,7 @@ export const REINSTALL_CONTEXT = {
 // - Reference: catalog UAT plugin-reinstall fixtures.
 export function renderReinstallPartitionAndNotify(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  run: NotificationRun,
   outcomes: readonly ReinstallPluginOutcome[],
   cardinality: "single" | "plural",
 ): void {
@@ -203,7 +204,7 @@ export function renderReinstallPartitionAndNotify(
   // reinstall omits it (the row embeds the outcome). The structural
   // single-vs-plural signal is the invocation FORM, threaded from
   // `reinstallPlugins`.
-  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, marketplaces, undefined, cardinality);
+  notifyWithContext(ctx, run, REINSTALL_CONTEXT, marketplaces, undefined, cardinality);
 }
 
 /**

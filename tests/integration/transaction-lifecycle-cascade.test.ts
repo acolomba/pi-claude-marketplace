@@ -246,12 +246,12 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
       await writeFile(hooksPath, JSON.stringify({ corrupted: true }));
 
       {
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         const outcome = await reinstallPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",

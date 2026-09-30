@@ -180,10 +180,10 @@ const INVOKERS: Record<string, Invoker> = {
     });
   },
   // reinstall (marketplace target). reinstall-flow.test.ts ATTR-03.
-  reinstall: async ({ ctx, pi, cwd, mode }) => {
+  reinstall: async ({ ctx, run, cwd, mode }) => {
     await createReinstallPlugins()({
       ctx,
-      pi,
+      run,
       cwd,
       target: { kind: "marketplace", marketplace: NAME },
       ...(mode === "explicit" && { scope: "project" as const }),

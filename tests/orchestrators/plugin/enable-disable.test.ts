@@ -4497,7 +4497,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       ctx: reinstallContext.ctx,
       cwd,
       marketplace: "mp",
-      pi,
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4638,7 +4638,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       ctx: reinstallContext.ctx,
       cwd,
       marketplace: "mp",
-      pi,
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });

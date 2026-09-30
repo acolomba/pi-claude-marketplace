@@ -498,20 +498,20 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:109:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:217:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:218:42",
       "owner": "isManualRecoveryOutcome",
       "key": "failureClass",
       "category": "type-refinement",
       "purpose": "Narrows failureClass at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:217:15"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:218:15"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:73:60",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:74:60",
       "owner": "REINSTALL_RENDER",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within ReinstallMsg by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:73:36"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:74:36"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:710:54",
@@ -562,20 +562,20 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:993:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:834:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:835:42",
       "owner": "enumerateMarketplaceTarget.target",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:834:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:835:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:915:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:916:42",
       "owner": "resolveUpdateMarketplaceScope.target",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:915:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:916:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:137:56",

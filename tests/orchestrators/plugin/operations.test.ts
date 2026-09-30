@@ -624,12 +624,12 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
       PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo goodbye" }] }],
     }),
   );
-  const { ctx, pi } = makeCtx();
+  const { ctx, run } = makeCtx();
 
   // act
   const outcome = await reinstallPlugin({
     ctx,
-    pi,
+    run,
     scope: "project",
     cwd,
     marketplace: "mp",

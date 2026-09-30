@@ -49,20 +49,19 @@
 // materialises the wrong name rather than merely materialising nothing.
 //
 // The negative half of D-116-06 is proven in full. A rejecting case sizes the
-// boundary at one emission, zero probes, and NO stated working directory, and
-// also reads back the empty footprint, so "the workflow never ran" is asserted
-// as an absence of recorded state as well as at the boundary. The zero-probe
-// half is a post-hoc report from the boundary's own verification rather than a
-// crash -- the soft-dependency probe swallows its own throw -- so every case
-// calls `verifyBoundary()` and none relies on the workflow dying.
+// boundary at one emission and NO stated working directory, and also reads back
+// the empty footprint, so "the workflow never ran" is asserted as an absence of
+// recorded state as well as at the boundary. Every case calls
+// `verifyBoundary()` and none relies on the workflow dying.
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- the usage-error channel writes straight to `ctx.ui`;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` THREE times, on every target form, scope and flag
-//     combination.
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- the usage-error
+//     channel writes straight to `ctx.ui`;
+//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, on every
+//     target form, scope and flag combination.
+// Neither path reads `pi.getAllTools()`: the command renders from the run the
+// case hands it (D-05).
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -107,6 +106,7 @@ import { makeReinstallHandler as makeReinstallHandlerWithOperation } from "../..
 import { createNodeReinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
@@ -114,14 +114,10 @@ import {
   mergeMarketplaceIntoState,
 } from "../marketplace-seed.ts";
 
-import type { ExtensionAPI } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
-function makeReinstallHandler(
-  pi: ExtensionAPI,
-): ReturnType<typeof makeReinstallHandlerWithOperation> {
+function makeReinstallHandler(): ReturnType<typeof makeReinstallHandlerWithOperation> {
   return makeReinstallHandlerWithOperation(
-    pi,
     createNodeReinstallPlugins(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
@@ -366,14 +362,14 @@ test("re-materialises every installed plugin in both scopes when no positional i
   // arrange
   const workspace = await createHermeticWorkspace(t, "all-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const reinstallHandler = makeReinstallHandler(pi);
+  const reinstallHandler = makeReinstallHandler();
 
   // act
-  await reinstallHandler("", ctx);
+  await reinstallHandler("", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: ALL_PLUGINS_MESSAGE }]);
@@ -393,14 +389,14 @@ test("re-materialises only the named marketplace when a bare marketplace referen
   // arrange
   const workspace = await createHermeticWorkspace(t, "marketplace-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const reinstallHandler = makeReinstallHandler(pi);
+  const reinstallHandler = makeReinstallHandler();
 
   // act
-  await reinstallHandler("@mp", ctx);
+  await reinstallHandler("@mp", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_FORM_MESSAGE }]);
@@ -420,7 +416,7 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
   // arrange
   const workspace = await createHermeticWorkspace(t, "plugin-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -430,10 +426,11 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
   );
   const reinstallPluginsSpy = t.mock.fn(reinstallPlugins);
 
-  const reinstallHandler = makeReinstallHandlerWithOperation(pi, reinstallPluginsSpy);
+  const reinstallHandler = makeReinstallHandlerWithOperation(reinstallPluginsSpy);
+  const run = runWithNothingLoaded();
 
   // act
-  await reinstallHandler("alpha@mp", ctx);
+  await reinstallHandler("alpha@mp", ctx, run);
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: PLUGIN_FORM_MESSAGE }]);
@@ -451,7 +448,7 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     [
       {
         ctx,
-        pi,
+        run,
         cwd: workspace.cwd,
         target: { kind: "plugin", plugin: "alpha", marketplace: "mp" },
       },
@@ -500,14 +497,14 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `scope-${scopeValue}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const reinstallHandler = makeReinstallHandler(pi);
+    const reinstallHandler = makeReinstallHandler();
 
     // act
-    await reinstallHandler(`--scope ${scopeValue}`, ctx);
+    await reinstallHandler(`--scope ${scopeValue}`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -525,14 +522,14 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const reinstallHandler = makeReinstallHandler(pi);
+    const reinstallHandler = makeReinstallHandler();
 
     // act
-    await reinstallHandler(args, ctx);
+    await reinstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_FORM_MESSAGE }]);
@@ -564,14 +561,14 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const reinstallHandler = makeReinstallHandler(pi);
+    const reinstallHandler = makeReinstallHandler();
 
     // act
-    await reinstallHandler(args, ctx);
+    await reinstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_FORM_MESSAGE }]);
@@ -592,14 +589,14 @@ test("honours a scope flag and the scope-target flag driven together (WB-02)", a
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const reinstallHandler = makeReinstallHandler(pi);
+  const reinstallHandler = makeReinstallHandler();
 
   // act
-  await reinstallHandler("--scope user --local", ctx);
+  await reinstallHandler("--scope user --local", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: USER_SCOPE_MESSAGE }]);
@@ -647,14 +644,14 @@ test("answers a cold git source from the no-network resolver without opening a c
       ),
     },
   });
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const reinstallHandler = makeReinstallHandler(pi);
+  const reinstallHandler = makeReinstallHandler();
 
   // act
-  await reinstallHandler("far@mp", ctx);
+  await reinstallHandler("far@mp", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -692,11 +689,11 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const reinstallHandler = makeReinstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const reinstallHandler = makeReinstallHandler();
 
     // act
-    await reinstallHandler(args, ctx);
+    await reinstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -723,11 +720,11 @@ for (const { label, reference, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const reinstallHandler = makeReinstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const reinstallHandler = makeReinstallHandler();
 
     // act
-    await reinstallHandler(reference, ctx);
+    await reinstallHandler(reference, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -771,11 +768,11 @@ for (const { args, label, offendingToken, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const reinstallHandler = makeReinstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const reinstallHandler = makeReinstallHandler();
 
     // act
-    await reinstallHandler(args, ctx);
+    await reinstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -791,11 +788,11 @@ test("rejects an overwrite flag (--force) as an unknown flag rather than accepti
   // arrange
   const workspace = await createHermeticWorkspace(t, "retired-overwrite-flag");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const reinstallHandler = makeReinstallHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const reinstallHandler = makeReinstallHandler();
 
   // act
-  await reinstallHandler("alpha@mp --force", ctx);
+  await reinstallHandler("alpha@mp --force", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -829,11 +826,11 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const reinstallHandler = makeReinstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const reinstallHandler = makeReinstallHandler();
 
     // act
-    await reinstallHandler(args, ctx);
+    await reinstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -869,11 +866,11 @@ for (const { args, expectedSentence, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const reinstallHandler = makeReinstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const reinstallHandler = makeReinstallHandler();
 
     // act
-    await reinstallHandler(args, ctx);
+    await reinstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -890,11 +887,11 @@ for (const args of ['""', "''", '--local ""', "'' --local"]) {
     // arrange
     const workspace = await createHermeticWorkspace(t, "empty-target");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const reinstallHandler = makeReinstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const reinstallHandler = makeReinstallHandler();
 
     // act
-    await reinstallHandler(args, ctx);
+    await reinstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [

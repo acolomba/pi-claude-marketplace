@@ -415,7 +415,7 @@ async function maybeBackfillPlugin(
   // preserved by reinstall (D-68-02).
   const outcome = await reinstallPlugin({
     ctx: opts.ctx,
-    pi: opts.pi,
+    run: opts.run,
     scope,
     cwd: opts.cwd,
     marketplace,

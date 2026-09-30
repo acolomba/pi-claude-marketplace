@@ -46,10 +46,7 @@ import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketp
 import type { ScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type { CommandContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -169,7 +166,6 @@ async function saveScopedState(
  */
 function makeRecordingBoundary(notifications: { message: string; severity?: string }[]): {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
 } {
   const ui = {
     notify(message: string, severity?: string) {
@@ -177,8 +173,7 @@ function makeRecordingBoundary(notifications: { message: string; severity?: stri
     },
   } as unknown as ExtensionContext["ui"];
   const ctx = { ui } as ExtensionContext;
-  const pi = { getAllTools: () => [] } as unknown as ExtensionAPI;
-  return { ctx, pi };
+  return { ctx };
 }
 
 async function writeConfig(filePath: string, config: ScopeConfig): Promise<void> {
@@ -1821,12 +1816,12 @@ describe("emitMarketplaceNotAddedSignal", () => {
       markers: { skipped: false },
     } satisfies CommandContext<"skipped", PluginSkippedMessage>;
     const notifications: { message: string; severity?: string }[] = [];
-    const { ctx, pi } = makeRecordingBoundary(notifications);
+    const { ctx } = makeRecordingBoundary(notifications);
 
     // act
     await emitMarketplaceNotAddedSignal({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       cwd: "/work/project",
       context,
       cardinality: "plural",
@@ -1866,12 +1861,12 @@ describe("emitMarketplaceNotAddedSignal", () => {
         markers: { skipped: false },
       } satisfies CommandContext<"skipped", PluginSkippedMessage>;
       const notifications: { message: string; severity?: string }[] = [];
-      const { ctx, pi } = makeRecordingBoundary(notifications);
+      const { ctx } = makeRecordingBoundary(notifications);
 
       // act
       await emitMarketplaceNotAddedSignal({
         ctx,
-        pi,
+        run: runWithNothingLoaded(),
         cwd,
         context,
         cardinality: "single",
