@@ -39,6 +39,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { type PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { PluginEntry } from "../../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
@@ -1689,12 +1690,11 @@ describe("emitMarketplaceNotAdded", () => {
   test("returns a complete orchestrated failure across both scopes", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
 
     // act
     const failure = emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       marketplace: "ghost",
       requestedScope: undefined,
       orchestrated: true,
@@ -1709,18 +1709,16 @@ describe("emitMarketplaceNotAdded", () => {
     assert.equal(failure.cause, 'Marketplace "ghost" not found in project, user scopes.');
     assert.deepStrictEqual(Object.keys(failure), ["status", "reason", "error", "cause"]);
     verify(ctx);
-    verify(pi);
   });
 
   test("returns a complete orchestrated failure for the requested scope", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
 
     // act
     const failure = emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       marketplace: "ghost",
       requestedScope: "project",
       orchestrated: true,
@@ -1735,17 +1733,12 @@ describe("emitMarketplaceNotAdded", () => {
     assert.equal(failure.cause, 'Marketplace "ghost" not found in project scope.');
     assert.deepStrictEqual(Object.keys(failure), ["status", "reason", "error", "cause"]);
     verify(ctx);
-    verify(pi);
   });
 
   test("emits the exact scoped standalone row and still answers with the typed failure", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -1761,7 +1754,7 @@ describe("emitMarketplaceNotAdded", () => {
     // act
     const failure = emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       marketplace: "ghost",
       requestedScope: "user",
       orchestrated: false,
@@ -1776,17 +1769,12 @@ describe("emitMarketplaceNotAdded", () => {
     assert.deepStrictEqual(failure.error.scopes, ["user"]);
     verify(ctx);
     verify(ui);
-    verify(pi);
   });
 
   test("emits the exact unscoped standalone row when both scopes miss", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -1802,7 +1790,7 @@ describe("emitMarketplaceNotAdded", () => {
     // act
     const failure = emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       marketplace: "ghost",
       requestedScope: undefined,
       orchestrated: false,
@@ -1815,7 +1803,6 @@ describe("emitMarketplaceNotAdded", () => {
     assert.deepStrictEqual(failure.error.scopes, ["project", "user"]);
     verify(ctx);
     verify(ui);
-    verify(pi);
   });
 });
 

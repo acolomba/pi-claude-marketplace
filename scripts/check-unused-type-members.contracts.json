@@ -298,28 +298,28 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:75:54"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1072:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1075:42",
       "owner": "configuredSetPluginEnabled.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1072:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1075:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1072:59",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1075:59",
       "owner": "configuredSetPluginEnabled.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1072:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1075:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1230:41",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1233:41",
       "owner": "freshOutcomeToTypedResult.outcome",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1230:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1233:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:127:67",
@@ -330,60 +330,60 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:127:36"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1497:41",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1500:41",
       "owner": "enableFailedRow.outcome",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1497:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1500:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:524:3",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:527:3",
       "owner": "FailedUnstageOutcome",
       "key": "ok",
       "category": "type-refinement",
       "purpose": "Narrows ok at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:523:29"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:526:29"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:629:41",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:632:41",
       "owner": "addCachedHooksAfterSave.outcome",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:629:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:632:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:660:72",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:663:72",
       "owner": "SelectedConfigWriteTarget",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within DeclaringConfigWriteTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:660:34"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:663:34"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:752:62",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:755:62",
       "owner": "emitUnresolvedTarget.args.resolution",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Excludes from CrossScopePluginResolution by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:752:24"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:755:24"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1062:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1065:42",
       "owner": "SetPluginEnabledOperation.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1062:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1065:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1062:59",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1065:59",
       "owner": "SetPluginEnabledOperation.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1062:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1065:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts:62:72",
@@ -514,12 +514,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:73:36"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:709:54",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:710:54",
       "owner": "InvalidConfigLoad",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within ConfigLoadResult by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:709:26"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:710:26"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts:41:60",
@@ -530,36 +530,36 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts:41:36"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:982:38",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:983:38",
       "owner": "UninstallPluginOperation.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:982:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:983:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:982:55",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:983:55",
       "owner": "UninstallPluginOperation.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:982:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:983:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:993:38",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:994:38",
       "owner": "configuredUninstallPlugin.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:993:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:994:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:993:55",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:994:55",
       "owner": "configuredUninstallPlugin.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:993:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:994:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:834:42",

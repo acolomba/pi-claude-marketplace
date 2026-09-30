@@ -512,12 +512,12 @@ test("setPluginEnabled(false) unstages the artifacts, flips durable state and dr
   // Pre-conditions: the install left one live route and a staged hooks.json.
   assert.equal(runtime.getRoutingBucket("PreToolUse").length, 1);
   assert.equal(await pathExists(path.join(locations.hooksDir, "p1", "hooks.json")), true);
-  const { ctx, pi } = makeCtx();
+  const { ctx, run } = makeCtx();
 
   // act
   const outcome = await setPluginEnabled({
     ctx,
-    pi,
+    run,
     scope: "project",
     cwd,
     marketplace: "mp",

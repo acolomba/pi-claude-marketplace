@@ -605,7 +605,7 @@ async function applyPluginToggles(
     // branch unreachable instead of routing through a row).
     const result = await setPluginEnabled({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       cwd: opts.cwd,
       marketplace: op.marketplace,
       plugin: op.plugin,

@@ -50,6 +50,7 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { StateLockHeldError, errorMessage, isErrnoException } from "../../shared/errors.ts";
+import { openNotificationRun } from "../../shared/notification-run.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginFailedMessage,
@@ -706,7 +707,7 @@ async function runUninstallOutcome(
 
     return emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run: openNotificationRun(pi),
       marketplace,
       requestedScope: resolution.requestedScope,
       orchestrated,

@@ -22,7 +22,7 @@ import { extractLocalFlag } from "../shared.ts";
 import { parseRequiredPluginMarketplaceRef } from "./shared.ts";
 
 import type { EnableDisableHooksRouting } from "../../../orchestrators/plugin/enable-disable.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 function usageFor(enable: boolean): string {
   return enable
@@ -31,13 +31,12 @@ function usageFor(enable: boolean): string {
 }
 
 export function makeEnableDisableHandler(
-  pi: ExtensionAPI,
   enable: boolean,
   hooksRouting: EnableDisableHooksRouting,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
+): SubcommandHandler {
   const usage = usageFor(enable);
   const setPluginEnabled = createEnableOperation(hooksRouting);
-  return async (args, ctx): Promise<void> => {
+  return async (args, ctx, run): Promise<void> => {
     const localFlag = extractLocalFlag(args, ctx, usage);
     if (localFlag === undefined) {
       return;
@@ -53,7 +52,7 @@ export function makeEnableDisableHandler(
     try {
       await setPluginEnabled({
         ctx,
-        pi,
+        run,
         cwd: ctx.cwd,
         marketplace: parsed.marketplace,
         plugin: parsed.plugin,
@@ -68,7 +67,7 @@ export function makeEnableDisableHandler(
       // IL-2 -- never as a raw process.stderr trace with no user-visible row.
       const scope = parsed.scope ?? "user";
       const cause = err instanceof Error ? err : new Error(errorMessage(err));
-      notify(ctx, pi, {
+      notify(ctx, run, {
         marketplaces: [
           {
             name: parsed.marketplace,

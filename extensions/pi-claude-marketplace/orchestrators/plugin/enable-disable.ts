@@ -63,7 +63,6 @@ import path from "node:path";
 
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
-import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
 import { createRemovalOps } from "../../shared/fs-utils.ts";
@@ -106,7 +105,8 @@ import type {
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -195,8 +195,11 @@ export interface EnableDisableSubject {
  */
 export interface EnableDisablePluginOptions {
   readonly ctx: NotificationContext;
-  /** Factory `pi` reference -- threaded into `notify()` for the single softDepStatus(pi) probe. */
-  readonly pi: ToolInventory;
+  /**
+   * The command run. D-05: its one soft-dep snapshot stamps the row severity
+   * and composes the `{requires pi-...}` markers.
+   */
+  readonly run: NotificationRun;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
   readonly marketplace: string;
@@ -743,7 +746,7 @@ async function resolveIdempotentOutcome(
  */
 async function emitUnresolvedTarget(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
@@ -751,13 +754,13 @@ async function emitUnresolvedTarget(args: {
   readonly orchestrated: boolean;
   readonly resolution: Exclude<CrossScopePluginResolution, { kind: "resolved" }>;
 }): Promise<EnableDisablePluginOutcome> {
-  const { ctx, pi, cwd, marketplace, plugin, enable, orchestrated, resolution } = args;
+  const { ctx, run, cwd, marketplace, plugin, enable, orchestrated, resolution } = args;
 
   const notInstalledAt = await missIsNotInstalled({ cwd, marketplace, resolution });
   if (notInstalledAt === undefined) {
     return emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run,
       marketplace,
       requestedScope: resolution.requestedScope,
       orchestrated,
@@ -767,7 +770,7 @@ async function emitUnresolvedTarget(args: {
   if (!orchestrated) {
     dispatchOutcome({
       ctx,
-      pi,
+      run,
       marketplace,
       scope: notInstalledAt,
       plugin,
@@ -831,7 +834,7 @@ async function runSetEnabledOutcome(
   opts: EnableDisablePluginOptions,
   orchestrated: boolean,
 ): Promise<EnableDisablePluginOutcome> {
-  const { ctx, pi, cwd, marketplace, plugin, enable } = opts;
+  const { ctx, run, cwd, marketplace, plugin, enable } = opts;
 
   // C1: `resolveCrossScopePluginTarget` calls `loadState`, which throws on a
   // corrupt/unparseable state.json in either scope. The throw must NOT escape
@@ -850,7 +853,7 @@ async function runSetEnabledOutcome(
   } catch (err) {
     return emitResolutionFailure({
       ctx,
-      pi,
+      run,
       marketplace,
       plugin,
       requestedScope: opts.scope,
@@ -870,7 +873,7 @@ async function runSetEnabledOutcome(
   if (resolution.kind !== "resolved") {
     return await emitUnresolvedTarget({
       ctx,
-      pi,
+      run,
       cwd,
       marketplace,
       plugin,
@@ -1024,7 +1027,7 @@ async function runSetEnabledOutcome(
       // through the active verb's CommandContext for naming consistency.
       emitEnableDisableFailedRow({
         ctx,
-        pi,
+        run,
         enable,
         marketplace,
         scope,
@@ -1050,7 +1053,7 @@ async function runSetEnabledOutcome(
   }
 
   if (!orchestrated) {
-    dispatchOutcome({ ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome });
+    dispatchOutcome({ ctx, run, marketplace, scope, plugin, enable, configBasename, outcome });
   }
 
   return outcomeToTypedResult({ plugin, enable, outcome, configBasename });
@@ -1110,7 +1113,7 @@ function classifyTransactionThrow(cause: Error): ContentReason {
  */
 function emitResolutionFailure(args: {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  run: NotificationRun;
   marketplace: string;
   plugin: string;
   requestedScope: Scope | undefined;
@@ -1118,7 +1121,7 @@ function emitResolutionFailure(args: {
   enable: boolean;
   orchestrated: boolean;
 }): EnableDisablePluginOutcome {
-  const { ctx, pi, marketplace, plugin, requestedScope, cause, enable, orchestrated } = args;
+  const { ctx, run, marketplace, plugin, requestedScope, cause, enable, orchestrated } = args;
   const sanitized = sanitizeStateLoadError(cause);
   const reason = classifyTransactionThrow(sanitized);
   const outcome: EnableDisablePluginOutcome = {
@@ -1133,7 +1136,7 @@ function emitResolutionFailure(args: {
     // through the active verb's CommandContext for naming consistency.
     emitEnableDisableFailedRow({
       ctx,
-      pi,
+      run,
       enable,
       marketplace,
       scope,
@@ -1162,17 +1165,17 @@ function emitResolutionFailure(args: {
  */
 function emitEnableDisableFailedRow(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly enable: boolean;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly row: PluginFailedMessage;
 }): void {
-  const { ctx, pi, enable, marketplace, scope, row } = args;
+  const { ctx, run, enable, marketplace, scope, row } = args;
   if (enable) {
     notifyWithContext(
       ctx,
-      pi,
+      run,
       ENABLE_CONTEXT,
       [{ name: marketplace, scope, plugins: [row] }],
       undefined,
@@ -1181,7 +1184,7 @@ function emitEnableDisableFailedRow(args: {
   } else {
     notifyWithContext(
       ctx,
-      pi,
+      run,
       DISABLE_CONTEXT,
       [{ name: marketplace, scope, plugins: [row] }],
       undefined,
@@ -1327,7 +1330,7 @@ function outcomeToTypedResult(args: {
  */
 function dispatchOutcome(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
@@ -1335,16 +1338,16 @@ function dispatchOutcome(args: {
   readonly configBasename: string;
   readonly outcome: SetEnabledOutcome;
 }): void {
-  const { ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome } = args;
-  // SEV-01: the single sanctioned companion probe, taken once here -- the same
-  // one `notify()` uses to render the `{requires pi-...}` markers -- and passed
-  // down to the pure row composer, which holds no Pi reference of its own.
+  const { ctx, run, marketplace, scope, plugin, enable, configBasename, outcome } = args;
+  // SEV-01 / D-05: the row composer stamps severity from the run's snapshot,
+  // the same one `notifyWithContext` composes the `{requires pi-...}` markers
+  // from. The composer holds no Pi reference of its own.
   const row = composeOutcomeRow({
     plugin,
     enable,
     configBasename,
     outcome,
-    probe: softDepStatus(pi),
+    probe: run.softDeps,
   });
   // RLD-05 / D-07: the disable verb does not thread a distinguishing cascade
   // kind. The fresh `(disabled)` row stamps `needsReload: true` directly (its
@@ -1366,7 +1369,7 @@ function dispatchOutcome(args: {
     const enableRow = row as EnableMsg;
     notifyWithContext(
       ctx,
-      pi,
+      run,
       ENABLE_CONTEXT,
       [{ name: marketplace, scope, plugins: [enableRow] }],
       undefined,
@@ -1379,7 +1382,7 @@ function dispatchOutcome(args: {
     const disableRow = row as DisableMsg;
     notifyWithContext(
       ctx,
-      pi,
+      run,
       DISABLE_CONTEXT,
       [{ name: marketplace, scope, plugins: [disableRow] }],
       undefined,
@@ -1524,7 +1527,10 @@ function composeOutcomeRow(args: {
   readonly enable: boolean;
   readonly configBasename: string;
   readonly outcome: SetEnabledOutcome;
-  /** SEV-01: the caller's `softDepStatus(pi)` snapshot -- this composer is pure. */
+  /**
+   * SEV-01 / D-05: the command run's soft-dep snapshot, the same one the
+   * markers are composed from. This composer is pure.
+   */
   readonly probe: SoftDepStatus;
 }): EnableMsg | DisableMsg {
   const { plugin, enable, configBasename, outcome, probe } = args;

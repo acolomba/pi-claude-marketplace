@@ -1,7 +1,7 @@
 // Owner for edge/handlers/plugin/enable-disable.ts (MOD-09).
 //
-// One factory serves both slash subcommands: `makeEnableDisableHandler(pi, true, hooksRouting)`
-// backs `plugin enable` and `makeEnableDisableHandler(pi, false, hooksRouting)` backs
+// One factory serves both slash subcommands: `makeEnableDisableHandler(true, hooksRouting)`
+// backs `plugin enable` and `makeEnableDisableHandler(false, hooksRouting)` backs
 // `plugin disable`. The two forms differ only in the usage block that boolean
 // selects and in the enabled state the workflow records, so both arms are driven
 // wherever nothing else separates them.
@@ -20,16 +20,15 @@
 // beside `verifyBoundary()`.
 //
 // Measured counts, taken against the real module through a counting proxy before
-// a case was written, because the two emission paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` SIX times -- the orchestrator's context cascade runs
-//     two soft-dependency probes and each probe reads the tool list once per
-//     companion target;
-//   * the handler's own failure conversion reads `pi.getAllTools()` THREE times
-//     -- it
-//     calls `notify()` directly, so it runs one probe.
+// a case was written:
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
+//     writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once;
+//   * the handler's own failure conversion reads `ctx.ui` once.
+// No path reads `pi.getAllTools()`, so every case states zero probes. The
+// handler holds no tool inventory: D-05 has the workflow and the handler's own
+// failure row read the router's run for both the severity stamp and the
+// markers.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope,
 // and `<HOME>/.pi/agent` for the user scope with the agent-directory variable
@@ -61,6 +60,7 @@ import {
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { makeEnableDisableHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/enable-disable.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
@@ -70,10 +70,7 @@ import {
 
 import type { HooksRouting } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
-import type {
-  ExtensionAPI,
-  ExtensionCommandContext,
-} from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionCommandContext } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /** The enabled flags one scope's `state.json` carries for the two seeded plugins. */
@@ -334,12 +331,8 @@ async function populateRuntimeRoute(
   return hooksRouting;
 }
 
-function makeHandlerUnderTest(
-  pi: ExtensionAPI,
-  enable: boolean,
-): ReturnType<typeof makeEnableDisableHandler> {
+function makeHandlerUnderTest(enable: boolean): ReturnType<typeof makeEnableDisableHandler> {
   return makeEnableDisableHandler(
-    pi,
     enable,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
   );
@@ -363,11 +356,11 @@ for (const { enable, expectedMessage, subcommand } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `unknown-flag-${subcommand}`);
     await seedBothScopes(workspace, false);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const enableDisableHandler = makeHandlerUnderTest(pi, enable);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const enableDisableHandler = makeHandlerUnderTest(enable);
 
     // act
-    await enableDisableHandler("alpha@mp --frobnicate", ctx);
+    await enableDisableHandler("alpha@mp --frobnicate", ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -380,11 +373,11 @@ test("collapses a missing plugin reference into one sentence with the usage bloc
   // arrange
   const workspace = await createHermeticWorkspace(t, "missing-positional");
   await seedBothScopes(workspace, false);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const enableDisableHandler = makeHandlerUnderTest(pi, true);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const enableDisableHandler = makeHandlerUnderTest(true);
 
   // act
-  await enableDisableHandler("", ctx);
+  await enableDisableHandler("", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -402,11 +395,11 @@ test("names the offending token when the plugin reference carries no separator (
   // arrange
   const workspace = await createHermeticWorkspace(t, "malformed-ref");
   await seedBothScopes(workspace, false);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const enableDisableHandler = makeHandlerUnderTest(pi, false);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const enableDisableHandler = makeHandlerUnderTest(false);
 
   // act
-  await enableDisableHandler("no-at-sign", ctx);
+  await enableDisableHandler("no-at-sign", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -424,11 +417,11 @@ test("reports an unrecognised scope value and records nothing (D-116-06)", async
   // arrange
   const workspace = await createHermeticWorkspace(t, "invalid-scope");
   await seedBothScopes(workspace, false);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const enableDisableHandler = makeHandlerUnderTest(pi, true);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const enableDisableHandler = makeHandlerUnderTest(true);
 
   // act
-  await enableDisableHandler("alpha@mp --scope bogus", ctx);
+  await enableDisableHandler("alpha@mp --scope bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -504,14 +497,14 @@ for (const { enable, expectedFootprint, label, seedDisabled, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, seedDisabled);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const enableDisableHandler = makeHandlerUnderTest(pi, enable);
+    const enableDisableHandler = makeHandlerUnderTest(enable);
 
     // act
-    await enableDisableHandler("alpha@mp --scope user", ctx);
+    await enableDisableHandler("alpha@mp --scope user", ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), expectedFootprint);
@@ -523,11 +516,11 @@ test("rejects a surplus reference token and leaves both records unchanged (ENBL-
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus-positional");
   await seedBothScopes(workspace, false);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const enableDisableHandler = makeHandlerUnderTest(pi, false);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const enableDisableHandler = makeHandlerUnderTest(false);
 
   // act
-  await enableDisableHandler("alpha@mp beta@mp --scope user", ctx);
+  await enableDisableHandler("alpha@mp beta@mp --scope user", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -553,14 +546,14 @@ for (const { args, label, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const enableDisableHandler = makeHandlerUnderTest(pi, false);
+    const enableDisableHandler = makeHandlerUnderTest(false);
 
     // act
-    await enableDisableHandler(args, ctx);
+    await enableDisableHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), {
@@ -591,14 +584,14 @@ for (const { args, label, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, 0, {
       value: workspace.cwd,
       reads: 1,
     });
-    const enableDisableHandler = makeHandlerUnderTest(pi, false);
+    const enableDisableHandler = makeHandlerUnderTest(false);
 
     // act
-    await enableDisableHandler(args, ctx);
+    await enableDisableHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), {
@@ -646,11 +639,11 @@ for (const { args, enable, expectedMessage, failure, label, reported } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
-    const enableDisableHandler = makeHandlerUnderTest(pi, enable);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const enableDisableHandler = makeHandlerUnderTest(enable);
 
     // act
-    await enableDisableHandler(args, withUnreadableCwd(ctx, failure));
+    await enableDisableHandler(args, withUnreadableCwd(ctx, failure), runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -667,14 +660,14 @@ test("removes only the owning runtime route after a successful disable", async (
   const peerRuntime = createHooksRuntime();
   const ownerRouting = await populateRuntimeRoute(workspace, ownerRuntime, "echo owner");
   await populateRuntimeRoute(workspace, peerRuntime, "echo peer");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
     value: workspace.cwd,
     reads: 1,
   });
-  const enableDisableHandler = makeEnableDisableHandler(pi, false, ownerRouting);
+  const enableDisableHandler = makeEnableDisableHandler(false, ownerRouting);
 
   // act
-  await enableDisableHandler("alpha@mp --scope user", ctx);
+  await enableDisableHandler("alpha@mp --scope user", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(await readFootprint(workspace), {

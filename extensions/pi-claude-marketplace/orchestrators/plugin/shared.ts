@@ -48,6 +48,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -1267,7 +1268,7 @@ export function applyPartialCascadeFold(
  */
 export function emitMarketplaceNotAdded(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly marketplace: string;
   readonly requestedScope: Scope | undefined;
   readonly orchestrated: boolean;
@@ -1277,7 +1278,7 @@ export function emitMarketplaceNotAdded(args: {
   readonly error: Error;
   readonly cause: string;
 } {
-  const { ctx, pi, marketplace, requestedScope, orchestrated } = args;
+  const { ctx, run, marketplace, requestedScope, orchestrated } = args;
   const scopeList: readonly Scope[] =
     requestedScope === undefined ? ["project", "user"] : [requestedScope];
   const err = new MarketplaceNotFoundError(marketplace, scopeList);
@@ -1289,7 +1290,7 @@ export function emitMarketplaceNotAdded(args: {
   } as const;
 
   if (!orchestrated) {
-    notify(ctx, pi, {
+    notify(ctx, run, {
       kind: "marketplace-not-added",
       name: marketplace,
       ...(requestedScope !== undefined && { scope: requestedScope }),

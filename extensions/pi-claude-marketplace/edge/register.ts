@@ -94,8 +94,8 @@ export function registerClaudePluginCommand(
   const install = makeInstallHandler(hooksRouting, deps.completionCache);
   const uninstall = makeUninstallHandler(pi, hooksRouting, deps.completionCache);
   const pluginInfo = makePluginInfoHandler(pi);
-  const enable = makeEnableDisableHandler(pi, true, hooksRouting);
-  const disable = makeEnableDisableHandler(pi, false, hooksRouting);
+  const enable = makeEnableDisableHandler(true, hooksRouting);
+  const disable = makeEnableDisableHandler(false, hooksRouting);
   const list = makeListHandler(pi);
   const browse = makeBrowseHandler(pi, { list, install, uninstall, pluginInfo, enable, disable });
 
