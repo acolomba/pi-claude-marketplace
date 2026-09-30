@@ -25,7 +25,7 @@ Both fixes change tests only. No production file changed.
 
 ## Fixed Issues
 
-### WR-01: The context wrappers are only tested with markers on
+### WR-01: The context wrappers are only tested with markers on, so ignoring `context.markers` would pass every test
 
 **Files modified:** `tests/shared/notify-context.test.ts`
 **Commit:** 3093a652

@@ -5,11 +5,11 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The context wrappers are only tested with markers on, so ignoring `context.markers` would pass every test"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The SC-5 marker-policy table does not check that it lists every context"
   - id: IN-01
     severity: info
@@ -31,17 +31,17 @@ findings:
     severity: info
     disposition: open
     title: "Resolve's read order is constrained by a test's getter-backed `kind`"
-open: 7
+open: 5
 total: 7
-recorded: 2026-09-30T18:21:30.067Z
+recorded: 2026-09-30T18:58:06.788Z
 ---
 
 # Phase 01: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
+| WR-01 | warning | fixed | 01-REVIEW-FIX.md |
+| WR-02 | warning | fixed | 01-REVIEW-FIX.md |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
