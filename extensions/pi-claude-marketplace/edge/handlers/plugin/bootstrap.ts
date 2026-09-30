@@ -24,7 +24,8 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notify, notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionAPI } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
 const USAGE = "Usage: /claude:plugin bootstrap";
@@ -32,8 +33,8 @@ const USAGE = "Usage: /claude:plugin bootstrap";
 export function makeBootstrapHandler(
   pi: ExtensionAPI,
   deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     let parsed;
     try {
       parsed = parseArgs(args);
@@ -59,6 +60,7 @@ export function makeBootstrapHandler(
     try {
       await bootstrapClaudePlugin({
         ctx,
+        run,
         pi,
         cwd: ctx.cwd,
         completionCache: deps.completionCache,

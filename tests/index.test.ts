@@ -852,9 +852,9 @@ test("keeps hook routing and command completion state inside each extension-load
   await seedBlockingHookPlugin(ownerCwd);
   const ownerMarketplace = await seedMarketplaceSource(ownerCwd, "owned-rows", "hello");
   process.chdir(ownerCwd);
-  // Six tool reads: the command's notification run takes three (D-05), and the
-  // add notification still probes three more at emission.
-  const owner = await loadExtension(1, 6, { value: ownerCwd, reads: 1 });
+  // Three tool reads: the command's notification run is the only probe, and the
+  // add notification renders from its snapshot (D-05).
+  const owner = await loadExtension(1, 3, { value: ownerCwd, reads: 1 });
   const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
   await owner.bridgeSessionStart({ type: "session_start", reason: "startup" }, ownerHookContext);
   const toolEvent: ToolCallEvent = {

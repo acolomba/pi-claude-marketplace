@@ -4,6 +4,9 @@
 // `/claude:plugin marketplace add <source> [--scope user|project]`.
 // Delegates to `addMarketplace` orchestrator, threading deps.gitOps through.
 //
+// D-05: the orchestrator renders from the router's notification run, which
+// the handler forwards.
+//
 // Argument-parsing failures route through `notifyUsageError` so the
 // rendered surface is `${message}\n\n${USAGE}` (sentence form +
 // blank-line + Usage block). Entity-shape errors
@@ -17,16 +20,15 @@ import { addMarketplace } from "../../../orchestrators/marketplace/add.ts";
 
 import { openMarketplaceCommand } from "./shared.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
 const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
 
 export function makeAddHandler(
-  pi: ExtensionAPI,
   deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     const opened = openMarketplaceCommand(args, ctx, {
       usage: USAGE,
       positionalName: "source",
@@ -37,7 +39,7 @@ export function makeAddHandler(
 
     await addMarketplace({
       ctx,
-      pi,
+      run,
       scope: opened.scope ?? "user",
       cwd: ctx.cwd,
       rawSource: opened.source,

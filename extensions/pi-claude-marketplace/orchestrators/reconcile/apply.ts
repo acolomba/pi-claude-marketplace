@@ -324,7 +324,7 @@ async function applyMarketplaceAdds(
   for (const op of plan.marketplacesToAdd) {
     const result = await addMarketplace({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: op.scope,
       cwd: opts.cwd,
       rawSource: op.source,

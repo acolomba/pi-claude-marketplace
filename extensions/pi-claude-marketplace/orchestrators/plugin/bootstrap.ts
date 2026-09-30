@@ -44,6 +44,7 @@ import { setMarketplaceAutoupdate } from "../marketplace/autoupdate.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 
 /**
@@ -67,8 +68,12 @@ export const BOOTSTRAP_MARKETPLACE_NAME = "claude-plugins-official";
 export interface BootstrapOptions {
   readonly ctx: ExtensionContext;
   /**
-   * Required by `addMarketplace` / `setMarketplaceAutoupdate` orchestrators.
-   * Bootstrap itself does not read `pi` directly.
+   * D-05 / D-07: the command's run, shared with the nested `addMarketplace`.
+   */
+  readonly run: NotificationRun;
+  /**
+   * The inventory forwarded to `setMarketplaceAutoupdate`, which does not
+   * take a run yet. Bootstrap itself does not read `pi` directly.
    */
   readonly pi: ExtensionAPI;
   readonly cwd: string;
@@ -105,7 +110,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
   try {
     await addMarketplace({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: "user",
       cwd: opts.cwd,
       rawSource: BOOTSTRAP_SOURCE,

@@ -27,9 +27,10 @@
 // every other case promises exactly one.
 //
 // D-05: the cascade renders from the command run's snapshot, so every case
-// states zero tool probes. The strict `pi` is still forwarded to the nested
-// install and marketplace add, which run orchestrated and never probe, so it
-// states no `getAllTools()` expectation and any probe fails where it happens.
+// states zero tool probes. The nested marketplace add receives the same run.
+// The strict `pi` is still forwarded to the nested install, which runs
+// orchestrated and never probes, so it states no `getAllTools()` expectation
+// and any probe fails where it happens.
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -515,6 +516,8 @@ test("passes the marketplace add an options object that carries the git port onl
   const { cwd } = await createHermeticScopes(t, "git-port");
   const withPort = createNotificationBoundary(1, 0);
   const withoutPort = createNotificationBoundary(1, 0);
+  const withPortRun = runWithNothingLoaded();
+  const withoutPortRun = runWithNothingLoaded();
   const gitOps = createOfflineGitOps();
   const withRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const withoutRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
@@ -541,7 +544,7 @@ test("passes the marketplace add an options object that carries the git port onl
   // act
   await importClaudeSettings({
     ctx: withPort.ctx,
-    run: runWithNothingLoaded(),
+    run: withPortRun,
     cwd,
     deps: collaborators(promised()),
     gitOps,
@@ -551,7 +554,7 @@ test("passes the marketplace add an options object that carries the git port onl
   });
   await importClaudeSettings({
     ctx: withoutPort.ctx,
-    run: runWithNothingLoaded(),
+    run: withoutPortRun,
     cwd,
     deps: collaborators(promised()),
     pi: withoutPort.pi,
@@ -567,8 +570,8 @@ test("passes the marketplace add an options object that carries the git port onl
       cwd,
       gitOps,
       notifications: { mode: "orchestrated" },
-      pi: withPort.pi,
       rawSource: "./mp",
+      run: withPortRun,
       scope: "user",
     },
     {
@@ -576,8 +579,8 @@ test("passes the marketplace add an options object that carries the git port onl
       completionCache: completionCacheFor(withoutRouting),
       cwd,
       notifications: { mode: "orchestrated" },
-      pi: withoutPort.pi,
       rawSource: "./mp",
+      run: withoutPortRun,
       scope: "user",
     },
   ]);

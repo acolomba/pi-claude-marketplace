@@ -55,11 +55,13 @@ import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrator
 import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { enterHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 interface NotifyRecord {
   message: string;
@@ -69,6 +71,7 @@ interface NotifyRecord {
 interface TestCtx {
   ctx: ExtensionContext;
   pi: ExtensionAPI;
+  run: NotificationRun;
   notifications: NotifyRecord[];
 }
 
@@ -85,7 +88,7 @@ function makeCtx(cwd: string): TestCtx {
       },
     },
   } as ExtensionContext;
-  return { ctx, pi, notifications };
+  return { ctx, pi, run: runWithNothingLoaded(), notifications };
 }
 
 interface HermeticEnv {
@@ -179,7 +182,7 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
     // act
     await addMarketplace({
       ctx: userAdd.ctx,
-      pi: userAdd.pi,
+      run: userAdd.run,
       scope: "user",
       cwd: env.cwd,
       completionCache,
@@ -268,7 +271,7 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     // act
     await addMarketplace({
       ctx: userAdd.ctx,
-      pi: userAdd.pi,
+      run: userAdd.run,
       scope: "user",
       cwd: env.cwd,
       completionCache,
@@ -286,7 +289,7 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     const beforeOutput = captureLastSuccess(beforeListCtx.notifications);
     await addMarketplace({
       ctx: projectAdd.ctx,
-      pi: projectAdd.pi,
+      run: projectAdd.run,
       scope: "project",
       cwd: env.cwd,
       completionCache,

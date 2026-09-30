@@ -166,14 +166,13 @@ test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND stat
     await mkdir(locations.extensionRoot, { recursive: true });
 
     const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
     await addMarketplace({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -243,7 +242,7 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
 
     await addMarketplace({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -315,7 +314,7 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
 
     await addMarketplace({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -370,7 +369,6 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
     await mkdir(locations.extensionRoot, { recursive: true });
 
     const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -380,7 +378,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
     // config + state in their original empty shape.
     await addMarketplace({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -590,7 +588,6 @@ test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orch
     await mkdir(locations.extensionRoot, { recursive: true });
 
     const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -603,7 +600,7 @@ test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orch
 
     await addMarketplace({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),

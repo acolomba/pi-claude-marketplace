@@ -25,7 +25,7 @@
 //   })
 //
 //   // The success notification is a single
-//   //   notify(opts.ctx, opts.pi, { marketplaces: [{ status: "added", ... }] })
+//   //   notify(opts.ctx, opts.run, { marketplaces: [{ status: "added", ... }] })
 //   // call. Both github and path source kinds collapse to the same
 //   // payload (the `<autoupdate>` marker lives on the list-surface header
 //   // per D-17.1-01 / D-18-04). The `/reload to pick up changes` trailer
@@ -91,8 +91,9 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -100,7 +101,7 @@ import type { Scope } from "../../shared/types.ts";
  * notifications. Mirrors the `InstallPluginNotifications` precedent.
  *
  * - `"standalone"` (default when option is omitted): the orchestrator fires
- *   one `notify(ctx, pi, ...)` per outcome arm with the per-variant
+ *   one `notify(ctx, run, ...)` per outcome arm with the per-variant
  *   `MarketplaceNotificationMessage` / `MarketplaceNotAddedMessage` payload.
  *   Byte-identical to today; every existing caller (edge handler, bootstrap
  *   composer, catalog UAT) observes zero output drift.
@@ -151,9 +152,11 @@ export type AddMarketplaceOutcome =
 export interface AddMarketplaceOptions {
   readonly ctx: NotificationContext;
   /**
-   * Required by `notify(ctx, pi, message)` for soft-dep probing.
+   * D-05 / D-07: the command's run, or the composer's run when bootstrap,
+   * import, or reconcile drives the add. Every emission renders from its
+   * soft-dependency snapshot.
    */
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   /** SC-5: the edge layer defaults this to "user"; orchestrator receives a fully resolved Scope. */
   readonly scope: Scope;
   /** Used to compute project-scope locations (`<cwd>/.pi`). Ignored when scope === "user". */
@@ -504,7 +507,7 @@ function handleAddFailure(
         plugins: [],
       },
     ];
-    notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, failedRows, undefined, "single");
+    notifyWithContext(opts.ctx, opts.run, ADD_CONTEXT, failedRows, undefined, "single");
   }
 
   return { status: "failed", reason, error: wrapped, cause: errorMessage(err) };
@@ -654,7 +657,7 @@ async function runAddOutcome(
         plugins: [],
       },
     ];
-    notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, addedRows, undefined, "single");
+    notifyWithContext(opts.ctx, opts.run, ADD_CONTEXT, addedRows, undefined, "single");
   }
 
   return { status: "added", name: recordedName };

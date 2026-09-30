@@ -179,9 +179,9 @@ export interface ImportClaudeSettingsOptions {
    */
   readonly run: NotificationRun;
   /**
-   * The inventory forwarded to the nested install and marketplace-add
-   * orchestrators, which do not take a run yet. Import's own emission reads
-   * `run`.
+   * The inventory forwarded to the nested install orchestrator, which does
+   * not take a run yet. Import's own emission and the nested marketplace add
+   * read `run`.
    */
   readonly pi: ExtensionAPI;
   readonly cwd: string;
@@ -850,7 +850,7 @@ async function addOnePlannedMarketplace(
   try {
     const outcome = await addMarketplace({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: marketplace.scope,
       cwd: opts.cwd,
       rawSource: marketplace.source,

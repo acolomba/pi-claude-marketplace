@@ -25,12 +25,11 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { pathExists } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 const OTHER_URL = "https://other.example.com/different";
 const PIN_40 = "1234567890abcdef1234567890abcdef12345678";
@@ -47,7 +46,7 @@ interface NotificationBoundary {
     readonly message: string;
     readonly severity?: NotificationSeverity;
   }>;
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   readonly ui: NotificationUi;
 }
 
@@ -58,17 +57,13 @@ interface GitOpsAdapterOptions {
 
 function notificationBoundary(name: string): NotificationBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: `${name} context` });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: `${name} extension API` });
   const ui = mock<NotificationUi>({ exactParams: true, name: `${name} UI` });
   const notifications: NotificationBoundary["notifications"] = [];
   when(() => ctx.ui).thenReturn(ui);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
   when(() => ui.notify).thenReturn((message, severity) => {
     notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
   });
-  return { ctx, notifications, pi, ui };
+  return { ctx, notifications, run: runWithNothingLoaded(), ui };
 }
 
 function credentialOps() {
@@ -168,7 +163,7 @@ test("seeds a same-repository URL plugin mirror with one marketplace clone", asy
     // act
     await addMarketplace({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -189,7 +184,6 @@ test("seeds a same-repository URL plugin mirror with one marketplace clone", asy
     assert.deepStrictEqual(boundary.notifications, [{ message: "● mp [project] (added)" }]);
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -208,7 +202,7 @@ test("seeds a matching path marketplace without network operations", async () =>
     // act
     await addMarketplace({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -233,7 +227,6 @@ test("seeds a matching path marketplace without network operations", async () =>
     assert.strictEqual(await probeManifestEntry(entry, marketplaceRoot, locations), "available");
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -252,7 +245,7 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
     // act
     await addMarketplace({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -272,7 +265,6 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
     );
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -300,7 +292,7 @@ test("seeds a reachable pin and leaves an unreachable pin unseeded", async () =>
         });
         await addMarketplace({
           ctx: boundary.ctx,
-          pi: boundary.pi,
+          run: boundary.run,
           scope: "project",
           cwd,
           completionCache: createCompletionCache(),
@@ -311,7 +303,6 @@ test("seeds a reachable pin and leaves an unreachable pin unseeded", async () =>
         const clone = await locations.pluginCloneDir(pluginCloneKey(REPO_URL, PIN_40));
         const exists = await pathExists(clone);
         verify(boundary.ctx);
-        verify(boundary.pi);
         verify(boundary.ui);
         return { exists, gitCalls: gitBoundary.state.calls, credentialCalls: credentials.calls };
       }),
@@ -350,7 +341,7 @@ test("preserves the real remote URL on the seeded mirror", async () => {
     // act
     await addMarketplace({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -371,7 +362,6 @@ test("preserves the real remote URL on the seeded mirror", async () => {
     );
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -388,7 +378,7 @@ test("lets normal clone garbage collection sweep an unreferenced seeded mirror",
     const gitBoundary = gitOpsAdapter({ fixtureSourceDir: fixture });
     await addMarketplace({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -410,7 +400,6 @@ test("lets normal clone garbage collection sweep an unreferenced seeded mirror",
     );
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
