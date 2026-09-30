@@ -2,9 +2,9 @@
 //
 // Cross-subcommand helpers (D-01 -- shared.ts cap ~300 LOC).
 //
-//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Seven primitives:
+//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Eight primitives:
 //     clone + fetch + forceUpdateRef + checkout + resolveRef +
-//     currentBranch + resolveRemoteRef.
+//     currentBranch + resolveRemoteRef + listRemotes.
 //     NO `pull` -- D-14 follow-upstream-blindly semantics require the
 //     three-step force-overwrite path that `pull --ff-only` cannot
 //     express.
@@ -53,8 +53,8 @@ import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { OnAuthRequiredFn } from "../../platform/git.ts";
+import type { BuildAuthCallbacksOpts } from "../../platform/git-auth-callbacks.ts";
+import type { ListRemotesResult } from "../../platform/git.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -103,33 +103,32 @@ export class WorkflowsUnstageFailureError extends Error {
 
 /**
  * Optional auth bundle passed through GitOps.clone / GitOps.fetch and
- * refreshGitHubClone. Mirrors the shape accepted by platform/git.ts
+ * refreshGitHubClone: the readonly form of the platform's
+ * `BuildAuthCallbacksOpts`, which is also the type of
  * `CloneOptions.auth?` / `FetchOptions.auth?`. When undefined, every call
  * site behaves identically to the public-only path.
  *
- * D-13 boundary: this re-exports only TYPES from the platform tier
- * (`CredentialOps`, `OnAuthRequiredFn`) -- no isomorphic-git symbol
- * crosses into the orchestrator tier.
+ * D-13 boundary: this names only a TYPE from the platform tier
+ * (`BuildAuthCallbacksOpts`) -- no isomorphic-git symbol crosses into the
+ * orchestrator tier.
  */
-export interface GitAuthBundle {
-  readonly credentialOps: CredentialOps;
-  readonly host: string;
-  readonly onAuthRequired: OnAuthRequiredFn;
-}
+export type GitAuthBundle = Readonly<BuildAuthCallbacksOpts>;
 
 /**
  * D-12, D-13: marketplace orchestrator git surface.
  *
- * Seven primitives. The 5 base primitives (clone / fetch / forceUpdateRef
- * / checkout / resolveRef) cover the standard D-14 sequence. CR-01
- * added a 6th -- `currentBranch` -- because the D-14 default-branch
- * tracking path needs to distinguish "what is the symbolic name of the
- * local branch" from "what SHA does HEAD point at". `resolveRef('HEAD')`
- * returns a SHA; using that SHA as the `ref` to forceUpdateRef writes a
- * meaningless `refs/<40-hex>` -- the local branch never advances.
- * D-77-05 added a 7th -- `resolveRemoteRef` -- so the plugin clone-cache
- * seam can pin an unpinned source's remote HEAD to a SHA without a full
- * clone at install time.
+ * Eight primitives. The 5 base primitives (clone / fetch / forceUpdateRef
+ * / checkout / resolveRef) cover the standard D-14 sequence.
+ * `currentBranch` (CR-01) exists because the D-14 default-branch tracking
+ * path needs to distinguish "what is the symbolic name of the local branch"
+ * from "what SHA does HEAD point at". `resolveRef('HEAD')` returns a SHA;
+ * using that SHA as the `ref` to forceUpdateRef writes a meaningless
+ * `refs/<40-hex>` -- the local branch never advances.
+ * `resolveRemoteRef` (D-77-05) lets the plugin clone-cache seam pin an
+ * unpinned source's remote HEAD to a SHA without a full clone at install
+ * time. `listRemotes` (D-3-03; MA-12, MA-13) lets the `marketplace add`
+ * leftover-clone guard tell its own leftover clone apart from a foreign or
+ * unreadable tree.
  *
  * No `pull` -- D-14 requires the three-step force-overwrite path
  * (fetch → forceUpdateRef → checkout) that `pull --ff-only` cannot
@@ -173,6 +172,16 @@ export interface GitOps {
    * resolution can authenticate (PROV-03); omitted = public-only.
    */
   resolveRemoteRef(opts: { url: string; ref?: string; auth?: GitAuthBundle }): Promise<string>;
+  /**
+   * D-3-03 / MA-12 / MA-13: report whether `dir` is a readable git clone and,
+   * if so, what its `origin` remote names. Used by the `marketplace add`
+   * leftover-clone guard to recognize its own leftover clone before removing
+   * it. This is the only member of this interface that does not throw on
+   * failure: the caller must tell a foreign tree apart from a directory it
+   * could not read, and a throw-and-catch shape would collapse both into one
+   * outcome.
+   */
+  listRemotes(opts: { dir: string }): Promise<ListRemotesResult>;
 }
 
 /**
@@ -193,6 +202,7 @@ export const DEFAULT_GIT_OPS: GitOps = {
   resolveRef: defaultGit.resolveRef,
   currentBranch: defaultGit.currentBranch,
   resolveRemoteRef: defaultGit.resolveRemoteRef,
+  listRemotes: defaultGit.listRemotes,
 };
 
 /**
@@ -218,11 +228,12 @@ function isGitNotFoundError(err: unknown): boolean {
  *       fetch + checkout (resolveRef of refs/remotes/origin/<ref> fails, then
  *       checkout throws if the SHA no longer exists).
  *
- * The optional `auth` parameter is forwarded to `gitOps.fetch` so
- * private-repository refreshes can trigger Device Flow on a credential
- * miss. `gitOps.clone` is not called from here (`add.ts` is the only caller
- * of clone); the auth bundle therefore only flows into the fetch primitive
- * within this helper.
+ * The optional `auth` parameter is forwarded to `gitOps.fetch` so a
+ * private-repository refresh reaches the user's credential helper, and on a
+ * registry host a credential miss additionally triggers that provider's Device
+ * Flow (GAUTH-03). `gitOps.clone` is not called from here (`add.ts` is the only
+ * caller of clone); the auth bundle therefore only flows into the fetch
+ * primitive within this helper.
  */
 export async function refreshGitHubClone(
   cloneDir: string,

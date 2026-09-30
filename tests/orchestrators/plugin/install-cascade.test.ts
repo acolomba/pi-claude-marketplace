@@ -1800,7 +1800,7 @@ test("RESV-03 one listing serves two members whose sources share a repository", 
   assert.strictEqual(cascade.kind, "installed");
   assert.deepStrictEqual(
     queried,
-    [`${GIT_SOURCE_URL}.git`],
+    [GIT_SOURCE_URL],
     "the second member is served from the run's own memo, not from a second listing",
   );
 });

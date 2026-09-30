@@ -250,20 +250,20 @@
       "filter": "extensions/pi-claude-marketplace/domain/resolver-types.ts:53:13"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:539:35",
+      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:577:35",
       "owner": "addMarketplace.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:539:9"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:577:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:539:52",
+      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:577:52",
       "owner": "addMarketplace.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:539:9"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:577:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:701:38",
@@ -450,12 +450,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts:62:52"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1690:49",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1691:49",
       "owner": "composeStateOnlyComponents.components",
       "key": "componentsResolved",
       "category": "type-selection",
       "purpose": "Selects within PluginInfoRow by componentsResolved, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1690:24"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1691:24"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:59:3",
@@ -634,20 +634,20 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:950:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:179:56",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:185:56",
       "owner": "PartialableUpdateShapeError.shape",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PluginShapeErrorShape by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:179:19"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:185:19"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:180:5",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:186:5",
       "owner": "PartialableUpdateShapeError.shape",
       "key": "partialable",
       "category": "type-refinement",
       "purpose": "Narrows partialable at this position, so a non-partialable shape error cannot satisfy the partialable narrowing.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:179:19"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:185:19"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:75",
@@ -805,12 +805,12 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:233:45"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:469:63",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:476:63",
       "owner": "StaticPreflightRowOptions",
       "key": "fromVersion",
       "category": "type-refinement",
       "purpose": "Closes the from-version slot on the failed partition, whose plugin is absent from the manifest and has no install record to read a version from.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:469:6"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:476:6"
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/args-schema.ts:49:70",
@@ -966,12 +966,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts:142:28"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts:101:41",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts:100:41",
       "owner": "TagListingOutcome",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within DependencyTagProbeResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts:101:5"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts:100:5"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:94:62",

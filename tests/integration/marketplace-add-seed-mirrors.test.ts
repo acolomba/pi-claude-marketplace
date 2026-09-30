@@ -78,7 +78,7 @@ function credentialOps() {
 function gitOpsAdapter(initial: GitOpsAdapterOptions = {}) {
   return createGitOpsFake({
     boundary: "memory",
-    allowedRemoteUrls: [REPO_URL, `${REPO_URL}.git`],
+    allowedRemoteUrls: [REPO_URL],
     ...(initial.fixtureSourceDir === undefined
       ? {}
       : { cloneFixture: { boundary: "local" as const, sourceDir: initial.fixtureSourceDir } }),
@@ -182,7 +182,7 @@ test("seeds a same-repository URL plugin mirror with one marketplace clone", asy
     const { entry, marketplaceRoot } = await firstEntry(locations);
     assert.deepStrictEqual(
       gitBoundary.state.calls.clone.map(({ url }) => url),
-      [`${REPO_URL}.git`],
+      [REPO_URL],
     );
     assert.strictEqual(await pathExists(mirror), true);
     assert.strictEqual(await probeManifestEntry(entry, marketplaceRoot, locations), "available");
@@ -268,7 +268,7 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
     assert.strictEqual(await probeManifestEntry(entry, marketplaceRoot, locations), "remote");
     assert.deepStrictEqual(
       gitBoundary.state.calls.clone.map(({ url }) => url),
-      [`${REPO_URL}.git`],
+      [REPO_URL],
     );
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
@@ -325,7 +325,7 @@ test("seeds a reachable pin and leaves an unreachable pin unseeded", async () =>
   );
   assert.deepStrictEqual(
     observations.map(({ gitCalls }) => gitCalls.clone.map(({ url }) => url)),
-    [[`${REPO_URL}.git`], [`${REPO_URL}.git`]],
+    [[REPO_URL], [REPO_URL]],
   );
   assert.deepStrictEqual(
     observations.map(({ credentialCalls }) => credentialCalls),
@@ -367,7 +367,7 @@ test("preserves the real remote URL on the seeded mirror", async () => {
     );
     assert.deepStrictEqual(
       gitBoundary.state.calls.clone.map(({ url }) => url),
-      [`${REPO_URL}.git`],
+      [REPO_URL],
     );
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
@@ -406,7 +406,7 @@ test("lets normal clone garbage collection sweep an unreferenced seeded mirror",
     assert.strictEqual(await pathExists(mirror), false);
     assert.deepStrictEqual(
       gitBoundary.state.calls.clone.map(({ url }) => url),
-      [`${REPO_URL}.git`],
+      [REPO_URL],
     );
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);

@@ -1050,6 +1050,40 @@ test("the constraint gate call omits both tag memos when the caller supplies nei
   assert.strictEqual(Object.hasOwn(received[0] as object, "marketplaceTagMemo"), false);
 });
 
+test("sends the unpinned mirror the identity url and the typed wire url", async (t) => {
+  // arrange
+  // D-2-01 / D-2-03: the manifest url carries a `.git`, so the mirror seam's
+  // identity `cloneUrl` and wire `networkUrl` arguments differ.
+  const mirrorSha = "3333333333333333333333333333333333333333";
+  const seed = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "url", url: "https://example.com/mirror.git" },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const mirrorCalls: { readonly cloneUrl: string; readonly networkUrl: string }[] = [];
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+    materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
+    materializeOrRefreshPluginMirror: ({ cloneUrl, networkUrl }) => {
+      mirrorCalls.push({ cloneUrl, networkUrl });
+      return Promise.resolve({ pluginRoot: seed.pluginRoot, resolvedSha: mirrorSha });
+    },
+  };
+
+  // act
+  const prepared = await prepare(seed, { cloneCacheSeam });
+
+  // assert
+  assert.deepStrictEqual(mirrorCalls, [
+    {
+      cloneUrl: "https://example.com/mirror",
+      networkUrl: "https://example.com/mirror.git",
+    },
+  ]);
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(prepared.resolvedSha, mirrorSha);
+});
+
 test("classifies a clone transport failure without exposing a raw throw", async (t) => {
   // arrange
   const seed = await seedUpdate({
@@ -1214,6 +1248,70 @@ test("passes authenticated clone context and refs through both clone arms", asyn
   const auth = { ctx, credentialOps, deviceFlowHttp, authMemo };
   const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam, ...auth });
   const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam, ...auth });
+
+  // assert
+  assert.ok(!("partition" in pinnedPrepared));
+  assert.strictEqual(pinnedPrepared.resolvedSha, sha);
+  assert.ok(!("partition" in unpinnedPrepared));
+  assert.strictEqual(unpinnedPrepared.resolvedSha, sha);
+});
+
+test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle when it has no notification context", async (t) => {
+  // arrange
+  // The cascade shape: prepare() with `ctx` omitted, mirroring
+  // update-flow.ts's PluginUpdateFn, which never threads one through.
+  const sha = "9999999999999999999999999999999999999999";
+  const pinned = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "github", repo: "org/repo", ref: "stable", sha },
+  });
+  const unpinned = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "github", repo: "org/repo", ref: "next" },
+  });
+  t.after(() =>
+    Promise.all([pinned.cwd, unpinned.cwd].map((cwd) => rm(cwd, { force: true, recursive: true }))),
+  );
+  const credentialOps: CredentialOps = {
+    approve: () => Promise.resolve(),
+    fill: () => Promise.resolve(null),
+    reject: () => Promise.resolve(),
+  };
+  const pinnedSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: (options) => {
+      assert.deepStrictEqual(options.auth, {
+        kind: "stored-credential",
+        credentialOps,
+        host: "github.com",
+      });
+      return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" });
+    },
+    materializePluginClone: (options) => {
+      assert.deepStrictEqual(options.auth, {
+        kind: "stored-credential",
+        credentialOps,
+        host: "github.com",
+      });
+      return Promise.resolve(pinned.pluginRoot);
+    },
+    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+  };
+  const unpinnedSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+    materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
+    materializeOrRefreshPluginMirror: (options) => {
+      assert.deepStrictEqual(options.auth, {
+        kind: "stored-credential",
+        credentialOps,
+        host: "github.com",
+      });
+      return Promise.resolve({ pluginRoot: unpinned.pluginRoot, resolvedSha: sha });
+    },
+  };
+
+  // act
+  const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam, credentialOps });
+  const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam, credentialOps });
 
   // assert
   assert.ok(!("partition" in pinnedPrepared));

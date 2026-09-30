@@ -2,15 +2,34 @@
 
 ## [Unreleased]
 
+- A private marketplace or plugin source on any git host now clones with a credential that is already in your git credential helper. Before, only `github.com` and `gitlab.com` authenticated. Thanks to @jstillwa, who found this defect and the next two in #153. (#221)
+
+  - If no credential is stored for the host, the error tells you to store one with `git credential approve`.
+  - A credential goes only to the host it was stored for. When a server redirects to another scheme, host, or port, the extension follows the redirect without the credential, as git does.
+  - The marketplace autoupdate now authenticates on every host too.
+
+- A `url` marketplace source is now fetched at the exact URL you typed. A server that serves only that URL, and returns 404 for the `.git` form, now works. The extension adds `.git` only to a `github.com` `owner/repo` URL, as Claude Code does. It makes one request per operation, so a missing or forbidden repository fails with its own error. (#221)
+
+- `marketplace add` now succeeds when an earlier attempt left a clone of the same source in place, for example after a crash. Any other leftover directory is still refused. If the leftover cannot be fully removed, the add fails and reports the cleanup error. If the extension cannot read the leftover's git configuration, the add fails with `{permission denied}` or `{unreadable}` instead of `{stale clone}`. (#221)
+
+- A `github.com` URL with capital letters in the host, a `www.` prefix, or the default `:443` port is now a GitHub source, as in Claude Code. Before, the extension treated it as a different repository, so it could clone the same repository twice. A marketplace you already added this way changes to a GitHub source the next time the extension loads. (#221)
+
+- Internal: added a `new-gsd-milestone` skill that names milestones and restarts phase numbers at 1, renamed `new-workspace` to `new-gsd-workspace`, and remapped GSD's Codex model tiers. (#229)
+
 - A hook matcher that lists several tools now runs on the tools Pi supports and ignores the ones it does not. Pi drops the whole matcher only when it supports none of the tools in the list. Thanks to @fank, who reported #217. (#219)
+
 - Pi Coding Agent 0.86.1 is now required. This version supports workflow child tools with the current `@quintinshaw/pi-dynamic-workflows` engine.
+
 - A plugin that ships workflow scripts now installs them as workflows the Pi workflow engine can load. (#205)
+
   - The extension reports and skips a workflow script it cannot read, one with no usable metadata, one with no literal `meta.name`, or one over 512 KiB. It installs the rest of the plugin. Claude Code skips the same scripts.
   - Only `.js` files are workflow scripts, as in Claude Code. The `workflows` manifest field can name a single `.js` file as well as a directory.
   - Installed plugin Markdown that names a sibling workflow as `plugin:workflow` gets the workflow's installed command name, the same way it does for sibling skills and commands.
   - The extension now depends on `acorn` to read the metadata that a workflow script declares.
   - Release waits for `pi-dynamic-workflows` fixes [#232](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/232), [#233](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/233), and [#234](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/234).
+
 - A plugin can declare the other plugins it needs, and `install` now installs them with it. See [Dependency resolution](docs/dependency-resolution.md). (#198)
+
   - A dependency resolves from the marketplace it names, or from the declaring plugin's marketplace. Version constraints follow the semver range syntax. A cycle stops. An already-installed dependency is not reinstalled. When one dependency fails, the whole install rolls back and the message names the dependency and the reason.
   - Each install record now says whether you asked for the plugin by name or another plugin pulled it in. A direct install stays direct when a later install declares it. Records from older versions are upgraded silently.
   - `uninstall --prune` also removes the dependencies that no remaining plugin needs. It never removes a plugin you installed by name. `uninstall` now proceeds while another installed plugin still needs it. It names the dependents, and the next `/reload` disables them with the install remedy. It refuses only when it cannot read what an installed plugin declares, including a marketplace entry whose `dependencies` are malformed.
@@ -20,11 +39,17 @@
   - `/reload` now installs a declared dependency an installed plugin lacks, and enables the plugin that needed it. A dependency that cannot be installed gets its own row naming the reason.
   - New dependencies from another marketplace need permission in the install root's marketplace manifest. An installed dependency remains exempt. Reload checks the original declarers before it starts a missing dependency's own cascade and reports a refusal with both remedies.
   - `update` and `autoupdate` now keep a plugin inside the version ranges its dependents declare. Each picks the highest version those ranges allow, and holds the update with a row naming the holders when none exists.
+
 - Internal: the GSD discuss phase now loads a Claude Code compatibility research skill before it generates questions, so phase decisions cite verified upstream behavior instead of assumption. `AGENTS.md` and `PROJECT.md` now state the upstream-parity rule and the two things that license a divergence, and both record the hook bridge that their component list had been omitting. (#210)
+
   - Internal: the marketplace-remove test that covers the in-lock concurrent disappearance now injects the state load instead of racing a real filesystem writer, so the branch is covered on every run rather than only when the race lands. It was the intermittent cause of sub-100% coverage runs in CI.
+
 - Internal: the tests, the live-UAT canaries, and `scripts/pi.sh` now run the Pi version that `package-lock.json` pins. They run it from `node_modules` and no longer use the `pi` on `PATH`. Run `npm ci` first.
+
   - `scripts/pi.sh` installs pinned versions of pi-mcp-adapter, pi-subagents, and @quintinshaw/pi-dynamic-workflows into a private npm prefix outside the checkout (`PI_CM_RUNTIME_PREFIX`). It no longer installs them into the global npm root.
+
 - Internal: `npm run check` now passes on macOS. It already passed on Linux.
+
   - Tests and the unused-type-member gate now use the resolved path of the temporary directory. On macOS that directory is a symlink, so the paths the tests built did not match the paths the code reported.
   - Tests that expect a Linux error code or a case-sensitive file system now accept the macOS result.
   - Some tests used `fs.watch` to make a change in the middle of an operation. macOS reports file events late, so the change arrived after the operation. These tests now make the change through the state I/O, the functions that read and save `state.json`. The marketplace update, the plugin update operations, and the reinstall target selection accept an optional replacement for those functions. Production callers do not pass it.

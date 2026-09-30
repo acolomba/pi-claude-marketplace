@@ -193,14 +193,16 @@ interface GitOpsAdapterOptions {
   readonly remoteRefs?: Readonly<Record<string, string>>;
 }
 
+// D-2-01: the `.git`-suffixed entry is the wire url of the two `--fetch` cases
+// whose manifest source carries a `.git`. Its suffix-less identity form
+// `https://example.com/repo` is also listed, because other cases here declare
+// that url, so the allowlist alone cannot tell the two forms apart -- the
+// by-value `cloneCalls[0].url` assertion in those two cases is what does.
 const ALLOWED_INFO_REMOTES = [
   "https://example.com/monorepo",
-  "https://example.com/monorepo.git",
   "https://example.com/repo",
   "https://example.com/repo.git",
   "https://example.com/warmdecl",
-  "https://example.com/warmdecl.git",
-  "https://github.com/owner/gh-mp",
   "https://github.com/owner/gh-mp.git",
 ] as const;
 
@@ -5645,7 +5647,7 @@ test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing 
         plugins: [
           {
             name: "gplug",
-            source: { source: "url", url: "https://example.com/repo", sha: GIT_SHA },
+            source: { source: "url", url: "https://example.com/repo.git", sha: GIT_SHA },
             version: "1.0.0",
           },
         ],
@@ -5672,9 +5674,12 @@ test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing 
     });
 
     // The clone was materialized, then the now-warm tree resolved on the
-    // recorded (installed) row -- the headline `info --fetch` recovery.
+    // recorded (installed) row -- the headline `info --fetch` recovery. D-2-01:
+    // the manifest url carries a `.git`, so the wire url keeps it while the
+    // clone-key identity (`https://example.com/repo`) does not.
     // assert
-    assert.ok(gitState.cloneCalls.length >= 1, "the fetch hook cloned the cold clone");
+    assert.equal(gitState.cloneCalls.length, 1);
+    assert.equal(gitState.cloneCalls[0]?.url, "https://example.com/repo.git");
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
     assert.match(msg, /● gplug v1\.0\.0 \(installed\)/, msg);
@@ -5711,7 +5716,7 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source materi
       mpName: "mp",
       manifest: {
         name: "mp",
-        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+        plugins: [{ name: "gplug", source: "https://example.com/repo.git", version: "1.0.0" }],
       },
     });
 
@@ -5737,9 +5742,12 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source materi
     });
 
     // Cold mirror: materialized once, then refreshed in place (MIRR-02 -- the
-    // mirror refresh IS the consented fetch on the unpinned arm).
+    // mirror refresh IS the consented fetch on the unpinned arm). D-2-01: the
+    // COLD mirror clone sends the wire url, `.git` and all; the mirror dir is
+    // keyed on the suffix-less identity.
     // assert
-    assert.ok(gitState.cloneCalls.length >= 1, "the fetch hook cloned the cold mirror");
+    assert.equal(gitState.cloneCalls.length, 1);
+    assert.equal(gitState.cloneCalls[0]?.url, "https://example.com/repo.git");
     assert.ok(gitState.fetchCalls.length >= 1, "the fetch hook refreshed the mirror (MIRR-02)");
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;

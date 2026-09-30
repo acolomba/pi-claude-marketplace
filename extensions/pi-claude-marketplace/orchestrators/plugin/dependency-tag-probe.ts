@@ -30,9 +30,8 @@
 // The failure arm carries the classified transport cause and the rendered
 // range only.
 
-import { canonicalCloneUrl } from "../../domain/clone-key.ts";
+import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 import { RELEASE_TAG_SEPARATOR, selectHighestSatisfyingTag } from "../../domain/release-tag.ts";
-import { ensureGitSuffix } from "../../domain/source.ts";
 import { listRemoteTags } from "../../platform/git.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { buildCloneAuth } from "../auth-host.ts";
@@ -103,7 +102,7 @@ type TagListingOutcome =
 interface TagListingRequest {
   readonly seam: DependencyTagListingSeam;
   readonly url: string;
-  readonly auth?: ReturnType<typeof buildCloneAuth>;
+  readonly auth: ReturnType<typeof buildCloneAuth>;
   readonly memo?: Map<string, readonly RemoteTag[]>;
 }
 
@@ -124,7 +123,7 @@ async function listCandidateTags(request: TagListingRequest): Promise<TagListing
   try {
     const tags = await request.seam.listRemoteTags({
       url: request.url,
-      ...(request.auth !== undefined && { auth: request.auth }),
+      auth: request.auth,
     });
     request.memo?.set(request.url, tags);
     return { kind: "listed", tags };
@@ -141,9 +140,10 @@ async function listCandidateTags(request: TagListingRequest): Promise<TagListing
  * Resolves a constrained dependency to the highest release tag on its source
  * repository that satisfies the constraint.
  *
- * The query URL is the source's canonical clone URL carried to its wire form
- * (MURL-01), and the credential bundle is the host bundle every other clone
- * path already builds -- this adds no second credential acquisition path.
+ * The query URL is the wire form `networkCloneUrl` derives, the same URL a
+ * clone of this source sends (D-2-03), and the credential bundle is the host
+ * bundle every other clone path already builds -- this adds no second
+ * credential acquisition path.
  */
 export async function probeDependencyTags(
   options: DependencyTagProbeOptions,
@@ -155,8 +155,8 @@ export async function probeDependencyTags(
 
   const listing = await listCandidateTags({
     seam,
-    url: ensureGitSuffix(cloneUrl),
-    ...(auth !== undefined && { auth }),
+    url: networkCloneUrl(source),
+    auth,
     ...(options.tagMemo !== undefined && { memo: options.tagMemo }),
   });
   if (listing.kind === "tag-listing-failed") {

@@ -3277,12 +3277,13 @@ const DEVICE_CODE = {
   interval: 0,
 } as const;
 const REINSTALL_REMOTE_URLS = [
-  "https://example.com/org/mono.git",
+  "https://example.com/org/mono",
+  "https://example.com/org/repo",
   "https://example.com/org/repo.git",
   "https://github.com/org/one.git",
   "https://github.com/org/repo.git",
   "https://github.com/org/two.git",
-  "https://gitlab.example.com/o/r.git",
+  "https://gitlab.example.com/o/r",
 ] as const;
 
 function createGitOps(
@@ -3554,7 +3555,7 @@ test("plugin reinstall authentication: a cold GitHub cache threads one provider 
   });
 });
 
-test("plugin reinstall authentication: a non-provider host threads no auth bundle", async () => {
+test("plugin reinstall authentication: a host the registry does not claim threads a host-keyed bundle", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-auth-no-provider-"));
     try {
@@ -3597,7 +3598,13 @@ test("plugin reinstall authentication: a non-provider host threads no auth bundl
       // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(captured.count, 1);
-      assert.equal(captured.auth, undefined);
+      assert.deepStrictEqual(
+        { credentialOps: captured.auth?.credentialOps, host: captured.auth?.host },
+        { credentialOps, host: "gitlab.example.com" },
+      );
+      // Attaching a bundle consults nothing on its own: the credential helper
+      // is queried only when the server issues a challenge, and this clone
+      // succeeds without one.
       assert.deepEqual(credentialCalls, { approve: [], fill: [], reject: [] });
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -3709,8 +3716,8 @@ test("plugin reinstall authentication: a bulk cold-cache sweep shares one host m
       });
       const firstBundle = bundles[0];
       const secondBundle = bundles[1];
-      if (firstBundle === undefined || secondBundle === undefined) {
-        throw new Error("expected one auth bundle for each cold-cache reinstall");
+      if (firstBundle?.kind !== "device-flow" || secondBundle?.kind !== "device-flow") {
+        throw new Error("expected one device-flow auth bundle for each cold-cache reinstall");
       }
 
       await firstBundle.onAuthRequired();
@@ -3817,11 +3824,14 @@ test("a cold-cache git-source reinstall re-materializes from the recorded sha wi
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-purl-cold-"));
     try {
+      // The manifest's .git suffix survives onto the wire URL (source.raw)
+      // while the parse-time identity (source.url) drops it, so this fixture
+      // also discriminates networkCloneUrl from canonicalCloneUrl.
       await seedInstalledGitSourcePlugin({
         cwd,
         marketplaceName: "mp",
         pluginName: "gp",
-        source: { source: "url", url: "https://example.com/org/repo", sha: GIT_SOURCE_SHA },
+        source: { source: "url", url: "https://example.com/org/repo.git", sha: GIT_SOURCE_SHA },
       });
 
       const locations = locationsFor("project", cwd);
@@ -3853,6 +3863,11 @@ test("a cold-cache git-source reinstall re-materializes from the recorded sha wi
 
       assert.equal(outcome.partition, "reinstalled", "cold-cache reinstall re-materializes");
       assert.equal(gitState.cloneCalls.length, 1, "one clone on the cold cache");
+      assert.equal(
+        gitState.cloneCalls[0]?.url,
+        "https://example.com/org/repo.git",
+        "the wire url preserves the manifest's .git decision (source.raw)",
+      );
       assert.equal(
         gitState.checkoutCalls[0]?.ref,
         GIT_SOURCE_SHA,

@@ -35,6 +35,8 @@ import { errorMessage } from "../shared/errors.ts";
 
 import { migrateLegacyMarketplaceRecords, persistMigratedState } from "./migrate.ts";
 
+import type { GitHubSource, UrlSource } from "../domain/source.ts";
+
 /**
  * D-100-01 / D-100-02 / ENBL-11: one persisted hook entry -- the event name
  * plus the optional matcher, and NOTHING else.
@@ -360,6 +362,21 @@ function firstValidationErrorDetail(first: {
   return `${first.instancePath || "<root>"}: ${first.message}`;
 }
 
+/**
+ * MURL-01/MURL-05: revalidate a stored url source through the SAME parser
+ * funnel (ST-6) so the .git-canonical url + optional #ref are recomputed.
+ * Any other parse, a github shorthand included, is a corrupt record.
+ */
+function revalidateStoredUrlSource(mpName: string, raw: string): UrlSource | GitHubSource {
+  const parsedSrc = parsePluginSource(raw);
+  // D-76-02: an https github.com url parses as `github`, and the record migrates to that kind.
+  if (parsedSrc.kind === "url" || (parsedSrc.kind === "github" && raw.startsWith("https://"))) {
+    return parsedSrc;
+  }
+
+  throw new Error(`state.json marketplace "${mpName}" has an invalid url source: ${raw}`);
+}
+
 function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): void {
   const src = mp.source;
 
@@ -385,15 +402,7 @@ function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): voi
   } else if (obj.kind === "github" && typeof obj.raw === "string") {
     mp.source = githubSource(obj.raw);
   } else if (obj.kind === "url" && typeof obj.raw === "string") {
-    // MURL-01/MURL-05: revalidate a stored url source through the SAME parser
-    // funnel (ST-6) so the .git-canonical url + optional #ref are recomputed.
-    // Anything that no longer classifies as url is a corrupt record.
-    const parsedSrc = parsePluginSource(obj.raw);
-    if (parsedSrc.kind !== "url") {
-      throw new Error(`state.json marketplace "${mpName}" has an invalid url source: ${obj.raw}`);
-    }
-
-    mp.source = parsedSrc;
+    mp.source = revalidateStoredUrlSource(mpName, obj.raw);
   } else if (obj.kind !== "unknown") {
     throw new Error(
       `state.json marketplace "${mpName}" has malformed source object (missing kind/raw)`,

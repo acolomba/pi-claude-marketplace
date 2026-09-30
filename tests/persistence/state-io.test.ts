@@ -951,6 +951,16 @@ for (const { name, source, expectedSource } of [
     },
   },
   {
+    name: "a URL record on a mixed-case GitHub host into a GitHub source",
+    source: { kind: "url", raw: "https://GitHub.com/acme/catalog" },
+    expectedSource: {
+      kind: "github",
+      raw: "https://GitHub.com/acme/catalog",
+      owner: "acme",
+      repo: "catalog",
+    },
+  },
+  {
     name: "a forward-compatible unknown source",
     source: { kind: "unknown", raw: "future:catalog", reason: "future source" },
     expectedSource: { kind: "unknown", raw: "future:catalog", reason: "future source" },
@@ -1016,7 +1026,7 @@ for (const { name, source, expectedMessage } of [
     expectedMessage: 'state.json marketplace "catalog" has missing or invalid source',
   },
   {
-    name: "a URL record whose raw value classifies as GitHub",
+    name: "a URL record whose raw value is a GitHub shorthand",
     source: { kind: "url", raw: "acme/catalog" },
     expectedMessage: 'state.json marketplace "catalog" has an invalid url source: acme/catalog',
   },

@@ -12,7 +12,8 @@ import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/or
 import type { RemoteTag } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-const PLUGIN_REPO_URL = "https://example.com/formatter.git";
+// D-2-01: a url source is queried at the URL as typed, with no `.git` added.
+const PLUGIN_REPO_URL = "https://example.com/formatter";
 
 function auth(): DependencyTagProbeOptions["auth"] {
   const ctx: NotificationContext = { ui: { notify: () => undefined } };
@@ -249,7 +250,7 @@ test("reports the same no-match arm when the query ran against the marketplace r
 
   // assert
   assert.deepStrictEqual(outcome, { kind: "no-matching-tag", range: ">=9.0.0" });
-  assert.deepStrictEqual(queried, ["https://example.com/acme-marketplace.git"]);
+  assert.deepStrictEqual(queried, ["https://example.com/acme-marketplace"]);
 });
 
 test("returns the failure arm for an unclassifiable listing throw instead of rejecting", async () => {
