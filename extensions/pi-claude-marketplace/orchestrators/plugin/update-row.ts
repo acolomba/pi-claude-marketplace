@@ -91,9 +91,10 @@ export interface UpdatedRowSeverity {
  * before (NREG-01).
  *
  * CMC-13 / MSG-SD-3: `dependencies` carries the declared kinds that drive the
- * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` /
- * `{requires pi-dynamic-workflows}` markers on BOTH forms (WR-03); the renderer
- * narrows on membership plus the notify-time probe.
+ * `{requires pi-subagents}` / `{requires pi-mcp}` /
+ * `{requires pi-dynamic-workflows}` markers on BOTH forms (WR-03); resolveRows
+ * composes them from that membership and the command run's snapshot under the
+ * context's marker policy (D-05, D-12).
  *
  * D-03/D-06: a realized update transition always reloads Pi resources, and
  * `partially-installed` is a realized transition too.

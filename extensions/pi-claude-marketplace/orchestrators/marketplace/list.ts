@@ -34,7 +34,11 @@ import type { Scope } from "../../shared/types.ts";
 
 export interface ListMarketplacesOptions {
   readonly ctx: ExtensionContext;
-  /** D-05: the command's notification run; its snapshot drives the markers. */
+  /**
+   * D-05: the command's notification run, threaded for the shared emitter
+   * signature. `LIST_CONTEXT` declares no marker policy, so its snapshot
+   * composes no markers here.
+   */
   readonly run: NotificationRun;
   /** When omitted, SC-6 mandates enumeration of BOTH scopes. */
   readonly scope?: Scope;
