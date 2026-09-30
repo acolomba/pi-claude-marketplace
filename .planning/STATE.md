@@ -22,12 +22,12 @@ milestone_name: Mode-Keyed Presentation Strategies
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-28 for the json-output milestone)
+See: `.planning/PROJECT.md` (updated 2026-09-30 after json-output Phase 1)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 01 — Presentation Model
+**Current focus:** Phase 2 — Row Policies
 
 ## Current Position
 
@@ -169,13 +169,14 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-30T18:05:41.066Z
+**Last session:** 2026-09-30T18:40:00Z
 **Stopped at:** Phase 01 complete, ready to plan Phase 2
 **Resume file:** None
 
-**Current work:** Milestone json-output on `features/json`. Requirements and
-the roadmap are written (36 requirements, 7 phases, all mapped). No phase has
-started, and no `phases/` directory exists yet.
+**Current work:** Milestone json-output on `features/json`. Phase 1
+(Presentation Model) is complete and verified 5/5: 16 plans, PMOD-01 and
+PMOD-03 checked off, text bytes unchanged against the wire corpus and
+`docs/output-catalog.md`. Phases 2-7 are not planned yet.
 
 **Release context (unchanged):** The 0.19.1 and 0.19.2 releases are tagged and
 published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218 and
@@ -189,9 +190,16 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Discuss Phase 1 with `/gsd-discuss-phase 1`, then plan it with
-  `/gsd-plan-phase 1`. Its research flag asks for the per-verb soft-dep
-  suppression table and the inventory of named-file gates to re-point.
+- Continue with Phase 2 (Row Policies): `/gsd-autonomous --interactive --from 2`,
+  or `/gsd-discuss-phase 2` to go step by step.
+- Phase 1 code review left 7 findings open in
+  `phases/01-presentation-model/01-REVIEW-DISPOSITION.md`. The two warnings are
+  test gaps on the marker-policy seam Phase 2 extends: WR-01 (the context
+  wrappers are tested only with markers on) and WR-02 (the SC-5 table has no
+  completeness check). The verifier recommends fixing both before or early in
+  Phase 2 (`/gsd-code-review 1 --fix`).
+- Phase 1's verify-time Nyquist validation and security audit have not run:
+  `/gsd-validate-phase 1` and `/gsd-secure-phase 1`.
 - `BACKLOG.md` still holds the six carriers the workflows-replay close named
   (VSTALE-01, WLREC-01, RLHINT-01, PCERR-01, WSTOR-01, WPIN-01). This
   milestone closes MRO-01 in Phase 7.
