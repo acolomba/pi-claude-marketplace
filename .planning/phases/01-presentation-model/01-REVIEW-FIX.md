@@ -3,10 +3,10 @@ phase: 01-presentation-model
 fixed_at: 2026-09-30T00:00:00Z
 review_path: .planning/phases/01-presentation-model/01-REVIEW.md
 iteration: 1
-findings_in_scope: 2
-fixed: 2
-skipped: 0
-status: all_fixed
+findings_in_scope: 7
+fixed: 5
+skipped: 2
+status: partial
 ---
 
 # Phase 1: Code Review Fix Report
@@ -17,11 +17,13 @@ status: all_fixed
 
 **Summary:**
 
-- Findings in scope: 2 (WR-01, WR-02; IN-01..IN-05 are out of scope)
-- Fixed: 2
-- Skipped: 0
+- Findings in scope: 7 (WR-01, WR-02, IN-01..IN-05)
+- Fixed: 5 (WR-01 and WR-02 in an earlier pass; IN-01, IN-02, IN-04 in this pass)
+- Skipped: 2 (IN-03, IN-05)
 
-Both fixes change tests only. No production file changed.
+No fix changes user-visible output bytes. The IN-01 fix changes comments only.
+The IN-02 and WR fixes change tests only. The IN-04 fix changes the
+operator-run corpus scripts only.
 
 ## Fixed Issues
 
@@ -103,31 +105,203 @@ the suite runs 21 cases with exit 0.
 
 With the files restored, the suite runs 22 cases with exit 0.
 
+### IN-01: Comments still describe render-time probes
+
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts`, `extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts`
+**Commit:** 8f6a4f69
+**Applied fix:** Comments only.
+
+- `update-swap.ts` (success block above `stagedAgentNames`): the comment now
+  says that `resolveRows` composes `{requires pi-subagents}` /
+  `{requires pi-mcp}` from the command run's snapshot under the context's
+  marker policy (D-05, D-12), iff (declares AND unloaded).
+- `update-row.ts` (`updatedRowFromOutcome` doc, the out-of-list site the review
+  named): "renderer-time" and "the notify-time probe" are gone. The comment
+  says that `resolveRows` composes the markers from `dependencies` membership
+  and the command run's snapshot under the context's marker policy.
+- `marketplace/list.ts` (`ListMarketplacesOptions.run`): the doc now says the
+  run is threaded for the shared emitter signature, and that `LIST_CONTEXT`
+  declares no marker policy, so its snapshot composes no markers here.
+
+No type-member pin names these lines. The pins in `update-swap.ts` sit at line
+219-222, above the edit, and the edit keeps the line count there.
+
+### IN-02: `CommandProbes.probingEmissions` is a dead test member that describes surfaces that no longer exist
+
+**Files modified:** `tests/edge/register.test.ts`
+**Commit:** 6bc023d7
+**Applied fix:** The `probingEmissions` member is deleted from `CommandProbes`,
+and `toolReads` is now `probes.runs * 3`. All 15 sites that passed
+`probingEmissions: 0` (the default parameter and 14 call sites) now pass
+`{ runs: N }`. The doc comment now states one count: each handler invocation
+opens one notification run whose snapshot reads the inventory three times
+(D-05). The interface is kept, not replaced by a bare number, so each call site
+still names what the count is. `node --test tests/edge/register.test.ts`: exit
+0, 164 tests.
+
+### IN-04: Corpus tooling fragilities
+
+**Files modified:** `scripts/notify-corpus.mjs`, `scripts/notify-corpus.hook.mjs`, `scripts/notify-corpus.negative.mjs`
+**Commit:** 736e69fc
+**Applied fix:**
+
+1. **Argument order.** A new `flagValues(args, flag)` helper in
+   `notify-corpus.mjs` returns the values after a flag, up to the next `--`
+   flag. `parseCaptureArgs` reads `--files` through it, so
+   `capture --files a.test.ts --out x.jsonl` no longer reads `x.jsonl` as a
+   test path.
+2. **Hook receiver.** The hook regex is now the module constant
+   `bareReceiverCall`, `/(?<![\w$.])([A-Za-z_$][\w$]*)\.ui\.notify\(/g`. After
+   the rewrite, the load hook compares the literal `ui.notify(` count with the
+   match count. If they differ, it throws
+   `notify-corpus: <url> spells N ui.notify( calls, but only M have the bare X.ui.notify( receiver the hook can rewrite`.
+   So a member-access receiver or a destructured `ui.notify(` now fails to load
+   with an error. Before, the first became broken code that threw only when
+   called, and the second went unrecorded. The hook doc states the rule. A scan
+   of every `.ts` file under `extensions/pi-claude-marketplace/` found no module
+   where the two counts differ, so the stricter hook refuses nothing today.
+3. **Controls** (there is no `tests/scripts/` pair for these operator-run
+   scripts; their test is `notify-corpus.negative.mjs`, so the controls go
+   there):
+   - Control 5 runs `capture --files <test> --out <existing capture file>` and
+     asserts exit 0 and the same entries as Control 4.
+   - Control 6 plants three `.ts` files under
+     `<tmp>/extensions/pi-claude-marketplace/` and loads each with
+     `node --import <hook>` and `NOTIFY_CORPUS_OUT` set. The bare
+     `ctx.ui.notify(` loads with exit 0. `opts.ctx.ui.notify(` and a
+     destructured `ui.notify(` exit non-zero, with the refusal on stderr.
+
+**Red/green evidence:**
+
+- `node scripts/notify-corpus.negative.mjs` with the fix: exit 0.
+- With the previous hook restored (`git show HEAD:...`): exit 1,
+  `AssertionError: member:`. The member-receiver file loaded cleanly.
+- With the previous `parseCaptureArgs` restored: exit 1,
+  `The test run exited 1, so its corpus is incomplete`.
+
+An earlier draft of Control 5 wrote to a new `--out` path, and it passed
+against the old parser too. On Node 26, `node --test` reads a path that does
+not exist as a glob that matches nothing, so the stray token did no harm. The
+control now points `--out` at an existing file, which the old parser ran as a
+test file. Both production files were restored from scratch copies after each
+red run, and the final green run was repeated.
+
+## Skipped Issues
+
+### IN-03: Row composers accept unresolved producer rows structurally, so markers can be dropped silently
+
+**File:** `extensions/pi-claude-marketplace/shared/notification-grammar.ts:522-543,552-570,600-618`
+**Reason:** skipped: the minimal guard works but trips the unused-type-member
+gate, and clearing that gate needs an operator decision. The attempt was rolled
+back with `git checkout --`.
+
+What was tried and measured:
+
+- Adding `readonly dependencies?: never;` to the `p` type of `pluginRow`,
+  `partiallyInstalledRow`, and `installedLikeRow` type-checks cleanly. Every
+  production caller already passes a `ResolvedRow`, which omits
+  `dependencies`.
+- A type-level control in `tests/shared/notification-grammar.test.ts` asserted
+  `true`/`false` assignability of `ResolvedRow<X>` and raw `X` (for example
+  `PluginInstalledMessage`) to each composer's `p`. With the guard removed,
+  `tsc` failed on exactly the three `false` lines (TS1360). So the guard
+  catches a raw producer row at compile time.
+- `npm run lint:type-members` then reported three `unread` findings
+  (`pluginRow.p.dependencies`, `partiallyInstalledRow.p.dependencies`,
+  `installedLikeRow.p.dependencies`). An inline `?: never` refusal marker has no
+  slot to refine, so no contract entry can reach it. The only precedent,
+  `enableRowDependencies.signals.partition` (WR-01), is a recorded exception in
+  `scripts/check-unused-type-members.exceptions.json`. Adding three new
+  recorded decisions is an operator call, not a review fix.
+- The review's other option, branding `ResolvedRowFacts.reasons`, needs an
+  `as` cast or a new constructor in `notification-resolve.ts`, and `extensions/`
+  forbids `as`.
+
+To apply the fix: re-add the three `dependencies?: never` members and the
+type-level control. Record three exceptions modeled on the WR-01 `partition`
+entry. Shift the `notification-grammar.ts` pins in
+`check-unused-type-members.contracts.json` by +7 lines (789→796, 787→794,
+1401→1408, with the doc lines as drafted). No production caller changes.
+Another option is a conditional-type parameter (`p: P & RefuseDependencies<P>`).
+It adds no type member, but it is more complex and misses a union that
+includes a variant without `dependencies`.
+
+**Original issue:** `installedLikeRow`, `pluginRow`, and
+`partiallyInstalledRow` take structural `p` subsets, so a raw producer row
+compiles and renders without its `{requires ...}` markers. D-13 holds by
+convention, not by type.
+
+### IN-05: Resolve's read order is constrained by a test's getter-backed `kind`
+
+**File:** `extensions/pi-claude-marketplace/shared/notification-resolve.ts:127-130`; `tests/shared/notification-dispatch.test.ts:45-58,5256,6200`
+**Reason:** skipped: the two getter-backed tests own two entries in the
+committed notify-corpus baseline. Deleting them needs a corpus re-baseline, and
+threading `kind` through resolve is a disproportionate refactor. The attempt was
+rolled back with `git checkout --`.
+
+What was tried and measured:
+
+- The empty-summary arms these tests reach are already covered directly,
+  without a getter, by `tests/shared/notification-summary.test.ts`
+  ("summary composes no line for a read-only kind" and "summary composes no
+  line for an available plugin info" call `buildSummaryLine(message, "error")`).
+- With `messageWithKindSequence` and both tests removed, direct coverage stayed
+  at 100%: `notification-dispatch.ts` 44/44 branches and 473/473 lines,
+  `notification-resolve.ts` 79/79 and 540/540, `notification-summary.ts`
+  101/101 and 493/493.
+- The committed baseline
+  `.planning/phases/01-presentation-model/notify-corpus/baseline.jsonl` holds
+  two `tests/shared/notification-dispatch.test.ts` entries with the message
+  `"\n\n⊘ official [user] (failed) {marketplace not added}"` and severity
+  `error`. These are the outputs of the two getter tests. Only an unstable
+  `kind` can produce an error envelope with an empty summary. Removing the tests
+  makes `notify-corpus.mjs check` report both entries missing and refuse the
+  shrunken capture (D-02, D-04), until someone re-baselines (D-03).
+- Reading `message.kind` once and threading it would change the signatures of
+  `computeSeverity`, `buildSummaryLine`, and `isInfoKind`, which narrow on
+  `message`. It would also make the fallback arms compiler-forced and
+  unreachable, which fights the 100% coverage gate.
+
+The production comment stays because it states a constraint that still holds
+while those two tests exist. To apply the fix: delete the helper and the two
+tests, delete the three-line comment in `resolveEnvelope` (and shift any
+`notification-resolve.ts` pins by -3), then re-baseline the corpus with
+`node scripts/notify-corpus.mjs baseline`.
+
+**Original issue:** `resolveEnvelope`'s evaluation order is tied to an exact
+property-read count (17 reads, then a different `kind`), which a harmless
+refactor of resolve would break for reasons unrelated to output.
+
 ## Verification
 
 All gates ran in the main working tree of the `features/json` worktree
 (`/home/acolomba/src/pi-claude-marketplace-json`). No nested review-fix
 worktree was created. The gates need this checkout's `node_modules`, and the
 caller named this worktree as the working directory. The numbers below can be
-reproduced from this tree. The exit codes were read directly, not through a
-pipe.
+reproduced from this tree. Exit codes were read directly, not through a pipe.
 
-- `node --test tests/shared/notify-context.test.ts`: exit 0 (21 tests)
-- `node --test tests/architecture/soft-dep-marker-policy.test.ts`: exit 0 (22 tests)
-- `node --test tests/architecture/gate-targets.test.ts tests/architecture/partial-vocabulary-guard.test.ts tests/architecture/no-stale-test-citations.test.ts`: exit 0 (78 tests)
-- `npm run typecheck`: exit 0 (before each commit)
-- ESLint on the changed files: exit 0 (before each commit)
-- `npx fallow health`: exit 0, 0 above threshold (before each commit)
-- `npm run fallow`: exit 0 (before each commit). Its dupes summary prints a
-  `✗` glyph, but the exit code is 0.
-- `fallow audit --gate-marker agent`: verdict `warn` (not `fail`). It reports
-  0 dead-code issues, 0 complexity findings, and 17 clone groups. These are the
-  same 17 pre-existing groups the review classified.
-- `SKIP=trufflehog pre-commit run --files <changed files>`: exit 0 for each
-  commit, and no hook rewrote a file.
-- `npm test`: exit 0 (7364 tests, 0 failed) after both commits.
-- The type-member pins in `scripts/check-unused-type-members.*.json` name none
-  of the touched files, so no repin was needed.
+This pass (IN-01, IN-02, IN-04):
+
+- `SKIP=trufflehog pre-commit run --files <changed files>`: exit 0 before each
+  commit. For IN-01 and IN-02 this ran `npm lint`, `npm typecheck`,
+  `npm fallow`, `npm direct coverage (changed pairs)`, and `npm type members`.
+  For IN-04 the typecheck, coverage, and type-member hooks had no matching
+  files. No hook rewrote a file.
+- `node --test tests/architecture/*.test.ts` after the IN-01 edit: exit 0
+  (411 tests), including the vocabulary guards that scan comments.
+- `node --test tests/edge/register.test.ts`: exit 0 (164 tests).
+- `node scripts/notify-corpus.negative.mjs`: exit 0 (red runs listed under
+  IN-04).
+- `npx fallow health`: exit 0.
+- `fallow audit --base 371dcd5e --format json --quiet --explain --gate-marker agent`:
+  verdict `pass`, 0 dead-code issues, 0 complexity findings.
+- `npm run check` (once, after the last commit, run in this main working
+  tree): exit 0. Unit coverage run: 7364 tests, 0 failed. Integration run: 36
+  tests, 0 failed. The pi-subagents integration tests did not fail in this
+  environment.
+
+Earlier pass (WR-01, WR-02): see the evidence under each finding. `npm test`
+was exit 0 (7364 tests) after both commits.
 
 ---
 
