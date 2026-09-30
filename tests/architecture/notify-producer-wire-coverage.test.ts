@@ -20,11 +20,10 @@ import { UNINSTALL_CONTEXT } from "../../extensions/pi-claude-marketplace/orches
 import { UPDATE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
 import { type Severity } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { notifyWithContext } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 interface CapturedNotification {
   readonly message: string;
@@ -42,7 +41,7 @@ type WireUi = Omit<ExtensionContext["ui"], "notify"> & {
 
 interface WireHarness {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   readonly ui: WireUi;
   readonly notifications: CapturedNotification[];
 }
@@ -51,17 +50,13 @@ const RELOAD_TRAILER = "/reload to pick up changes";
 
 function createWireHarness(name: string): WireHarness {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: `${name} context` });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: `${name} extension API` });
   const ui = mock<WireUi>({ exactParams: true, name: `${name} UI` });
   const notifications: CapturedNotification[] = [];
   when(() => ctx.ui).thenReturn(ui);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
   when(() => ui.notify).thenReturn((message, severity) => {
     notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
   });
-  return { ctx, pi, ui, notifications };
+  return { ctx, run: runWithNothingLoaded(), ui, notifications };
 }
 
 function wireFacts(notifications: readonly CapturedNotification[]): WireFact[] {
@@ -79,7 +74,7 @@ test("enable and disable realized transitions share info severity and a reload t
   // act
   notifyWithContext(
     enable.ctx,
-    enable.pi,
+    enable.run,
     ENABLE_CONTEXT,
     [
       {
@@ -102,7 +97,7 @@ test("enable and disable realized transitions share info severity and a reload t
   );
   notifyWithContext(
     disable.ctx,
-    disable.pi,
+    disable.run,
     DISABLE_CONTEXT,
     [
       {
@@ -129,10 +124,8 @@ test("enable and disable realized transitions share info severity and a reload t
   assert.deepStrictEqual(enableWire, [{ severity: undefined, reload: true }]);
   assert.deepStrictEqual(disableWire, [{ severity: undefined, reload: true }]);
   verify(enable.ctx);
-  verify(enable.pi);
   verify(enable.ui);
   verify(disable.ctx);
-  verify(disable.pi);
   verify(disable.ui);
 });
 
@@ -144,7 +137,7 @@ test("install and uninstall realized transitions share info severity and a reloa
   // act
   notifyWithContext(
     install.ctx,
-    install.pi,
+    install.run,
     INSTALL_CONTEXT,
     [
       {
@@ -167,7 +160,7 @@ test("install and uninstall realized transitions share info severity and a reloa
   );
   notifyWithContext(
     uninstall.ctx,
-    uninstall.pi,
+    uninstall.run,
     UNINSTALL_CONTEXT,
     [
       {
@@ -194,10 +187,8 @@ test("install and uninstall realized transitions share info severity and a reloa
   assert.deepStrictEqual(installWire, [{ severity: undefined, reload: true }]);
   assert.deepStrictEqual(uninstallWire, [{ severity: undefined, reload: true }]);
   verify(install.ctx);
-  verify(install.pi);
   verify(install.ui);
   verify(uninstall.ctx);
-  verify(uninstall.pi);
   verify(uninstall.ui);
 });
 
@@ -209,7 +200,7 @@ test("reinstall and update realized transitions share info severity and a reload
   // act
   notifyWithContext(
     reinstall.ctx,
-    reinstall.pi,
+    reinstall.run,
     REINSTALL_CONTEXT,
     [
       {
@@ -232,7 +223,7 @@ test("reinstall and update realized transitions share info severity and a reload
   );
   notifyWithContext(
     update.ctx,
-    update.pi,
+    update.run,
     UPDATE_CONTEXT,
     [
       {
@@ -261,10 +252,8 @@ test("reinstall and update realized transitions share info severity and a reload
   assert.deepStrictEqual(reinstallWire, [{ severity: undefined, reload: true }]);
   assert.deepStrictEqual(updateWire, [{ severity: undefined, reload: true }]);
   verify(reinstall.ctx);
-  verify(reinstall.pi);
   verify(reinstall.ui);
   verify(update.ctx);
-  verify(update.pi);
   verify(update.ui);
 });
 
@@ -276,7 +265,7 @@ test("enable and disable idempotent skips share info severity without a reload t
   // act
   notifyWithContext(
     enable.ctx,
-    enable.pi,
+    enable.run,
     ENABLE_CONTEXT,
     [
       {
@@ -298,7 +287,7 @@ test("enable and disable idempotent skips share info severity without a reload t
   );
   notifyWithContext(
     disable.ctx,
-    disable.pi,
+    disable.run,
     DISABLE_CONTEXT,
     [
       {
@@ -325,10 +314,8 @@ test("enable and disable idempotent skips share info severity without a reload t
   assert.deepStrictEqual(enableWire, [{ severity: undefined, reload: false }]);
   assert.deepStrictEqual(disableWire, [{ severity: undefined, reload: false }]);
   verify(enable.ctx);
-  verify(enable.pi);
   verify(enable.ui);
   verify(disable.ctx);
-  verify(disable.pi);
   verify(disable.ui);
 });
 
@@ -340,7 +327,7 @@ test("install and uninstall failures share error severity without a reload trail
   // act
   notifyWithContext(
     install.ctx,
-    install.pi,
+    install.run,
     INSTALL_CONTEXT,
     [
       {
@@ -362,7 +349,7 @@ test("install and uninstall failures share error severity without a reload trail
   );
   notifyWithContext(
     uninstall.ctx,
-    uninstall.pi,
+    uninstall.run,
     UNINSTALL_CONTEXT,
     [
       {
@@ -389,10 +376,8 @@ test("install and uninstall failures share error severity without a reload trail
   assert.deepStrictEqual(installWire, [{ severity: "error", reload: false }]);
   assert.deepStrictEqual(uninstallWire, [{ severity: "error", reload: false }]);
   verify(install.ctx);
-  verify(install.pi);
   verify(install.ui);
   verify(uninstall.ctx);
-  verify(uninstall.pi);
   verify(uninstall.ui);
 });
 
@@ -404,7 +389,7 @@ test("reinstall and update absent-target skips share error severity without a re
   // act
   notifyWithContext(
     reinstall.ctx,
-    reinstall.pi,
+    reinstall.run,
     REINSTALL_CONTEXT,
     [
       {
@@ -426,7 +411,7 @@ test("reinstall and update absent-target skips share error severity without a re
   );
   notifyWithContext(
     update.ctx,
-    update.pi,
+    update.run,
     UPDATE_CONTEXT,
     [
       {
@@ -453,9 +438,7 @@ test("reinstall and update absent-target skips share error severity without a re
   assert.deepStrictEqual(reinstallWire, [{ severity: "error", reload: false }]);
   assert.deepStrictEqual(updateWire, [{ severity: "error", reload: false }]);
   verify(reinstall.ctx);
-  verify(reinstall.pi);
   verify(reinstall.ui);
   verify(update.ctx);
-  verify(update.pi);
   verify(update.ui);
 });

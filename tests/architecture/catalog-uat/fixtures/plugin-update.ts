@@ -125,8 +125,8 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
         cardinality: "plural",
         marketplaces: [],
       },
-      emit: (ctx, pi) => {
-        notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, [], "plural");
+      emit: (ctx, run) => {
+        notifyUpdateNoOpWithContext(ctx, run, UPDATE_CONTEXT, [], "plural");
       },
     },
 
@@ -484,10 +484,10 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
           },
         ],
       },
-      emit: (ctx, pi) => {
+      emit: (ctx, run) => {
         notifyUpdateNoOpWithContext(
           ctx,
-          pi,
+          run,
           UPDATE_CONTEXT,
           [
             {

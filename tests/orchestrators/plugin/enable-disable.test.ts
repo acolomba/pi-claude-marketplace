@@ -52,11 +52,7 @@ import type {
   EnableDisablePluginOptions,
   EnableDisablePluginOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
-import type {
-  NotificationContext,
-  ToolInventory,
-  ToolInventoryItem,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 /**
@@ -111,17 +107,6 @@ function makeCtx(cwd: string): { ctx: NotificationContext; notifications: Notify
     },
   };
   return { ctx, notifications };
-}
-
-function toolInfo(name: string): ToolInventoryItem {
-  return {
-    name,
-    sourceInfo: { source: "test" },
-  };
-}
-
-function makePi(toolNames: readonly string[] = []): ToolInventory {
-  return { getAllTools: () => toolNames.map(toolInfo) };
 }
 
 function createUpdatePlugins() {
@@ -2364,7 +2349,7 @@ test("WR-02: a failed plugin row from another surface renders byte-identically -
   // `partialHint`. Widening the trailer gate to admit the `failed` status must
   // leave it byte-for-byte where it was.
   // act
-  notify(ctx, makePi(), {
+  notify(ctx, runWithNothingLoaded(), {
     marketplaces: [
       {
         name: "claude-plugins-official",

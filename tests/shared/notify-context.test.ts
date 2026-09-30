@@ -23,12 +23,14 @@ import {
   type Single,
 } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 
+import { runWithNothingLoaded } from "./notification-run-seeds.ts";
+
 import type {
-  ExtensionAPI,
   ExtensionContext,
   SoftDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type ControlledMessage = PluginAvailableMessage | PluginDisabledMessage;
@@ -105,7 +107,7 @@ interface NotificationRecord {
 
 interface Harness {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   readonly ui: ExtensionContext["ui"];
 }
 
@@ -122,36 +124,32 @@ interface ControlledContext {
 
 function omissionMustRemainATypeError(
   ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  run: NotificationRun,
   context: CommandContext<ControlledStatus, ControlledMessage>,
   rows: readonly MarketplaceRows<ControlledMessage>[],
 ): void {
   // @ts-expect-error -- cardinality is mandatory even when kind is explicitly undefined.
-  notifyWithContext(ctx, pi, context, rows, undefined);
+  notifyWithContext(ctx, run, context, rows, undefined);
 }
 
 void omissionMustRemainATypeError;
 
 function undeclaredStatusMustRemainATypeError(
   ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  run: NotificationRun,
   context: CommandContext<"available", PluginDisabledMessage>,
   message: ReconcileAppliedCascadeMessage,
 ): void {
   // @ts-expect-error -- the reconcile emitter admits only rows whose status its render map declares.
-  notifyReconcileAppliedWithContext(ctx, pi, context, message);
+  notifyReconcileAppliedWithContext(ctx, run, context, message);
 }
 
 void undeclaredStatusMustRemainATypeError;
 
 function createHarness(notification: NotificationRecord): Harness {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
   when(() => ctx.ui).thenReturn(ui);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
   if (notification.severity === undefined) {
     when(() => {
       ui.notify(notification.message);
@@ -162,7 +160,7 @@ function createHarness(notification: NotificationRecord): Harness {
     }).thenReturn(undefined);
   }
 
-  return { ctx, pi, ui };
+  return { ctx, run: runWithNothingLoaded(), ui };
 }
 
 function createControlledContext(t: TestContext, label: string): ControlledContext {
@@ -199,12 +197,11 @@ test("an empty plural cascade emits only its sentinel", (t) => {
   const controlled = createControlledContext(t, "Plugin inspect");
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, controlled.context, [], undefined, "plural");
+  notifyWithContext(harness.ctx, harness.run, controlled.context, [], undefined, "plural");
 
   // assert
   assert.deepStrictEqual(controlled.calls, []);
   verify(harness.ctx);
-  verify(harness.pi);
   verify(harness.ui);
 });
 
@@ -222,7 +219,7 @@ test("WR-06: folds caller-supplied advisory lines before the tally", (t) => {
   ];
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, undefined, "plural", [
+  notifyWithContext(harness.ctx, harness.run, controlled.context, rows, undefined, "plural", [
     "first advisory",
     "second advisory",
   ]);
@@ -236,7 +233,6 @@ test("WR-06: folds caller-supplied advisory lines before the tally", (t) => {
     },
   ]);
   verify(harness.ctx);
-  verify(harness.pi);
   verify(harness.ui);
 });
 
@@ -251,7 +247,7 @@ test("a one-row plural cascade retains its one-success tally", (t) => {
   ];
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, undefined, "plural");
+  notifyWithContext(harness.ctx, harness.run, controlled.context, rows, undefined, "plural");
 
   // assert
   assert.deepStrictEqual(controlled.calls, [
@@ -262,7 +258,6 @@ test("a one-row plural cascade retains its one-success tally", (t) => {
     },
   ]);
   verify(harness.ctx);
-  verify(harness.pi);
   verify(harness.ui);
 });
 
@@ -277,7 +272,7 @@ test("a single cascade dispatches its row without a plural tally", (t) => {
   ];
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, "cascade", "single");
+  notifyWithContext(harness.ctx, harness.run, controlled.context, rows, "cascade", "single");
 
   // assert
   assert.deepStrictEqual(controlled.calls, [
@@ -288,7 +283,6 @@ test("a single cascade dispatches its row without a plural tally", (t) => {
     },
   ]);
   verify(harness.ctx);
-  verify(harness.pi);
   verify(harness.ui);
 });
 
@@ -317,7 +311,7 @@ test("plural marketplaces dispatch equal-status rows separately in input order",
   ];
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, undefined, "plural");
+  notifyWithContext(harness.ctx, harness.run, controlled.context, rows, undefined, "plural");
 
   // assert
   assert.deepStrictEqual(controlled.calls, [
@@ -338,7 +332,6 @@ test("plural marketplaces dispatch equal-status rows separately in input order",
     },
   ]);
   verify(harness.ctx);
-  verify(harness.pi);
   verify(harness.ui);
 });
 
@@ -367,7 +360,7 @@ for (const { count, expectedMessage } of [
     ];
 
     // act
-    notifyUpdateWithContext(harness.ctx, harness.pi, controlled.context, rows, "plural", {
+    notifyUpdateWithContext(harness.ctx, harness.run, controlled.context, rows, "plural", {
       verb: "updated",
       count,
     });
@@ -381,7 +374,6 @@ for (const { count, expectedMessage } of [
       },
     ]);
     verify(harness.ctx);
-    verify(harness.pi);
     verify(harness.ui);
   });
 }
@@ -392,12 +384,11 @@ test("the no-op update wrapper emits its fixed headline for no rows", (t) => {
   const controlled = createControlledContext(t, "Plugin update");
 
   // act
-  notifyUpdateNoOpWithContext(harness.ctx, harness.pi, controlled.context, [], "plural");
+  notifyUpdateNoOpWithContext(harness.ctx, harness.run, controlled.context, [], "plural");
 
   // assert
   assert.deepStrictEqual(controlled.calls, []);
   verify(harness.ctx);
-  verify(harness.pi);
   verify(harness.ui);
 });
 
@@ -413,7 +404,7 @@ test("the no-op update wrapper dispatches surviving rows before its headline", (
   ];
 
   // act
-  notifyUpdateNoOpWithContext(harness.ctx, harness.pi, controlled.context, rows, "plural");
+  notifyUpdateNoOpWithContext(harness.ctx, harness.run, controlled.context, rows, "plural");
 
   // assert
   assert.deepStrictEqual(controlled.calls, [
@@ -424,7 +415,6 @@ test("the no-op update wrapper dispatches surviving rows before its headline", (
     },
   ]);
   verify(harness.ctx);
-  verify(harness.pi);
   verify(harness.ui);
 });
 
@@ -432,14 +422,14 @@ for (const { entry, emit, expectedMessage } of [
   {
     entry: "notifyWithContext",
     emit: (harness, context, rows) => {
-      notifyWithContext(harness.ctx, harness.pi, context, rows, undefined, "single");
+      notifyWithContext(harness.ctx, harness.run, context, rows, undefined, "single");
     },
     expectedMessage: "● official [user]\n  alpha {requires pi-subagents}",
   },
   {
     entry: "notifyUpdateWithContext",
     emit: (harness, context, rows) => {
-      notifyUpdateWithContext(harness.ctx, harness.pi, context, rows, "single", {
+      notifyUpdateWithContext(harness.ctx, harness.run, context, rows, "single", {
         verb: "updated",
         count: 1,
       });
@@ -449,7 +439,7 @@ for (const { entry, emit, expectedMessage } of [
   {
     entry: "notifyUpdateNoOpWithContext",
     emit: (harness, context, rows) => {
-      notifyUpdateNoOpWithContext(harness.ctx, harness.pi, context, rows, "single");
+      notifyUpdateNoOpWithContext(harness.ctx, harness.run, context, rows, "single");
     },
     expectedMessage:
       "● official [user]\n  alpha {requires pi-subagents}\n\nPlugin update: nothing to update",
@@ -457,7 +447,7 @@ for (const { entry, emit, expectedMessage } of [
   {
     entry: "notifyReconcileAppliedWithContext",
     emit: (harness, context, rows) => {
-      notifyReconcileAppliedWithContext(harness.ctx, harness.pi, context, {
+      notifyReconcileAppliedWithContext(harness.ctx, harness.run, context, {
         kind: "reconcile-applied-cascade",
         marketplaces: rows,
       });
@@ -503,7 +493,6 @@ for (const { entry, emit, expectedMessage } of [
 
     // assert
     verify(harness.ctx);
-    verify(harness.pi);
     verify(harness.ui);
   });
 }
@@ -540,7 +529,7 @@ test("a missing render arm reports its named row before the adjacent present arm
   ];
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, context, rows, undefined, "single");
+  notifyWithContext(harness.ctx, harness.run, context, rows, undefined, "single");
 
   // assert
   assert.deepStrictEqual(missing, {
@@ -557,7 +546,6 @@ test("a missing render arm reports its named row before the adjacent present arm
     },
   ]);
   verify(harness.ctx);
-  verify(harness.pi);
   verify(harness.ui);
 });
 
@@ -590,7 +578,7 @@ test("a frozen unnamed missing-arm row still precedes the adjacent present arm",
   ];
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, context, rows, undefined, "single");
+  notifyWithContext(harness.ctx, harness.run, context, rows, undefined, "single");
 
   // assert
   assert.deepStrictEqual(calls, [
@@ -601,7 +589,6 @@ test("a frozen unnamed missing-arm row still precedes the adjacent present arm",
     },
   ]);
   verify(harness.ctx);
-  verify(harness.pi);
   verify(harness.ui);
 });
 
@@ -618,7 +605,7 @@ test("the reconcile wrapper dispatches rows with its label and plural cardinalit
   } as const;
 
   // act
-  notifyReconcileAppliedWithContext(harness.ctx, harness.pi, controlled.context, message);
+  notifyReconcileAppliedWithContext(harness.ctx, harness.run, controlled.context, message);
 
   // assert
   assert.deepStrictEqual(controlled.calls, [
@@ -629,6 +616,5 @@ test("the reconcile wrapper dispatches rows with its label and plural cardinalit
     },
   ]);
   verify(harness.ctx);
-  verify(harness.pi);
   verify(harness.ui);
 });

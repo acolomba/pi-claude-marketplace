@@ -38,11 +38,10 @@
  * reached through their exported outcome-to-row composers or through a full
  * orchestrator entry point, never through an export added to serve a test.
  *
- * The engine-absent runs that probe a tool list use the DECOY tool name
- * `workflow` rather than an empty tool list. `@nicknisi/pi-workflows` registers
- * a tool by that name, so driving the absent case through it re-proves the
- * WDEP-01 discriminator at each surface that probes. The surfaces that render
- * from a notification run read the run's snapshot instead (D-05).
+ * Every surface renders from a notification run and reads the run's
+ * soft-dependency snapshot (D-05), so the cases seed the snapshot directly. The
+ * WDEP-01 discriminator that keeps the decoy `workflow` tool name from reading
+ * as the host engine belongs to the `softDepStatus` owner suite.
  */
 
 import assert from "node:assert/strict";
@@ -50,8 +49,6 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-
-import { Type } from "typebox";
 
 import {
   createHooksRouting,
@@ -82,13 +79,9 @@ import { filesMatching } from "./source-scan.ts";
 import { materializeTargets, plantOffender, withTempRoot } from "./temp-root-control.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
 const installPlugin = createInstallOperation(
   createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -98,38 +91,13 @@ const installPlugin = createInstallOperation(
 /** The closed-set marker every case looks for. */
 const HOST_ENGINE_MARKER = "requires pi-dynamic-workflows";
 
-/** The tool name only the host workflow engine registers (WDEP-01). */
-const ENGINE_TOOL = "workflow_control";
-
-/** `@nicknisi/pi-workflows` registers this name; it must NOT read as loaded. */
-const DECOY_TOOL = "workflow";
-
-function toolNamesFor(engineLoaded: boolean): readonly string[] {
-  return engineLoaded ? [ENGINE_TOOL] : [DECOY_TOOL];
-}
-
-function toolInfo(name: string): ToolInfo {
-  return {
-    name,
-    description: `test tool ${name}`,
-    parameters: Type.Object({}),
-    sourceInfo: {
-      origin: "top-level",
-      path: `/test/tools/${name}.ts`,
-      scope: "temporary",
-      source: "test",
-    },
-  } satisfies ToolInfo;
-}
-
 interface NotifyRecord {
   readonly message: string;
   readonly severity?: string;
 }
 
-function makeCtx(engineLoaded: boolean): {
+function makeCtx(): {
   ctx: ExtensionContext;
-  pi: ExtensionAPI;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -140,10 +108,7 @@ function makeCtx(engineLoaded: boolean): {
       },
     },
   } as ExtensionContext;
-  const pi = {
-    getAllTools: () => toolNamesFor(engineLoaded).map(toolInfo),
-  } as ExtensionAPI;
-  return { ctx, pi, notifications };
+  return { ctx, notifications };
 }
 
 /** The run whose snapshot reports the host engine as `engineLoaded` and no other companion. */
@@ -161,8 +126,8 @@ function runFor(engineLoaded: boolean): NotificationRun {
  * the marker" claim the three Tier C cases make.
  */
 function renderThroughNotify(engineLoaded: boolean, message: NotificationMessage): string {
-  const { ctx, pi, notifications } = makeCtx(engineLoaded);
-  notify(ctx, pi, message);
+  const { ctx, notifications } = makeCtx();
+  notify(ctx, runFor(engineLoaded), message);
   const emitted = notifications[0];
   assert.ok(emitted !== undefined, "notify() emitted nothing");
   return emitted.message;
@@ -262,7 +227,7 @@ async function runInstall(
   cwd: string,
   engineLoaded: boolean,
 ): Promise<{ notifications: readonly NotifyRecord[] }> {
-  const { ctx, notifications } = makeCtx(engineLoaded);
+  const { ctx, notifications } = makeCtx();
   await installPlugin({
     ctx,
     run: runFor(engineLoaded),
@@ -317,7 +282,7 @@ const SITE_CASES = [
         await runInstall(cwd, engineLoaded);
 
         // act
-        const { ctx, notifications } = makeCtx(engineLoaded);
+        const { ctx, notifications } = makeCtx();
         await listPlugins({ ctx, run: runFor(engineLoaded), cwd, scope: "project" });
 
         // assert
@@ -434,7 +399,7 @@ const SITE_CASES = [
             extraKnownMarketplaces: { mp: { directory: marketplaceRoot } },
           }),
         );
-        const { ctx, notifications } = makeCtx(engineLoaded);
+        const { ctx, notifications } = makeCtx();
 
         // act
         await importClaudeSettings({

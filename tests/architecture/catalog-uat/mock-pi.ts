@@ -96,7 +96,10 @@ export function piWithNothingLoaded(): MockPi {
   return makePi([]);
 }
 
-/** Verifies the catalog renderer performed exactly three tool probes. */
+/**
+ * Verifies the run constructor read the tool inventory exactly three times: one
+ * `openNotificationRun` per catalog fixture (D-05).
+ */
 export function verifyPi(pi: MockPi): void {
   verify(pi);
 }

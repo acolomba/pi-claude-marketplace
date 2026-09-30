@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 import { loadCatalogExamples, type CatalogExample } from "./catalog-parser.ts";
 import { MARKETPLACE_ADD_FIXTURES } from "./fixtures/marketplace-add.ts";
@@ -238,14 +239,15 @@ function renderFailure(example: CatalogExample, fixtures: FixtureMap): ContractF
   }
 
   const boundary = makeCtx();
+  const run = openNotificationRun(fixture.pi);
   if (fixture.emit !== undefined) {
-    fixture.emit(boundary.ctx, fixture.pi);
+    fixture.emit(boundary.ctx, run);
   } else {
     const message =
       example.section === "/claude:plugin list" && "marketplaces" in fixture.message
         ? { ...fixture.message, label: "Plugin list", cardinality: "plural" as const }
         : fixture.message;
-    notify(boundary.ctx, fixture.pi, message);
+    notify(boundary.ctx, run, message);
   }
 
   boundary.verifyContext();

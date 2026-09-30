@@ -1,4 +1,5 @@
 import type { MockCtx, MockPi } from "./mock-pi.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { NotificationMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /** One programmatic input paired with an independent catalog output block. */
@@ -10,7 +11,7 @@ export interface CatalogFixture {
    * Emits states whose public bytes belong to an orchestrator seam rather than
    * the notification dispatcher, such as bulk update's never-silent no-op.
    */
-  readonly emit?: (ctx: MockCtx, pi: MockPi) => void;
+  readonly emit?: (ctx: MockCtx, run: NotificationRun) => void;
 }
 
 /** Catalog fixtures indexed by exact section and state names. */

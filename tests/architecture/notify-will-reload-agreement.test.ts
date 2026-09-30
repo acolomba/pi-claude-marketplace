@@ -34,6 +34,9 @@ import test, { mock } from "node:test";
 
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { runWithAllLoaded } from "../shared/notification-run-seeds.ts";
+
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 // ---------------------------------------------------------------------------
 // Mock helpers -- mirror the catalog-uat / grammar-invariant harness.
@@ -45,24 +48,6 @@ interface MockCtx {
 
 function makeCtx(): MockCtx {
   return { ui: { notify: mock.fn() } };
-}
-
-interface MockTool {
-  name?: string;
-}
-
-interface MockPi {
-  getAllTools: () => MockTool[];
-}
-
-/**
- * Probe reports all three companions loaded -- pi-subagents, pi-mcp-adapter and
- * the host workflow engine -- so no soft-dep marker fires on any row.
- */
-function piWithAllLoaded(): MockPi {
-  return {
-    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
-  };
 }
 
 // The trailer literal independently mirrors `RELOAD_HINT_TRAILER` in
@@ -80,7 +65,7 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 interface AgreementFixture {
   readonly label: string;
   readonly pendingToken: string;
-  readonly pi: MockPi;
+  readonly run: NotificationRun;
   readonly message: NotificationMessage;
 }
 
@@ -91,7 +76,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin install -- realized (installed) row",
     pendingToken: "will install",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -114,7 +99,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin uninstall -- realized (uninstalled) row",
     pendingToken: "will uninstall",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -136,7 +121,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin enable -- re-materialized (installed) row",
     pendingToken: "will enable",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -159,7 +144,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin disable -- realized fresh (disabled) transition row",
     pendingToken: "will disable",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -181,7 +166,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "marketplace remove with installed plugins -- realized (uninstalled) child cascade",
     pendingToken: "will uninstall (per recorded plugin under a bare header)",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -203,7 +188,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
     // correctly keeps its `will` token.
     label: "plugin partial install -- realized (partially-installed) row",
     pendingToken: "will partially install",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -233,7 +218,7 @@ const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "marketplace add -- realized (added) header, no installed plugins",
     pendingToken: "(retired) will add",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [{ name: "new-mp", scope: "user", status: "added", plugins: [] }],
     },
@@ -241,7 +226,7 @@ const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "marketplace remove with no installed plugins -- realized header-only (removed)",
     pendingToken: "(retired) will remove",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [{ name: "old-mp", scope: "user", status: "removed", plugins: [] }],
     },
@@ -250,7 +235,7 @@ const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
 
 function render(fixture: AgreementFixture): string {
   const ctx = makeCtx();
-  notify(ctx as never, fixture.pi, fixture.message);
+  notify(ctx as never, fixture.run, fixture.message);
   assert.equal(
     ctx.ui.notify.mock.calls.length,
     1,

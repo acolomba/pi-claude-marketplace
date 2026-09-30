@@ -8,8 +8,9 @@ import {
   narrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
+import { runWithSoftDeps } from "../shared/notification-run-seeds.ts";
 
-import { makeCtx, piWithBothLoaded, verifyPi } from "./catalog-uat/mock-pi.ts";
+import { makeCtx } from "./catalog-uat/mock-pi.ts";
 
 import type {
   ContentReason,
@@ -181,12 +182,15 @@ const PARTIALLY_UPGRADABLE_BRACE = /\(partially-upgradable\) (\{[^}]*\})/;
  */
 function renderPartiallyUpgradableBrace(message: NotificationMessage): string {
   const boundary = makeCtx();
-  const pi = piWithBothLoaded();
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: true,
+    piMcpAdapterLoaded: true,
+    workflowEngineLoaded: false,
+  });
 
-  notify(boundary.ctx, pi, message);
+  notify(boundary.ctx, run, message);
 
   boundary.verifyContext();
-  verifyPi(pi);
   const body = boundary.notifications[0]?.message;
   assert.ok(body !== undefined, "the strict boundary must capture one notification");
   const matched = PARTIALLY_UPGRADABLE_BRACE.exec(body);

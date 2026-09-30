@@ -513,10 +513,10 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
     "available-installs-disabled": {
       pi: piWithBothLoaded(),
       message: { marketplaces: AVAILABLE_INSTALLS_DISABLED_ROWS },
-      emit: (ctx, pi) => {
+      emit: (ctx, run) => {
         notifyWithContext(
           ctx,
-          pi,
+          run,
           LIST_CONTEXT,
           AVAILABLE_INSTALLS_DISABLED_ROWS,
           undefined,
@@ -588,10 +588,10 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
     "remote-installs-disabled": {
       pi: piWithBothLoaded(),
       message: { marketplaces: REMOTE_INSTALLS_DISABLED_ROWS },
-      emit: (ctx, pi) => {
+      emit: (ctx, run) => {
         notifyWithContext(
           ctx,
-          pi,
+          run,
           LIST_CONTEXT,
           REMOTE_INSTALLS_DISABLED_ROWS,
           undefined,

@@ -15,7 +15,11 @@ import {
   notifyUsageInfo,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 
-import { runWithAllLoaded, runWithNothingLoaded } from "./notification-run-seeds.ts";
+import {
+  runWithAllLoaded,
+  runWithNothingLoaded,
+  runWithSoftDeps,
+} from "./notification-run-seeds.ts";
 
 import type { ResolvedRow } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
@@ -38,44 +42,6 @@ function hasRenderArm(): boolean {
   return true;
 }
 
-interface ToolDefinition {
-  readonly name?: string;
-  readonly sourceInfo?: { readonly source?: string };
-}
-
-interface NotificationApi {
-  readonly getAllTools: () => ToolDefinition[];
-}
-
-/**
- * Probe reports all three companions loaded -- pi-subagents, pi-mcp-adapter and
- * the host workflow engine -- so no soft-dep marker fires on any row, whatever
- * that row declares.
- */
-function piWithAllLoaded(): NotificationApi {
-  return {
-    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
-  };
-}
-
-function piWithSubagentsLoaded(): NotificationApi {
-  return {
-    getAllTools: () => [{ name: "subagent" }],
-  };
-}
-
-function piWithMcpLoaded(): NotificationApi {
-  return {
-    getAllTools: () => [{ name: "mcp" }],
-  };
-}
-
-function piWithNothingLoaded(): NotificationApi {
-  return {
-    getAllTools: () => [],
-  };
-}
-
 function messageWithKindSequence(
   fields: Record<string, unknown>,
   kinds: readonly string[],
@@ -94,7 +60,7 @@ function messageWithKindSequence(
 test("notify renders single installed plugin with empty deps under added marketplace (info severity + reload-hint)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -116,7 +82,7 @@ test("notify renders single installed plugin with empty deps under added marketp
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -128,7 +94,11 @@ test("notify renders single installed plugin with empty deps under added marketp
 test("notify renders installed plugin with agents dep + probe unloaded (soft-dep marker emitted inside brace)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithMcpLoaded(); // agents NOT loaded
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: true,
+    workflowEngineLoaded: false,
+  }); // agents NOT loaded
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -150,7 +120,7 @@ test("notify renders installed plugin with agents dep + probe unloaded (soft-dep
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -159,70 +129,14 @@ test("notify renders installed plugin with agents dep + probe unloaded (soft-dep
   ]);
 });
 
-function agentsRowMessage(): NotificationMessage {
-  return {
-    marketplaces: [
-      {
-        name: "demo",
-        scope: "user",
-        status: "added",
-        plugins: [
-          {
-            status: "installed",
-            severity: "info",
-            needsReload: true,
-            name: "commit-commands",
-            version: "1.0.0",
-            dependencies: ["agents"],
-          },
-        ],
-      },
-    ],
-  };
-}
-
-test("D-05: notify reads a run's snapshot and marks an agents row when no companion is loaded", (t) => {
-  // arrange
-  const ctx = createContext(t);
-  const run = runWithNothingLoaded();
-
-  // act
-  notify(ctx as never, run, agentsRowMessage());
-
-  // assert
-  assert.deepStrictEqual(
-    ctx.ui.notify.mock.calls.map((call) => call.arguments),
-    [
-      [
-        `● demo [user] (added)\n  ● commit-commands v1.0.0 (installed) {requires pi-subagents}\n\n/reload to pick up changes`,
-      ],
-    ],
-  );
-});
-
-test("D-05: notify reads a run's snapshot and leaves an agents row unmarked when every companion is loaded", (t) => {
-  // arrange
-  const ctx = createContext(t);
-  const run = runWithAllLoaded();
-
-  // act
-  notify(ctx as never, run, agentsRowMessage());
-
-  // assert
-  assert.deepStrictEqual(
-    ctx.ui.notify.mock.calls.map((call) => call.arguments),
-    [
-      [
-        `● demo [user] (added)\n  ● commit-commands v1.0.0 (installed)\n\n/reload to pick up changes`,
-      ],
-    ],
-  );
-});
-
 test("notify renders updated plugin with version arrow + mcp dep marker", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithSubagentsLoaded(); // mcp NOT loaded
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: true,
+    piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
+  }); // mcp NOT loaded
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -245,7 +159,7 @@ test("notify renders updated plugin with version arrow + mcp dep marker", (t) =>
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -257,7 +171,7 @@ test("notify renders updated plugin with version arrow + mcp dep marker", (t) =>
 test("notify renders reinstalled plugin with both deps loaded (no soft-dep marker, empty brace suppressed)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -279,7 +193,7 @@ test("notify renders reinstalled plugin with both deps loaded (no soft-dep marke
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -291,7 +205,7 @@ test("notify renders reinstalled plugin with both deps loaded (no soft-dep marke
 test("notify renders uninstalled plugin (no dependencies field, ICON_AVAILABLE)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -312,7 +226,7 @@ test("notify renders uninstalled plugin (no dependencies field, ICON_AVAILABLE)"
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -324,7 +238,7 @@ test("notify renders uninstalled plugin (no dependencies field, ICON_AVAILABLE)"
 test("notify renders available plugin (MSG-PL-6 carve-out: NO scope bracket ever, list-surface header)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -342,7 +256,7 @@ test("notify renders available plugin (MSG-PL-6 carve-out: NO scope bracket ever
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -354,7 +268,7 @@ test("notify renders available plugin (MSG-PL-6 carve-out: NO scope bracket ever
 test("notify renders unavailable plugin with reasons (MSG-PL-6 carve-out: NO scope bracket)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -372,7 +286,7 @@ test("notify renders unavailable plugin with reasons (MSG-PL-6 carve-out: NO sco
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -384,7 +298,7 @@ test("notify renders unavailable plugin with reasons (MSG-PL-6 carve-out: NO sco
 test("USTAT-01 / D-64-01: notify renders unsupported plugin with the ⊖ glyph (MSG-PL-6 carve-out: NO scope bracket)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -402,7 +316,7 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with the ⊖ glyph (
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -416,7 +330,7 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with the ⊖ glyph (
 test("USTAT-01 / D-64-01: notify renders unsupported plugin with version and {lsp} brace", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -435,7 +349,7 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with version and {ls
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -447,7 +361,7 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with version and {ls
 test("XSURF-01: partially-available install-failure row with partialHint emits the --partial install trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -468,7 +382,7 @@ test("XSURF-01: partially-available install-failure row with partialHint emits t
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -483,7 +397,7 @@ test("XSURF-01: partially-available install-failure row with partialHint emits t
 test("XSURF-01: unsupported row WITHOUT partialHint stays byte-frozen (no trailer)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -502,7 +416,7 @@ test("XSURF-01: unsupported row WITHOUT partialHint stays byte-frozen (no traile
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -518,7 +432,7 @@ test("XSURF-01: unsupported row WITHOUT partialHint stays byte-frozen (no traile
 test("XSURF-03: partially-upgradable update-decline row with partialHint emits the --partial update trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -539,7 +453,7 @@ test("XSURF-03: partially-upgradable update-decline row with partialHint emits t
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -554,7 +468,7 @@ test("XSURF-03: partially-upgradable update-decline row with partialHint emits t
 test("XSURF-03: list-inventory partially-upgradable row WITHOUT partialHint stays byte-frozen (no trailer)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -573,7 +487,7 @@ test("XSURF-03: list-inventory partially-upgradable row WITHOUT partialHint stay
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -589,7 +503,7 @@ test("XSURF-03: list-inventory partially-upgradable row WITHOUT partialHint stay
 test("notify renders upgradable plugin with version and reasons brace", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -608,7 +522,7 @@ test("notify renders upgradable plugin with version and reasons brace", (t) => {
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -620,7 +534,7 @@ test("notify renders upgradable plugin with version and reasons brace", (t) => {
 test("FSTAT-02 / D-66-03: partially-installed renders the ◉ glyph distinct from ● installed", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -639,7 +553,7 @@ test("FSTAT-02 / D-66-03: partially-installed renders the ◉ glyph distinct fro
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -656,7 +570,11 @@ test("FSTAT-02 / D-66-03: partially-installed renders the ◉ glyph distinct fro
 test("WR-03: partially-installed success row threads dependencies -> soft-dep marker fires in the SAME brace as the dropped-component reason", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithMcpLoaded();
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: true,
+    workflowEngineLoaded: false,
+  });
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -678,7 +596,7 @@ test("WR-03: partially-installed success row threads dependencies -> soft-dep ma
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -692,7 +610,7 @@ test("WR-03: partially-installed success row threads dependencies -> soft-dep ma
 test("WR-03: partially-installed INVENTORY row (no dependencies) renders no soft-dep marker even when a companion is unloaded", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -711,7 +629,7 @@ test("WR-03: partially-installed INVENTORY row (no dependencies) renders no soft
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -724,7 +642,7 @@ test("WR-03: partially-installed INVENTORY row (no dependencies) renders no soft
 test("FSTAT-04 / D-66-03: partially-upgradable reuses the ● glyph like the upgradable arm", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -743,7 +661,7 @@ test("FSTAT-04 / D-66-03: partially-upgradable reuses the ● glyph like the upg
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -758,7 +676,7 @@ test("FSTAT-04 / D-66-03: partially-upgradable reuses the ● glyph like the upg
 test("FSTAT-06 / D-66-04: the will-install partial modifier renders (will partially install)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -770,7 +688,7 @@ test("FSTAT-06 / D-66-04: the will-install partial modifier renders (will partia
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -782,7 +700,7 @@ test("FSTAT-06 / D-66-04: the will-install partial modifier renders (will partia
 test("FSTAT-06 / D-66-04: will-install WITHOUT the partial modifier renders (will install)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -794,7 +712,7 @@ test("FSTAT-06 / D-66-04: will-install WITHOUT the partial modifier renders (wil
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -804,7 +722,7 @@ test("FSTAT-06 / D-66-04: will-install WITHOUT the partial modifier renders (wil
 test("notify renders benign skipped plugin with up-to-date reason (info severity, UXG-02 / D-28-06)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -826,7 +744,7 @@ test("notify renders benign skipped plugin with up-to-date reason (info severity
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -838,7 +756,7 @@ test("notify renders benign skipped plugin with up-to-date reason (info severity
 test("notify renders failed plugin with reasons only -- no cause, no rollback (error severity, NO reload-hint when mp.status=failed)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -861,7 +779,7 @@ test("notify renders failed plugin with reasons only -- no cause, no rollback (e
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -874,13 +792,13 @@ test("notify renders failed plugin with reasons only -- no cause, no rollback (e
 test("notify renders added marketplace header alone (empty plugins -> header-only body, NO reload-hint per SNM-33/D-22-01)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [{ name: "demo", scope: "user", status: "added", plugins: [] }],
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -890,13 +808,13 @@ test("notify renders added marketplace header alone (empty plugins -> header-onl
 test("notify renders removed marketplace header alone (empty plugins -> header-only, NO reload-hint per SNM-33/D-22-01, G-MIL-02)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [{ name: "demo", scope: "user", status: "removed", plugins: [] }],
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -906,13 +824,13 @@ test("notify renders removed marketplace header alone (empty plugins -> header-o
 test("notify renders updated marketplace header alone (empty plugins -> header-only, NO reload-hint per SNM-33/D-22-01, G-MIL-06)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [{ name: "demo", scope: "user", status: "updated", plugins: [] }],
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -922,7 +840,7 @@ test("notify renders updated marketplace header alone (empty plugins -> header-o
 test("notify renders failed marketplace header alone (empty plugins -> NO reload-hint per D-16-12; no severity because no failed plugin)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -937,7 +855,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -950,7 +868,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 test("D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (reasons omitted -> brace collapses)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -965,7 +883,7 @@ test("D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (re
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -981,7 +899,7 @@ test("D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (re
 test("D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged (reasons omitted -> brace collapses)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -996,7 +914,7 @@ test("D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1012,7 +930,7 @@ test("D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged
 test("D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (the third bare form; arm byte-stable)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1027,7 +945,7 @@ test("D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1043,13 +961,13 @@ test("D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (
 test("notify renders autoupdate enabled marketplace header alone (UXG-04 <autoupdate> marker, info severity, NO reload-hint per SNM-33/D-22-01/D-22-03)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [{ name: "foo", scope: "user", status: "autoupdate enabled", plugins: [] }],
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1059,13 +977,13 @@ test("notify renders autoupdate enabled marketplace header alone (UXG-04 <autoup
 test("notify renders autoupdate disabled marketplace header alone (UXG-04 <no autoupdate> off-marker, info severity, NO reload-hint per SNM-33/D-22-01/D-22-03)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [{ name: "foo", scope: "user", status: "autoupdate disabled", plugins: [] }],
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1075,7 +993,7 @@ test("notify renders autoupdate disabled marketplace header alone (UXG-04 <no au
 test("notify renders idempotent-enable marketplace header with <autoupdate> marker + reasons brace (UXG-04, info severity per UXG-02 / D-28-07, NO reload-hint per D-17.1-05)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1091,7 +1009,7 @@ test("notify renders idempotent-enable marketplace header with <autoupdate> mark
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1103,7 +1021,7 @@ test("notify renders idempotent-enable marketplace header with <autoupdate> mark
 test("notify severity tier mp-skipped: idempotent-disable marketplace renders <no autoupdate> + brace, computes info (benign per UXG-02 / D-28-07)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1119,7 +1037,7 @@ test("notify severity tier mp-skipped: idempotent-disable marketplace renders <n
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1129,7 +1047,7 @@ test("notify severity tier mp-skipped: idempotent-disable marketplace renders <n
 test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plugins:[]) renders `● <mp> [<scope>] (skipped) {up-to-date}`, computes info (benign per UXG-02 / D-28-07), emits NO /reload trailer', (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1145,7 +1063,7 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1162,7 +1080,7 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
 test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons:["up-to-date"], plugins:[]) renders byte-identically to the OFF no-op `● <mp> [<scope>] (skipped) {up-to-date}`, computes info (benign per UXG-02 / D-28-07), emits NO /reload trailer', (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1178,7 +1096,7 @@ test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1195,7 +1113,7 @@ test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons
 test("notify benign-only cascade: benign mp.skipped coexists with healthy plugin row -> computes info (UXG-02 / D-28-06/07)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1217,7 +1135,7 @@ test("notify benign-only cascade: benign mp.skipped coexists with healthy plugin
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1237,7 +1155,7 @@ test("notify benign-only cascade: benign mp.skipped coexists with healthy plugin
 test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdate token; lastUpdatedAt field persists but is not rendered (UXG-01)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1250,7 +1168,7 @@ test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdat
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1260,13 +1178,13 @@ test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdat
 test("notify renders header-only block on empty plugins under added marketplace (NO reload-hint per SNM-33/D-22-01)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [{ name: "demo", scope: "user", status: "added", plugins: [] }],
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1276,7 +1194,7 @@ test("notify renders header-only block on empty plugins under added marketplace 
 test("RLD-04: list-shaped message with an installed inventory row (needsReload:false) emits NO /reload trailer (RLD-02 OR-reduce)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1297,7 +1215,7 @@ test("RLD-04: list-shaped message with an installed inventory row (needsReload:f
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1315,7 +1233,7 @@ test("RLD-04: list-shaped message with an installed inventory row (needsReload:f
 test("RLD-02: cascade-shaped message with an installed transition row (needsReload:true) emits the /reload trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1336,7 +1254,7 @@ test("RLD-02: cascade-shaped message with an installed transition row (needsRelo
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1350,7 +1268,7 @@ test("RLD-02: cascade-shaped message with an installed transition row (needsRelo
 test("PL-4: installed inventory row with description emits a 4-space-indented second line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1372,7 +1290,7 @@ test("PL-4: installed inventory row with description emits a 4-space-indented se
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1385,7 +1303,7 @@ test("PL-4: installed inventory row with description emits a 4-space-indented se
 test("PL-4: upgradable row with description emits description line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1405,7 +1323,7 @@ test("PL-4: upgradable row with description emits description line", (t) => {
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1418,7 +1336,7 @@ test("PL-4: upgradable row with description emits description line", (t) => {
 test("PL-4: available row with description emits description line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1437,7 +1355,7 @@ test("PL-4: available row with description emits description line", (t) => {
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1450,7 +1368,7 @@ test("PL-4: available row with description emits description line", (t) => {
 test("PL-4: unavailable row with description emits description line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1469,7 +1387,7 @@ test("PL-4: unavailable row with description emits description line", (t) => {
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1482,7 +1400,7 @@ test("PL-4: unavailable row with description emits description line", (t) => {
 test("PL-4 / CR-01: unsupported row with description emits description line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1501,7 +1419,7 @@ test("PL-4 / CR-01: unsupported row with description emits description line", (t
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1514,7 +1432,7 @@ test("PL-4 / CR-01: unsupported row with description emits description line", (t
 test("PL-4: disabled inventory row with description emits description line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1535,7 +1453,7 @@ test("PL-4: disabled inventory row with description emits description line", (t)
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1548,7 +1466,7 @@ test("PL-4: disabled inventory row with description emits description line", (t)
 test("PL-4: description absent -- no second line emitted", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1560,7 +1478,7 @@ test("PL-4: description absent -- no second line emitted", (t) => {
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1570,7 +1488,7 @@ test("PL-4: description absent -- no second line emitted", (t) => {
 test("PL-4: description exactly 66 chars -- emitted verbatim (no truncation)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const exactly66 = "A".repeat(66);
   const msg: NotificationMessage = {
     marketplaces: [
@@ -1583,7 +1501,7 @@ test("PL-4: description exactly 66 chars -- emitted verbatim (no truncation)", (
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1596,7 +1514,7 @@ test("PL-4: description exactly 66 chars -- emitted verbatim (no truncation)", (
 test("PL-4: description 67 chars -- truncated to 63 + '...' (column 66)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const over = "B".repeat(67);
   const msg: NotificationMessage = {
     marketplaces: [
@@ -1609,7 +1527,7 @@ test("PL-4: description 67 chars -- truncated to 63 + '...' (column 66)", (t) =>
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1622,7 +1540,7 @@ test("PL-4: description 67 chars -- truncated to 63 + '...' (column 66)", (t) =>
 test("PL-4: empty string description -- no second line emitted", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1634,7 +1552,7 @@ test("PL-4: empty string description -- no second line emitted", (t) => {
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1644,13 +1562,13 @@ test("PL-4: empty string description -- no second line emitted", (t) => {
 test("D-22-04 NEGATIVE: empty `marketplace add` ({status:'added', plugins:[]}) emits NO /reload trailer (SNM-33 / G-MIL-01)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [{ name: "local-mp", scope: "user", status: "added", plugins: [] }],
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1664,13 +1582,13 @@ test("D-22-04 NEGATIVE: empty `marketplace add` ({status:'added', plugins:[]}) e
 test("D-22-04 NEGATIVE: empty `marketplace remove` ({status:'removed', plugins:[]}) emits NO /reload trailer (SNM-33 / G-MIL-02)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [{ name: "local-mp", scope: "user", status: "removed", plugins: [] }],
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1684,7 +1602,7 @@ test("D-22-04 NEGATIVE: empty `marketplace remove` ({status:'removed', plugins:[
 test("D-22-04 NEGATIVE: no-op `marketplace update` (all plugin rows skipped) emits NO /reload trailer (SNM-33 / G-MIL-06)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1705,7 +1623,7 @@ test("D-22-04 NEGATIVE: no-op `marketplace update` (all plugin rows skipped) emi
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1719,7 +1637,7 @@ test("D-22-04 NEGATIVE: no-op `marketplace update` (all plugin rows skipped) emi
 test("D-22-04 POSITIVE: `marketplace remove` that uninstalled >=1 plugin emits the /reload trailer (SC#4)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1732,7 +1650,7 @@ test("D-22-04 POSITIVE: `marketplace remove` that uninstalled >=1 plugin emits t
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1746,7 +1664,7 @@ test("D-22-04 POSITIVE: `marketplace remove` that uninstalled >=1 plugin emits t
 test("D-22-04 POSITIVE: `marketplace update` with >=1 changed plugin emits the /reload trailer (SC#4)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1769,7 +1687,7 @@ test("D-22-04 POSITIVE: `marketplace update` with >=1 changed plugin emits the /
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1783,11 +1701,11 @@ test("D-22-04 POSITIVE: `marketplace update` with >=1 changed plugin emits the /
 test("notify renders (no marketplaces) sentinel for empty marketplaces array (no reload-hint, no severity)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = { marketplaces: [] };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1797,14 +1715,14 @@ test("notify renders (no marketplaces) sentinel for empty marketplaces array (no
 test("WR-06: notify folds caller-supplied advisory lines between the body and the tally", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [],
     advisories: ["first advisory", "second advisory"],
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.strictEqual(ctx.ui.notify.mock.calls.length, 1);
@@ -1816,7 +1734,7 @@ test("WR-06: notify folds caller-supplied advisory lines between the body and th
 test("notify renders bare marketplace header when mp.status and mp.details are both undefined (no-crash, BLOCKER-3 coverage)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1828,7 +1746,7 @@ test("notify renders bare marketplace header when mp.status and mp.details are b
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1838,7 +1756,7 @@ test("notify renders bare marketplace header when mp.status and mp.details are b
 test("notify renders single-plugin payload as 2-line body (header + 2-space indented row)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1860,7 +1778,7 @@ test("notify renders single-plugin payload as 2-line body (header + 2-space inde
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1872,7 +1790,7 @@ test("notify renders single-plugin payload as 2-line body (header + 2-space inde
 test("notify preserves caller-supplied plugin order across multi-plugin payload (D-16-06: no internal sort)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1910,7 +1828,7 @@ test("notify preserves caller-supplied plugin order across multi-plugin payload 
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1922,7 +1840,7 @@ test("notify preserves caller-supplied plugin order across multi-plugin payload 
 test("notify joins multi-marketplace blocks with single blank line and appends reload-hint at end (D-16-07)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1959,7 +1877,7 @@ test("notify joins multi-marketplace blocks with single blank line and appends r
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1971,7 +1889,7 @@ test("notify joins multi-marketplace blocks with single blank line and appends r
 test("notify emits inline [scope] bracket on plugin row when p.scope set (orphan-fold PRESENT)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1994,7 +1912,7 @@ test("notify emits inline [scope] bracket on plugin row when p.scope set (orphan
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2006,7 +1924,7 @@ test("notify emits inline [scope] bracket on plugin row when p.scope set (orphan
 test("notify omits scope bracket on plugin row when p.scope is undefined (non-orphan-fold, BLOCKER-1 coverage)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2028,7 +1946,7 @@ test("notify omits scope bracket on plugin row when p.scope is undefined (non-or
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2056,7 +1974,7 @@ test("notify omits scope bracket on plugin row when p.scope is undefined (non-or
 test("notify omits scope bracket on installed plugin row when p.scope === mp.scope (D-17.2-07a)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2079,7 +1997,7 @@ test("notify omits scope bracket on installed plugin row when p.scope === mp.sco
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2106,7 +2024,7 @@ test("notify omits scope bracket on installed plugin row when p.scope === mp.sco
 test("notify emits [project] bracket on installed plugin row when p.scope !== mp.scope (D-17.2-07b)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2129,7 +2047,7 @@ test("notify emits [project] bracket on installed plugin row when p.scope !== mp
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2152,7 +2070,7 @@ test("notify emits [project] bracket on installed plugin row when p.scope !== mp
 test("notify omits scope bracket on updated plugin row when p.scope === mp.scope (D-17.2-07c)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2176,7 +2094,7 @@ test("notify omits scope bracket on updated plugin row when p.scope === mp.scope
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2203,7 +2121,7 @@ test("notify omits scope bracket on updated plugin row when p.scope === mp.scope
 test("notify emits [project] bracket on failed plugin row when p.scope !== mp.scope (D-17.2-07d)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2226,7 +2144,7 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2250,7 +2168,7 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
 test("notify renders rollbackPartial child rows at 4-space indent for failed plugin (no causes)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2274,7 +2192,7 @@ test("notify renders rollbackPartial child rows at 4-space indent for failed plu
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2287,7 +2205,7 @@ test("notify renders rollbackPartial child rows at 4-space indent for failed plu
 test("notify renders nested cause chains: per-plugin at 4-space indent, per-phase rollback cause at 6-space indent (D-16-08)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const inner = new Error("inner", { cause: new Error("root") });
   const msg: NotificationMessage = {
     marketplaces: [
@@ -2313,7 +2231,7 @@ test("notify renders nested cause chains: per-plugin at 4-space indent, per-phas
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2326,7 +2244,7 @@ test("notify renders nested cause chains: per-plugin at 4-space indent, per-phas
 test("notify emits per-plugin cause-chain inline below each failed row (multi-cause cascade, D-16-08)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2358,7 +2276,7 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2371,7 +2289,7 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
 test("notify severity tier info: installed plugin in added marketplace -> arguments length 1 (no severity arg)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2393,7 +2311,7 @@ test("notify severity tier info: installed plugin in added marketplace -> argume
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2403,7 +2321,7 @@ test("notify severity tier info: installed plugin in added marketplace -> argume
 test('notify severity tier warning: single actionable skipped plugin -> arguments = [..., "warning"]', (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2424,7 +2342,7 @@ test('notify severity tier warning: single actionable skipped plugin -> argument
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2435,7 +2353,7 @@ test('notify severity tier warning: single actionable skipped plugin -> argument
 test('notify severity tier error first-match: failed + skipped in same payload -> "error" (failed beats warning)', (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2464,7 +2382,7 @@ test('notify severity tier error first-match: failed + skipped in same payload -
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2475,7 +2393,7 @@ test('notify severity tier error first-match: failed + skipped in same payload -
 test("notify suppresses reload-hint when payload contains only failed statuses (D-16-12 negative case)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2498,7 +2416,7 @@ test("notify suppresses reload-hint when payload contains only failed statuses (
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2536,7 +2454,7 @@ test("notifyUsageError emits ${msg.message}\\n\\n${msg.usage} with 'error' sever
 test("notify renders manual recovery plugin with cause-chain trailer (warning severity, status literal includes the space)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2558,7 +2476,7 @@ test("notify renders manual recovery plugin with cause-chain trailer (warning se
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2571,7 +2489,7 @@ test("notify renders manual recovery plugin with cause-chain trailer (warning se
 test("AS-7: manual recovery row names the leaked paths from ManualRecoveryError.leaks", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const leaks = [
     "/home/u/.pi/pi-claude-marketplace/agents-staging/foo.md",
     "/home/u/.pi/pi-claude-marketplace/agents-index.json",
@@ -2599,7 +2517,7 @@ test("AS-7: manual recovery row names the leaked paths from ManualRecoveryError.
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2614,7 +2532,7 @@ test("AS-7: manual recovery row names the leaked paths from ManualRecoveryError.
 test("AS-7: manual recovery row with no leaks emits no leaked-paths child row", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2638,7 +2556,7 @@ test("AS-7: manual recovery row with no leaks emits no leaked-paths child row", 
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -2648,7 +2566,7 @@ test("AS-7: manual recovery row with no leaks emits no leaked-paths child row", 
 test("notify renders single-version hash row as v#<7hex> via renderVersion chokepoint (SNM-35)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2670,7 +2588,7 @@ test("notify renders single-version hash row as v#<7hex> via renderVersion choke
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2682,7 +2600,7 @@ test("notify renders single-version hash row as v#<7hex> via renderVersion choke
 test("D-77-01 / PURL-09 notify renders single-version sha row as v#<7hex> via renderVersion chokepoint", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2704,7 +2622,7 @@ test("D-77-01 / PURL-09 notify renders single-version sha row as v#<7hex> via re
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2716,7 +2634,7 @@ test("D-77-01 / PURL-09 notify renders single-version sha row as v#<7hex> via re
 test("notify renders update arrow with hash on both sides as v#<7hex> → v#<7hex> via composeVersionArrow (SNM-35)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2739,7 +2657,7 @@ test("notify renders update arrow with hash on both sides as v#<7hex> → v#<7he
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2751,7 +2669,7 @@ test("notify renders update arrow with hash on both sides as v#<7hex> → v#<7he
 test("notify passes a SemVer version through unchanged -> v1.0.0 (non-hash pass-through guard, SNM-35)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2773,7 +2691,7 @@ test("notify passes a SemVer version through unchanged -> v1.0.0 (non-hash pass-
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2785,7 +2703,7 @@ test("notify passes a SemVer version through unchanged -> v1.0.0 (non-hash pass-
 test('UXG-02 (D-28-03/06): actionable plugin skip ("not installed") computes warning', (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2806,7 +2724,7 @@ test('UXG-02 (D-28-03/06): actionable plugin skip ("not installed") computes war
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2818,7 +2736,7 @@ test('UXG-02 (D-28-03/06): actionable plugin skip ("not installed") computes war
 test("UXG-02 (D-28-09): mixed cascade (benign skip + actionable skip) computes warning -- first-match poisoning", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2847,7 +2765,7 @@ test("UXG-02 (D-28-09): mixed cascade (benign skip + actionable skip) computes w
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2859,7 +2777,7 @@ test("UXG-02 (D-28-09): mixed cascade (benign skip + actionable skip) computes w
 test("UXG-02 (D-28-06): plugin skip with empty reasons:[] computes warning (allBenign guard on length)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2880,7 +2798,7 @@ test("UXG-02 (D-28-06): plugin skip with empty reasons:[] computes warning (allB
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2892,7 +2810,7 @@ test("UXG-02 (D-28-06): plugin skip with empty reasons:[] computes warning (allB
 test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- safe default", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2907,7 +2825,7 @@ test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- s
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2919,7 +2837,7 @@ test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- s
 test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> 'Some operations have failed.' summary prepended", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2942,7 +2860,7 @@ test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> 'Som
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2955,7 +2873,7 @@ test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> 'Som
 test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> 'A plugin operation has failed.' (single-type singular)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2977,7 +2895,7 @@ test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> 'A plugi
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2990,7 +2908,7 @@ test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> 'A plugi
 test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> 'Some plugin operations have failed.' (single-type plural)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -3020,7 +2938,7 @@ test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> 'Some plug
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3035,7 +2953,7 @@ test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> 'Some plug
 test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> 'A marketplace operation has failed.' (single-type marketplace)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -3050,7 +2968,7 @@ test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> 'A marketplac
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3063,7 +2981,7 @@ test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> 'A marketplac
 test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> 'A plugin operation needs attention.'", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -3084,7 +3002,7 @@ test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> 'A plugin
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3099,7 +3017,7 @@ test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> 'A plugin
 test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionable skip -> 'A plugin operation needs attention.'", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -3121,7 +3039,7 @@ test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionabl
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3134,7 +3052,7 @@ test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionabl
 test("UXG-07 (D-29-03/04): warning -- two actionable-skip plugins + one actionable-skip mp -> mixed plural summary", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -3171,7 +3089,7 @@ test("UXG-07 (D-29-03/04): warning -- two actionable-skip plugins + one actionab
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3186,7 +3104,7 @@ test("UXG-07 (D-29-03/04): warning -- two actionable-skip plugins + one actionab
 test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identical to prior info-severity behavior)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -3208,7 +3126,7 @@ test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identic
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3220,7 +3138,7 @@ test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identic
 test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reload-hint stays last", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -3248,7 +3166,7 @@ test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reloa
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3267,7 +3185,7 @@ test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reloa
 test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summary line is prepended", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -3288,7 +3206,7 @@ test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summ
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3303,7 +3221,7 @@ test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summ
 
 function pluginInfoDescriptionBlock(t: TestContext, description: string): string[] {
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3317,7 +3235,7 @@ function pluginInfoDescriptionBlock(t: TestContext, description: string): string
       componentsResolved: false,
     },
   };
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   const lines = body.split("\n");
   return lines.slice(2);
@@ -3419,7 +3337,7 @@ test("WR-05 / wrapDescription: two words whose `current.length + 1 + word.length
 test("GRAM-01 / GRAM-02: standalone {marketplace not added} row renders the two-block summary + separate detail block (marketplace subject, error severity)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-not-added",
     name: "my-mp",
@@ -3427,7 +3345,7 @@ test("GRAM-01 / GRAM-02: standalone {marketplace not added} row renders the two-
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3440,7 +3358,7 @@ test("GRAM-01 / GRAM-02: standalone {marketplace not added} row renders the two-
 test("GRAM-02: standalone failed plugin-info renders `A plugin operation has failed.` + separate multi-line detail block", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "bad-mp",
@@ -3456,7 +3374,7 @@ test("GRAM-02: standalone failed plugin-info renders `A plugin operation has fai
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3475,7 +3393,7 @@ test("GRAM-02: standalone failed plugin-info renders `A plugin operation has fai
 test("INFO-04: {marketplace not added} row never carries a reload-hint (read-only surface)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-not-added",
     name: "my-mp",
@@ -3483,7 +3401,7 @@ test("INFO-04: {marketplace not added} row never carries a reload-hint (read-onl
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -3496,7 +3414,7 @@ test("INFO-04: {marketplace not added} row never carries a reload-hint (read-onl
 test("INFO-01: renderMarketplaceInfo (github source + ref + lastUpdated + description)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info",
     name: "official",
@@ -3507,7 +3425,7 @@ test("INFO-01: renderMarketplaceInfo (github source + ref + lastUpdated + descri
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3526,7 +3444,7 @@ test("INFO-01: renderMarketplaceInfo (github source + ref + lastUpdated + descri
 test("INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no description)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info",
     name: "local-mp",
@@ -3536,7 +3454,7 @@ test("INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no descriptio
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3550,7 +3468,7 @@ test("INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no descriptio
 test("INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true with sorted components + dependencies + wrapping description)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3572,7 +3490,7 @@ test("INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true with sorted c
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3594,7 +3512,7 @@ test("INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true with sorted c
 test("INFO-05: renderPluginInfo (componentsResolved:false emits the `components: not resolved` marker)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3609,7 +3527,7 @@ test("INFO-05: renderPluginInfo (componentsResolved:false emits the `components:
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3627,7 +3545,7 @@ test("INFO-05: renderPluginInfo (componentsResolved:false emits the `components:
 test("SURF-02 / D-63-04: renderer emits multi-line `hooks:` block at 4-space header + 6-space per-entry indent (mixed tool/non-tool entries)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3650,7 +3568,7 @@ test("SURF-02 / D-63-04: renderer emits multi-line `hooks:` block at 4-space hea
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3672,7 +3590,7 @@ test("SURF-02 / D-63-04: renderer emits multi-line `hooks:` block at 4-space hea
 test("SURF-02 / D-63-04: empty hooks ([]) emits NO `hooks:` header; non-hooks kinds still render their single-line comma-join", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3691,7 +3609,7 @@ test("SURF-02 / D-63-04: empty hooks ([]) emits NO `hooks:` header; non-hooks ki
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3707,7 +3625,7 @@ test("SURF-02 / D-63-04: empty hooks ([]) emits NO `hooks:` header; non-hooks ki
 test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` header; legacy 4-kind comma-join output is byte-stable", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3728,7 +3646,7 @@ test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` heade
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3749,7 +3667,7 @@ test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` heade
 test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` when supported=false, bare `<event>` when supported=true", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3770,7 +3688,7 @@ test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` wh
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3790,7 +3708,7 @@ test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` wh
 test("INFO-03: marketplace-info-cascade with a single block byte-equals the bare marketplace-info render", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info-cascade",
     blocks: [
@@ -3811,7 +3729,7 @@ test("INFO-03: marketplace-info-cascade with a single block byte-equals the bare
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3831,7 +3749,7 @@ test("INFO-03: marketplace-info-cascade with a single block byte-equals the bare
 test("INFO-03: marketplace-info-cascade with two blocks renders project-first then user, joined by one blank line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info-cascade",
     blocks: [
@@ -3853,7 +3771,7 @@ test("INFO-03: marketplace-info-cascade with two blocks renders project-first th
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3873,7 +3791,7 @@ test("INFO-03: marketplace-info-cascade with two blocks renders project-first th
 test("INFO-03: marketplace-info-cascade severity is always info (no second arg) and no reload-hint", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info-cascade",
     blocks: [
@@ -3895,7 +3813,7 @@ test("INFO-03: marketplace-info-cascade severity is always info (no second arg) 
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3909,7 +3827,7 @@ test("INFO-03: marketplace-info-cascade severity is always info (no second arg) 
 test("INFO-03 + INFO-01: single-block fan-out (github source, all optional fields) byte form", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info-cascade",
     blocks: [
@@ -3930,7 +3848,7 @@ test("INFO-03 + INFO-01: single-block fan-out (github source, all optional field
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3949,7 +3867,7 @@ test("INFO-03 + INFO-01: single-block fan-out (github source, all optional field
 test("INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form omits last_updated and description", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info-cascade",
     blocks: [
@@ -3964,7 +3882,7 @@ test("INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form o
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3978,7 +3896,7 @@ test("INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form o
 test("INFO-02: plugin-info-cascade with a single block byte-equals the bare plugin-info render", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info-cascade",
     blocks: [
@@ -3999,7 +3917,7 @@ test("INFO-02: plugin-info-cascade with a single block byte-equals the bare plug
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -4014,7 +3932,7 @@ test("INFO-02: plugin-info-cascade with a single block byte-equals the bare plug
 test("INFO-02 + INFO-03: plugin-info-cascade with two blocks renders project-first then user, joined by one blank line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info-cascade",
     blocks: [
@@ -4048,7 +3966,7 @@ test("INFO-02 + INFO-03: plugin-info-cascade with two blocks renders project-fir
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -4070,7 +3988,7 @@ test("INFO-02 + INFO-03: plugin-info-cascade with two blocks renders project-fir
 test("INFO-02: plugin-info-cascade severity is always info (no second arg) and no reload-hint", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info-cascade",
     blocks: [
@@ -4104,7 +4022,7 @@ test("INFO-02: plugin-info-cascade severity is always info (no second arg) and n
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4118,7 +4036,7 @@ test("INFO-02: plugin-info-cascade severity is always info (no second arg) and n
 test("INFO-02: plugin-info-cascade single block installed with resolved components + dependencies renders full INFO-02 happy path", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info-cascade",
     blocks: [
@@ -4145,7 +4063,7 @@ test("INFO-02: plugin-info-cascade single block installed with resolved componen
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4167,7 +4085,7 @@ test("INFO-02: plugin-info-cascade single block installed with resolved componen
 test("INFO-05: plugin-info-cascade single block components-not-resolved emits the marker line at col 4", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info-cascade",
     blocks: [
@@ -4188,7 +4106,7 @@ test("INFO-05: plugin-info-cascade single block components-not-resolved emits th
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4208,7 +4126,7 @@ test("an omitted cascade kind renders byte-identically to an explicit cascade ki
   // arrange
   const ctxNoKind = createContext(t);
   const ctxWithKind = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const noKindMsg: NotificationMessage = {
     marketplaces: [
       {
@@ -4246,10 +4164,10 @@ test("an omitted cascade kind renders byte-identically to an explicit cascade ki
       },
     ],
   };
-  notify(ctxNoKind as never, pi, noKindMsg);
+  notify(ctxNoKind as never, run, noKindMsg);
 
   // act
-  notify(ctxWithKind as never, pi, withKindMsg);
+  notify(ctxWithKind as never, run, withKindMsg);
   const noKindArgs = ctxNoKind.ui.notify.mock.calls[0]!.arguments;
   const withKindArgs = ctxWithKind.ui.notify.mock.calls[0]!.arguments;
 
@@ -4264,7 +4182,7 @@ test("an omitted cascade kind renders byte-identically to an explicit cascade ki
 test("WILL-01: marketplace add renders a bare header + will-install plugin child (orphan-fold suppresses [scope])", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4276,7 +4194,7 @@ test("WILL-01: marketplace add renders a bare header + will-install plugin child
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -4288,7 +4206,7 @@ test("WILL-01: marketplace add renders a bare header + will-install plugin child
 test("DIFF-02: will-uninstall plugin under existing (no-status) marketplace block", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4300,7 +4218,7 @@ test("DIFF-02: will-uninstall plugin under existing (no-status) marketplace bloc
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4311,7 +4229,7 @@ test("DIFF-02: will-uninstall plugin under existing (no-status) marketplace bloc
 test("DIFF-02: will-enable + will-disable rows under same marketplace", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4326,7 +4244,7 @@ test("DIFF-02: will-enable + will-disable rows under same marketplace", (t) => {
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4337,7 +4255,7 @@ test("DIFF-02: will-enable + will-disable rows under same marketplace", (t) => {
 test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace scope -> [scope] bracket renders", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4349,7 +4267,7 @@ test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace 
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4360,7 +4278,7 @@ test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace 
 test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (pending rows are pre-transition)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4375,7 +4293,7 @@ test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (pendi
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -4388,7 +4306,7 @@ test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (pendi
 test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.notify)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4400,7 +4318,7 @@ test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.no
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4410,7 +4328,7 @@ test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.no
 test("D-54-01: (disabled) inventory row renders subject-first with version under list-arm marketplace (info severity, no /reload)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4431,7 +4349,7 @@ test("D-54-01: (disabled) inventory row renders subject-first with version under
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4442,7 +4360,7 @@ test("D-54-01: (disabled) inventory row renders subject-first with version under
 test("D-54-01: (disabled) inventory row without version omits the v<version> slot cleanly", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4454,7 +4372,7 @@ test("D-54-01: (disabled) inventory row without version omits the v<version> slo
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4465,7 +4383,7 @@ test("D-54-01: (disabled) inventory row without version omits the v<version> slo
 test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explicit p.scope differs from mp.scope", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4486,7 +4404,7 @@ test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explic
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4497,7 +4415,7 @@ test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explic
 test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches mp.scope -> no row bracket", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4518,7 +4436,7 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4529,7 +4447,7 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
 test("UAT-03 / RLD-05: a fresh (disabled) row stamping needsReload:true DOES emit the /reload trailer (realized transition; byte-identical row form)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4549,7 +4467,7 @@ test("UAT-03 / RLD-05: a fresh (disabled) row stamping needsReload:true DOES emi
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4568,7 +4486,7 @@ test("UAT-03 / RLD-05: a fresh (disabled) row stamping needsReload:true DOES emi
 test("UAT-03 / RLD-05: a (disabled) inventory row stamping needsReload:false stays trailer-free (stamp drives the hint, not the row status)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4588,7 +4506,7 @@ test("UAT-03 / RLD-05: a (disabled) inventory row stamping needsReload:false sta
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4599,7 +4517,7 @@ test("UAT-03 / RLD-05: a (disabled) inventory row stamping needsReload:false sta
 test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info severity (benign reason)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4619,7 +4537,7 @@ test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4633,7 +4551,7 @@ test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info
 test("D-54-01 / ENBL idempotency: (skipped) {already disabled} row routes to info severity (benign reason)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4653,7 +4571,7 @@ test("D-54-01 / ENBL idempotency: (skipped) {already disabled} row routes to inf
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4667,7 +4585,7 @@ test("D-54-01 / ENBL idempotency: (skipped) {already disabled} row routes to inf
 test("D-54-01: enable cascade (installed plugin row under added mp header) emits /reload trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4689,7 +4607,7 @@ test("D-54-01: enable cascade (installed plugin row under added mp header) emits
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4703,7 +4621,7 @@ test("D-54-01: enable cascade (installed plugin row under added mp header) emits
 test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits /reload trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4723,7 +4641,7 @@ test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits 
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4737,7 +4655,7 @@ test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits 
 test("RECON-04: success cascade -- mixed marketplace add + plugin install across both scopes, project-first ordering", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -4773,7 +4691,7 @@ test("RECON-04: success cascade -- mixed marketplace add + plugin install across
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -4788,7 +4706,7 @@ test("RECON-04: success cascade -- mixed marketplace add + plugin install across
 test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -4805,7 +4723,7 @@ test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -4818,7 +4736,7 @@ test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer
 test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful install row routes to error + summary prepended", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -4849,7 +4767,7 @@ test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful insta
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4864,7 +4782,7 @@ test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful insta
 test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 information-disclosure mitigation)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -4881,7 +4799,7 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4896,7 +4814,7 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
 test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via the existing reasons brace", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4918,7 +4836,7 @@ test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -4930,7 +4848,7 @@ test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via
 test("CLASS-01 / D-86-01: installed row renders `(installed) {malformed skill}` at warning severity", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4952,7 +4870,7 @@ test("CLASS-01 / D-86-01: installed row renders `(installed) {malformed skill}` 
   };
 
   // act
-  notify(ctx as never, pi, msg);
+  notify(ctx as never, run, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -4965,7 +4883,7 @@ test("CLASS-01 / D-86-01: installed row renders `(installed) {malformed skill}` 
 test("notify renders a central remote row without inferred reasons", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -4977,7 +4895,7 @@ test("notify renders a central remote row without inferred reasons", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -4988,7 +4906,7 @@ test("notify renders a central remote row without inferred reasons", (t) => {
 test("notify counts a warning in a plural tally", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     kind: "cascade",
     cardinality: "plural",
@@ -5011,7 +4929,7 @@ test("notify counts a warning in a plural tally", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5035,7 +4953,7 @@ for (const { name, tally, expected } of [
   test(name, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithAllLoaded();
+    const run = runWithAllLoaded();
     const message = {
       kind: "cascade",
       cardinality: "plural",
@@ -5045,7 +4963,7 @@ for (const { name, tally, expected } of [
     } satisfies NotificationMessage;
 
     // act
-    notify(ctx as never, pi, message);
+    notify(ctx as never, run, message);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
@@ -5055,7 +4973,7 @@ for (const { name, tally, expected } of [
 test("an empty default plural cascade emits only its sentinel", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     kind: "cascade",
     cardinality: "plural",
@@ -5064,7 +4982,7 @@ test("an empty default plural cascade emits only its sentinel", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["(no marketplaces)"]);
@@ -5073,7 +4991,7 @@ test("an empty default plural cascade emits only its sentinel", (t) => {
 test("a marketplace-level reload stamp emits the trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -5088,7 +5006,7 @@ test("a marketplace-level reload stamp emits the trailer", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5099,7 +5017,7 @@ test("a marketplace-level reload stamp emits the trailer", (t) => {
 test("marketplace info renders complete URL-source fields", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     kind: "marketplace-info",
     name: "remote-mp",
@@ -5110,7 +5028,7 @@ test("marketplace info renders complete URL-source fields", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5170,7 +5088,7 @@ for (const { name, plugin, expected } of [
   test(name, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithAllLoaded();
+    const run = runWithAllLoaded();
     const message = {
       kind: "plugin-info",
       marketplaceName: "official",
@@ -5180,7 +5098,7 @@ for (const { name, plugin, expected } of [
     } satisfies NotificationMessage;
 
     // act
-    notify(ctx as never, pi, message);
+    notify(ctx as never, run, message);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
@@ -5190,11 +5108,11 @@ for (const { name, plugin, expected } of [
 test("reconcile-pending-empty emits the exact zero-action advisory", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = { kind: "reconcile-pending-empty" } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5205,7 +5123,7 @@ test("reconcile-pending-empty emits the exact zero-action advisory", (t) => {
 test("context emission renders the disabled enable hint", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(
     () => "◍ alpha v1.0.0 (disabled)",
   );
@@ -5230,7 +5148,7 @@ test("context emission renders the disabled enable hint", (t) => {
   } satisfies Parameters<typeof emitContextCascade>[2];
 
   // act
-  emitContextCascade(ctx as never, pi, message, renderRow, {}, hasRenderArm);
+  emitContextCascade(ctx as never, run, message, renderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5241,7 +5159,7 @@ test("context emission renders the disabled enable hint", (t) => {
 test("reconcile applied summarizes mixed failed subjects", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -5266,7 +5184,7 @@ test("reconcile applied summarizes mixed failed subjects", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5319,11 +5237,11 @@ for (const { name, message, expected } of [
   test(name, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithAllLoaded();
+    const run = runWithAllLoaded();
     const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(() => "unused");
 
     // act
-    emitContextCascade(ctx as never, pi, message as never, renderRow, {}, hasRenderArm);
+    emitContextCascade(ctx as never, run, message as never, renderRow, {}, hasRenderArm);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, expected);
@@ -5334,14 +5252,14 @@ for (const { name, message, expected } of [
 test("summary computation preserves its read-only empty fallback after narrowing", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = messageWithKindSequence({ name: "official", scope: "user" }, [
     ...Array<string>(17).fill("marketplace-not-added"),
     "marketplace-info",
   ]);
 
   // act
-  notify(ctx as never, pi, message as never);
+  notify(ctx as never, run, message as never);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5353,7 +5271,7 @@ test("summary computation preserves its read-only empty fallback after narrowing
 test("a list-surface marketplace with autoupdate disabled omits the marker", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -5366,7 +5284,7 @@ test("a list-surface marketplace with autoupdate disabled omits the marker", (t)
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["● official [user]"]);
@@ -5375,7 +5293,7 @@ test("a list-surface marketplace with autoupdate disabled omits the marker", (t)
 test("a warning reconcile cascade summarizes a marketplace subject", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -5392,7 +5310,7 @@ test("a warning reconcile cascade summarizes a marketplace subject", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5404,7 +5322,7 @@ test("a warning reconcile cascade summarizes a marketplace subject", (t) => {
 test("a non-failed plugin fallback preserves the empty standalone summary", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   let statusIndex = 0;
   const statuses = ["available", "available", "failed", "available"] as const;
   const plugin = Object.defineProperty({ name: "alpha", componentsResolved: false }, "status", {
@@ -5424,7 +5342,7 @@ test("a non-failed plugin fallback preserves the empty standalone summary", (t) 
   };
 
   // act
-  notify(ctx as never, pi, message as never);
+  notify(ctx as never, run, message as never);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5436,7 +5354,7 @@ test("a non-failed plugin fallback preserves the empty standalone summary", (t) 
 test("a defined empty cause does not add an indented cause trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -5457,7 +5375,7 @@ test("a defined empty cause does not add an indented cause trailer", (t) => {
   };
 
   // act
-  notify(ctx as never, pi, message as never);
+  notify(ctx as never, run, message as never);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5469,7 +5387,7 @@ test("a defined empty cause does not add an indented cause trailer", (t) => {
 test("a URL marketplace without a ref omits the fragment suffix", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     kind: "marketplace-info",
     name: "official",
@@ -5479,7 +5397,7 @@ test("a URL marketplace without a ref omits the fragment suffix", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5490,14 +5408,14 @@ test("a URL marketplace without a ref omits the fragment suffix", (t) => {
 test("an absent marketplace without a scope omits the scope bracket", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     kind: "marketplace-not-added",
     name: "official",
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5513,7 +5431,7 @@ for (const { scope, expectedReason } of [
   test(`an absent marketplace present in the other scope names the ${scope} scope that missed`, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithAllLoaded();
+    const run = runWithAllLoaded();
     const message = {
       kind: "marketplace-not-added",
       name: "official",
@@ -5522,7 +5440,7 @@ for (const { scope, expectedReason } of [
     } satisfies NotificationMessage;
 
     // act
-    notify(ctx as never, pi, message);
+    notify(ctx as never, run, message);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5535,7 +5453,7 @@ for (const { scope, expectedReason } of [
 test("an absent marketplace claiming a sibling scope with no bracket keeps the plain token", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     kind: "marketplace-not-added",
     name: "official",
@@ -5543,7 +5461,7 @@ test("an absent marketplace claiming a sibling scope with no bracket keeps the p
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5555,14 +5473,14 @@ test("an absent marketplace claiming a sibling scope with no bracket keeps the p
 test("an empty applied reconcile cascade renders the empty sentinel", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     kind: "reconcile-applied-cascade",
     marketplaces: [],
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["(no marketplaces)"]);
@@ -5571,7 +5489,7 @@ test("an empty applied reconcile cascade renders the empty sentinel", (t) => {
 test("a failed stale-gate row emits its dedicated recovery trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -5592,7 +5510,7 @@ test("a failed stale-gate row emits its dedicated recovery trailer", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5604,7 +5522,7 @@ test("a failed stale-gate row emits its dedicated recovery trailer", (t) => {
 test("the central disabled arm preserves a caller-stamped reason", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -5625,7 +5543,7 @@ test("the central disabled arm preserves a caller-stamped reason", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5658,13 +5576,13 @@ for (const { name, plugin, expected } of [
   test(name, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithAllLoaded();
+    const run = runWithAllLoaded();
     const message = {
       marketplaces: [{ name: "official", scope: "user", plugins: [plugin] }],
     } satisfies NotificationMessage;
 
     // act
-    notify(ctx as never, pi, message);
+    notify(ctx as never, run, message);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
@@ -5694,7 +5612,7 @@ for (const { name, reasons, expected } of [
   test(name, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithAllLoaded();
+    const run = runWithAllLoaded();
     const plugin = {
       status: "available",
       name: "alpha",
@@ -5711,7 +5629,7 @@ for (const { name, reasons, expected } of [
     } satisfies NotificationMessage;
 
     // act
-    notify(ctx as never, pi, message);
+    notify(ctx as never, run, message);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
@@ -5721,7 +5639,7 @@ for (const { name, reasons, expected } of [
 test("a single-target label remains inert without plural cardinality", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     label: "Plugin uninstall",
     marketplaces: [
@@ -5742,7 +5660,7 @@ test("a single-target label remains inert without plural cardinality", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5837,7 +5755,7 @@ function renderOwnedRow(row: ResolvedRow): string {
 test("context dispatch preserves ordered rows and stamped reload hint", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(renderOwnedRow);
   const message = {
     marketplaces: [
@@ -5864,7 +5782,7 @@ test("context dispatch preserves ordered rows and stamped reload hint", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, pi, message, renderRow, {}, hasRenderArm);
+  emitContextCascade(ctx as never, run, message, renderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5879,7 +5797,7 @@ test("context dispatch forwards the row and the enclosing marketplace scope, and
   // emitter: the scope must be the ENCLOSING marketplace's, not the row's, and
   // D-13 gives the renderer no probe argument.
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(
     (row) => `controlled ${row.status} ${row.name}`,
   );
@@ -5905,7 +5823,7 @@ test("context dispatch forwards the row and the enclosing marketplace scope, and
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, pi, message, renderRow, {}, hasRenderArm);
+  emitContextCascade(ctx as never, run, message, renderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5920,7 +5838,7 @@ test("context dispatch forwards the row and the enclosing marketplace scope, and
 test("D-12: context dispatch composes each row's markers under the caller's marker policy", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithNothingLoaded();
+  const run = runWithNothingLoaded();
   const renderedReasons: (readonly string[])[] = [];
   const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>((row) => {
     renderedReasons.push(row.reasons);
@@ -5954,7 +5872,7 @@ test("D-12: context dispatch composes each row's markers under the caller's mark
   // act
   emitContextCascade(
     ctx as never,
-    pi,
+    run,
     message,
     renderRow,
     { installed: true, reinstalled: false },
@@ -5969,17 +5887,17 @@ test("context dispatch keeps independent parallel captures", async (t) => {
   // arrange
   const first = createContext(t);
   const second = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(renderOwnedRow);
   const message = { marketplaces: [] } satisfies CascadeNotificationMessage;
 
   // act
   await Promise.all([
     Promise.resolve().then(() => {
-      emitContextCascade(first as never, pi, message, renderRow, {}, hasRenderArm);
+      emitContextCascade(first as never, run, message, renderRow, {}, hasRenderArm);
     }),
     Promise.resolve().then(() => {
-      emitContextCascade(second as never, pi, message, renderRow, {}, hasRenderArm);
+      emitContextCascade(second as never, run, message, renderRow, {}, hasRenderArm);
     }),
   ]);
 
@@ -5995,7 +5913,7 @@ test("update no-op dispatch preserves empty and non-empty folds", (t) => {
   // arrange
   const empty = createContext(t);
   const nonEmpty = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const emptyRenderRow = t.mock.fn<Parameters<typeof emitUpdateNoOpCascade>[3]>(renderOwnedRow);
   const nonEmptyRenderRow = t.mock.fn<Parameters<typeof emitUpdateNoOpCascade>[3]>(renderOwnedRow);
   const emptyMessage = { marketplaces: [] } satisfies CascadeNotificationMessage;
@@ -6017,8 +5935,8 @@ test("update no-op dispatch preserves empty and non-empty folds", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitUpdateNoOpCascade(empty as never, pi, emptyMessage, emptyRenderRow, {}, hasRenderArm);
-  emitUpdateNoOpCascade(nonEmpty as never, pi, message, nonEmptyRenderRow, {}, hasRenderArm);
+  emitUpdateNoOpCascade(empty as never, run, emptyMessage, emptyRenderRow, {}, hasRenderArm);
+  emitUpdateNoOpCascade(nonEmpty as never, run, message, nonEmptyRenderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(empty.ui.notify.mock.calls[0]!.arguments, [
@@ -6034,7 +5952,7 @@ test("update no-op dispatch preserves empty and non-empty folds", (t) => {
 test("reconcile context dispatch keeps its tally and omits reload", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const renderRow =
     t.mock.fn<Parameters<typeof emitReconcileAppliedContextCascade>[3]>(renderOwnedRow);
   const message = {
@@ -6054,7 +5972,7 @@ test("reconcile context dispatch keeps its tally and omits reload", (t) => {
   } as const;
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow, {}, hasRenderArm);
+  emitReconcileAppliedContextCascade(ctx as never, run, message, renderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6071,7 +5989,7 @@ test("reconcile context dispatch suppresses reload and stamps error severity", (
   // this emitter from shared/notify-context.ts, so the suppression, the
   // failure tally, and the stamped severity argument are pinned here.
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const renderRow = t.mock.fn<Parameters<typeof emitReconcileAppliedContextCascade>[3]>(
     () => "⊘ alpha (failed) {not found}",
   );
@@ -6097,7 +6015,7 @@ test("reconcile context dispatch suppresses reload and stamps error severity", (
   } satisfies Parameters<typeof emitReconcileAppliedContextCascade>[2];
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow, {}, hasRenderArm);
+  emitReconcileAppliedContextCascade(ctx as never, run, message, renderRow, {}, hasRenderArm);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6119,7 +6037,7 @@ test("reconcile context dispatch suppresses reload and stamps error severity", (
 test("a mixed actionable-skip cascade emits the plural attention summary", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -6144,7 +6062,7 @@ test("a mixed actionable-skip cascade emits the plural attention summary", (t) =
   // act
   emitContextCascade(
     ctx as never,
-    pi,
+    run,
     message,
     (row) => `${row.name} (${row.status})`,
     {},
@@ -6161,7 +6079,7 @@ test("a mixed actionable-skip cascade emits the plural attention summary", (t) =
 test("a marketplace-only failure cascade emits the marketplace failure summary", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     marketplaces: [
       { name: "official", scope: "user", status: "failed", severity: "error", plugins: [] },
@@ -6171,7 +6089,7 @@ test("a marketplace-only failure cascade emits the marketplace failure summary",
   // act
   emitContextCascade(
     ctx as never,
-    pi,
+    run,
     message,
     (row) => `${row.name} (${row.status})`,
     {},
@@ -6188,7 +6106,7 @@ test("a marketplace-only failure cascade emits the marketplace failure summary",
 test("an unstamped cascade plugin defaults to info severity and a success tally", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     cardinality: "plural",
     label: "Plugin list",
@@ -6200,7 +6118,7 @@ test("an unstamped cascade plugin defaults to info severity and a success tally"
   // act
   emitContextCascade(
     ctx as never,
-    pi,
+    run,
     message,
     (row) => `${row.name} (${row.status})`,
     {},
@@ -6216,7 +6134,7 @@ test("an unstamped cascade plugin defaults to info severity and a success tally"
 test("an applied reconcile with a failed plugin emits the plural failure summary", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -6239,7 +6157,7 @@ test("an applied reconcile with a failed plugin emits the plural failure summary
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6251,7 +6169,7 @@ test("an applied reconcile with a failed plugin emits the plural failure summary
 test("an applied reconcile with only a skipped marketplace emits the marketplace attention summary", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -6260,7 +6178,7 @@ test("an applied reconcile with only a skipped marketplace emits the marketplace
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi, message);
+  notify(ctx as never, run, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6278,7 +6196,7 @@ test("summary computation preserves its available-plugin empty fallback after na
   // read -- what this case pins is that the arm reached at the summary read
   // contributes an empty sentence rather than a hard-count-1 one.
   const ctx = createContext(t);
-  const pi = piWithAllLoaded();
+  const run = runWithAllLoaded();
   const message = messageWithKindSequence(
     {
       name: "official",
@@ -6289,7 +6207,7 @@ test("summary computation preserves its available-plugin empty fallback after na
   );
 
   // act
-  notify(ctx as never, pi, message as never);
+  notify(ctx as never, run, message as never);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [

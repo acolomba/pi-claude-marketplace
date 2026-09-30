@@ -15,7 +15,10 @@ import {
   shouldEmitReloadHint,
 } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
 
+import { runWithSoftDeps } from "./notification-run-seeds.ts";
+
 import type { ResolvedRow } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type {
   CascadeNotificationMessage,
   NotificationMessage,
@@ -23,10 +26,6 @@ import type {
 
 interface NotificationContext {
   readonly ui: { readonly notify: ReturnType<TestContext["mock"]["fn"]> };
-}
-
-interface NotificationApi {
-  readonly getAllTools: () => readonly { readonly name: string }[];
 }
 
 function createContext(t: TestContext): NotificationContext {
@@ -38,8 +37,13 @@ function hasRenderArm(): boolean {
   return true;
 }
 
-function notificationApi(): NotificationApi {
-  return { getAllTools: () => [{ name: "subagent" }, { name: "mcp" }] };
+/** pi-subagents and pi-mcp-adapter are loaded; the workflow engine is not. */
+function notificationRun(): NotificationRun {
+  return runWithSoftDeps({
+    piSubagentsLoaded: true,
+    piMcpAdapterLoaded: true,
+    workflowEngineLoaded: false,
+  });
 }
 
 function renderRow(row: ResolvedRow): string {
@@ -49,7 +53,7 @@ function renderRow(row: ResolvedRow): string {
 function emitContext(t: TestContext, message: CascadeNotificationMessage): readonly unknown[] {
   const ctx = createContext(t);
 
-  emitContextCascade(ctx as never, notificationApi(), message, renderRow, {}, hasRenderArm);
+  emitContextCascade(ctx as never, notificationRun(), message, renderRow, {}, hasRenderArm);
 
   assert.equal(ctx.ui.notify.mock.callCount(), 1);
   return ctx.ui.notify.mock.calls[0]!.arguments;
@@ -550,7 +554,7 @@ test("update no-op fold preserves empty and non-empty bodies", (t) => {
   // act
   emitUpdateNoOpCascade(
     emptyContext as never,
-    notificationApi(),
+    notificationRun(),
     emptyMessage,
     renderRow,
     {},
@@ -558,7 +562,7 @@ test("update no-op fold preserves empty and non-empty bodies", (t) => {
   );
   emitUpdateNoOpCascade(
     bodyContext as never,
-    notificationApi(),
+    notificationRun(),
     bodyMessage,
     renderRow,
     {},
@@ -601,7 +605,7 @@ test("reconcile applied fold suppresses reload while preserving severity and tal
   // act
   emitReconcileAppliedContextCascade(
     ctx as never,
-    notificationApi(),
+    notificationRun(),
     message,
     renderRow,
     {},
