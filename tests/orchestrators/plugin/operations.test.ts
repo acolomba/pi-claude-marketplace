@@ -574,12 +574,12 @@ test("uninstallPlugin removes the record, the staged artifacts and the routes", 
   // Pre-conditions: the install left one live route and a staged hooks.json.
   assert.equal(runtime.getRoutingBucket("PreToolUse").length, 1);
   assert.equal(await pathExists(path.join(locations.hooksDir, "p1", "hooks.json")), true);
-  const { ctx, pi } = makeCtx();
+  const { ctx, run } = makeCtx();
 
   // act
   const outcome = await uninstallPlugin({
     ctx,
-    pi,
+    run,
     scope: "project",
     cwd,
     marketplace: "mp",

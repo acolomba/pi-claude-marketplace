@@ -166,13 +166,13 @@ const INVOKERS: Record<string, Invoker> = {
     )({ ctx, run, scope: "project", cwd, marketplace: NAME, plugin: "anything" });
   },
   // uninstall. uninstall.test.ts ATTR-04 / D-03.
-  uninstall: async ({ ctx, pi, cwd, mode }) => {
+  uninstall: async ({ ctx, run, cwd, mode }) => {
     await createUninstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     )({
       ctx,
-      pi,
+      run,
       cwd,
       marketplace: NAME,
       plugin: "ghost",

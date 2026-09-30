@@ -271,7 +271,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
 
       {
         // arrange
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         await createUninstallOperation(
@@ -279,7 +279,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
           completionCache,
         )({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",

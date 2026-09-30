@@ -10,19 +10,18 @@ import { extractLocalFlag } from "../shared.ts";
 import { parseRequiredPluginMarketplaceRef } from "./shared.ts";
 
 import type { UninstallHooksRouting } from "../../../orchestrators/plugin/uninstall.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { CompletionCache } from "../../../shared/completion-cache.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE =
   "Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--local]";
 
 export function makeUninstallHandler(
-  pi: ExtensionAPI,
   hooksRouting: UninstallHooksRouting,
   completionCache: CompletionCache,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
+): SubcommandHandler {
   const uninstallPlugin = createUninstallOperation(hooksRouting, completionCache);
-  return async (args, ctx): Promise<void> => {
+  return async (args, ctx, run): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts.
     const localFlag = extractLocalFlag(args, ctx, USAGE);
     if (localFlag === undefined) {
@@ -36,7 +35,7 @@ export function makeUninstallHandler(
 
     await uninstallPlugin({
       ctx,
-      pi,
+      run,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
       cwd: ctx.cwd,
       marketplace: parsed.marketplace,

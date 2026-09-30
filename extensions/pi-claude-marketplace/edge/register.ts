@@ -92,7 +92,7 @@ export function registerClaudePluginCommand(
 ): void {
   const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
   const install = makeInstallHandler(hooksRouting, deps.completionCache);
-  const uninstall = makeUninstallHandler(pi, hooksRouting, deps.completionCache);
+  const uninstall = makeUninstallHandler(hooksRouting, deps.completionCache);
   const pluginInfo = makePluginInfoHandler(pi);
   const enable = makeEnableDisableHandler(true, hooksRouting);
   const disable = makeEnableDisableHandler(false, hooksRouting);

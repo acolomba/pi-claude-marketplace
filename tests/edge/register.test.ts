@@ -1354,12 +1354,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
-  // One run, plus the uninstall notification, which still probes per emission.
+  // One run; the uninstall notification renders from it and probes nothing.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1, probingEmissions: 1 },
+    { runs: 1, probingEmissions: 0 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });

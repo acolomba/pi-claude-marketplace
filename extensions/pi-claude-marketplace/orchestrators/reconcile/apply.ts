@@ -360,7 +360,7 @@ async function applyPluginUninstalls(
     try {
       const result = await uninstallPlugin({
         ctx: opts.ctx,
-        pi: opts.pi,
+        run: opts.run,
         scope: op.scope,
         cwd: opts.cwd,
         marketplace: op.marketplace,
