@@ -418,13 +418,48 @@ test("the no-op update wrapper dispatches surviving rows before its headline", (
   verify(harness.ui);
 });
 
-for (const { entry, emit, expectedMessage } of [
+/** An `installed`-only context whose one marker policy value is `installed`. */
+function installedMarkerContext(
+  installed: boolean,
+): CommandContext<"installed", PluginInstalledMessage> {
+  return {
+    Messaging: { label: "Plugin inspect" },
+    render: { installed: (row) => `${row.name} {${row.reasons.join(", ")}}` },
+    markers: { installed },
+  };
+}
+
+/** One `installed` row that declares agents, so pi-subagents is its marker. */
+function installedAgentsRows(): readonly MarketplaceRows<PluginInstalledMessage>[] {
+  return [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        {
+          status: "installed",
+          name: "alpha",
+          dependencies: ["agents"],
+          severity: "info",
+          needsReload: false,
+        },
+      ],
+    },
+  ];
+}
+
+// D-12: each wrapper runs once with its context's policy on and once with it
+// off. The off case is red for a wrapper that hands the emitter
+// `CENTRAL_MARKER_POLICY` or an all-true policy in place of `context.markers`,
+// because both map `installed` to true.
+for (const { entry, emit, markedMessage, unmarkedMessage } of [
   {
     entry: "notifyWithContext",
     emit: (harness, context, rows) => {
       notifyWithContext(harness.ctx, harness.run, context, rows, undefined, "single");
     },
-    expectedMessage: "● official [user]\n  alpha {requires pi-subagents}",
+    markedMessage: "● official [user]\n  alpha {requires pi-subagents}",
+    unmarkedMessage: "● official [user]\n  alpha {}",
   },
   {
     entry: "notifyUpdateWithContext",
@@ -434,15 +469,17 @@ for (const { entry, emit, expectedMessage } of [
         count: 1,
       });
     },
-    expectedMessage: "● official [user]\n  alpha {requires pi-subagents}",
+    markedMessage: "● official [user]\n  alpha {requires pi-subagents}",
+    unmarkedMessage: "● official [user]\n  alpha {}",
   },
   {
     entry: "notifyUpdateNoOpWithContext",
     emit: (harness, context, rows) => {
       notifyUpdateNoOpWithContext(harness.ctx, harness.run, context, rows, "single");
     },
-    expectedMessage:
+    markedMessage:
       "● official [user]\n  alpha {requires pi-subagents}\n\nPlugin update: nothing to update",
+    unmarkedMessage: "● official [user]\n  alpha {}\n\nPlugin update: nothing to update",
   },
   {
     entry: "notifyReconcileAppliedWithContext",
@@ -452,8 +489,9 @@ for (const { entry, emit, expectedMessage } of [
         marketplaces: rows,
       });
     },
-    expectedMessage:
+    markedMessage:
       "● official [user]\n  alpha {requires pi-subagents}\n\nPlugin inspect: 1 success",
+    unmarkedMessage: "● official [user]\n  alpha {}\n\nPlugin inspect: 1 success",
   },
 ] satisfies readonly {
   entry: string;
@@ -462,34 +500,29 @@ for (const { entry, emit, expectedMessage } of [
     context: CommandContext<"installed", PluginInstalledMessage>,
     rows: readonly MarketplaceRows<PluginInstalledMessage>[],
   ) => void;
-  expectedMessage: string;
+  markedMessage: string;
+  unmarkedMessage: string;
 }[]) {
   test(`D-12: ${entry} composes row markers under the context's marker policy`, () => {
     // arrange
-    const harness = createHarness({ message: expectedMessage });
-    const context = {
-      Messaging: { label: "Plugin inspect" },
-      render: { installed: (row) => `${row.name} {${row.reasons.join(", ")}}` },
-      markers: { installed: true },
-    } satisfies CommandContext<"installed", PluginInstalledMessage>;
-    const rows: readonly MarketplaceRows<PluginInstalledMessage>[] = [
-      {
-        name: "official",
-        scope: "user",
-        plugins: [
-          {
-            status: "installed",
-            name: "alpha",
-            dependencies: ["agents"],
-            severity: "info",
-            needsReload: false,
-          },
-        ],
-      },
-    ];
+    const harness = createHarness({ message: markedMessage });
+    const context = installedMarkerContext(true);
 
     // act
-    emit(harness, context, rows);
+    emit(harness, context, installedAgentsRows());
+
+    // assert
+    verify(harness.ctx);
+    verify(harness.ui);
+  });
+
+  test(`D-12: ${entry} suppresses markers its context's policy maps off`, () => {
+    // arrange
+    const harness = createHarness({ message: unmarkedMessage });
+    const context = installedMarkerContext(false);
+
+    // act
+    emit(harness, context, installedAgentsRows());
 
     // assert
     verify(harness.ctx);
