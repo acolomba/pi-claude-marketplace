@@ -43,6 +43,7 @@ import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
 import { It, mock, verify, when } from "strong-mock";
+import { Type } from "typebox";
 
 import {
   createHooksRouting,
@@ -201,6 +202,24 @@ function installNetworkTrap(t: TestContext): void {
   t.mock.method(https, "request", (): never => {
     throw new Error("the registration glue must not open a network connection");
   });
+}
+
+/**
+ * The tool pi-subagents registers. Its name is what the RH-3 soft-dependency
+ * probe looks for; the other fields only satisfy the Pi tool shape.
+ */
+function subagentTool(): ReturnType<ExtensionAPI["getAllTools"]>[number] {
+  return {
+    name: "subagent",
+    description: "test tool subagent",
+    parameters: Type.Object({}),
+    sourceInfo: {
+      origin: "top-level",
+      path: "/test/tools/subagent.ts",
+      scope: "temporary",
+      source: "test",
+    },
+  };
 }
 
 /**
@@ -1082,6 +1101,105 @@ test("rebuilds completion rows through the cache that owns a successful register
   verify(ui);
   owner.verifyRegistrar();
   peer.verifyRegistrar();
+});
+
+test("one soft-dep snapshot drives both the severity stamp and the markers of a registered install (SC-3, D-08)", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "sc3-one-snapshot");
+  const marketplace = "sc3-marketplace";
+  const sourceRoot = path.join(cwd, "marketplaces", marketplace);
+  const pluginRoot = path.join(sourceRoot, "plugins", "helper");
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, "agents"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "snapshot owner" },
+      plugins: [{ name: "helper", source: "./plugins/helper", version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "helper", version: "1.0.0" }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(pluginRoot, "agents", "helper.md"),
+    "---\nname: helper\ndescription: Helps.\n---\n\nBody.\n",
+    "utf8",
+  );
+  await seedProjectMarketplace(cwd, marketplace);
+  // The inventory answers "no companion" for the three reads one snapshot
+  // takes, and "pi-subagents loaded" on every later read. If the severity
+  // stamp and the renderer took separate probes, the second probe would see
+  // `subagent` loaded: the row would lose its marker while the summary still
+  // said "needs attention", or the reverse.
+  const getAllTools = t.mock.fn<ExtensionAPI["getAllTools"]>(() => [subagentTool()]);
+  getAllTools.mock.mockImplementationOnce(() => [], 0);
+  getAllTools.mock.mockImplementationOnce(() => [], 1);
+  getAllTools.mock.mockImplementationOnce(() => [], 2);
+  const pi = mock<PiRegistrar>({ exactParams: true, name: "extension API" });
+  const commandOptions = It.willCapture<CommandRegistration>("claude:plugin registration");
+  when(() => {
+    pi.registerCommand("claude:plugin", commandOptions);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("session_start", It.willCapture<SessionStartListener>("session start listener"));
+  })
+    .thenReturn()
+    .times(1);
+  when(() => pi.getAllTools)
+    .thenReturn(getAllTools)
+    .atLeast(3);
+  const completionCache = createCompletionCache();
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  registerClaudePluginCommand(
+    pi,
+    createEdgeDeps(completionCache),
+    hooksRouting,
+    createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
+  );
+  const registration = commandOptions.value;
+  assert.ok(registration !== undefined, "the registration glue installed no command");
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await registration.handler(`install helper@${marketplace} --scope project`, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● sc3-marketplace [project]\n" +
+        "  ● helper v1.0.0 (installed) {requires pi-subagents}\n\n" +
+        "/reload to pick up changes",
+      severity: "warning",
+    },
+  ]);
+  // D-05: one probe per command run, three inventory reads.
+  assert.strictEqual(getAllTools.mock.callCount(), 3);
+  verify(ctx);
+  verify(ui);
+  verify(pi);
 });
 
 test("rebuilds completion rows through the cache that owns a successful registered reinstall", async (t) => {
