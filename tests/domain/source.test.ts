@@ -8,7 +8,6 @@ import {
   pathSource,
   samePlannedSource,
   sourceLogical,
-  stripGitSuffix,
   stripSlashAndFragment,
   type ParsedSource,
   type SamePlannedSourceResult,
@@ -655,6 +654,20 @@ const INVALID_INPUT_CASES: readonly ParseCase[] = [
  * expected value here cold-misses every warm clone for that input.
  */
 const URL_IDENTITY_CASES: readonly ParseCase[] = [
+  {
+    name: "strips only the last of a doubled .git.git suffix from the url identity",
+    raw: "https://gitlab.com/o/r.git.git",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git.git",
+      url: "https://gitlab.com/o/r.git",
+    },
+  },
+  {
+    name: "does not fold a differing case .GIT suffix in the url identity",
+    raw: "https://gitlab.com/o/r.GIT",
+    source: { kind: "url", raw: "https://gitlab.com/o/r.GIT", url: "https://gitlab.com/o/r.GIT" },
+  },
   {
     name: "strips a path slash that precedes a #<ref> fragment from the url identity",
     raw: "https://gitlab.com/o/r/#main",
@@ -1585,42 +1598,6 @@ describe("stripSlashAndFragment", () => {
 
       // assert
       assert.deepStrictEqual(stripped, expectedStripped);
-    });
-  }
-});
-
-describe("stripGitSuffix", () => {
-  for (const { name, input, expected } of [
-    {
-      name: "strips one trailing .git suffix",
-      input: "https://github.com/o/r.git",
-      expected: "https://github.com/o/r",
-    },
-    {
-      name: "returns a url without the suffix unchanged",
-      input: "https://github.com/o/r",
-      expected: "https://github.com/o/r",
-    },
-    {
-      name: "strips only the last of a doubled .git.git suffix",
-      input: "https://github.com/o/r.git.git",
-      expected: "https://github.com/o/r.git",
-    },
-    {
-      name: "does not fold a differing case suffix",
-      input: "https://github.com/o/r.GIT",
-      expected: "https://github.com/o/r.GIT",
-    },
-  ]) {
-    test(name, () => {
-      // arrange
-      const expectedStripped = expected;
-
-      // act
-      const stripped = stripGitSuffix(input);
-
-      // assert
-      assert.strictEqual(stripped, expectedStripped);
     });
   }
 });

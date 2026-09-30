@@ -15,7 +15,7 @@
 
 import { createHash } from "node:crypto";
 
-import { ensureGitSuffix, stripSlashAndFragment } from "./source.ts";
+import { ensureGitSuffix, parsePluginSource, stripSlashAndFragment } from "./source.ts";
 
 import type { GitHubSource, GitSubdirSource, UrlSource } from "./source.ts";
 
@@ -102,4 +102,32 @@ export function networkCloneUrl(source: UrlSource | GitSubdirSource | GitHubSour
     case "git-subdir":
       return stripSlashAndFragment(source.url).base;
   }
+}
+
+/**
+ * Q-03 / MA-12: whether a leftover clone's recorded `origin` url names the same
+ * repository as `source`. Both sides reduce to their `canonicalCloneUrl`
+ * identity and compare after WHATWG URL normalization, so the host compares
+ * case-insensitively (RFC 3986 section 3.2.2). github spellings fold through
+ * the parser (D-76-02), so a leftover created before that fold is recognized.
+ * A trailing `.git` and a `#<ref>` strip through the identity composition. The
+ * path compares exactly (D-3-01), so `owner/Repo` and `owner/repo` differ even
+ * where GitHub treats them as one repository (the IN-05 limitation). An origin
+ * that parses to another kind, or whose identity is not a URL, never matches.
+ */
+export function originMatchesSource(originUrl: string, source: GitHubSource | UrlSource): boolean {
+  const origin = parsePluginSource(originUrl);
+  if (origin.kind !== "github" && origin.kind !== "url") {
+    return false;
+  }
+
+  const originIdentity = normalizedIdentity(canonicalCloneUrl(origin));
+  return (
+    originIdentity !== undefined && originIdentity === normalizedIdentity(canonicalCloneUrl(source))
+  );
+}
+
+/** The WHATWG-normalized `href` of a clone identity, or undefined when it is not a URL. */
+function normalizedIdentity(identity: string): string | undefined {
+  return URL.canParse(identity) ? new URL(identity).href : undefined;
 }

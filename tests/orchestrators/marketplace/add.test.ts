@@ -7,6 +7,7 @@ import {
   readFile,
   readdir,
   rm,
+  symlink,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -31,6 +32,7 @@ import {
   UnsupportedSourceError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -371,6 +373,30 @@ async function withTmpScope<T>(
   }
 }
 
+/** The ownership marker `marketplace add` writes into every clone it creates (Q-01). */
+const OWNERSHIP_MARKER = path.join(".git", "pi-claude-marketplace.json");
+
+const OWNERSHIP_MARKER_BYTES = '{\n  "generatedBy": "pi-claude-marketplace"\n}\n';
+
+/**
+ * Seeds `sources/valid-marketplace/` with a `.leftover-sentinel` file. An
+ * owned leftover also carries the ownership marker, written by hand.
+ */
+async function arrangeLeftover(
+  locations: ScopedLocations,
+  options: { readonly owned: boolean },
+): Promise<string> {
+  const finalDir = await locations.sourceCloneDir("valid-marketplace");
+  await mkdir(finalDir, { recursive: true });
+  await writeFile(path.join(finalDir, ".leftover-sentinel"), "x");
+  if (options.owned) {
+    await mkdir(path.join(finalDir, ".git"), { recursive: true });
+    await writeFile(path.join(finalDir, OWNERSHIP_MARKER), OWNERSHIP_MARKER_BYTES);
+  }
+
+  return finalDir;
+}
+
 test("MA-5: github source clones, validates, renames, mutates state, emits V2 success message with NO reload-hint trailer (SNM-33 / D-22-01)", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
@@ -491,14 +517,65 @@ test("MA-6 / ATTR-07: pre-existing non-empty sources/<name>/ renders (failed) {s
   });
 });
 
-test("MA-12: a leftover clone whose origin names the same source recovers", async () => {
+interface Ma12RecognizedOrigin {
+  readonly rawSource: string;
+  readonly origin: string;
+}
+
+// MA-12 / Q-03: an owned leftover is recognized when its origin names the
+// source, with the host compared case-insensitively and github spellings
+// folded through the parser.
+const MA12_RECOGNIZED_ORIGINS: readonly Ma12RecognizedOrigin[] = [
+  {
+    rawSource: "anthropics/claude-plugins-official",
+    origin: "https://github.com/anthropics/claude-plugins-official.git",
+  },
+  {
+    rawSource: "anthropics/claude-plugins-official",
+    origin: "https://GitHub.com/anthropics/claude-plugins-official",
+  },
+  {
+    rawSource: "anthropics/claude-plugins-official",
+    origin: "https://www.github.com/anthropics/claude-plugins-official.git",
+  },
+  {
+    rawSource: "https://gitlab.example.com/team/mp",
+    origin: "https://GitLab.Example.com/team/mp",
+  },
+];
+
+for (const { rawSource, origin } of MA12_RECOGNIZED_ORIGINS) {
+  test(`MA-12 / Q-03: an owned leftover whose origin is ${origin} recovers for ${rawSource}`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, pi, notifications } = makeCtx();
+      const finalDir = await arrangeLeftover(locations, { owned: true });
+      const { gitOps } = createGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+        listRemotesResult: { kind: "origin", url: origin },
+      });
+
+      // act
+      await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource, gitOps });
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+      const persisted = await loadState(locations.extensionRoot);
+      assert.strictEqual(persisted.marketplaces["valid-marketplace"]?.marketplaceRoot, finalDir);
+      assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), false);
+      assert.strictEqual(
+        await readFile(path.join(finalDir, OWNERSHIP_MARKER), "utf8"),
+        OWNERSHIP_MARKER_BYTES,
+      );
+    });
+  });
+}
+
+test("MA-13 / WR-03: a leftover without the ownership marker refuses as stale clone and stays on disk", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const finalDir = await locations.sourceCloneDir("valid-marketplace");
-    await mkdir(finalDir, { recursive: true });
-    await writeFile(path.join(finalDir, ".leftover-marker"), "x");
-
+    const finalDir = await arrangeLeftover(locations, { owned: false });
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       listRemotesResult: {
@@ -518,23 +595,120 @@ test("MA-12: a leftover clone whose origin names the same source recovers", asyn
     });
 
     // assert
-    const note = notifications[0];
-    assert.ok(note);
-    assert.equal(note.message, "● valid-marketplace [project] (added)");
-
-    const persisted = await loadState(locations.extensionRoot);
-    const recorded = persisted.marketplaces["valid-marketplace"];
-    assert.ok(recorded);
-    assert.equal(recorded.marketplaceRoot, finalDir);
-
-    assert.equal(await pathExists(path.join(finalDir, ".leftover-marker")), false);
-    assert.equal(await pathExists(path.join(finalDir, ".claude-plugin", "marketplace.json")), true);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
+        severity: "error",
+      },
+    ]);
+    assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), true);
+    assert.strictEqual(await pathExists(path.join(finalDir, OWNERSHIP_MARKER)), false);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {},
+    });
   });
 });
 
-// MA-13: every non-matching listRemotes arm still refuses as stale clone, and
-// the leftover tree stays on disk. Recognition compares WHOLE strings
-// (D-3-01), so a near-miss origin refuses exactly like a foreign tree.
+test("Q-01: a successful add leaves the ownership marker in the clone", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, pi } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const finalDir = await locations.sourceCloneDir("valid-marketplace");
+
+    // act
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // assert
+    assert.strictEqual(
+      await readFile(path.join(finalDir, OWNERSHIP_MARKER), "utf8"),
+      OWNERSHIP_MARKER_BYTES,
+    );
+  });
+});
+
+test("Q-01 / NFR-10: a staging clone whose .git is a symlink refuses the marker write", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, pi } = makeCtx(0);
+    const outside = path.join(cwd, "outside");
+    await mkdir(outside);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      onClone: async (directory) => {
+        await rm(path.join(directory, ".git"), { recursive: true, force: true });
+        await symlink(outside, path.join(directory, ".git"));
+      },
+    });
+
+    // act & assert
+    await assert.rejects(
+      addMarketplace({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        rawSource: "anthropics/claude-plugins-official",
+        gitOps,
+      }),
+      SymlinkRefusedError,
+    );
+    assert.deepStrictEqual(await readdir(outside), []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {},
+    });
+    assert.strictEqual(
+      await pathExists(await locations.sourceCloneDir("valid-marketplace")),
+      false,
+    );
+  });
+});
+
+test("IN-06: a destination that disappears before recognition reads it proceeds to the rename", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, pi, notifications } = makeCtx();
+    const finalDir = await arrangeLeftover(locations, { owned: false });
+    const gitOps: GitOps = {
+      ...createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") }).gitOps,
+      async listRemotes({ dir }) {
+        await rm(dir, { recursive: true, force: true });
+        return { kind: "not-a-repo" };
+      },
+    };
+
+    // act
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    const persisted = await loadState(locations.extensionRoot);
+    assert.strictEqual(persisted.marketplaces["valid-marketplace"]?.marketplaceRoot, finalDir);
+  });
+});
+
+// MA-13: every non-matching listRemotes arm of an owned leftover still refuses
+// as stale clone, and the leftover tree stays on disk. The path compares
+// exactly (D-3-01), so a near-miss origin refuses exactly like a foreign tree.
 
 interface Ma13RefusalArm {
   readonly title: string;
@@ -559,11 +733,12 @@ const MA13_REFUSAL_ARMS: readonly Ma13RefusalArm[] = [
     },
   },
   {
-    // D-3-01: the comparison is a byte comparison with no case folding.
-    title: "origin differs from the identity only by letter case",
+    // D-3-01: the path compares exactly, so an owner letter-case difference
+    // refuses even where the host folds.
+    title: "origin differs from the identity only by owner letter case",
     listRemotesResult: {
       kind: "origin",
-      url: "https://GitHub.com/anthropics/claude-plugins-official.git",
+      url: "https://github.com/Anthropics/claude-plugins-official.git",
     },
   },
   {
@@ -594,9 +769,7 @@ for (const { title, listRemotesResult } of MA13_REFUSAL_ARMS) {
     await withTmpScope(async ({ cwd, locations }) => {
       // arrange
       const { ctx, pi, notifications } = makeCtx();
-      const finalDir = await locations.sourceCloneDir("valid-marketplace");
-      await mkdir(finalDir, { recursive: true });
-      await writeFile(path.join(finalDir, ".leftover-marker"), "x");
+      const finalDir = await arrangeLeftover(locations, { owned: true });
 
       const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
@@ -621,7 +794,7 @@ for (const { title, listRemotesResult } of MA13_REFUSAL_ARMS) {
         "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
       );
       assert.equal(note.severity, "error");
-      assert.equal(await pathExists(path.join(finalDir, ".leftover-marker")), true);
+      assert.equal(await pathExists(path.join(finalDir, ".leftover-sentinel")), true);
     });
   });
 }
@@ -645,9 +818,7 @@ for (const { listRemotesResult, reason } of MA13_UNREADABLE_ARMS) {
     await withTmpScope(async ({ cwd, locations }) => {
       // arrange
       const { ctx, pi, notifications } = makeCtx();
-      const finalDir = await locations.sourceCloneDir("valid-marketplace");
-      await mkdir(finalDir, { recursive: true });
-      await writeFile(path.join(finalDir, ".leftover-marker"), "x");
+      const finalDir = await arrangeLeftover(locations, { owned: true });
 
       const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
@@ -671,7 +842,7 @@ for (const { listRemotesResult, reason } of MA13_UNREADABLE_ARMS) {
           severity: "error",
         },
       ]);
-      assert.equal(await pathExists(path.join(finalDir, ".leftover-marker")), true);
+      assert.equal(await pathExists(path.join(finalDir, ".leftover-sentinel")), true);
     });
   });
 }
@@ -687,7 +858,8 @@ const ORIGIN_WITH_TWO_URLS_CONFIG =
 // The fake's canned `listRemotesResult` cannot express a url-less origin
 // section and skips the config read that decides a multi-url origin (WR-11).
 // This helper composes the real `listRemotes` so it reads the given
-// `.git/config` in the destination.
+// `.git/config` in the destination. The destination carries the ownership
+// marker, so each refusal comes from the config shape alone.
 async function arrangeLeftoverWithOriginConfig(
   locations: ScopedLocations,
   config: string,
@@ -696,6 +868,7 @@ async function arrangeLeftoverWithOriginConfig(
   const configPath = path.join(finalDir, ".git", "config");
   await mkdir(path.join(finalDir, ".git"), { recursive: true });
   await writeFile(configPath, config);
+  await writeFile(path.join(finalDir, OWNERSHIP_MARKER), OWNERSHIP_MARKER_BYTES);
   const gitOps: GitOps = {
     ...createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") }).gitOps,
     listRemotes,
@@ -784,6 +957,10 @@ test("MA-13 / RECON-03: orchestrated mode reports a leftover whose origin sectio
     });
     assert.deepStrictEqual(notifications, []);
     assert.strictEqual(await readFile(configPath, "utf8"), ORIGIN_WITHOUT_URL_CONFIG);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {},
+    });
   });
 });
 
@@ -843,9 +1020,7 @@ test("MA-8: a matching leftover still yields (failed) {duplicate name}, not {sta
 test("MA-14: an unremovable recognized leftover fails as stale, with the leak appended and no recorded destination", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
-    const finalDir = await locations.sourceCloneDir("valid-marketplace");
-    await mkdir(finalDir, { recursive: true });
-    await writeFile(path.join(finalDir, ".leftover-marker"), "x");
+    const finalDir = await arrangeLeftover(locations, { owned: true });
     const matchingOrigin: ListRemotesResult = {
       kind: "origin",
       url: "https://github.com/anthropics/claude-plugins-official.git",
@@ -928,9 +1103,7 @@ test("MA-14: an unremovable recognized leftover fails as stale, with the leak ap
 test("MA-14 double fault: leftover removal AND staging cleanup both leak; still stale clone through one Error.cause level", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
-    const finalDir = await locations.sourceCloneDir("valid-marketplace");
-    await mkdir(finalDir, { recursive: true });
-    await writeFile(path.join(finalDir, ".leftover-marker"), "x");
+    const finalDir = await arrangeLeftover(locations, { owned: true });
     const matchingOrigin: ListRemotesResult = {
       kind: "origin",
       url: "https://github.com/anthropics/claude-plugins-official.git",
@@ -1583,6 +1756,14 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
         "valid-marketplace",
         ".claude-plugin",
         "marketplace.json",
+      ),
+      path.join("pi-claude-marketplace", "sources", "valid-marketplace", ".git"),
+      path.join(
+        "pi-claude-marketplace",
+        "sources",
+        "valid-marketplace",
+        ".git",
+        "pi-claude-marketplace.json",
       ),
       path.join("pi-claude-marketplace", "state.json"),
     ]);

@@ -10,10 +10,13 @@
 //
 //   withStateGuard(locations, async (state) => {
 //     if (github) or (url):  // MURL-01: url mirrors the github clone path
-//       MA-6  stale-clone check on final sources/<derivedName>/  (BEFORE clone)
-//       MA-8  duplicate-name check on state.marketplaces[<derivedName>]
 //       gitOps.clone(stagingDir)                            // network -- gated by NFR-5
+//       write <staging>/.git/pi-claude-marketplace.json     // Q-01 ownership marker
 //       read + MARKETPLACE_VALIDATOR.Check(<staging>/.claude-plugin/marketplace.json)
+//       MA-8  duplicate-name check on state.marketplaces[<derivedName>]
+//       MA-6/MA-12/MA-13  recognize-remove-rename on sources/<derivedName>/:
+//             a tree carrying the marker whose `origin` names the source is
+//             removed; every other outcome throws
 //       fs.rename(stagingDir, finalDir)                     // atomic, same-FS by D-09
 //       state.marketplaces[derivedName] = { ... }
 //
@@ -50,12 +53,13 @@ import { mkdir, rename, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
+import { networkCloneUrl, originMatchesSource } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { parsePluginSource, stripGitSuffix } from "../../domain/source.ts";
+import { parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
+import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   InvalidMarketplaceManifestError,
@@ -80,6 +84,7 @@ import {
   type MarketplaceRows,
   type Single,
 } from "../../shared/notify-context.ts";
+import { assertPathInside } from "../../shared/path-safety.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_CREDENTIAL_OPS,
@@ -239,12 +244,12 @@ function unwrapAddError(err: unknown): unknown {
 }
 
 /**
- * MA-14: join the leftover-removal leak and the staging-cleanup leak into ONE
- * value for the single existing `appendLeakToError` call in the bottom MA-9
- * catch. A second independent `appendLeakToError` call would build a
- * two-level `Error.cause` chain that `unwrapAddError` cannot see through,
- * silently breaking the `{stale clone}` classification -- so a double fault
- * reads as one leak line instead.
+ * MA-14: join the leftover-removal leak and the cleanup leak into ONE value for
+ * the MA-9 catch's `appendLeakToError` call (IN-04: both of its arms). A second
+ * independent `appendLeakToError` call would build a two-level `Error.cause`
+ * chain that `unwrapAddError` cannot see through, silently breaking the
+ * `{stale clone}` classification -- so a double fault reads as one leak line
+ * instead.
  */
 function joinLeaks(a: string | undefined, b: string | undefined): string | undefined {
   if (a === undefined) {
@@ -699,31 +704,59 @@ async function runAddOutcome(
 }
 
 /**
+ * Q-01: the ownership marker `marketplace add` writes into `.git/` of every
+ * clone it creates, before the rename into `sources/<name>`. The name and the
+ * `.git/` location are a user contract: renaming either orphans every leftover
+ * created before the rename, which then refuses as `{stale clone}`.
+ */
+const OWNERSHIP_MARKER_FILE = "pi-claude-marketplace.json";
+
+/** The path of the ownership marker inside the clone at `cloneDir`. */
+function ownershipMarkerPath(cloneDir: string): string {
+  return path.join(cloneDir, ".git", OWNERSHIP_MARKER_FILE);
+}
+
+/**
+ * Q-01 / NFR-1 / NFR-10: write the ownership marker into the staging clone.
+ * `assertPathInside` refuses a `.git` that is a symlink, so the write stays
+ * inside `stagingDir`.
+ */
+async function writeOwnershipMarker(stagingDir: string): Promise<void> {
+  const markerPath = ownershipMarkerPath(stagingDir);
+  await assertPathInside(stagingDir, markerPath, "marketplace ownership marker");
+  await atomicWriteJson(markerPath, { generatedBy: "pi-claude-marketplace" });
+}
+
+/**
  * MA-12/MA-13 (D-3-01, D-3-02): recognize whether `finalDir` is the
  * extension's own leftover clone of `source` and, if so, remove it so the
- * caller's atomic rename can proceed. Throws `StaleSourceCloneError` for a
- * foreign tree, or for an `origin` that does not byte-equal
- * `canonicalCloneUrl(source)` after one trailing `.git` strip (D-3-01).
- * Throws `UnreadableSourceCloneError` when the tree's `.git/config` cannot be
- * read, so the row names the read failure instead of calling the tree stale.
- * Recognition is the only authority for removal.
+ * caller's atomic rename can proceed. A leftover is recognized only when it
+ * carries the ownership marker and its `origin` names the source through
+ * `originMatchesSource` (Q-01, Q-03). Throws `StaleSourceCloneError` for any
+ * other tree, and `UnreadableSourceCloneError` when the tree's `.git/config`
+ * cannot be read, so the row names the read failure instead of calling the
+ * tree stale. Recognition is the only authority for removal (D-3-02).
  *
  * @returns the leak message from removing a recognized leftover, or
- *   `undefined` when the removal left nothing behind. The caller decides
- *   what a non-undefined leak means (MA-14: a partially-removed tree must
- *   not be renamed over).
+ *   `undefined` when the removal left nothing behind or the destination no
+ *   longer exists (IN-06). The caller decides what a non-undefined leak means
+ *   (MA-14: a partially-removed tree must not be renamed over).
  */
-async function recognizeLeftover(
-  finalDir: string,
-  derivedName: string,
-  source: GitHubSource | UrlSource,
-  gitOps: GitOps,
-  removalOps: RemovalOps,
-): Promise<string | undefined> {
+async function recognizeLeftover(args: {
+  finalDir: string;
+  derivedName: string;
+  source: GitHubSource | UrlSource;
+  gitOps: GitOps;
+  removalOps: RemovalOps;
+}): Promise<string | undefined> {
+  const { finalDir, derivedName, source, gitOps, removalOps } = args;
   const remotes = await gitOps.listRemotes({ dir: finalDir });
   switch (remotes.kind) {
     case "origin":
-      if (stripGitSuffix(remotes.url) !== canonicalCloneUrl(source)) {
+      if (
+        !originMatchesSource(remotes.url, source) ||
+        !(await pathExists(ownershipMarkerPath(finalDir)))
+      ) {
         // Carry the derived name so the ATTR-07 entrypoint catch renders the
         // `(failed) {stale clone}` row on the marketplace SUBJECT (A2).
         throw new StaleSourceCloneError(finalDir, derivedName);
@@ -731,8 +764,15 @@ async function recognizeLeftover(
 
       return cleanupStaging(removalOps, finalDir, `marketplace leftover clone ${finalDir}`);
     case "no-origin":
-    case "not-a-repo":
       throw new StaleSourceCloneError(finalDir, derivedName);
+    case "not-a-repo":
+      // IN-06: a destination removed since the caller's existence check
+      // leaves nothing to recognize, so the rename proceeds.
+      if (await pathExists(finalDir)) {
+        throw new StaleSourceCloneError(finalDir, derivedName);
+      }
+
+      return undefined;
     case "permission-denied":
     case "unreadable":
       throw new UnreadableSourceCloneError(finalDir, derivedName, remotes.kind);
@@ -741,9 +781,10 @@ async function recognizeLeftover(
 
 /**
  * Shared clone-into-guard body for git-cloned marketplace sources (github and
- * url). Owns everything from staging-dir creation through the clone, manifest
- * read, MA-8 duplicate check, MA-6 stale-clone check, atomic rename, state
- * mutation, and the MA-9 append-leak-not-mask cleanup catch. The only per-kind
+ * url). Owns everything from staging-dir creation through the clone, the Q-01
+ * ownership-marker write, manifest read, MA-8 duplicate check, MA-6/MA-12/MA-13
+ * leftover recognition, atomic rename, state mutation, and the MA-9
+ * append-leak-not-mask cleanup catch. The only per-kind
  * differences are the parsed `source` (from which the clone url is derived)
  * and the `auth` bundle, so that subtle MA-9 discipline lives in
  * exactly one place.
@@ -783,40 +824,51 @@ async function addGitClonedInGuard(args: {
   let finalDir: string | undefined;
   let leftoverLeak: string | undefined;
   try {
-    // 2. Read + validate manifest.
+    // 2. Q-01: mark the clone as this extension's own before anything can
+    //    rename it into place.
+    await writeOwnershipMarker(stagingDir);
+
+    // 3. Read + validate manifest.
     const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
     const parsed = await loadMarketplaceManifest(manifestPath);
 
     const derivedName = parsed.name;
 
-    // 3. MA-8: duplicate name in this scope.
+    // 4. MA-8: duplicate name in this scope.
     if (derivedName in state.marketplaces) {
       throw new MarketplaceDuplicateNameError(derivedName, locations.scope);
     }
 
-    // 4. MA-6/MA-12/MA-13: recognize-remove-rename on the final destination.
-    // A leftover directory whose `origin` names the same source (compared on
-    // the IDENTITY, `.git`-insensitive, not the wire form -- D-3-01) is the
-    // extension's own leftover from a prior crash-window failure or a state
-    // rebuild; it is removed so a partial tree cannot leak into installed
-    // state (D-3-02). Every other outcome throws (MA-13).
+    // 5. MA-6/MA-12/MA-13: recognize-remove-rename on the final destination.
+    // A leftover is the extension's own when it carries the ownership marker
+    // and its `origin` names the same source, with the host case folded and
+    // the path exact (Q-01, Q-03, D-3-01). Such a tree is removed so a partial
+    // tree cannot leak into installed state (D-3-02); every other outcome
+    // throws (MA-13). `sourceCloneDir` has already refused a symlinked
+    // destination (PS-1), so recognition and removal act on one directory.
     finalDir = await locations.sourceCloneDir(derivedName);
     if (await pathExists(finalDir)) {
-      leftoverLeak = await recognizeLeftover(finalDir, derivedName, source, gitOps, removalOps);
+      leftoverLeak = await recognizeLeftover({
+        finalDir,
+        derivedName,
+        source,
+        gitOps,
+        removalOps,
+      });
       if (leftoverLeak !== undefined) {
         // A partially-removed tree must not be renamed over (MA-14).
         throw new StaleSourceCloneError(finalDir, derivedName);
       }
     }
 
-    // 5. Atomic rename -- same FS by D-09 (sources-staging/ and sources/
+    // 6. Atomic rename -- same FS by D-09 (sources-staging/ and sources/
     //    are siblings under extensionRoot). Ensure the parent (sources/)
     //    exists; on a fresh scope it has not been created yet.
     await mkdir(path.dirname(finalDir), { recursive: true });
     await rename(stagingDir, finalDir);
     stagedAtFinal = true;
 
-    // 6. Mutate state.
+    // 7. Mutate state.
     state.marketplaces[derivedName] = {
       name: derivedName,
       scope: locations.scope,
@@ -840,7 +892,7 @@ async function addGitClonedInGuard(args: {
         finalDir,
         `marketplace final clone ${finalDir}`,
       );
-      wrapped = appendLeakToError(wrapped, leak);
+      wrapped = appendLeakToError(wrapped, joinLeaks(leftoverLeak, leak));
     }
 
     throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
