@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 01
 current_phase_name: Presentation Model
 status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-09-29T23:07:35.316Z"
-last_activity: 2026-09-29
-last_activity_desc: Completed 01-07 load-pass notification run
-state_head: bb6772d20b48d3d9bed67450f4919a44f7f9c439
+stopped_at: Completed 01-08-PLAN.md
+last_updated: "2026-09-30T00:22:05.446Z"
+last_activity: 2026-09-30
+last_activity_desc: Completed 01-08 import and marketplace remove/update run
+state_head: 701fee50b08f3363fdfb3e35223f48c78e50be75
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 16
-  completed_plans: 7
+  completed_plans: 8
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Presentation Model) — EXECUTING
-Plan: 8 of 16
+Plan: 9 of 16
 Status: Ready to execute
-Last activity: 2026-09-29 — Completed 01-07 (load-pass notification run)
+Last activity: 2026-09-30 — Completed 01-08 (import and marketplace remove/update run)
 
-Progress: [████░░░░░░] 44% (7 of 16 plans)
+Progress: [█████░░░░░] 50% (8 of 16 plans)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,8 +168,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-29T23:07:35.239Z
-**Stopped at:** Completed 01-07-PLAN.md
+**Last session:** 2026-09-30T00:22:05.373Z
+**Stopped at:** Completed 01-08-PLAN.md
 **Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
@@ -206,6 +206,7 @@ archived milestone artifacts.
 | Phase 01 P05 | 73 min | 2 tasks | 37 files |
 | Phase 01 P06 | 74 min | 2 tasks | 25 files |
 | Phase 01 P07 | 71 min | 2 tasks | 25 files |
+| Phase 01 P08 | 51 min | 2 tasks | 22 files |
 
 ## Decisions
 
@@ -224,3 +225,5 @@ archived milestone artifacts.
 - [Phase 01]: The notify family takes NotificationRun | ToolInventory until 01-16; module-private snapshotOf discriminates on softDeps. register.test.ts states tool reads as { runs, probingEmissions }
 - [Phase 01]: The resources_discover pass opens one NotificationRun inside the reconcile try, before the reconcile reads event.cwd, and hands it to applyReconcile; ApplyReconcileOptions keeps pi only for the nested orchestrators until 01-12 (D-05, D-07)
 - [Phase 01]: withParsedArgs(parse, usage, operation) returns SubcommandHandler and forwards the run; pending renders from it, and the plugin list and info factories return SubcommandHandler while still ignoring the run
+- [Phase 01]: The import cascade renders from ImportClaudeSettingsOptions.run; pi stays only as the forward to the nested install and marketplace add until 01-09/01-10 (D-05)
+- [Phase 01]: marketplace remove and update, including resolveScopeOrNotifyNotAdded, take run in place of pi; their handler factories take no pi, and reconcile hands its load-pass run to the nested removeMarketplace (D-05, D-07)
