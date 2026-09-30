@@ -625,6 +625,11 @@ export const SOFT_DEP_MARKER_DERIVATION_TARGETS = [
   "extensions/pi-claude-marketplace/shared/notification-resolve.ts",
 ] as const;
 
+/** D-12 / SC-5: the context module whose copy receives the marker-policy scan's planted context. */
+export const MARKER_POLICY_CONTROL_TARGETS = [
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts",
+] as const;
+
 /**
  * D-07-19 / GGAT-04: every export the repository publishes that no production
  * consumer reads, keyed by the file that publishes it.

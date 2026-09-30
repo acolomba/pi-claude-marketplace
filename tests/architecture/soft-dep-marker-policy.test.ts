@@ -24,9 +24,17 @@
  * that row red. This suite only restates data. The derivation (policy x
  * dependencies x snapshot -> markers) is owned by
  * tests/shared/notification-resolve.test.ts.
+ *
+ * Two totality cases keep the rows from going missing. The first compares the
+ * table's names with `DECLARED_MARKERS`, so a deleted or doubled row is red.
+ * The second scans the extension for `satisfies CommandContext<` and compares
+ * the contexts it finds with `DECLARED_MARKERS`, so a new context that nobody
+ * registers here is red. A planted control proves the scan finds a context.
  */
 
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 
 import { IMPORT_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts";
@@ -55,6 +63,17 @@ import {
 } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
 import { CENTRAL_MARKER_POLICY } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
+import {
+  EXTENSION_ROOT_REL,
+  MARKER_POLICY_CONTROL_TARGETS,
+  ORCHESTRATORS_REL,
+} from "./gate-targets.ts";
+import { REPO_ROOT, filesMatching, stripComments } from "./source-scan.ts";
+import { plantOffender, withTempRoot } from "./temp-root-control.ts";
+
+/** The one `DECLARED_MARKERS` entry that is not a `CommandContext`. */
+const CENTRAL_POLICY_NAME = "CENTRAL_MARKER_POLICY (legacy notify)";
+
 /** The marker policy each named table row states, read from its module. */
 const DECLARED_MARKERS = {
   "INSTALL_CONTEXT (plugin/install.messaging.ts)": INSTALL_CONTEXT.markers,
@@ -78,7 +97,8 @@ const DECLARED_MARKERS = {
   "CENTRAL_MARKER_POLICY (legacy notify)": CENTRAL_MARKER_POLICY,
 };
 
-for (const { name, markers } of [
+/** SC-5: the independent literal each declared policy is compared with. */
+const MARKER_POLICY_TABLE = [
   {
     name: "INSTALL_CONTEXT (plugin/install.messaging.ts)",
     markers: {
@@ -221,7 +241,9 @@ for (const { name, markers } of [
 ] satisfies readonly {
   name: keyof typeof DECLARED_MARKERS;
   markers: Readonly<Record<string, boolean>>;
-}[]) {
+}[];
+
+for (const { name, markers } of MARKER_POLICY_TABLE) {
   test(`SC-5 / D-12: ${name} declares the per-verb marker policy`, () => {
     // act
     const declared = DECLARED_MARKERS[name];
@@ -230,3 +252,91 @@ for (const { name, markers } of [
     assert.deepStrictEqual(declared, markers);
   });
 }
+
+test("SC-5: the table states every declared marker policy exactly once", () => {
+  // act
+  const stated = MARKER_POLICY_TABLE.map((row) => row.name).sort();
+
+  // assert
+  assert.deepStrictEqual(stated, Object.keys(DECLARED_MARKERS).sort());
+});
+
+/** The pin every command context carries (D-04). */
+const CONTEXT_PIN = /\bsatisfies\s+CommandContext</;
+
+/** A top-level exported const, whose name labels the context pin after it. */
+const EXPORTED_CONST = /^export const (\w+)/gm;
+
+/**
+ * The name of each context pinned in `stripped`, in source order.
+ *
+ * Each pin takes the last exported const between it and the previous pin. A
+ * pin with no exported const before it is labelled `(unexported)`, so it can
+ * never match a table name and cannot pass unseen.
+ */
+function contextNamesIn(stripped: string): string[] {
+  return stripped
+    .split(CONTEXT_PIN)
+    .slice(0, -1)
+    .map((before) => [...before.matchAll(EXPORTED_CONST)].at(-1)?.[1] ?? "(unexported)");
+}
+
+/**
+ * Every command context declared under `root`'s extension tree, labelled as
+ * `DECLARED_MARKERS` labels it: the name, then the path below the orchestrators.
+ */
+async function declaredContextsUnder(root: string): Promise<string[]> {
+  const labels: string[] = [];
+  for (const rel of await filesMatching(EXTENSION_ROOT_REL, CONTEXT_PIN, { root })) {
+    const stripped = stripComments(await readFile(path.join(root, rel), "utf8"));
+    const where = path.posix.relative(ORCHESTRATORS_REL, rel);
+    labels.push(...contextNamesIn(stripped).map((name) => `${name} (${where})`));
+  }
+
+  return labels.sort();
+}
+
+test("SC-5: DECLARED_MARKERS names every command context the extension declares", async () => {
+  // act
+  const discovered = await declaredContextsUnder(REPO_ROOT);
+
+  // assert -- set equality in both directions. A context present on disk and
+  // absent here has a marker policy that SC-5 never states; one absent on
+  // disk and present here names a context that no longer exists.
+  assert.deepStrictEqual(
+    discovered,
+    Object.keys(DECLARED_MARKERS)
+      .filter((name) => name !== CENTRAL_POLICY_NAME)
+      .sort(),
+  );
+});
+
+/** The real context module whose copy receives the planted context. */
+const PLANTED_CONTEXT_HOST: (typeof MARKER_POLICY_CONTROL_TARGETS)[number] =
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
+
+test("SC-5: the context scan reports a context planted in a copy of a real messaging module", async () => {
+  await withTempRoot("marker-policy-context-", async (root) => {
+    // arrange
+    await plantOffender(
+      root,
+      PLANTED_CONTEXT_HOST,
+      [
+        "export const PLANTED_CONTEXT = {",
+        '  Messaging: { label: "Planted" },',
+        "  render: {},",
+        "  markers: {},",
+        "} as const satisfies CommandContext<never, never>;",
+      ].join("\n"),
+    );
+
+    // act
+    const discovered = await declaredContextsUnder(root);
+
+    // assert
+    assert.deepStrictEqual(discovered, [
+      "INSTALL_CONTEXT (plugin/install.messaging.ts)",
+      "PLANTED_CONTEXT (plugin/install.messaging.ts)",
+    ]);
+  });
+});
