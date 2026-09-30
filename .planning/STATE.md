@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 01
 current_phase_name: Presentation Model
 status: executing
-stopped_at: Completed 01-10-PLAN.md
-last_updated: "2026-09-30T02:43:44.051Z"
+stopped_at: Completed 01-11-PLAN.md
+last_updated: "2026-09-30T04:08:03.002Z"
 last_activity: 2026-09-30
-last_activity_desc: Completed 01-10 plugin install run and SC-3 proof
-state_head: 8c4f096758fd7c30ad4a24a32dbe558fed7d2d7a
+last_activity_desc: Completed 01-11 plugin enable, disable, and uninstall run
+state_head: 728e85d8adca13e4d2df0c87695072c7e90c4fa1
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 16
-  completed_plans: 10
+  completed_plans: 11
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Presentation Model) — EXECUTING
-Plan: 11 of 16
+Plan: 12 of 16
 Status: Ready to execute
-Last activity: 2026-09-30 — Completed 01-10 (plugin install run and SC-3 proof)
+Last activity: 2026-09-30 — Completed 01-11 (plugin enable, disable, and uninstall run)
 
-Progress: [██████░░░░] 63% (10 of 16 plans)
+Progress: [███████░░░] 69% (11 of 16 plans)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,8 +168,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-30T02:43:27.962Z
-**Stopped at:** Completed 01-10-PLAN.md
+**Last session:** 2026-09-30T04:08:02.911Z
+**Stopped at:** Completed 01-11-PLAN.md
 **Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. Requirements and
@@ -209,6 +209,7 @@ archived milestone artifacts.
 | Phase 01 P08 | 51 min | 2 tasks | 22 files |
 | Phase 01 P09 | 70 min | 2 tasks | 24 files |
 | Phase 01 P10 | 67 min | 2 tasks | 23 files |
+| Phase 01 P11 | 81 min | 2 tasks | 19 files |
 
 ## Decisions
 
@@ -235,3 +236,5 @@ archived milestone artifacts.
 - [Phase 01]: Plugin install takes InstallPluginOptions.run: the success row stamps companionSeverity from run.softDeps and notify composes the markers from the same snapshot, so one probe drives both (D-05)
 - [Phase 01]: ImportClaudeSettingsOptions carries no pi; import and reconcile hand their own run to the nested install, and reconcile keeps pi only for uninstall, enable, and backfill (D-07)
 - [Phase 01]: SC-3 is proven through the registered command with a two-answer inventory: [] for the first three reads, subagent after; the case asserts the warning summary with the marker and exactly three reads (D-08)
+- [Phase 01]: Plugin enable and disable take EnableDisablePluginOptions.run: dispatchOutcome passes run.softDeps to composeOutcomeRow, the same snapshot notifyWithContext composes the markers from, so one probe drives both (D-05)
+- [Phase 01]: Uninstall and the shared emitMarketplaceNotAdded take a run; the enable/disable and uninstall handlers take no pi, and reconcile hands its run to both nested verbs, keeping pi only for the backfill (D-07)
