@@ -197,7 +197,7 @@ completed: 2026-09-30
 
 ## Issues Encountered
 
-- One corpus check, run in the same background job as `npm run check`, left a 96-line log with no summary and no exit line. A standalone rerun passed with `2622 baseline entries present, 8 extra`, the same count as 01-11.
+- The scratchpad directory is shared across plan executors, and `check.log` there already held an earlier plan's `CHECK_EXIT=0`. The first read of it, and of a 96-line `corpus2.log`, happened while the combined background job was still running. That job finished later: the corpus check passed with `2622 baseline entries present, 8 extra`, the same count as 01-11, and `npm run check` exited 0 on the Task 2 tree. A standalone corpus rerun gave the same result.
 - The default `fallow audit` (no base) returns `warn` from clone groups this branch introduced earlier. `fallow audit --base HEAD` returned `pass` before both commits.
 
 ## Verification
