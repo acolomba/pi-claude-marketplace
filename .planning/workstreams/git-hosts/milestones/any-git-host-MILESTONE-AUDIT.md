@@ -33,14 +33,13 @@ tech_debt:
       - "WR-09, IN-02, IN-03, IN-06, IN-07, IN-08: test structure, naming, substring assertions, double read, comment framing"
   - phase: milestone
     items:
-      - "Phases 2 and 3 VALIDATION.md are draft (Nyquist NOT-VALIDATED)"
       - "Advisory (02-VERIFICATION.md): the github.com host fold moves the cache identity of a capitalized-host, www. or :443 github URL, so a warm plugin clone keyed on the old spelling re-clones once (intended under D-76-02)"
 nyquist:
-  compliant_phases: [1]
+  compliant_phases: [1, 2, 3]
   partial_phases: []
-  not_validated_phases: [2, 3]
+  not_validated_phases: []
   missing_phases: []
-  overall: partial
+  overall: compliant
 ---
 
 # Milestone audit: any-git-host
@@ -78,10 +77,14 @@ custom headers, which `credentialFill` never produces.
 | Phase | Verification | Security | UAT | Nyquist |
 |-------|--------------|----------|-----|---------|
 | 1. Private repos on any git host | passed 5/5 | verified, 0 open | complete | COMPLIANT |
-| 2. Endpoints that answer only at the verbatim URL | passed 9/9 | verified, 0 open | complete | NOT-VALIDATED (draft) |
-| 3. `marketplace add` recovers from its own leftover clone | passed 7/7 | verified, 0 open | n/a | NOT-VALIDATED (draft) |
+| 2. Endpoints that answer only at the verbatim URL | passed 9/9 | verified, 0 open | complete | COMPLIANT |
+| 3. `marketplace add` recovers from its own leftover clone | passed 7/7 | verified, 0 open | n/a | COMPLIANT |
 
 `query audit-open` reports every artifact type clear.
+
+Phases 2 and 3 were validated by hand on 2026-09-30, at `3166c504` on PR #231 (`init.phase-op`
+does not find archived phases). Neither had a gap. Phase 3 was checked against the tree after
+quick task 260930-j4y, which changed its surface.
 
 All three reports first read `stale`: commits `505dc912`, `23cc2218`, `ae8ce217`, `62ec0fa6` and
 `c1286475` changed files they cover after they were written. On 2026-09-30 the verifier re-ran for
