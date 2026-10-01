@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- **any-git-host** — completed 2026-09-30, merged to main 2026-09-30 (PR #221); [archive](milestones/ws-git-hosts-2026-10-01/milestones/any-git-host-ROADMAP.md).
 - **v1.20 transitive-dependencies** — shipped 2026-09-24; 12 phases, 55 plans, 45/45 requirements. [Archive](milestones/v1.20-ROADMAP.md), [requirements](milestones/v1.20-REQUIREMENTS.md), [audit](milestones/v1.20-MILESTONE-AUDIT.md). Closeout used an explicit UAT exception for the private-repository credential challenge.
 - **workflows-replay** — completed 2026-09-21, merged to main 2026-09-24 (PR #205); [archive](milestones/ws-workflows-2026-09-27/milestones/workflows-replay-ROADMAP.md).
 - **test-backlog** — shipped 2026-09-18; [archive](milestones/test-backlog-ROADMAP.md).

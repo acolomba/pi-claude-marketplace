@@ -49,6 +49,20 @@ WPIN-01). The bridge reached `main` in PR #205 (`5c652697`) on 2026-09-24; the
 `0.19.x` tags deliberately exclude it, and the next release cut from `main`
 carries it.
 
+### any-git-host closeout (merged from main)
+
+`any-git-host` ran in the `git-hosts` workstream, which was archived to
+`milestones/ws-git-hosts-2026-10-01/` on 2026-10-01; `.planning/workstreams/`
+again does not exist and no workstream is active. It completed 2026-09-30:
+10/10 requirements, 3/3 phases re-verified `passed` against the final tree,
+`threats_open: 0` on each. The audit reads `passed` after quick task 260930-j4y
+closed the review debt (`BACKLOG.md` GHRED-01, GHADD-01) in PR #231. The code
+reached `main` in PR #221 (`a0d3aef1`) on 2026-09-30, with review fixes in
+PR #231; no tag contains it (`v0.19.2` was cut on 2026-09-24). The workstream's
+three quick tasks (260928-tt9, 260930-j4y, 260930-tlb) are recorded in the
+archived `STATE.md`. PR #153, the contributor PR any-git-host reimplemented, is
+still open with a comment explaining what landed.
+
 ## Performance Metrics
 
 **Velocity:**
