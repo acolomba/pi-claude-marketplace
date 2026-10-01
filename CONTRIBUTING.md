@@ -50,10 +50,18 @@ The script refuses a prefix inside the checkout, and it never writes the `packag
 
 ```bash
 npm run check          # typecheck, lint, fallow, format check, gate scripts, unit + integration tests
+npm run check:changed  # feedback for changes since HEAD, including untracked files
+npm run check:changed -- --base origin/main --list  # preview branch checks
 npm run lint:fix       # ESLint with autofixes
 npm run format         # Prettier autoformat
 pre-commit run --all-files
 ```
+
+`check:changed` checks the edited source/test pairs and follows production imports, re-exports, and type references to consumer tests. It also runs incremental type checking, affected-file linting, cached formatting, source/test pairing, and global Fallow. Shared test helpers, removed files, configuration, tooling, and unknown inputs broaden to the full check and all-pair coverage. A focused pass is feedback during work. Run the full `npm run check` before completion to cover architecture rules, integration, full typed lint, and unread members.
+
+Use `npm run test:modules`, `npm run test:architecture`, or `npm run test:analyzers` to run one part of the unit suite. `npm test` and unit coverage still run the complete suite. After committing a task, give `check:changed` its starting commit with `--base`; its default HEAD comparison then contains no committed changes.
+
+TypeScript and Prettier keep disposable caches under `node_modules/.cache/`. TypeScript still checks the project dependency graph. ESLint's full completion check remains uncached. Local commit hooks format selected files and run `check:changed`; member analysis and the full typed lint run at completion and whenever changed checks broaden to the full command.
 
 Direct coverage runs each source/test pair in a separate process with its own coverage report. It runs up to four pairs at once, limited by the available CPUs. `TEST_CONCURRENCY` sets the worker limit for the gate and the report command. If you need serial output for diagnosis, set the limit to one:
 

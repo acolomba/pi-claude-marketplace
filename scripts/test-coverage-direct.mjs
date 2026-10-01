@@ -916,26 +916,23 @@ async function main() {
     throw new Error("--base takes one ref name: --base <ref>");
   }
 
-  if (args.length === 1) {
-    // Through the same comparison as every other arm. `.claude/rules/typescript-unit-testing.md`
-    // sends a developer here while working on one pair, so this is the most-used arm; running it
-    // against `runPair` alone made it the ONE arm that does not know about the pin, and a developer
-    // editing a pinned module got a bare refusal with nothing to distinguish "you broke coverage"
-    // from "this pair reads exactly as recorded".
-    //
-    // The pin is narrowed to this pair. The whole pin cannot apply: the other rows name modules this
-    // run never measures, so comparing against them would refuse every single-path run as a set of
-    // stale rows.
-    const pair = pairForPath(args[0]);
-    const rowsForPair = loadCoveragePin().filter((row) => row.sourcePath === pair.sourcePath);
+  if (args.length > 0 && args.every((arg) => !arg.startsWith("--"))) {
+    // Explicit paths compare only the pins they measure, with the same strictness as other arms.
+    const pairs = new Map(
+      args.map((arg) => {
+        const pair = pairForPath(arg);
+        return [pair.sourcePath, pair];
+      }),
+    );
+    const rowsForPairs = loadCoveragePin().filter((row) => pairs.has(row.sourcePath));
 
-    await enforcePairs([pair], rowsForPair, productionPaths());
+    await enforcePairs([...pairs.values()], rowsForPairs, productionPaths());
     return;
   }
 
   if (args.length !== 0) {
     throw new Error(
-      "Pass one source or test path, --all, --all --report <path>, --base <ref>, or no arguments",
+      "Pass source or test paths, --all, --all --report <path>, --base <ref>, or no arguments",
     );
   }
 
