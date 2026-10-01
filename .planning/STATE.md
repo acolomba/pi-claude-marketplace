@@ -2,11 +2,11 @@
 gsd_state_version: "1.0"
 milestone: none
 status: between milestones; any-git-host archived; npm 0.19.2 released
-stopped_at: local check optimizations and GSD verification guidance completed
-last_updated: "2026-10-01T18:58:01.667Z"
+stopped_at: focused task completion and full combined-gate policy implemented
+last_updated: "2026-10-01T20:19:47.387Z"
 last_activity: 2026-10-01
-last_activity_desc: optimized local checks and GSD verification; full checks passed
-state_head: 462f3f249790aa86669f834452e4ebdce6d56fdc
+last_activity_desc: aligned task and review verification scheduling; document checks passed
+state_head: d9b672b96e9bd36e3284f78baaaf1bca8e9b2a52
 progress:
   total_phases: 3
   completed_phases: 3
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 Phase: No active milestone
 Plan: —
 Status: any-git-host complete (3/3 phases, 11/11 plans) and archived 2026-10-01
-Last activity: 2026-10-01 — Completed quick task 261001-jwu: optimize local checks and GSD verification
+Last activity: 2026-10-01 — Completed quick task 261001-mlt: schedule focused task checks and full combined gates
 
 Five milestones have closed since the last root-scope milestone ran here.
 `test-backlog` and `refine-unit-tests` closed in root scope. `workflows` and
@@ -184,17 +184,21 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261001-iad | Deduplicate CI checks and run isolated direct coverage pairs concurrently | 2026-10-01 | b0d45f4f | complete | [261001-iad-deduplicate-ci-checks-and-run-isolated-d](./quick/261001-iad-deduplicate-ci-checks-and-run-isolated-d/) |
 | 261001-jpu | Remove brittle CI configuration assertions and retain the separate Sonar workflow | 2026-10-01 | f69e5023 | complete | [261001-jpu-remove-brittle-ci-configuration-assertio](./quick/261001-jpu-remove-brittle-ci-configuration-assertio/) |
 | 261001-jwu | Optimize local checks and GSD verification with native caches and conservative changed-file checks | 2026-10-01 | 462f3f24 | complete | [261001-jwu-optimize-local-checks-and-gsd-verificati](./quick/261001-jwu-optimize-local-checks-and-gsd-verificati/) |
+| 261001-mlt | Schedule focused task gates and full combined verification without duplicate local runs | 2026-10-01 | d9b672b9 | complete | [261001-mlt-schedule-focused-task-gates-and-full-pha](./quick/261001-mlt-schedule-focused-task-gates-and-full-pha/) |
 
 ## Session Continuity
 
 **Last session:** 2026-10-01
-**Stopped at:** Local check optimizations and GSD verification guidance completed
+**Stopped at:** Focused task completion and full combined-gate policy implemented
 **Resume file:** None
 
-**Current work:** Quick tasks 261001-iad, 261001-jpu, and 261001-jwu completed on
-`features/ci-check-efficiency`. CI deduplication, parallel direct coverage,
-local check optimizations, and GSD verification guidance are implemented.
-The full check and all 251 direct-coverage pairs passed on Node 24.21.0.
+**Current work:** Quick task 261001-mlt completed on `features/ci-check-efficiency`.
+Ordinary quick/plan tasks and review fixes may finish with task-wide focused
+evidence from the required hooks; full gates remain at combined GSD merge/phase
+and final PR/release boundaries. TypeScript skills follow the same policy.
+Document hooks and skill validation passed; runtime code and CI are unchanged
+from the previously verified optimization work. The disposable experiment and
+its measurements remain on `features/build-check-trial`.
 The 0.19.1 and 0.19.2 releases are tagged and
 published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218
 through #232 landed after it. `main` carries the workflows bridge from PR #205
