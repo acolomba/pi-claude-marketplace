@@ -3,9 +3,9 @@ phase: "2"
 slug: "endpoints-that-answer-only-at-the-verbatim-url"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-26"
 ---
 
@@ -43,15 +43,15 @@ planner as it writes each task's `<automated>` verify block.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 02-01-01 | 01 | 1 | MURL-08 | T-2-01, T-2-05 | Derivation reads only the already-`https`-admitted `source.raw` | integration (tracer) | `node --test tests/edge/handlers/marketplace/add.test.ts tests/orchestrators/marketplace/add.test.ts tests/domain/source.test.ts tests/domain/clone-key.test.ts` | ✅ | ⬜ pending |
-| 02-01-02 | 01 | 1 | MURL-08 | T-2-01 | N/A | unit | `node --test tests/domain/clone-key.test.ts tests/domain/source.test.ts` + `node scripts/test-coverage-direct.mjs extensions/pi-claude-marketplace/domain/clone-key.ts` | ✅ | ⬜ pending |
-| 02-01-03 | 01 | 1 | MURL-09 | T-2-02, T-2-05 | 404/401 keeps `message`, `code`, `data.statusCode`; failure names the URL sent | unit | `node --test tests/orchestrators/marketplace/add.test.ts tests/edge/handlers/marketplace/add.test.ts` | ✅ (new cases) | ⬜ pending |
-| 02-02-01 | 02 | 2 | MURL-08 | T-2-06 | Required field, so the compiler names all 39 construction sites | source + typecheck | `npx tsc --noEmit 2>&1 \| grep '^extensions/'` (must print nothing) + `npm run lint` | ✅ | ⬜ pending |
-| 02-02-02 | 02 | 2 | MURL-09 | T-2-03 | Exactly one attempt per seam on success AND injected 404/401 | unit | `node --test tests/orchestrators/plugin/clone-cache.test.ts tests/orchestrators/plugin/reinstall-clone-probe.test.ts tests/orchestrators/plugin/install-clone-probe.test.ts tests/orchestrators/plugin/update-preflight.test.ts` | ✅ (new cases) | ⬜ pending |
-| 02-02-03 | 02 | 2 | MURL-08 | T-2-04 | Suffix keys on `source.kind`, not the hostname | unit + coverage | `node --test tests/orchestrators/plugin/fetch.test.ts tests/orchestrators/plugin/info.test.ts tests/orchestrators/plugin/clone-cache.test.ts` + `test-coverage-direct` for all six modules | ✅ | ⬜ pending |
-| 02-03-01 | 03 | 3 | MURL-08 | T-2-07 | N/A | unit | `node --test tests/orchestrators/plugin/install-flow.test.ts tests/orchestrators/plugin/update-flow.test.ts tests/orchestrators/plugin/reinstall-flow.test.ts` | ✅ | ⬜ pending |
-| 02-03-02 | 03 | 3 | MURL-08, MURL-09 | T-2-07 | No allowlist admits both URL forms | unit + integration | `npm run test:coverage:unit` and `npm run test:integration` | ✅ | ⬜ pending |
-| 02-03-03 | 03 | 3 | MURL-08, MURL-09 | T-2-08, T-2-09 | Prose states the shipped rule; no allowance widened | phase gate | `npm run check; echo "CHECK_EXIT=$?"` | ✅ | ⬜ pending |
+| 02-01-01 | 01 | 1 | MURL-08 | T-2-01, T-2-05 | Derivation reads only the already-`https`-admitted `source.raw` | integration (tracer) | `node --test tests/edge/handlers/marketplace/add.test.ts tests/orchestrators/marketplace/add.test.ts tests/domain/source.test.ts tests/domain/clone-key.test.ts` | ✅ | ✅ green |
+| 02-01-02 | 01 | 1 | MURL-08 | T-2-01 | N/A | unit | `node --test tests/domain/clone-key.test.ts tests/domain/source.test.ts` + `node scripts/test-coverage-direct.mjs extensions/pi-claude-marketplace/domain/clone-key.ts` | ✅ | ✅ green |
+| 02-01-03 | 01 | 1 | MURL-09 | T-2-02, T-2-05 | 404/401 keeps `message`, `code`, `data.statusCode`; failure names the URL sent | unit | `node --test tests/orchestrators/marketplace/add.test.ts tests/edge/handlers/marketplace/add.test.ts` | ✅ (new cases) | ✅ green |
+| 02-02-01 | 02 | 2 | MURL-08 | T-2-06 | Required field, so the compiler names all 39 construction sites | source + typecheck | `npx tsc --noEmit 2>&1 \| grep '^extensions/'` (must print nothing) + `npm run lint` | ✅ | ✅ green |
+| 02-02-02 | 02 | 2 | MURL-09 | T-2-03 | Exactly one attempt per seam on success AND injected 404/401 | unit | `node --test tests/orchestrators/plugin/clone-cache.test.ts tests/orchestrators/plugin/reinstall-clone-probe.test.ts tests/orchestrators/plugin/install-clone-probe.test.ts tests/orchestrators/plugin/update-preflight.test.ts` | ✅ (new cases) | ✅ green |
+| 02-02-03 | 02 | 2 | MURL-08 | T-2-04 | Suffix keys on `source.kind`, not the hostname | unit + coverage | `node --test tests/orchestrators/plugin/fetch.test.ts tests/orchestrators/plugin/info.test.ts tests/orchestrators/plugin/clone-cache.test.ts` + `test-coverage-direct` for all six modules | ✅ | ✅ green |
+| 02-03-01 | 03 | 3 | MURL-08 | T-2-07 | N/A | unit | `node --test tests/orchestrators/plugin/install-flow.test.ts tests/orchestrators/plugin/update-flow.test.ts tests/orchestrators/plugin/reinstall-flow.test.ts` | ✅ | ✅ green |
+| 02-03-02 | 03 | 3 | MURL-08, MURL-09 | T-2-07 | No allowlist admits both URL forms | unit + integration | `npm run test:coverage:unit` and `npm run test:integration` | ✅ | ✅ green |
+| 02-03-03 | 03 | 3 | MURL-08, MURL-09 | T-2-08, T-2-09 | Prose states the shipped rule; no allowance widened | phase gate | `npm run check; echo "CHECK_EXIT=$?"` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -65,26 +65,26 @@ second. No suite is to be made green by restoring a suffix.
 
 ## Wave 0 Requirements
 
-- [ ] A call-count assertion of exactly one on the **failure** path for each clone-cache seam.
+- [x] A call-count assertion of exactly one on the **failure** path for each clone-cache seam.
       Every existing failure-path test asserts only the thrown error, never
       `git.state.calls.*.length`. This is the SC3 regression guard and must be written, not
       assumed to exist. → **Owned by task 02-01-03 (marketplace seam) and 02-02-02 (three plugin
       seams).** The fake needs no change: `calls.clone.push(...)` runs before `requireRemote` and
       before an injected error throws.
-- [ ] A fixture for a host that serves ONLY the verbatim (non-`.git`) path and 404s the `.git`
+- [x] A fixture for a host that serves ONLY the verbatim (non-`.git`) path and 404s the `.git`
       form. `createGitOpsFake`'s `allowedRemoteUrls` already expresses this (allowlist the
       verbatim URL, omit the `.git` form) — no new fake capability, one new case per affected seam.
       → **Owned by task 02-01-01**, which flips `tests/edge/handlers/marketplace/add.test.ts`'s
       `CLONE_URL` to the verbatim form; that one constant feeds `allowedRemoteUrls`, so the port becomes
       a verbatim-only endpoint and the whole edge suite becomes the MURL-08 acceptance scenario.
       Reinforced by narrowing every other allowlist in tasks 02-02-02, 02-02-03, 02-03-01 and 02-03-02.
-- [ ] The suites that currently pin the pre-phase `.git`-for-every-host wire URL must be rewritten
+- [x] The suites that currently pin the pre-phase `.git`-for-every-host wire URL must be rewritten
       as first-class task work, not as fallout: `add.test.ts:2344` and `clone-cache.test.ts:824`
       encode the old rule in their test NAMES under MURL-01 / PURL-09 and must be retitled, not
       edited under an unchanged name. → **Owned by tasks 02-01-01 (add suite, 2 retitles) and
       02-02-02 (seam suite, 3 retitles).** Each plan carries a `must_haves.prohibitions` entry
       forbidding a case whose name promises one rule while its assertion asserts the other.
-- [ ] Framework install: none — `node:test` is already the project's sole framework.
+- [x] Framework install: none — `node:test` is already the project's sole framework.
 
 **Added at plan time — a fourth Wave 0 gap the research pass did not surface.** RESEARCH.md sized the
 blast radius with a `.git"` grep, which cannot see a wire URL built as a template literal ending in a
@@ -102,6 +102,11 @@ non-`-F` form reports a clean tree having matched nothing.
 |----------|-------------|------------|-------------------|
 | A real smart-HTTP endpoint that answers only at the verbatim path | MURL-08 | Needs a live server configured to 404 the `.git` form; the offline fake proves the URL sent, not a real server's response | Point `marketplace add` at such an endpoint and confirm both the initial clone and a later `resolveRemoteRef` resolve |
 
+Closed 2026-09-28 by `02-UAT.md` test 1 (pass). A local `git http-backend` server answered only at
+`/verbatim-mp` and returned 404 for any `.git` path. `marketplace add` and a later
+`marketplace update` each sent only the verbatim `info/refs` and `git-upload-pack` requests, and
+both `.git` and unknown-path controls failed with one request as `{source missing}`.
+
 ---
 
 ## Validation Sign-Off
@@ -115,7 +120,30 @@ non-`-F` form reports a clean tree having matched nothing.
 - [x] No watch-mode flags
 - [x] Feedback latency < 30s for the per-task `node --test` runs (the full `npm run check` is the
       phase-boundary gate only, ~600s, and runs once in task 02-03-03)
-- [ ] `nyquist_compliant: true` set in frontmatter — left for `/gsd-validate-phase` to set after
-      execution confirms each row green
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** seeded by plan-phase; per-task rows filled from the three PLAN files' `<automated>` blocks.
+**Approval:** approved 2026-09-30
+
+## Validation Audit 2026-09-30
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Audited by hand against `features/git-hosts` at `3166c504`, because `init.phase-op` does not find
+archived phases. Both requirements have automated coverage that runs green on the current tree:
+
+- MURL-08: `MURL-08` cases in `tests/orchestrators/marketplace/add.test.ts` (typed `.git` kept,
+  verbatim clone, GitLab bundle) and `tests/orchestrators/plugin/clone-cache.test.ts` (four
+  forwarding cases), plus the `networkCloneUrl` arms in `tests/domain/clone-key.test.ts`.
+- MURL-09: the exactly-one-attempt cases for a 404, a 401 and a suffix-only port in `add.test.ts`,
+  and one per plugin seam in `clone-cache.test.ts` (`resolvePluginPin`, `materializePluginClone`,
+  `materializeOrRefreshPluginMirror`).
+
+Run: the 13 unit files named in the per-task rows passed 1037 of 1037, and
+`tests/integration/marketplace-add-seed-mirrors.test.ts` passed 6 of 6. The `npm run check`,
+`direct coverage` and `integration tests` CI jobs passed on PR #231 at the same HEAD. The one
+manual-only item was closed by `02-UAT.md`. Quick task 260930-j4y changed `clone-key.ts` and
+`source.ts` after this phase, and the MURL cases above still pass unchanged.

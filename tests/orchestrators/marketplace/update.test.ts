@@ -28,7 +28,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  CrossOriginChallengeError,
+  PluginShapeError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -826,6 +829,39 @@ test("GAUTH-04: a transport error that already carries a cause keeps its own cha
       {
         message:
           'Some operations have failed.\n\n⊘ urlmp-chained [project] (failed)\n  ⊘ urlmp-chained (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-chained". -> cancelled -> helper exited 128',
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("Q-02: a challenge after a cross-origin redirect keeps its own cause without the stored-credential line", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedUrlMarketplace({ cwd, name: "urlmp-redirect", ref: "main" });
+    const { ctx, pi, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps } = createGitOps({
+      fetchThrows: new CrossOriginChallengeError("https://sso.example.com"),
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      pi,
+      name: "urlmp-redirect",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ urlmp-redirect [project] (failed)\n  ⊘ urlmp-redirect (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-redirect". -> redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin',
         severity: "error",
       },
     ]);

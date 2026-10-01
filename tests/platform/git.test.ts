@@ -12,6 +12,7 @@ import { describe, test, type TestContext } from "node:test";
 
 import * as git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
+import { mock, verify } from "strong-mock";
 
 import {
   checkout,
@@ -26,6 +27,10 @@ import {
   resolveRemoteRef,
   resolveTagOid,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import {
+  CrossOriginChallengeError,
+  TooManyRedirectsError,
+} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import { registerGitOpsContract } from "./git-ops-contract.ts";
@@ -510,6 +515,20 @@ interface RedirectRow {
   readonly location: string;
 }
 
+/** A cross-origin redirect case, with the origin its `Location` names. */
+interface CrossOriginRedirectRow extends RedirectRow {
+  readonly origin: string;
+}
+
+/** How `git-upload-pack` is re-sent after its POST is redirected. */
+interface PostRedirectRow {
+  readonly title: string;
+  readonly statusCode: number;
+  readonly finalMethod: string;
+  readonly finalBody: Buffer;
+  readonly finalContentHeaders: readonly string[];
+}
+
 /**
  * Replaces the socket door of both `node:https` and `node:http`.
  *
@@ -594,11 +613,12 @@ function unplannedWireRequest(request: WireRequest): Error {
 }
 
 /** The bound host redirects `info/refs` to `location`; every other request is challenged. */
-function crossOriginServer(location: string): (request: WireRequest) => WireResponse {
+function crossOriginServer(
+  location: string,
+  challenge: () => WireResponse = unauthorizedWireResponse,
+): (request: WireRequest) => WireResponse {
   return (request) =>
-    request.url === BOUND_INFO_URL
-      ? redirectWireResponse(302, location)
-      : unauthorizedWireResponse();
+    request.url === BOUND_INFO_URL ? redirectWireResponse(302, location) : challenge();
 }
 
 /**
@@ -706,16 +726,26 @@ function wireCredentials(
   }));
 }
 
-/** The wire log of a challenge answered once, when `location` is on another origin. */
+/** The wire log of a challenge from `location`, on another origin, that fails before any credential. */
 function expectedCrossOriginWireLog(
   location: string,
 ): Array<{ readonly url: string; readonly authorization: string | null }> {
   return [
     { url: BOUND_INFO_URL, authorization: null },
     { url: location, authorization: null },
-    { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
-    { url: location, authorization: null },
   ];
+}
+
+/** Q-02: accepts only the cross-origin challenge failure naming `origin`. */
+function crossOriginChallengeFrom(origin: string): (error: unknown) => boolean {
+  return (error) => {
+    assert.ok(error instanceof CrossOriginChallengeError);
+    assert.strictEqual(
+      error.message,
+      `redirected request to ${origin} asked for credentials; a credential is not sent after a redirect to another origin`,
+    );
+    return true;
+  };
 }
 
 describe("local Git operations", () => {
@@ -870,7 +900,7 @@ describe("clone", () => {
     ]);
   });
 
-  test("GAUTH-06: does not forward the credential on a redirect to another port of the same host", async (t) => {
+  test("Q-02: fails a challenge from another port of the same host without a credential lookup", async (t) => {
     // arrange
     const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
     const directory = await createGitTestDirectory(t, { boundary: "local" });
@@ -880,12 +910,12 @@ describe("clone", () => {
     const cloning = clone({ dir: directory, url: REMOTE_URL, auth: boundAuth(credentials) });
 
     // assert
-    await assert.rejects(cloning, isUserCanceledError);
+    await assert.rejects(cloning, crossOriginChallengeFrom(`https://${HOST}:8443`));
     assert.deepStrictEqual(
       wireCredentials(requests),
       expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
     );
-    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
   });
 });
 
@@ -946,7 +976,7 @@ describe("fetch", () => {
     ]);
   });
 
-  test("GAUTH-06: does not forward the credential on a redirect to another port of the same host", async (t) => {
+  test("Q-02: fails a challenge from another port of the same host without a credential lookup", async (t) => {
     // arrange
     const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
     const repository = await createGitTestRepository(t, { boundary: "local" });
@@ -957,12 +987,12 @@ describe("fetch", () => {
     const fetching = fetch({ dir: repository.dir, auth: boundAuth(credentials) });
 
     // assert
-    await assert.rejects(fetching, isUserCanceledError);
+    await assert.rejects(fetching, crossOriginChallengeFrom(`https://${HOST}:8443`));
     assert.deepStrictEqual(
       wireCredentials(requests),
       expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
     );
-    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
   });
 });
 
@@ -1193,14 +1223,26 @@ describe("resolveRemoteRef", () => {
     assert.deepStrictEqual(requestsCarryingAuthorization(requests), []);
   });
 
-  const CROSS_ORIGIN_REDIRECTS: readonly RedirectRow[] = [
-    { kind: "another port of the same host", location: OTHER_PORT_INFO_URL },
-    { kind: "http on the same host", location: `http://${HOST}/owner/repo.git${INFO_REFS_PATH}` },
-    { kind: "another host", location: `${OTHER_REMOTE_URL}${INFO_REFS_PATH}` },
+  const CROSS_ORIGIN_REDIRECTS: readonly CrossOriginRedirectRow[] = [
+    {
+      kind: "another port of the same host",
+      location: OTHER_PORT_INFO_URL,
+      origin: `https://${HOST}:8443`,
+    },
+    {
+      kind: "http on the same host",
+      location: `http://${HOST}/owner/repo.git${INFO_REFS_PATH}`,
+      origin: `http://${HOST}`,
+    },
+    {
+      kind: "another host",
+      location: `${OTHER_REMOTE_URL}${INFO_REFS_PATH}`,
+      origin: `https://${OTHER_HOST}`,
+    },
   ];
 
-  for (const { kind, location } of CROSS_ORIGIN_REDIRECTS) {
-    test(`GAUTH-06: does not forward the credential on a redirect to ${kind}`, async (t) => {
+  for (const { kind, location, origin } of CROSS_ORIGIN_REDIRECTS) {
+    test(`Q-02: fails a challenge after a redirect to ${kind} without a credential lookup`, async (t) => {
       // arrange
       const requests = installWireTransport(t, crossOriginServer(location));
       const credentials = storedCredentials();
@@ -1209,15 +1251,178 @@ describe("resolveRemoteRef", () => {
       const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
 
       // assert
-      await assert.rejects(resolution, isUserCanceledError);
+      await assert.rejects(resolution, crossOriginChallengeFrom(origin));
       assert.deepStrictEqual(wireCredentials(requests), expectedCrossOriginWireLog(location));
-      assert.deepStrictEqual(credentials.calls, {
-        fill: [{ host: HOST }],
-        approve: [],
-        reject: [],
-      });
+      assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
     });
   }
+
+  test("Q-02: fails a cross-origin challenge without starting a Device Flow", async (t) => {
+    // arrange
+    const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
+    const credentials = storedCredentials();
+    const onAuthRequired = mock<OnAuthRequiredFn>({ exactParams: true, name: "device flow" });
+
+    // act
+    const resolution = resolveRemoteRef({
+      url: REMOTE_URL,
+      auth: {
+        credentialOps: credentials.credentialOps,
+        host: HOST,
+        kind: "device-flow",
+        onAuthRequired,
+      },
+    });
+
+    // assert
+    await assert.rejects(resolution, crossOriginChallengeFrom(`https://${HOST}:8443`));
+    assert.deepStrictEqual(
+      wireCredentials(requests),
+      expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
+    );
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+    verify(onAuthRequired);
+  });
+
+  test("Q-02: fails a 203 from another origin the same way as a 401", async (t) => {
+    // arrange
+    const requests = installWireTransport(
+      t,
+      crossOriginServer(OTHER_PORT_INFO_URL, () => ({
+        statusCode: 203,
+        statusMessage: "Non-Authoritative Information",
+        headers: {},
+        body: Buffer.alloc(0),
+      })),
+    );
+    const credentials = storedCredentials();
+
+    // act
+    const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+    // assert
+    await assert.rejects(resolution, crossOriginChallengeFrom(`https://${HOST}:8443`));
+    assert.deepStrictEqual(
+      wireCredentials(requests),
+      expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
+    );
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+  });
+
+  test("Q-02: fails a challenge back on the original origin after a detour through another origin", async (t) => {
+    // arrange
+    const requests = installWireTransport(t, (request) => {
+      if (request.url === BOUND_INFO_URL) {
+        return request.headers.authorization === undefined
+          ? unauthorizedWireResponse()
+          : redirectWireResponse(302, OTHER_PORT_INFO_URL);
+      }
+
+      if (request.url === OTHER_PORT_INFO_URL) {
+        return redirectWireResponse(302, RENAMED_INFO_URL);
+      }
+
+      if (request.url === RENAMED_INFO_URL) {
+        return request.headers.authorization === undefined
+          ? unauthorizedWireResponse()
+          : advertisementWireResponse();
+      }
+
+      throw unplannedWireRequest(request);
+    });
+    const credentials = storedCredentials();
+    const onAuthRequired = mock<OnAuthRequiredFn>({ exactParams: true, name: "device flow" });
+
+    // act
+    const resolution = resolveRemoteRef({
+      url: REMOTE_URL,
+      auth: {
+        credentialOps: credentials.credentialOps,
+        host: HOST,
+        kind: "device-flow",
+        onAuthRequired,
+      },
+    });
+
+    // assert
+    await assert.rejects(resolution, crossOriginChallengeFrom(`https://${HOST}`));
+    assert.deepStrictEqual(wireCredentials(requests), [
+      { url: BOUND_INFO_URL, authorization: null },
+      { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
+      { url: OTHER_PORT_INFO_URL, authorization: null },
+      { url: RENAMED_INFO_URL, authorization: null },
+    ]);
+    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
+    verify(onAuthRequired);
+  });
+
+  test("WR-03: keeps only protocol headers on a hop to another origin", async (t) => {
+    // arrange
+    const requests = installWireTransport(t, (request) => {
+      if (request.url === BOUND_INFO_URL) {
+        return request.headers.authorization === undefined
+          ? unauthorizedWireResponse()
+          : redirectWireResponse(302, OTHER_PORT_INFO_URL);
+      }
+
+      if (request.url === OTHER_PORT_INFO_URL) {
+        return advertisementWireResponse();
+      }
+
+      if (request.url === BOUND_UPLOAD_PACK_URL && request.headers.authorization !== undefined) {
+        return refsWireResponse();
+      }
+
+      throw unplannedWireRequest(request);
+    });
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [
+        [
+          HOST,
+          {
+            username: "user",
+            password: "secret",
+            headers: { cookie: "session=1", "private-token": "token-1" },
+          },
+        ],
+      ],
+    });
+
+    // act
+    const oid = await resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+
+    // assert
+    assert.strictEqual(oid, OID_MAIN);
+    assert.deepStrictEqual(
+      requests.map(({ url, headers }) => ({
+        url,
+        authorization: headers.authorization ?? null,
+        cookie: headers.cookie ?? null,
+        privateToken: headers["private-token"] ?? null,
+      })),
+      [
+        { url: BOUND_INFO_URL, authorization: null, cookie: null, privateToken: null },
+        {
+          url: BOUND_INFO_URL,
+          authorization: BASIC_CREDENTIAL,
+          cookie: "session=1",
+          privateToken: "token-1",
+        },
+        { url: OTHER_PORT_INFO_URL, authorization: null, cookie: null, privateToken: null },
+        {
+          url: BOUND_UPLOAD_PACK_URL,
+          authorization: BASIC_CREDENTIAL,
+          cookie: "session=1",
+          privateToken: "token-1",
+        },
+      ],
+    );
+    assert.deepStrictEqual(Object.keys(requests[2]?.headers ?? {}).sort(), [
+      "accept-encoding",
+      "git-protocol",
+    ]);
+  });
 
   const SAME_ORIGIN_REDIRECTS: readonly RedirectRow[] = [
     { kind: "another path", location: RENAMED_INFO_URL },
@@ -1247,15 +1452,6 @@ describe("resolveRemoteRef", () => {
         { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
       ]);
     });
-  }
-
-  // How `git-upload-pack` is re-sent after its POST is redirected.
-  interface PostRedirectRow {
-    readonly title: string;
-    readonly statusCode: number;
-    readonly finalMethod: string;
-    readonly finalBody: Buffer;
-    readonly finalContentHeaders: readonly string[];
   }
 
   const POST_REDIRECTS: readonly PostRedirectRow[] = [
@@ -1309,16 +1505,25 @@ describe("resolveRemoteRef", () => {
   // git-upload-pack POST -- not just info/refs -- is redirected. A wrong
   // `nextHop` that scrubs credential headers only on GET hops, or only on
   // the POST->GET (302/303) arm, would leave `authorization` on the 307 row.
-  const CROSS_ORIGIN_POST_REDIRECTS: readonly RedirectRow[] = [
+  const CROSS_ORIGIN_POST_REDIRECTS: readonly CrossOriginRedirectRow[] = [
     {
       kind: "another port of the same host (POST kept, 307)",
       location: OTHER_PORT_UPLOAD_PACK_URL,
+      origin: `https://${HOST}:8443`,
     },
-    { kind: "http on the same host", location: HTTP_SAME_HOST_UPLOAD_PACK_URL },
-    { kind: "another host", location: OTHER_HOST_UPLOAD_PACK_URL },
+    {
+      kind: "http on the same host",
+      location: HTTP_SAME_HOST_UPLOAD_PACK_URL,
+      origin: `http://${HOST}`,
+    },
+    {
+      kind: "another host",
+      location: OTHER_HOST_UPLOAD_PACK_URL,
+      origin: `https://${OTHER_HOST}`,
+    },
   ];
 
-  for (const { kind, location } of CROSS_ORIGIN_POST_REDIRECTS) {
+  for (const { kind, location, origin } of CROSS_ORIGIN_POST_REDIRECTS) {
     test(`GAUTH-06: does not forward the credential on a git-upload-pack POST redirect to ${kind}`, async (t) => {
       // arrange
       const requests = installWireTransport(
@@ -1331,11 +1536,7 @@ describe("resolveRemoteRef", () => {
       const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
 
       // assert
-      await assert.rejects(resolution, (error: unknown) => {
-        assert.ok(error instanceof git.Errors.HttpError);
-        assert.strictEqual(error.data.statusCode, 401);
-        return true;
-      });
+      await assert.rejects(resolution, crossOriginChallengeFrom(origin));
       assert.deepStrictEqual(wireCredentials(requests), [
         { url: BOUND_INFO_URL, authorization: null },
         { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
@@ -1359,11 +1560,7 @@ describe("resolveRemoteRef", () => {
     const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
 
     // assert
-    await assert.rejects(resolution, (error: unknown) => {
-      assert.ok(error instanceof git.Errors.HttpError);
-      assert.strictEqual(error.data.statusCode, 401);
-      return true;
-    });
+    await assert.rejects(resolution, crossOriginChallengeFrom(`https://${HOST}:8443`));
     assert.deepStrictEqual(wireCredentials(requests), [
       { url: BOUND_INFO_URL, authorization: null },
       { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
@@ -1397,35 +1594,46 @@ describe("resolveRemoteRef", () => {
     ]);
   });
 
-  test("returns a redirect without a Location header to isomorphic-git as an HttpError", async (t) => {
-    // arrange
-    const requests = installWireTransport(t, () => ({
-      statusCode: 302,
-      statusMessage: "Found",
-      headers: {},
-      body: Buffer.alloc(0),
-    }));
+  const UNUSABLE_LOCATIONS: ReadonlyArray<{
+    readonly kind: string;
+    readonly headers: Readonly<Record<string, string>>;
+  }> = [
+    { kind: "no Location header", headers: {} },
+    { kind: "an empty Location", headers: { location: "" } },
+    { kind: "a Location that is not a URL", headers: { location: "https://exa mple:99999/" } },
+  ];
 
-    // act
-    const resolution = resolveRemoteRef({ url: REMOTE_URL });
-
-    // assert
-    await assert.rejects(resolution, (error: unknown) => {
-      assert.ok(error instanceof git.Errors.HttpError);
-      assert.deepStrictEqual(error.data, {
+  for (const { kind, headers } of UNUSABLE_LOCATIONS) {
+    test(`WR-04: returns a redirect with ${kind} to isomorphic-git as an HttpError`, async (t) => {
+      // arrange
+      const requests = installWireTransport(t, () => ({
         statusCode: 302,
         statusMessage: "Found",
-        response: "",
-      });
-      return true;
-    });
-    assert.deepStrictEqual(
-      requests.map(({ url }) => url),
-      [BOUND_INFO_URL],
-    );
-  });
+        headers,
+        body: Buffer.alloc(0),
+      }));
 
-  test("rejects an eleventh consecutive redirect with too many redirects", async (t) => {
+      // act
+      const resolution = resolveRemoteRef({ url: REMOTE_URL });
+
+      // assert
+      await assert.rejects(resolution, (error: unknown) => {
+        assert.ok(error instanceof git.Errors.HttpError);
+        assert.deepStrictEqual(error.data, {
+          statusCode: 302,
+          statusMessage: "Found",
+          response: "",
+        });
+        return true;
+      });
+      assert.deepStrictEqual(
+        requests.map(({ url }) => url),
+        [BOUND_INFO_URL],
+      );
+    });
+  }
+
+  test("IN-03: rejects an eleventh consecutive redirect with TooManyRedirectsError", async (t) => {
     // arrange
     const requests = installWireTransport(t, () => redirectWireResponse(302, BOUND_INFO_URL));
 
@@ -1433,7 +1641,10 @@ describe("resolveRemoteRef", () => {
     const resolution = resolveRemoteRef({ url: REMOTE_URL });
 
     // assert
-    await assert.rejects(resolution, { name: "Error", message: "too many redirects" });
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof TooManyRedirectsError);
+      return true;
+    });
     assert.deepStrictEqual(
       requests.map(({ url }) => url),
       Array.from({ length: 11 }, () => BOUND_INFO_URL),

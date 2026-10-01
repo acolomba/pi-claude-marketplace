@@ -5,12 +5,13 @@
 - A private marketplace or plugin source on any git host now clones with a credential that is already in your git credential helper. Before, only `github.com` and `gitlab.com` authenticated. Thanks to @jstillwa, who found this defect and the next two in #153. (#221)
 
   - If no credential is stored for the host, the error tells you to store one with `git credential approve`.
-  - A credential goes only to the host it was stored for. When a server redirects to another scheme, host, or port, the extension follows the redirect without the credential, as git does.
+  - A credential goes only to the host it was stored for. When a server redirects to another scheme, host, or port, the extension follows the redirect without the credential or any other header that could carry one. If that server then asks for a credential, the command fails with `{authentication required}`. It does not look up, ask for, or delete a stored credential. git would ask your credential helper for that server's own credential, but the extension's git library cannot.
+  - A redirect with an empty or malformed `Location` header now fails on the first response.
   - The marketplace autoupdate now authenticates on every host too.
 
 - A `url` marketplace source is now fetched at the exact URL you typed. A server that serves only that URL, and returns 404 for the `.git` form, now works. The extension adds `.git` only to a `github.com` `owner/repo` URL, as Claude Code does. It makes one request per operation, so a missing or forbidden repository fails with its own error. (#221)
 
-- `marketplace add` now succeeds when an earlier attempt left a clone of the same source in place, for example after a crash. Any other leftover directory is still refused. If the leftover cannot be fully removed, the add fails and reports the cleanup error. If the extension cannot read the leftover's git configuration, the add fails with `{permission denied}` or `{unreadable}` instead of `{stale clone}`. (#221)
+- `marketplace add` now succeeds when an earlier attempt left a clone of the same source in place, for example after a crash. The extension marks every clone it creates. It removes a leftover only when the leftover carries that mark and its `origin` names the source you are adding, also when the host differs in letter case. A clone you placed there yourself, or one left by a release that did not mark its clones, is still refused with `{stale clone}`; delete it once. If the leftover cannot be fully removed, the add fails and shows the cleanup error below the row. If the extension cannot read the leftover's git configuration, the add fails with `{permission denied}` or `{unreadable}` instead of `{stale clone}`. (#221)
 
 - A `github.com` URL with capital letters in the host, a `www.` prefix, or the default `:443` port is now a GitHub source, as in Claude Code. Before, the extension treated it as a different repository, so it could clone the same repository twice. A marketplace you already added this way changes to a GitHub source the next time the extension loads. (#221)
 

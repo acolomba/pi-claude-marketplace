@@ -789,6 +789,8 @@ describe("registerClaudePluginCommand", () => {
       "pi-claude-marketplace/sources/claude-plugins-official/",
       "pi-claude-marketplace/sources/claude-plugins-official/.claude-plugin/",
       "pi-claude-marketplace/sources/claude-plugins-official/.claude-plugin/marketplace.json",
+      "pi-claude-marketplace/sources/claude-plugins-official/.git/",
+      "pi-claude-marketplace/sources/claude-plugins-official/.git/pi-claude-marketplace.json",
       "pi-claude-marketplace/sources-staging/",
       "pi-claude-marketplace/state.json",
     ]);
