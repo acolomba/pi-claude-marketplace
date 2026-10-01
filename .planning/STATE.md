@@ -1,12 +1,12 @@
 ---
 gsd_state_version: "1.0"
 milestone: none
-status: "between milestones; any-git-host archived; npm 0.19.2 released"
-stopped_at: git-hosts workstream archived; root planning records reconciled
-last_updated: "2026-10-01T09:55:01Z"
+status: between milestones; any-git-host archived; npm 0.19.2 released
+stopped_at: CI deduplication and parallel direct coverage verified; local check optimizations next
+last_updated: "2026-10-01T17:43:11.012Z"
 last_activity: 2026-10-01
-last_activity_desc: archived the git-hosts workstream; reconciled root planning records
-state_head: 3723699a13eea53f0186c77f9c0d6ebfb44853ed
+last_activity_desc: completed CI deduplication and parallel direct coverage
+state_head: b0d45f4f5c65ac69924d16eedc3e8bb9e54a7276
 progress:
   total_phases: 3
   completed_phases: 3
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 Phase: No active milestone
 Plan: —
 Status: any-git-host complete (3/3 phases, 11/11 plans) and archived 2026-10-01
-Last activity: 2026-10-01 — Archived the git-hosts workstream and reconciled the root planning records
+Last activity: 2026-10-01 — Completed quick task 261001-iad: CI deduplication and parallel direct coverage
 
 Five milestones have closed since the last root-scope milestone ran here.
 `test-backlog` and `refine-unit-tests` closed in root scope. `workflows` and
@@ -181,14 +181,17 @@ hit the same wall; convert it rather than re-disclosing it.
 | 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na/) |
 | 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | b07ae35c | complete | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew/) |
 | 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./quick/260924-q0m-keep-only-plugin-qualified-interactive-s/) |
+| 261001-iad | Deduplicate CI checks and run isolated direct coverage pairs concurrently | 2026-10-01 | b0d45f4f | complete | [261001-iad-deduplicate-ci-checks-and-run-isolated-d](./quick/261001-iad-deduplicate-ci-checks-and-run-isolated-d/) |
 
 ## Session Continuity
 
 **Last session:** 2026-10-01
-**Stopped at:** git-hosts workstream archived; root planning records reconciled
+**Stopped at:** CI deduplication and parallel direct coverage verified; local check optimizations next
 **Resume file:** None
 
-**Current work:** None in flight. The 0.19.1 and 0.19.2 releases are tagged and
+**Current work:** Quick task 261001-iad completed on `features/ci-check-efficiency`.
+The approved local check optimizations remain in its plan as follow-up work.
+The 0.19.1 and 0.19.2 releases are tagged and
 published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218
 through #232 landed after it. `main` carries the workflows bridge from PR #205
 and any-git-host from PRs #221 and #231, which no tag includes yet. The
