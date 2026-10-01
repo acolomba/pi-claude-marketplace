@@ -54,3 +54,13 @@ npm run lint:fix       # ESLint with autofixes
 npm run format         # Prettier autoformat
 pre-commit run --all-files
 ```
+
+Direct coverage runs each source/test pair in a separate process with its own coverage report. It runs up to four pairs at once, limited by the available CPUs. `TEST_CONCURRENCY` sets the worker limit for the gate and the report command. If you need serial output for diagnosis, set the limit to one:
+
+```bash
+TEST_CONCURRENCY=1 npm run test:coverage:direct:all
+```
+
+The gate prints each pair's test output together after that pair finishes. If a worker fails, the gate stops starting pairs and waits for the active workers to finish before it reports failure. Completed report rows remain available.
+
+In CI, `npm run check` runs the unit coverage and integration tests once. Sonar downloads that run's accepted unit report. The lint workflow runs the remaining repository hooks, and a separate job runs direct coverage. Local commit hooks remain enabled.
