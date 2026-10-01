@@ -1040,6 +1040,7 @@ async function executeScopedPlan(
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
     await installOnePlannedPlugin(opts, result, plugin, existingPlugin);
   }
 
@@ -1179,11 +1180,13 @@ async function stampReenabledWhereLocalDeclares(
     }
 
     const key = `${installed.plugin}@${installed.marketplace}`;
+    // eslint-disable-next-line no-await-in-loop -- each stamp reads the previous stamp's write
     const localCfg = await loadConfig(locations.configLocalJsonPath);
     if (localCfg.status !== "valid" || localCfg.config.plugins?.[key] === undefined) {
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- read-modify-write of the local config file
     await writePluginConfigEntry(
       localCfg.config,
       locations.configLocalJsonPath,

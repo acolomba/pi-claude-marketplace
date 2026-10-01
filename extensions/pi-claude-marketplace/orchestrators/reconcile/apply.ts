@@ -498,6 +498,7 @@ async function applyPluginUninstalls(
     }> = [];
     let settled = 0;
     for (const op of pending) {
+      // eslint-disable-next-line no-await-in-loop -- each uninstall locks the scope (retries: 0)
       const outcome = await applyOnePluginUninstall(uninstallPlugin, opts, op);
       if (outcome === undefined) {
         continue;
@@ -695,6 +696,7 @@ async function applyDependencyInstalls(
   let satisfied = false;
   for (const op of plan.pluginsToDependencyInstall) {
     const rootKey = `${op.plugin}@${op.marketplace}`;
+    // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
     const result = await installMissingDependency({
       ctx: opts.ctx,
       pi: opts.pi,
@@ -1016,6 +1018,7 @@ async function applyDependencyDisables(
   const setPluginEnabled = createEnableOperation(opts.hooksRouting);
   const transitioned: PlannedDependencyDisable[] = [];
   for (const op of plan.pluginsToDependencyDisable) {
+    // eslint-disable-next-line no-await-in-loop -- each disable locks the scope (retries: 0)
     const result = await setPluginEnabled({
       ctx: opts.ctx,
       pi: opts.pi,
@@ -1319,6 +1322,7 @@ async function applyReconcileWithReader(
     }
 
     if (readResult.plan !== undefined) {
+      // eslint-disable-next-line no-await-in-loop -- each scope's apply edits shared hooks routing
       await applyPlan(reader, opts, readResult.plan, outcomes);
     }
 
