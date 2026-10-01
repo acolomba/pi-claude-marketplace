@@ -517,3 +517,42 @@ test("the reconcile wrapper dispatches rows with its label and plural cardinalit
   verify(harness.ctx);
   verify(harness.ui);
 });
+
+function nullRowsAreRefused(
+  ctx: ExtensionContext,
+  run: NotificationRun,
+  context: CommandContext<"available">,
+): void {
+  notifyWithContext(
+    ctx,
+    run,
+    context,
+    // @ts-expect-error a null marketplace collection is not an empty collection
+    null,
+    undefined,
+    "plural",
+  );
+  const nullPlugin = {
+    name: "official",
+    scope: "user",
+    // @ts-expect-error a null plugin row is not a producer row
+    plugins: [null],
+  } satisfies MarketplaceRows<PluginAvailableMessage>;
+  void nullPlugin;
+  const nullPlugins = {
+    name: "official",
+    scope: "user",
+    // @ts-expect-error a null plugin collection is not an empty collection
+    plugins: null,
+  } satisfies MarketplaceRows<PluginAvailableMessage>;
+  void nullPlugins;
+  // @ts-expect-error no-op updates still require a marketplace collection
+  notifyUpdateNoOpWithContext(ctx, run, context, null, "plural");
+  notifyReconcileAppliedWithContext(ctx, run, context, {
+    kind: "reconcile-applied-cascade",
+    // @ts-expect-error applied reconcile still requires a marketplace collection
+    marketplaces: null,
+  });
+}
+
+void nullRowsAreRefused;

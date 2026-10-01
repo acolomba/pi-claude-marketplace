@@ -1259,3 +1259,78 @@ for (const { name, envelope, body, expectedText } of [
     assert.equal(text, expectedText);
   });
 }
+
+test("a missing-policy row retains its trailers before the adjacent valid row", () => {
+  // arrange
+  const marketplace = {
+    name: "official",
+    scope: "user",
+    plugins: [
+      {
+        status: "partially-available",
+        name: "orphan",
+        missingPolicy: true,
+        reasons: ["lsp"],
+        description: "Unavailable tools",
+        hint: "partial-install",
+        failure: {
+          cause: { causeChain: ["outer", "inner"], truncated: false },
+          leaks: ["relative-leak"],
+          rollbackPartial: [{ phase: "skills" }],
+        },
+      },
+      { status: "available", name: "neighbor", reasons: [], description: "Available tools" },
+    ],
+  } as const satisfies ResolvedMarketplace;
+
+  // act
+  const text = composeMarketplaceBlock(marketplace);
+
+  // assert
+  assert.equal(
+    text,
+    [
+      "● official [user]",
+      '  orphan (failed) {internal: no render arm for "partially-available"}',
+      "    Unavailable tools",
+      "    Re-run with --partial to install the supported components.",
+      "    cause: outer -> inner",
+      "    leaked: relative-leak",
+      "    [skills] (rollback failed)",
+      "  ○ neighbor (available)",
+      "    Available tools",
+    ].join("\n"),
+  );
+});
+
+test("empty plugin collections keep their header and singletons keep complete grammar", () => {
+  // arrange
+  const empty = { name: "official", scope: "project", plugins: [] } as const;
+  const singleton = {
+    name: "official",
+    scope: "project",
+    plugins: [
+      {
+        status: "installed",
+        name: "alpha",
+        scope: "user",
+        version: "1.2.3",
+        severity: "info",
+        needsReload: true,
+        reasons: ["lsp", "requires pi-mcp"],
+        description: "One plugin",
+      },
+    ],
+  } as const satisfies ResolvedMarketplace;
+
+  // act
+  const emptyText = composeMarketplaceBlock(empty);
+  const singletonText = composeMarketplaceBlock(singleton);
+
+  // assert
+  assert.equal(emptyText, "● official [project]");
+  assert.equal(
+    singletonText,
+    "● official [project]\n  ● alpha [user] v1.2.3 (installed) {lsp, requires pi-mcp}\n    One plugin",
+  );
+});

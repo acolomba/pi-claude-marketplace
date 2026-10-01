@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { PENDING_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
 import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { composeMarketplaceBlock } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import {
   CENTRAL_ROW_POLICY,
   resolveEnvelope,
@@ -1177,4 +1179,119 @@ describe("resolveNotAddedReason", () => {
       assert.strictEqual(reason, expectedReason);
     });
   }
+});
+
+test("an inherited prototype-name policy cannot authorize a malformed row", () => {
+  // arrange
+  const row = { status: "toString", name: "orphan", severity: "warning" };
+
+  // act
+  const resolved = resolveRows(marketplaceWith([row as never]), allLoaded(), {});
+  const text = composeMarketplaceBlock(resolved[0]!);
+
+  // assert
+  assert.deepStrictEqual(row, { status: "toString", name: "orphan", severity: "error" });
+  assert.deepStrictEqual(resolved, [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        {
+          status: "toString",
+          name: "orphan",
+          severity: "error",
+          reasons: [],
+          missingPolicy: true,
+        },
+      ],
+    },
+  ]);
+  assert.equal(
+    text,
+    '● official [user]\n  orphan (failed) {internal: no render arm for "toString"}',
+  );
+});
+
+test("equal neighboring rows and same-name scopes retain order and duplicate reasons", () => {
+  // arrange
+  const row = {
+    status: "partially-installed",
+    name: "same",
+    scope: "project",
+    reasons: ["lsp", "lsp"],
+    dependencies: ["workflows", "mcp", "agents"],
+  } as const;
+  const marketplaces = [
+    { name: "z-last", scope: "user", plugins: [row, row, { ...row, scope: "user" }] },
+    { name: "a-first", scope: "project", plugins: [] },
+  ] as const;
+
+  // act
+  const resolved = resolveRows(marketplaces, noneLoaded(), CENTRAL_ROW_POLICY);
+  const text = resolved.map(composeMarketplaceBlock);
+
+  // assert
+  const reasons = [
+    "lsp",
+    "lsp",
+    "requires pi-subagents",
+    "requires pi-mcp",
+    "requires pi-dynamic-workflows",
+  ];
+  assert.deepStrictEqual(resolved, [
+    {
+      name: "z-last",
+      scope: "user",
+      plugins: [
+        { status: "partially-installed", name: "same", scope: "project", reasons },
+        { status: "partially-installed", name: "same", scope: "project", reasons },
+        { status: "partially-installed", name: "same", scope: "user", reasons },
+      ],
+    },
+    { name: "a-first", scope: "project", plugins: [] },
+  ]);
+  assert.deepStrictEqual(text, [
+    "● z-last [user]\n  ◉ same [project] (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp, requires pi-dynamic-workflows}\n  ◉ same [project] (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp, requires pi-dynamic-workflows}\n  ◉ same (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp, requires pi-dynamic-workflows}",
+    "● a-first [project]",
+  ]);
+});
+
+test("pending policies produce identical complete rows under opposite snapshots", () => {
+  // arrange
+  const rows = [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        { status: "will install", name: "alpha", scope: "project", partial: true },
+        { status: "will uninstall", name: "beta" },
+        { status: "will enable", name: "gamma" },
+        { status: "will disable", name: "delta" },
+      ],
+    },
+  ] as const;
+
+  // act
+  const loaded = resolveRows(rows, allLoaded(), PENDING_CONTEXT.rowPolicies);
+  const absent = resolveRows(rows, noneLoaded(), PENDING_CONTEXT.rowPolicies);
+
+  // assert
+  const expected = [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        { status: "will install", name: "alpha", scope: "project", partial: true, reasons: [] },
+        { status: "will uninstall", name: "beta", reasons: [] },
+        { status: "will enable", name: "gamma", reasons: [] },
+        { status: "will disable", name: "delta", reasons: [] },
+      ],
+    },
+  ];
+  assert.deepStrictEqual(loaded, expected);
+  assert.deepStrictEqual(absent, expected);
+  const expectedText =
+    "● official [user]\n  ● alpha [project] (will partially install)\n  ○ beta (will uninstall)\n  ● gamma (will enable)\n  ◍ delta (will disable)";
+  assert.equal(composeMarketplaceBlock(loaded[0]!), expectedText);
+  assert.equal(composeMarketplaceBlock(absent[0]!), expectedText);
 });
