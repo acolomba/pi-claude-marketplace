@@ -134,6 +134,32 @@ try {
     assert.equal(/notify-corpus: .* spells 1 ui\.notify\( calls/.test(loadRun.stderr), refused);
   }
 
+  // Control 7: malformed subset requests fail before a capture can overwrite its destination.
+  for (const { args, message } of [
+    {
+      args: ["--files", "--out", capturePath],
+      message: "capture --files needs at least one <path>",
+    },
+    {
+      args: ["--out", capturePath, "--files"],
+      message: "capture --files needs at least one <path>",
+    },
+    {
+      args: ["--out", capturePath, "--files", endToEndTest, "--verbose", "b.test.ts"],
+      message: "unknown capture flag: --verbose",
+    },
+    {
+      args: ["--out", capturePath, "-v"],
+      message: "unknown capture flag: -v",
+    },
+  ]) {
+    const rejectedRun = runTool(["capture", ...args]);
+
+    assert.equal(rejectedRun.status, 1);
+    assert.equal(rejectedRun.stderr, `${message}\n`);
+    assert.deepStrictEqual(parseCorpus(await readFile(capturePath, "utf8")), captured);
+  }
+
   process.stdout.write("Notify corpus negative controls passed.\n");
 } finally {
   await rm(fixtureRoot, { force: true, recursive: true });

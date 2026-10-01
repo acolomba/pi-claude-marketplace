@@ -312,12 +312,24 @@ function flagValues(args, flag) {
 
 // `capture --out <file> [--files <path> ...]`
 function parseCaptureArgs(args) {
+  const unknownFlag = args.find(
+    (arg) => arg.startsWith("-") && arg !== "--out" && arg !== "--files",
+  );
+
+  if (unknownFlag !== undefined) {
+    throw new Error(`unknown capture flag: ${unknownFlag}`);
+  }
+
   const outIndex = args.indexOf("--out");
   const outPath = outIndex === -1 ? undefined : args[outIndex + 1];
   const files = flagValues(args, "--files");
 
   if (outPath === undefined || outPath.startsWith("--")) {
     throw new Error("capture needs --out <file>");
+  }
+
+  if (args.includes("--files") && files.length === 0) {
+    throw new Error("capture --files needs at least one <path>");
   }
 
   return {
