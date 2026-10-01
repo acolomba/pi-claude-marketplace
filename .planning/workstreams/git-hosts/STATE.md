@@ -7,7 +7,7 @@ status: Awaiting next milestone
 stopped_at: milestone any-git-host archived (2026-09-30)
 last_updated: "2026-09-30T16:17:55.709Z"
 last_activity: 2026-09-30
-last_activity_desc: "Completed quick task 260930-j4y: fix the open any-git-host review findings"
+last_activity_desc: "Completed quick task 260930-tlb: clean up clone-cache test temp directories"
 state_head: f42e5dd6798bf828812cc5baee2ca6e8671e4500
 progress:
   total_phases: 3
@@ -40,7 +40,7 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 Phase: Milestone any-git-host complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-30 - Completed quick task 260930-j4y: Fix the open any-git-host review findings (GHRED-01, GHADD-01)
+Last activity: 2026-09-30 - Completed quick task 260930-tlb: Clean up clone-cache test temp directories
 
 ## Deferred Verification
 
@@ -240,6 +240,7 @@ None.
 |---|-------------|------|--------|-----------|
 | 260928-tt9 | Fix T-2-10 (url/raw identity mismatch) and T-3-05/WR-11 (duplicate origin url) before ship | 2026-09-28 | add75890 | [260928-tt9-fix-url-raw-identity-mismatch-and-duplic](./quick/260928-tt9-fix-url-raw-identity-mismatch-and-duplic/) |
 | 260930-j4y | Fix the open any-git-host review findings (GHRED-01, GHADD-01) | 2026-09-30 | 1f412768 | [260930-j4y-fix-open-any-git-host-review-findings](./quick/260930-j4y-fix-open-any-git-host-review-findings/) |
+| 260930-tlb | Clean up clone-cache test temp directories | 2026-09-30 | 556345c8 | [260930-tlb-clean-up-clone-cache-test-temp-directori](./quick/260930-tlb-clean-up-clone-cache-test-temp-directori/) |
 
 ## Session Continuity
 
