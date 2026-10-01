@@ -110,7 +110,7 @@ try {
   assert.equal(reorderedRun.status, 0, reorderedRun.stderr);
   assert.deepStrictEqual(parseCorpus(await readFile(capturePath, "utf8")), captured);
 
-  // Control 6: the hook loads a bare `X.ui.notify(` receiver and refuses any other spelling.
+  // Control 6: the hook loads a bare receiver and refuses other exact `ui.notify(` spellings.
   const plantedRoot = path.join(fixtureRoot, "extensions/pi-claude-marketplace");
 
   await mkdir(plantedRoot, { recursive: true });

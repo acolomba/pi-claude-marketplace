@@ -12,9 +12,14 @@ import path from "node:path";
  * receiver `X.ui` once and calls `ui.notify` with `this === ui`, so strict call-count mocks on
  * `ctx.ui` still pass.
  *
- * `X` must be a bare identifier. A module that spells any other `ui.notify(` call, such as a
+ * `X` must be a bare identifier. A module containing another exact `ui.notify(` spelling, such as a
  * member-access receiver (`opts.ctx.ui.notify(`) or a destructured `ui.notify(`, fails to load
  * with an error, because the rewrite would break the first and miss the second.
+ *
+ * D-01 limitation: this is a raw-text rewrite, not a syntax parser. Optional chaining, whitespace
+ * before `(`, `.call`, and a destructured `notify` bypass it. Matching text inside strings or
+ * templates is rewritten too. Extension sources must keep notify calls in the supported form
+ * and must not embed that form in string or template literals.
  *
  * The preload does nothing unless `NOTIFY_CORPUS_OUT` names an output directory. It records only
  * when the process entry point is a `.test.ts` file, so a child that a test forks never adds
