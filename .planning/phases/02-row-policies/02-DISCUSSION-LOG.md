@@ -23,6 +23,26 @@ phase 1 decisions, and the scope limits. Concrete policy field names, module
 boundaries, and migration order remain subject to research and plan review.
 No additional question or separate approval is needed for these routine choices.
 
+## Research Acceptance Conflict
+
+Research found 25 synthetic callback emissions in the frozen corpus. Deleting
+those callbacks changes their test output while production output can remain
+unchanged. The exact occurrences are recorded in `02-RESEARCH.md`.
+
+The agent asked for a decision under the plan-phase conflict rule: update only
+those 25 test entries with an exact before/after record (recommended), or keep
+the baseline immutable and maintain exact substitutions. The production catalog
+and all unrelated corpus occurrences must stay unchanged in either case.
+The answer is pending; D-07 has not been amended and no baseline was changed.
+
+Research, pattern mapping, and draft validation are complete. Planning the
+callback-test migration waits for this acceptance decision. The autonomous run
+remains at phase 2 and should resume planning once the answer is recorded.
+
+The assumption-delta scan found the word `fallback` in the deletion requirement.
+Disposition: no change. The primary noun remains command row policy; removing
+the old fallback does not introduce another provider or a new selectable mode.
+
 ## Deferred Ideas
 
 None.
