@@ -23,11 +23,24 @@
  * gitCredentialIO reference the subcommand name + timeout-ms or exit code.
  * approve/reject swallow all subprocess errors so they never escape.
  *
- * Non-interactive guarantee: env carries `GIT_TERMINAL_PROMPT=0`
- * so a credential-helper miss never falls through to a TTY prompt, and
- * `GCM_INTERACTIVE=never` so Git Credential Manager returns null on a
- * cache miss rather than opening a browser OAuth flow. Pi shows the
- * Device Flow URL + code in its own UI via `initiateDeviceFlow` instead.
+ * Non-interactive boundary: env carries `GIT_TERMINAL_PROMPT=0`, which
+ * suppresses git's OWN terminal prompt on a helper miss, and
+ * `GCM_INTERACTIVE=never`, which makes Git Credential Manager return null on a
+ * cache miss instead of opening a browser OAuth flow. Pi shows the Device Flow
+ * URL + code in its own UI via `initiateDeviceFlow`.
+ *
+ * Those two variables bound git and GCM, and `fill` spawns on every host a
+ * source names (GAUTH-03). Three interactive surfaces sit outside that bound:
+ *   - a configured `credential.helper` that prompts on its own -- `pass` via
+ *     gpg-agent pinentry, 1Password's `op`, `gh auth`, a shell one-liner;
+ *   - a GUI keychain access-permission dialog, which
+ *     `git-credential-osxkeychain` raises outside any TTY;
+ *   - `GIT_ASKPASS` / `SSH_ASKPASS` / `core.askPass`, which this env leaves
+ *     intact.
+ * A prompt on any of them meets the `timeoutMs` SIGTERM, so the user sees a
+ * dialog that flashes and a `fill` that answers null. `spawn` passes no `cwd`,
+ * so `credential.helper` resolves from whatever repository the Pi process sits
+ * in.
  *
  * stdin EOF guarantee: both `child.stdin.write(input)` AND
  * `child.stdin.end()` are called -- the trailing blank line in the input

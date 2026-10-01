@@ -95,9 +95,10 @@ const UPDATE_REMOTE_URLS = [
   "https://github.com/anthropics/test.git",
   "https://github.com/org/repo.git",
   "https://github.com/test/repo.git",
+  "https://example.com/org/repo",
   "https://example.com/org/repo.git",
-  "https://example.com/org/mono.git",
-  "https://example.com/org/monorepo.git",
+  "https://example.com/org/mono",
+  "https://example.com/org/monorepo",
 ] as const;
 
 const DEVICE_CODE = {
@@ -6734,6 +6735,10 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
     const cwd = await createCaseDir("update-git-pinned-swap-");
     try {
       const cloneUrl = "https://example.com/org/repo";
+      // The manifest's .git suffix survives onto the wire URL (source.raw)
+      // while the parse-time identity (source.url) drops it, so this fixture
+      // also discriminates networkCloneUrl from canonicalCloneUrl.
+      const rawUrl = "https://example.com/org/repo.git";
       const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
       // Installed at SHA_OLD; manifest now carries SHA_NEW (a pinned bump).
       const seeded = await seedGitPluginMarketplace({
@@ -6741,11 +6746,11 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
         cloneUrl,
         fixtureRepoDir,
         versionTag: "9.9.9",
-        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        entrySource: { source: "url", url: rawUrl, sha: SHA_NEW },
         recordedSha: SHA_OLD,
       });
 
-      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi } = makeCtx();
       await updatePlugins({
         ctx,
@@ -6775,6 +6780,11 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
         await pathExists(seeded.oldCloneRoot ?? ""),
         false,
         "old clone GC'd (no surviving record references it)",
+      );
+      assert.equal(
+        gitState.cloneCalls[0]?.url,
+        rawUrl,
+        "the wire url preserves the manifest's .git decision (source.raw)",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -7510,8 +7520,8 @@ test("plugin update authentication: a pinned provider update threads auth to the
       // assert
       assert.equal(captured.cloneAuth?.credentialOps, credentialOps);
       assert.equal(captured.cloneAuth?.host, "github.com");
-      assert.equal(typeof captured.cloneAuth?.onAuthRequired, "function");
-      assert.deepEqual(await captured.cloneAuth?.onAuthRequired(), memoized);
+      assert.ok(captured.cloneAuth?.kind === "device-flow");
+      assert.deepEqual(await captured.cloneAuth.onAuthRequired(), memoized);
       assert.equal(authMemo.size, 1);
       assert.equal(notifications.length, 1);
     } finally {
@@ -7558,7 +7568,7 @@ test("plugin update authentication: an unpinned provider update threads auth to 
       // assert
       assert.equal(captured.cloneAuth?.credentialOps, credentialOps);
       assert.equal(captured.cloneAuth?.host, "github.com");
-      assert.equal(typeof captured.cloneAuth?.onAuthRequired, "function");
+      assert.equal(captured.cloneAuth?.kind, "device-flow");
       assert.equal(captured.pinAuth, undefined);
       assert.equal(notifications.length, 1);
     } finally {

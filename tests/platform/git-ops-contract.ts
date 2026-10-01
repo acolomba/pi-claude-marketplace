@@ -35,6 +35,7 @@ export const GIT_OPS_CASE_NAMES = [
   "resolves a named remote branch",
   "resolves a remote annotated tag to its peeled commit",
   "rejects a missing remote ref",
+  "reports the origin remote url",
 ] as const;
 
 // Mutable aliasing is inapplicable because GitOps returns only void or immutable string primitives.
@@ -291,6 +292,22 @@ export const gitOpsContractCases = [
         name: "Error",
         message: `remote ${participant.remoteUrl} has no ref "missing"`,
       });
+    },
+  },
+  {
+    // D-3-03: only the origin arm is parity-tested here. The three failure
+    // arms are filesystem mechanics of the real implementation, which this
+    // contract's header already excludes from parity scope.
+    name: "reports the origin remote url",
+    run: async (createGitOps, t) => {
+      // arrange
+      const participant = await createGitOps(t);
+
+      // act
+      const remotes = await participant.gitOps.listRemotes({ dir: participant.worktreeDir });
+
+      // assert
+      assert.deepStrictEqual(remotes, { kind: "origin", url: participant.remoteUrl });
     },
   },
 ] satisfies readonly GitOpsContractCase[];

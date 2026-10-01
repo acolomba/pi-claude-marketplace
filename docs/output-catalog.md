@@ -1704,7 +1704,7 @@ A marketplace operation has failed.
 
 ### Failure -- stale clone (ATTR-07)
 
-Triggered when a github `marketplace add` finds a pre-existing non-empty `sources/<derivedName>/` clone directory on the final destination (`StaleSourceCloneError`). Post-manifest failure: the subject is the derived marketplace name. The github guard's `cleanupStaging` runs before this row is emitted (no staging-dir leak). Severity `error`; no reload-hint.
+Triggered when a github or url `marketplace add` finds a `sources/<derivedName>/` it cannot recognize as its own leftover (`StaleSourceCloneError`): the directory is not a git clone, its `origin` names another repository, or it carries no ownership marker `.git/pi-claude-marketplace.json` (MA-13, Q-01). A recognized leftover is removed and the add succeeds (MA-12). Post-manifest failure: the subject is the derived marketplace name. The guard's `cleanupStaging` runs before this row is emitted (no staging-dir leak). Severity `error`; no reload-hint.
 
 <!-- catalog-state: add-stale-clone -->
 
@@ -1712,6 +1712,20 @@ Triggered when a github `marketplace add` finds a pre-existing non-empty `source
 A marketplace operation has failed.
 
 ⊘ claude-plugins-official [user] (failed) {stale clone}
+```
+
+### Failure -- stale clone, leftover not fully removed (MA-14)
+
+Triggered when a github or url `marketplace add` recognizes its own leftover clone at `sources/<derivedName>/` but cannot fully remove it (`UnremovableLeftoverCloneError`). The add never renames over the partly removed tree and records nothing. The row is the stale-clone row, followed by one advisory line that names the cleanup failure with every absolute path reduced to its last segment (NFR-9). Severity `error`; no reload-hint.
+
+<!-- catalog-state: add-stale-clone-cleanup-leak -->
+
+```text
+A marketplace operation has failed.
+
+⊘ claude-plugins-official [user] (failed) {stale clone}
+
+    failed to clean up marketplace leftover clone at claude-plugins-official: EACCES: permission denied, rm 'claude-plugins-official'
 ```
 
 ### Failure -- unsupported source (ATTR-07)
