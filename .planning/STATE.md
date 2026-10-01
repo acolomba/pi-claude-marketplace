@@ -1,17 +1,17 @@
 ---
 gsd_state_version: "1.0"
 milestone: none
-status: "between milestones; workflows-replay archived; npm 0.19.2 released"
-stopped_at: workflows workstream archived and GSD config pinned to the quality profile
-last_updated: "2026-09-27T23:42:24Z"
-last_activity: 2026-09-27
-last_activity_desc: archived the workflows workstream; reconciled root planning records
-state_head: 7c1c1d3bd14b838b000c4bb9bd9bdfc4091a1295
+status: "between milestones; any-git-host archived; npm 0.19.2 released"
+stopped_at: git-hosts workstream archived; root planning records reconciled
+last_updated: "2026-10-01T09:55:01Z"
+last_activity: 2026-10-01
+last_activity_desc: archived the git-hosts workstream; reconciled root planning records
+state_head: 3723699a13eea53f0186c77f9c0d6ebfb44853ed
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 39
-  completed_plans: 39
+  total_phases: 3
+  completed_phases: 3
+  total_plans: 11
+  completed_plans: 11
   percent: 100
 ---
 
@@ -19,7 +19,7 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-18 after the test-backlog milestone)
+See: `.planning/PROJECT.md` (updated 2026-10-01 after the git-hosts workstream was archived)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
@@ -30,15 +30,30 @@ component as a working Pi artifact.
 
 Phase: No active milestone
 Plan: —
-Status: workflows-replay complete (9/9 phases, 39/39 plans) and archived 2026-09-27
-Last activity: 2026-09-27 — Archived the workflows workstream and reconciled the root planning records
+Status: any-git-host complete (3/3 phases, 11/11 plans) and archived 2026-10-01
+Last activity: 2026-10-01 — Archived the git-hosts workstream and reconciled the root planning records
 
-Four milestones have closed since the last root-scope milestone ran here.
-`test-backlog` and `refine-unit-tests` closed in root scope; `workflows` and
-`workflows-replay` ran in the `workflows` workstream, which was archived to
-`milestones/ws-workflows-2026-09-27/` on 2026-09-27. `.planning/workstreams/` no
-longer exists and no workstream is active, so every phase, plan and quick-task
-record for the two workflow milestones lives under that archive directory.
+Five milestones have closed since the last root-scope milestone ran here.
+`test-backlog` and `refine-unit-tests` closed in root scope. `workflows` and
+`workflows-replay` ran in the `workflows` workstream, archived to
+`milestones/ws-workflows-2026-09-27/` on 2026-09-27. `any-git-host` ran in the
+`git-hosts` workstream, archived to `milestones/ws-git-hosts-2026-10-01/` on
+2026-10-01. `.planning/workstreams/` no longer exists and no workstream is
+active, so every phase, plan and quick-task record for those three milestones
+lives under its archive directory.
+
+### any-git-host closeout
+
+Completed 2026-09-30: 10/10 requirements, 3/3 phases (`01/`-`03/`) re-verified
+`passed` against the final tree, `threats_open: 0` on each. The audit reads
+`passed` after quick task 260930-j4y closed the review debt (`BACKLOG.md`
+GHRED-01, GHADD-01) in PR #231. Both live canaries (GHCAN-01, GHCAN-02) closed
+against local stand-in servers on 2026-09-28.
+
+The code reached `main` in PR #221 (`a0d3aef1`) on 2026-09-30, with review
+fixes in PR #231. No tag contains it: `v0.19.2` was cut on 2026-09-24. The
+workstream's three quick tasks (260928-tt9, 260930-j4y, 260930-tlb) are recorded
+in the archived `STATE.md`, not in the table below.
 
 ### workflows-replay closeout
 
@@ -75,6 +90,10 @@ acknowledged, 17 carried forward, and the phase-25 table conversion.
 - `phase.complete` drops `current_phase_name`, resets Current Position to
   `Plan: Not started`, and rewrites the historical `Stopped at:` line under an
   older heading. Restore by hand and check with `git diff`.
+- `workstream complete` run from Claude Code clears only its session-scoped
+  pointer (`CLAUDE_CODE_SESSION_ID` selects it), so the tracked
+  `.planning/active-workstream` still names the archived workstream. Delete it
+  by hand with `git rm`.
 - `milestone complete` leaves every original-path deletion **unstaged**
   (`git add -u .planning/phases .planning/quick`) and writes 40 verbose
   accomplishment bullets that need a hand rewrite. `.planning/workstreams/` no
@@ -96,8 +115,8 @@ acknowledged, 17 carried forward, and the phase-25 table conversion.
   undeclared phase as soon as N leaves ROADMAP.md. The directory form says the
   same thing, more precisely, and the check stays quiet. Do not re-add a phase
   checklist to ROADMAP.md to silence it — that trades each W002 for a W006.
-- **Do not zero the `progress:` block between milestones.** The 9/9 phases and
-  39/39 plans are workflows-replay's, not root scope's, but 0 routes worse:
+- **Do not zero the `progress:` block between milestones.** The 3/3 phases and
+  11/11 plans are any-git-host's, not root scope's, but 0 routes worse:
   `smart-entry` tests `total_phases <= 0` first and recommends
   `/gsd-discuss-phase` for a phase that does not exist. Measured both ways.
 
@@ -165,14 +184,15 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-27
-**Stopped at:** workflows workstream archived; root planning records reconciled
+**Last session:** 2026-10-01
+**Stopped at:** git-hosts workstream archived; root planning records reconciled
 **Resume file:** None
 
 **Current work:** None in flight. The 0.19.1 and 0.19.2 releases are tagged and
-published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218 and
-#219 landed after it. `main` carries the workflows bridge from PR #205, which no
-tag includes yet. Handoffs for the earlier milestones moved into their archives
+published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218
+through #232 landed after it. `main` carries the workflows bridge from PR #205
+and any-git-host from PRs #221 and #231, which no tag includes yet. The
+git-hosts workstream left no root handoff. Handoffs for the earlier milestones moved into their archives
 (`milestones/refine-unit-tests-HANDOFF*.md`,
 `milestones/ws-defaults-enabled-2026-09-17/HANDOFF.md`) and the paused phase-117
 handoff moved to `milestones/ws-workflows-2026-09-27/`. Earlier milestone
@@ -184,3 +204,5 @@ archived milestone artifacts.
 - Start the next milestone with `/gsd-new-milestone`; `BACKLOG.md` holds the
   six carriers the workflows-replay close named (VSTALE-01, WLREC-01,
   RLHINT-01, PCERR-01, WSTOR-01, WPIN-01).
+- PR #153, the contributor PR any-git-host reimplemented, is still open with a
+  comment explaining what landed; close it if there is no reply.

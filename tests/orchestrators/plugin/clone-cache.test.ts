@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import * as git from "isomorphic-git";
 
@@ -31,7 +31,10 @@ import type {
   GitSubdirSource,
   UrlSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type {
+  GitAuthBundle,
+  GitOps,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
@@ -54,8 +57,6 @@ const ALLOWED_CLONE_CACHE_REMOTES = [
   "https://example.com/mono",
   "https://example.com/mono.git",
   "https://example.com/repo",
-  "https://example.com/repo.git",
-  "https://github.com/owner/repo",
   "https://github.com/owner/repo.git",
   "https://gitlab.example.com/o/r",
   "https://gitlab.example.com/o/r.git",
@@ -167,23 +168,43 @@ function createGitOps(initial: GitOpsAdapterOptions = {}) {
   };
 }
 
-async function freshLocations(): Promise<ScopedLocations> {
+/** A stored-credential bundle for a clone the remote never challenges. */
+function publicCloneAuth(): GitAuthBundle {
+  return {
+    kind: "stored-credential",
+    credentialOps: {
+      fill: () => Promise.reject(new Error("a public clone never consults the helper")),
+      approve: () => Promise.reject(new Error("a public clone never stores a credential")),
+      reject: () => Promise.reject(new Error("a public clone never evicts a credential")),
+    },
+    host: "example.com",
+  };
+}
+
+async function freshLocations(t: TestContext): Promise<ScopedLocations> {
   const cwd = await mkdtemp(path.join(tmpdir(), "clone-cache-"));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   return locations;
 }
 
-void test("PURL-02: a warm cache uses the default git surface without making a git call", async () => {
+void test("PURL-02: a warm cache uses the default git surface without making a git call", async (t) => {
   // arrange
-  const locations = await freshLocations();
+  const locations = await freshLocations(t);
   const cloneUrl = "https://example.com/warm-default";
   const cloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40));
   await mkdir(cloneRoot, { recursive: true });
   await writeFile(path.join(cloneRoot, "sentinel"), "warm\n");
 
   // act
-  const materialized = await materializePluginClone({ locations, cloneUrl, pin: PIN_40 });
+  const materialized = await materializePluginClone({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    pin: PIN_40,
+  });
 
   // assert
   assert.equal(materialized, cloneRoot);
@@ -209,13 +230,15 @@ void test("D-77-04: a pinned source uses the default git surface without remote 
   });
 });
 
-void test("PURL-02/04: materializePluginClone clones into staging, checks out the pin, returns a plugin-clones path", async () => {
-  const locations = await freshLocations();
+void test("PURL-02/04: materializePluginClone clones into staging, checks out the pin, returns a plugin-clones path", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps();
 
   const cloneRoot = await materializePluginClone({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     pin: PIN_40,
     gitOps,
   });
@@ -224,24 +247,29 @@ void test("PURL-02/04: materializePluginClone clones into staging, checks out th
     cloneRoot.includes(`${path.sep}plugin-clones${path.sep}`),
     `expected cloneRoot under plugin-clones/, got ${cloneRoot}`,
   );
-  assert.equal(state.cloneCalls.length, 1, "exactly one clone");
+  assert.equal(state.cloneCalls.length, 1, "MURL-09: exactly one clone attempt");
+  assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
   assert.equal(state.checkoutCalls.length, 1, "exactly one checkout");
   assert.equal(state.checkoutCalls[0]!.ref, PIN_40, "checkout pins the sha");
 });
 
-void test("PURL-04: a second materialize of the same url+sha triggers zero additional clones (dedup)", async () => {
-  const locations = await freshLocations();
+void test("PURL-04: a second materialize of the same url+sha triggers zero additional clones (dedup)", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps();
 
   const first = await materializePluginClone({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     pin: PIN_40,
     gitOps,
   });
   const second = await materializePluginClone({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     pin: PIN_40,
     gitOps,
   });
@@ -251,8 +279,8 @@ void test("PURL-04: a second materialize of the same url+sha triggers zero addit
   assert.equal(state.checkoutCalls.length, 1, "no second checkout");
 });
 
-void test("PURL-02: a warm cache returns offline even when gitOps.clone throws", async () => {
-  const locations = await freshLocations();
+void test("PURL-02: a warm cache returns offline even when gitOps.clone throws", async (t) => {
+  const locations = await freshLocations(t);
   // Pre-create the key dir so the warm-cache short-circuit fires.
   const { gitOps } = createGitOps({ cloneThrows: new Error("network down") });
   const keyDir = await locations.pluginCloneDir(
@@ -267,8 +295,10 @@ void test("PURL-02: a warm cache returns offline even when gitOps.clone throws",
   await writeFile(path.join(keyDir, "marker"), "warm");
 
   const cloneRoot = await materializePluginClone({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     pin: PIN_40,
     gitOps,
   });
@@ -276,13 +306,15 @@ void test("PURL-02: a warm cache returns offline even when gitOps.clone throws",
   assert.equal(cloneRoot, keyDir, "returns the warm cache dir");
 });
 
-void test("Pitfall: sha wins over ref -- checkout pins the sha, clone singleBranch uses the ref", async () => {
-  const locations = await freshLocations();
+void test("Pitfall: sha wins over ref -- checkout pins the sha, clone singleBranch uses the ref", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps();
 
   await materializePluginClone({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     pin: PIN_40,
     ref: "v2.0.0",
     gitOps,
@@ -307,8 +339,8 @@ function commitNotFetchedError(ref: string): Error {
   return err;
 }
 
-void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch then retries the checkout to success", async () => {
-  const locations = await freshLocations();
+void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch then retries the checkout to success", async (t) => {
+  const locations = await freshLocations(t);
   const base = createGitOps();
   let fullyFetched = false;
   const checkouts: string[] = [];
@@ -333,8 +365,10 @@ void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch t
   };
 
   const cloneRoot = await materializePluginClone({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     pin: PIN_OUTSIDE_CLOSURE,
     ref: "v1.5.5",
     gitOps,
@@ -357,13 +391,15 @@ void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch t
   );
 });
 
-void test("PURL-04: a pin reachable within the ref-hint closure stays on the fast path with no recovery fetch", async () => {
-  const locations = await freshLocations();
+void test("PURL-04: a pin reachable within the ref-hint closure stays on the fast path with no recovery fetch", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps();
 
   await materializePluginClone({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     pin: PIN_40,
     ref: "v2.0.0",
     gitOps,
@@ -373,8 +409,8 @@ void test("PURL-04: a pin reachable within the ref-hint closure stays on the fas
   assert.equal(state.fetchCalls.length, 0, "no recovery fetch when the pin is already present");
 });
 
-void test("PURL-04: a still-unreachable pin fails clean after the retry (fetch does not make it appear)", async () => {
-  const locations = await freshLocations();
+void test("PURL-04: a still-unreachable pin fails clean after the retry (fetch does not make it appear)", async (t) => {
+  const locations = await freshLocations(t);
   const base = createGitOps();
   const gitOps = {
     ...base.gitOps,
@@ -392,8 +428,10 @@ void test("PURL-04: a still-unreachable pin fails clean after the retry (fetch d
   await assert.rejects(
     () =>
       materializePluginClone({
+        auth: publicCloneAuth(),
         locations,
         cloneUrl: "https://example.com/repo",
+        networkUrl: "https://example.com/repo",
         pin: PIN_OUTSIDE_CLOSURE,
         ref: "v1.5.5",
         gitOps,
@@ -404,8 +442,8 @@ void test("PURL-04: a still-unreachable pin fails clean after the retry (fetch d
   assert.equal(base.state.fetchCalls.length, 1, "exactly one recovery fetch was attempted");
 });
 
-void test("PURL-04: a NO-ref clone whose checkout throws CommitNotFetchedError fails immediately with zero recovery fetches", async () => {
-  const locations = await freshLocations();
+void test("PURL-04: a NO-ref clone whose checkout throws CommitNotFetchedError fails immediately with zero recovery fetches", async (t) => {
+  const locations = await freshLocations(t);
   const base = createGitOps();
   const gitOps = {
     ...base.gitOps,
@@ -420,8 +458,10 @@ void test("PURL-04: a NO-ref clone whose checkout throws CommitNotFetchedError f
   await assert.rejects(
     () =>
       materializePluginClone({
+        auth: publicCloneAuth(),
         locations,
         cloneUrl: "https://example.com/repo",
+        networkUrl: "https://example.com/repo",
         pin: PIN_OUTSIDE_CLOSURE,
         gitOps,
       }),
@@ -437,8 +477,8 @@ void test("PURL-04: a NO-ref clone whose checkout throws CommitNotFetchedError f
   );
 });
 
-void test("PURL-04: a ref-hint clone whose checkout throws a NON-CommitNotFetchedError does NOT trigger the recovery fetch", async () => {
-  const locations = await freshLocations();
+void test("PURL-04: a ref-hint clone whose checkout throws a NON-CommitNotFetchedError does NOT trigger the recovery fetch", async (t) => {
+  const locations = await freshLocations(t);
   const base = createGitOps();
   const gitOps = {
     ...base.gitOps,
@@ -453,8 +493,10 @@ void test("PURL-04: a ref-hint clone whose checkout throws a NON-CommitNotFetche
   await assert.rejects(
     () =>
       materializePluginClone({
+        auth: publicCloneAuth(),
         locations,
         cloneUrl: "https://example.com/repo",
+        networkUrl: "https://example.com/repo",
         pin: PIN_40,
         ref: "v1.5.5",
         gitOps,
@@ -475,17 +517,16 @@ void test("PURL-04: a ref-hint clone whose checkout throws a NON-CommitNotFetche
   );
 });
 
-void test("PROV-03: the recovery fetch threads the auth bundle so a private pin outside the ref-hint closure authenticates", async () => {
-  const locations = await freshLocations();
-  const auth = {
+void test("PROV-03: the recovery fetch threads the auth bundle so a private pin outside the ref-hint closure authenticates", async (t) => {
+  const locations = await freshLocations(t);
+  const auth: GitAuthBundle = {
     credentialOps: {
       fill: async (): Promise<null> => Promise.resolve(null),
       approve: async (): Promise<void> => Promise.resolve(),
       reject: async (): Promise<void> => Promise.resolve(),
     },
     host: "gitlab.example.com",
-    onAuthRequired: async (): Promise<{ ok: false; reason: string; authAttempted: true }> =>
-      Promise.resolve({ ok: false, reason: "no", authAttempted: true }),
+    kind: "stored-credential",
   };
   const base = createGitOps();
   let fullyFetched = false;
@@ -509,6 +550,7 @@ void test("PROV-03: the recovery fetch threads the auth bundle so a private pin 
   await materializePluginClone({
     locations,
     cloneUrl: "https://gitlab.example.com/o/r",
+    networkUrl: "https://gitlab.example.com/o/r",
     pin: PIN_OUTSIDE_CLOSURE,
     ref: "v1.5.5",
     gitOps,
@@ -523,39 +565,24 @@ void test("PROV-03: the recovery fetch threads the auth bundle so a private pin 
   );
 });
 
-void test("PROV-02/PROV-03: materializePluginClone with NO auth records a cloneCall whose auth is undefined (public-only, byte-identical)", async () => {
-  const locations = await freshLocations();
+void test("PROV-03: materializePluginClone with an auth bundle threads it to gitOps.clone", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps();
 
-  await materializePluginClone({
-    locations,
-    cloneUrl: "https://example.com/repo",
-    pin: PIN_40,
-    gitOps,
-  });
-
-  assert.equal(state.cloneCalls.length, 1, "exactly one clone");
-  assert.equal(state.cloneCalls[0]!.auth, undefined, "public path threads no auth bundle");
-});
-
-void test("PROV-03: materializePluginClone with an auth bundle threads it to gitOps.clone", async () => {
-  const locations = await freshLocations();
-  const { gitOps, state } = createGitOps();
-
-  const auth = {
+  const auth: GitAuthBundle = {
     credentialOps: {
       fill: async (): Promise<null> => Promise.resolve(null),
       approve: async (): Promise<void> => Promise.resolve(),
       reject: async (): Promise<void> => Promise.resolve(),
     },
     host: "gitlab.example.com",
-    onAuthRequired: async (): Promise<{ ok: false; reason: string; authAttempted: true }> =>
-      Promise.resolve({ ok: false, reason: "no", authAttempted: true }),
+    kind: "stored-credential",
   };
 
   await materializePluginClone({
     locations,
     cloneUrl: "https://gitlab.example.com/o/r",
+    networkUrl: "https://gitlab.example.com/o/r",
     pin: PIN_40,
     gitOps,
     auth,
@@ -569,8 +596,8 @@ void test("PROV-03: materializePluginClone with an auth bundle threads it to git
   );
 });
 
-void test("Pitfall: an EEXIST/ENOTEMPTY rename is a warm-cache win (no rethrow)", async () => {
-  const locations = await freshLocations();
+void test("Pitfall: an EEXIST/ENOTEMPTY rename is a warm-cache win (no rethrow)", async (t) => {
+  const locations = await freshLocations(t);
   const { pluginCloneKey } =
     await import("../../../extensions/pi-claude-marketplace/domain/clone-key.ts");
   const keyDir = await locations.pluginCloneDir(pluginCloneKey("https://example.com/repo", PIN_40));
@@ -589,8 +616,10 @@ void test("Pitfall: an EEXIST/ENOTEMPTY rename is a warm-cache win (no rethrow)"
   };
 
   const cloneRoot = await materializePluginClone({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     pin: PIN_40,
     gitOps: racingGitOps,
   });
@@ -598,9 +627,9 @@ void test("Pitfall: an EEXIST/ENOTEMPTY rename is a warm-cache win (no rethrow)"
   assert.equal(cloneRoot, keyDir, "EEXIST/ENOTEMPTY rename returns the winner's cache dir");
 });
 
-void test("MA-9: a non-race promotion failure cleans staging and preserves the rename error", async () => {
+void test("MA-9: a non-race promotion failure cleans staging and preserves the rename error", async (t) => {
   // arrange
-  const locations = await freshLocations();
+  const locations = await freshLocations(t);
   const base = createGitOps();
   const gitOps: GitOps = {
     ...base.gitOps,
@@ -614,8 +643,10 @@ void test("MA-9: a non-race promotion failure cleans staging and preserves the r
   // act
   try {
     await materializePluginClone({
+      auth: publicCloneAuth(),
       locations,
       cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
       pin: PIN_40,
       gitOps,
     });
@@ -629,15 +660,17 @@ void test("MA-9: a non-race promotion failure cleans staging and preserves the r
   assert.deepEqual(await stagingEntries(locations), []);
 });
 
-void test("MA-9: a clone failure cleans staging and rethrows with the leak suffix appended", async () => {
-  const locations = await freshLocations();
+void test("MA-9: a clone failure cleans staging and rethrows with the leak suffix appended", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps({ cloneThrows: new Error("clone boom") });
 
   await assert.rejects(
     () =>
       materializePluginClone({
+        auth: publicCloneAuth(),
         locations,
         cloneUrl: "https://example.com/repo",
+        networkUrl: "https://example.com/repo",
         pin: PIN_40,
         gitOps,
       }),
@@ -676,15 +709,14 @@ void test("D-77-05: resolvePluginPin resolves an unpinned source's remote HEAD t
 void test("PROV-03 (Q1): resolvePluginPin forwards an auth bundle into resolveRemoteRef for an unpinned private HEAD resolution", async () => {
   const HEAD = "ffffffffffffffffffffffffffffffffffffffff";
   const { gitOps, state } = createGitOps({ remoteHead: HEAD });
-  const auth = {
+  const auth: GitAuthBundle = {
     credentialOps: {
       fill: async (): Promise<null> => Promise.resolve(null),
       approve: async (): Promise<void> => Promise.resolve(),
       reject: async (): Promise<void> => Promise.resolve(),
     },
     host: "gitlab.example.com",
-    onAuthRequired: async (): Promise<{ ok: false; reason: string; authAttempted: true }> =>
-      Promise.resolve({ ok: false, reason: "no", authAttempted: true }),
+    kind: "stored-credential",
   };
   const source: UrlSource = {
     kind: "url",
@@ -713,7 +745,8 @@ void test("PROV-02: resolvePluginPin with NO auth records a bare resolveRemoteRe
 
   await resolvePluginPin({ source, gitOps });
 
-  assert.deepEqual(state.resolveRemoteRefCalls, [{ url: "https://example.com/repo.git" }]);
+  assert.equal(state.resolveRemoteRefCalls.length, 1, "MURL-09: exactly one attempt");
+  assert.deepEqual(state.resolveRemoteRefCalls, [{ url: "https://example.com/repo" }]);
 });
 
 void test("Pitfall: resolvePluginPin does NOT call resolveRemoteRef when a sha is set", async () => {
@@ -751,7 +784,7 @@ void test("D-77-05: resolvePluginPin resolves a ref (no sha) to its remote sha",
   assert.equal(resolved.pin, TAG, "pin = the ref's resolved sha");
   assert.equal(resolved.ref, "v1.0.0", "ref returned as the fetch hint");
   assert.deepEqual(state.resolveRemoteRefCalls, [
-    { url: "https://example.com/repo.git", ref: "v1.0.0" },
+    { url: "https://example.com/repo", ref: "v1.0.0" },
   ]);
 });
 
@@ -759,15 +792,14 @@ void test("PROV-03: resolvePluginPin forwards auth while resolving a named priva
   // arrange
   const refPin = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0";
   const { gitOps, state } = createGitOps({ remoteResolveMap: { private: refPin } });
-  const auth = {
+  const auth: GitAuthBundle = {
     credentialOps: {
       approve: async (): Promise<void> => Promise.resolve(),
       fill: async (): Promise<null> => Promise.resolve(null),
       reject: async (): Promise<void> => Promise.resolve(),
     },
     host: "gitlab.example.com",
-    onAuthRequired: async (): Promise<{ ok: false; reason: string; authAttempted: true }> =>
-      Promise.resolve({ authAttempted: true, ok: false, reason: "denied" }),
+    kind: "stored-credential",
   };
   const source: UrlSource = {
     kind: "url",
@@ -786,7 +818,7 @@ void test("PROV-03: resolvePluginPin forwards auth while resolving a named priva
     ref: "private",
   });
   assert.deepEqual(state.resolveRemoteRefCalls, [
-    { auth, ref: "private", url: "https://gitlab.example.com/o/r.git" },
+    { auth, ref: "private", url: "https://gitlab.example.com/o/r" },
   ]);
 });
 
@@ -817,11 +849,11 @@ void test("D-77-04: resolvePluginPin returns the git-subdir url verbatim as the 
   assert.equal(resolved.pin, PIN_40);
 });
 
-void test("MURL-01 / PURL-09: resolvePluginPin sends a `.git`-suffixed url but returns the canonical suffix-less cloneUrl", async () => {
+void test("MURL-08 / PURL-09: resolvePluginPin sends the url as typed and still returns the canonical cache-key identity", async () => {
   const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
   const source: UrlSource = {
     kind: "url",
-    raw: "https://gitlab.example.com/o/r",
+    raw: "https://gitlab.example.com/o/r.git",
     url: "https://gitlab.example.com/o/r",
   };
 
@@ -830,7 +862,7 @@ void test("MURL-01 / PURL-09: resolvePluginPin sends a `.git`-suffixed url but r
   assert.equal(
     state.resolveRemoteRefCalls[0]?.url,
     "https://gitlab.example.com/o/r.git",
-    "the wire url carries the suffix",
+    "the wire url is sent as typed, keeping the user's .git decision",
   );
   assert.equal(
     resolved.cloneUrl,
@@ -839,7 +871,7 @@ void test("MURL-01 / PURL-09: resolvePluginPin sends a `.git`-suffixed url but r
   );
 });
 
-void test("MURL-01 / PURL-04: resolvePluginPin adds exactly one suffix to an already-suffixed git-subdir url", async () => {
+void test("MURL-08 / PURL-04: resolvePluginPin sends the git-subdir url to the wire verbatim, suffix and all", async () => {
   const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
   const source: GitSubdirSource = {
     kind: "git-subdir",
@@ -864,23 +896,71 @@ void test("MURL-01 / PURL-09: resolvePluginPin sends the suffixed github url and
   assert.equal(resolved.cloneUrl, "https://github.com/owner/repo");
 });
 
-void test("MURL-01 / PURL-04: materializePluginClone clones the suffixed url but keys the dir off the canonical one", async () => {
-  const locations = await freshLocations();
+void test("MURL-09: resolvePluginPin makes exactly one resolveRemoteRef attempt and a 404 keeps its original identity", async () => {
+  const notFound = Object.assign(new Error("HTTP Error: 404"), {
+    code: "HttpError",
+    data: { statusCode: 404 },
+  });
+  const { gitOps, state } = createGitOps({ resolveRemoteRefThrows: notFound });
+  const source: UrlSource = {
+    kind: "url",
+    raw: "https://example.com/repo",
+    url: "https://example.com/repo",
+  };
+
+  await assert.rejects(
+    () => resolvePluginPin({ source, gitOps }),
+    (error: unknown) => error === notFound,
+  );
+  assert.equal(state.resolveRemoteRefCalls.length, 1, "no retry after the 404");
+  assert.equal(state.resolveRemoteRefCalls[0]?.url, "https://example.com/repo");
+});
+
+void test("MURL-08 / PURL-04: materializePluginClone forwards the caller's wire url and keys the dir off the identity url", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps();
+  const cloneUrl = "https://gitlab.example.com/o/r";
+  const wireUrl = "https://gitlab.example.com/o/r.git";
 
   const cloneRoot = await materializePluginClone({
+    auth: publicCloneAuth(),
     locations,
-    cloneUrl: "https://gitlab.example.com/o/r",
+    cloneUrl,
+    networkUrl: wireUrl,
     pin: PIN_40,
     gitOps,
   });
 
-  assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/o/r.git");
+  assert.equal(state.cloneCalls[0]?.url, wireUrl, "the caller's wire url reaches the network");
   assert.equal(
     cloneRoot,
-    await locations.pluginCloneDir(pluginCloneKey("https://gitlab.example.com/o/r", PIN_40)),
-    "a dir keyed before the suffix change still hits warm",
+    await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40)),
+    "the disk key hashes the identity url, not the wire url",
   );
+});
+
+void test("MURL-09: materializePluginClone makes exactly one clone attempt and a 401 keeps its original identity", async (t) => {
+  const locations = await freshLocations(t);
+  const unauthorized = Object.assign(new Error("HTTP Error: 401"), {
+    code: "HttpError",
+    data: { statusCode: 401 },
+  });
+  const { gitOps, state } = createGitOps({ cloneThrows: unauthorized });
+
+  await assert.rejects(
+    () =>
+      materializePluginClone({
+        auth: publicCloneAuth(),
+        locations,
+        cloneUrl: "https://example.com/repo",
+        networkUrl: "https://example.com/repo",
+        pin: PIN_40,
+        gitOps,
+      }),
+    (error: unknown) => error === unauthorized,
+  );
+  assert.equal(state.cloneCalls.length, 1, "no retry after the 401");
+  assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
 });
 
 const MIRROR_HEAD = "fedcba9876543210fedcba9876543210fedcba98";
@@ -897,13 +977,15 @@ function mirrorGitOps(): ReturnType<typeof createGitOps> {
   });
 }
 
-void test("MIRR-01/02: mirror ABSENT materializes into staging then renames to plugin-clones/<bare-key>/, refreshes, returns HEAD", async () => {
-  const locations = await freshLocations();
+void test("MIRR-01/02: mirror ABSENT materializes into staging then renames to plugin-clones/<bare-key>/, refreshes, returns HEAD", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
 
   const { pluginRoot, resolvedSha } = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     gitOps,
   });
 
@@ -914,7 +996,8 @@ void test("MIRR-01/02: mirror ABSENT materializes into staging then renames to p
   );
   assert.equal(path.basename(pluginRoot), bareKey, "mirror root last segment is the bare key");
   assert.match(path.basename(pluginRoot), /^[0-9a-f]{12}$/, "bare 12-hex key, no sha suffix");
-  assert.equal(state.cloneCalls.length, 1, "exactly one clone on the cold mirror");
+  assert.equal(state.cloneCalls.length, 1, "MURL-09: exactly one clone attempt");
+  assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
   // The mirror tracks a moving ref -- it MUST NOT checkout a fixed 40-hex pin.
   assert.ok(
     !state.checkoutCalls.some((c) => /^[a-f0-9]{40}$/i.test(c.ref)),
@@ -923,39 +1006,70 @@ void test("MIRR-01/02: mirror ABSENT materializes into staging then renames to p
   assert.equal(resolvedSha, MIRROR_HEAD, "resolvedSha comes from resolveRef(HEAD)");
 });
 
-void test("MURL-01 / PURL-04: materializeOrRefreshPluginMirror clones the suffixed url but keys the mirror off the canonical one", async () => {
-  const locations = await freshLocations();
+void test("MURL-08 / PURL-04: materializeOrRefreshPluginMirror forwards the caller's wire url and keys the mirror off the identity url", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
+  const cloneUrl = "https://gitlab.example.com/o/r";
+  const wireUrl = "https://gitlab.example.com/o/r.git";
 
   const { pluginRoot } = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
     locations,
-    cloneUrl: "https://gitlab.example.com/o/r",
+    cloneUrl,
+    networkUrl: wireUrl,
     gitOps,
   });
 
-  assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/o/r.git");
+  assert.equal(state.cloneCalls[0]?.url, wireUrl, "the caller's wire url reaches the network");
   assert.equal(
     pluginRoot,
-    await locations.pluginCloneDir(pluginMirrorKey("https://gitlab.example.com/o/r")),
-    "a mirror keyed before the suffix change still hits warm",
+    await locations.pluginCloneDir(pluginMirrorKey(cloneUrl)),
+    "the mirror key hashes the identity url, not the wire url",
   );
 });
 
-void test("MIRR-02: mirror PRESENT (warm) refreshes in place via refreshGitHubClone rather than short-circuiting", async () => {
-  const locations = await freshLocations();
+void test("MURL-09: materializeOrRefreshPluginMirror makes exactly one clone attempt and a 404 keeps its original identity", async (t) => {
+  const locations = await freshLocations(t);
+  const notFound = Object.assign(new Error("HTTP Error: 404"), {
+    code: "HttpError",
+    data: { statusCode: 404 },
+  });
+  const { gitOps, state } = createGitOps({ cloneThrows: notFound });
+
+  await assert.rejects(
+    () =>
+      materializeOrRefreshPluginMirror({
+        auth: publicCloneAuth(),
+        locations,
+        cloneUrl: "https://example.com/repo",
+        networkUrl: "https://example.com/repo",
+        gitOps,
+      }),
+    (error: unknown) => error === notFound,
+  );
+  assert.equal(state.cloneCalls.length, 1, "no retry after the 404");
+  assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
+});
+
+void test("MIRR-02: mirror PRESENT (warm) refreshes in place via refreshGitHubClone rather than short-circuiting", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
 
   await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     gitOps,
   });
   const fetchesAfterFirst = state.fetchCalls.length;
   const clonesAfterFirst = state.cloneCalls.length;
 
   const second = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     gitOps,
   });
 
@@ -967,18 +1081,22 @@ void test("MIRR-02: mirror PRESENT (warm) refreshes in place via refreshGitHubCl
   assert.equal(second.resolvedSha, MIRROR_HEAD);
 });
 
-void test("MIRR-02: two successive calls both succeed; the second refreshes rather than throwing (idempotent)", async () => {
-  const locations = await freshLocations();
+void test("MIRR-02: two successive calls both succeed; the second refreshes rather than throwing (idempotent)", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps } = mirrorGitOps();
 
   const first = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     gitOps,
   });
   const second = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     gitOps,
   });
 
@@ -986,8 +1104,8 @@ void test("MIRR-02: two successive calls both succeed; the second refreshes rath
   assert.equal(second.resolvedSha, MIRROR_HEAD);
 });
 
-void test("MIRR-01: ref-set mirror clones singleBranch with the ref hint and tracks it (no fixed-pin checkout)", async () => {
-  const locations = await freshLocations();
+void test("MIRR-01: ref-set mirror clones singleBranch with the ref hint and tracks it (no fixed-pin checkout)", async (t) => {
+  const locations = await freshLocations(t);
   const TAG_HEAD = "0011223344556677889900112233445566778899";
   const { gitOps, state } = createGitOps({
     head: TAG_HEAD,
@@ -996,8 +1114,10 @@ void test("MIRR-01: ref-set mirror clones singleBranch with the ref hint and tra
   });
 
   const { resolvedSha } = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     ref: "v2.0.0",
     gitOps,
   });
@@ -1011,25 +1131,25 @@ void test("MIRR-01: ref-set mirror clones singleBranch with the ref hint and tra
   assert.equal(resolvedSha, TAG_HEAD);
 });
 
-void test("PROV-03: a private mirror forwards auth through clone and refresh fetch", async () => {
+void test("PROV-03: a private mirror forwards auth through clone and refresh fetch", async (t) => {
   // arrange
-  const locations = await freshLocations();
+  const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
-  const auth = {
+  const auth: GitAuthBundle = {
     credentialOps: {
       approve: async (): Promise<void> => Promise.resolve(),
       fill: async (): Promise<null> => Promise.resolve(null),
       reject: async (): Promise<void> => Promise.resolve(),
     },
     host: "gitlab.example.com",
-    onAuthRequired: async (): Promise<{ ok: false; reason: string; authAttempted: true }> =>
-      Promise.resolve({ authAttempted: true, ok: false, reason: "denied" }),
+    kind: "stored-credential",
   };
 
   // act
   const result = await materializeOrRefreshPluginMirror({
     locations,
     cloneUrl: "https://gitlab.example.com/o/r",
+    networkUrl: "https://gitlab.example.com/o/r",
     gitOps,
     auth,
   });
@@ -1043,9 +1163,9 @@ void test("PROV-03: a private mirror forwards auth through clone and refresh fet
   assert.equal(state.fetchCalls[0]?.auth, auth);
 });
 
-void test("MIRR-02: the default git surface fails locally on an invalid warm mirror", async () => {
+void test("MIRR-02: the default git surface fails locally on an invalid warm mirror", async (t) => {
   // arrange
-  const locations = await freshLocations();
+  const locations = await freshLocations(t);
   const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
   await mkdir(mirrorRoot, { recursive: true });
   let refreshError: unknown;
@@ -1053,8 +1173,10 @@ void test("MIRR-02: the default git surface fails locally on an invalid warm mir
   // act
   try {
     await materializeOrRefreshPluginMirror({
+      auth: publicCloneAuth(),
       locations,
       cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
     });
   } catch (error) {
     refreshError = error;
@@ -1069,8 +1191,8 @@ void test("MIRR-02: the default git surface fails locally on an invalid warm mir
   assert.equal(await pathExists(mirrorRoot), true);
 });
 
-void test("MIRR-03: a concurrent create losing the rename race treats the winner's dir as the warm mirror (no throw)", async () => {
-  const locations = await freshLocations();
+void test("MIRR-03: a concurrent create losing the rename race treats the winner's dir as the warm mirror (no throw)", async (t) => {
+  const locations = await freshLocations(t);
   const keyDir = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
 
   // A concurrent winner materializes the mirror dir AFTER our presence check but
@@ -1091,8 +1213,10 @@ void test("MIRR-03: a concurrent create losing the rename race treats the winner
   };
 
   const { pluginRoot, resolvedSha } = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
     gitOps: racingGitOps,
   });
 
@@ -1100,15 +1224,17 @@ void test("MIRR-03: a concurrent create losing the rename race treats the winner
   assert.equal(resolvedSha, MIRROR_HEAD, "still reads HEAD from the winner's tree");
 });
 
-void test("MIRR-01/03: a clone failure cleans staging and rethrows the original error", async () => {
-  const locations = await freshLocations();
+void test("MIRR-01/03: a clone failure cleans staging and rethrows the original error", async (t) => {
+  const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps({ cloneThrows: new Error("mirror clone boom") });
 
   await assert.rejects(
     () =>
       materializeOrRefreshPluginMirror({
+        auth: publicCloneAuth(),
         locations,
         cloneUrl: "https://example.com/repo",
+        networkUrl: "https://example.com/repo",
         gitOps,
       }),
     /mirror clone boom/,
@@ -1124,11 +1250,15 @@ void test("MIRR-01/03: a clone failure cleans staging and rethrows the original 
 const GITHUB_REPO_URL = "https://github.com/owner/repo";
 const OTHER_REPO_URL = "https://other.example.com/different";
 
-async function buildMarketplaceCheckout(options: {
-  originUrl?: string;
-  plugins: unknown[];
-}): Promise<string> {
+async function buildMarketplaceCheckout(
+  t: TestContext,
+  options: {
+    originUrl?: string;
+    plugins: unknown[];
+  },
+): Promise<string> {
   const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "clone-cache-marketplace-"));
+  t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
   await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
   await mkdir(path.join(marketplaceRoot, "plugins", "foo", ".claude-plugin"), {
     recursive: true,
@@ -1198,10 +1328,10 @@ async function stagingEntries(locations: ScopedLocations): Promise<string[]> {
   }
 }
 
-void test("SEED-01/03: same-repository git source kinds seed once in manifest order and unrelated kinds stay cold", async () => {
+void test("SEED-01/03: same-repository git source kinds seed once in manifest order and unrelated kinds stay cold", async (t) => {
   // arrange
-  const locations = await freshLocations();
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [
       { name: "url", source: GITHUB_REPO_URL },
@@ -1232,10 +1362,10 @@ void test("SEED-01/03: same-repository git source kinds seed once in manifest or
   assert.deepEqual(await stagingEntries(locations), []);
 });
 
-void test("SEED-02: a path marketplace derives its canonical URL from the local origin config", async () => {
+void test("SEED-02: a path marketplace derives its canonical URL from the local origin config", async (t) => {
   // arrange
-  const locations = await freshLocations();
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
@@ -1249,10 +1379,10 @@ void test("SEED-02: a path marketplace derives its canonical URL from the local 
   assert.equal(await pathExists(mirrorRoot), true);
 });
 
-void test("SEED-02: a path marketplace without an origin remote leaves the clone cache empty", async () => {
+void test("SEED-02: a path marketplace without an origin remote leaves the clone cache empty", async (t) => {
   // arrange
-  const locations = await freshLocations();
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
   await saveMarketplace(locations, marketplaceRoot, marketplaceRoot);
@@ -1265,10 +1395,11 @@ void test("SEED-02: a path marketplace without an origin remote leaves the clone
   assert.equal(await pathExists(mirrorRoot), false);
 });
 
-void test("SEED-02: a path marketplace without git metadata leaves the clone cache empty", async () => {
+void test("SEED-02: a path marketplace without git metadata leaves the clone cache empty", async (t) => {
   // arrange
-  const locations = await freshLocations();
+  const locations = await freshLocations(t);
   const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "clone-cache-nongit-"));
+  t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
   await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
   await writeFile(
     path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
@@ -1287,10 +1418,10 @@ void test("SEED-02: a path marketplace without git metadata leaves the clone cac
   assert.equal(await pathExists(mirrorRoot), false);
 });
 
-void test("SEED-02: an origin that is not a git source leaves the clone cache empty", async () => {
+void test("SEED-02: an origin that is not a git source leaves the clone cache empty", async (t) => {
   // arrange
-  const locations = await freshLocations();
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: "/local/checkout",
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
@@ -1304,10 +1435,10 @@ void test("SEED-02: an origin that is not a git source leaves the clone cache em
   assert.equal(await pathExists(mirrorRoot), false);
 });
 
-void test("SEED-02: an unsupported stored marketplace source leaves the clone cache empty", async () => {
+void test("SEED-02: an unsupported stored marketplace source leaves the clone cache empty", async (t) => {
   // arrange
-  const locations = await freshLocations();
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
@@ -1324,10 +1455,10 @@ void test("SEED-02: an unsupported stored marketplace source leaves the clone ca
   assert.equal(await pathExists(mirrorRoot), false);
 });
 
-void test("SEED-01: an absent marketplace name is a complete no-op", async () => {
+void test("SEED-01: an absent marketplace name is a complete no-op", async (t) => {
   // arrange
-  const locations = await freshLocations();
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
@@ -1340,10 +1471,10 @@ void test("SEED-01: an absent marketplace name is a complete no-op", async () =>
   assert.equal(await pathExists(path.join(locations.extensionRoot, "plugin-clones")), false);
 });
 
-void test("SEED-01: an existing mirror is preserved as a warm-cache win", async () => {
+void test("SEED-01: an existing mirror is preserved as a warm-cache win", async (t) => {
   // arrange
-  const locations = await freshLocations();
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
@@ -1363,10 +1494,10 @@ void test("SEED-01: an existing mirror is preserved as a warm-cache win", async 
   );
 });
 
-void test("SEED-04: reachable pins seed per-SHA clones in exact manifest order", async () => {
+void test("SEED-04: reachable pins seed per-SHA clones in exact manifest order", async (t) => {
   // arrange
-  const locations = await freshLocations();
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [
       gitSubdirEntry("first", GITHUB_REPO_URL, { sha: PIN_40 }),
@@ -1391,10 +1522,10 @@ void test("SEED-04: reachable pins seed per-SHA clones in exact manifest order",
   assert.deepEqual(await stagingEntries(locations), []);
 });
 
-void test("SEED-04: an unreachable pin is cleaned and a later unpinned entry still seeds", async () => {
+void test("SEED-04: an unreachable pin is cleaned and a later unpinned entry still seeds", async (t) => {
   // arrange
-  const locations = await freshLocations();
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [
       gitSubdirEntry("pinned", GITHUB_REPO_URL, { sha: PIN_40 }),
@@ -1416,10 +1547,10 @@ void test("SEED-04: an unreachable pin is cleaned and a later unpinned entry sti
   assert.deepEqual(await stagingEntries(locations), []);
 });
 
-void test("SEED-04: a concurrent winner preserves its clone and the losing staging tree is cleaned", async () => {
+void test("SEED-04: a concurrent winner preserves its clone and the losing staging tree is cleaned", async (t) => {
   // arrange
-  const locations = await freshLocations();
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [gitSubdirEntry("pinned", GITHUB_REPO_URL, { sha: PIN_40 })],
   });
@@ -1443,10 +1574,10 @@ void test("SEED-04: a concurrent winner preserves its clone and the losing stagi
   assert.deepEqual(await stagingEntries(locations), []);
 });
 
-void test("SEED-04: a later-call rename failure is isolated and the next entry still seeds", async () => {
+void test("SEED-04: a later-call rename failure is isolated and the next entry still seeds", async (t) => {
   // arrange
-  const locations = await freshLocations();
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [
       gitSubdirEntry("pinned", GITHUB_REPO_URL, { sha: PIN_40 }),
@@ -1493,9 +1624,10 @@ void test("PURL-03: a non-subdirectory git source resolves to the clone root", a
   });
 });
 
-void test("PURL-03: a materialized git subdirectory resolves beneath the clone root", async () => {
+void test("PURL-03: a materialized git subdirectory resolves beneath the clone root", async (t) => {
   // arrange
   const cloneRoot = await mkdtemp(path.join(tmpdir(), "clone-cache-subdir-"));
+  t.after(() => rm(cloneRoot, { recursive: true, force: true }));
   const pluginRoot = path.join(cloneRoot, "plugins", "foo");
   await mkdir(pluginRoot, { recursive: true });
   const source: GitSubdirSource = {
@@ -1512,9 +1644,10 @@ void test("PURL-03: a materialized git subdirectory resolves beneath the clone r
   assert.deepEqual(resolved, { kind: "materialized", pluginRoot, resolvedSha: PIN_40 });
 });
 
-void test("PURL-03: an escaping git subdirectory preserves the complete containment result", async () => {
+void test("PURL-03: an escaping git subdirectory preserves the complete containment result", async (t) => {
   // arrange
   const cloneRoot = await mkdtemp(path.join(tmpdir(), "clone-cache-escape-"));
+  t.after(() => rm(cloneRoot, { recursive: true, force: true }));
   const source: GitSubdirSource = {
     kind: "git-subdir",
     path: "../outside",
@@ -1532,9 +1665,10 @@ void test("PURL-03: an escaping git subdirectory preserves the complete containm
   });
 });
 
-void test("PURL-03: a missing git subdirectory preserves the complete missing result", async () => {
+void test("PURL-03: a missing git subdirectory preserves the complete missing result", async (t) => {
   // arrange
   const cloneRoot = await mkdtemp(path.join(tmpdir(), "clone-cache-missing-"));
+  t.after(() => rm(cloneRoot, { recursive: true, force: true }));
   const source: GitSubdirSource = {
     kind: "git-subdir",
     path: "plugins/missing",

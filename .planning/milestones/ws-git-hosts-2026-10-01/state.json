@@ -1,0 +1,28 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "any-git-host — Any Git Host",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Private repos on any git host",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Endpoints that answer only at the verbatim URL",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "`marketplace add` recovers from its own leftover clone",
+      "status": "complete"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
+  },
+  "updated_at": "2026-09-30T16:17:55.747Z"
+}
