@@ -57,11 +57,13 @@ npm run format         # Prettier autoformat
 pre-commit run --all-files
 ```
 
-`check:changed` checks the edited source/test pairs and follows production imports, re-exports, and type references to consumer tests. It also runs incremental type checking, affected-file linting, cached formatting, source/test pairing, and global Fallow. Shared test helpers, removed files, configuration, tooling, and unknown inputs broaden to the full check and all-pair coverage. A focused pass is feedback during work. Run the full `npm run check` before completion to cover architecture rules, integration, full typed lint, and unread members.
+`check:changed` checks the edited source/test pairs and follows production imports, re-exports, and type references to consumer tests. It also runs incremental type checking, affected-file linting, cached formatting, source/test pairing, and global Fallow. Shared test helpers, removed files, configuration, tooling, and unknown inputs broaden to the full check and all-pair coverage. Ordinary quick tasks and individual plan tasks may complete with focused checks covering their full change. Run the full `npm run check` for combined GSD merge/phase verification and final PR/release handoff to cover architecture rules, integration, full typed lint, and unread members.
+
+Use the owner test while editing, then run the required pre-commit hooks. They already run `check:changed`, so running both separately normally duplicates work. A passing hook supplies the task's focused evidence when it covers the whole task; record that scope without claiming the full project passed. See `skills/local-verification/SKILL.md` for multi-commit tasks and reuse of unchanged verification results.
 
 Use `npm run test:modules`, `npm run test:architecture`, or `npm run test:analyzers` to run one part of the unit suite. `npm test` and unit coverage still run the complete suite. After committing a task, give `check:changed` its starting commit with `--base`; its default HEAD comparison then contains no committed changes.
 
-TypeScript and Prettier keep disposable caches under `node_modules/.cache/`. TypeScript still checks the project dependency graph. ESLint's full completion check remains uncached. Local commit hooks format selected files and run `check:changed`; member analysis and the full typed lint run at completion and whenever changed checks broaden to the full command.
+TypeScript and Prettier keep disposable caches under `node_modules/.cache/`. TypeScript still checks the project dependency graph. ESLint's full check remains uncached. Local commit hooks format selected files and run `check:changed`; member analysis and full typed lint run at the combined verification/handoff boundary and whenever changed checks broaden to the full command.
 
 Direct coverage runs each source/test pair in a separate process with its own coverage report. It runs up to four pairs at once, limited by the available CPUs. `TEST_CONCURRENCY` sets the worker limit for the gate and the report command. If you need serial output for diagnosis, set the limit to one:
 

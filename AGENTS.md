@@ -39,7 +39,7 @@ Rules for TypeScript live under `skills/` and are not registered with any runtim
 
 ### Build verification
 
-Read `skills/local-verification/SKILL.md` when planning or running checks. Use focused checks during work and the full `npm run check` at completion. A passing full result can serve repeated GSD gates only when its inputs remain unchanged, as defined in that skill. Local pre-commit hooks use `check:changed`.
+Read `skills/local-verification/SKILL.md` when planning or running checks. Ordinary quick tasks, individual plan tasks, and review fixes may complete with task-wide focused evidence, normally supplied by the required pre-commit hooks. Do not routinely run `check:changed` separately before those hooks. Full `npm run check` remains required for combined GSD merge/phase gates and final PR/release handoff, with unchanged-input reuse as defined in the skill. This project scheduling policy governs the TypeScript and GSD skill instructions; a focused result is not full-project verification.
 
 ### Versioning
 
