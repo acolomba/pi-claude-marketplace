@@ -1250,11 +1250,15 @@ void test("MIRR-01/03: a clone failure cleans staging and rethrows the original 
 const GITHUB_REPO_URL = "https://github.com/owner/repo";
 const OTHER_REPO_URL = "https://other.example.com/different";
 
-async function buildMarketplaceCheckout(options: {
-  originUrl?: string;
-  plugins: unknown[];
-}): Promise<string> {
+async function buildMarketplaceCheckout(
+  t: TestContext,
+  options: {
+    originUrl?: string;
+    plugins: unknown[];
+  },
+): Promise<string> {
   const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "clone-cache-marketplace-"));
+  t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
   await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
   await mkdir(path.join(marketplaceRoot, "plugins", "foo", ".claude-plugin"), {
     recursive: true,
@@ -1327,7 +1331,7 @@ async function stagingEntries(locations: ScopedLocations): Promise<string[]> {
 void test("SEED-01/03: same-repository git source kinds seed once in manifest order and unrelated kinds stay cold", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [
       { name: "url", source: GITHUB_REPO_URL },
@@ -1361,7 +1365,7 @@ void test("SEED-01/03: same-repository git source kinds seed once in manifest or
 void test("SEED-02: a path marketplace derives its canonical URL from the local origin config", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
@@ -1378,7 +1382,7 @@ void test("SEED-02: a path marketplace derives its canonical URL from the local 
 void test("SEED-02: a path marketplace without an origin remote leaves the clone cache empty", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
   await saveMarketplace(locations, marketplaceRoot, marketplaceRoot);
@@ -1395,6 +1399,7 @@ void test("SEED-02: a path marketplace without git metadata leaves the clone cac
   // arrange
   const locations = await freshLocations(t);
   const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "clone-cache-nongit-"));
+  t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
   await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
   await writeFile(
     path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
@@ -1416,7 +1421,7 @@ void test("SEED-02: a path marketplace without git metadata leaves the clone cac
 void test("SEED-02: an origin that is not a git source leaves the clone cache empty", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: "/local/checkout",
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
@@ -1433,7 +1438,7 @@ void test("SEED-02: an origin that is not a git source leaves the clone cache em
 void test("SEED-02: an unsupported stored marketplace source leaves the clone cache empty", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
@@ -1453,7 +1458,7 @@ void test("SEED-02: an unsupported stored marketplace source leaves the clone ca
 void test("SEED-01: an absent marketplace name is a complete no-op", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
@@ -1469,7 +1474,7 @@ void test("SEED-01: an absent marketplace name is a complete no-op", async (t) =
 void test("SEED-01: an existing mirror is preserved as a warm-cache win", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [gitSubdirEntry("subdir", GITHUB_REPO_URL)],
   });
@@ -1492,7 +1497,7 @@ void test("SEED-01: an existing mirror is preserved as a warm-cache win", async 
 void test("SEED-04: reachable pins seed per-SHA clones in exact manifest order", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [
       gitSubdirEntry("first", GITHUB_REPO_URL, { sha: PIN_40 }),
@@ -1520,7 +1525,7 @@ void test("SEED-04: reachable pins seed per-SHA clones in exact manifest order",
 void test("SEED-04: an unreachable pin is cleaned and a later unpinned entry still seeds", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [
       gitSubdirEntry("pinned", GITHUB_REPO_URL, { sha: PIN_40 }),
@@ -1545,7 +1550,7 @@ void test("SEED-04: an unreachable pin is cleaned and a later unpinned entry sti
 void test("SEED-04: a concurrent winner preserves its clone and the losing staging tree is cleaned", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [gitSubdirEntry("pinned", GITHUB_REPO_URL, { sha: PIN_40 })],
   });
@@ -1572,7 +1577,7 @@ void test("SEED-04: a concurrent winner preserves its clone and the losing stagi
 void test("SEED-04: a later-call rename failure is isolated and the next entry still seeds", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const marketplaceRoot = await buildMarketplaceCheckout({
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
     originUrl: GITHUB_REPO_URL,
     plugins: [
       gitSubdirEntry("pinned", GITHUB_REPO_URL, { sha: PIN_40 }),
@@ -1619,9 +1624,10 @@ void test("PURL-03: a non-subdirectory git source resolves to the clone root", a
   });
 });
 
-void test("PURL-03: a materialized git subdirectory resolves beneath the clone root", async () => {
+void test("PURL-03: a materialized git subdirectory resolves beneath the clone root", async (t) => {
   // arrange
   const cloneRoot = await mkdtemp(path.join(tmpdir(), "clone-cache-subdir-"));
+  t.after(() => rm(cloneRoot, { recursive: true, force: true }));
   const pluginRoot = path.join(cloneRoot, "plugins", "foo");
   await mkdir(pluginRoot, { recursive: true });
   const source: GitSubdirSource = {
@@ -1638,9 +1644,10 @@ void test("PURL-03: a materialized git subdirectory resolves beneath the clone r
   assert.deepEqual(resolved, { kind: "materialized", pluginRoot, resolvedSha: PIN_40 });
 });
 
-void test("PURL-03: an escaping git subdirectory preserves the complete containment result", async () => {
+void test("PURL-03: an escaping git subdirectory preserves the complete containment result", async (t) => {
   // arrange
   const cloneRoot = await mkdtemp(path.join(tmpdir(), "clone-cache-escape-"));
+  t.after(() => rm(cloneRoot, { recursive: true, force: true }));
   const source: GitSubdirSource = {
     kind: "git-subdir",
     path: "../outside",
@@ -1658,9 +1665,10 @@ void test("PURL-03: an escaping git subdirectory preserves the complete containm
   });
 });
 
-void test("PURL-03: a missing git subdirectory preserves the complete missing result", async () => {
+void test("PURL-03: a missing git subdirectory preserves the complete missing result", async (t) => {
   // arrange
   const cloneRoot = await mkdtemp(path.join(tmpdir(), "clone-cache-missing-"));
+  t.after(() => rm(cloneRoot, { recursive: true, force: true }));
   const source: GitSubdirSource = {
     kind: "git-subdir",
     path: "plugins/missing",
