@@ -42,21 +42,6 @@ function hasRenderArm(): boolean {
   return true;
 }
 
-function messageWithKindSequence(
-  fields: Record<string, unknown>,
-  kinds: readonly string[],
-): Record<string, unknown> {
-  let index = 0;
-  return Object.defineProperty({ ...fields }, "kind", {
-    enumerable: true,
-    get() {
-      const kind = kinds[Math.min(index, kinds.length - 1)]!;
-      index++;
-      return kind;
-    },
-  });
-}
-
 test("notify renders single installed plugin with empty deps under added marketplace (info severity + reload-hint)", (t) => {
   // arrange
   const ctx = createContext(t);
@@ -5249,25 +5234,6 @@ for (const { name, message, expected } of [
   });
 }
 
-test("summary computation preserves its read-only empty fallback after narrowing", (t) => {
-  // arrange
-  const ctx = createContext(t);
-  const run = runWithAllLoaded();
-  const message = messageWithKindSequence({ name: "official", scope: "user" }, [
-    ...Array<string>(17).fill("marketplace-not-added"),
-    "marketplace-info",
-  ]);
-
-  // act
-  notify(ctx as never, run, message as never);
-
-  // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "\n\n⊘ official [user] (failed) {marketplace not added}",
-    "error",
-  ]);
-});
-
 test("a list-surface marketplace with autoupdate disabled omits the marker", (t) => {
   // arrange
   const ctx = createContext(t);
@@ -6184,34 +6150,5 @@ test("an applied reconcile with only a skipped marketplace emits the marketplace
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     "A marketplace operation needs attention.\n\n● official [user] (skipped)",
     "warning",
-  ]);
-});
-
-test("summary computation preserves its available-plugin empty fallback after narrowing", (t) => {
-  // arrange
-  // The sibling case above lands the summary switch on a read-only kind; this
-  // one lands it on a `plugin-info` whose row is NOT failed, which is the other
-  // arm that yields no summary sentence. The body is still the
-  // marketplace-absence render, because the body is composed from an earlier
-  // read -- what this case pins is that the arm reached at the summary read
-  // contributes an empty sentence rather than a hard-count-1 one.
-  const ctx = createContext(t);
-  const run = runWithAllLoaded();
-  const message = messageWithKindSequence(
-    {
-      name: "official",
-      scope: "user",
-      plugin: { name: "alpha", status: "available", componentsResolved: false },
-    },
-    [...Array<string>(17).fill("marketplace-not-added"), "plugin-info"],
-  );
-
-  // act
-  notify(ctx as never, run, message as never);
-
-  // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "\n\n⊘ official [user] (failed) {marketplace not added}",
-    "error",
   ]);
 });

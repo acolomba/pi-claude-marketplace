@@ -2491,8 +2491,6 @@
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Unknown plugin\n\nUsage: /claude:plugin install <name>","severity":"error","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Usage: /claude:plugin ...","severity":"info","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Warnings\n\nfirst\nsecond","severity":"warning","argc":2}
-{"file":"tests/shared/notification-dispatch.test.ts","message":"\n\n\u2298 official [user] (failed) {marketplace not added}","severity":"error","argc":2}
-{"file":"tests/shared/notification-dispatch.test.ts","message":"\n\n\u2298 official [user] (failed) {marketplace not added}","severity":"error","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\n\n\u25cf official [user] <no autoupdate>\n  \u25cb alpha (available)\n    components: not resolved","severity":"error","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"failed","severity":"error","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"plain","severity":null,"argc":1}

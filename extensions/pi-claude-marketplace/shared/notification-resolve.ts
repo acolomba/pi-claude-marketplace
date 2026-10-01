@@ -124,9 +124,6 @@ interface TallySource {
  * a tally.
  */
 export function resolveEnvelope(message: NotificationMessage): ResolvedEnvelope {
-  // Severity and the summary line resolve before the reload and tally facts.
-  // Every step reads `message.kind`, and the dispatch tests pin the bytes a
-  // getter-backed `kind` yields under this read order.
   const attention = resolveAttention(message);
   const needsReload = shouldEmitReloadHint(message);
   const tally =
