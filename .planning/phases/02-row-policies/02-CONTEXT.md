@@ -53,10 +53,16 @@ on 2026-10-01; no new Claude Code behavior or divergence requires research.
 - **D-06:** Keep phase 1's shared `NotificationRun`, resolved reasons and
   failures, and internal readonly TypeScript model. No new probe occurs in
   rendering. Internal policy data is not the future public JSON schema.
-- **D-07:** The phase closes with `npm run check` passing and the committed
-  corpus unchanged. Use phase 1's accepted current baseline: 2,661 corpus
-  entries and the catalog at upstream commit `e40d3dda` (206 states, 26,848
-  bytes). Do not recapture or bless a changed baseline to pass the refactor.
+- **D-07:** The phase closes with `npm run check` passing and production
+  output unchanged. Starting baseline: 2,661 corpus entries and the catalog
+  at upstream commit `e40d3dda` (206 states, 26,848 bytes). On 2026-10-01 the
+  user approved a narrow exception: "yes, narrow update is fine". Replace
+  only the 25 synthetic callback emissions enumerated in `02-RESEARCH.md`
+  with the migrated tests' real-policy emissions. Record exact before/after
+  triples, owner files, multiplicities, and the behavior each test preserves.
+  Keep severity, argument count, and all other corpus occurrences unchanged;
+  keep the production catalog unchanged. No full recapture, blanket acceptance,
+  production template flexibility, or replayed literals to pass the corpus.
 
 ### Agent's Discretion
 

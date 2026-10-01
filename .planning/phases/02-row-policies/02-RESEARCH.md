@@ -1,5 +1,12 @@
 # Phase 2: Row Policies - Research
 
+> Disposition recorded after research: on 2026-10-01 the user approved the
+> narrow 25-entry synthetic corpus update: "yes, narrow update is fine".
+> Current CONTEXT.md D-07 supersedes the original frozen-corpus constraint
+> quoted below and resolves the open question. Use appendix option 2 with
+> exact before/after evidence; every other occurrence and catalog byte stays
+> unchanged. Historical research observations below are retained as evidence.
+
 **Researched:** 2026-10-01
 **Domain:** Internal TypeScript notification policy and text formatting
 **Confidence:** MEDIUM — direct source observations; one acceptance conflict needs disposition

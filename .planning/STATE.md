@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 2
 current_phase_name: Row Policies
-status: planning
-stopped_at: "Autonomous from phase 2: research complete; awaiting synthetic corpus disposition before planning"
-last_updated: "2026-10-01T20:41:48.812Z"
+status: executing
+stopped_at: "Autonomous from phase 2: narrow corpus exception approved; planning resumes"
+last_updated: "2026-10-01T21:39:27.664Z"
 last_activity: 2026-10-01
 last_activity_desc: Phase 1 complete, transitioned to Phase 2
-state_head: 7b1e5f08f3233209ed809193ec67dc76b2fff7f8
+state_head: ef3ebfdae8ec023c85940bbf9e46aa7d982c7882
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 16
+  total_plans: 18
   completed_plans: 16
 milestone_name: Mode-Keyed Presentation Strategies
 ---
@@ -30,9 +30,9 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 2 — Row Policies
+Phase: 2 (Row Policies) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-10-01 — Phase 1 complete, transitioned to Phase 2
 
 Progress: [█░░░░░░░░░] 14% (1 of 7 phases fully verified; 16 plans complete)
@@ -168,9 +168,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-01T20:41:48.606Z
-**Stopped at:** Autonomous from phase 2: research complete; awaiting synthetic corpus disposition before planning
-**Resume file:** .planning/phases/02-row-policies/02-DISCUSSION-LOG.md
+**Last session:** 2026-10-01T21:27:17.478Z
+**Stopped at:** Autonomous from phase 2: narrow corpus exception approved; planning resumes
+**Resume file:** .planning/phases/02-row-policies/02-CONTEXT.md
 
 **Current work:** Milestone json-output on `features/json`. GSD now selects
 this root milestone. All six current review findings are fixed, and the
