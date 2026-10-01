@@ -3,7 +3,7 @@
 // ML-1..4 + SC-6 + NFR-5.
 //
 // READ-ONLY: NO withStateGuard (D-04 corollary). NO manifest reads
-// (ML-3 -- `loadState` reads only state.json; `notify()` is a
+// (ML-3 -- `loadState` reads only state.json; `notifyWithContext()` is a
 // pure formatter on the in-memory records). NO gitOps surface
 // (NFR-5 by construction -- list.ts does not even import platform/git
 // or DEFAULT_GIT_OPS).
@@ -12,9 +12,9 @@
 //   const scopes: Scope[] = opts.scope !== undefined ? [opts.scope] : ["project", "user"];
 //   for each scope: loadState(locationsFor(scope, cwd).extensionRoot)
 //     -> accumulate one MarketplaceNotificationMessage per state.marketplaces[<name>]
-//   notify(opts.ctx, opts.run, { marketplaces: <built array> });
+//   notifyWithContext(opts.ctx, opts.run, LIST_CONTEXT, <built array>, ...);
 // An empty top-level marketplaces array renders the `(no marketplaces)`
-//   sentinel through renderMarketplaceList. CMC-10.
+//   sentinel through the cascade emitter. CMC-10.
 // Caller-supplied order is honored end-to-end (no internal sort); the outer
 //   scopes loop is project-then-user (SC-6 / MSG-GR-3), so same-name
 //   cross-scope rows land in project-before-user order when single-name.
@@ -67,7 +67,7 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
     for (const record of Object.values(state.marketplaces)) {
       // NotificationMessage construction recipe.
       // - One MarketplaceNotificationMessage per record, emitted via one
-      //   notify(opts.ctx, opts.run, ...) call below; `plugins: []` is required.
+      //   notifyWithContext(..., LIST_CONTEXT, ...) call; `plugins: []` is required.
       // - Discriminator here: `mp.status === undefined` (list-surface arm of
       //   renderMpHeader). Unique to this orchestrator in the marketplace family.
       // - `details: MarketplaceDetails` is OPTIONAL and INDEPENDENT of status
@@ -77,7 +77,7 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
       //   sub-branch A).
       // - Explicit info severity marks this statusless inventory row as an
       //   operation for the plural tally. The UI still receives no 2nd arg.
-      //   Reload-hint is computed by notify (list surface emits none).
+      //   Resolve computes the reload hint (list surface emits none).
       // - Reference: catalog UAT `mixed-scopes` fixture (binding
       //   `<autoupdate>` + `<last-updated <iso>>` tokens).
       const autoupdate = merged.marketplaces[record.name]?.entry.autoupdate ?? false;

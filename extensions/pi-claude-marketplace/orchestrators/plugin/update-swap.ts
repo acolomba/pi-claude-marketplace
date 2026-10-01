@@ -1390,11 +1390,11 @@ export async function swapPluginUpdate(
   }
 
   // Success: WR-04 fields populated for cascade-side RH-5 composition.
-  // CMC-13: declaresAgents / declaresMcp predicate inputs
-  // mirror reinstall's effective-state contract (declares iff actually
-  // staged this update). resolveRows composes `{requires pi-subagents}` /
-  // `{requires pi-mcp}` from the command run's snapshot under the context's
-  // marker policy (D-05, D-12), iff (declares AND unloaded).
+  // CMC-13: declaresAgents / declaresMcp / declaresWorkflows reflect what
+  // was actually staged, matching reinstall's effective-state contract.
+  // resolveRows composes `{requires pi-subagents}`, `{requires pi-mcp}`, and
+  // `{requires pi-dynamic-workflows}` from the command run's snapshot under
+  // the context's marker policy (D-05, D-12), iff (declares AND unloaded).
   const stagedAgentNames = handles.agents.result.recorded.map((r) => r.generatedName);
   const stagedMcpServerNames = handles.mcp.result.recorded.map((r) => r.generatedName);
   // WARN-01 / WR-12 / D-99-03: the same per-kind degrade collection install and
