@@ -83,6 +83,18 @@ type PluginUpdate = EdgeDeps["pluginUpdate"];
 type PluginUpdateOutcome = Awaited<ReturnType<PluginUpdate>>;
 type GitFetchCall = ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetch"][number];
 
+/**
+ * A recorded fetch with its auth bundle reduced to the one comparable field.
+ * The bundle carries three closures, so a literal expectation cannot spell it;
+ * the bound host is what a wrong binding would get wrong.
+ */
+type DescribedFetchCall = Omit<GitFetchCall, "auth"> & {
+  readonly auth?: { readonly host: string };
+};
+
+/** The host every seeded url source sits on. The provider registry does not claim it. */
+const SOURCE_HOST = "gitlab.example.com";
+
 /** Written out by hand; never read back off the module under test. */
 const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]";
 
@@ -138,8 +150,8 @@ interface SeededClones {
  * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
  * `https.request` and never `globalThis.fetch`. A global-fetch spy would record
  * zero here whatever the handler did -- this repository's only `fetch` caller
- * is the device flow in `domain/github-auth.ts`, and every seeded source sits
- * on a host with no registered auth provider, so no case reaches it.
+ * is the device flow in `domain/github-auth.ts`, and no seeded source sits on a
+ * host the provider registry claims, so no case reaches it.
  */
 function installNetworkCounter(t: TestContext): () => number {
   const networkSpy = t.mock.method(https, "request", (): never => {
@@ -148,9 +160,20 @@ function installNetworkCounter(t: TestContext): () => number {
   return (): number => networkSpy.mock.callCount();
 }
 
-/** The single fetch a clone pinned to `main` produces on the refresh path. */
-function fetchOf(cloneDir: string): GitFetchCall {
-  return { dir: cloneDir, remote: "origin", ref: "main" };
+/**
+ * The single fetch a clone pinned to `main` produces on the refresh path. The
+ * refresh carries a bundle bound to the source's host even though the provider
+ * registry does not claim it, so a credential already in the user's helper is
+ * reachable (GAUTH-03).
+ */
+function fetchOf(cloneDir: string): DescribedFetchCall {
+  return { dir: cloneDir, remote: "origin", ref: "main", auth: { host: SOURCE_HOST } };
+}
+
+/** Reduce a recorded fetch to the fields an expectation can spell. */
+function describeFetch(call: GitFetchCall): DescribedFetchCall {
+  const { auth, ...dataCall } = call;
+  return { ...dataCall, ...(auth === undefined ? {} : { auth: { host: auth.host } }) };
 }
 
 /** The cascade outcome the injected plugin update port promises. */
@@ -180,8 +203,10 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
 
 /**
  * Seed one url-source marketplace pinned to `main` and return its clone
- * directory. A url source on a host with no registered auth provider refreshes
- * authless, so the git port receives a fetch carrying no credential bundle.
+ * directory. The refresh threads a bundle bound to `SOURCE_HOST`, so the git
+ * port receives a fetch carrying that bundle. The provider registry does not
+ * claim the host, so the bundle's interactive half resolves without a device
+ * flow and the credential helper is the only auth path.
  */
 async function seedMarketplace(opts: {
   readonly cwd: string;
@@ -213,8 +238,8 @@ async function seedMarketplace(opts: {
     scope: opts.scope,
     source: {
       kind: "url",
-      raw: `https://gitlab.example.com/team/${opts.name}#main`,
-      url: `https://gitlab.example.com/team/${opts.name}`,
+      raw: `https://${SOURCE_HOST}/team/${opts.name}#main`,
+      url: `https://${SOURCE_HOST}/team/${opts.name}`,
       ref: "main",
     },
     addedFromCwd: opts.cwd,
@@ -272,7 +297,7 @@ test("updates every recorded marketplace in both scopes when no name is supplied
     { message: pluralUpdateMessage(PROJECT_BETA_ROW) },
     { message: pluralUpdateMessage(USER_ALPHA_ROW) },
   ]);
-  assert.deepStrictEqual(git.state.calls.fetch, [
+  assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [
     fetchOf(clones.projectAlpha),
     fetchOf(clones.projectBeta),
     fetchOf(clones.userAlpha),
@@ -307,7 +332,9 @@ for (const { args, label, arity } of [
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: PROJECT_ALPHA_ROW }]);
-    assert.deepStrictEqual(git.state.calls.fetch, [fetchOf(clones.projectAlpha)]);
+    assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [
+      fetchOf(clones.projectAlpha),
+    ]);
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
     verify(pluginUpdate);
@@ -361,7 +388,7 @@ for (const { emissions, rows, scope, touched } of [
       notifications,
       rows.map((row) => ({ message: pluralUpdateMessage(row) })),
     );
-    assert.deepStrictEqual(git.state.calls.fetch, touched(clones).map(fetchOf));
+    assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), touched(clones).map(fetchOf));
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
     verify(pluginUpdate);
@@ -512,7 +539,7 @@ for (const { args, tally } of [
       ],
       [sharedBytes, localBytes],
     );
-    assert.deepStrictEqual(git.state.calls.fetch, [fetchOf(cloneDir)]);
+    assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [fetchOf(cloneDir)]);
     verifyBoundary();
   });
 }

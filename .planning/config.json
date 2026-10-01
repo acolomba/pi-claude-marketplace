@@ -2,8 +2,9 @@
   "model_profile": "quality",
   "model_profile_overrides": {
     "codex": {
-      "opus": "gpt-6-sol",
-      "sonnet": "gpt-6-terra"
+      "opus": "gpt-6-astra",
+      "sonnet": "gpt-6-sol",
+      "haiku": "gpt-6-luna"
     }
   },
   "git": {

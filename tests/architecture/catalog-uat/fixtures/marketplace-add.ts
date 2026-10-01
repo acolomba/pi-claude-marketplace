@@ -93,6 +93,32 @@ export const MARKETPLACE_ADD_FIXTURES: FixtureMap = {
       },
     },
 
+    // MA-14 / WR-02 / NFR-9: a recognized leftover the add could not remove.
+    // The advisory names the cleanup failure with every absolute path reduced
+    // to its last segment at the composition site.
+    "add-stale-clone-cleanup-leak": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace add",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            reasons: ["stale clone"],
+            plugins: [],
+          },
+        ],
+        advisories: [
+          "    failed to clean up marketplace leftover clone at claude-plugins-official: EACCES: permission denied, rm 'claude-plugins-official'",
+        ],
+      },
+    },
+
     "add-unsupported-source": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

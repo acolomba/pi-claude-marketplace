@@ -100,6 +100,9 @@ function fixtureGitOps(): GitOps {
     resolveRemoteRef(): Promise<string> {
       return Promise.resolve("0000000000000000000000000000000000000001");
     },
+    listRemotes(): ReturnType<GitOps["listRemotes"]> {
+      return Promise.resolve({ kind: "not-a-repo" });
+    },
   };
 }
 

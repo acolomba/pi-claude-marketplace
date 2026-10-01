@@ -25,6 +25,7 @@ function createFakeParticipant(): GitOpsContractParticipant {
     updatedOid: UPDATED_OID,
     remoteHead: UPDATED_OID,
     worktreeDir: "/memory/worktree",
+    listRemotesResult: { kind: "origin", url: REMOTE_URL },
   });
 
   return {
@@ -105,6 +106,7 @@ describe("createGitOpsFake", () => {
     const auth = {
       credentialOps: credentials.credentialOps,
       host: "git.example.invalid",
+      kind: "device-flow",
       onAuthRequired,
     } satisfies GitAuthBundle;
     const git = createGitOpsFake({

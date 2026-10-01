@@ -1,9 +1,9 @@
 ---
-name: new-workspace
-description: Create a git worktree for the current repository at ~/src/<repo>-<name> on a new branch features/<name>, via GSD's /gsd-workspace command. Use when the user asks to create a new workspace, worktree, or feature-branch environment for the current repo, or invokes /new-workspace <name>.
+name: new-gsd-workspace
+description: Create a git worktree for the current repository at ~/src/<repo>-<name> on a new branch features/<name>, via GSD's /gsd-workspace command. Use when the user asks to create a new workspace, worktree, or feature-branch environment for the current repo, or invokes /new-gsd-workspace <name>.
 ---
 
-# New Workspace
+# New GSD Workspace
 
 Given a workspace `<name>`, create it by invoking GSD's `/gsd-workspace` command with
 the name filled in — do not reimplement worktree creation directly.

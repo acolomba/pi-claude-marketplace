@@ -46,6 +46,7 @@ const gitOps = {
   forceUpdateRef: () => Promise.resolve(),
   resolveRef: () => Promise.resolve("a1b2c3d"),
   resolveRemoteRef: () => Promise.resolve("a1b2c3d"),
+  listRemotes: () => Promise.resolve({ kind: "not-a-repo" }),
 } satisfies GitOps;
 
 const pluginUpdate = (() =>

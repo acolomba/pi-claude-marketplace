@@ -102,6 +102,102 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
   assert.deepStrictEqual(calls, ["resolve", "materialize"]);
 });
 
+// D-2-01 / D-2-03: both seam calls take the identity `cloneUrl` AND the wire
+// `networkUrl`. These two cases are the only ones here whose fixture makes the
+// pair differ, so they are what holds the `networkCloneUrl(source)` argument in
+// place at each call.
+test("sends the pinned clone the identity url and the typed wire url", async (testContext) => {
+  // arrange
+  const { locations, root } = await freshLocations(testContext);
+  const cloneUrl = "https://example.com/pinned-plugin";
+  const rawUrl = "https://example.com/pinned-plugin.git";
+  const cloneRoot = path.join(root, "pinned-clone");
+  await mkdir(cloneRoot, { recursive: true });
+  const source: GitBackedSource = { kind: "url", raw: rawUrl, url: cloneUrl, sha: SHA };
+  const calls: unknown[] = [];
+  const pluginAuth = auth();
+  const seam: InstallCloneCacheSeam = {
+    resolvePluginPin() {
+      return Promise.resolve({ cloneUrl, pin: SHA });
+    },
+    // The bundle carries closures, so the recorded call keeps only the two
+    // comparable fields: the bound host and the injected credential ops.
+    materializePluginClone({ auth: bundle, ...cloneOptions }) {
+      calls.push({
+        ...cloneOptions,
+        auth: { credentialOps: bundle?.credentialOps, host: bundle?.host },
+      });
+      return Promise.resolve(cloneRoot);
+    },
+    materializeOrRefreshPluginMirror() {
+      return Promise.reject(new Error("unexpected mirror materialization"));
+    },
+  };
+
+  // act
+  const outcome = await probeInstallClone({ source, seam, locations, auth: pluginAuth });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    result: { kind: "materialized", pluginRoot: cloneRoot, resolvedSha: SHA },
+    resolvedSha: SHA,
+  });
+  assert.deepStrictEqual(calls, [
+    {
+      auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
+      cloneUrl,
+      networkUrl: rawUrl,
+      locations,
+      pin: SHA,
+    },
+  ]);
+});
+
+test("sends the unpinned mirror the identity url and the typed wire url", async (testContext) => {
+  // arrange
+  const { locations, root } = await freshLocations(testContext);
+  const cloneUrl = "https://example.com/mirror-plugin";
+  const rawUrl = "https://example.com/mirror-plugin.git";
+  const mirrorRoot = path.join(root, "mirror-clone");
+  await mkdir(mirrorRoot, { recursive: true });
+  const source: GitBackedSource = { kind: "url", raw: rawUrl, url: cloneUrl, ref: "main" };
+  const calls: unknown[] = [];
+  const pluginAuth = auth();
+  const seam: InstallCloneCacheSeam = {
+    resolvePluginPin() {
+      return Promise.reject(new Error("unexpected pin resolution"));
+    },
+    materializePluginClone() {
+      return Promise.reject(new Error("unexpected pinned materialization"));
+    },
+    materializeOrRefreshPluginMirror({ auth: bundle, ...mirrorOptions }) {
+      calls.push({
+        ...mirrorOptions,
+        auth: { credentialOps: bundle?.credentialOps, host: bundle?.host },
+      });
+      return Promise.resolve({ pluginRoot: mirrorRoot, resolvedSha: SHA });
+    },
+  };
+
+  // act
+  const outcome = await probeInstallClone({ source, seam, locations, auth: pluginAuth });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    result: { kind: "materialized", pluginRoot: mirrorRoot, resolvedSha: SHA },
+    resolvedSha: SHA,
+  });
+  assert.deepStrictEqual(calls, [
+    {
+      auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
+      cloneUrl,
+      networkUrl: rawUrl,
+      locations,
+      ref: "main",
+    },
+  ]);
+});
+
 test("returns a refreshed unpinned mirror result with ref and auth", async (testContext) => {
   // arrange
   const { locations, root } = await freshLocations(testContext);
@@ -165,13 +261,17 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
     path: "plugins/missing",
     sha: SHA,
   };
+  const pluginAuth = auth();
   const seam: InstallCloneCacheSeam = {
     resolvePluginPin() {
       return Promise.resolve({ cloneUrl: "https://example.com/mono", pin: SHA, ref: "main" });
     },
     materializePluginClone(options) {
       assert.strictEqual(options.ref, "main");
-      assert.strictEqual(options.auth, undefined);
+      assert.deepStrictEqual(
+        { credentialOps: options.auth?.credentialOps, host: options.auth?.host },
+        { credentialOps: pluginAuth.credentialOps, host: "example.com" },
+      );
       return Promise.resolve(cloneRoot);
     },
     materializeOrRefreshPluginMirror() {
@@ -180,7 +280,7 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
   };
 
   // act
-  const outcome = await probeInstallClone({ source, seam, locations, auth: auth() });
+  const outcome = await probeInstallClone({ source, seam, locations, auth: pluginAuth });
 
   // assert
   assert.deepStrictEqual(outcome, {

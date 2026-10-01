@@ -1,12 +1,15 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 import * as git from "isomorphic-git";
-import http from "isomorphic-git/http/node";
+import nodeHttpClient from "isomorphic-git/http/node";
+
+import { CrossOriginChallengeError, TooManyRedirectsError } from "../shared/errors.ts";
 
 import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
 
-import type { OnAuthRequiredFn } from "./git-auth-callbacks.ts";
-import type { CredentialOps } from "./git-credential.ts";
+import type { BuildAuthCallbacksOpts } from "./git-auth-callbacks.ts";
+import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git/http/node";
 
 /**
  * platform/git.ts -- isomorphic-git wrapper (D-18, D-19, D-20).
@@ -14,8 +17,10 @@ import type { CredentialOps } from "./git-credential.ts";
  * Uses pure-JS `isomorphic-git`, so there is no `git not found on PATH`
  * failure mode (D-21, MA-7).
  *
- * Pins `fs` (Node's built-in) and `http` (`isomorphic-git/http/node`) so
- * the marketplace orchestrators don't thread them through every call.
+ * Pins `fs` (Node's built-in) and `http` so the marketplace orchestrators
+ * don't thread them through every call. `http` is the module-private client
+ * below: it sends each hop through `isomorphic-git/http/node` and follows
+ * redirects itself, so a credential never reaches another origin (GAUTH-06).
  *
  * NOT exposed:
  *   - sparse checkout (PRD §11 deferred; isomorphic-git also doesn't support it)
@@ -29,12 +34,7 @@ import type { CredentialOps } from "./git-credential.ts";
  *
  * The wrapper is the canonical platform-git surface; the optional-auth
  * callbacks are consumed by isomorphic-git's onAuth / onAuthFailure hooks.
- * `OnAuthRequiredFn` is re-exported because the three option bundles below
- * name it, so a consumer of those options reads the seam from the same
- * module (D-13 boundary) rather than reaching past it.
  */
-
-export type { OnAuthRequiredFn };
 
 export interface CloneOptions {
   /**
@@ -43,12 +43,13 @@ export interface CloneOptions {
    */
   dir: string;
   /**
-   * Remote URL. Any `https://` git URL is accepted: github sources reconstruct
-   * their canonical `https://github.com/<owner>/<repo>.git` form, while url
-   * sources (MURL-01 / D-76-06) supply their canonical `source.url` passed
-   * through `domain/source.ts::ensureGitSuffix` -- the stored identity form is
-   * `.git`-stripped, the wire form is not. Auth is omitted for public url
-   * clones (D-76-07); see `opts.auth` below.
+   * Remote URL. Any `https://` git URL is accepted, already derived by
+   * `domain/clone-key.ts::networkCloneUrl`: github sources reconstruct their
+   * suffixed canonical `https://github.com/<owner>/<repo>.git` form, while
+   * url and git-subdir sources supply the verbatim form the user typed. The
+   * stored identity form is `.git`-stripped; the wire form is not. Callers
+   * pass a host-keyed `opts.auth` bundle (GAUTH-03); a public clone never
+   * challenges, so the bundle is not consulted.
    */
   url: string;
   /** Optional ref (branch/tag/SHA) to check out. If omitted, the default branch. */
@@ -63,7 +64,7 @@ export interface CloneOptions {
    * public-only path (no network policy change for public clones; NFR-5
    * surfaces untouched).
    */
-  auth?: { credentialOps: CredentialOps; host: string; onAuthRequired: OnAuthRequiredFn };
+  auth?: BuildAuthCallbacksOpts;
 }
 
 export interface FetchOptions {
@@ -72,7 +73,7 @@ export interface FetchOptions {
    * fetch() builds the callbacks when present and behaves as the
    * public-only path when omitted.
    */
-  auth?: { credentialOps: CredentialOps; host: string; onAuthRequired: OnAuthRequiredFn };
+  auth?: BuildAuthCallbacksOpts;
   dir: string;
   /** Default "origin". */
   remote?: string;
@@ -109,7 +110,7 @@ export interface ResolveRemoteRefOptions {
    * unpinned private-repo HEAD resolution can authenticate (PROV-03). When
    * omitted, the resolution behaves identically to the public-only path.
    */
-  auth?: { credentialOps: CredentialOps; host: string; onAuthRequired: OnAuthRequiredFn };
+  auth?: BuildAuthCallbacksOpts;
 }
 
 export interface ForceUpdateRefOptions {
@@ -121,6 +122,190 @@ export interface ForceUpdateRefOptions {
 export interface CurrentBranchOptions {
   dir: string;
 }
+
+export interface ListRemotesOptions {
+  dir: string;
+}
+
+/**
+ * D-3-03 / MA-12 / MA-13: whether `dir` holds a readable git clone and, if so,
+ * what its `origin` remote names. Five arms:
+ *   - `origin`: a readable repo whose `origin` remote records exactly one
+ *     url; `url` is that value, verbatim.
+ *   - `no-origin`: a readable repo whose `origin` remote records no url or
+ *     more than one.
+ *   - `not-a-repo`: `dir` has no `.git/config` (ENOENT/ENOTDIR).
+ *   - `permission-denied`: the process may not read `dir/.git/config`
+ *     (EACCES/EPERM).
+ *   - `unreadable`: reading `dir/.git/config` failed with any other error.
+ */
+export type ListRemotesResult =
+  | { readonly kind: "origin"; readonly url: string }
+  | { readonly kind: "no-origin" }
+  | { readonly kind: "not-a-repo" }
+  | { readonly kind: "permission-denied" }
+  | { readonly kind: "unreadable" };
+
+/** The redirect cap of `simple-get`, which `http` keeps. */
+const MAX_REDIRECTS = 10;
+
+/**
+ * WR-03: the only headers a hop keeps when its origin differs from the
+ * original request's. isomorphic-git sets `accept`, `content-type` and
+ * `git-protocol`; `simple-get` sets `accept-encoding` and `content-length`.
+ */
+const CROSS_ORIGIN_HEADERS: ReadonlySet<string> = new Set([
+  "accept",
+  "accept-encoding",
+  "content-length",
+  "content-type",
+  "git-protocol",
+  "user-agent",
+]);
+
+/** Headers that describe a request body; they go with the body. */
+const BODY_HEADERS: ReadonlySet<string> = new Set(["content-length", "content-type"]);
+
+/** Redirect statuses on which a POST is re-sent as a GET. */
+const POST_TO_GET_STATUSES: ReadonlySet<number> = new Set([301, 302]);
+
+/** Q-02: the statuses on which isomorphic-git's `discover` calls `onAuth`. */
+const CHALLENGE_STATUSES: ReadonlySet<number> = new Set([401, 203]);
+
+/** What one hop of a redirect chain passes to the next. */
+interface RedirectChain {
+  /** `URL.origin` of the original request. */
+  readonly origin: string;
+  /** Redirects followed so far. */
+  readonly redirects: number;
+  /** Whether any hop so far was on another origin than the original request's. */
+  readonly leftOrigin: boolean;
+}
+
+function headersWhere(
+  headers: Record<string, string>,
+  keep: (lowerCaseName: string) => boolean,
+): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers).filter(([name]) => keep(name.toLowerCase())));
+}
+
+/**
+ * The target of a redirect, or undefined when `response` goes back to
+ * isomorphic-git: a status outside 3xx, or a `Location` that is absent, empty
+ * or not a URL (WR-04, IN-02).
+ */
+function redirectTarget(response: GitHttpResponse, base: string): URL | undefined {
+  const { statusCode, headers = {} } = response;
+  const location = headers.location;
+  if (statusCode < 300 || statusCode >= 400 || location === undefined || location.trim() === "") {
+    return undefined;
+  }
+
+  return URL.canParse(location, base) ? new URL(location, base) : undefined;
+}
+
+/** Builds the request for the hop that `statusCode` redirected to `target`. */
+function nextHop(
+  hop: GitHttpRequest,
+  statusCode: number,
+  target: URL,
+  origin: string,
+): GitHttpRequest {
+  const { headers = {}, body, ...rest } = hop;
+  const kept =
+    target.origin === origin
+      ? headers
+      : headersWhere(headers, (name) => CROSS_ORIGIN_HEADERS.has(name));
+  if (hop.method === "POST" && POST_TO_GET_STATUSES.has(statusCode)) {
+    return {
+      ...rest,
+      url: target.href,
+      method: "GET",
+      headers: headersWhere(kept, (name) => !BODY_HEADERS.has(name)),
+    };
+  }
+
+  return { ...rest, url: target.href, headers: kept, ...(body !== undefined && { body }) };
+}
+
+async function sendHop(hop: GitHttpRequest, chain: RedirectChain): Promise<GitHttpResponse> {
+  const response = await nodeHttpClient.request({
+    ...hop,
+    fetchOptions: { followRedirects: false },
+  });
+  const target = redirectTarget(response, hop.url);
+  if (target === undefined) {
+    if (chain.leftOrigin && CHALLENGE_STATUSES.has(response.statusCode)) {
+      await response.body?.return?.();
+      throw new CrossOriginChallengeError(new URL(hop.url).origin);
+    }
+
+    return response;
+  }
+
+  await response.body?.return?.();
+  if (chain.redirects === MAX_REDIRECTS) {
+    throw new TooManyRedirectsError();
+  }
+
+  return sendHop(nextHop(hop, response.statusCode, target, chain.origin), {
+    origin: chain.origin,
+    redirects: chain.redirects + 1,
+    leftOrigin: chain.leftOrigin || target.origin !== chain.origin,
+  });
+}
+
+async function requestWithinOrigin(original: GitHttpRequest): Promise<GitHttpResponse> {
+  return sendHop(original, {
+    origin: new URL(original.url).origin,
+    redirects: 0,
+    leftOrigin: false,
+  });
+}
+
+/**
+ * The HTTP client every isomorphic-git call in this file uses (GAUTH-06).
+ *
+ * `simple-get@4.0.1`, under `isomorphic-git/http/node`, follows redirects on
+ * its own and drops `authorization` and `cookie` only when the hostname
+ * changes (node_modules/simple-get/index.js:55-60). This client sends each hop
+ * with `followRedirects: false`, gets every 3xx back unchanged, and follows
+ * the redirect itself.
+ *
+ * Origin rule (WR-03). The origin is the scheme, host and port as `URL.origin`
+ * normalizes them, compared with the original request's. A hop on another
+ * origin keeps only `accept`, `accept-encoding`, `content-length`,
+ * `content-type`, `git-protocol` and `user-agent`. The credential, a cookie
+ * and any header the credential brings stay behind. `onAuth` applies the same
+ * normalization to the bound host. Each hop starts from the previous one, so a
+ * header dropped once stays dropped, also after the chain returns to the
+ * original origin.
+ *
+ * Challenges (Q-02). When a hop answers 401 or 203 after any hop of the chain
+ * left the original origin, the client throws `CrossOriginChallengeError`
+ * before isomorphic-git's auth loop sees the response. No credential is looked
+ * up, evicted or minted for that server. git would ask its credential helper
+ * for the target's own credential, but isomorphic-git calls `onAuth` only with
+ * the original URL, so this stays the recorded DD-3 capability gap.
+ *
+ * Parity scope (IN-01). git follows a redirect only on its initial `info/refs`
+ * request (`http.followRedirects=initial`) and sends later requests to the
+ * redirected base URL. This client follows redirects on every request,
+ * including the `git-upload-pack` POST, and isomorphic-git sends every request
+ * to the original URL.
+ *
+ * The other redirect rules come from `simple-get`. After 10 redirects the next
+ * one throws `TooManyRedirectsError` (IN-03). A 3xx whose `Location` is absent,
+ * empty or not a URL is returned unchanged, and isomorphic-git raises
+ * `HttpError` with the server's status (WR-04, IN-02). The body of a redirect
+ * is discarded. A POST answered with 301 or 302 becomes a GET without its
+ * body, `content-type` and `content-length`. A POST answered with 303, 307 or
+ * 308 keeps its method, as `simple-get` does, although RFC 9110 section 15.4.4
+ * makes a 303 a GET. It also keeps its body, where `simple-get` re-sends an
+ * empty one. isomorphic-git's request bodies are arrays, so the same reference
+ * sends the same bytes again.
+ */
+const http: HttpClient = { request: requestWithinOrigin };
 
 export async function clone(opts: CloneOptions): Promise<void> {
   // When opts.auth is provided, build the isomorphic-git callbacks
@@ -288,6 +473,70 @@ export async function currentBranch(opts: CurrentBranchOptions): Promise<string 
   // undefined.
   const branch = await git.currentBranch({ fs, dir: opts.dir });
   return branch ?? undefined;
+}
+
+/**
+ * D-3-03 / MA-12 / MA-13: report whether `dir` is a readable git clone and,
+ * if so, what its `origin` remote names -- WITHOUT throwing. This is the only
+ * function in this file that reports failure as a return value instead of a
+ * throw: every sibling above throws on absence, ambiguity, or a read error,
+ * but a caller here (`marketplace add`'s leftover-clone recognition) must
+ * tell "this is definitely a foreign or unreadable tree" apart from "I could
+ * not look at all", and a catch block collapses that distinction.
+ *
+ * The function reads `<dir>/.git/config` itself, BEFORE calling
+ * `git.getConfigAll`, and uses that read alone to choose among the
+ * `not-a-repo`, `permission-denied` and `unreadable` arms. This ordering is required, not
+ * stylistic: isomorphic-git's internal filesystem wrapper
+ * (node_modules/isomorphic-git/index.js, the `read` helper backing
+ * `GitConfigManager.get`) catches every filesystem error and resolves `null`,
+ * so `git.getConfigAll({ fs, dir, path })` returns `[]` identically for a
+ * missing `.git`, an unreadable `.git/config`, and a real repo with no origin
+ * url -- wrapping the library call in a `try`/`catch` would be unreachable
+ * code, and the 100%-branch gate would have no way to cover it. The probe
+ * read doubles as the existence check, so no separate `stat` is needed.
+ *
+ * git fetches from the FIRST `url` under `origin`, and the library's
+ * single-value config read returns the LAST. The function therefore reads
+ * every `remote.origin.url` value, in file order, across every
+ * `[remote "origin"]` section, and reports `origin` only for exactly one
+ * value. No value and two or more values report `no-origin`, which the caller
+ * refuses (D-3-03, MA-13). The check is on the value's type
+ * because the library declares the values `any`, so any string, including an
+ * empty one, reaches the caller verbatim. The read folds the section name's
+ * case as git does, so a capitalized `Remote` section names the origin remote.
+ *
+ * The returned `url`, when present, is the wire form stored on disk,
+ * verbatim. This tier may not import `domain/` (the `platform` zone's
+ * `.fallowrc.json` boundary allows only `shared`), so the identity
+ * comparison against `canonicalCloneUrl` belongs to the caller.
+ */
+export async function listRemotes(opts: ListRemotesOptions): Promise<ListRemotesResult> {
+  try {
+    await fs.promises.readFile(path.join(opts.dir, ".git", "config"));
+  } catch (err) {
+    // `readFile` rejects only with a `NodeJS.ErrnoException`.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return { kind: "not-a-repo" };
+    }
+
+    if (code === "EACCES" || code === "EPERM") {
+      return { kind: "permission-denied" };
+    }
+
+    return { kind: "unreadable" };
+  }
+
+  const urls: readonly unknown[] = await git.getConfigAll({
+    fs,
+    dir: opts.dir,
+    path: "remote.origin.url",
+  });
+  const url = urls[0];
+  return urls.length === 1 && typeof url === "string"
+    ? { kind: "origin", url }
+    : { kind: "no-origin" };
 }
 
 /**

@@ -15,6 +15,8 @@
 
 import { createHash } from "node:crypto";
 
+import { ensureGitSuffix, parsePluginSource, stripSlashAndFragment } from "./source.ts";
+
 import type { GitHubSource, GitSubdirSource, UrlSource } from "./source.ts";
 
 /**
@@ -72,12 +74,60 @@ export function pluginMirrorKey(canonicalUrl: string): string {
  *     (git-subdir pluginRoot = cloneRoot + path).
  *
  * The result is the cache-key IDENTITY, not a wire url: a caller sending it to
- * the network passes it through `domain/source.ts::ensureGitSuffix` first
- * (MURL-01). Folding that suffix in here instead would rehash every
- * `plugin-clones/` directory and cold-miss every warm clone.
+ * the network derives the wire form from `networkCloneUrl` instead (D-2-03).
+ * Folding that suffix in here instead would rehash every `plugin-clones/`
+ * directory and cold-miss every warm clone.
  */
 export function canonicalCloneUrl(source: UrlSource | GitSubdirSource | GitHubSource): string {
   return source.kind === "github"
     ? `https://github.com/${source.owner}/${source.repo}`
     : source.url;
+}
+
+/**
+ * D-2-01 / D-2-03: derive the wire url actually sent to the network for a
+ * git-backed source, as distinct from `canonicalCloneUrl`'s cache-key
+ * identity above. `.git` is appended only where Claude Code appends it -- the
+ * `github` arm -- and the `url` arm preserves whatever `.git` decision the
+ * user's own input made, deriving from `source.raw` rather than the
+ * parse-time `.git`-stripped `source.url` so that decision is never silently
+ * discarded.
+ */
+export function networkCloneUrl(source: UrlSource | GitSubdirSource | GitHubSource): string {
+  switch (source.kind) {
+    case "github":
+      return ensureGitSuffix(canonicalCloneUrl(source));
+    case "url":
+      return stripSlashAndFragment(source.raw).base;
+    case "git-subdir":
+      return stripSlashAndFragment(source.url).base;
+  }
+}
+
+/**
+ * Q-03 / MA-12: whether a leftover clone's recorded `origin` url names the same
+ * repository as `source`. Both sides reduce to their `canonicalCloneUrl`
+ * identity and compare after WHATWG URL normalization, so the host compares
+ * case-insensitively (RFC 3986 section 3.2.2). github spellings fold through
+ * the parser (D-76-02), so a leftover created before that fold is recognized.
+ * A trailing `.git` and a `#<ref>` strip through the identity composition. The
+ * path compares exactly (D-3-01), so `owner/Repo` and `owner/repo` differ even
+ * where GitHub treats them as one repository (the IN-05 limitation). An origin
+ * that parses to another kind, or whose identity is not a URL, never matches.
+ */
+export function originMatchesSource(originUrl: string, source: GitHubSource | UrlSource): boolean {
+  const origin = parsePluginSource(originUrl);
+  if (origin.kind !== "github" && origin.kind !== "url") {
+    return false;
+  }
+
+  const originIdentity = normalizedIdentity(canonicalCloneUrl(origin));
+  return (
+    originIdentity !== undefined && originIdentity === normalizedIdentity(canonicalCloneUrl(source))
+  );
+}
+
+/** The WHATWG-normalized `href` of a clone identity, or undefined when it is not a URL. */
+function normalizedIdentity(identity: string): string | undefined {
+  return URL.canParse(identity) ? new URL(identity).href : undefined;
 }

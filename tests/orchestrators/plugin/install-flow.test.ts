@@ -67,6 +67,7 @@ import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification
 import { retryTree } from "./scope-tree-inventory.ts";
 
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   GitAuthBundle,
   GitOps,
@@ -5982,13 +5983,14 @@ test("FORCE-05: force cannot bypass a missing marketplace", async () => {
 
 const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 const INSTALL_REMOTE_URLS = [
+  "https://example.com/org/repo",
   "https://example.com/org/repo.git",
-  "https://example.com/org/mono.git",
+  "https://example.com/org/mono",
   "https://github.com/org/repo.git",
   "https://github.com/org/private.git",
-  "https://gitlab.com/o/r.git",
-  "https://gitlab.example.com/o/private.git",
-  "https://gitlab.example.com/o/r.git",
+  "https://gitlab.com/o/r",
+  "https://gitlab.example.com/o/private",
+  "https://gitlab.example.com/o/r",
 ] as const;
 
 function createGitOps(options: {
@@ -6171,12 +6173,15 @@ test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-url-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      // The manifest's .git suffix survives onto the wire URL (source.raw)
+      // while the parse-time identity (source.url) drops it, so this fixture
+      // also discriminates networkCloneUrl from canonicalCloneUrl.
       await seedGitSourceMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "gp",
-        source: { source: "url", url: "https://example.com/org/repo", sha: GIT_SOURCE_SHA },
+        source: { source: "url", url: "https://example.com/org/repo.git", sha: GIT_SOURCE_SHA },
         fixtureRepoDir,
       });
 
@@ -6205,6 +6210,11 @@ test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex
       );
       // One clone (cold cache) and one checkout at the pin.
       assert.equal(gitState.cloneCalls.length, 1, "one clone on cold cache");
+      assert.equal(
+        gitState.cloneCalls[0]?.url,
+        "https://example.com/org/repo.git",
+        "the wire url preserves the manifest's .git decision (source.raw)",
+      );
       assert.equal(gitState.checkoutCalls.length, 1, "one checkout at the pin");
       assert.equal(gitState.checkoutCalls[0]?.ref, GIT_SOURCE_SHA, "checkout pins the sha");
       // The clone materialized under plugin-clones/<key>/.
@@ -7111,14 +7121,14 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
       assert.deepStrictEqual(
         authCapture.calls.map(({ auth, cloneUrl }) => ({
           authHost: auth?.host,
-          authRequiredType: typeof auth?.onAuthRequired,
+          authKind: auth?.kind,
           cloneUrl,
           credentialOps: auth?.credentialOps,
         })),
         [
           {
             authHost: "github.com",
-            authRequiredType: "function",
+            authKind: "device-flow",
             cloneUrl: "https://github.com/org/repo",
             credentialOps: credentials.credentialOps,
           },
@@ -7132,7 +7142,7 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
   });
 });
 
-test("plugin install authentication: leaves a providerless clone authless", async () => {
+test("plugin install authentication: threads a host-keyed bundle for a host the registry does not claim", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-providerless-"));
     try {
@@ -7175,16 +7185,41 @@ test("plugin install authentication: leaves a providerless clone authless", asyn
         version: "sha-a1b2c3d4e5f6",
       });
       assert.deepStrictEqual(notifications, []);
-      assert.deepStrictEqual(authCapture.calls, [{ auth: undefined, cloneUrl }]);
+      assert.deepStrictEqual(
+        authCapture.calls.map(({ auth, cloneUrl: capturedUrl }) => ({
+          authHost: auth?.host,
+          authKind: auth?.kind,
+          cloneUrl: capturedUrl,
+          credentialOps: auth?.credentialOps,
+        })),
+        [
+          {
+            authHost: "gitlab.example.com",
+            authKind: "stored-credential",
+            cloneUrl,
+            credentialOps: credentials.credentialOps,
+          },
+        ],
+      );
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ auth, ref, singleBranch, url }) => ({
-          auth,
+          authHost: auth?.host,
           ref,
           singleBranch,
           url,
         })),
-        [{ auth: undefined, ref: undefined, singleBranch: undefined, url: `${cloneUrl}.git` }],
+        [
+          {
+            authHost: "gitlab.example.com",
+            ref: undefined,
+            singleBranch: undefined,
+            url: cloneUrl,
+          },
+        ],
       );
+      // Attaching a bundle consults nothing on its own: the credential helper
+      // is queried only when the server issues a challenge, and this clone
+      // succeeds without one.
       assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     } finally {
       await rm(cwd, { force: true, recursive: true });
@@ -7248,7 +7283,7 @@ test("plugin install authentication: threads the GitLab provider bundle onto the
       );
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ url }) => url),
-        [`${cloneUrl}.git`],
+        [cloneUrl],
       );
       assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
     } finally {
@@ -7294,7 +7329,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
           { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
         ],
       });
-      const authMemo = new Map<string, Awaited<ReturnType<GitAuthBundle["onAuthRequired"]>>>();
+      const authMemo = new Map<string, AuthAttemptResult>();
       const { ctx, notifications, run } = makeCtx();
 
       // act
@@ -7324,8 +7359,11 @@ test("plugin install authentication: memoizes one Device Flow result across same
         plugin: "second",
         scope: "project",
       });
-      const firstAuthResult = await authCapture.calls[0]?.auth?.onAuthRequired();
-      const secondAuthResult = await authCapture.calls[1]?.auth?.onAuthRequired();
+      const firstAuth = authCapture.calls[0]?.auth;
+      const secondAuth = authCapture.calls[1]?.auth;
+      assert.ok(firstAuth?.kind === "device-flow" && secondAuth?.kind === "device-flow");
+      const firstAuthResult = await firstAuth.onAuthRequired();
+      const secondAuthResult = await secondAuth.onAuthRequired();
 
       // assert
       assert.deepStrictEqual(
@@ -8258,7 +8296,7 @@ test("an unpinned ref-only source forwards the moving ref to its cold mirror clo
       });
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ ref, singleBranch, url }) => ({ ref, singleBranch, url })),
-        [{ ref: "main", singleBranch: true, url: "https://example.com/org/repo.git" }],
+        [{ ref: "main", singleBranch: true, url: "https://example.com/org/repo" }],
       );
       assert.deepStrictEqual(notifications, []);
       assert.equal(

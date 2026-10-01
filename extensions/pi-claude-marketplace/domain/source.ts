@@ -167,23 +167,74 @@ function unknownObjectSource(obj: Record<string, unknown>, reason: string): Unkn
   return { kind: "unknown", raw: objectRaw(obj), reason };
 }
 
+/**
+ * D-76-01: put one field of a manifest-supplied url object through the same
+ * syntactic gate the string form uses, so `http://`, `ssh://`, `git@host:`, a
+ * relative path and a github browser URL are rejected whichever field carries
+ * them. `PLUGIN_ENTRY_SCHEMA` types an entry's source as `unknown`, so a
+ * third-party marketplace manifest controls every field of the object, and the
+ * two fields `urlObjectSource` reads reach different consumers: `url` becomes
+ * the cache identity `canonicalCloneUrl` returns, and `raw` becomes the wire url
+ * `networkCloneUrl` hands to `gitOps`. Each one is gated on its own.
+ * `urlObjectSource` then admits `raw` only when its parse-time identity equals
+ * `url`'s (T-2-10).
+ *
+ * D-76-02: the gate's first arm sends a github.com url through the github
+ * parser, so it normalizes to `github` kind (one canonical identity per repo;
+ * Device Flow auth stays applicable) and a github url the parser rejects is
+ * rejected here rather than falling through to a clonable `url` source.
+ */
+function gatedUrlField(
+  obj: Record<string, unknown>,
+  field: string,
+): GitHubSource | UrlSource | UnknownSource {
+  return parseUrlSourceForm(field) ?? unknownObjectSource(obj, nonRelativeReason(field));
+}
+
 function urlObjectSource(obj: Record<string, unknown>): ParsedSource {
+  // D-76-01 / D-2-03: the identity derives from `url`, the parse-time
+  // `.git`-stripped form that `canonicalCloneUrl` returns and `pluginCloneKey`
+  // hashes, so a re-parse of a persisted source names the same
+  // `plugin-clones/<hash>` directory as the parse that stored it.
   const url = optionalString(obj, "url");
   if (url === undefined) {
     return unknownObjectSource(obj, "url source is missing url");
   }
 
-  // D-76-02: an object-form url pointing at github.com funnels through the
-  // github parser so it normalizes to `github` kind (canonical identity;
-  // Device Flow auth stays applicable), carrying the object's ref/sha fields.
-  if (url.startsWith("https://github.com/")) {
-    const parsed = parsePluginSource(url);
-    if (parsed.kind === "github") {
-      return withOptionalSourceFields(parsed, obj);
-    }
+  const identity = gatedUrlField(obj, url);
+  if (identity.kind === "unknown") {
+    return identity;
   }
 
-  return withOptionalSourceFields(parseUrlSource(url), obj);
+  // D-2-01 / D-2-03: `networkCloneUrl`'s `url` arm reads `raw`, so a stored
+  // `raw` is carried onto the parsed source verbatim and keeps the `.git`
+  // decision the user typed -- a decision `url` has already stripped. The
+  // `github` arm builds its wire url from owner/repo and never reads `raw`, so
+  // that kind keeps the `raw` its own parse produced.
+  const raw = optionalString(obj, "raw");
+  if (identity.kind !== "url" || raw === undefined) {
+    return withOptionalSourceFields(identity, obj);
+  }
+
+  const gatedRaw = gatedUrlField(obj, raw);
+  if (gatedRaw.kind === "unknown") {
+    return gatedRaw;
+  }
+
+  // T-2-10: `url` picks the auth host and the shared clone directory and `raw`
+  // picks what is fetched, so `raw` must parse to the identity `url` names.
+  // D-2-05's decorations strip to that identity. The ref stays out because a
+  // persisted record keeps it in its own field.
+  if (gatedRaw.kind !== "url" || gatedRaw.url !== identity.url) {
+    return unknownObjectSource(
+      obj,
+      `url source raw ${raw} does not name the same repository as url ${url}`,
+    );
+  }
+
+  // The gate above decides only whether `raw` is admissible; the value carried
+  // over is the manifest's own string, because the wire form is verbatim.
+  return withOptionalSourceFields({ ...identity, raw }, obj);
 }
 
 function gitSubdirObjectSource(obj: Record<string, unknown>): ParsedSource {
@@ -316,15 +367,19 @@ function parsePathSourceForm(raw: string): ParsedSource | undefined {
  *
  * D-76-02: the github-host check MUST run BEFORE the generic-https arm so
  * github.com always normalizes to the `github` kind -- one canonical identity
- * per repo, and Device Flow auth stays applicable.
+ * per repo, and Device Flow auth stays applicable. The check folds the host the
+ * way Claude Code recognizes github.com (`gitHubUrlPath`), so
+ * `https://GitHub.com/o/r`, `https://www.github.com/o/r` and
+ * `https://github.com:443/o/r` name the same repo as `https://github.com/o/r`.
  *
  * D-76-01: `http://`, `ssh://` and the `git@host:` scp form stay rejected.
  * Only `https://` URLs and local paths are accepted, so the reject must sit
  * AFTER both https arms.
  */
-function parseUrlSourceForm(raw: string): ParsedSource | undefined {
-  if (raw.startsWith("https://github.com/")) {
-    return parseGitHubUrl(raw);
+function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSource | undefined {
+  const gitHubPath = gitHubUrlPath(raw);
+  if (gitHubPath !== undefined) {
+    return parseGitHubUrl(raw, gitHubPath);
   }
 
   // MURL-01 / D-76-01: any other https host is a generic `url` source.
@@ -402,85 +457,168 @@ function parseOwnerRepo(candidate: string, raw: string): ParsedSource {
   return { kind: "github", raw, owner, repo };
 }
 
-/**
- * Shared canonicalization tail for https sources (`parseUrlSource` /
- * `parseGitHubUrl`): strip trailing slashes, split off an optional `#<ref>`
- * fragment (SP-5: empty fragment dropped), then strip a single trailing
- * `.git` suffix.
- */
-function stripUrlDecorations(input: string): { base: string; ref: string | undefined } {
+/** Strip every trailing `/` from a URL or from a `#<ref>` fragment. */
+function stripTrailingSlashes(input: string): string {
   let rest = input;
-
   while (rest.endsWith("/")) {
     rest = rest.slice(0, -1);
   }
 
-  let ref: string | undefined;
-  const hashIdx = rest.indexOf("#");
-  if (hashIdx !== -1) {
-    const frag = rest.slice(hashIdx + 1);
-    rest = rest.slice(0, hashIdx);
-    if (frag.length > 0) {
-      ref = frag;
-    }
-  }
-
-  if (rest.endsWith(".git")) {
-    rest = rest.slice(0, -".git".length);
-  }
-
-  return { base: rest, ref };
+  return rest;
 }
 
 /**
- * MURL-01 / D-76-06: the network-side counterpart to `stripUrlDecorations`.
- * Parse time strips a trailing `.git` so `sourceLogical` / `samePlannedSource`
- * compare one canonical identity per repo (D-76-01); this restores the suffix
- * on the string that actually goes to the wire.
- *
- * Host-agnostic on purpose: the `.git` suffix is a general git-hosting
- * convention, and a host that 301-redirects the suffix-less smart-HTTP
- * endpoint makes the transport replay the `POST git-upload-pack` as a bodyless
- * `GET`, which the host then rejects (observed against gitlab.com as
- * `422 Unprocessable Entity`). This mirrors the GitHub `url`-kind clone-URL
- * builder (`orchestrators/marketplace/add.ts` / `update.ts`), which already
- * appends `.git` unconditionally, rather than special-casing gitlab.com.
- * Accepted trade-off: a smart-HTTP host that serves ONLY the un-suffixed path
- * (unlike GitHub/GitLab/Gitea/Bitbucket, which serve both forms or redirect
- * one to the other) will now fail to clone via a `url`-kind or
- * `git-subdir`-kind source where it may have worked before this change.
- *
- * The trailing-slash trim exists because a `git-subdir` source stores its
- * manifest `url` verbatim (`gitSubdirObjectSource`) and is therefore not
- * parse-canonicalized the way a `url` source is.
+ * D-76-01: strip one trailing `.git` from a URL. Shared by the two parse-time
+ * identity compositions below, so `https://host/o/r.git` and
+ * `https://host/o/r` name one source; the wire form does not call it, because it
+ * keeps the suffix decision the user's own input made (D-2-01).
  */
-export function ensureGitSuffix(url: string): string {
-  let rest = url;
+function stripGitSuffix(url: string): string {
+  return url.endsWith(".git") ? url.slice(0, -".git".length) : url;
+}
 
-  while (rest.endsWith("/")) {
-    rest = rest.slice(0, -1);
+/**
+ * Split an optional `#<ref>` fragment off a URL. SP-5: a fragment that is empty
+ * once its own trailing slashes are stripped is dropped. The path half is
+ * returned untouched, because whether a path's trailing slashes come off before
+ * or after the split is the one point on which the three compositions below
+ * differ, and each of them settles it for itself.
+ */
+function splitUrlFragment(input: string): { path: string; ref: string | undefined } {
+  const hashIdx = input.indexOf("#");
+  if (hashIdx === -1) {
+    return { path: input, ref: undefined };
   }
 
-  return rest.endsWith(".git") ? rest : `${rest}.git`;
+  const frag = stripTrailingSlashes(input.slice(hashIdx + 1));
+  return { path: input.slice(0, hashIdx), ref: frag.length > 0 ? frag : undefined };
+}
+
+/**
+ * D-2-01 / D-2-03: the WIRE form of a `url` or `git-subdir` source, read by
+ * `domain/clone-key.ts::networkCloneUrl`. Splits the `#<ref>` fragment off and
+ * then strips the path's trailing slashes, so `https://host/o/r/#main` is sent
+ * as `https://host/o/r`. A trailing `.git` is left alone, so the wire request
+ * carries whatever suffix decision the user's own input made.
+ */
+export function stripSlashAndFragment(input: string): { base: string; ref: string | undefined } {
+  const { path, ref } = splitUrlFragment(input);
+  return { base: stripTrailingSlashes(path), ref };
+}
+
+/**
+ * D-76-01 / D-2-05: the parse-time IDENTITY form of a generic `url` source.
+ * Splits the `#<ref>` fragment off, strips the path's trailing slashes, then
+ * strips one trailing `.git`. A slash sitting in front of a fragment carries no
+ * meaning in a clone url, so it comes off and the identity of
+ * `https://host/o/r/#main` is `https://host/o/r` -- the same value a re-parse of
+ * the persisted source computes, which makes the identity a fixed point and
+ * keeps the add and every later operation on one `plugin-clones/<hash>`
+ * directory (D-2-05).
+ *
+ * D-2-03: this string is what `pluginCloneKey` and `pluginMirrorKey` hash, so
+ * its composition order is pinned by `tests/domain/source.test.ts`'s identity
+ * table. `stripSlashAndFragment` composes the same two steps in the same order
+ * for the wire form and differs only in keeping `.git`; the two share no
+ * composition, so a correction to the wire form cannot move the cache identity.
+ */
+function stripUrlDecorations(input: string): { base: string; ref: string | undefined } {
+  const { path, ref } = splitUrlFragment(input);
+  return { base: stripGitSuffix(stripTrailingSlashes(path)), ref };
+}
+
+/**
+ * D-76-01: the parse-time IDENTITY form of a `https://github.com/<owner>/<repo>`
+ * url, applied to the path that follows the host. Strips the whole input's
+ * trailing slashes, then splits the `#<ref>` fragment, then strips one trailing
+ * `.git`. Stripping before the split keeps a path slash that sits in front of a
+ * fragment, so `o/r/#main` reaches `parseGitHubUrl`'s owner/repo validation as
+ * the three-part `o/r/` and is rejected with the canonical-form diagnostic.
+ *
+ * D-2-03 / D-2-05: the slash normalization D-2-05 grants the `url` kind stops
+ * here. A github source's identity is its `owner`/`repo` pair rather than a url
+ * string, `canonicalCloneUrl` rebuilds that pair into one canonical url, and
+ * widening what the owner/repo validation admits would move the accepted parse
+ * surface rather than the identity of an accepted source.
+ */
+function stripGitHubUrlDecorations(input: string): { base: string; ref: string | undefined } {
+  const { path, ref } = splitUrlFragment(stripTrailingSlashes(input));
+  return { base: stripGitSuffix(path), ref };
+}
+
+/**
+ * D-76-06: append the conventional `.git` suffix to a url that lacks one.
+ *
+ * `domain/clone-key.ts::networkCloneUrl` calls this only for the `github` arm,
+ * appending `.git` where Claude Code appends it -- a `github.com` `owner/repo`
+ * path -- and nowhere else. A `url` source's wire form preserves whatever
+ * suffix decision the user's own input made (D-2-01).
+ *
+ * Accepted trade-off (D-2-02): a suffix-less URL does not resolve against a
+ * host that serves ONLY the `.git`-suffixed smart-HTTP path. Verbatim means
+ * verbatim in both directions, and the failure names the URL that was sent.
+ */
+export function ensureGitSuffix(url: string): string {
+  return url.endsWith(".git") ? url : `${url}.git`;
 }
 
 /**
  * MURL-01 / D-76-01: parse a generic non-github `https://` source into a
- * `UrlSource`. Mirrors `parseGitHubUrl`'s canonicalization: strip a trailing
- * slash, split off an optional `#<ref>` fragment (empty fragment dropped), then
- * strip a single trailing `.git`. Normalizing the `.git` suffix at parse time
- * is the identity rule that lets `sourceLogical` / `samePlannedSource` compare
- * `https://host/repo.git` and `https://host/repo` as the same source (D-76-01).
+ * `UrlSource`. Splits off an optional `#<ref>` fragment (empty fragment
+ * dropped), strips the path's trailing slashes, then strips a single trailing
+ * `.git`. Normalizing the `.git` suffix at parse time is the identity rule that
+ * lets `sourceLogical` / `samePlannedSource` compare `https://host/repo.git` and
+ * `https://host/repo` as the same source (D-76-01); normalizing the slash is
+ * what makes that identity a fixed point across a persist-and-reload round trip
+ * (D-2-05).
  */
 function parseUrlSource(raw: string): UrlSource {
   const { base, ref } = stripUrlDecorations(raw);
   return ref === undefined ? { kind: "url", raw, url: base } : { kind: "url", raw, url: base, ref };
 }
 
-function parseGitHubUrl(raw: string): ParsedSource {
-  // strip prefix
-  const rest = raw.slice("https://github.com/".length);
+/**
+ * D-76-02: the path after the host when `raw` is an `https://` url on
+ * github.com, else undefined. The authority is the text between `https://` and
+ * the first `/`, and a url with no `/` after it is not a github url. The
+ * authority is folded the way Claude Code recognizes a github host: lowercased,
+ * an explicit default `:443` port dropped, and every leading `www.` label
+ * stripped. The scheme match stays case-sensitive, as Claude Code's does.
+ *
+ * A non-default port and userinfo (`user@`) are not folded, so an authority
+ * carrying either never equals `github.com` and the url stays a generic `url`
+ * source. The `github` kind rebuilds its wire url as
+ * `https://github.com/<owner>/<repo>.git` from owner/repo, so it has nowhere to
+ * keep a port or userinfo, and folding either would change where the clone goes.
+ */
+function gitHubUrlPath(raw: string): string | undefined {
+  if (!raw.startsWith("https://")) {
+    return undefined;
+  }
 
+  const rest = raw.slice("https://".length);
+  const slashIdx = rest.indexOf("/");
+  if (slashIdx === -1) {
+    return undefined;
+  }
+
+  let host = rest.slice(0, slashIdx).toLowerCase();
+  if (host.endsWith(":443")) {
+    host = host.slice(0, -":443".length);
+  }
+
+  while (host.startsWith("www.")) {
+    host = host.slice("www.".length);
+  }
+
+  return host === "github.com" ? rest.slice(slashIdx + 1) : undefined;
+}
+
+/**
+ * Parse a github.com url. `raw` is the verbatim input, echoed on the source and
+ * in every diagnostic; `rest` is the path after the host (`gitHubUrlPath`).
+ */
+function parseGitHubUrl(raw: string, rest: string): GitHubSource | UnknownSource {
   // SP-3: browser-paste /tree/<ref> URL
   const treeIdx = rest.indexOf("/tree/");
   if (treeIdx !== -1) {
@@ -495,7 +633,7 @@ function parseGitHubUrl(raw: string): ParsedSource {
 
   // strip trailing slash, optional #<ref> fragment (SP-5: empty fragment
   // dropped), and optional .git suffix
-  const { base, ref } = stripUrlDecorations(rest);
+  const { base, ref } = stripGitHubUrlDecorations(rest);
 
   // validate exactly owner/repo
   const parts = base.split("/");

@@ -1,4 +1,4 @@
-import { canonicalCloneUrl } from "../../domain/clone-key.ts";
+import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 import { buildCloneAuth } from "../auth-host.ts";
 
 import {
@@ -60,8 +60,9 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     const materialized = await seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
+      networkUrl: networkCloneUrl(source),
       ...(source.ref !== undefined && { ref: source.ref }),
-      ...(auth !== undefined && { auth }),
+      auth,
     });
     const result = await resolveGitPluginRootWithSubdir(
       source,
@@ -78,9 +79,10 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
   const cloneRoot = await seam.materializePluginClone({
     locations,
     cloneUrl: pin.cloneUrl,
+    networkUrl: networkCloneUrl(source),
     pin: pin.pin,
     ...(pin.ref !== undefined && { ref: pin.ref }),
-    ...(auth !== undefined && { auth }),
+    auth,
   });
   const result = await resolveGitPluginRootWithSubdir(source, cloneRoot, pin.pin);
   return { result, resolvedSha: result.kind === "materialized" ? pin.pin : undefined };

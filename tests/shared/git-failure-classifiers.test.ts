@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { CrossOriginChallengeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   classifyGitSourceAccessFailure,
   classifyGitTransportFailure,
@@ -125,6 +126,17 @@ for (const { title, createFailure } of [
     assert.strictEqual(reason, "authentication required");
   });
 }
+
+test("classifies a challenge after a cross-origin redirect as authentication required", () => {
+  // arrange
+  const failure = new CrossOriginChallengeError("https://sso.example.com");
+
+  // act
+  const reason = classifyGitTransportFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, "authentication required");
+});
 
 test("classifies a cancellation name before a network code", () => {
   // arrange

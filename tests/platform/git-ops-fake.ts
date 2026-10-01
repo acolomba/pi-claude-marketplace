@@ -4,6 +4,7 @@ import type {
   GitAuthBundle,
   GitOps,
 } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { ListRemotesResult } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 
 export interface GitOpsFakeOptions {
   readonly boundary: "memory";
@@ -22,6 +23,7 @@ export interface GitOpsFakeOptions {
   readonly fetchError?: Error;
   readonly checkoutError?: Error;
   readonly resolveRemoteRefError?: Error;
+  readonly listRemotesResult?: ListRemotesResult;
 }
 
 export interface GitOpsFakeCalls {
@@ -241,6 +243,16 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       }
 
       return oid;
+    },
+    // D-3-03: no call ledger. `git-ops-fake.test.ts` deep-equals the whole
+    // `state.calls` object, and the guard calls this member at most once per
+    // add -- a single canned result is sufficient. `opts.dir` is read (and
+    // discarded) rather than dropped from the signature, so GATE-01 sees a
+    // runtime read of the interface member's parameter.
+    async listRemotes(listRemotesOptions) {
+      void listRemotesOptions.dir;
+      await Promise.resolve();
+      return options.listRemotesResult ?? { kind: "not-a-repo" };
     },
   };
 

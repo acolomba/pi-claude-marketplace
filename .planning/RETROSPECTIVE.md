@@ -2,6 +2,37 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: any-git-host -- Any Git Host
+
+**Completed:** 2026-09-30 on `features/git-hosts` (workstream `git-hosts`; merged to main in PR #221 as `a0d3aef1`, no npm release yet)
+**Phases:** 3 (1-3) | **Plans:** 11 | **Tasks:** 29 | **Requirements:** 10/10 | **Audit:** passed (no blockers; 3/3 phases, 10/10 wired, 5/5 flows) -- first `tech_debt`; the review debt (GHRED-01, GHADD-01) was closed in PR #231
+
+### What Was Built
+- Private https sources authenticate on any git host from the git credential helper, with no hostname added to the provider registry; `github.com` / `gitlab.com` keep Device Flow.
+- Credentials stay bound to their host: `onAuth` cancels on a host mismatch, and `platform/git.ts` follows redirects itself, dropping credential headers on any scheme, host or port change.
+- `url` sources clone at the verbatim URL with one attempt per operation, and `marketplace add` recovers from its own leftover clone while refusing anything else.
+
+### What Worked
+- **Reimplementing a contributor PR instead of merging it.** PR #153 found three real defects. Rebuilding each against upstream parity gave narrower fixes than the PR: no retry instead of a `.git` fallback, and no per-host registry entry instead of a Gitea descriptor.
+- **Measuring the transport instead of trusting the library.** Scoping read `simple-get` as scrubbing credentials on a cross-host redirect. UAT measured it on the wire and found it compares hostnames only, so a port or `http:` change leaked the header (G-01-4). The fix follows redirects in our own code.
+
+### What Was Inefficient
+- **The milestone was merged before it was closed.** The audit and archive ran after the squash-merge, on a branch that had to merge main back in, and the archive now needs a docs PR of its own. `AGENTS.md` now requires the audit and close before merging a milestone PR.
+- **Review fixes after verification staled all three phase reports.** Five commits (one substantive, `c1286475`) landed after the verifiers ran, so every `covered_digest` stopped matching and the close needed three fresh verifier runs.
+
+### Patterns Established
+- **A redirect keeps its credential only within the same origin (scheme, host and port).** The same rule git applies over libcurl since CVE-2022-27776.
+- **`listRemotes` is the one `GitOps` member that returns a discriminated value instead of throwing**, so "foreign tree" and "could not look" stay separate outcomes.
+
+### Key Lessons
+1. **Audit and close a milestone on its branch before the PR merges**, so the archive lands in the same squash.
+2. **When a library's security claim decides a design, measure it on the wire.** The hostname-only redirect scrub was a one-line read that UAT disproved.
+
+### Cost Observations
+- Model mix: opus orchestration, planning and execution; sonnet verifiers and integration checker
+- Timeline: 2026-09-25 -> 2026-09-30, ~147 first-parent commits on the branch
+- Notable: the close's three parallel sonnet re-verifications took 3-4 minutes and ~150k tokens each.
+
 ## Milestone: workflows-replay -- Workflow Bridge Replay onto main
 
 **Completed:** 2026-09-21 on `features/workflow` (workstream `workflows`; unmerged, no npm release yet)

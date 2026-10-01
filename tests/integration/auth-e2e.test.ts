@@ -168,6 +168,7 @@ test("AUTH-01 add path E2E: fill-miss triggers Device Flow, token stored via app
   const { onAuth } = buildAuthCallbacks({
     credentialOps: credOps,
     host: "github.com",
+    kind: "device-flow",
     onAuthRequired,
   });
 
@@ -225,6 +226,7 @@ test("AUTH-02 / AUTH-08 silent reuse: fill-hit returns stored cred, no Device Fl
   const { onAuth } = buildAuthCallbacks({
     credentialOps: credOps,
     host: "github.com",
+    kind: "device-flow",
     onAuthRequired,
   });
 
@@ -291,6 +293,7 @@ test("AUTH-07 reject-evict-reflow: onAuthFailure evicts cred, next fill-miss re-
   const { onAuthFailure: onAuthFailure1 } = buildAuthCallbacks({
     credentialOps: credOps,
     host: "github.com",
+    kind: "device-flow",
     onAuthRequired: onAuthRequired1,
   });
 
@@ -342,6 +345,7 @@ test("AUTH-07 reject-evict-reflow: onAuthFailure evicts cred, next fill-miss re-
   const { onAuth: onAuth2 } = buildAuthCallbacks({
     credentialOps: credOps,
     host: "github.com",
+    kind: "device-flow",
     onAuthRequired: onAuthRequired2,
   });
 
