@@ -59,14 +59,7 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
   // applied only centrally would raise the severity while still dropping the
   // brace.
   updated: (p, mpScope) =>
-    installedLikeRow(
-      ICON_INSTALLED,
-      p,
-      mpScope,
-      composeVersionArrow(p.from, p.to),
-      "(updated)",
-      p.reasons,
-    ),
+    installedLikeRow(ICON_INSTALLED, p, mpScope, composeVersionArrow(p.from, p.to), "(updated)"),
   // FSTAT-07 / D-66-04: a partial update whose candidate re-resolved `partially-available`
   // reports (partially-installed) with the dropped-component detail. WR-03 /
   // D-12: its marker policy is on, so the soft-dep markers appear on a degraded

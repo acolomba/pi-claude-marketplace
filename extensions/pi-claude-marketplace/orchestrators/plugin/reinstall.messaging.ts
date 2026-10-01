@@ -77,14 +77,7 @@ const REINSTALL_RENDER: {
   // reinstall that degraded a component names the kind here; a clean one passes
   // an undefined list and renders the same brace-less row as before.
   reinstalled: (p, mpScope) =>
-    installedLikeRow(
-      ICON_INSTALLED,
-      p,
-      mpScope,
-      renderVersion(p.version),
-      "(reinstalled)",
-      p.reasons,
-    ),
+    installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(reinstalled)"),
   skipped: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)"),
   failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
   "manual recovery": (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)"),

@@ -74,14 +74,7 @@ export type DisableMsg = PluginDisabledMessage | PluginSkippedMessage | PluginFa
  */
 const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status: K }>> } = {
   installed: (p, mpScope) =>
-    installedLikeRow(
-      ICON_INSTALLED,
-      p,
-      mpScope,
-      renderVersion(p.version),
-      "(installed)",
-      p.reasons,
-    ),
+    installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(installed)"),
   "partially-installed": (p, mpScope) => partiallyInstalledRow(p, mpScope),
   skipped: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)"),
   failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),

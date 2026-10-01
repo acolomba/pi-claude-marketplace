@@ -613,11 +613,11 @@ export function installedLikeRow(
     readonly name: string;
     readonly scope?: Scope;
     readonly dependencies?: never;
+    readonly reasons?: readonly Reason[];
   },
   mpScope: Scope,
   versionToken: string,
   label: string,
-  reasons: readonly Reason[] | undefined,
 ): string {
   return joinTokens([
     icon,
@@ -625,7 +625,7 @@ export function installedLikeRow(
     renderScopeBracket(p.scope, mpScope),
     versionToken,
     label,
-    composeReasons(reasons),
+    composeReasons(p.reasons),
   ]);
 }
 

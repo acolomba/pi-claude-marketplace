@@ -999,11 +999,10 @@ test("installedLikeRow composes an exact transition row", () => {
   // act
   const row = installedLikeRow(
     "●",
-    { name: "alpha", scope: "project" },
+    { name: "alpha", scope: "project", reasons: ["orphan rewake"] },
     "user",
     "v1.0.0",
     "(installed)",
-    ["orphan rewake"],
   );
 
   // assert

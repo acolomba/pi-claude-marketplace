@@ -100,14 +100,7 @@ export type ListMsg =
  */
 const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>> } = {
   installed: (p, mpScope) =>
-    installedLikeRow(
-      ICON_INSTALLED,
-      p,
-      mpScope,
-      renderVersion(p.version),
-      "(installed)",
-      p.reasons,
-    ),
+    installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(installed)"),
   // OUT-02: the shared composer threads the row's own `reasons`, and this
   // surface's producer stamps at most `installs disabled` there -- the
   // not-installed candidate row's statement about what an install WOULD do.

@@ -166,7 +166,7 @@ export type ReconcileAppliedMsg =
  * from the central `renderPluginRow` `installed` arm.
  */
 const renderInstalled: RenderFn<PluginInstalledMessage> = (p, mpScope) =>
-  installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(installed)", p.reasons);
+  installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(installed)");
 
 /**
  * `(uninstalled)` -- realized uninstall row. NO soft-dep marker (uninstalled

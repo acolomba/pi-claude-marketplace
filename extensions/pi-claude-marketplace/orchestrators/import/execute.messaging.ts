@@ -62,7 +62,7 @@ export type ImportMsg =
  * Lifted verbatim from the central `renderPluginRow` `installed` arm.
  */
 const renderInstalled: RenderFn<PluginInstalledMessage> = (p, mpScope) =>
-  installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(installed)", p.reasons);
+  installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(installed)");
 
 /**
  * `(skipped)` -- already-installed plugin row. No soft-dep gating (passes

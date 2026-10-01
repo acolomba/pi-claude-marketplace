@@ -107,14 +107,7 @@ export type InstallMsg =
  */
 const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { status: K }>> } = {
   installed: (p, mpScope) =>
-    installedLikeRow(
-      ICON_INSTALLED,
-      p,
-      mpScope,
-      renderVersion(p.version),
-      "(installed)",
-      p.reasons,
-    ),
+    installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(installed)"),
   // FSTAT-07 / D-66-04: a partial install that re-resolves `partially-available` reports
   // (partially-installed) with the dropped-component detail. WR-03 / D-12: its
   // marker policy is on, so the soft-dep markers appear on a degraded install
