@@ -518,6 +518,9 @@ export function composeReasons(reasons: readonly Reason[] | undefined): string {
  * `reasons` is OPTIONAL so the composer accepts any row shape;
  * `composeReasons` treats `undefined` as the empty list. This is what lets the
  * `disabled` arm share this composer instead of restating its body.
+ *
+ * D-13: the `dependencies?: never` refusal rejects an unresolved producer row,
+ * whose markers `resolveRows` has not yet composed into `reasons`.
  */
 export function pluginRow(
   icon: string,
@@ -526,6 +529,7 @@ export function pluginRow(
     readonly scope?: Scope;
     readonly version?: string;
     readonly reasons?: readonly Reason[];
+    readonly dependencies?: never;
   },
   mpScope: Scope,
   label: string,
@@ -550,6 +554,9 @@ export function pluginRow(
  * resolved `reasons` can end with the `{requires pi-subagents}` /
  * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` markers, after the
  * dropped-component reasons (MSG-GR-4).
+ *
+ * D-13: the `dependencies?: never` refusal rejects an unresolved producer row,
+ * whose markers `resolveRows` has not yet composed into `reasons`.
  */
 export function partiallyInstalledRow(
   p: {
@@ -557,6 +564,7 @@ export function partiallyInstalledRow(
     readonly scope?: Scope;
     readonly version?: string;
     readonly reasons: readonly Reason[];
+    readonly dependencies?: never;
   },
   mpScope: Scope,
 ): string {
@@ -595,12 +603,16 @@ export function partiallyInstalledRow(
  * clean `(updated)` row over a degraded component. The field is optional on
  * every one of these message types, so a caller with nothing to report still
  * composes the brace-less row byte for byte.
+ *
+ * D-13: the `dependencies?: never` refusal rejects an unresolved producer row,
+ * whose markers `resolveRows` has not yet composed into `reasons`.
  */
 export function installedLikeRow(
   icon: string,
   p: {
     readonly name: string;
     readonly scope?: Scope;
+    readonly dependencies?: never;
   },
   mpScope: Scope,
   versionToken: string,

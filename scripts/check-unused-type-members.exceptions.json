@@ -28,6 +28,27 @@
       "key": "authAttempted",
       "decision": "D-32-05. Revoking a recorded decision is outside any repair plan in this phase.",
       "mechanism": "D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source."
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:532:5",
+      "owner": "pluginRow.p",
+      "key": "dependencies",
+      "decision": "D-13 refusal marker, recorded as an exception with operator approval on 2026-10-01.",
+      "mechanism": "A dependencies?: never refusal marker. The p parameter is a structural row subset that declares no dependencies, so there is no slot to narrow and every restatement ADDS a key; the type-refinement prover refuses it by construction, so no contract entry can reach it. Its job (D-13) is to refuse a raw producer row such as PluginPartiallyInstalledMessage, which carries dependencies and would otherwise compile here and render without the {requires ...} markers resolveRows composes into reasons. Removing the marker turns exactly the matching false line of the type-level control in tests/shared/notification-grammar.test.ts red (TS1360). Weakening the refusal to clear this row reintroduces that silent marker drop."
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:567:5",
+      "owner": "partiallyInstalledRow.p",
+      "key": "dependencies",
+      "decision": "D-13 refusal marker, recorded as an exception with operator approval on 2026-10-01.",
+      "mechanism": "A dependencies?: never refusal marker. The p parameter is a structural row subset that declares no dependencies, so there is no slot to narrow and every restatement ADDS a key; the type-refinement prover refuses it by construction, so no contract entry can reach it. Its job (D-13) is to refuse a raw producer row such as PluginPartiallyInstalledMessage, which carries dependencies and would otherwise compile here and render without the {requires ...} markers resolveRows composes into reasons. Removing the marker turns exactly the matching false line of the type-level control in tests/shared/notification-grammar.test.ts red (TS1360). Weakening the refusal to clear this row reintroduces that silent marker drop."
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:615:5",
+      "owner": "installedLikeRow.p",
+      "key": "dependencies",
+      "decision": "D-13 refusal marker, recorded as an exception with operator approval on 2026-10-01.",
+      "mechanism": "A dependencies?: never refusal marker. The p parameter is a structural row subset that declares no dependencies, so there is no slot to narrow and every restatement ADDS a key; the type-refinement prover refuses it by construction, so no contract entry can reach it. Its job (D-13) is to refuse a raw producer row such as PluginInstalledMessage, which carries dependencies and would otherwise compile here and render without the {requires ...} markers resolveRows composes into reasons. Removing the marker turns exactly the matching false line of the type-level control in tests/shared/notification-grammar.test.ts red (TS1360). Weakening the refusal to clear this row reintroduces that silent marker drop."
     }
   ]
 }

@@ -668,20 +668,20 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:225:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1401:32",
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1413:32",
       "owner": "isDescriptionBearingRow",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within ResolvedRow by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1401:9"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1413:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:789:9",
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:801:9",
       "owner": "renderPendingRow.p",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:787:5"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:799:5"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-summary.ts:41:40",

@@ -40,7 +40,9 @@ import type {
 import type {
   MarketplaceNotAddedMessage,
   PluginFailedMessage,
+  PluginInstalledMessage,
   PluginNotificationMessage,
+  PluginPartiallyInstalledMessage,
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
@@ -70,6 +72,26 @@ type DescriptionBearingByStatus = Extract<
 type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
 void (true satisfies MutuallyAssignable<DescriptionBearingByMember, DescriptionBearingByStatus>);
+
+/**
+ * D-13: the row composers accept a resolved row and refuse the producer row it
+ * was resolved from, so a caller cannot render a row whose `{requires ...}`
+ * markers `resolveRows` has not composed yet.
+ */
+type Assignable<A, B> = [A] extends [B] ? true : false;
+type PluginRowInput = Parameters<typeof pluginRow>[1];
+type PartiallyInstalledRowInput = Parameters<typeof partiallyInstalledRow>[0];
+type InstalledLikeRowInput = Parameters<typeof installedLikeRow>[1];
+
+void (true satisfies Assignable<ResolvedRow<PluginPartiallyInstalledMessage>, PluginRowInput>);
+void (false satisfies Assignable<PluginPartiallyInstalledMessage, PluginRowInput>);
+void (true satisfies Assignable<
+  ResolvedRow<PluginPartiallyInstalledMessage>,
+  PartiallyInstalledRowInput
+>);
+void (false satisfies Assignable<PluginPartiallyInstalledMessage, PartiallyInstalledRowInput>);
+void (true satisfies Assignable<ResolvedRow<PluginInstalledMessage>, InstalledLikeRowInput>);
+void (false satisfies Assignable<PluginInstalledMessage, InstalledLikeRowInput>);
 
 test("exports notification grammar from its named owner", () => {
   // arrange
