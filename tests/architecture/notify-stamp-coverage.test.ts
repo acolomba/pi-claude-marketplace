@@ -94,6 +94,15 @@ function appliedOutcomes(): readonly PerEntryOutcome[] {
       scope: "user",
     },
     {
+      cause: new Error('Install "secrets-vault@fresh-mp" or uninstall "held-plugin@fresh-mp"'),
+      kind: "plugin-dependency-disabled",
+      marketplace: "fresh-mp",
+      plugin: "held-plugin",
+      reasons: ["dependency unsatisfied"],
+      scope: "user",
+      version: "4.0.0",
+    },
+    {
       dependencies: [],
       installable: false,
       kind: "plugin-backfilled",
@@ -117,6 +126,8 @@ function pendingPlan(): ReconcilePlan {
       },
     ],
     marketplacesToRemove: [],
+    pluginsToDependencyDisable: [],
+    pluginsToDependencyInstall: [],
     pluginsToDisable: [{ marketplace: "pending-mp", plugin: "sleepable-plugin", scope: "user" }],
     pluginsToEnable: [{ marketplace: "pending-mp", plugin: "wakeable-plugin", scope: "user" }],
     pluginsToInstall: [
@@ -164,6 +175,11 @@ test("GATE-01/D-05: applied projection stamps every realized-transition row", ()
     { name: "gone-plugin", needsReload: true, severity: "info", status: "uninstalled" },
     { name: "rewoken-plugin", needsReload: true, severity: "info", status: "installed" },
     { name: "muted-plugin", needsReload: true, severity: "info", status: "disabled" },
+    // LOAD-01: the one transition row in this list stamped `warning`. The
+    // disable was carried out in full, so it is a realized transition like the
+    // rows around it, but the desired state -- the plugin loading -- was not
+    // reached, which is the warning arm of the tri-state severity model.
+    { name: "held-plugin", needsReload: true, severity: "warning", status: "disabled" },
     {
       name: "partial-plugin",
       needsReload: true,

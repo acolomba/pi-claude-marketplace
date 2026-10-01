@@ -1,3 +1,5 @@
+import { isRenderablePluginKey } from "../../domain/dependencies.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { isErrnoException, PluginShapeError } from "../../shared/errors.ts";
 import {
   ICON_UNINSTALLABLE,
@@ -19,6 +21,7 @@ import {
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
+import type { Scope } from "../../shared/types.ts";
 
 /**
  * enable-disable.messaging.ts -- the command-local notification vocabulary for
@@ -118,6 +121,45 @@ export const ENABLE_CONTEXT = {
 } as const satisfies CommandContext<EnableStatus, EnableMsg>;
 
 /**
+ * EDEP-01 / EDEP-03: one row for one member of the enable cascade's
+ * transitive closure. Deliberately NOT `EnableMsg.dependencies` or the
+ * `Dependency` union from `shared/concerns/soft-dep.ts` -- that vocabulary
+ * names the pi-subagents / pi-mcp-adapter soft-dependency companion
+ * extensions, an unrelated concept from a declared PLUGIN dependency. A
+ * member renders through the SAME `ENABLE_RENDER` arms as the root (its
+ * `status` selects the arm exactly as `dispatchRow` already does), so no new
+ * render map is needed -- only the row shape.
+ */
+export type EnableCascadeMemberRow = PluginInstalledMessage | PluginSkippedMessage;
+
+/**
+ * RESV-01 / RESV-06 precedent, applied to the enable cascade: one row per
+ * closure member beside the root's own row, sorted through the project's
+ * canonical name-then-scope comparator so the root takes its alphabetical
+ * place among the members rather than always leading (EDEP-01 ordering
+ * edge). Every member of one cascade lands in the root's own scope, so the
+ * comparator's scope half is inert here by construction, exactly as it is
+ * for the install cascade's block.
+ *
+ * A one-element sort is a no-op, so a root that declares no dependencies (or
+ * whose every member fails classification, `members: []`) composes to
+ * exactly `[rootRow]`.
+ */
+export function composeEnableCascadeRows(args: {
+  readonly scope: Scope;
+  readonly rootRow: EnableMsg;
+  readonly members: readonly EnableCascadeMemberRow[];
+}): readonly EnableMsg[] {
+  const rows: EnableMsg[] = [args.rootRow, ...args.members];
+  return [...rows].sort((a, b) =>
+    compareByNameThenScope(
+      { name: a.name, scope: args.scope },
+      { name: b.name, scope: args.scope },
+    ),
+  );
+}
+
+/**
  * D-04 / D-05: disable's `CommandContext`. Distinct label and render map from
  * `ENABLE_CONTEXT`.
  */
@@ -125,6 +167,37 @@ export const DISABLE_CONTEXT = {
   Messaging: { label: "Plugin disable" },
   render: DISABLE_RENDER,
 } as const satisfies CommandContext<DisableStatus, DisableMsg>;
+
+/**
+ * The dependents as EDEP-02's refusal sentence names them: the keys
+ * themselves when every one of them is renderable, and their count when any
+ * is not. Local mirror of `uninstall.messaging.ts::renderDependents` --
+ * T-08-06: the keys are holder keys `findDependents` derived from STATE
+ * records, bounded only by `domain/name.ts::assertSafeName`, which admits
+ * `"`, `,`, spaces and bidi controls. Interpolated unchecked, one hostile
+ * name could forge the rest of the sentence.
+ */
+function renderDependentKeys(dependents: readonly string[]): string {
+  if (dependents.every(isRenderablePluginKey)) {
+    return dependents.join(", ");
+  }
+
+  return dependents.length === 1 ? "1 other plugin" : `${dependents.length} other plugins`;
+}
+
+/**
+ * D-08-01: the disable refusal's plain-English instruction. Upstream's
+ * template offers a chained command; `disable` accepts exactly one
+ * `<plugin>@<marketplace>` target, so this names the target, names the
+ * sorted dependents through `renderDependentKeys`, and states the order --
+ * disable the dependents first, then the target. T-08-07: composed from
+ * `name@marketplace` keys and fixed phrases only, with no `{ cause }`
+ * chained behind it, so the renderer's cause-chain walk cannot print a raw
+ * underlying message.
+ */
+export function composeDisableRefusalCause(target: string, dependents: readonly string[]): string {
+  return `Disable ${renderDependentKeys(dependents)} first, then ${target}.`;
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // Failure -> reasons narrowing for both verbs, moved from enable-disable.ts
@@ -185,6 +258,20 @@ export function narrowEnableFailure(cause: Error): readonly ContentReason[] {
 
   const chained = cause.cause;
   if (chained !== undefined && isErrnoException(chained) && chained.code === "ENOENT") {
+    return ["source missing"];
+  }
+
+  // PR-2 case 3: the resolver classifies a plugin clone directory that is
+  // genuinely absent from disk as a structural `not-installable` shape
+  // (`domain/plugin-resolver.ts`'s "source dir does not exist" note), not a
+  // raw errno throw -- the two checks above cannot see it. ENBL-03: a cached
+  // clone missing between the recorded state and the enable invocation
+  // reaches exactly this shape.
+  if (
+    cause instanceof PluginShapeError &&
+    cause.shape.kind === "not-installable" &&
+    cause.shape.reasons.some((reason) => reason.startsWith("source dir does not exist"))
+  ) {
     return ["source missing"];
   }
 

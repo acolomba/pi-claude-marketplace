@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -107,12 +107,12 @@ test("saves one explicit transaction while the real scope lock is held and permi
     },
   } satisfies LockedStateTransactionDeps;
   const expectedState = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
     lastReconciledExtensionVersion: "saved-by-transaction",
   } satisfies ExtensionState;
   const expectedStateBytes =
-    '{\n  "schemaVersion": 2,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "saved-by-transaction"\n}\n';
+    '{\n  "schemaVersion": 3,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "saved-by-transaction"\n}\n';
 
   // act
   const callbackOutcome = await withLockedStateTransaction(
@@ -200,13 +200,73 @@ test("returns a no-save transaction without creating durable state", async (t) =
 
   // assert
   assert.deepStrictEqual(callbackOutcome, {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
     lastReconciledExtensionVersion: "memory-only",
   });
   assert.deepStrictEqual(persistenceLog, [`load ${locations.extensionRoot}`]);
   assert.strictEqual(stateBytes, undefined);
   assert.strictEqual(lockHeld, false);
+});
+
+test("keeps a legacy state read in memory when migration persistence is disabled", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "state-guard-legacy-read-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const locations = locationsFor("project", directory);
+  const legacyBytes = JSON.stringify({
+    schemaVersion: 1,
+    marketplaces: {
+      legacy: {
+        name: "legacy",
+        scope: "project",
+        source: "./legacy",
+        addedFromCwd: directory,
+        plugins: {},
+      },
+    },
+  });
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await writeFile(locations.stateJsonPath, legacyBytes);
+  const loadOptions: unknown[] = [];
+  const dependencies = {
+    persistMigration: false,
+    loadState: async (root: string, options?: { readonly persistMigration?: boolean }) => {
+      loadOptions.push(options);
+      return loadState(root, options);
+    },
+  } satisfies LockedStateTransactionDeps;
+
+  // act
+  const snapshot = await withLockedStateTransaction(
+    locations,
+    (transaction) => structuredClone(transaction.state),
+    dependencies,
+  );
+
+  // assert
+  assert.deepStrictEqual(snapshot, {
+    schemaVersion: 3,
+    marketplaces: {
+      legacy: {
+        name: "legacy",
+        scope: "project",
+        source: { kind: "path", raw: "./legacy", logical: "./legacy" },
+        addedFromCwd: directory,
+        manifestPath: path.join(
+          locations.extensionRoot,
+          "sources",
+          "legacy",
+          ".claude-plugin",
+          "marketplace.json",
+        ),
+        marketplaceRoot: path.join(locations.extensionRoot, "sources", "legacy"),
+        plugins: {},
+      },
+    },
+  });
+  assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), legacyBytes);
+  assert.deepStrictEqual(loadOptions, [{ persistMigration: false }]);
 });
 
 test("rejects a duplicate explicit save after one complete durable write", async (t) => {
@@ -223,12 +283,12 @@ test("rejects a duplicate explicit save after one complete durable write", async
     },
   } satisfies LockedStateTransactionDeps;
   const expectedState = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
     lastReconciledExtensionVersion: "saved-once",
   } satisfies ExtensionState;
   const expectedStateBytes =
-    '{\n  "schemaVersion": 2,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "saved-once"\n}\n';
+    '{\n  "schemaVersion": 3,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "saved-once"\n}\n';
 
   // act
   const duplicateSaveError = await captureThrown(() =>
@@ -269,7 +329,7 @@ test("automatically saves a successful state guard callback and returns its comp
   t.after(() => rm(directory, { recursive: true, force: true }));
   const locations = locationsFor("project", directory);
   const expectedState = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
     lastReconciledExtensionVersion: "automatic-save",
   } satisfies ExtensionState;
@@ -528,7 +588,7 @@ test("propagates an injected save failure by identity with the complete attempte
   assert.strictEqual(thrownError, saveError);
   assert.deepStrictEqual(saveLog, [expectedAttemptedState]);
   assert.strictEqual(stateBytes, undefined);
-  assert.deepStrictEqual(retryOutcome, { schemaVersion: 2, marketplaces: {} });
+  assert.deepStrictEqual(retryOutcome, { schemaVersion: 3, marketplaces: {} });
   assert.strictEqual(lockHeldAfterRetry, false);
 });
 
@@ -546,12 +606,12 @@ test(
     let contenderEntries = 0;
     let retryEntries = 0;
     const expectedState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
       lastReconciledExtensionVersion: "retry-committed",
     } satisfies ExtensionState;
     const expectedStateBytes =
-      '{\n  "schemaVersion": 2,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "retry-committed"\n}\n';
+      '{\n  "schemaVersion": 3,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "retry-committed"\n}\n';
 
     // act
     const holderTransaction = withLockedStateTransaction(locations, async () => {

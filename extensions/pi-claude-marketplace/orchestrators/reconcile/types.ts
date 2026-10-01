@@ -2,8 +2,8 @@
 //
 // DIFF-01 -- pure type surface for the reconcile planner.
 //
-// `ReconcilePlan` is the structured result of the bidirectional 7-bucket
-// diff that `planReconcile(merged, state, scope)` produces. The seven
+// `ReconcilePlan` is the structured result of the bidirectional 9-bucket
+// diff that `planReconcile(merged, state, scope, verdict)` produces. The nine
 // buckets partition the union of declared marketplaces + plugins (from
 // `MergedConfig`) and recorded marketplaces + plugins (from `ExtensionState`)
 // into the actions the apply path takes:
@@ -21,7 +21,18 @@
 //                                availability is an orthogonal axis)
 //   6. `pluginsToDisable`     -- declared with `enabled === false` but
 //                                still recorded
-//   7. `sourceMismatches`     -- four per-cause planner diagnostics
+//   7. `pluginsToDependencyDisable`
+//                             -- recorded plugins the load-time check holds
+//                                down because a declared dependency is not
+//                                satisfied in the same scope (LOAD-01); the
+//                                verdict arrives precomputed (D-06-04)
+//   8. `pluginsToDependencyInstall`
+//                             -- missing declared dependencies of an eligible
+//                                dependent, one entry per dependency key,
+//                                deduplicated across declarers (MISS-01,
+//                                D-09-01, D-09-02, D-09-05); the verdict
+//                                arrives precomputed (D-06-04)
+//   9. `sourceMismatches`     -- four per-cause planner diagnostics
 //                                (`source-mismatch`, `unknown-stored`,
 //                                `dangling-reference`, `malformed-plugin-key`);
 //                                each variant carries only the fields its
@@ -41,12 +52,18 @@
 // for any populated state.
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { ScopeSatisfactionVerdict, UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type {
+  NotificationContext,
+  ResourcesDiscoverEvent,
+  ToolInventory,
+} from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
+import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
 
 /** Planned addition of a marketplace declared in config but not recorded. */
 export interface PlannedMarketplaceAdd {
@@ -126,6 +143,53 @@ export interface PlannedPluginDisable {
   readonly scope: Scope;
   readonly plugin: string;
   readonly marketplace: string;
+}
+
+/**
+ * LOAD-01: a recorded plugin the load-time check holds down, because one of
+ * the dependencies it declares is not satisfied in the same scope.
+ *
+ * Membership means "held down", not "about to change". The apply step performs
+ * the enabled -> disabled transition and stamps the marker only on a record it
+ * actually transitions (D-06-02), so a record a previous pass already disabled
+ * stays in this bucket -- that is how LOAD-02 keeps it down -- and the step
+ * leaves it alone.
+ *
+ * `dependency`, `kind` and `range` are the row's payload: the first
+ * unsatisfied declaration in declaration order, which is the one the remedy
+ * names. A declarer with several unsatisfied declarations gets ONE entry, so
+ * one held-down plugin renders as one row.
+ */
+export interface PlannedDependencyDisable {
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  /** `name@marketplace` of the declared dependency the scope does not satisfy. */
+  readonly dependency: string;
+  readonly kind: UnsatisfiedKind;
+  /** The declared range, present only on the out-of-range kind. */
+  readonly range?: string;
+}
+
+/**
+ * MISS-01, D-09-01, D-09-05: a missing declared dependency of an eligible
+ * dependent, deduplicated across every declarer that names it.
+ *
+ * `ranges` carries the raw per-declarer range texts, in verdict order, every
+ * eligible declarer's, empty when no declarer constrained it -- the fold is
+ * the install cascade's, not the planner's (T-06-10: a fold that fails is
+ * unsatisfiable, never no-constraint, and one fold site is what keeps that
+ * true). `requiredBy` is the first eligible declarer in verdict order, the
+ * key a closure failure on this root names as its dependent. `declarers`
+ * retains each eligible source key once in that order for original-edge policy.
+ */
+export interface PlannedDependencyInstall {
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly ranges: readonly string[];
+  readonly requiredBy: string;
+  readonly declarers: readonly string[];
 }
 
 /**
@@ -212,7 +276,7 @@ export function plannedSourceMismatchSubject(mismatch: PlannedSourceMismatch): s
 }
 
 /**
- * DIFF-01 result -- the structured output of `planReconcile`. The seven
+ * DIFF-01 result -- the structured output of `planReconcile`. The nine
  * action buckets are mutually exclusive at the (scope, marketplace,
  * plugin?) tuple level (a single entity is in at most one bucket).
  */
@@ -224,6 +288,8 @@ export interface ReconcilePlan {
   readonly pluginsToUninstall: readonly PlannedPluginUninstall[];
   readonly pluginsToEnable: readonly PlannedPluginEnable[];
   readonly pluginsToDisable: readonly PlannedPluginDisable[];
+  readonly pluginsToDependencyDisable: readonly PlannedDependencyDisable[];
+  readonly pluginsToDependencyInstall: readonly PlannedDependencyInstall[];
   readonly sourceMismatches: readonly PlannedSourceMismatch[];
 }
 
@@ -240,6 +306,8 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
     pluginsToUninstall: [],
     pluginsToEnable: [],
     pluginsToDisable: [],
+    pluginsToDependencyDisable: [],
+    pluginsToDependencyInstall: [],
     sourceMismatches: [],
   };
 }
@@ -249,6 +317,15 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
 // files in this folder now name them, so leaving them in one of those files
 // would have made the other import back into it (FLOW-09).
 // ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * The LOAD-01 marker write, as the dependency-disable step calls it: the
+ * records it just flipped, in the scope it flipped them in.
+ */
+export type DependencyDisableStamp = (
+  scope: Scope,
+  transitioned: readonly PlannedDependencyDisable[],
+) => Promise<void>;
 
 /**
  * RECON-01..05 options bundle. When `scope` is omitted, applyReconcile fans
@@ -275,6 +352,39 @@ export interface ApplyReconcileOptions {
    * to drive the soft-fail-per-entry proof without real network.
    */
   readonly gitOps?: GitOps;
+  /**
+   * D-12-style injection seam for the uninstall child. Production callers
+   * (index.ts) omit it and `createNodeUninstallPlugin(hooksRouting,
+   * completionCache)` applies. A test injects an observing wrapper around the
+   * real operation to prove how many passes the D-05-16 retry loop takes: a
+   * refused or converged child call touches no other injectable collaborator,
+   * so the per-entry invocation count is the only observable that separates
+   * one pass from two.
+   */
+  readonly uninstallPlugin?: UninstallPluginOperation;
+  /**
+   * D-12-style injection seam for the LOAD-01 marker write. Production callers
+   * (index.ts) omit it and `apply.ts::stampDependencyDisabled` applies.
+   *
+   * The seam exists because the step's EMISSION POINT is a contract a test
+   * cannot otherwise reach: each disable row is pushed as its disable commits,
+   * BEFORE the stamp the `runScopeIsolated` wrapper can turn into a single
+   * `state.json` row. Moving the pushes back below the stamp loses every row of
+   * a disable that already happened, and no other observable separates the two
+   * orderings -- the stamp and the `setPluginEnabled` write that precedes it
+   * take the same lock and write the same file, so an external `chmod` or lock
+   * hold fails the disable instead of the stamp.
+   */
+  readonly stampDependencyDisabled?: DependencyDisableStamp;
+  /**
+   * D-09-13: the host's `resources_discover` reason. Only `"reload"` runs the
+   * dependency-install step (`apply.ts::applyDependencyInstalls`) and its
+   * D-09-07 re-plan; an omitted value keeps the safer startup posture every
+   * caller that does not opt in already has -- the bucket still plans (the
+   * planner is reason-blind), but nothing installs and the scope stays
+   * offline.
+   */
+  readonly reason?: ResourcesDiscoverEvent["reason"];
 }
 
 /**
@@ -304,4 +414,13 @@ export interface ScopeReadResult {
    * pristine arm (no `state` carried anyway).
    */
   readonly stateExisted: boolean;
+  /**
+   * LOAD-01: the satisfaction verdict computed inside the locked read pass,
+   * over the same snapshot the planner saw. Carried out so the apply pass can
+   * report a declarer whose declarations could not be established -- the
+   * planner turns that arm into an empty bucket and has nothing left to say
+   * about it. Undefined for a pristine scope and for a CFG-03 abort, where no
+   * record was walked.
+   */
+  readonly verdict?: ScopeSatisfactionVerdict;
 }

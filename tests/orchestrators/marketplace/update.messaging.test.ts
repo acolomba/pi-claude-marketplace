@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { rm } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -6,6 +7,8 @@ import {
   outcomeToCascadePluginMessage,
   type UpdateRowMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts";
+import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
+import { seedUnconstrainedTarget } from "../plugin/seed-unconstrained-target.ts";
 
 import type { PluginUpdateOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -218,6 +221,7 @@ test("projects a clean updated outcome with dependency order and optional reason
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
     declaresMcp: true,
+    constraint: undefined,
     declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
@@ -252,6 +256,7 @@ test("projects orphan rewake before canonical malformed reasons on an updated ro
     declaresWorkflows: false,
     orphanRewake: true,
     degradedKinds: ["command", "skill", "command"],
+    constraint: undefined,
   } as const satisfies PluginUpdateOutcome;
 
   // act
@@ -284,6 +289,7 @@ test("keeps an empty newly-degraded signal on the clean updated row", () => {
     declaresMcp: false,
     declaresWorkflows: false,
     partialDegrade: { kinds: [], newlyDegraded: true },
+    constraint: undefined,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -316,6 +322,7 @@ test("projects a newly degraded partial update with warning severity", () => {
     declaresMcp: true,
     declaresWorkflows: false,
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+    constraint: undefined,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -347,6 +354,7 @@ test("projects an already degraded partial update with info severity", () => {
     declaresMcp: false,
     declaresWorkflows: false,
     partialDegrade: { kinds: ["hooks"], newlyDegraded: false },
+    constraint: undefined,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -383,6 +391,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial update"
       kinds: ["hooks", "lspServers", "commands", "hooks"],
       newlyDegraded: false,
     },
+    constraint: undefined,
   } as const satisfies PluginUpdateOutcome;
 
   // act
@@ -417,6 +426,7 @@ test("projects an unchanged outcome as a complete benign skipped message", () =>
     toVersion: "7.0.0",
     declaresAgents: false,
     declaresMcp: false,
+    constraint: undefined,
     declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
@@ -433,6 +443,41 @@ test("projects an unchanged outcome as a complete benign skipped message", () =>
     needsReload: false,
   });
   assert.equal(Object.hasOwn(message, "version"), false);
+  assert.equal(Object.hasOwn(message, "cause"), false);
+});
+
+test("D-10-13: an unchanged outcome with a constraint discloses its range and holders", () => {
+  // arrange
+  const outcome = {
+    declaresWorkflows: false,
+    partition: "unchanged",
+    name: "shared-lib",
+    fromVersion: "1.5.0",
+    toVersion: "1.5.0",
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: {
+      disclosure:
+        'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+      fellBackToCurrentCopy: false,
+    },
+  } satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "skipped",
+    name: "shared-lib",
+    scope: "user",
+    reasons: ["up-to-date"],
+    severity: "info",
+    needsReload: false,
+    cause: new Error(
+      'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+    ),
+  });
 });
 
 test("prefers a typed benign skip reason over contradictory notes", () => {
@@ -487,6 +532,84 @@ test("prefers a typed actionable skip reason over unclassified notes", () => {
     severity: "warning",
     needsReload: false,
   });
+});
+
+test("D-10-12: the held row is warning on the autoupdate cascade", () => {
+  // arrange -- the SAME held outcome `update-cascade.test.ts`'s manual-
+  // cascade case drives, so both surfaces are proven against one literal.
+  const outcome = {
+    declaresWorkflows: false,
+    partition: "skipped",
+    name: "shared-lib",
+    fromVersion: "1.0.0",
+    notes: ['the declared ranges admit no version in common -- required by "alpha@mp"'],
+    reasons: ["dependents constrain"],
+    declaresAgents: false,
+    declaresMcp: false,
+  } as const satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "skipped",
+    name: "shared-lib",
+    scope: "user",
+    reasons: ["dependents constrain"],
+    severity: "warning",
+    needsReload: false,
+    cause: new Error('the declared ranges admit no version in common -- required by "alpha@mp"'),
+  });
+});
+
+test("SC3: an unconstrained plugin renders the same autoupdate cascade rows as before", async (t) => {
+  // arrange: the REAL preflight over a real on-disk marketplace, with a
+  // second installed plugin ("beta") declaring something else entirely --
+  // the gate itself, not a stub, decides "alpha" is unconstrained, and
+  // `constraintFromVerdict` -- the production step that turns that verdict
+  // into the outcome's disclosure slot -- is what fills `constraint` below.
+  const seed = await seedUnconstrainedTarget("sc3-update-messaging-");
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const prepared = await preparePluginUpdate({
+    plugin: "alpha",
+    marketplace: "mp",
+    scope: "project",
+    locations: seed.locations,
+    cleanupClones: async () => {},
+  });
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(prepared.constraint, undefined);
+  const outcome = {
+    declaresWorkflows: false,
+    partition: "updated",
+    name: "alpha",
+    fromVersion: prepared.fromVersion,
+    toVersion: prepared.toVersion,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: prepared.constraint,
+  } satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "project");
+
+  // assert: the gate ran, found no holder, the preflight projected no
+  // disclosure, and the projected row is byte-identical to the
+  // pre-constraint-gate projection (NREG-01).
+  assert.deepStrictEqual(message, {
+    status: "updated",
+    name: "alpha",
+    scope: "project",
+    from: "1.0.0",
+    to: "1.1.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  });
+  assert.equal(Object.hasOwn(message, "reasons"), false);
 });
 
 test("classifies an empty notes-only skip as an unreadable manifest", () => {

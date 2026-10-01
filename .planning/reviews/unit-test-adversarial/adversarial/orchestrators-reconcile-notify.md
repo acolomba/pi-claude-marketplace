@@ -432,7 +432,7 @@ is unexecutable). Meanwhile all four "clean" verdicts fail under attack.
   raw path instead of the basename (T-53-02-02, pinned in the expected string),
   swapping the two `narrowStateLoadFailReason` arms (`:329–340`), planning against
   the raw merged view in the MIG-01 pre-migration window (`:390, 411, 435`),
-  emitting a second notification anywhere (`createNotificationBoundary(1, 2)`
+  emitting a second notification anywhere (`createNotificationBoundary(1, 3)`
   fails at the emission site, not afterwards), writing anything at all on the
   read-only surface (`retryTree` compares the whole scope tree, and the config and
   state bytes are compared verbatim), and sorting invalid blocks after the plan

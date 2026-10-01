@@ -607,7 +607,7 @@ test("MA-13 / WR-03: a leftover without the ownership marker refuses as stale cl
     assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), true);
     assert.strictEqual(await pathExists(path.join(finalDir, OWNERSHIP_MARKER)), false);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -668,7 +668,7 @@ test("Q-01 / NFR-10: a staging clone whose .git is a symlink refuses the marker 
     );
     assert.deepStrictEqual(await readdir(outside), []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.strictEqual(
@@ -923,7 +923,7 @@ for (const { title, config } of LEFTOVER_ORIGIN_CONFIGS) {
       ]);
       assert.strictEqual(await readFile(configPath, "utf8"), config);
       assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {},
       });
     });
@@ -960,7 +960,7 @@ test("MA-13 / RECON-03: orchestrated mode reports a leftover whose origin sectio
     assert.deepStrictEqual(notifications, []);
     assert.strictEqual(await readFile(configPath, "utf8"), ORIGIN_WITHOUT_URL_CONFIG);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -1107,7 +1107,7 @@ for (const { kind, faultStaging } of [
       // assert
       assert.deepStrictEqual(notifications, [UNREMOVABLE_LEFTOVER_NOTIFICATION]);
       assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {},
       });
       assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), true);
@@ -1147,7 +1147,7 @@ test("MA-14: orchestrated mode carries the leftover cleanup failure in the cause
     });
     assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), true);
@@ -1187,7 +1187,7 @@ test("MA-14: orchestrated mode joins both cleanup failures behind one Error.caus
     });
     assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), true);
@@ -1235,6 +1235,69 @@ test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate n
       "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
     );
     assert.equal(note.severity, "error");
+  });
+});
+
+test("accepts a path marketplace with an allowed dependency marketplace", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "allowed-marketplace");
+    const manifestDirectory = path.join(marketplaceRoot, ".claude-plugin");
+    await mkdir(manifestDirectory, { recursive: true });
+    await writeFile(
+      path.join(manifestDirectory, "marketplace.json"),
+      JSON.stringify({
+        name: "allowed-marketplace",
+        plugins: [],
+        allowCrossMarketplaceDependenciesOn: ["tools"],
+      }),
+    );
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps, state } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● allowed-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
+      "allowed-marketplace",
+    ]);
+    assert.deepStrictEqual(state.cloneCalls, []);
+  });
+});
+
+test("rejects a path marketplace with a scalar dependency allowlist", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "invalid-allowlist");
+    const manifestDirectory = path.join(marketplaceRoot, ".claude-plugin");
+    await mkdir(manifestDirectory, { recursive: true });
+    await writeFile(
+      path.join(manifestDirectory, "marketplace.json"),
+      JSON.stringify({
+        name: "invalid-allowlist",
+        plugins: [],
+        allowCrossMarketplaceDependenciesOn: "tools",
+      }),
+    );
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps, state } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          `⊘ ${marketplaceRoot} [project] (failed) {invalid manifest}`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+    assert.deepStrictEqual(state.cloneCalls, []);
   });
 });
 
@@ -1346,7 +1409,7 @@ test("classifies an invalid manifest through a staging-cleanup leak and preserve
       state.cloneCalls[0]?.dir === undefined ? "" : path.basename(state.cloneCalls[0].dir),
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -1431,7 +1494,7 @@ for (const source of [
         resolveRefCalls: [],
       });
       assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {},
       });
     });
@@ -1548,7 +1611,7 @@ test("normalizes a non-Error config-write throw after a path mutation", async (t
       resolveRefCalls: [],
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -1702,7 +1765,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     assert.deepStrictEqual(
       { ...persisted, marketplaces: { "valid-marketplace": stableRecord } },
       {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {
           "valid-marketplace": {
             name: "valid-marketplace",
@@ -1906,7 +1969,7 @@ test("does not invalidate when source validation fails before commit", async () 
 
     assert.deepStrictEqual(recorder.calls, []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.deepStrictEqual(await loadConfig(locations.configJsonPath), {
@@ -2536,7 +2599,7 @@ test("orchestrated mode normalizes a non-Error opaque failure without mutation",
       resolveRefCalls: [],
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -2595,7 +2658,7 @@ test("normalizes a structurally classified exotic throw in orchestrated mode", a
       resolveRefCalls: [],
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -2662,7 +2725,7 @@ test("cleans the final clone when state-record construction fails after rename",
       false,
     );
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });

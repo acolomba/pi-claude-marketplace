@@ -202,7 +202,7 @@ test("adds the canonical marketplace and enables autoupdate on a clean user scop
     { message: "● claude-plugins-official [user] <autoupdate>" },
   ]);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {
       "claude-plugins-official": {
         ...addedMarketplaceRecord(cwd, marketplaceRoot),
@@ -360,7 +360,7 @@ test("preserves the committed add when the real autoupdate child rejects its con
     },
   ]);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {
       "claude-plugins-official": {
         ...addedMarketplaceRecord(cwd, marketplaceRoot),
@@ -388,7 +388,7 @@ test("writes into the user scope only and leaves the project scope absent", asyn
   // assert
   assert.deepStrictEqual(await retryTree(projectLocations.scopeRoot), []);
   assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), bootstrappedScopeTree());
@@ -413,7 +413,7 @@ test("propagates a clone failure silently and never reaches the autoupdate step"
   );
   assert.deepStrictEqual(notifications, []);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), ["pi-claude-marketplace/"]);

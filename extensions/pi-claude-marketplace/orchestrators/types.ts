@@ -152,6 +152,25 @@ export type ReinstallPluginOutcome =
   ReinstallReinstalledOutcome | ReinstallSkippedOutcome | ReinstallFailedOutcome;
 
 /**
+ * D-10-17a: the user-visible residue of the update constraint gate, carried
+ * required-but-nullable (never optional, see `constraint` below) by every
+ * outcome that can report it. Both fields are REQUIRED inside this
+ * sub-object, on the `partialDegrade` precedent (`PluginUpdateUpdatedOutcome`
+ * above): the sub-object travels whole or not at all, so no site can produce
+ * a disclosure with only one of its two facts filled.
+ */
+export interface UpdateConstraintDisclosure {
+  /** The composed cause line: the effective range and the plugins holding it. */
+  readonly disclosure: string;
+  /**
+   * Whether the tree that landed is the marketplace's CURRENT copy rather
+   * than a tag the range selected -- the fact `{dependency current copy}`
+   * names on the success row.
+   */
+  readonly fellBackToCurrentCopy: boolean;
+}
+
+/**
  * Bridge identifier for `PluginUpdateFailedOutcome.phaseFailures` on the
  * update path. Promoted to a named type so callers and tests don't repeat
  * the literal union inline. (Distinct from the free-form
@@ -309,6 +328,19 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    * reads this one.
    */
   readonly notes?: readonly string[];
+  /**
+   * D-10-17a: the constraint gate's disclosure, forwarded from the
+   * preflight's `PreparedPluginUpdate.constraint` by a plain assignment --
+   * `update-swap.ts`'s `updated`-outcome literal is the SINGLE justified
+   * consumer of that slot. REQUIRED-BUT-NULLABLE (never `constraint?:`), so
+   * under `exactOptionalPropertyTypes` a construction site that forgets this
+   * member is a compile error rather than a silent omission -- the
+   * `fellBackToCurrentCopy` sub-field on its own only stops a HALF-FILLED
+   * disclosure, not an omitted one. `undefined` for an unconstrained update;
+   * `{ fellBackToCurrentCopy: true }` names the `{dependency current copy}`
+   * row (D-10-15).
+   */
+  readonly constraint: UpdateConstraintDisclosure | undefined;
 }
 
 /**
@@ -321,6 +353,17 @@ export interface PluginUpdateUnchangedOutcome extends PluginUpdateBase {
   readonly partition: "unchanged";
   readonly fromVersion: string;
   readonly toVersion: string;
+  /**
+   * D-10-13 / D-10-17a: the ceiling disclosure -- the effective range and its
+   * holders, when the plugin is already at the highest version its
+   * dependents admit. Built directly at the two `unchanged` construction
+   * sites in `update-preflight.ts`, where the gate verdict is already in
+   * scope; never read off `PreparedPluginUpdate.constraint`, which has
+   * exactly one other consumer. REQUIRED-BUT-NULLABLE (never `constraint?:`)
+   * for the same compile-time-omission reason as the `updated` partition's
+   * member. `undefined` for an unconstrained up-to-date plugin.
+   */
+  readonly constraint: UpdateConstraintDisclosure | undefined;
 }
 
 /**
@@ -495,6 +538,18 @@ export type InstallPluginOutcome =
        * shape) is undisturbed.
        */
       readonly landedDisabled?: true;
+      /**
+       * D-04-07: the plugin was already recorded as another plugin's
+       * dependency, and this install promoted that record to a direct install
+       * rather than installing anew. `resourcesChanged` says whether the
+       * promotion re-materialized a disabled record. Omitted for a fresh
+       * install (NREG-01). An orchestrated caller reads it to describe the row
+       * as a promotion, since its own snapshot may pre-date the record: an
+       * import whose earlier entry's cascade recorded the dependency sees no
+       * record at its call site. Not a `LedgerDegradationSignals` member, so
+       * the COMPAT-01 key-set pin is undisturbed.
+       */
+      readonly promoted?: true;
     } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers" | "stagedWorkflows">)
   | {
       /**

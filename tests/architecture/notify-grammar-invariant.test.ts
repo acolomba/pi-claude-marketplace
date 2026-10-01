@@ -329,12 +329,28 @@ const WILL_TOKEN_RE =
 // U+25CD, after `◌` was reassigned to `(remote)`). The status token is the
 // load-bearing assertion -- the row icon + name + optional bracket + optional
 // version are exercised by the catalog-uat byte-equality runner.
+// LOAD-01 widened it to admit an optional reasons brace: the load-time
+// dependency disable is a `(disabled)` row that names a condition, so a pattern
+// ending at the status token would match nothing about it and the fixture below
+// would be carried without being checked.
 const DISABLED_TOKEN_RE =
-  /^◍ [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: v[A-Za-z0-9.#_-]+)? \(disabled\)$/;
+  /^◍ [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: v[A-Za-z0-9.#_-]+)? \(disabled\)(?: \{[a-z ,-]+\})?$/;
 
-const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
+/**
+ * A `(disabled)` row plus the notify-argument count its severity produces: one
+ * argument for info, two for warning. The count is per fixture because the
+ * load-time dependency disable is the one `(disabled)` row that is NOT info --
+ * asserting a single shared count would have forced that fixture out of this
+ * gate or dropped the severity assertion for every other row here.
+ */
+interface DisabledRowFixture extends GrammarFixture {
+  readonly notifyArgs: 1 | 2;
+}
+
+const DISABLED_VARIANT_FIXTURES: readonly DisabledRowFixture[] = [
   {
     label: "D-54-01 / disabled plugin row with version under list-arm marketplace",
+    notifyArgs: 1,
     pi: piWithAllLoaded(),
     message: {
       marketplaces: [
@@ -356,6 +372,7 @@ const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "D-54-01 / disabled plugin row without version",
+    notifyArgs: 1,
     pi: piWithAllLoaded(),
     message: {
       marketplaces: [
@@ -371,6 +388,7 @@ const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "D-54-01 / disabled plugin row with orphan-fold scope bracket",
+    notifyArgs: 1,
     pi: piWithAllLoaded(),
     message: {
       marketplaces: [
@@ -384,6 +402,33 @@ const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
               version: "1.2.3",
               scope: "project",
               severity: "info",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // LOAD-01: the load-time dependency disable. It is the one `(disabled)`
+    // row that carries a reasons brace AND a cause trailer, and the one that
+    // renders at warning severity.
+    label: "LOAD-01 / disabled plugin row held down by an unsatisfied dependency",
+    notifyArgs: 2,
+    pi: piWithAllLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            {
+              status: "disabled",
+              name: "foo-plugin",
+              version: "1.2.3",
+              reasons: ["dependency unsatisfied"],
+              cause: new Error('Install "vault@mp" or uninstall "foo-plugin@mp"'),
+              severity: "warning",
               needsReload: false,
             },
           ],
@@ -443,11 +488,12 @@ test("D-54-01 / ENBL-04: every (disabled) row renders subject-first `◍ <name> 
       `notify() must call ctx.ui.notify exactly once for: ${fixture.label}`,
     );
     const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
-    // (disabled) is an inventory token; routes to info severity (no 2nd arg).
+    // An inventory (disabled) row routes to info severity (no 2nd arg); the
+    // load-time dependency disable routes to warning and carries one.
     assert.equal(
       args.length,
-      1,
-      `${fixture.label}: (disabled) rows route to info severity (no 2nd notify arg)`,
+      fixture.notifyArgs,
+      `${fixture.label}: the row's severity decides the notify argument count`,
     );
     const emitted = args[0];
     // Every plugin row line (stripped 2-space indent) must match the
@@ -546,6 +592,32 @@ const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
       ],
     },
   },
+  {
+    // LOAD-01: the first reconcile row to carry a cause trailer, which is what
+    // makes the cause-line escape in the subject-first test load-bearing.
+    label: "LOAD-01 / cascade with a load-time dependency disable row (warning severity)",
+    pi: piWithAllLoaded(),
+    message: {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "disabled",
+              name: "deploy-kit",
+              version: "1.0.0",
+              reasons: ["dependency unsatisfied"],
+              cause: new Error('Install "secrets-vault@mp" or uninstall "deploy-kit@mp"'),
+              severity: "warning",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 test("RECON-04: reconcile-applied-cascade NEVER emits `/reload to pick up changes` even on cascades with realized transition tokens", () => {
@@ -576,7 +648,9 @@ test("RECON-04: every reconcile-applied-cascade row renders subject-first `<glyp
   // indent on failed rows). The load-bearing assertion is that no line
   // starts with a `(<token>)` discriminator -- the subject (glyph + name)
   // always precedes the token.
-  const ROW_ICONS_AT_START = ["●", "○", "⊘"];
+  // LOAD-01 added `◍`: the load-time dependency disable renders a `(disabled)`
+  // row, whose glyph the three transition icons do not cover.
+  const ROW_ICONS_AT_START = ["●", "○", "⊘", "◍"];
   for (const fixture of RECONCILE_APPLIED_FIXTURES) {
     const ctx = makeCtx();
     notify(ctx as never, fixture.pi, fixture.message);
@@ -594,8 +668,12 @@ test("RECON-04: every reconcile-applied-cascade row renders subject-first `<glyp
     for (const line of lines) {
       // Subject-first invariant: every non-empty row line starts with one of
       // the closed-set row icons (or is a deeper-indent cause-chain trailer).
+      // The cause-trailer escape tests the indent that SURVIVES the two-space
+      // strip above: a 4-space trailer arrives here as a 2-space one, so an
+      // escape written against four spaces never fires and a cause line would
+      // be required to start with a row icon.
       assert.ok(
-        ROW_ICONS_AT_START.some((icon) => line.startsWith(icon)) || line.startsWith("    "),
+        ROW_ICONS_AT_START.some((icon) => line.startsWith(icon)) || line.startsWith("  "),
         `${fixture.label}: row line MUST start with a row icon (subject-first); got '${line}'`,
       );
       // The status token must never APPEAR before the row icon.

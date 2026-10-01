@@ -250,6 +250,7 @@ function seededRecord(plugin: SeededPlugin): Record<string, unknown> {
       workflows: [],
     },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -594,7 +595,7 @@ const PROJECT_ONE_UPDATED: ScopeFootprint = {
 test("forwards the exact direct update request through the required update operation", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "forward-operation");
-  const { ctx, pi } = createNotificationBoundary(1, 4, {
+  const { ctx, pi } = createNotificationBoundary(1, 6, {
     value: workspace.cwd,
     reads: 1,
   });

@@ -6,9 +6,11 @@
 //
 // D-116-05 (O3) places this handler in Group C: `uninstallPlugin` is reached by
 // direct import with no injection point, so a delegating case cannot state an
-// exact argument list against it. Delegation is observed instead as one minimal
-// effect -- whether the seeded install record is still in the scope's state.json
-// after the command. That exact-argument gap is this owner's recorded scope.
+// exact argument list against it. Delegation is observed instead as two minimal
+// effects -- whether the seeded install record is still in the scope's state.json
+// after the command, and whether the seeded plugin data bytes survived it (the
+// only way the forwarded `keepData` option shows from outside). That
+// exact-argument gap is this owner's recorded scope.
 //
 // Uninstall is destructive, which is why every case pairs its notification with
 // that on-disk footprint. A rejection case asserting only the sentence would
@@ -67,7 +69,11 @@ import { makeUninstallHandler } from "../../../../extensions/pi-claude-marketpla
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
-import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
+import {
+  buildInstalledPluginRecord,
+  mergeMarketplaceIntoState,
+  type SeededResources,
+} from "../marketplace-seed.ts";
 
 import type { HooksRouting } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
@@ -75,27 +81,58 @@ import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/
 
 /** The usage block, written out here rather than read back off the handler. */
 const USAGE_BLOCK =
-  "Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--local]";
+  "Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]";
+
+/**
+ * The exact payload seeded under each scope's plugin data directory. Data
+ * disposition is a byte contract (DATA-01 / DATA-02), so every case compares the
+ * content rather than mere presence.
+ */
+const DATA_PAYLOAD = "session bytes\n";
 
 /** Nothing was removed anywhere: the shape a rejected command must leave behind. */
 const BOTH_RECORDS_INTACT = {
   transportCalls: 0,
   projectPlugins: ["demo"],
+  projectData: DATA_PAYLOAD,
   userPlugins: ["demo"],
+  userData: DATA_PAYLOAD,
 };
 
-/** The project scope lost the record; the same plugin in the user scope survived. */
+/** The project scope lost the record and its data; the user scope survived whole. */
 const PROJECT_RECORD_REMOVED = {
   transportCalls: 0,
   projectPlugins: [],
+  projectData: null,
   userPlugins: ["demo"],
+  userData: DATA_PAYLOAD,
 };
 
-/** The user scope lost the record; the same plugin in the project scope survived. */
+/** The user scope lost the record and its data; the project scope survived whole. */
 const USER_RECORD_REMOVED = {
   transportCalls: 0,
   projectPlugins: ["demo"],
+  projectData: DATA_PAYLOAD,
   userPlugins: [],
+  userData: null,
+};
+
+/** DATA-01: the project record is gone, its seeded data bytes are not. */
+const PROJECT_RECORD_REMOVED_DATA_KEPT = {
+  transportCalls: 0,
+  projectPlugins: [],
+  projectData: DATA_PAYLOAD,
+  userPlugins: ["demo"],
+  userData: DATA_PAYLOAD,
+};
+
+/** DATA-01 at the other scope: the user record is gone, its data bytes are not. */
+const USER_RECORD_REMOVED_DATA_KEPT = {
+  transportCalls: 0,
+  projectPlugins: ["demo"],
+  projectData: DATA_PAYLOAD,
+  userPlugins: [],
+  userData: DATA_PAYLOAD,
 };
 
 const PROJECT_UNINSTALLED = {
@@ -104,6 +141,20 @@ const PROJECT_UNINSTALLED = {
 
 const USER_UNINSTALLED = {
   message: "● alpha [user]\n  ○ demo v1.0.0 (uninstalled)\n\n/reload to pick up changes",
+};
+
+// WR-06 / DATA-01: the preserving disposition's row. The `{data kept}` brace is
+// the only byte that separates a preserved uninstall from a destructive one, so
+// the keep-data cases assert THIS row rather than the bare one -- a flag that
+// stopped reaching the orchestrator would otherwise still look right here.
+const PROJECT_UNINSTALLED_DATA_KEPT = {
+  message:
+    "● alpha [project]\n  ○ demo v1.0.0 (uninstalled) {data kept}\n\n/reload to pick up changes",
+};
+
+const USER_UNINSTALLED_DATA_KEPT = {
+  message:
+    "● alpha [user]\n  ○ demo v1.0.0 (uninstalled) {data kept}\n\n/reload to pick up changes",
 };
 
 const PROJECT_OVERRIDE_REJECTED = {
@@ -174,7 +225,9 @@ interface HermeticWorkspace {
 interface ObservedEffects {
   readonly transportCalls: number;
   readonly projectPlugins: readonly string[];
+  readonly projectData: string | null;
   readonly userPlugins: readonly string[];
+  readonly userData: string | null;
 }
 
 /**
@@ -197,31 +250,127 @@ async function createHermeticWorkspace(t: TestContext, label: string): Promise<H
   };
 }
 
+/** The `alpha` manifest path every seeded record names; only `seedOrphanedDependency` writes it. */
+function alphaManifestPath(workspace: HermeticWorkspace): string {
+  return path.join(workspace.cwd, "alpha-src", ".claude-plugin", "marketplace.json");
+}
+
+/** Fresh empty inventory axes, so no two seeded records share an array. */
+function emptyResources(): SeededResources {
+  return { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] };
+}
+
+/**
+ * Seed `demo@alpha` (installed by name) into one scope. With
+ * `withOrphanedDependency`, a second record `dep` rides beside it with
+ * `provenance: "dependency"` and no declarer anywhere in the scope -- the
+ * whole-scope orphan the `--prune` sweep exists to find (D-05-01).
+ */
 async function seedInstalledPlugin(
   workspace: HermeticWorkspace,
   scope: Scope,
   scopeRoot: string,
+  withOrphanedDependency = false,
 ): Promise<void> {
   await mergeMarketplaceIntoState(path.join(scopeRoot, "pi-claude-marketplace"), "alpha", {
     name: "alpha",
     scope,
     source: { kind: "path", raw: "./alpha-src", logical: "./alpha-src" },
     addedFromCwd: workspace.cwd,
-    manifestPath: path.join(workspace.cwd, "alpha-src", ".claude-plugin", "marketplace.json"),
+    manifestPath: alphaManifestPath(workspace),
     marketplaceRoot: path.join(workspace.cwd, "alpha-src"),
     plugins: {
-      demo: buildInstalledPluginRecord(
-        { version: "1.0.0" },
-        { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
-      ),
+      demo: buildInstalledPluginRecord({ version: "1.0.0" }, emptyResources()),
+      ...(withOrphanedDependency && {
+        dep: buildInstalledPluginRecord(
+          { version: "1.0.0", provenance: "dependency" },
+          emptyResources(),
+        ),
+      }),
     },
   });
 }
 
-/** The same `demo@alpha` install recorded in both scopes, so a wrong scope shows. */
+/**
+ * The nested payload file under a scope's plugin data directory, composed the
+ * way `locations.pluginDataDir` composes it (`<extensionRoot>/data/<mp>/<plugin>`)
+ * rather than by calling the production helper.
+ */
+function pluginDataFile(scopeRoot: string): string {
+  return path.join(
+    scopeRoot,
+    "pi-claude-marketplace",
+    "data",
+    "alpha",
+    "demo",
+    "nested",
+    "session.bin",
+  );
+}
+
+/** Persistent data a user would lose if the command disposed of it wrongly. */
+async function seedPluginData(scopeRoot: string): Promise<void> {
+  const dataFile = pluginDataFile(scopeRoot);
+  await mkdir(path.dirname(dataFile), { recursive: true });
+  await writeFile(dataFile, DATA_PAYLOAD, "utf8");
+}
+
+/** The seeded payload when it survived; `null` once the data directory is gone. */
+async function readPluginData(scopeRoot: string): Promise<string | null> {
+  try {
+    return await readFile(pluginDataFile(scopeRoot), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * The same `demo@alpha` install recorded in both scopes, each with its own
+ * seeded data, so a wrong scope and a wrong data disposition both show.
+ */
 async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
   await seedInstalledPlugin(workspace, "project", workspace.projectRoot);
   await seedInstalledPlugin(workspace, "user", workspace.userRoot);
+  await seedPluginData(workspace.projectRoot);
+  await seedPluginData(workspace.userRoot);
+}
+
+/**
+ * `seedBothScopes` plus, in the project scope alone, the orphaned `dep` record
+ * and the real `alpha` manifest listing `demo` and `dep`. The manifest matters
+ * twice: the dependents guard reads every OTHER record's declarations before
+ * `demo` may go, and fails closed on a record its marketplace does not list
+ * (D-05-07); and the sweep reads the same declarations to decide that nothing
+ * holds `dep`. Neither plugin tree exists, so each read falls back to its
+ * manifest entry, which declares nothing.
+ */
+async function seedOrphanedDependency(workspace: HermeticWorkspace): Promise<void> {
+  await seedInstalledPlugin(
+    workspace,
+    "project",
+    workspace.projectRoot,
+    /* withOrphanedDependency= */ true,
+  );
+  await seedInstalledPlugin(workspace, "user", workspace.userRoot);
+  await seedPluginData(workspace.projectRoot);
+  await seedPluginData(workspace.userRoot);
+  const manifestPath = alphaManifestPath(workspace);
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "alpha",
+      plugins: [
+        { name: "demo", source: "./plugins/demo" },
+        { name: "dep", source: "./plugins/dep" },
+      ],
+    }),
+    "utf8",
+  );
 }
 
 /**
@@ -249,16 +398,18 @@ async function readInstalledPlugins(scopeRoot: string): Promise<readonly string[
   return marketplace === undefined ? [] : Object.keys(marketplace.plugins).sort();
 }
 
-/** Both scopes' surviving install records plus the transport counter. */
+/** Both scopes' surviving install records and data bytes, plus the transport counter. */
 async function readObservedEffects(workspace: HermeticWorkspace): Promise<ObservedEffects> {
   return {
     transportCalls: workspace.transportCalls(),
     projectPlugins: await readInstalledPlugins(workspace.projectRoot),
+    projectData: await readPluginData(workspace.projectRoot),
     userPlugins: await readInstalledPlugins(workspace.userRoot),
+    userData: await readPluginData(workspace.userRoot),
   };
 }
 
-test("removes the project-scope record when the reference alone selects the plugin", async (t) => {
+test("DATA-02: removes the project-scope record and its data when the reference alone selects the plugin", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "bare-reference");
   await seedBothScopes(workspace);
@@ -287,6 +438,222 @@ test("removes the project-scope record when the reference alone selects the plug
     peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
     ["demo"],
   );
+  verifyBoundary();
+});
+
+for (const { args, placement } of [
+  { args: "--keep-data demo@alpha", placement: "ahead of the reference" },
+  { args: "demo@alpha --keep-data", placement: "after the reference" },
+  { args: "--keep-data demo@alpha --keep-data", placement: "twice" },
+]) {
+  test(`DATA-01: keeps the seeded data bytes when the preservation flag appears ${placement}`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "keep-data-position");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+      value: workspace.cwd,
+      reads: 1,
+    });
+    const uninstallHandler = makeHandlerUnderTest(pi);
+
+    // act
+    await uninstallHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED_DATA_KEPT]);
+    assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED_DATA_KEPT);
+    verifyBoundary();
+  });
+}
+
+// FLAG-01 / D-05-10: `--prune` is accepted in any position and any number of
+// times. The scope holds one record, so nothing qualifies for the sweep and the
+// row is the plain success row (D-05-12); the flag's effect on a scope that does
+// hold orphans is the orchestrator suite's contract.
+for (const { args, placement } of [
+  { args: "--prune demo@alpha", placement: "ahead of the reference" },
+  { args: "demo@alpha --prune", placement: "after the reference" },
+  { args: "--prune demo@alpha --prune", placement: "twice" },
+]) {
+  test(`FLAG-01: accepts the prune flag ${placement} and removes the record and its data`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "prune-position");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+      value: workspace.cwd,
+      reads: 1,
+    });
+    const uninstallHandler = makeHandlerUnderTest(pi);
+
+    // act
+    await uninstallHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
+    assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED);
+    verifyBoundary();
+  });
+}
+
+// D-05-09: `--keep-data` and `--prune` are independent dispositions, so both
+// apply whatever their relative order.
+for (const { args, placement } of [
+  { args: "--prune --keep-data demo@alpha", placement: "prune first" },
+  { args: "demo@alpha --keep-data --prune", placement: "keep-data first" },
+]) {
+  test(`FLAG-01: keeps the seeded data bytes when the prune flag rides beside the preservation flag, ${placement}`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "prune-keep-data");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+      value: workspace.cwd,
+      reads: 1,
+    });
+    const uninstallHandler = makeHandlerUnderTest(pi);
+
+    // act
+    await uninstallHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED_DATA_KEPT]);
+    assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED_DATA_KEPT);
+    verifyBoundary();
+  });
+}
+
+// FLAG-01 / D-05-10: the forwarding proof the acceptance cases above cannot
+// give. With an orphaned dependency in the scope, the `{dependency pruned}` row
+// and the emptied project state are observable only if `prune: true` crossed
+// the handler-to-orchestrator seam; the plain command on the same seed is the
+// control that keeps the orphan (D-05-08's "never without the flag" at the
+// command line).
+const PROJECT_UNINSTALLED_DEPENDENCY_PRUNED = {
+  message:
+    "● alpha [project]\n  ○ demo v1.0.0 (uninstalled)\n  ○ dep v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+};
+
+/** The named plugin and the orphan are both gone from the project scope; the user scope is whole. */
+const PROJECT_RECORD_AND_ORPHAN_REMOVED = PROJECT_RECORD_REMOVED;
+
+/** The named plugin is gone; the orphan `dep` survived the plain command. */
+const PROJECT_RECORD_REMOVED_ORPHAN_KEPT = {
+  transportCalls: 0,
+  projectPlugins: ["dep"],
+  projectData: null,
+  userPlugins: ["demo"],
+  userData: DATA_PAYLOAD,
+};
+
+test("FLAG-01 / D-05-10: a typed --prune reaches the sweep and removes the orphaned dependency beside the named plugin", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "prune-forwarded");
+  await seedOrphanedDependency(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const uninstallHandler = makeHandlerUnderTest(pi);
+
+  // act
+  await uninstallHandler("demo@alpha --prune", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED_DEPENDENCY_PRUNED]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_AND_ORPHAN_REMOVED);
+  assert.deepStrictEqual(await readInstalledPlugins(workspace.projectRoot), []);
+  verifyBoundary();
+});
+
+test("FLAG-01 / D-05-10: the same command without --prune keeps the orphaned dependency", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "prune-omitted");
+  await seedOrphanedDependency(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const uninstallHandler = makeHandlerUnderTest(pi);
+
+  // act
+  await uninstallHandler("demo@alpha", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED_ORPHAN_KEPT);
+  assert.deepStrictEqual(await readInstalledPlugins(workspace.projectRoot), ["dep"]);
+  verifyBoundary();
+});
+
+for (const { expectedEffects, expectedNotification, scopeValue } of [
+  {
+    scopeValue: "project",
+    expectedNotification: PROJECT_UNINSTALLED_DATA_KEPT,
+    expectedEffects: PROJECT_RECORD_REMOVED_DATA_KEPT,
+  },
+  {
+    scopeValue: "user",
+    expectedNotification: USER_UNINSTALLED_DATA_KEPT,
+    expectedEffects: USER_RECORD_REMOVED_DATA_KEPT,
+  },
+]) {
+  test(`DATA-01: preservation keeps the ${scopeValue}-scope data the selected scope alone names`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, `keep-data-scope-${scopeValue}`);
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+      value: workspace.cwd,
+      reads: 1,
+    });
+    const uninstallHandler = makeHandlerUnderTest(pi);
+
+    // act
+    await uninstallHandler(`demo@alpha --keep-data --scope ${scopeValue}`, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [expectedNotification]);
+    assert.deepStrictEqual(await readObservedEffects(workspace), expectedEffects);
+    verifyBoundary();
+  });
+}
+
+test("preservation leaves the scope-target flag selecting the override layer", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "keep-data-write-target");
+  await seedBothScopes(workspace);
+  await seedInvalidOverrideLayer(workspace.projectRoot);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const uninstallHandler = makeHandlerUnderTest(pi);
+
+  // act
+  await uninstallHandler("demo@alpha --keep-data --local", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [PROJECT_OVERRIDE_REJECTED]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
+  verifyBoundary();
+});
+
+test("D-02-05: a preservation-shaped scope value is rejected, not read as the flag", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "keep-data-as-scope-value");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const uninstallHandler = makeHandlerUnderTest(pi);
+
+  // act
+  await uninstallHandler("demo@alpha --scope --keep-data", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: `Invalid --scope value: "--keep-data". Must be "user" or "project".\n\n${USAGE_BLOCK}`,
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
   verifyBoundary();
 });
 
@@ -365,7 +732,7 @@ for (const { expectedEffects, expectedNotification, scopeValue } of [
     expectedEffects: USER_RECORD_REMOVED,
   },
 ]) {
-  test(`removes the ${scopeValue}-scope record alone when --scope ${scopeValue} is supplied`, async (t) => {
+  test(`DATA-02: removes the ${scopeValue}-scope record and data alone when --scope ${scopeValue} is supplied`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, `scope-${scopeValue}`);
     await seedBothScopes(workspace);
@@ -451,23 +818,34 @@ test("honors the scope flag and the scope-target flag together", async (t) => {
   verifyBoundary();
 });
 
-test("reports an unknown long flag and removes nothing (D-116-06)", async (t) => {
-  // arrange
-  const workspace = await createHermeticWorkspace(t, "unknown-flag");
-  await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const uninstallHandler = makeHandlerUnderTest(pi);
+// D-02-05 / FLAG-01: the rejected data-disposition aliases, the value form of
+// the accepted flag, and an unrelated long option. The consuming scanner refuses
+// short options too, which is what keeps `-y` from ever reaching a confirmation
+// the command does not have.
+for (const rejectedToken of ["--delete-data", "-y", "--yes", "--keep-data=false", "--frobnicate"]) {
+  for (const { args, placement } of [
+    { args: `${rejectedToken} demo@alpha`, placement: "ahead of the reference" },
+    { args: `demo@alpha ${rejectedToken}`, placement: "after the reference" },
+  ]) {
+    test(`rejects "${rejectedToken}" ${placement} and disposes of nothing (D-02-05 / D-116-06)`, async (t) => {
+      // arrange
+      const workspace = await createHermeticWorkspace(t, "rejected-flag");
+      await seedBothScopes(workspace);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+      const uninstallHandler = makeHandlerUnderTest(pi);
 
-  // act
-  await uninstallHandler("demo@alpha --frobnicate", ctx);
+      // act
+      await uninstallHandler(args, ctx);
 
-  // assert
-  assert.deepStrictEqual(notifications, [
-    { message: `Unknown flag: "--frobnicate".\n\n${USAGE_BLOCK}`, severity: "error" },
-  ]);
-  assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
-  verifyBoundary();
-});
+      // assert
+      assert.deepStrictEqual(notifications, [
+        { message: `Unknown flag: "${rejectedToken}".\n\n${USAGE_BLOCK}`, severity: "error" },
+      ]);
+      assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
+      verifyBoundary();
+    });
+  }
+}
 
 for (const { rejectedToken, shape } of [
   { rejectedToken: "bogus", shape: "an ordinary token" },

@@ -12,6 +12,7 @@ import {
   type PluginInstalledMessage,
   type PluginNotificationMessage,
   type PluginSkippedMessage,
+  type PluginUpdateSkippedMessage,
   type PluginStatus,
   type Reason,
   type Severity,
@@ -77,6 +78,25 @@ const EXPECTED_REASONS = [
   "installs disabled",
   "marketplace in user scope",
   "marketplace in project scope",
+  "data kept",
+  "no matching version",
+  "version conflict",
+  "constraint too complex",
+  "invalid version constraint",
+  "dependency marketplace not added",
+  "dependency cycle",
+  "dependency failed",
+  "dependency promoted",
+  "dependency pruned",
+  "dependency unsatisfied",
+  "dependency version unsatisfied",
+  "dependents unsatisfied",
+  "dependency current copy",
+  "dependency enabled",
+  "dependents remain",
+  "dependency installed",
+  "dependents constrain",
+  "cross-marketplace",
   "stale workflow command",
   "requires pi-dynamic-workflows",
   "components now supported",
@@ -192,6 +212,8 @@ function notificationKindIsExhaustive(message: NotificationMessage): string {
     case "plugin-info-cascade":
     case "marketplace-not-added":
     case "reconcile-pending-empty":
+    case "prune-empty":
+    case "prune-committed-warning":
     case "reconcile-applied-cascade":
       return message.kind;
   }
@@ -215,14 +237,26 @@ const skippedMessage = {
 } satisfies PluginSkippedMessage;
 
 const contentReason: ContentReason = "marketplace in user scope";
+const crossMarketplaceReason: ContentReason = "cross-marketplace";
 const severity: Severity = "warning";
 
 void pluginStatusIsExhaustive;
 void marketplaceStatusIsExhaustive;
 void notificationKindIsExhaustive;
+void ({ kind: "prune-empty", scope: "user" } satisfies NotificationMessage);
+// @ts-expect-error a prune empty result must name its selected scope
+void ({ kind: "prune-empty" } satisfies NotificationMessage);
+void ({
+  kind: "prune-committed-warning",
+  scope: "project",
+  cause: new Error("release failed"),
+} satisfies NotificationMessage);
+// @ts-expect-error a committed prune warning must carry its failure cause
+void ({ kind: "prune-committed-warning", scope: "project" } satisfies NotificationMessage);
 void installedMessage;
 void skippedMessage;
 void contentReason;
+void crossMarketplaceReason;
 void severity;
 
 void ({
@@ -237,6 +271,25 @@ void ({
   status: "skipped",
   name: "alpha",
   // @ts-expect-error skipped messages require reasons
+} satisfies PluginSkippedMessage);
+
+// UPDT-02 / D-10-11: the cause trailer is update's alone. The base skipped
+// row has no slot for one, so no other producer can grow a trailer on a
+// byte-frozen row.
+const updateSkippedMessage = {
+  status: "skipped",
+  name: "alpha",
+  reasons: ["dependents constrain"],
+  cause: new Error('the declared ranges admit no version in common -- required by "beta@mp"'),
+} satisfies PluginUpdateSkippedMessage;
+void updateSkippedMessage;
+
+void ({
+  status: "skipped",
+  name: "alpha",
+  reasons: ["up-to-date"],
+  // @ts-expect-error a base skipped row structurally excludes a failure cause
+  cause: new Error("boom"),
 } satisfies PluginSkippedMessage);
 
 // @ts-expect-error structural marketplace absence is not a content reason

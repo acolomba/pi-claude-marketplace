@@ -276,7 +276,7 @@ test("uses depth-first order as the first-wins tiebreak for flat and nested name
   assert.deepStrictEqual(discovery, expectedDiscovery);
 });
 
-test("reports one source file reached through overlapping command roots", async (t) => {
+test("keeps one source file reached through overlapping command roots without warning", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(tmpdir(), "command-discover-overlap-"));
   t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
@@ -292,11 +292,8 @@ test("reports one source file reached through overlapping command roots", async 
         generatedName: "acme:build:web",
         commandFile: commandPath,
       },
-      { sourceName: "web", generatedName: "acme:web", commandFile: commandPath },
     ],
-    warnings: [
-      `command file "commands/build/web.md" is reached by more than one componentPaths.commands entry; installing it as both "acme:build:web" and "acme:web".`,
-    ],
+    warnings: [],
   };
 
   // act

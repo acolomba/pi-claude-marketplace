@@ -32,11 +32,13 @@
  *   clauses here that scan source.
  *
  *   Persistence (COMPAT-01) -- the persisted install record's key set is exactly
- *   the nine fields it already had, and neither a manifest-snapshot-shaped key
- *   nor an orphan-shaped key appears. The public state's version type still
- *   admits exactly the two versions it already admitted and the frozen
- *   default state still declares the current one, which together prove no
- *   migration and no version bump was introduced.
+ *   its pinned eleven fields, and neither a manifest-snapshot-shaped key nor an
+ *   orphan-shaped key appears. The public state's version type admits exactly
+ *   the three versions the record has had, and the frozen default state
+ *   declares the current one. A key joins the record only by one of the two
+ *   sanctioned routes (optional with no bump, or required with a bump and a
+ *   pre-validation fill, per D-04-03), and a version joins the union only with
+ *   such a fill behind it; either lands here deliberately.
  *
  *   Network (COMPAT-01 / D-98-09) -- DELEGATED, not duplicated. The NFR-5
  *   orchestrator-network gate already proves both info surfaces carry zero
@@ -259,6 +261,66 @@ const EXPECTED_REASONS = [
   "installs disabled",
   "marketplace in user scope",
   "marketplace in project scope",
+  // DATA-01 / WR-06: uninstall's data-disposition marker, appended at the
+  // tail with its catalog row, its renderer arm and its fixture.
+  "data kept",
+  // RESV-03: no release tag of the dependency's source falls inside the
+  // effective constraint.
+  "no matching version",
+  // RESV-03 / RESV-05: the effective constraint cannot be satisfied, either by
+  // the declarations against each other or by the copy already on disk.
+  "version conflict",
+  // RESV-03: the declared constraints pass one of the two combination caps.
+  "constraint too complex",
+  // RESV-03: a declared constraint is not a readable version range.
+  "invalid version constraint",
+  // RESV-02 / D-03-08: the dependency's marketplace is not added in the target
+  // scope. A CONTENT reason -- its subject is the dependency row, not the
+  // standalone marketplace row the three structural markers above belong to.
+  "dependency marketplace not added",
+  // RESV-04: the dependency graph closes on itself.
+  "dependency cycle",
+  // RESV-06: the requesting plugin's own row, when a dependency is what failed.
+  "dependency failed",
+  // D-04-07: a recorded dependency the user then installed by name. The
+  // record's provenance changed and nothing was materialized, so it rides an
+  // `installed` row beside `already installed`.
+  "dependency promoted",
+  // D-05-11: uninstall's prune marker -- a dependency record nothing
+  // installed declared any more, swept out by `--prune` after the named
+  // plugin. It rides an ordinary `uninstalled` row.
+  "dependency pruned",
+  "dependency unsatisfied",
+  "dependency version unsatisfied",
+  // D-06-06: uninstall's consequence marker for a removal that went through
+  // while other installed plugins still declared the target. It rides the
+  // success row; the dependents ride the cause line, never the token.
+  "dependents unsatisfied",
+  // TAGS-02 / D-07-03: no marketplace tag satisfied a path-source
+  // dependency's constraint, so the marketplace's current copy installed
+  // instead of failing. Rides an `installed` row -- the install succeeded --
+  // and is neither idempotent nor a failure reason.
+  "dependency current copy",
+  // D-08-02: install's already-installed arm and enable's own cascade
+  // member row turn on an already-installed, disabled dependency through
+  // its record. It rides an `installed` row -- the state changed and
+  // nothing was refused, so `already installed` alone cannot carry it.
+  "dependency enabled",
+  // EDEP-02: disable's refusal marker for an installed and ENABLED plugin
+  // in the same scope that still declares the target. It rides a `failed`
+  // row -- the command was NOT carried out, unlike its `dependents
+  // unsatisfied` neighbour, whose subject is a removal that went through.
+  "dependents remain",
+  // MISS-01 / D-09-09: the reload dependency-install step's marker for a
+  // missing declared dependency it materialized. It rides an `installed`
+  // row alone -- an undeclared plugin appearing with no stated reason is
+  // the row a user cannot explain, and it is neither idempotent nor a
+  // failure reason.
+  "dependency installed",
+  // UPDT-02 / D-10-09: the update-preflight constraint gate's marker for a
+  // plugin held to versions its installed dependents jointly admit.
+  "dependents constrain",
+  "cross-marketplace",
   "stale workflow command",
   "requires pi-dynamic-workflows",
   "components now supported",
@@ -626,12 +688,21 @@ type IsExact<Actual, Expected> = [Actual] extends [Expected]
     : false
   : false;
 
+// The pinned key set of the persisted install record. A key may join it in one
+// of exactly two ways: as an OPTIONAL additive field that needs no schemaVersion
+// bump and no migrate fill (the resolvedSha / hookEntries / dependencyDisabled
+// precedent), or as a REQUIRED field that arrives WITH a schemaVersion bump and
+// a migrate fill that runs before validation, so every earlier document loads
+// with a truthful default (the enabled / ENBL-02 and provenance / D-04-03
+// precedent). Removing one is a migration.
 void (true satisfies IsExact<
   keyof PluginInstallRecord,
   | "compatibility"
+  | "dependencyDisabled"
   | "enabled"
   | "hookEntries"
   | "installedAt"
+  | "provenance"
   | "resolvedSha"
   | "resolvedSource"
   | "resources"
@@ -688,11 +759,16 @@ void (true satisfies IsExact<
   never
 >);
 
-void (true satisfies IsExact<ExtensionState["schemaVersion"], 1 | 2>);
+// D-04-03: schemaVersion 3 IS an on-disk migration, and it is the whole of it:
+// a required `provenance` field that `ensurePluginProvenance` fills with its
+// truthful default ("explicit") on every record that lacks it, before
+// validation runs. A fourth member means another such migration and lands
+// here deliberately, with its own fill and its own default stated.
+void (true satisfies IsExact<ExtensionState["schemaVersion"], 1 | 2 | 3>);
 
-test("COMPAT-01: the default state still declares the current schema version", () => {
+test("COMPAT-01: the default state declares the current schema version", () => {
   // arrange
-  const expected = 2;
+  const expected = 3;
 
   // act
   const declaredSchemaVersion = DEFAULT_STATE.schemaVersion;
@@ -701,7 +777,7 @@ test("COMPAT-01: the default state still declares the current schema version", (
   assert.strictEqual(
     declaredSchemaVersion,
     expected,
-    "COMPAT-01: a first-load state.json is written at the version this work inherited -- no bump.",
+    "COMPAT-01 / D-04-03: a first-load state.json is written at schemaVersion 3, the version the provenance migration introduced.",
   );
 });
 

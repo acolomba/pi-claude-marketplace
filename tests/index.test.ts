@@ -49,6 +49,7 @@ import { It, when } from "strong-mock";
 
 import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/index.ts";
 import * as entryModule from "../extensions/pi-claude-marketplace/index.ts";
+import { loadState } from "../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { EXTENSION_VERSION } from "../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import { createNotificationBoundary } from "./edge/notification-boundary.ts";
@@ -540,8 +541,11 @@ function contextWithSessionId(
   });
 }
 
-function discoverEvent(cwd: string): ResourcesDiscoverEvent {
-  return { type: "resources_discover", cwd, reason: "startup" };
+function discoverEvent(
+  cwd: string,
+  reason: ResourcesDiscoverEvent["reason"] = "startup",
+): ResourcesDiscoverEvent {
+  return { type: "resources_discover", cwd, reason };
 }
 
 /** A complete context for exercising a production hook callback. */
@@ -638,6 +642,7 @@ async function seedBlockingHookPlugin(cwd: string): Promise<void> {
                 hooks: ["hook-owner"],
               },
               enabled: true,
+              provenance: "explicit",
               installedAt: "2026-09-08T00:00:00.000Z",
               updatedAt: "2026-09-08T00:00:00.000Z",
             },
@@ -698,10 +703,22 @@ async function seedEnabledPlugin(
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "mp-src");
   await mkdir(extensionRoot, { recursive: true });
+  // LOAD-01: the recorded plugin's marketplace declares it. A state whose
+  // marketplace manifest is absent is a scope whose declarations cannot be
+  // established, which the load-time check reports rather than passing over --
+  // so a seed that omits the manifest describes a broken installation instead
+  // of the ordinary one every case here is about.
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ name: "mp", plugins: [{ name: "plug", source: "./plugins/plug" }] }),
+    "utf8",
+  );
   await writeFile(
     path.join(extensionRoot, "state.json"),
     JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
       ...(opts.stamped !== false && { lastReconciledExtensionVersion: EXTENSION_VERSION }),
       marketplaces: {
         mp: {
@@ -725,12 +742,91 @@ async function seedEnabledPlugin(
                 workflows: [],
               },
               enabled: true,
+              provenance: "explicit",
               installedAt: "2026-08-03T00:00:00.000Z",
               updatedAt: "2026-08-03T00:00:00.000Z",
             },
           },
         },
       },
+    }),
+    "utf8",
+  );
+}
+
+/**
+ * MISS-01: record project-scope plugin "plug" (enabled), whose manifest
+ * declares a dependency on "helper" -- also declared and on disk in the same
+ * marketplace, but never recorded. Config declares "plug@mp" (kept out of
+ * the uninstall bucket) and says nothing about "helper" (D-04-02).
+ */
+async function seedEnabledPluginWithMissingDependency(cwd: string): Promise<void> {
+  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "mp",
+      plugins: [
+        { name: "plug", source: "./plugins/plug", dependencies: ["helper"] },
+        { name: "helper", source: "./plugins/helper" },
+      ],
+    }),
+    "utf8",
+  );
+  const plugRoot = path.join(marketplaceRoot, "plugins", "plug");
+  await mkdir(path.join(plugRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(plugRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "plug", version: "1.0.0", dependencies: ["helper"] }),
+    "utf8",
+  );
+  const helperRoot = path.join(marketplaceRoot, "plugins", "helper");
+  await mkdir(path.join(helperRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(helperRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "helper", version: "1.0.0" }),
+    "utf8",
+  );
+  await mkdir(extensionRoot, { recursive: true });
+  await writeFile(
+    path.join(extensionRoot, "state.json"),
+    JSON.stringify({
+      schemaVersion: 2,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "project",
+          source: { kind: "path", raw: marketplaceRoot },
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            plug: {
+              version: "1.0.0",
+              resolvedSource: plugRoot,
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              enabled: true,
+              provenance: "explicit",
+              installedAt: "2026-08-03T00:00:00.000Z",
+              updatedAt: "2026-08-03T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    }),
+    "utf8",
+  );
+  await mkdir(path.join(cwd, ".pi"), { recursive: true });
+  await writeFile(
+    path.join(cwd, ".pi", "claude-plugins.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "plug@mp": {} },
     }),
     "utf8",
   );
@@ -831,6 +927,59 @@ test("constructs one runtime, completion cache and reconcile operation per exten
     "createHooksHydration(hooksRuntime, { loadState, readHooksJson })",
   ]);
   assert.deepStrictEqual(reconcileConstructions, ["createApplyReconcile({ loadState })"]);
+});
+
+test("D-09-13: the discover handler hands the event's reason to the reconcile", async () => {
+  // arrange -- whitespace-tolerant so a Prettier reflow (the literal exceeds
+  // one line's print width) cannot silently stop matching.
+  const source = await readFile(
+    path.join(import.meta.dirname, "../extensions/pi-claude-marketplace/index.ts"),
+    "utf8",
+  );
+
+  // act
+  const reasonThreadConstructions =
+    source.match(
+      /applyReconcile\(\{\s*ctx,\s*pi,\s*cwd:\s*event\.cwd,\s*hooksRouting,\s*completionCache,\s*reason:\s*event\.reason,?\s*\}\)/g,
+    ) ?? [];
+
+  // assert
+  assert.equal(reasonThreadConstructions.length, 1);
+});
+
+test("MISS-01 / D-09-13: a reload event installs a missing dependency that a startup event left alone", async (t) => {
+  // arrange -- two independent project roots under one hermetic scope: one
+  // for the startup event, one for the reload event.
+  const scope = await createHermeticScope(t, "dep-reason");
+  const startupCwd = path.join(scope.cwd, "startup-project");
+  const reloadCwd = path.join(scope.cwd, "reload-project");
+  await mkdir(startupCwd, { recursive: true });
+  await mkdir(reloadCwd, { recursive: true });
+  await seedEnabledPluginWithMissingDependency(startupCwd);
+  await seedEnabledPluginWithMissingDependency(reloadCwd);
+
+  // act -- startup: the load-time check disables "plug", "helper" untouched.
+  process.chdir(startupCwd);
+  const startup = await loadExtension(1, 3);
+  await startup.discover(discoverEvent(startupCwd, "startup"), startup.ctx);
+
+  // assert
+  const afterStartup = await loadState(path.join(startupCwd, ".pi", "pi-claude-marketplace"));
+  assert.equal(afterStartup.marketplaces["mp"]?.plugins["helper"], undefined);
+  assert.equal(afterStartup.marketplaces["mp"]?.plugins["plug"]?.enabled, false);
+  startup.verifyBoundary();
+
+  // act -- reload: the missing dependency installs and "plug" stays up.
+  process.chdir(reloadCwd);
+  const reload = await loadExtension(1, 3);
+  await reload.discover(discoverEvent(reloadCwd, "reload"), reload.ctx);
+
+  // assert
+  const afterReload = await loadState(path.join(reloadCwd, ".pi", "pi-claude-marketplace"));
+  assert.equal(afterReload.marketplaces["mp"]?.plugins["helper"]?.provenance, "dependency");
+  assert.equal(afterReload.marketplaces["mp"]?.plugins["helper"]?.enabled, true);
+  assert.equal(afterReload.marketplaces["mp"]?.plugins["plug"]?.enabled, true);
+  reload.verifyBoundary();
 });
 
 test("keeps hook routing and command completion state inside each extension-load owner graph", async (t) => {
@@ -971,7 +1120,7 @@ test(
     const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
     const configPath = path.join(scope.cwd, ".pi", "claude-plugins.json");
     const expectedState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         mp: {
           name: "mp",
@@ -994,6 +1143,7 @@ test(
                 workflows: [],
               },
               enabled: true,
+              provenance: "explicit",
               installedAt: "2026-08-03T00:00:00.000Z",
               updatedAt: "2026-08-03T00:00:00.000Z",
             },

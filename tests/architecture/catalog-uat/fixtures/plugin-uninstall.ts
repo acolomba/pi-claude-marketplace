@@ -27,6 +27,30 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // WR-06 / DATA-01: the preserving disposition, which is the only thing that
+    // separates this row from the `success` row above.
+    "success-keep-data": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["data kept"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // WLIF-06: the removal took a workflow envelope off disk, so the command it
     // registered stays live until a reload. The `{stale workflow command}` token
     // and the `/reload to pick up changes` trailer coexist on one screen and
@@ -186,6 +210,191 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
                 reasons: ["not installed", "marketplace in project scope"],
                 severity: "error",
                 needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LOAD-03 / D-06-06: other installed plugins in the scope still declared
+    // the target and the removal went through anyway. The token rides the
+    // SUCCESS row; the dependents ride the cause line, never the token.
+    // The row is `info`, so the fixture omits `expectedSeverity`: notify
+    // passes no second argument on the info arm.
+    "success-dependents-unsatisfied": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                severity: "info",
+                needsReload: true,
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["dependents unsatisfied"],
+                cause: new Error("required by deploy-kit@official"),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-05-07: some OTHER record's declarations could not be established, so
+    // the uninstall is refused rather than risked. The brace carries the D-47-B
+    // `unreadable` default -- a token about the declarer would make a false
+    // claim about the target -- and the cause names which record it was.
+    "refused-declarer-unreadable": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["unreadable"],
+                cause: new Error(
+                  "cannot read the dependencies of other@official: not declared by its marketplace",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-05-01 / D-05-02 / D-05-11 / PRUNE-04: `--prune` swept two orphaned
+    // dependency records out after the named plugin -- one under the same
+    // marketplace, one under another. The named plugin's block comes first,
+    // then one block per other marketplace that lost a member.
+    "success-prune": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "uninstalled",
+                name: "shared-lib",
+                version: "2.0.0",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "community",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "tooling",
+                version: "3.0.0",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-05-09: the data disposition covers every plugin the command removed,
+    // and each pruned row says why it went before what was kept.
+    "success-prune-keep-data": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["data kept"],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "uninstalled",
+                name: "shared-lib",
+                version: "2.0.0",
+                reasons: ["dependency pruned", "data kept"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-05-13: a pruned member whose removal failed renders its own warning
+    // row beside the rows that succeeded; the named plugin's removal and the
+    // other members' stand, so the block computes `warning`.
+    "prune-partial-failure": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "uninstalled",
+                name: "shared-lib",
+                version: "2.0.0",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "community",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "warning",
+                needsReload: false,
+                name: "tooling",
+                version: "3.0.0",
+                reasons: ["source mismatch"],
+                cause: new Error("Agents unstage refused: foreign content"),
               },
             ],
           },

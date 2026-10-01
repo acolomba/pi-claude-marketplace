@@ -30,8 +30,14 @@ void ({
   status: "skipped",
   name: "alpha",
   reasons: ["up-to-date"],
-  // @ts-expect-error skipped messages cannot carry a failure cause
-  cause: new Error("not permitted"),
+} satisfies UpdateMsg);
+// UPDT-02: a held update's cause line is the first `skipped` row to carry
+// `cause` -- the constraint gate's remedy, naming the constraining plugins.
+void ({
+  status: "skipped",
+  name: "alpha",
+  reasons: ["dependents constrain"],
+  cause: new Error('required by "beta@mp"'),
 } satisfies UpdateMsg);
 void ({
   status: "partially-upgradable",

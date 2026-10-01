@@ -55,6 +55,139 @@ export type Reason =
   | "installs disabled"
   | "marketplace in user scope"
   | "marketplace in project scope"
+  // DATA-01 / WR-06: the uninstall row's disposition marker. Uninstall destroys
+  // the plugin's data directory by default, and without a marker the two
+  // dispositions render the same row: the operator who typed `--keep-data`
+  // needs confirmation it took effect, and the one who omitted it needs to know
+  // a data tree was destroyed. The token rides the PRESERVING branch, which
+  // keeps the default row byte-frozen (D-02-01) while making the two branches
+  // distinguishable.
+  | "data kept"
+  // RESV-03: the dependency's source advertises no release tag inside the
+  // effective constraint. The outcome the operator can act on, kept separate
+  // from the transport failures (`network unreachable` / `authentication
+  // required`), which say the listing could not be READ rather than that it
+  // held nothing usable.
+  | "no matching version"
+  // RESV-03 / RESV-05: the effective constraint cannot be satisfied. One token
+  // over two rows -- declarations that contradict each other, and a copy
+  // already on disk that falls outside them. The already-installed row joins
+  // `already installed` in the same brace and carries its recorded version, so
+  // the two subjects stay distinguishable without a second token.
+  | "version conflict"
+  // RESV-03: the declared constraints pass one of the two combination size
+  // caps. The input is well formed and it is the COMBINATION that is refused,
+  // so `invalid version constraint` would misattribute it.
+  | "constraint too complex"
+  // RESV-03: a declared constraint is not a version range the evaluator can
+  // read. Distinct from `unparseable`, whose subject is a whole document rather
+  // than one field of one declaration.
+  | "invalid version constraint"
+  // RESV-02 / D-03-08: the dependency names a marketplace the target scope has
+  // not added. A CONTENT reason, on the `marketplace in user scope` precedent:
+  // its subject is the dependency row it rides, which is why the three
+  // structural `marketplace not added*` markers -- whose subject is a
+  // standalone marketplace row -- cannot carry it.
+  | "dependency marketplace not added"
+  // RESV-04: the dependency graph closes on itself. Every inherited token names
+  // a property of ONE plugin; a cycle is a property of the path between
+  // several, which the row's cause line spells out in walk order.
+  | "dependency cycle"
+  // RESV-06: stamped on the requesting plugin's own row when what failed was
+  // one of its dependencies. Without it that row -- the one the user's command
+  // produced -- reads as an unexplained failure beside the dependency row that
+  // carries the real cause.
+  | "dependency failed"
+  // D-04-07: the plugin the user just named was already recorded, as another
+  // plugin's dependency, and this command promoted that record to a direct
+  // install. `already installed` alone reports a REFUSAL -- the command did
+  // nothing -- and this row reports a state change, so the two cannot share a
+  // brace without one of them lying. It rides an `installed` row beside
+  // `already installed`: the desired state is reached, nothing was
+  // materialized, and the pair says which of those two facts this command
+  // is responsible for.
+  | "dependency promoted"
+  // D-05-11 / PRUNE-04: the plugin was recorded as another plugin's
+  // dependency, nothing installed declares it any more, and `uninstall
+  // --prune` removed it. It rides an ordinary `uninstalled` row because the
+  // operation IS an uninstall; the brace says why this plugin, which the user
+  // did not name, went. Under `--keep-data` it precedes `data kept` (D-05-09).
+  | "dependency pruned"
+  // LOAD-01: the load-time check disabled this recorded plugin, because a
+  // dependency it declares is not satisfied in the same scope. It mirrors
+  // upstream's `dependency-unsatisfied` error code, so the token names the
+  // CONDITION and the remedy naming both parties rides the row's cause line --
+  // the same split `dependency cycle` established, and the only one available:
+  // a reason is one to three lowercase words and this set is a literal tuple,
+  // so no token can interpolate an identifier. Its subject is the DEPENDENT
+  // the load-time check just disabled, never the dependency an install cascade
+  // row is about.
+  | "dependency unsatisfied"
+  // LOAD-01: the same load-time check, on the arm where the dependency IS
+  // recorded and enabled but its recorded version falls outside the declared
+  // range. It mirrors upstream's second error code,
+  // `dependency-version-unsatisfied`, so the pair of tokens tracks the pair of
+  // upstream codes. `dependency unsatisfied` cannot carry this case: the two
+  // remedies differ in kind -- one says install or enable the missing thing,
+  // the other says move an existing thing's version -- and a reader who greps
+  // one token must not be shown the other's situation. As with its neighbour
+  // the token names the CONDITION and the remedy, which interpolates both the
+  // dependency and the range, rides the row's cause line.
+  | "dependency version unsatisfied"
+  // LOAD-03 / D-06-06: the plugin the command just removed was still declared
+  // as a dependency by other installed plugins in the same scope. The removal
+  // WENT THROUGH -- that is upstream's behaviour, and it is what breaks the
+  // deadlock two plugins declaring each other would otherwise create -- so the
+  // token rides the SUCCESS row and states the consequence rather than a
+  // refusal: each dependent named beside it becomes unsatisfied at the next
+  // load, where the check disables it and names the remedy. `dependency
+  // unsatisfied` cannot carry this: that token's subject is the DEPENDENT the
+  // check just disabled, and this one's subject is the DEPENDENCY that just
+  // left, reported on the row of the command that removed it. The dependent
+  // keys ride the row's cause line rather than the token, on the `dependency
+  // cycle` precedent -- a token names one fact about one plugin, and the list
+  // of who needed it is a fact about several.
+  | "dependents unsatisfied"
+  // TAGS-02 / D-07-03: no marketplace tag satisfied a path-source dependency's
+  // constraint, so the marketplace's CURRENT copy installed instead of
+  // failing. It rides an `installed` row -- the install succeeded -- and is
+  // neither idempotent (a copy installed) nor a failure reason. The
+  // constraint itself is left for the LOAD-01 load-time check to enforce.
+  | "dependency current copy"
+  // D-08-02: install or enable turned on an already-installed, disabled
+  // dependency through its record. It rides an `installed` row beside
+  // `already installed` on the install cascade's already-installed arm, and
+  // alone on the enable cascade's own re-materialized member row -- the
+  // state changed and nothing was refused, so a plain `already installed`
+  // (which reports a no-op) cannot carry it.
+  | "dependency enabled"
+  // EDEP-02: disable refuses while an installed and ENABLED plugin in the
+  // same scope still declares the target, and the refusal rides a `failed`
+  // row. `dependents unsatisfied` cannot carry it: that token's subject is a
+  // removal that WENT THROUGH on a SUCCESS row, and this one's subject is an
+  // operation that was NOT carried out. The dependent keys ride the row's
+  // cause line, on the `dependency cycle` precedent, never the token.
+  | "dependents remain"
+  // MISS-01 / D-09-09: the reload's dependency-install step materialized a
+  // plugin the user never named, to satisfy a declaration. It rides an
+  // `installed` row alone, because a bare `(installed)` for an undeclared
+  // plugin is the row a user cannot explain, and it is neither idempotent
+  // nor a failure.
+  | "dependency installed"
+  // UPDT-02 / D-10-09 / D-10-10: the update-preflight constraint gate held
+  // this plugin to versions its installed dependents jointly admit, and none
+  // exists. Three situations fold onto this one token -- disjoint declared
+  // ranges, no tag satisfying the intersection, and a fetched version
+  // outside it -- and the cause line says which one applies and names the
+  // constraining plugins. `version conflict` cannot carry it: nothing here
+  // contradicts anything. `no matching version` cannot carry it either: that
+  // token claims the source advertised no tag in range, which is false on
+  // the arm where a version WAS found and simply falls outside what the
+  // dependents allow.
+  | "dependents constrain"
+  // D-11-06: the root marketplace disallows a new cross-marketplace edge.
+  // The cause names the policy root and both available remedies.
+  | "cross-marketplace"
   // WLIF-06: a workflow command the just-finished verb RETIRED -- its envelope
   // is off disk, but the host exposes no unregister call, so the command that
   // envelope registered stays live and runnable for the rest of the session.
@@ -235,7 +368,14 @@ export interface PluginReinstalledMessage extends TransitionMessageBase {
   readonly reasons?: readonly ContentReason[];
 }
 
-/** Uninstalled plugin row. */
+/**
+ * Uninstalled plugin row.
+ *
+ * WR-06: `reasons` carries the data disposition (`data kept`) and nothing else
+ * today. The field is optional, so every producer that has nothing to report --
+ * `marketplace remove`'s per-plugin rows, the default uninstall -- composes the
+ * brace-less row.
+ */
 export interface PluginUninstalledMessage extends TransitionMessageBase {
   readonly status: "uninstalled";
   readonly name: string;
@@ -258,6 +398,18 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
    * `{requires pi-dynamic-workflows}` whatever the removed record declared.
    */
   readonly reasons?: readonly ContentReason[];
+  /**
+   * LOAD-03: the `name@marketplace` keys of the plugins that still declared
+   * the removed plugin, on the `PluginDisabledMessage.cause` precedent.
+   * Standalone prune also uses this slot on a committed member when that
+   * member's post-commit cleanup fails.
+   * Other uninstall rows omit it.
+   *
+   * It rides the cause chain because the sentence interpolates plugin
+   * identifiers, and the cause chain is the only channel in this grammar that
+   * legally interpolates one.
+   */
+  readonly cause?: Error;
 }
 
 /** Disabled plugin row. */
@@ -269,6 +421,18 @@ export interface PluginDisabledMessage extends TransitionMessageBase {
   readonly description?: string;
   readonly reasons?: readonly ContentReason[];
   readonly enableHint?: boolean;
+  /**
+   * LOAD-01: the load-time dependency disable's remedy, naming the dependency
+   * and the dependent. It is the ONE thing this field carries: the ordinary
+   * toggle disable and the install-disabled cascade both omit it, and their
+   * rows stay byte-frozen.
+   *
+   * It rides the cause chain because the sentence interpolates two plugin
+   * identifiers, and the cause chain is the only channel in this grammar that
+   * legally interpolates one -- every frozen trailer constant interpolates
+   * nothing by contract.
+   */
+  readonly cause?: Error;
 }
 
 /** Available plugin row. */
@@ -366,6 +530,29 @@ export interface PluginSkippedMessage extends MessageBase {
   readonly scope?: Scope;
 }
 
+/**
+ * The one `skipped` row that carries a cause trailer: update's.
+ *
+ * UPDT-02 / D-10-11: the held-update remedy names the constraining plugins
+ * and marks which of them are currently disabled, and D-10-13's ceiling
+ * disclosure names the range and its holders. Both interpolate plugin
+ * identifiers, and the cause chain is the only channel in this grammar that
+ * legally interpolates one -- every frozen trailer constant interpolates
+ * nothing by contract.
+ *
+ * The slot lives on this variant rather than on `PluginSkippedMessage`, so a
+ * row literal typed as the base -- every non-update surface's own `*Msg`
+ * union -- is an excess-property error when it sets `cause`. That is the
+ * whole of the guard. The dispatcher union `PluginNotificationMessage` names
+ * this variant too, so a producer that composes its rows at the dispatcher
+ * type sets `cause` on a `skipped` row and compiles; the catalog fixtures
+ * compose at that type and do exactly this. No production surface composes
+ * rows at the dispatcher type today.
+ */
+export interface PluginUpdateSkippedMessage extends PluginSkippedMessage {
+  readonly cause?: Error;
+}
+
 /** Manual-recovery plugin row. */
 export interface PluginManualRecoveryMessage extends MessageBase {
   readonly status: "manual recovery";
@@ -389,6 +576,7 @@ export interface PluginWillUninstallMessage extends MessageBase {
   readonly status: "will uninstall";
   readonly name: string;
   readonly scope?: Scope;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /** Pending plugin-enable row. */
@@ -418,6 +606,7 @@ export type PluginNotificationMessage =
   | PluginUpgradableMessage
   | PluginFailedMessage
   | PluginSkippedMessage
+  | PluginUpdateSkippedMessage
   | PluginManualRecoveryMessage
   | PluginWillInstallMessage
   | PluginWillUninstallMessage
@@ -615,6 +804,7 @@ export interface MarketplaceInfoMessage {
     | { readonly sourceKind: "url"; readonly url: string; readonly ref?: string }
     | { readonly sourceKind: "path"; readonly absPath: string };
   readonly description?: string;
+  readonly allowedMarketplaces?: readonly string[];
 }
 
 /** Plugin information message. */
@@ -668,7 +858,10 @@ export interface PluginInfoRowBase {
   readonly notes?: readonly string[];
 }
 
-/** Component details for a resolved plugin information row. */
+/**
+ * Component details sorted alphabetically, with dependencies pre-rendered as
+ * plugin addresses and optional version/SHA constraints, sorted by dependency name.
+ */
 export interface PluginInfoComponentsResolved {
   readonly componentsResolved: true;
   readonly components: {
@@ -687,9 +880,17 @@ export interface PluginInfoComponentsResolved {
   readonly dependencies?: readonly string[];
 }
 
-/** Marker arm for plugin information whose components are not resolved. */
+/**
+ * Marker arm for plugin information whose components are not resolved.
+ *
+ * `dependencies` is the pre-rendered, name-sorted list the cold git-source
+ * `(remote)` row carries from its marketplace entry (D-01-32): the plugin's
+ * own `plugin.json` is not readable without a fetch and NFR-5 forbids one.
+ * The renderer emits it after the `components: not resolved` marker.
+ */
 export interface PluginInfoComponentsUnresolved {
   readonly componentsResolved: false;
+  readonly dependencies?: readonly string[];
 }
 
 /** Non-empty marketplace information fan-out. */
@@ -717,6 +918,19 @@ export interface ReconcilePendingEmptyMessage {
   readonly advisories?: readonly string[];
 }
 
+/** Scoped informational result for a standalone orphan sweep. */
+export interface PruneEmptyMessage {
+  readonly kind: "prune-empty";
+  readonly scope: Scope;
+}
+
+/** Scope-wide warning after a standalone prune state save succeeded. */
+export interface PruneCommittedWarningMessage {
+  readonly kind: "prune-committed-warning";
+  readonly scope: Scope;
+  readonly cause: Error;
+}
+
 /** Marketplace-absence failure message. */
 export interface MarketplaceNotAddedMessage {
   readonly kind: "marketplace-not-added";
@@ -742,4 +956,6 @@ export type NotificationMessage =
   | PluginInfoCascadeMessage
   | MarketplaceNotAddedMessage
   | ReconcilePendingEmptyMessage
+  | PruneEmptyMessage
+  | PruneCommittedWarningMessage
   | ReconcileAppliedCascadeMessage;

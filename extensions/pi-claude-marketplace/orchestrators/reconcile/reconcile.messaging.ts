@@ -12,6 +12,7 @@ import {
   composeReasons,
 } from "../../shared/notification-grammar.ts";
 import {
+  type ContentReason,
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
@@ -200,10 +201,11 @@ const renderForceInstalled: RenderFn<PluginPartiallyInstalledMessage> = (p, prob
  * `(disabled)` -- realized disable row. NO dependencies. Lifted verbatim from
  * the central `renderPluginRow` `disabled` arm, including its ENBL-16 /
  * D-100-07 reason threading: the plain toggle path stamps no reason (the row
- * reports a transition the user asked for), while the DFEN-04 install-disabled
- * cascade already stamps `reasons: ["installs disabled"]` (apply.ts). `pluginRow`
- * threads whichever `p.reasons` the producer supplies, so an absent field still
- * collapses the brace, but a reason a producer stamps cannot be dropped here
+ * reports a transition the user asked for) and its brace collapses, while the
+ * DFEN-04 install-disabled cascade stamps `reasons: ["installs disabled"]`
+ * (apply.ts) and the load-time dependency disable stamps
+ * `DEPENDENCY_UNSATISFIED_ROW_REASONS` below; `pluginRow` threads whichever
+ * `p.reasons` the producer supplies, so a stamped reason cannot be dropped here
  * without a byte change anyone can see. Both soft-dep flags stay hard-coded
  * false (ENBL-15 / D-100-06).
  */
@@ -211,11 +213,30 @@ const renderDisabled: RenderFn<PluginDisabledMessage> = (p, probe, mpScope) =>
   pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe);
 
 /**
+ * LOAD-01: the brace of the load-time dependency-disable row, owned here beside
+ * the row it rides. The token names the condition; the remedy naming the
+ * dependency and the dependent rides the row's cause line, which is the only
+ * channel in this grammar that interpolates an identifier.
+ */
+export const DEPENDENCY_UNSATISFIED_ROW_REASONS = [
+  "dependency unsatisfied",
+] as const satisfies readonly ContentReason[];
+
+/**
+ * LOAD-01: the brace of the same row on its version arm. A separate constant
+ * rather than a second member of the brace above: exactly one of the two tokens
+ * rides any given row, and which one is decided by the unsatisfied kind.
+ */
+export const DEPENDENCY_VERSION_UNSATISFIED_ROW_REASONS = [
+  "dependency version unsatisfied",
+] as const satisfies readonly ContentReason[];
+
+/**
  * D-04 / D-05: the applied cascade's `CommandContext`. `Messaging.label` is the
  * human operation name `"Reconcile"`. The `render` map is total over
  * `ReconcileAppliedStatus` (D-10). Both reconcile contexts reuse the shared
- * closed reason set (`notify-reasons.ts`); reconcile declares no command-private
- * reasons.
+ * closed reason set (`notify-reasons.ts`); the one reason reconcile owns is the
+ * load-time `dependency unsatisfied` brace declared above.
  */
 export const RECONCILE_APPLIED_CONTEXT = {
   Messaging: { label: "Reconcile" },

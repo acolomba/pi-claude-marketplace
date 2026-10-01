@@ -95,6 +95,7 @@ test("projects complete marketplaces, plugins, legacy flags, and nullish sources
       workflows: [],
     },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-08-29T10:00:00.000Z",
     updatedAt: "2026-08-29T10:00:00.000Z",
   } satisfies PluginInstallRecord;
@@ -116,6 +117,7 @@ test("projects complete marketplaces, plugins, legacy flags, and nullish sources
       workflows: [],
     },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-08-29T11:00:00.000Z",
     updatedAt: "2026-08-29T11:00:00.000Z",
   } satisfies PluginInstallRecord;

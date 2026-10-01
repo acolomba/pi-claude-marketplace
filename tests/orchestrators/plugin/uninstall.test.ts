@@ -5,6 +5,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  readlink,
   rm,
   stat,
   symlink,
@@ -30,7 +31,10 @@ import {
   cascadeUnstagePlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { createUninstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
-import { createUninstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import {
+  createUninstallPlugin,
+  UninstallRefusedError,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -179,7 +183,10 @@ function makeCtx(piOverrides?: { getAllTools?: () => unknown[] }): {
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
-function makePluginRecord(resources: Partial<PluginRecord["resources"]> = {}): PluginRecord {
+function makePluginRecord(
+  resources: Partial<PluginRecord["resources"]> = {},
+  provenance: PluginRecord["provenance"] = "explicit",
+): PluginRecord {
   return {
     version: "0.0.1",
     resolvedSource: "/tmp",
@@ -193,6 +200,7 @@ function makePluginRecord(resources: Partial<PluginRecord["resources"]> = {}): P
       workflows: resources.workflows ?? [],
     },
     enabled: true,
+    provenance,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -333,8 +341,9 @@ async function seedFullPlugin(
         source: pathSource("./src"),
         addedFromCwd: cwd,
         // LIFE-04: nothing writes a marketplace.json under this cwd, so the
-        // recorded manifest path never exists. Uninstall reads no manifest and
-        // no resolver -- the installation record alone drives the cascade.
+        // recorded manifest path never exists. A single record has no sibling
+        // whose declarations the dependents guard would read (D-05-14), so the
+        // installation record alone drives the cascade.
         manifestPath: path.join(cwd, "marketplace.json"),
         marketplaceRoot: cwd,
         plugins: {
@@ -400,6 +409,148 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
     }
   });
 });
+
+/** A surviving plugin data tree: its inventory plus the seeded session bytes. */
+interface DataTree {
+  readonly tree: readonly string[];
+  readonly sessionBytes: Buffer | null;
+}
+
+/**
+ * The plugin data tree under `dataDir`, or `null` once the directory itself is
+ * gone: the deleting disposition removes the directory, not only its contents,
+ * so the two dispositions differ in exactly this value.
+ */
+async function readDataTree(dataDir: string): Promise<DataTree | null> {
+  if (!(await pathExists(dataDir))) {
+    return null;
+  }
+
+  const sessionFile = path.join(dataDir, "nested", "session.bin");
+  return {
+    tree: await retryTree(dataDir),
+    sessionBytes: (await pathExists(sessionFile)) ? await readFile(sessionFile) : null,
+  };
+}
+
+// WR-06: the preserving disposition stamps `{data kept}`; the two deleting
+// cases (false and omitted) keep the byte-frozen bare row, so the brace is
+// exactly as discriminating as the data tree beside it.
+for (const scope of ["user", "project"] as const) {
+  for (const { keepData, expectedDataTree, expectedReasonBrace } of [
+    {
+      keepData: true,
+      expectedDataTree: {
+        tree: ["nested/", "nested/session.bin"],
+        sessionBytes: Buffer.from([0, 7, 255, 10]),
+      },
+      // WLIF-06: `seedFullPlugin` ships a workflow, so every arm's removal
+      // retires a command that stays registered until a reload.
+      expectedReasonBrace: " {data kept, stale workflow command}",
+    },
+    {
+      keepData: false,
+      expectedDataTree: null,
+      expectedReasonBrace: " {stale workflow command}",
+    },
+    {
+      keepData: undefined,
+      expectedDataTree: null,
+      expectedReasonBrace: " {stale workflow command}",
+    },
+  ] satisfies readonly {
+    keepData: boolean | undefined;
+    expectedDataTree: DataTree | null;
+    expectedReasonBrace: string;
+  }[]) {
+    test(`uninstall preserves nested data only when keepData is true (${String(keepData)}, ${scope})`, async () => {
+      // arrange
+      await withHermeticHome(async () => {
+        const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-data-policy-"));
+        try {
+          const locations = locationsFor(scope, cwd);
+          const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
+          const dataDir = await locations.pluginDataDir("mp", "hello");
+          await mkdir(path.join(dataDir, "nested"), { recursive: true });
+          await writeFile(
+            path.join(dataDir, "nested", "session.bin"),
+            Buffer.from([0, 7, 255, 10]),
+          );
+          await writeFile(locations.configJsonPath, '{"plugins":{"hello@mp":{}}}\n');
+          const otherLocations = locationsFor(scope === "user" ? "project" : "user", cwd);
+          const otherDataDir = await otherLocations.pluginDataDir("mp", "hello");
+          await mkdir(path.join(otherDataDir, "nested"), { recursive: true });
+          await writeFile(path.join(otherDataDir, "nested", "sentinel"), Buffer.from([31, 65, 0]));
+          const { ctx, pi, notifications } = makeCtx();
+
+          // act
+          const outcome = await uninstallWithFreshOwner({
+            ctx,
+            pi,
+            scope,
+            cwd,
+            marketplace: "mp",
+            plugin: "hello",
+            ...(keepData !== undefined && { keepData }),
+          });
+
+          // assert
+          assert.strictEqual(outcome, undefined);
+          assert.deepStrictEqual(
+            await readFile(path.join(otherDataDir, "nested", "sentinel")),
+            Buffer.from([31, 65, 0]),
+          );
+          assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+            schemaVersion: 3,
+            marketplaces: {
+              mp: {
+                name: "mp",
+                scope,
+                source: { kind: "path", logical: "./src", raw: "./src" },
+                addedFromCwd: cwd,
+                manifestPath: path.join(cwd, "marketplace.json"),
+                marketplaceRoot: cwd,
+                plugins: {},
+              },
+            },
+          });
+          assert.strictEqual(
+            await readFile(locations.configJsonPath, "utf8"),
+            '{\n  "plugins": {},\n  "schemaVersion": 1\n}\n',
+          );
+          assert.deepStrictEqual(
+            await Promise.all(
+              [seeded.skillDir, seeded.commandFile, seeded.agentFile, seeded.hooksFile].map(
+                (file) => pathExists(file),
+              ),
+            ),
+            [false, false, false, false],
+          );
+          assert.deepStrictEqual(JSON.parse(await readFile(seeded.mcpJson, "utf8")), {
+            mcpServers: {},
+          });
+          assert.deepStrictEqual(await loadAgentsIndex(locations), {
+            schemaVersion: 1,
+            agents: [],
+            corruptions: [],
+          });
+          assert.deepStrictEqual(await readDataTree(dataDir), expectedDataTree);
+          assert.deepStrictEqual(notifications, [
+            {
+              message:
+                "A plugin operation needs attention.\n" +
+                `\n● mp [${scope}]\n  ○ hello v0.0.1 (uninstalled)${expectedReasonBrace}\n` +
+                "\n/reload to pick up changes",
+              severity: "warning",
+            },
+          ]);
+        } finally {
+          await rm(cwd, { recursive: true, force: true });
+        }
+      });
+    });
+  }
+}
 
 test("WLIF-03: a successful uninstall takes the plugin's workflow envelope off disk", async () => {
   await withHermeticHome(async () => {
@@ -1896,6 +2047,9 @@ test("RECON-03 uninstall orchestrated mode -- success returns { status: 'uninsta
     try {
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
+      const dataDir = await locations.pluginDataDir("mp", "hello");
+      await mkdir(path.join(dataDir, "nested"), { recursive: true });
+      await writeFile(path.join(dataDir, "nested", "history"), "orchestrated history\n");
       const { ctx, pi, notifications } = makeCtx();
 
       const outcome = await uninstallWithFreshOwner({
@@ -1906,15 +2060,19 @@ test("RECON-03 uninstall orchestrated mode -- success returns { status: 'uninsta
         marketplace: "mp",
         plugin: "hello",
         notifications: { mode: "orchestrated" },
+        keepData: true,
       });
 
-      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
-      assert.ok(outcome);
-      assert.equal(outcome.status, "uninstalled");
+      assert.deepStrictEqual(outcome, { status: "uninstalled", name: "hello", version: "0.0.1" });
       if (outcome.status === "uninstalled") {
         assert.equal(outcome.name, "hello");
-        assert.equal(outcome.version, "0.0.1");
       }
+
+      assert.strictEqual(
+        await readFile(path.join(dataDir, "nested", "history"), "utf8"),
+        "orchestrated history\n",
+      );
+      assert.deepStrictEqual(notifications, []);
 
       // State record removed via orchestrated path -- same cascade ran.
       const after = await loadState(locations.extensionRoot);
@@ -2586,15 +2744,27 @@ async function seedGitPlugin(
     await mkdir(path.join(locations.pluginClonesDir, cloneKey), { recursive: true });
   }
 
+  // D-05-14: with two records under one marketplace, uninstalling either one
+  // reads the OTHER's declarations, so the recorded manifest must exist and
+  // list both. Neither entry declares a dependency, so neither holds the other.
+  const manifestPath = path.join(cwd, "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: marketplace,
+      plugins: Object.keys(plugins).map((name) => ({ name, source: `./plugins/${name}` })),
+    }),
+  );
+
   await seedState(locations.extensionRoot, {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {
       [marketplace]: {
         name: marketplace,
         scope: locations.scope,
         source: pathSource("./src"),
         addedFromCwd: cwd,
-        manifestPath: path.join(cwd, "marketplace.json"),
+        manifestPath,
         marketplaceRoot: cwd,
         plugins: pluginRecords,
       },
@@ -2603,6 +2773,102 @@ async function seedGitPlugin(
 
   return envelopes;
 }
+
+test("preservation bypasses the data path while retiring routes, caches and the last clone", async () => {
+  // arrange
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-preserve-hygiene-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedGitPlugin(locations, "mp", { solo: "keySolo" }, cwd);
+      const dataDir = await locations.pluginDataDir("mp", "solo");
+      const retainedDir = path.join(cwd, "retained");
+      await mkdir(path.join(retainedDir, "nested"), { recursive: true });
+      await writeFile(path.join(retainedDir, "nested", "session"), "retained session\n");
+      await mkdir(path.dirname(dataDir), { recursive: true });
+      await symlink(retainedDir, dataDir);
+      const runtime = createHooksRuntime();
+      const hooksRouting = await populateRuntimeRoute(cwd, runtime, {
+        command: "echo retained",
+        marketplace: "mp",
+        plugin: "solo",
+      });
+      const completionCache = createCompletionCache();
+      const pluginCachePath = await locations.pluginCacheFile("mp");
+      await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () =>
+        Promise.resolve([{ name: "solo", status: "installed" }]),
+      );
+      const uninstallPlugin = createUninstallOperation(hooksRouting, completionCache);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        plugin: "solo",
+        keepData: true,
+      });
+      const cacheFilePresent = await pathExists(pluginCachePath);
+      const rows = await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () =>
+        Promise.resolve([{ name: "solo", status: "available" }]),
+      );
+      const repeatedOutcome = await uninstallPlugin({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        plugin: "solo",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.strictEqual(outcome, undefined);
+      assert.deepStrictEqual(repeatedOutcome, { status: "converged", name: "solo" });
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+        schemaVersion: 3,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: { kind: "path", logical: "./src", raw: "./src" },
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+      assert.strictEqual(await readlink(dataDir), retainedDir);
+      assert.deepStrictEqual(await readdir(dataDir), ["nested"]);
+      assert.deepStrictEqual(await readdir(path.join(dataDir, "nested")), ["session"]);
+      assert.strictEqual(
+        await readFile(path.join(dataDir, "nested", "session"), "utf8"),
+        "retained session\n",
+      );
+      assert.strictEqual(await pathExists(path.join(locations.pluginClonesDir, "keySolo")), false);
+      assert.strictEqual(cacheFilePresent, false);
+      assert.deepStrictEqual(rows, [{ name: "solo", status: "available" }]);
+      assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+      assert.deepStrictEqual(notifications, [
+        {
+          // WLIF-06: the seeded plugin ships a workflow, so the removal retires
+          // a command that stays registered until a reload.
+          message:
+            "A plugin operation needs attention.\n" +
+            "\n● mp [project]\n  ○ solo v0.0.1 (uninstalled) {data kept, stale workflow command}\n" +
+            "\n/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("uninstalling the last referencer of a git clone deletes its plugin-clones dir", async () => {
   await withHermeticHome(async () => {
@@ -3371,6 +3637,9 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
       const locations = locationsFor("project", cwd);
       const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
       const agentName = path.basename(seeded.agentFile, ".md");
+      const dataDir = await locations.pluginDataDir("mp", "hello");
+      await mkdir(path.join(dataDir, "nested"), { recursive: true });
+      await writeFile(path.join(dataDir, "nested", "history"), "hooks history\n");
       const configBytes = JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": {} } });
       await writeFile(locations.configJsonPath, configBytes, "utf8");
       const firstSchedule: string[] = [];
@@ -3396,6 +3665,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         scope: "project",
       });
       const firstTree = await retryTree(locations.scopeRoot);
+      const firstDataBytes = await readFile(path.join(dataDir, "nested", "history"), "utf8");
       const firstRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
         "hello"
       ];
@@ -3423,6 +3693,8 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
       });
       assert.deepStrictEqual(second, { name: "hello", status: "uninstalled", version: "0.0.1" });
       assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstDataBytes, "hooks history\n");
+      assert.strictEqual(await pathExists(dataDir), false);
       assert.deepStrictEqual(firstRecord?.resources, {
         agents: [],
         hooks: ["hello"],
@@ -3453,6 +3725,11 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         "mcp.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/data/mp/hello/nested/",
+        "pi-claude-marketplace/data/mp/hello/nested/history",
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/hooks/hello/",
         "pi-claude-marketplace/hooks/hello/hooks.json",
@@ -3467,6 +3744,8 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         "mcp.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/prompts/",
@@ -4054,6 +4333,9 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
         "utf8",
       );
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const dataDir = await locations.pluginDataDir("mp", "hello");
+      await mkdir(path.join(dataDir, "nested"), { recursive: true });
+      await writeFile(path.join(dataDir, "nested", "history"), "save history\n");
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -4077,6 +4359,7 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
       });
       const firstNotifications = [...notifications];
       const firstTree = await retryTree(locations.scopeRoot);
+      const firstDataBytes = await readFile(path.join(dataDir, "nested", "history"), "utf8");
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
       const firstConfigMtime = (await stat(locations.configJsonPath)).mtimeMs;
@@ -4109,6 +4392,8 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
         },
       ]);
       assert.equal(firstStateBytes, stateBytes);
+      assert.strictEqual(firstDataBytes, "save history\n");
+      assert.strictEqual(await pathExists(dataDir), false);
       assert.deepStrictEqual(JSON.parse(firstConfigBytes), {
         plugins: { "keep@mp": {} },
         schemaVersion: 1,
@@ -4135,6 +4420,11 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
         "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/data/mp/hello/nested/",
+        "pi-claude-marketplace/data/mp/hello/nested/history",
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/prompts/",
@@ -4144,6 +4434,8 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "claude-plugins.json",
         "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/prompts/",
@@ -4455,8 +4747,21 @@ test("retry proof: uninstall: a hooks refusal on a shared clone retries without 
         return record;
       };
 
+      // D-05-14: uninstalling `alpha` reads `beta`'s declarations, so the
+      // recorded manifest must exist and list both; neither declares the other.
+      await writeFile(
+        path.join(cwd, "marketplace.json"),
+        JSON.stringify({
+          name: "mp",
+          plugins: [
+            { name: "alpha", source: "./plugins/alpha" },
+            { name: "beta", source: "./plugins/beta" },
+          ],
+        }),
+      );
+
       await seedState(locations.extensionRoot, {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {
           mp: {
             addedFromCwd: cwd,
@@ -4845,6 +5150,1355 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
       restoreSchedule?.();
       await rm(escape, { force: true, recursive: true });
       await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOAD-03 / D-06-06 / D-06-07: the declarer snapshot.
+//
+// `uninstall X` in a scope where other installed records declare X PROCEEDS.
+// The record and its artifacts go, and the success row names the dependents
+// the next load will report unsatisfied: an `(uninstalled)` row at info
+// severity with its reload stamp -- the command was carried out in full -- and
+// the dependent keys ride the cause line as sorted `name@marketplace` keys.
+//
+// Who counts as a declarer is unchanged from Phase 5: a disabled declarer
+// still holds (D-05-04), only the target scope's own state is consulted
+// (D-05-05), and every declaration is read offline (D-05-06). The
+// fail-closed refusal survives too (D-05-07): a declarer whose declarations
+// cannot be established still REFUSES and still removes nothing. Only the
+// found-dependents outcome moved from refuse to proceed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DeclaringSeed {
+  /** Bare `name` / `name@marketplace` tokens, written to the entry AND the plugin's own manifest. */
+  readonly dependencies?: readonly string[];
+  readonly enabled?: boolean;
+  readonly provenance?: PluginRecord["provenance"];
+  /** `false` records the plugin in state while its marketplace manifest omits it (D-05-07). */
+  readonly listed?: boolean;
+  /**
+   * Raw bytes written as the plugin's own manifest in place of the JSON the
+   * seed derives, so a case can plant a present-but-unusable file (D-05-07).
+   */
+  readonly ownManifest?: string;
+}
+
+/** The one skill each seeded plugin owns, so every cascade has something to drop. */
+function seededSkillName(marketplace: string, plugin: string): string {
+  return `${marketplace}-${plugin}-skill`;
+}
+
+/**
+ * Seed one scope: for every marketplace, an on-disk `marketplace.json` and
+ * per-plugin `plugin.json` carrying the declared dependencies, one staged
+ * skill per plugin, and the state records, with each marketplace record's
+ * `manifestPath` / `marketplaceRoot` pointing at its tree so the guard can
+ * read every declaration offline (D-05-06).
+ */
+async function seedDeclaringScope(
+  locations: ReturnType<typeof locationsFor>,
+  marketplaces: Readonly<Record<string, Readonly<Record<string, DeclaringSeed>>>>,
+  cwd: string,
+): Promise<void> {
+  const state: ExtensionState = { schemaVersion: 3, marketplaces: {} };
+  for (const [marketplace, plugins] of Object.entries(marketplaces)) {
+    const marketplaceRoot = path.join(cwd, marketplace);
+    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    const entries: object[] = [];
+    const pluginRecords: Record<string, PluginRecord> = {};
+    for (const [plugin, seed] of Object.entries(plugins)) {
+      const declared = seed.dependencies === undefined ? {} : { dependencies: seed.dependencies };
+      if (seed.listed !== false) {
+        entries.push({
+          name: plugin,
+          version: "1.0.0",
+          source: `./plugins/${plugin}`,
+          ...declared,
+        });
+      }
+
+      const ownManifest = path.join(
+        marketplaceRoot,
+        "plugins",
+        plugin,
+        ".claude-plugin",
+        "plugin.json",
+      );
+      await mkdir(path.dirname(ownManifest), { recursive: true });
+      await writeFile(
+        ownManifest,
+        seed.ownManifest ?? JSON.stringify({ name: plugin, version: "1.0.0", ...declared }),
+      );
+      const skillName = seededSkillName(marketplace, plugin);
+      const skillDir = path.join(locations.skillsTargetDir, skillName);
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: ${skillName}\n---\nbody\n`);
+      const record = makePluginRecord({ skills: [skillName] }, seed.provenance ?? "explicit");
+      record.enabled = seed.enabled ?? true;
+      pluginRecords[plugin] = record;
+    }
+
+    await writeFile(manifestPath, JSON.stringify({ name: marketplace, plugins: entries }));
+    state.marketplaces[marketplace] = {
+      name: marketplace,
+      scope: locations.scope,
+      source: pathSource(`./${marketplace}`),
+      addedFromCwd: cwd,
+      manifestPath,
+      marketplaceRoot,
+      plugins: pluginRecords,
+    };
+  }
+
+  await seedState(locations.extensionRoot, state);
+}
+
+/** `seedDeclaringScope` for the one-marketplace scope most cases need. */
+async function seedDeclaringMarketplace(
+  locations: ReturnType<typeof locationsFor>,
+  marketplace: string,
+  plugins: Readonly<Record<string, DeclaringSeed>>,
+  cwd: string,
+): Promise<void> {
+  await seedDeclaringScope(locations, { [marketplace]: plugins }, cwd);
+}
+
+interface DependentsCase {
+  readonly title: string;
+  readonly plugins: Readonly<Record<string, DeclaringSeed>>;
+  readonly expectedCause: string;
+  /** The `plugin@marketplace` keys still recorded after the target is removed. */
+  readonly remaining: readonly string[];
+}
+
+const DEPENDENTS_CASES: readonly DependentsCase[] = [
+  {
+    title: "LOAD-03: the uninstall proceeds while one installed plugin declares the target",
+    plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
+    expectedCause: "required by app@mp",
+    remaining: ["app@mp"],
+  },
+  {
+    title: "LOAD-03: two dependents are named on the cause line in sorted key order",
+    plugins: {
+      helper: {},
+      zeta: { dependencies: ["helper@mp"] },
+      alpha: { dependencies: ["helper"] },
+    },
+    expectedCause: "required by alpha@mp, zeta@mp",
+    remaining: ["alpha@mp", "zeta@mp"],
+  },
+  {
+    title: "D-05-04: a DISABLED installed plugin still holds the target",
+    plugins: { helper: {}, app: { dependencies: ["helper"], enabled: false } },
+    expectedCause: "required by app@mp",
+    remaining: ["app@mp"],
+  },
+];
+
+for (const { title, plugins, expectedCause, remaining } of DEPENDENTS_CASES) {
+  test(title, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-dependents-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedDeclaringMarketplace(locations, "mp", plugins, cwd);
+        const dataDir = await locations.pluginDataDir("mp", "helper");
+        await mkdir(dataDir, { recursive: true });
+        await writeFile(path.join(dataDir, "session"), "gone\n");
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "helper",
+        });
+
+        // assert
+        assert.equal(outcome, undefined);
+        assert.deepStrictEqual(notifications, [
+          {
+            message:
+              `● mp [project]\n` +
+              `  ○ helper v0.0.1 (uninstalled) {dependents unsatisfied}\n` +
+              `    cause: ${expectedCause}\n\n` +
+              `/reload to pick up changes`,
+          },
+        ]);
+        assert.deepStrictEqual(Object.keys(await recordedInventory(locations)).sort(), [
+          ...remaining,
+        ]);
+        assert.deepStrictEqual(await stagedSkills(locations, ["mp-helper-skill"]), {
+          "mp-helper-skill": false,
+        });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+interface RefusalCase {
+  readonly title: string;
+  readonly plugins: Readonly<Record<string, DeclaringSeed>>;
+  readonly expectedRow: string;
+  readonly expectedCause: string;
+}
+
+const REFUSAL_CASES: readonly RefusalCase[] = [
+  {
+    title: "D-05-07: a record its marketplace manifest does not list refuses the uninstall",
+    plugins: { helper: {}, other: { listed: false } },
+    expectedRow: "⊘ helper v0.0.1 (failed) {unreadable}",
+    expectedCause: "cannot read the dependencies of other@mp: not declared by its marketplace",
+  },
+  {
+    title: "D-05-07: a record whose own manifest is present but unreadable refuses the uninstall",
+    plugins: { helper: {}, other: { ownManifest: "{ truncated" } },
+    expectedRow: "⊘ helper v0.0.1 (failed) {unreadable}",
+    expectedCause:
+      "cannot read the dependencies of other@mp: its own manifest is present but cannot be read",
+  },
+];
+
+for (const { title, plugins, expectedRow, expectedCause } of REFUSAL_CASES) {
+  test(title, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-dependents-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedDeclaringMarketplace(locations, "mp", plugins, cwd);
+        const dataDir = await locations.pluginDataDir("mp", "helper");
+        await mkdir(dataDir, { recursive: true });
+        await writeFile(path.join(dataDir, "session"), "kept\n");
+        const stateBefore = await readFile(locations.stateJsonPath);
+        const mtimeBefore = (await stat(locations.stateJsonPath)).mtimeMs;
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "helper",
+        });
+
+        // assert
+        assert.equal(outcome, undefined);
+        assert.deepStrictEqual(notifications, [
+          {
+            message:
+              `A plugin operation has failed.\n\n● mp [project]\n` +
+              `  ${expectedRow}\n` +
+              `    cause: ${expectedCause}`,
+            severity: "error",
+          },
+        ]);
+        assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+        assert.equal((await stat(locations.stateJsonPath)).mtimeMs, mtimeBefore);
+        assert.equal(await readFile(path.join(dataDir, "session"), "utf8"), "kept\n");
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("LOAD-03: an installed sibling that declares nothing leaves the bare uninstalled row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-no-declarer-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { helper: {}, app: {} }, cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "helper",
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ○ helper v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), { "app@mp": ["mp-app-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-05-05: a declarer installed only in the OTHER scope is not consulted", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-dependents-other-scope-"));
+    try {
+      // arrange
+      const userLocations = locationsFor("user", cwd);
+      await seedDeclaringMarketplace(
+        userLocations,
+        "mp",
+        { app: { dependencies: ["helper"] } },
+        cwd,
+      );
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { helper: {} }, cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "helper",
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ○ helper v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), {});
+      assert.deepStrictEqual(await recordedInventory(userLocations), {
+        "app@mp": ["mp-app-skill"],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-06-06: the orchestrated uninstall of a still-declared plugin succeeds and names no dependents", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-dependents-orchestrated-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { helper: {}, app: { dependencies: ["helper"] } },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "helper",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "uninstalled",
+        name: "helper",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(await recordedInventory(locations), { "app@mp": ["mp-app-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-05-07: the orchestrated unreadable-declarer refusal still returns the typed failed outcome", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-unreadable-orchestrated-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { helper: {}, other: { listed: false } },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+      const cause = "cannot read the dependencies of other@mp: not declared by its marketplace";
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "helper",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "failed",
+        reason: "unreadable",
+        error: new UninstallRefusedError("unreadable", cause),
+        cause,
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(await recordedInventory(locations), {
+        "helper@mp": ["mp-helper-skill"],
+        "other@mp": ["mp-other-skill"],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D-05-01 / D-05-02 / D-05-03 / D-05-09 / D-05-12 / D-05-13 / PRUNE-01..04:
+// the `--prune` sweep.
+//
+// After the named plugin is removed, every dependency-provenance record in the
+// scope that no remaining installed record declares is removed too, iterated
+// to a fixpoint, inside the same locked transaction, with one save. Each
+// pruned plugin renders its own `{dependency pruned}` row under its own
+// marketplace; a member that fails to remove renders a warning row and rolls
+// nothing back; nothing is pruned unless the named plugin actually went.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The scope the sweep cases share: `x` (explicit) declares `d1`; `d1`
+ * (dependency) declares `d2` in the second marketplace; `o` (dependency) is
+ * declared by nothing -- an orphan an earlier removal left behind.
+ */
+const PRUNE_SCOPE = {
+  mp: {
+    x: { dependencies: ["d1"] },
+    d1: { provenance: "dependency", dependencies: ["d2@mp2"] },
+  },
+  mp2: {
+    d2: { provenance: "dependency" },
+    o: { provenance: "dependency" },
+  },
+} as const satisfies Readonly<Record<string, Readonly<Record<string, DeclaringSeed>>>>;
+
+/** `plugin@marketplace -> [skill names]` for every record left in the scope. */
+async function recordedInventory(
+  locations: ReturnType<typeof locationsFor>,
+): Promise<Record<string, readonly string[]>> {
+  const state = await loadState(locations.extensionRoot);
+  const inventory: Record<string, readonly string[]> = {};
+  for (const marketplace of Object.values(state.marketplaces)) {
+    for (const [plugin, record] of Object.entries(marketplace.plugins)) {
+      inventory[`${plugin}@${marketplace.name}`] = record.resources.skills;
+    }
+  }
+
+  return inventory;
+}
+
+/** Whether each named skill directory is still staged. */
+async function stagedSkills(
+  locations: ReturnType<typeof locationsFor>,
+  names: readonly string[],
+): Promise<Record<string, boolean>> {
+  const staged: Record<string, boolean> = {};
+  for (const name of names) {
+    staged[name] = await pathExists(path.join(locations.skillsTargetDir, name));
+  }
+
+  return staged;
+}
+
+/** Seed a data directory per key and return a reader of which ones survived. */
+async function seedDataDirs(
+  locations: ReturnType<typeof locationsFor>,
+  keys: readonly string[],
+): Promise<() => Promise<Record<string, boolean>>> {
+  const dirs: Record<string, string> = {};
+  for (const key of keys) {
+    const separator = key.indexOf("@");
+    const plugin = key.slice(0, separator);
+    const marketplace = key.slice(separator + 1);
+    const dir = await locations.pluginDataDir(marketplace, plugin);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "session"), "kept\n");
+    dirs[key] = dir;
+  }
+
+  return async () => {
+    const survived: Record<string, boolean> = {};
+    for (const [key, dir] of Object.entries(dirs)) {
+      survived[key] = await pathExists(path.join(dir, "session"));
+    }
+
+    return survived;
+  };
+}
+
+const PRUNE_SCOPE_SKILLS = ["mp-x-skill", "mp-d1-skill", "mp2-d2-skill", "mp2-o-skill"];
+const PRUNE_SCOPE_KEYS = ["x@mp", "d1@mp", "d2@mp2", "o@mp2"];
+
+test("D-05-01 / D-05-02: uninstall --prune removes the named plugin, its orphaned chain and a pre-existing orphan in one save", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringScope(locations, PRUNE_SCOPE, cwd);
+      const readDataDirs = await seedDataDirs(locations, PRUNE_SCOPE_KEYS);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      // `LockedStateTransaction.save()` throws on a second call, so a sweep
+      // that saved per member would surface here as a failure row, not as the
+      // success report asserted below: one save is what the assertion proves.
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled)\n" +
+            "  ○ d1 v0.0.1 (uninstalled) {dependency pruned}\n" +
+            "\n" +
+            "● mp2 [project]\n" +
+            "  ○ o v0.0.1 (uninstalled) {dependency pruned}\n" +
+            "  ○ d2 v0.0.1 (uninstalled) {dependency pruned}\n" +
+            "\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), {});
+      assert.deepStrictEqual(await stagedSkills(locations, PRUNE_SCOPE_SKILLS), {
+        "mp-x-skill": false,
+        "mp-d1-skill": false,
+        "mp2-d2-skill": false,
+        "mp2-o-skill": false,
+      });
+      assert.deepStrictEqual(await readDataDirs(), {
+        "x@mp": false,
+        "d1@mp": false,
+        "d2@mp2": false,
+        "o@mp2": false,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-05-09: --keep-data covers every plugin --prune removes, and each pruned row says so after the prune reason", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-keep-data-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringScope(locations, PRUNE_SCOPE, cwd);
+      const readDataDirs = await seedDataDirs(locations, PRUNE_SCOPE_KEYS);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        keepData: true,
+        prune: true,
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled) {data kept}\n" +
+            "  ○ d1 v0.0.1 (uninstalled) {dependency pruned, data kept}\n" +
+            "\n" +
+            "● mp2 [project]\n" +
+            "  ○ o v0.0.1 (uninstalled) {dependency pruned, data kept}\n" +
+            "  ○ d2 v0.0.1 (uninstalled) {dependency pruned, data kept}\n" +
+            "\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), {});
+      assert.deepStrictEqual(await stagedSkills(locations, PRUNE_SCOPE_SKILLS), {
+        "mp-x-skill": false,
+        "mp-d1-skill": false,
+        "mp2-d2-skill": false,
+        "mp2-o-skill": false,
+      });
+      assert.deepStrictEqual(await readDataDirs(), {
+        "x@mp": true,
+        "d1@mp": true,
+        "d2@mp2": true,
+        "o@mp2": true,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { keepData, expectedDataTree, expectedMessage } of [
+  {
+    keepData: true,
+    expectedDataTree: {
+      tree: ["nested/", "nested/session.bin"],
+      sessionBytes: Buffer.from([0, 7, 255, 10]),
+    },
+    expectedMessage:
+      "● mp [project]\n" +
+      "  ○ x v0.0.1 (uninstalled) {data kept}\n" +
+      "  ○ d1 v0.0.1 (uninstalled) {dependency pruned, data kept}\n" +
+      "\n" +
+      "/reload to pick up changes",
+  },
+  {
+    keepData: false,
+    expectedDataTree: null,
+    expectedMessage:
+      "● mp [project]\n" +
+      "  ○ x v0.0.1 (uninstalled)\n" +
+      "  ○ d1 v0.0.1 (uninstalled) {dependency pruned}\n" +
+      "\n" +
+      "/reload to pick up changes",
+  },
+] satisfies readonly {
+  keepData: boolean;
+  expectedDataTree: DataTree | null;
+  expectedMessage: string;
+}[]) {
+  test(`D-05-09: --prune with keepData ${String(keepData)} applies one disposition to the root and its pruned dependency`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-data-bytes-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedDeclaringMarketplace(
+          locations,
+          "mp",
+          { x: { dependencies: ["d1"] }, d1: { provenance: "dependency" } },
+          cwd,
+        );
+        const rootDataDir = await locations.pluginDataDir("mp", "x");
+        const depDataDir = await locations.pluginDataDir("mp", "d1");
+        for (const dataDir of [rootDataDir, depDataDir]) {
+          await mkdir(path.join(dataDir, "nested"), { recursive: true });
+          await writeFile(
+            path.join(dataDir, "nested", "session.bin"),
+            Buffer.from([0, 7, 255, 10]),
+          );
+        }
+
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "x",
+          keepData,
+          prune: true,
+        });
+
+        // assert
+        assert.equal(outcome, undefined);
+        assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
+        assert.deepStrictEqual(await recordedInventory(locations), {});
+        assert.deepStrictEqual(await readDataTree(rootDataDir), expectedDataTree);
+        assert.deepStrictEqual(await readDataTree(depDataDir), expectedDataTree);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const { title, holder } of [
+  {
+    title:
+      "PRUNE-03 / D-05-12: a dependency another installed plugin still declares survives, and the report is the plain uninstall's",
+    holder: { dependencies: ["d1"] },
+  },
+  {
+    title:
+      "PRUNE-03 / D-05-04: a DISABLED installed plugin still holds the dependency against the sweep",
+    holder: { dependencies: ["d1"], enabled: false },
+  },
+] satisfies readonly { title: string; holder: DeclaringSeed }[]) {
+  test(title, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-held-"));
+      try {
+        // arrange
+        const plugins = {
+          x: { dependencies: ["d1"] },
+          y: holder,
+          d1: { provenance: "dependency" },
+        } as const satisfies Readonly<Record<string, DeclaringSeed>>;
+        const locations = locationsFor("project", cwd);
+        await seedDeclaringMarketplace(locations, "mp", plugins, cwd);
+        const plain = makeCtx();
+        await uninstallWithFreshOwner({
+          ctx: plain.ctx,
+          pi: plain.pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "x",
+        });
+        await seedDeclaringMarketplace(locations, "mp", plugins, cwd);
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "x",
+          prune: true,
+        });
+
+        // assert
+        assert.equal(outcome, undefined);
+        assert.deepStrictEqual(notifications, plain.notifications);
+        assert.deepStrictEqual(notifications, [
+          {
+            message: "● mp [project]\n  ○ x v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+          },
+        ]);
+        assert.deepStrictEqual(await recordedInventory(locations), {
+          "y@mp": ["mp-y-skill"],
+          "d1@mp": ["mp-d1-skill"],
+        });
+        assert.deepStrictEqual(
+          await stagedSkills(locations, ["mp-x-skill", "mp-y-skill", "mp-d1-skill"]),
+          {
+            "mp-x-skill": false,
+            "mp-y-skill": true,
+            "mp-d1-skill": true,
+          },
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("PRUNE-02: an explicit record declared only by the named plugin is never pruned", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-explicit-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { x: { dependencies: ["e"] }, e: {} }, cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        { message: "● mp [project]\n  ○ x v0.0.1 (uninstalled)\n\n/reload to pick up changes" },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), { "e@mp": ["mp-e-skill"] });
+      assert.deepStrictEqual(await stagedSkills(locations, ["mp-x-skill", "mp-e-skill"]), {
+        "mp-x-skill": false,
+        "mp-e-skill": true,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-05-03: --prune on a plugin that is not installed prunes nothing, even with an orphan in the scope", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-not-installed-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { o: { provenance: "dependency" } }, cwd);
+      const stateBefore = await readFile(locations.stateJsonPath);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "ghost",
+        prune: true,
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ ghost (failed) {not installed}",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+      assert.deepStrictEqual(await stagedSkills(locations, ["mp-o-skill"]), { "mp-o-skill": true });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LOAD-03: --prune sweeps the orphan while the surviving declarer is named on the primary row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-dependents-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: {}, keeper: { dependencies: ["x"] }, o: { provenance: "dependency" } },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled) {dependents unsatisfied}\n" +
+            "    cause: required by keeper@mp\n" +
+            "  ○ o v0.0.1 (uninstalled) {dependency pruned}\n\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(Object.keys(await recordedInventory(locations)), ["keeper@mp"]);
+      assert.deepStrictEqual(await stagedSkills(locations, ["mp-x-skill", "mp-o-skill"]), {
+        "mp-x-skill": false,
+        "mp-o-skill": false,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("allowed named uninstall prunes only after the depended-on primary leaves", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-allowed-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        {
+          keeper: { dependencies: ["x"] },
+          x: { dependencies: ["d"] },
+          d: { provenance: "dependency" },
+          orphan: { provenance: "dependency" },
+        },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+      });
+
+      assert.deepStrictEqual(await recordedInventory(locations), {
+        "keeper@mp": ["mp-keeper-skill"],
+      });
+      assert.deepStrictEqual(
+        await stagedSkills(locations, [
+          "mp-keeper-skill",
+          "mp-x-skill",
+          "mp-d-skill",
+          "mp-orphan-skill",
+        ]),
+        {
+          "mp-keeper-skill": true,
+          "mp-x-skill": false,
+          "mp-d-skill": false,
+          "mp-orphan-skill": false,
+        },
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled) {dependents unsatisfied}\n" +
+            "    cause: required by keeper@mp\n" +
+            "  ○ d v0.0.1 (uninstalled) {dependency pruned}\n" +
+            "  ○ orphan v0.0.1 (uninstalled) {dependency pruned}\n\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a failed named uninstall does not sweep a pre-existing orphan", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-primary-failed-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: {}, orphan: { provenance: "dependency" } },
+        cwd,
+      );
+      const before = await readFile(locations.stateJsonPath);
+      const { ctx, pi, notifications } = makeCtx();
+
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+        cascade: cascadeFailure(new Error("primary refused")),
+      });
+
+      assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
+      assert.deepStrictEqual(await recordedInventory(locations), {
+        "x@mp": ["mp-x-skill"],
+        "orphan@mp": ["mp-orphan-skill"],
+      });
+      assert.deepStrictEqual(await stagedSkills(locations, ["mp-x-skill", "mp-orphan-skill"]), {
+        "mp-x-skill": true,
+        "mp-orphan-skill": true,
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n  ⊘ x v0.0.1 (failed) {unreadable}\n" +
+            "    cause: primary refused",
+          severity: "error",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LOAD-03: a declarer the same --prune run sweeps is not named as a surviving dependent", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-adjacent-"));
+    try {
+      // arrange: `dep` declares the target AND is a dependency record nothing
+      // else declares, so the sweep removes it in the same locked snapshot the
+      // declarer set was read from.
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: {}, dep: { provenance: "dependency", dependencies: ["x"] } },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled)\n" +
+            "  ○ dep v0.0.1 (uninstalled) {dependency pruned}\n\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), {});
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-05-08: without the option an orphan survives the uninstall of an unrelated plugin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-no-prune-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: {}, o: { provenance: "dependency" } },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, { status: "uninstalled", name: "x", version: "0.0.1" });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(await recordedInventory(locations), { "o@mp": ["mp-o-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-05-08: an orchestrated call carrying the prune option removes only the named plugin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orchestrated-prune-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: {}, o: { provenance: "dependency" } },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, { status: "uninstalled", name: "x", version: "0.0.1" });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(await recordedInventory(locations), { "o@mp": ["mp-o-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * A cascade that fails for ONE plugin by name and runs the real cascade for
+ * every other, so the member-failure cases exercise real removals around the
+ * injected fault.
+ */
+function cascadeFailingFor(
+  plugin: string,
+  cause: Error | undefined,
+  dropped: Partial<Awaited<ReturnType<typeof cascadeUnstagePlugin>>["dropped"]> = {},
+): typeof cascadeUnstagePlugin {
+  return (name, marketplace, locations, installed) => {
+    if (name !== plugin) {
+      return cascadeUnstagePlugin(name, marketplace, locations, installed);
+    }
+
+    return Promise.resolve({
+      ok: false,
+      dropped: {
+        workflows: [],
+        skills: dropped.skills ?? [],
+        commands: dropped.commands ?? [],
+        agents: dropped.agents ?? [],
+        hooks: dropped.hooks ?? [],
+        mcpServers: dropped.mcpServers ?? [],
+      },
+      ...(cause !== undefined && { cause }),
+    });
+  };
+}
+
+/** The sweep report when `d2` alone fails to unstage, by the reason its row carries. */
+function prunePartialFailureNotification(reason: string): NotifyRecord {
+  return {
+    message:
+      "A plugin operation needs attention.\n" +
+      "\n" +
+      "● mp [project]\n" +
+      "  ○ x v0.0.1 (uninstalled)\n" +
+      "  ○ d1 v0.0.1 (uninstalled) {dependency pruned}\n" +
+      "\n" +
+      "● mp2 [project]\n" +
+      "  ○ o v0.0.1 (uninstalled) {dependency pruned}\n" +
+      `  ⊘ d2 v0.0.1 (failed) {${reason}}\n` +
+      "    cause: Agents unstage refused: foreign content\n" +
+      "\n" +
+      "/reload to pick up changes",
+    severity: "warning",
+  };
+}
+
+test("D-05-13: a pruned member whose agents refuse to unstage renders a warning row, keeps its whole record, and rolls nothing back", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-member-ag5-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringScope(locations, PRUNE_SCOPE, cwd);
+      const { ctx, pi, notifications } = makeCtx();
+      const cause = new AgentsUnstageFailureError("Agents unstage refused: foreign content", [
+        { generatedName: "d2-agent", targetPath: "/agents/d2-agent.md", reason: "missing marker" },
+      ]);
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+        cascade: cascadeFailingFor("d2", cause, { skills: ["mp2-d2-skill"] }),
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [prunePartialFailureNotification("source mismatch")]);
+      assert.deepStrictEqual(await recordedInventory(locations), { "d2@mp2": ["mp2-d2-skill"] });
+      assert.deepStrictEqual(await stagedSkills(locations, PRUNE_SCOPE_SKILLS), {
+        "mp-x-skill": false,
+        "mp-d1-skill": false,
+        "mp2-d2-skill": true,
+        "mp2-o-skill": false,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRUNE-03 / D-05-13: a failed member is still a declarer, so the dependency only it holds is kept while the unrelated orphan is still pruned", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-member-holds-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringScope(locations, PRUNE_SCOPE, cwd);
+      const { ctx, pi, notifications } = makeCtx();
+      const cause = new AgentsUnstageFailureError("Agents unstage refused: foreign content", [
+        { generatedName: "d1-agent", targetPath: "/agents/d1-agent.md", reason: "missing marker" },
+      ]);
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+        cascade: cascadeFailingFor("d1", cause, { skills: ["mp-d1-skill"] }),
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n" +
+            "\n" +
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled)\n" +
+            "  ⊘ d1 v0.0.1 (failed) {source mismatch}\n" +
+            "    cause: Agents unstage refused: foreign content\n" +
+            "\n" +
+            "● mp2 [project]\n" +
+            "  ○ o v0.0.1 (uninstalled) {dependency pruned}\n" +
+            "\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), {
+        "d1@mp": ["mp-d1-skill"],
+        "d2@mp2": ["mp2-d2-skill"],
+      });
+      assert.deepStrictEqual(await stagedSkills(locations, PRUNE_SCOPE_SKILLS), {
+        "mp-x-skill": false,
+        "mp-d1-skill": true,
+        "mp2-d2-skill": true,
+        "mp2-o-skill": false,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-05-13: a pruned member that partially unstaged keeps a record shrunk to what is still on disk", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-member-partial-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringScope(locations, PRUNE_SCOPE, cwd);
+      const { ctx, pi, notifications } = makeCtx();
+      const cause = new Error("Agents unstage refused: foreign content");
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+        cascade: cascadeFailingFor("d2", cause, { skills: ["mp2-d2-skill"], hooks: ["d2"] }),
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [prunePartialFailureNotification("unreadable")]);
+      assert.deepStrictEqual(await recordedInventory(locations), { "d2@mp2": [] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-05-13: a pruned member whose cascade reports no cause renders the fallback cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-member-no-cause-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: { dependencies: ["d1"] }, d1: { provenance: "dependency" } },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+        cascade: cascadeFailingFor("d1", undefined),
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled)\n" +
+            "  ⊘ d1 v0.0.1 (failed) {unreadable}\n" +
+            '    cause: Cascade unstage failed for plugin "d1".\n' +
+            "\n/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), { "d1@mp": ["mp-d1-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
     }
   });
 });

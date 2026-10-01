@@ -52,6 +52,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { importClaudeSettings } from "../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
+import { composeCascadeMemberRows } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
 import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { reinstalledRowFromOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
@@ -71,6 +72,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
@@ -232,6 +234,19 @@ async function recordMarketplace(cwd: string, marketplaceRoot: string): Promise<
   await saveState(locations.extensionRoot, state);
 }
 
+/**
+ * The probe a row composer reads when it is driven directly rather than through
+ * an orchestrator: `toolNamesFor` decides the same loaded/not-loaded split the
+ * `makeCtx` fakes give the full-orchestrator cases.
+ */
+function softDepStatusFor(engineLoaded: boolean): SoftDepStatus {
+  return {
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+    workflowEngineLoaded: engineLoaded,
+  };
+}
+
 /** Drive a real project-scope install of the seeded workflow-bearing plugin. */
 async function runInstall(
   cwd: string,
@@ -328,6 +343,48 @@ const SITE_CASES = [
       ),
   },
   {
+    // Tier B: `stagedDependencies` is module-private behind the exported
+    // cascade row composer. The ROOT row is supplied already composed, so the
+    // member row below is the only one this case's marker can come from.
+    site: "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts",
+    drive: (engineLoaded) =>
+      Promise.resolve(
+        renderThroughNotify(engineLoaded, {
+          marketplaces: [
+            {
+              name: "mp",
+              scope: "project",
+              plugins: composeCascadeMemberRows({
+                scope: "project",
+                rootKey: "hello@mp",
+                rootRow: {
+                  status: "installed",
+                  name: "hello",
+                  version: "1.0.0",
+                  dependencies: [],
+                  severity: "info",
+                  needsReload: true,
+                },
+                installed: [
+                  {
+                    key: "dep@mp",
+                    version: "1.0.0",
+                    declaresAgents: false,
+                    declaresMcp: false,
+                    declaresWorkflows: true,
+                    fellBackToCurrentCopy: false,
+                    reEnabledFromRecord: false,
+                  },
+                ],
+                alreadyInstalled: [],
+                probe: softDepStatusFor(engineLoaded),
+              }),
+            },
+          ],
+        }),
+      ),
+  },
+  {
     // Tier B: `dependenciesFromOutcome` is module-private behind the exported
     // row composer.
     site: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
@@ -375,6 +432,7 @@ const SITE_CASES = [
               plugins: [
                 updatedRowFromOutcome(
                   {
+                    constraint: undefined,
                     partition: "updated",
                     name: "hello",
                     fromVersion: "1.0.0",

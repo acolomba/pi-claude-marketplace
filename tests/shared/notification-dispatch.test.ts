@@ -5135,6 +5135,52 @@ test("reconcile-pending-empty emits the exact zero-action advisory", (t) => {
   ]);
 });
 
+for (const scope of ["user", "project"] as const) {
+  test(`prune-empty emits the scoped informational sentence for ${scope}`, (t) => {
+    // arrange
+    const ctx = createContext(t);
+    const pi = piWithAllLoaded();
+    const message = { kind: "prune-empty", scope } satisfies NotificationMessage;
+
+    // act
+    notify(ctx as never, pi, message);
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [[`Nothing to prune in ${scope} scope: no orphaned dependency installs were found.`]],
+    );
+  });
+}
+
+test("prune-committed-warning reports a saved scope and requests reload", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const pi = piWithAllLoaded();
+  const message = {
+    kind: "prune-committed-warning",
+    scope: "project",
+    cause: new Error("lock release failed after save"),
+  } satisfies NotificationMessage;
+
+  // act
+  notify(ctx as never, pi, message);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "Prune committed; finalization needs attention.\n\n" +
+          "Prune committed in project scope.\n" +
+          "  cause: lock release failed after save\n\n" +
+          "/reload to pick up changes",
+        "warning",
+      ],
+    ],
+  );
+});
+
 test("context emission renders the disabled enable hint", (t) => {
   // arrange
   const ctx = createContext(t);

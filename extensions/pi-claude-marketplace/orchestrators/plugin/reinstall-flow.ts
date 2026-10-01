@@ -762,6 +762,7 @@ async function runLockedReinstall(
     transaction.replaceOperations,
   );
 
+  const sourceKind = parsePluginSource(entry.source).kind;
   let invalidConfigWriteBack: boolean;
   let outcome: ReinstallPluginOutcome;
   try {
@@ -775,6 +776,14 @@ async function runLockedReinstall(
       installable,
       handles: replacement.handles,
       hookEntries: replacement.hookEntries,
+      // PURL-07: a git source's reinstall re-pins to the SAME recorded sha,
+      // so its old `resolvedSha` is still truthful and worth carrying
+      // forward (see `recordReinstalledOutcome`). A `path` source's
+      // reinstall re-resolves through the marketplace's current checkout,
+      // not the tag-pin probe (see `resolveInstallable` above), so an old
+      // `resolvedSha` on that record would name a commit the fresh
+      // `resolvedSource` no longer sits at.
+      isGitSource: sourceKind === "url" || sourceKind === "git-subdir" || sourceKind === "github",
       placedWorkflowNames: replacement.placedWorkflowNames,
     });
 

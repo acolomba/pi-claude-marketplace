@@ -201,6 +201,7 @@ function installedRecord(resolvedSource: string, installed: SeededInstall): Plug
     },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: installed.disabled !== true,
+    provenance: "explicit",
     installedAt: "2026-06-17T00:00:00.000Z",
     updatedAt: "2026-06-17T00:00:00.000Z",
   };
@@ -1387,7 +1388,7 @@ describe("registerListPluginsTool", () => {
     const scope = await createHermeticScope(t, "unreadable-state");
     await seedScope(scope.cwd, "project", [{ name: "broken-mp", plugins: [] }]);
     const locations = locationsFor("project", scope.cwd);
-    await writeFile(locations.stateJsonPath, JSON.stringify({ schemaVersion: 3 }), "utf8");
+    await writeFile(locations.stateJsonPath, JSON.stringify({ schemaVersion: 4 }), "utf8");
     const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
       value: scope.cwd,
       reads: 1,

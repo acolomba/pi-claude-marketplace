@@ -50,6 +50,35 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
       },
     },
 
+    "installed-single-scope-with-dependency-constraints": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            commands: ["c1", "c2"],
+            skills: ["commit-summary"],
+          },
+          // Pre-rendered and pre-sorted on the dependency NAME (D-01-04):
+          // `both`, `helper`, `pinned`. The renderer does not sort.
+          dependencies: [
+            "both@utils-mp (^2.0.0, sha def5678)",
+            "helper@utils-mp (^1.0.0)",
+            "pinned@utils-mp (sha abc1234)",
+          ],
+        },
+      },
+    },
+
     // WFLW-04: the `workflows:` line renders LAST among the per-kind lines.
     // Both entries are admitted arms -- `commit-commands:changelog` names
     // itself, `commit-commands:release` falls back to its file stem -- and the
@@ -544,6 +573,25 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
           version: "0.5.0",
           description: "Git-source helper plugin; not yet fetched.",
           componentsResolved: false,
+        },
+      },
+    },
+
+    "remote-single-scope-with-dependencies": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "remote",
+          name: "git-helper",
+          version: "0.5.0",
+          description: "Git-source helper plugin; not yet fetched.",
+          componentsResolved: false,
+          // Pre-rendered from the marketplace entry, the only offline source for a cold clone (D-01-32).
+          dependencies: ["helper@community-mp"],
         },
       },
     },

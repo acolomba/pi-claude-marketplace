@@ -162,9 +162,9 @@ const budgetRefusal = "Option --budget needs a positive whole number, not 0";
  * computation would agree with the runner whatever the runner computed.
  */
 const expectedPlantMember = {
-  id: `${edgeDepsPath}:31:3`,
+  id: `${edgeDepsPath}:37:3`,
   path: edgeDepsPath,
-  line: 31,
+  line: 37,
   column: 3,
   owner: "EdgeDeps",
   key: "neverReadAnywhere",
@@ -177,9 +177,9 @@ const expectedPlantMember = {
 
 /** The same-spelling member on an unrelated type, which production really reads. */
 const expectedUnrelatedMember = {
-  id: `${edgeDepsPath}:35:3`,
+  id: `${edgeDepsPath}:41:3`,
   path: edgeDepsPath,
-  line: 35,
+  line: 41,
   column: 3,
   owner: "UnrelatedSameSpelling",
   key: "neverReadAnywhere",
@@ -189,7 +189,7 @@ const expectedUnrelatedMember = {
   witnesses: [
     {
       path: edgeDepsPath,
-      line: 39,
+      line: 45,
       column: 20,
       kind: "value-read",
       origin: "production",
@@ -319,7 +319,7 @@ test("rejects a gate that reports the plant before it was planted", async (t) =>
 
   // assert
   assert.strictEqual(run.status, 1);
-  assert.match(run.stderr, /baseline: the tree already reports .*edge\/types\.ts:31:3/);
+  assert.match(run.stderr, /baseline: the tree already reports .*edge\/types\.ts:37:3/);
 });
 
 test("rejects a gate that reports the plant as read", async (t) => {
@@ -398,7 +398,7 @@ test("rejects a gate that always reports a clean tree", async (t) => {
 
   // assert
   assert.strictEqual(run.status, 1);
-  assert.match(run.stderr, /offender-plant: the overlay finding set is missing .*:31:3/);
+  assert.match(run.stderr, /offender-plant: the overlay finding set is missing .*:37:3/);
 });
 
 test("rejects a gate that always reports the same findings", async (t) => {
@@ -412,7 +412,7 @@ test("rejects a gate that always reports the same findings", async (t) => {
 
   // assert
   assert.strictEqual(run.status, 1);
-  assert.match(run.stderr, /baseline: the tree already reports .*:31:3/);
+  assert.match(run.stderr, /baseline: the tree already reports .*:37:3/);
 });
 
 test("rejects a gate that describes a different member at the planted coordinates", async (t) => {
@@ -429,7 +429,7 @@ test("rejects a gate that describes a different member at the planted coordinate
 
   // assert
   assert.strictEqual(run.status, 1);
-  assert.match(run.stderr, /offender-plant: the record for .*:31:3 is .*SomethingElse/);
+  assert.match(run.stderr, /offender-plant: the record for .*:37:3 is .*SomethingElse/);
 });
 
 test("rejects a gate whose report cannot be parsed", async (t) => {

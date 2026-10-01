@@ -1,12 +1,73 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "none",
-  "phases": [],
+  "milestone": "v1.20 — transitive-dependencies",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Manifest read fidelity",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Uninstall data disposition and the uninstall option seam",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Dependency resolution",
+      "status": "complete"
+    },
+    {
+      "number": "4",
+      "name": "Install provenance",
+      "status": "complete"
+    },
+    {
+      "number": "5",
+      "name": "Prune on uninstall",
+      "status": "complete"
+    },
+    {
+      "number": "6",
+      "name": "Load-time dependency check and allowed uninstall",
+      "status": "complete"
+    },
+    {
+      "number": "7",
+      "name": "Marketplace-repository tag resolution for path-source dependencies",
+      "status": "complete"
+    },
+    {
+      "number": "8",
+      "name": "Enablement parity for dependencies",
+      "status": "complete"
+    },
+    {
+      "number": "9",
+      "name": "Reload installs missing declared dependencies",
+      "status": "complete"
+    },
+    {
+      "number": "10",
+      "name": "Constraint-aware update",
+      "status": "complete"
+    },
+    {
+      "number": "11",
+      "name": "Cross-marketplace dependency allowlist",
+      "status": "complete"
+    },
+    {
+      "number": "12",
+      "name": "Standalone prune with dry-run",
+      "status": "complete"
+    }
+  ],
   "next": {
     "command": "/gsd:progress",
     "label": "Show progress",
     "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-10-01T09:55:32.670Z"
+  "updated_at": "2026-09-24T18:03:41.241Z"
 }

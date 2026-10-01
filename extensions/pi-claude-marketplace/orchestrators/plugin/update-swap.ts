@@ -138,7 +138,11 @@ import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
-import type { PreparedPluginUpdate, UpdateCloneCacheSeam } from "./update-preflight.ts";
+import type {
+  PreparedPluginUpdate,
+  PreparePluginUpdateOptions,
+  UpdateCloneCacheSeam,
+} from "./update-preflight.ts";
 import type { PluginUpdateFailedOutcome, PluginUpdateOutcome } from "../types.ts";
 
 /** Common collaborators and identity for one prepared plugin replacement. */
@@ -157,6 +161,19 @@ export interface ThreePhaseArgsBase {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /**
+   * D-10-18: the run-scoped tag memos, one per repository URL and one per
+   * marketplace root, threaded into every target's preflight so one bulk run
+   * or cascade lists a shared repository's or clone's tags once. Typed off
+   * `PreparePluginUpdateOptions`'s own fields rather than importing
+   * `platform/git.ts`'s `RemoteTag` directly -- this file is one of the
+   * network-free-gated owners, and a type-only import from `platform/git`
+   * still names the surface the gate greps for.
+   */
+  readonly constraintTagMemo?: NonNullable<PreparePluginUpdateOptions["constraintTagMemo"]>;
+  readonly constraintMarketplaceTagMemo?: NonNullable<
+    PreparePluginUpdateOptions["constraintMarketplaceTagMemo"]
+  >;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
   /**
    * State I/O for the intent-mark and finalize guards (and the disabled-pin
@@ -730,8 +747,13 @@ function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: Plug
   sRecord.resolvedSource = installable.pluginRoot;
   // PURL-06 / D-78-01: write the git-source commit identity so the
   // post-commit GC and the next update read the swapped sha. Undefined for
-  // path / github-name sources (they have no clone and protect none).
-  if (resolvedSha !== undefined) {
+  // an unpinned source (no clone to protect). WR-01: also clear a STALE
+  // `resolvedSha` a prior update or install left on the record -- otherwise
+  // a `path` source whose re-resolution no longer pins a tag would keep
+  // naming a commit `resolvedSource` no longer sits at.
+  if (resolvedSha === undefined) {
+    delete sRecord.resolvedSha;
+  } else {
     sRecord.resolvedSha = resolvedSha;
   }
 }
@@ -1376,10 +1398,11 @@ export async function swapPluginUpdate(
   // record maps to it; `garbageCollectPluginClones` derives live clone keys from
   // the persisted records and deletes the rest. Runs POST-commit (NFR-3
   // fail-clean: a crash between commit and delete just leaves an orphan the next
-  // idempotent pass removes). Gated on a git-source swap (`preflight.resolvedSha`
-  // set) so path / github-name updates add no cache sweep. Leaks are swallowed
-  // (D-19-01): hygienic cleanup never becomes the primary path.
-  if (preflight.resolvedSha !== undefined) {
+  // idempotent pass removes). Gated on the record's commit identity having
+  // MOVED -- including to nothing, which is when a path-source record's own
+  // clone stops being referenced at all and most needs the sweep. Leaks are
+  // swallowed (D-19-01): hygienic cleanup never becomes the primary path.
+  if (preflight.resolvedSha !== preflight.record.resolvedSha) {
     try {
       await args.cleanupClones(args.locations);
     } catch (err) {
@@ -1431,6 +1454,11 @@ export async function swapPluginUpdate(
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
     declaresMcp: stagedMcpServerNames.length > 0,
+    // D-10-17a: forwarded from the preflight by a plain assignment, never a
+    // conditional spread -- the member is required, so its ABSENCE is
+    // spelled `undefined`, not an omitted key. This literal is the SINGLE
+    // justified consumer of `PreparedPluginUpdate.constraint`.
+    constraint: preflight.constraint,
     declaresWorkflows: handles.workflows.result.stagedNames.length > 0,
     // Spread only when non-empty: a clean update's outcome keeps the key ABSENT
     // rather than present-and-empty, so its shape is unchanged (NREG-01).

@@ -56,7 +56,7 @@ function createUpdateSinglePlugin(): PluginUpdateFn {
   return createPluginUpdateOperations(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
-  ).pluginUpdate;
+  ).beginPluginUpdateRun();
 }
 
 interface MarketplaceGitOpsSeed {
@@ -308,6 +308,7 @@ function makePluginRecord(): ExtensionState["marketplaces"][string]["plugins"][s
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -1610,6 +1611,7 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
         declaresWorkflows: false,
       });
     };
@@ -1666,6 +1668,7 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
         declaresWorkflows: false,
       });
     };
@@ -1989,6 +1992,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
           stagedMcpServerNames: [],
           declaresAgents: false,
           declaresMcp: false,
+          constraint: undefined,
           declaresWorkflows: false,
         });
       }
@@ -2001,6 +2005,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
           toVersion: "0.0.1",
           declaresAgents: false,
           declaresMcp: false,
+          constraint: undefined,
           declaresWorkflows: false,
         });
       }
@@ -2097,6 +2102,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
         declaresWorkflows: false,
       });
 
@@ -2146,6 +2152,7 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
         toVersion: "0.0.1",
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
         declaresWorkflows: false,
       });
     // act
@@ -2205,6 +2212,7 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
         declaresWorkflows: false,
       });
     // act
@@ -2331,6 +2339,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
         toVersion: "0.0.1",
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
         declaresWorkflows: false,
       };
     };
@@ -2358,7 +2367,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
 
     // assert
     const expectedState: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         official: {
           name: "official",
@@ -2461,6 +2470,7 @@ test("a newly degraded autoupdate cascade emits its partial row and warning enve
         declaresMcp: false,
         declaresWorkflows: false,
         partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+        constraint: undefined,
       });
 
     // act
@@ -2773,6 +2783,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
         toVersion: "0.0.1",
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
         declaresWorkflows: false,
       });
     };
@@ -2799,7 +2810,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
     ]);
     assert.deepStrictEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         "batch-mp": {
           name: "batch-mp",
@@ -2932,7 +2943,7 @@ test("all-target update drops changed rows in project-before-user order and isol
       },
     ]);
     assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         alpha: {
           ...marketplaceRecord("alpha", "project", manifestPath),
@@ -2945,7 +2956,7 @@ test("all-target update drops changed rows in project-before-user order and isol
       },
     });
     assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         alpha: {
           ...marketplaceRecord("alpha", "user", manifestPath),
@@ -3411,6 +3422,7 @@ test("WR-12: the autoupdate cascade row is byte-identical to the standalone upda
         declaresMcp: false,
         declaresWorkflows: false,
         degradedKinds: ["skill"],
+        constraint: undefined,
       });
 
     // act
@@ -3580,7 +3592,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
 
     // assert
     const expectedState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         "cache-mp": {
           name: "cache-mp",
@@ -3648,7 +3660,7 @@ test("silently stops when the marketplace vanishes after preflight", async () =>
     assert.strictEqual(inLockLoads, 1);
     assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.deepStrictEqual(git.calls, []);

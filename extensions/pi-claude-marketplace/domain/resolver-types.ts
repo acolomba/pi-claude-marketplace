@@ -1,5 +1,5 @@
 import type { DroppedHook } from "./components/hooks.ts";
-import type { GitHubSource, GitSubdirSource, UrlSource } from "./source.ts";
+import type { GitHubSource, GitSubdirSource, PathSource, UrlSource } from "./source.ts";
 import type Type from "typebox";
 
 type ComponentPathsSchema = Type.TObject<{
@@ -154,4 +154,21 @@ export interface ResolveContext {
   readonly resolveGitPluginRoot?: (
     source: UrlSource | GitSubdirSource | GitHubSource,
   ) => Promise<GitPluginRootResult>;
+  /**
+   * D-07-06: materializes a `path` source at a marketplace-tag pin, when one
+   * is set. Optional for
+   * back-compat -- `list` and `info` construct a `ResolveContext` with
+   * neither this nor `pathPluginPin` and must keep resolving an unpinned
+   * `path` source under `marketplaceRoot` unchanged.
+   */
+  readonly resolvePathPluginRoot?: (
+    source: PathSource,
+    pin: string,
+  ) => Promise<GitPluginRootResult>;
+  /**
+   * The tag oid a constrained `path`-source install pinned on, carried
+   * alongside `resolvePathPluginRoot` because the resolver has no notion of a
+   * pin on its own.
+   */
+  readonly pathPluginPin?: string;
 }

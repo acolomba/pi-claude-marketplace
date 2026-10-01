@@ -8,9 +8,11 @@ import { test } from "node:test";
 
 import { githubSource, pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { planReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
+import { emptyReconcilePlan } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { mergeScopeConfigs } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { buildConfigFromState } from "../../extensions/pi-claude-marketplace/persistence/migrate-config.ts";
 
+import type { ScopeSatisfactionVerdict } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 function populatedMixedState(): ExtensionState {
@@ -43,6 +45,7 @@ function populatedMixedState(): ExtensionState {
               workflows: [],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
           },
@@ -64,6 +67,7 @@ function populatedMixedState(): ExtensionState {
               workflows: [],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
           },
@@ -95,6 +99,7 @@ function populatedMixedState(): ExtensionState {
               workflows: [],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: "2026-01-02T00:00:00.000Z",
             updatedAt: "2026-01-02T00:00:00.000Z",
           },
@@ -157,6 +162,8 @@ test("config migration, merge, and planning converge populated state for project
     pluginsToUninstall: [],
     pluginsToEnable: [],
     pluginsToDisable: [],
+    pluginsToDependencyDisable: [],
+    pluginsToDependencyInstall: [],
     sourceMismatches: [],
   });
 });
@@ -179,6 +186,8 @@ test("config migration, merge, and planning converge populated state for user sc
     pluginsToUninstall: [],
     pluginsToEnable: [],
     pluginsToDisable: [],
+    pluginsToDependencyDisable: [],
+    pluginsToDependencyInstall: [],
     sourceMismatches: [],
   });
 });
@@ -220,6 +229,7 @@ test("a distinct declared alias resolves to the canonical recorded marketplace",
               workflows: [],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
           },
@@ -240,6 +250,159 @@ test("a distinct declared alias resolves to the canonical recorded marketplace",
     pluginsToUninstall: [],
     pluginsToEnable: [],
     pluginsToDisable: [],
+    pluginsToDependencyDisable: [],
+    pluginsToDependencyInstall: [],
     sourceMismatches: [],
   });
+});
+
+/**
+ * D-09-16: a state recording `app@mp` declaring `vault@mp`, with `vault@mp`
+ * either unrecorded (unsatisfied) or recorded as a dependency (satisfied).
+ * The verdict is stated as a literal -- the declaration walk reads manifests,
+ * which this integration file has none of (matching the file's existing
+ * convention for LOAD-01/LOAD-02 style cases).
+ */
+function unsatisfiedDependencyState(recordVault: boolean): ExtensionState {
+  return {
+    schemaVersion: 3,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: githubSource("acme/mp"),
+        addedFromCwd: "/workspace",
+        manifestPath: "/marketplaces/mp/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/marketplaces/mp",
+        plugins: {
+          app: {
+            version: "1.0.0",
+            resolvedSource: "/marketplaces/mp/app",
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
+            enabled: true,
+            provenance: "explicit",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+          ...(recordVault && {
+            vault: {
+              version: "1.0.0",
+              resolvedSource: "/marketplaces/mp/vault",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+                workflows: [],
+              },
+              enabled: true,
+              provenance: "dependency",
+              installedAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          }),
+        },
+      },
+    },
+  };
+}
+
+test("D-09-16: a recorded plugin declaring a missing key plans the bucket, and the recorded dependency plans nothing", () => {
+  // arrange
+  const state = unsatisfiedDependencyState(false);
+  const config = buildConfigFromState(state);
+  const merged = mergeScopeConfigs(config, {});
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [{ dependent: "app@mp", dependency: "vault@mp", kind: "missing" }],
+  };
+
+  // act
+  const unsatisfiedPlan = planReconcile(merged, state, "project", verdict);
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedPlan, {
+    scope: "project",
+    marketplacesToAdd: [],
+    marketplacesToRemove: [],
+    pluginsToInstall: [],
+    pluginsToUninstall: [],
+    pluginsToEnable: [],
+    pluginsToDisable: [],
+    pluginsToDependencyDisable: [
+      {
+        scope: "project",
+        plugin: "app",
+        marketplace: "mp",
+        dependency: "vault@mp",
+        kind: "missing",
+      },
+    ],
+    pluginsToDependencyInstall: [
+      {
+        scope: "project",
+        plugin: "vault",
+        marketplace: "mp",
+        ranges: [],
+        requiredBy: "app@mp",
+        declarers: ["app@mp"],
+      },
+    ],
+    sourceMismatches: [],
+  });
+
+  // arrange -- the recorded-dependency arm reuses the same migration + merge
+  // + plan pipeline the file's other cases span, with an empty (satisfied)
+  // verdict.
+  const satisfiedState = unsatisfiedDependencyState(true);
+  const satisfiedConfig = buildConfigFromState(satisfiedState);
+  const satisfiedMerged = mergeScopeConfigs(satisfiedConfig, {});
+
+  // act
+  const satisfiedPlan = planReconcile(satisfiedMerged, satisfiedState, "project", {
+    ok: true,
+    unsatisfied: [],
+  });
+
+  // assert
+  assert.deepStrictEqual(satisfiedPlan, emptyReconcilePlan("project"));
+});
+
+test("D-09-14: an unsatisfied declaration re-plans the same bucket entry", () => {
+  // arrange -- no backoff, no persisted failure marker: the same inputs
+  // re-plan the same bucket, a deliberate non-fixpoint (D-09-14).
+  const state = unsatisfiedDependencyState(false);
+  const config = buildConfigFromState(state);
+  const merged = mergeScopeConfigs(config, {});
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [{ dependent: "app@mp", dependency: "vault@mp", kind: "missing" }],
+  };
+
+  // act
+  const firstPlan = planReconcile(merged, state, "project", verdict);
+  const secondPlan = planReconcile(merged, state, "project", verdict);
+
+  // assert
+  assert.deepStrictEqual(secondPlan, firstPlan);
+  assert.deepStrictEqual(secondPlan.pluginsToDependencyInstall, [
+    {
+      scope: "project",
+      plugin: "vault",
+      marketplace: "mp",
+      ranges: [],
+      requiredBy: "app@mp",
+      declarers: ["app@mp"],
+    },
+  ]);
 });

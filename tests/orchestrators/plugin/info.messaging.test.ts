@@ -17,8 +17,18 @@ void ({
   status: "skipped",
   name: "alpha",
   reasons: ["up-to-date"],
-  // @ts-expect-error skipped rows structurally exclude failure causes
-  cause: new Error("must stay outside the command-owned row"),
+} satisfies PluginInfoCascadeMsg);
+
+// UPDT-02: the held-update cause trailer lives on
+// `PluginUpdateSkippedMessage`, not on the shared `PluginSkippedMessage`
+// this command's cascade message reuses, so `info`'s rows cannot grow one
+// and stay byte-frozen.
+void ({
+  status: "skipped",
+  name: "alpha",
+  reasons: ["up-to-date"],
+  // @ts-expect-error a plugin-info cascade row structurally excludes a failure cause
+  cause: new Error("boom"),
 } satisfies PluginInfoCascadeMsg);
 
 test("exports the complete plugin-info cascade context", () => {
