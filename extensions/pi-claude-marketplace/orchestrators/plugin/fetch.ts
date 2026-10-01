@@ -51,6 +51,7 @@ import {
   canonicalCloneUrl,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  networkCloneUrl,
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { FETCH_CONTEXT, type FetchMsg } from "./fetch.messaging.ts";
@@ -388,8 +389,9 @@ async function materializeThroughSeam(
     await deps.seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
+      networkUrl: networkCloneUrl(gitSource),
       ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
-      ...(auth !== undefined && { auth }),
+      auth,
     });
     return;
   }
@@ -399,9 +401,10 @@ async function materializeThroughSeam(
   await deps.seam.materializePluginClone({
     locations,
     cloneUrl,
+    networkUrl: networkCloneUrl(gitSource),
     pin,
     ...(ref !== undefined && { ref }),
-    ...(auth !== undefined && { auth }),
+    auth,
   });
 }
 

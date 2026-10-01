@@ -8,9 +8,12 @@
 // cross-orchestrator import surface) instead of drifting per verb.
 //
 // Duck-typed on the isomorphic-git error shapes (D-13: no isomorphic-git
-// import outside the platform tier); per-verb fallbacks (fetch's
-// `source missing` fold, install's auth-only narrowing) stay thin wrappers at
-// their call sites.
+// import outside the platform tier); the project's own
+// `CrossOriginChallengeError` is narrowed by `instanceof`. Per-verb fallbacks
+// (fetch's `source missing` fold, install's auth-only narrowing) stay thin
+// wrappers at their call sites.
+
+import { CrossOriginChallengeError } from "./errors.ts";
 
 type GitTransportReason = "network unreachable" | "authentication required";
 type GitSourceAccessReason = GitTransportReason | "source missing";
@@ -53,6 +56,8 @@ function classifyNetworkErrno(code: string | undefined): GitTransportReason | un
  * Classify a git clone/fetch/materialize throw into the EXISTING closed-set
  * `network unreachable` / `authentication required` REASONS -- no new token.
  *
+ *   - `CrossOriginChallengeError` -> `authentication required`: a hop reached
+ *     after a redirect to another origin asked for credentials (Q-02).
  *   - isomorphic-git `HttpError` (`.code === "HttpError"`) with a 401/403
  *     status -> `authentication required` (a private clone challenge, or a
  *     still-401 after a fresh credential).
@@ -72,6 +77,10 @@ export function classifyGitTransportFailure(
 ): "network unreachable" | "authentication required" | undefined {
   if (!(err instanceof Error)) {
     return undefined;
+  }
+
+  if (err instanceof CrossOriginChallengeError) {
+    return "authentication required";
   }
 
   const code = (err as NodeJS.ErrnoException).code;
