@@ -481,6 +481,9 @@ test("keeps a pinned warm URL clone offline and byte-identical", async () => {
 test("materializes a cold pinned URL clone at its recorded SHA", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
+    // D-2-01: the manifest url carries a `.git`, so the identity `cloneUrl`
+    // (which keys the clone dir) and the wire `networkUrl` differ, and the
+    // gitBoundary admits only the suffixed remote.
     const cloneUrl = "https://example.com/plugin";
     const networkUrl = "https://example.com/plugin.git";
     const pin = "2222222222222222222222222222222222222222";
@@ -491,7 +494,7 @@ test("materializes a cold pinned URL clone at its recorded SHA", async () => {
       entries: [
         {
           name: "cold",
-          source: { source: "url", url: cloneUrl, sha: pin, ref: "v2" },
+          source: { source: "url", url: networkUrl, sha: pin, ref: "v2" },
           version: "2.0.0",
         },
       ],
@@ -523,10 +526,10 @@ test("materializes a cold pinned URL clone at its recorded SHA", async () => {
     ]);
     assert.deepStrictEqual(cache.calls, [
       `resolve url ${cloneUrl} sha=${pin} ref=v2`,
-      `clone ${cloneUrl} pin=${pin} ref=v2 auth=-`,
+      `clone ${cloneUrl} pin=${pin} ref=v2 auth=example.com`,
     ]);
     assert.deepStrictEqual(git.schedule, [
-      `clone ${networkUrl} ref=v2 single=true auth=-`,
+      `clone ${networkUrl} ref=v2 single=true auth=example.com`,
       `checkout ${pin}`,
     ]);
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
@@ -556,7 +559,7 @@ test("refreshes an unpinned warm mirror with its ref and leaves state immutable"
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/plugin";
-    const networkUrl = "https://example.com/plugin.git";
+    const networkUrl = "https://example.com/plugin";
     const head = "3333333333333333333333333333333333333333";
     const marketplace = await marketplaceRecord({
       cwd,
@@ -597,9 +600,9 @@ test("refreshes an unpinned warm mirror with its ref and leaves state immutable"
     assert.deepStrictEqual(boundary.notifications, [
       { message: "● marketplace [project]\n  ○ moving (available)" },
     ]);
-    assert.deepStrictEqual(cache.calls, [`mirror ${cloneUrl} ref=main auth=-`]);
+    assert.deepStrictEqual(cache.calls, [`mirror ${cloneUrl} ref=main auth=example.com`]);
     assert.deepStrictEqual(git.schedule, [
-      "fetch remote=origin ref=main auth=-",
+      "fetch remote=origin ref=main auth=example.com",
       "resolve-local refs/remotes/origin/main",
       `force-update refs/heads/main=${head}`,
       "checkout main",
@@ -608,6 +611,88 @@ test("refreshes an unpinned warm mirror with its ref and leaves state immutable"
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     assert.deepStrictEqual(await stagingEntries(locations), []);
+    verifyNotifications(boundary);
+  });
+});
+
+test("materializes a cold unpinned URL mirror at the typed wire url", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    // D-2-01 / D-2-03: the mirror dir is keyed on the identity url; the COLD
+    // clone goes out at the wire url, `.git` and all.
+    const cloneUrl = "https://example.com/cold-mirror";
+    const networkUrl = "https://example.com/cold-mirror.git";
+    const head = "5555555555555555555555555555555555555555";
+    const fixture = path.join(cwd, "fixture");
+    await writePluginTree(fixture, "cold-mirror", "5.0.0");
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [
+        { name: "cold-mirror", source: { source: "url", url: networkUrl }, version: "5.0.0" },
+      ],
+      name: "marketplace",
+      scope: "project",
+    });
+    const locations = await saveMarketplaces(cwd, "project", [marketplace]);
+    const git = gitBoundary({
+      allowedRemoteUrls: [networkUrl],
+      fixtureSourceDir: fixture,
+      head,
+      localRefs: { "refs/heads/main": head },
+      remoteHead: head,
+      remoteRefs: { "refs/remotes/origin/HEAD": head },
+      writeHead: true,
+    });
+    const cache = cacheBoundary(git.gitOps);
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const boundary = notificationBoundary("cold URL mirror");
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: cache.seam,
+      credentialOps: credentials.credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      pi: boundary.pi,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "cold-mirror" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● marketplace [project]\n  ○ cold-mirror v5.0.0 (available)" },
+    ]);
+    assert.deepStrictEqual(cache.calls, [`mirror ${cloneUrl} ref=- auth=example.com`]);
+    assert.deepStrictEqual(git.schedule, [
+      `clone ${networkUrl} ref=- single=false auth=example.com`,
+      "fetch remote=origin ref=- auth=example.com",
+      "resolve-local refs/remotes/origin/HEAD",
+      "current-branch",
+      `force-update refs/heads/main=${head}`,
+      "checkout main",
+      "resolve-local HEAD",
+    ]);
+    assert.deepStrictEqual(await stagingEntries(locations), []);
+    assert.deepStrictEqual(
+      await snapshotTree(await locations.pluginCloneDir(pluginMirrorKey(cloneUrl))),
+      [
+        { path: ".claude-plugin", type: "directory" },
+        {
+          contents: '{"name":"cold-mirror","version":"5.0.0"}',
+          path: path.join(".claude-plugin", "plugin.json"),
+          type: "file",
+        },
+        { path: ".git", type: "directory" },
+        { contents: `${head}\n`, path: path.join(".git", "HEAD"), type: "file" },
+        { path: "skills", type: "directory" },
+        { path: path.join("skills", "greet"), type: "directory" },
+        {
+          contents: "---\nname: greet\n---\n\nHello 5.0.0.\n",
+          path: path.join("skills", "greet", "SKILL.md"),
+          type: "file",
+        },
+      ],
+    );
     verifyNotifications(boundary);
   });
 });
@@ -817,7 +902,9 @@ test("memoizes one accepted Device Flow result across a same-host sweep", async 
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        authResults.push(await requiredAuth(args.auth).onAuthRequired());
+        const auth = requiredAuth(args.auth);
+        assert.ok(auth.kind === "device-flow");
+        authResults.push(await auth.onAuthRequired());
         return path.join(cwd, "not-written");
       },
       resolvePluginPin(args) {
@@ -1082,7 +1169,7 @@ test("continues a manifest-ordered sweep after a network failure", async () => {
     const locations = await saveMarketplaces(cwd, "project", [marketplace]);
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
     const git = gitBoundary({
-      allowedRemoteUrls: [`${okUrl}.git`, `${badUrl}.git`],
+      allowedRemoteUrls: [okUrl, badUrl],
       fixtureSourceDir: fixture,
     });
     const cache = cacheBoundary(git.gitOps);
@@ -1129,7 +1216,7 @@ test("continues a manifest-ordered sweep after a network failure", async () => {
     ]);
     assert.deepStrictEqual(cache.calls, [
       `resolve url ${okUrl} sha=${okPin} ref=-`,
-      `clone ${okUrl} pin=${okPin} ref=- auth=-`,
+      `clone ${okUrl} pin=${okPin} ref=- auth=example.com`,
       `resolve url ${badUrl} sha=${badPin} ref=-`,
     ]);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
@@ -1170,7 +1257,7 @@ test("derives partially available and unavailable git rows exactly", async () =>
     });
     await saveMarketplaces(cwd, "project", [marketplace]);
     const git = gitBoundary({
-      allowedRemoteUrls: [`${partialUrl}.git`, `${subdirUrl}.git`],
+      allowedRemoteUrls: [partialUrl, subdirUrl],
       fixtureSourceDir: fixture,
     });
     const cache = cacheBoundary(git.gitOps);
@@ -1202,9 +1289,9 @@ test("derives partially available and unavailable git rows exactly", async () =>
     ]);
     assert.deepStrictEqual(cache.calls, [
       `resolve url ${partialUrl} sha=${partialPin} ref=-`,
-      `clone ${partialUrl} pin=${partialPin} ref=- auth=-`,
+      `clone ${partialUrl} pin=${partialPin} ref=- auth=example.com`,
       `resolve git-subdir ${subdirUrl} sha=${subdirPin} ref=-`,
-      `clone ${subdirUrl} pin=${subdirPin} ref=- auth=-`,
+      `clone ${subdirUrl} pin=${subdirPin} ref=- auth=example.com`,
     ]);
     verifyNotifications(boundary);
   });
@@ -1346,7 +1433,7 @@ test("renders fresh status after materialization through the required capability
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/status-capability";
-    const networkUrl = "https://example.com/status-capability.git";
+    const networkUrl = "https://example.com/status-capability";
     const pin = "acacacacacacacacacacacacacacacacacacacac";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "fresh", "4.0.0");
@@ -1516,7 +1603,7 @@ test("cleans failed clone staging and converges on retry", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/retry";
-    const networkUrl = "https://example.com/retry.git";
+    const networkUrl = "https://example.com/retry";
     const pin = "ffffffffffffffffffffffffffffffffffffffff";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "retry", "1.0.0");
@@ -1585,7 +1672,7 @@ test("accepts a concurrent cache winner and removes losing staging", async () =>
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/race";
-    const networkUrl = "https://example.com/race.git";
+    const networkUrl = "https://example.com/race";
     const pin = "0123456789abcdef0123456789abcdef01234567";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "race", "1.0.0");
@@ -1635,7 +1722,7 @@ test("surfaces a cleanup leak and retries safely after permissions are repaired"
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/leak";
-    const networkUrl = "https://example.com/leak.git";
+    const networkUrl = "https://example.com/leak";
     const pin = "89abcdef0123456789abcdef0123456789abcdef";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "leak", "1.0.0");
@@ -2023,7 +2110,7 @@ test("cleans a non-race promotion failure and converges on retry", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/promotion";
-    const networkUrl = "https://example.com/promotion.git";
+    const networkUrl = "https://example.com/promotion";
     const pin = "567890abcdef1234567890abcdef123456789012";
     const fixture = path.join(cwd, "fixture");
     await writePluginTree(fixture, "promotion", "1.0.0");

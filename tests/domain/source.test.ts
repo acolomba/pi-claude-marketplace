@@ -8,14 +8,22 @@ import {
   pathSource,
   samePlannedSource,
   sourceLogical,
+  stripSlashAndFragment,
   type ParsedSource,
   type SamePlannedSourceResult,
+  type UrlSource,
 } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 
 interface ParseCase {
   readonly name: string;
   readonly raw: unknown;
   readonly source: ParsedSource;
+}
+
+interface UrlFixedPointCase {
+  readonly name: string;
+  readonly typed: string;
+  readonly source: UrlSource;
 }
 
 interface SourceComparisonCase {
@@ -240,6 +248,15 @@ const PARSE_CASES: readonly ParseCase[] = [
   {
     name: "parses a stored URL source",
     raw: { kind: "url", url: "https://example.com/p.git" },
+    source: {
+      kind: "url",
+      raw: "https://example.com/p.git",
+      url: "https://example.com/p",
+    },
+  },
+  {
+    name: "re-parses a stored URL source from its raw field, preserving the .git decision",
+    raw: { kind: "url", raw: "https://example.com/p.git", url: "https://example.com/p" },
     source: {
       kind: "url",
       raw: "https://example.com/p.git",
@@ -624,9 +641,571 @@ const INVALID_INPUT_CASES: readonly ParseCase[] = [
   },
 ];
 
+/**
+ * D-2-03: the parse-time `url` is the exact string `pluginCloneKey` and
+ * `pluginMirrorKey` hash, so every expected value below names a
+ * `plugin-clones/<hash>` directory. Each row is an input whose answer depends on
+ * the ORDER in which `domain/source.ts` strips trailing slashes and splits the
+ * `#<ref>` fragment. D-2-05: the `url` arm splits the fragment off first, so a
+ * path slash sitting in front of one comes off and the identity is a fixed point
+ * across a persist-and-reload round trip (`URL_FIXED_POINT_CASES`). The github
+ * arm strips slashes first, so that slash survives into the owner/repo
+ * validation and the three-part `o/r/` it produces is rejected. Changing an
+ * expected value here cold-misses every warm clone for that input.
+ */
+const URL_IDENTITY_CASES: readonly ParseCase[] = [
+  {
+    name: "strips only the last of a doubled .git.git suffix from the url identity",
+    raw: "https://gitlab.com/o/r.git.git",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git.git",
+      url: "https://gitlab.com/o/r.git",
+    },
+  },
+  {
+    name: "does not fold a differing case .GIT suffix in the url identity",
+    raw: "https://gitlab.com/o/r.GIT",
+    source: { kind: "url", raw: "https://gitlab.com/o/r.GIT", url: "https://gitlab.com/o/r.GIT" },
+  },
+  {
+    name: "strips a path slash that precedes a #<ref> fragment from the url identity",
+    raw: "https://gitlab.com/o/r/#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "strips a path slash that precedes an empty #fragment from the url identity",
+    raw: "https://gitlab.com/o/r/#",
+    source: { kind: "url", raw: "https://gitlab.com/o/r/#", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "strips a .git suffix behind a path slash that precedes a #<ref> fragment",
+    raw: "https://gitlab.com/o/r.git/#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "strips a trailing slash from the url identity when no #<ref> fragment follows it",
+    raw: "https://gitlab.com/o/r/",
+    source: { kind: "url", raw: "https://gitlab.com/o/r/", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "strips a trailing slash from a #<ref> fragment in the url identity",
+    raw: "https://gitlab.com/o/r#main/",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r#main/",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "strips a .git suffix behind a trailing slash from the url identity",
+    raw: "https://gitlab.com/o/r.git/",
+    source: { kind: "url", raw: "https://gitlab.com/o/r.git/", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "rejects a github url whose path slash precedes a #<ref> fragment",
+    raw: "https://github.com/o/r/#main",
+    source: {
+      kind: "unknown",
+      raw: "https://github.com/o/r/#main",
+      reason:
+        "https://github.com/o/r/#main must be https://github.com/<owner>/<repo>[.git][#<ref>]",
+    },
+  },
+  {
+    name: "rejects a github url whose .git suffix and path slash precede a #<ref> fragment",
+    raw: "https://github.com/o/r.git/#main",
+    source: {
+      kind: "unknown",
+      raw: "https://github.com/o/r.git/#main",
+      reason:
+        "https://github.com/o/r.git/#main must be https://github.com/<owner>/<repo>[.git][#<ref>]",
+    },
+  },
+];
+
+/**
+ * D-76-01: the object form passes the same https-only scheme gate as the string
+ * form. `PLUGIN_ENTRY_SCHEMA` types a manifest entry's source as `unknown`, so a
+ * third-party marketplace controls every field of the object, and the two fields
+ * `urlObjectSource` reads reach different consumers: `url` becomes the cache
+ * identity `canonicalCloneUrl` returns, and `raw` becomes the wire url
+ * `networkCloneUrl` hands to `gitOps.clone`. Each rejected scheme is therefore
+ * listed twice, once per field: a gate on only one of them leaves the other as a
+ * way to reach the network with an unvalidated string. T-2-10: a `raw` that
+ * passes the scheme gate must still parse to the identity `url` names, because
+ * `url` picks the credential host and the shared clone directory while `raw`
+ * picks what is fetched; D-2-05's decorations are the only difference admitted.
+ */
+const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
+  {
+    name: "rejects an http:// identity url in the object form",
+    raw: { source: "url", url: "http://evil.example/x" },
+    source: {
+      kind: "unknown",
+      raw: "http://evil.example/x",
+      reason:
+        "http://evil.example/x is not supported; http:// URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects an http:// raw url in the object form",
+    raw: { source: "url", raw: "http://evil.example/x", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: "http://evil.example/x",
+      reason:
+        "http://evil.example/x is not supported; http:// URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects an ssh:// identity url in the object form",
+    raw: { source: "url", url: "ssh://git@evil.example/x" },
+    source: {
+      kind: "unknown",
+      raw: "ssh://git@evil.example/x",
+      reason:
+        "ssh://git@evil.example/x is not supported; ssh:// URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects an ssh:// raw url in the object form",
+    raw: { source: "url", raw: "ssh://git@evil.example/x", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: "ssh://git@evil.example/x",
+      reason:
+        "ssh://git@evil.example/x is not supported; ssh:// URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects a git@host: scp-form identity url in the object form",
+    raw: { source: "url", url: "git@evil.example:o/r.git" },
+    source: {
+      kind: "unknown",
+      raw: "git@evil.example:o/r.git",
+      reason:
+        "git@evil.example:o/r.git is not supported; git@host: scp-form URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects a git@host: scp-form raw url in the object form",
+    raw: { source: "url", raw: "git@evil.example:o/r.git", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: "git@evil.example:o/r.git",
+      reason:
+        "git@evil.example:o/r.git is not supported; git@host: scp-form URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects a relative identity path in the object form",
+    raw: { source: "url", url: "./local/path" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","url":"./local/path"}',
+      reason: "non-relative string source ./local/path cannot be classified",
+    },
+  },
+  {
+    name: "rejects a relative raw path in the object form",
+    raw: { source: "url", raw: "./local/path", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","raw":"./local/path","url":"https://gitlab.com/o/r"}',
+      reason: "non-relative string source ./local/path cannot be classified",
+    },
+  },
+  {
+    name: "rejects a github browser identity url in the object form",
+    raw: { source: "url", url: "https://github.com/o/r/tree/main" },
+    source: {
+      kind: "unknown",
+      raw: "https://github.com/o/r/tree/main",
+      reason:
+        "https://github.com/o/r/tree/main is a browser URL; use https://github.com/o/r#main instead",
+    },
+  },
+  {
+    name: "rejects a github browser raw url in the object form",
+    raw: {
+      source: "url",
+      raw: "https://github.com/o/r/tree/main",
+      url: "https://gitlab.com/o/r",
+    },
+    source: {
+      kind: "unknown",
+      raw: "https://github.com/o/r/tree/main",
+      reason:
+        "https://github.com/o/r/tree/main is a browser URL; use https://github.com/o/r#main instead",
+    },
+  },
+  {
+    name: "rejects an owner/repo identity shorthand in the object form",
+    raw: { source: "url", url: "o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","url":"o/r"}',
+      reason: "non-relative string source o/r cannot be classified",
+    },
+  },
+  {
+    name: "rejects an owner/repo raw shorthand in the object form",
+    raw: { source: "url", raw: "o/r", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","raw":"o/r","url":"https://gitlab.com/o/r"}',
+      reason: "non-relative string source o/r cannot be classified",
+    },
+  },
+  {
+    name: "accepts an https object-form url and keeps its .git decision on raw",
+    raw: { source: "url", url: "https://gitlab.com/o/r.git" },
+    source: { kind: "url", raw: "https://gitlab.com/o/r.git", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "drops the raw field of a github object url, whose wire form never reads it",
+    raw: { source: "url", url: "https://github.com/o/r", raw: "http://evil.example/x" },
+    source: { kind: "github", raw: "https://github.com/o/r", owner: "o", repo: "r" },
+  },
+  {
+    name: "rejects a raw url on another host than the identity url in the object form",
+    raw: { source: "url", raw: "https://evil.example/o/r", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","raw":"https://evil.example/o/r","url":"https://gitlab.com/o/r"}',
+      reason:
+        "url source raw https://evil.example/o/r does not name the same repository as url https://gitlab.com/o/r",
+    },
+  },
+  {
+    name: "rejects a github raw url behind a non-github identity url in the object form",
+    raw: { source: "url", raw: "https://github.com/evil/x", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","raw":"https://github.com/evil/x","url":"https://gitlab.com/o/r"}',
+      reason:
+        "url source raw https://github.com/evil/x does not name the same repository as url https://gitlab.com/o/r",
+    },
+  },
+  {
+    name: "rejects a raw url on the identity host with another path in the object form",
+    raw: { source: "url", raw: "https://gitlab.com/evil/x", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","raw":"https://gitlab.com/evil/x","url":"https://gitlab.com/o/r"}',
+      reason:
+        "url source raw https://gitlab.com/evil/x does not name the same repository as url https://gitlab.com/o/r",
+    },
+  },
+  {
+    name: "rejects a raw url on another host than the identity url in a kind-tagged object",
+    raw: { kind: "url", raw: "https://evil.example/o/r", url: "https://gitlab.com/o/r" },
+    source: {
+      kind: "unknown",
+      raw: '{"kind":"url","raw":"https://evil.example/o/r","url":"https://gitlab.com/o/r"}',
+      reason:
+        "url source raw https://evil.example/o/r does not name the same repository as url https://gitlab.com/o/r",
+    },
+  },
+  {
+    name: "admits a raw url that differs from the identity url only by decoration in the object form",
+    raw: { source: "url", raw: "https://gitlab.com/o/r.git/", url: "https://gitlab.com/o/r" },
+    source: { kind: "url", raw: "https://gitlab.com/o/r.git/", url: "https://gitlab.com/o/r" },
+  },
+];
+
+/**
+ * D-2-03: the reload half of the identity table above. A persisted `UrlSource`
+ * is re-parsed as an object, and `canonicalCloneUrl` reads the `url` these rows
+ * pin, so each expected `url` names a `plugin-clones/<hash>` directory exactly
+ * as the string rows do. The identity derives from the stored `url`, so the
+ * three rows whose stored `url` carries a path slash strip it again and reach
+ * the value the string table's first-parse rows produce -- D-2-05's fixed point,
+ * which the fourth row then holds. `raw` is carried over verbatim in every row,
+ * because `networkCloneUrl` reads it and the wire form keeps the `.git` decision
+ * the user typed.
+ */
+const URL_RELOAD_IDENTITY_CASES: readonly ParseCase[] = [
+  {
+    name: "re-strips a path slash that precedes a #<ref> fragment from a reloaded url identity",
+    raw: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r/#main",
+      url: "https://gitlab.com/o/r/",
+      ref: "main",
+    },
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "re-strips a path slash that precedes an empty #fragment from a reloaded url identity",
+    raw: { kind: "url", raw: "https://gitlab.com/o/r/#", url: "https://gitlab.com/o/r/" },
+    source: { kind: "url", raw: "https://gitlab.com/o/r/#", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "re-strips a .git suffix behind a path slash from a reloaded url identity",
+    raw: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r.git/",
+      ref: "main",
+    },
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "reloads a url source whose identity is already stripped to a fixed point",
+    raw: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "reloads a url source whose #<ref> fragment follows no path slash",
+    raw: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+];
+
+/**
+ * D-2-05: the `url` identity is a FIXED POINT. Each row's expected source is
+ * written out once and asserted twice -- against the parse of the typed string,
+ * and against the re-parse of the persisted `{kind, raw, url}` record that
+ * source serializes to. `canonicalCloneUrl` reads `url`, so one literal
+ * satisfying both is the statement that an add and every later operation hash
+ * the same `plugin-clones/<hash>` directory, whatever slash, `.git` suffix or
+ * `#<ref>` fragment the user typed.
+ */
+const URL_FIXED_POINT_CASES: readonly UrlFixedPointCase[] = [
+  {
+    name: "holds one identity for a path slash before a #<ref> fragment across a reload",
+    typed: "https://gitlab.com/o/r/#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "holds one identity for a #<ref> fragment behind no path slash across a reload",
+    typed: "https://gitlab.com/o/r#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "holds one identity for a .git suffix behind a path slash across a reload",
+    typed: "https://gitlab.com/o/r.git/#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git/#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "holds one identity for a .git suffix before a #<ref> fragment across a reload",
+    typed: "https://gitlab.com/o/r.git#main",
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/o/r.git#main",
+      url: "https://gitlab.com/o/r",
+      ref: "main",
+    },
+  },
+  {
+    name: "holds one identity for a path slash before an empty #fragment across a reload",
+    typed: "https://gitlab.com/o/r/#",
+    source: { kind: "url", raw: "https://gitlab.com/o/r/#", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "holds one identity for a .git suffix with no fragment across a reload",
+    typed: "https://gitlab.com/o/r.git",
+    source: { kind: "url", raw: "https://gitlab.com/o/r.git", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "holds one identity for a trailing slash with no fragment across a reload",
+    typed: "https://gitlab.com/o/r/",
+    source: { kind: "url", raw: "https://gitlab.com/o/r/", url: "https://gitlab.com/o/r" },
+  },
+  {
+    name: "holds one identity for a bare url across a reload",
+    typed: "https://gitlab.com/o/r",
+    source: { kind: "url", raw: "https://gitlab.com/o/r", url: "https://gitlab.com/o/r" },
+  },
+];
+
+/**
+ * D-76-02: an `https://` url whose authority folds to `github.com` is a `github`
+ * source, whatever case, leading `www.` labels or explicit `:443` port the user
+ * typed, and it keeps the typed `raw` verbatim. An authority carrying a
+ * non-default port or userinfo, a host that only contains `github.com`, and a
+ * host with no path after it stay generic `url` sources.
+ */
+const GITHUB_HOST_FOLD_CASES: readonly ParseCase[] = [
+  {
+    name: "folds a mixed-case GitHub host into a GitHub source",
+    raw: "https://GitHub.com/acme/repo",
+    source: { kind: "github", raw: "https://GitHub.com/acme/repo", owner: "acme", repo: "repo" },
+  },
+  {
+    name: "folds an upper-case GitHub host and strips the Git suffix from its identity",
+    raw: "https://GITHUB.COM/acme/repo.git",
+    source: {
+      kind: "github",
+      raw: "https://GITHUB.COM/acme/repo.git",
+      owner: "acme",
+      repo: "repo",
+    },
+  },
+  {
+    name: "folds a www. label on the GitHub host into a GitHub source",
+    raw: "https://www.github.com/acme/repo",
+    source: {
+      kind: "github",
+      raw: "https://www.github.com/acme/repo",
+      owner: "acme",
+      repo: "repo",
+    },
+  },
+  {
+    name: "folds repeated www. labels on the GitHub host into a GitHub source",
+    raw: "https://www.www.github.com/acme/repo",
+    source: {
+      kind: "github",
+      raw: "https://www.www.github.com/acme/repo",
+      owner: "acme",
+      repo: "repo",
+    },
+  },
+  {
+    name: "drops an explicit :443 port from the GitHub host and keeps the reference",
+    raw: "https://github.com:443/acme/repo#main",
+    source: {
+      kind: "github",
+      raw: "https://github.com:443/acme/repo#main",
+      owner: "acme",
+      repo: "repo",
+      ref: "main",
+    },
+  },
+  {
+    name: "folds an upper-case www. label, a mixed-case host and a :443 port together",
+    raw: "https://WWW.GitHub.com:443/acme/repo",
+    source: {
+      kind: "github",
+      raw: "https://WWW.GitHub.com:443/acme/repo",
+      owner: "acme",
+      repo: "repo",
+    },
+  },
+  {
+    name: "keeps a GitHub host with a non-default port as a generic URL source",
+    raw: "https://github.com:8443/acme/repo",
+    source: {
+      kind: "url",
+      raw: "https://github.com:8443/acme/repo",
+      url: "https://github.com:8443/acme/repo",
+    },
+  },
+  {
+    name: "keeps a GitHub host with userinfo as a generic URL source",
+    raw: "https://user@github.com/acme/repo",
+    source: {
+      kind: "url",
+      raw: "https://user@github.com/acme/repo",
+      url: "https://user@github.com/acme/repo",
+    },
+  },
+  {
+    name: "keeps a host that only ends in github.com as a generic URL source",
+    raw: "https://notgithub.com/acme/repo",
+    source: {
+      kind: "url",
+      raw: "https://notgithub.com/acme/repo",
+      url: "https://notgithub.com/acme/repo",
+    },
+  },
+  {
+    name: "keeps a host that only starts with github.com as a generic URL source",
+    raw: "https://github.com.evil/acme/repo",
+    source: {
+      kind: "url",
+      raw: "https://github.com.evil/acme/repo",
+      url: "https://github.com.evil/acme/repo",
+    },
+  },
+  {
+    name: "keeps a GitHub host with no path after it as a generic URL source",
+    raw: "https://github.com",
+    source: { kind: "url", raw: "https://github.com", url: "https://github.com" },
+  },
+  {
+    name: "normalizes an object URL on a mixed-case GitHub host to a GitHub source",
+    raw: { source: "url", url: "https://GitHub.com/acme/repo" },
+    source: { kind: "github", raw: "https://GitHub.com/acme/repo", owner: "acme", repo: "repo" },
+  },
+  {
+    name: "rejects a browser tree URL on a mixed-case GitHub host with a canonical hint",
+    raw: "https://GitHub.com/acme/repo/tree/main",
+    source: {
+      kind: "unknown",
+      raw: "https://GitHub.com/acme/repo/tree/main",
+      reason:
+        "https://GitHub.com/acme/repo/tree/main is a browser URL; use https://github.com/acme/repo#main instead",
+    },
+  },
+];
+
 describe("parsePluginSource", () => {
   for (const { name, raw, source } of [
     ...PARSE_CASES,
+    ...URL_IDENTITY_CASES,
+    ...URL_RELOAD_IDENTITY_CASES,
+    ...URL_OBJECT_GATE_CASES,
+    ...GITHUB_HOST_FOLD_CASES,
     ...UNKNOWN_PARSE_CASES,
     ...INVALID_INPUT_CASES,
   ]) {
@@ -641,6 +1220,36 @@ describe("parsePluginSource", () => {
       assert.deepStrictEqual(parsedSource, expectedSource);
     });
   }
+
+  for (const { name, typed, source } of URL_FIXED_POINT_CASES) {
+    test(name, () => {
+      // arrange
+      const expectedSources = [source, source];
+      const persistedSource = {
+        kind: "url",
+        raw: source.raw,
+        url: source.url,
+        ...(source.ref !== undefined && { ref: source.ref }),
+      };
+
+      // act
+      const parsedSources = [parsePluginSource(typed), parsePluginSource(persistedSource)];
+
+      // assert
+      assert.deepStrictEqual(parsedSources, expectedSources);
+    });
+  }
+
+  test("re-parsing an already-parsed URL source is idempotent on raw", () => {
+    // arrange
+    const expectedRaw = "https://example.com/p.git";
+
+    // act
+    const reparsedSource = parsePluginSource(parsePluginSource(expectedRaw));
+
+    // assert
+    assert.strictEqual(reparsedSource.raw, expectedRaw);
+  });
 });
 
 describe("pathSource", () => {
@@ -916,12 +1525,13 @@ describe("sourceLogical", () => {
 });
 
 describe("ensureGitSuffix", () => {
+  // The only production caller is `networkCloneUrl`'s github arm, which passes
+  // `canonicalCloneUrl(source)`. Both inputs below are values that arm produces:
+  // `https://github.com/<owner>/<repo>` for a parsed github url, and the same
+  // with `.git` inside `repo` for the `owner/repo.git` shorthand.
   for (const { url, cloneUrl } of [
     { url: "https://gitlab.com/o/r", cloneUrl: "https://gitlab.com/o/r.git" },
     { url: "https://gitlab.com/o/r.git", cloneUrl: "https://gitlab.com/o/r.git" },
-    { url: "https://gitlab.com/o/r/", cloneUrl: "https://gitlab.com/o/r.git" },
-    { url: "https://gitlab.com/o/r///", cloneUrl: "https://gitlab.com/o/r.git" },
-    { url: "https://gitlab.com/o/r.git/", cloneUrl: "https://gitlab.com/o/r.git" },
   ]) {
     test("normalizes " + url + " for Git transport", () => {
       // arrange
@@ -932,6 +1542,62 @@ describe("ensureGitSuffix", () => {
 
       // assert
       assert.strictEqual(normalizedCloneUrl, expectedCloneUrl);
+    });
+  }
+});
+
+describe("stripSlashAndFragment", () => {
+  for (const { name, input, expected } of [
+    {
+      name: "trims trailing slashes only",
+      input: "https://gitlab.com/o/r///",
+      expected: { base: "https://gitlab.com/o/r", ref: undefined },
+    },
+    {
+      name: "splits off a #<ref> fragment",
+      input: "https://gitlab.com/o/r#main",
+      expected: { base: "https://gitlab.com/o/r", ref: "main" },
+    },
+    {
+      name: "trims a trailing slash after the #<ref> fragment before splitting it off",
+      input: "https://gitlab.com/o/r#main/",
+      expected: { base: "https://gitlab.com/o/r", ref: "main" },
+    },
+    {
+      name: "trims a trailing slash that precedes the #<ref> fragment",
+      input: "https://gitlab.com/o/r/#main",
+      expected: { base: "https://gitlab.com/o/r", ref: "main" },
+    },
+    {
+      name: "returns the input unchanged when it carries neither",
+      input: "https://gitlab.com/o/r",
+      expected: { base: "https://gitlab.com/o/r", ref: undefined },
+    },
+    {
+      name: "drops an empty #fragment and leaves ref undefined",
+      input: "https://gitlab.com/o/r#",
+      expected: { base: "https://gitlab.com/o/r", ref: undefined },
+    },
+    {
+      name: "leaves a trailing .git suffix untouched",
+      input: "https://gitlab.com/o/r.git",
+      expected: { base: "https://gitlab.com/o/r.git", ref: undefined },
+    },
+    {
+      name: "keeps a trailing .git suffix and trims a trailing slash",
+      input: "https://gitlab.com/o/r.git/",
+      expected: { base: "https://gitlab.com/o/r.git", ref: undefined },
+    },
+  ]) {
+    test(name, () => {
+      // arrange
+      const expectedStripped = expected;
+
+      // act
+      const stripped = stripSlashAndFragment(input);
+
+      // assert
+      assert.deepStrictEqual(stripped, expectedStripped);
     });
   }
 });
