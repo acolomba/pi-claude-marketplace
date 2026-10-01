@@ -78,6 +78,7 @@ import {
   type RemovalOps,
 } from "../../shared/fs-utils.ts";
 import { classifyGitSourceAccessFailure } from "../../shared/git-failure-classifiers.ts";
+import { composeLeftoverRemovalAdvisories } from "../../shared/notification-summary.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import {
@@ -86,7 +87,6 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
-import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_CREDENTIAL_OPS,
@@ -502,13 +502,13 @@ async function runAddInGuard(args: {
 
 /**
  * WR-02 / MA-14 / NFR-9: the advisory line naming a leftover clone the add
- * recognized but could not remove, with every absolute path reduced to its last
- * segment at this composition site. Undefined for every other failure.
+ * recognized but could not remove. The presentation layer formats the leak.
+ * Undefined for every other failure.
  */
 function removalAdvisories(err: unknown): readonly string[] | undefined {
   const cause = unwrapAddError(err);
   return cause instanceof UnremovableLeftoverCloneError
-    ? [`    ${redactAbsolutePaths(cause.removalLeak)}`]
+    ? composeLeftoverRemovalAdvisories(cause.removalLeak)
     : undefined;
 }
 

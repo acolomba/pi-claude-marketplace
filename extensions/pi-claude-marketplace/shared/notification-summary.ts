@@ -1,3 +1,5 @@
+import { redactAbsolutePaths } from "./redact-absolute-paths.ts";
+
 import type {
   CascadeNotificationMessage,
   MarketplaceNotificationMessage,
@@ -412,6 +414,11 @@ export function composeRetainedWorkflowsAdvisories(
       count === undefined ? "" : ` (${tallyCategory(count, "envelope", "envelopes")})`;
     return `    retained workflow staging: ${tree.name}${envelopes} under the workflows staging directory`;
   });
+}
+
+/** Formats a leftover-clone cleanup leak with redacted paths and advisory indentation. */
+export function composeLeftoverRemovalAdvisories(leak: string): readonly string[] {
+  return [`    ${redactAbsolutePaths(leak)}`];
 }
 
 /**

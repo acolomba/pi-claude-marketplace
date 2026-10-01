@@ -684,12 +684,12 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:799:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-summary.ts:41:40",
+      "id": "extensions/pi-claude-marketplace/shared/notification-summary.ts:43:40",
       "owner": "isInfoKind",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-summary.ts:41:9"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-summary.ts:43:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-types.ts:458:48",

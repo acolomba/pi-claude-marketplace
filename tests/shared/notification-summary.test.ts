@@ -8,6 +8,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import {
   buildSummaryLine,
+  composeLeftoverRemovalAdvisories,
   composeRetainedWorkflowsAdvisories,
   computeSeverity,
   countRowsBySeverity,
@@ -617,6 +618,17 @@ test("reconcile applied fold suppresses reload while preserving severity and tal
     "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)\n\nReconcile: 1 failure",
     "error",
   ]);
+});
+
+test("leftover removal advisory redacts paths and preserves indentation", () => {
+  // arrange
+  const leak = "could not remove /private/clones/official: permission denied";
+
+  // act
+  const lines = composeLeftoverRemovalAdvisories(leak);
+
+  // assert
+  assert.deepStrictEqual(lines, ["    could not remove official: permission denied"]);
 });
 
 test("WR-05: composeRetainedWorkflowsAdvisories states the count when known and omits it when not", () => {
