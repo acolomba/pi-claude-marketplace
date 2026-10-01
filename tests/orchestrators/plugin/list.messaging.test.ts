@@ -5,8 +5,45 @@ import {
   LIST_CONTEXT,
   type ListMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+
+test("list preserves partial content while suppressing dependency markers", () => {
+  // arrange
+  const rows = [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        {
+          status: "partially-installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["lsp"],
+          dependencies: ["agents", "mcp", "workflows"],
+        },
+      ],
+    },
+  ] as const;
+
+  // act
+  const resolved = resolveRows(rows, runWithNothingLoaded().softDeps, LIST_CONTEXT.rowPolicies);
+  const lines = composePluginLines(resolved[0]!.plugins[0]!, "user");
+
+  // assert
+  assert.deepStrictEqual(resolved[0]!.plugins, [
+    {
+      status: "partially-installed",
+      name: "alpha",
+      version: "1.0.0",
+      reasons: ["lsp"],
+    },
+  ]);
+  assert.deepStrictEqual(lines, ["  ◉ alpha v1.0.0 (partially-installed) {lsp}"]);
+});
 
 void ({
   status: "available",
@@ -27,12 +64,12 @@ void ({ status: "partially-upgradable", name: "alpha" } satisfies ListMsg);
 
 test("exports the complete plugin-list command context", () => {
   // arrange
-  const expectedContextKeys = ["Messaging", "render", "markers"];
+  const expectedContextKeys = ["Messaging", "rowPolicies"];
   const expectedRenderKeys = [
     "installed",
     "available",
-    "unavailable",
     "partially-available",
+    "unavailable",
     "upgradable",
     "partially-installed",
     "partially-upgradable",
@@ -43,7 +80,7 @@ test("exports the complete plugin-list command context", () => {
 
   // act
   const contextKeys = Object.keys(LIST_CONTEXT);
-  const renderKeys = Object.keys(LIST_CONTEXT.render);
+  const renderKeys = Object.keys(LIST_CONTEXT.rowPolicies);
 
   // assert
   assert.deepStrictEqual(contextKeys, expectedContextKeys);
@@ -62,7 +99,7 @@ test("renders an available row without scope, reload state, or description bytes
   } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.available(row, "project");
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -90,7 +127,7 @@ test("renders a disabled row with its resolved reasons", () => {
   } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.disabled(row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -124,7 +161,7 @@ test("renders a failed row without consuming its failure detail or lifecycle fie
   } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.failed(row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -157,7 +194,7 @@ test("renders an installed row with its durable reasons and resolved markers", (
   } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.installed(row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -187,7 +224,7 @@ test("renders a partially-available row without a scope or reload stamp", () => 
   } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render["partially-available"](row, "project");
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -213,7 +250,7 @@ test("renders a partially-installed row with its resolved reasons", () => {
   } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render["partially-installed"](row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -243,7 +280,7 @@ test("renders a partially-upgradable row in its marketplace scope", () => {
   } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render["partially-upgradable"](row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -269,7 +306,7 @@ test("renders a remote row without scope or reload state", () => {
   } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.remote(row, "project");
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -294,7 +331,7 @@ test("renders an unavailable row without a scope or reload stamp", () => {
   } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.unavailable(row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -323,7 +360,7 @@ test("renders an upgradable row with cross-scope attribution", () => {
   } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.upgradable(row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -336,4 +373,23 @@ test("renders an upgradable row with cross-scope attribution", () => {
   });
   assert.strictEqual(renderedRow, "● nu [project] v10.0.0 (upgradable) {source mismatch}");
   assert.strictEqual(Object.hasOwn(row, "needsReload"), false);
+});
+
+test("LIST_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = LIST_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    installed: { markers: true, contentReasons: true },
+    available: { markers: false, contentReasons: true },
+    "partially-available": { markers: false, contentReasons: true },
+    unavailable: { markers: false, contentReasons: true },
+    upgradable: { markers: false, contentReasons: true },
+    "partially-installed": { markers: false, contentReasons: true },
+    "partially-upgradable": { markers: false, contentReasons: true },
+    disabled: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    remote: { markers: false, contentReasons: true },
+  });
 });

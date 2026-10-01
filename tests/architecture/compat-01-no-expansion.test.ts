@@ -82,14 +82,8 @@ import test from "node:test";
 
 import { DEFAULT_STATE } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
-  ICON_AVAILABLE,
-  ICON_DISABLED,
-  ICON_INSTALLED,
-  ICON_PARTIALLY_INSTALLED,
-  ICON_UNINSTALLABLE,
-  renderPartiallyAvailableRow,
+  composePluginLines,
   renderPluginInfo,
-  renderRemoteRow,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
 import {
@@ -397,7 +391,7 @@ test("COMPAT-01: the marketplace-status vocabulary holds exactly its inherited m
 
 void (true satisfies IsExact<MarketplaceStatus, (typeof EXPECTED_MARKETPLACE_STATUSES)[number]>);
 
-test("COMPAT-01: every exported glyph constant holds its inherited code point", () => {
+test("COMPAT-01: every row glyph constant holds its inherited code point", () => {
   // arrange
   // Escapes rather than the characters themselves: the pin IS the code point,
   // and several of these render near-identically at a glance.
@@ -411,19 +405,30 @@ test("COMPAT-01: every exported glyph constant holds its inherited code point", 
 
   // act
   const glyphs = {
-    ICON_AVAILABLE,
-    ICON_DISABLED,
-    ICON_INSTALLED,
-    ICON_PARTIALLY_INSTALLED,
-    ICON_UNINSTALLABLE,
+    ICON_AVAILABLE: composePluginLines(
+      { status: "available", name: "alpha", reasons: [] },
+      "user",
+    )[0]!.slice(2, 3),
+    ICON_DISABLED: composePluginLines(
+      { status: "disabled", name: "alpha", reasons: [], severity: "info", needsReload: false },
+      "user",
+    )[0]!.slice(2, 3),
+    ICON_INSTALLED: composePluginLines(
+      { status: "installed", name: "alpha", reasons: [], severity: "info", needsReload: false },
+      "user",
+    )[0]!.slice(2, 3),
+    ICON_PARTIALLY_INSTALLED: composePluginLines(
+      { status: "partially-installed", name: "alpha", reasons: [] },
+      "user",
+    )[0]!.slice(2, 3),
+    ICON_UNINSTALLABLE: composePluginLines(
+      { status: "unavailable", name: "alpha", reasons: [] },
+      "user",
+    )[0]!.slice(2, 3),
   };
 
   // assert
-  assert.deepStrictEqual(
-    glyphs,
-    expected,
-    "COMPAT-01: every exported glyph keeps its named code point",
-  );
+  assert.deepStrictEqual(glyphs, expected, "COMPAT-01: every row glyph keeps its named code point");
 });
 
 /** The unresolved `info` message one status renders, with no optional field set. */
@@ -449,15 +454,14 @@ test("COMPAT-01: the two module-private glyphs reach the output on their own row
 
   // act
   const rows = [
-    renderRemoteRow(
+    composePluginLines(
       { status: "remote", name: "alpha", version: "1.0.0", reasons: [] },
       "user",
-      undefined,
-    ),
-    renderPartiallyAvailableRow(
+    )[0]!.slice(2),
+    composePluginLines(
       { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
       "user",
-    ),
+    )[0]!.slice(2),
   ];
 
   // assert
@@ -500,13 +504,13 @@ test("COMPAT-01: the catalog names each glyph the way the code-point pins above 
   // reconciling the two documents had no way to tell which was wrong. The
   // catalog keeps its descriptive register; what is pinned is the pairing.
   const expected: ReadonlyArray<readonly [string, string]> = [
-    [ICON_INSTALLED, "filled circle"],
-    [ICON_AVAILABLE, "empty circle"],
-    [ICON_UNINSTALLABLE, "prohibited symbol"],
+    ["●", "filled circle"],
+    ["○", "empty circle"],
+    ["⊘", "prohibited symbol"],
     [PARTIALLY_AVAILABLE_GLYPH, "circled minus"],
-    [ICON_PARTIALLY_INSTALLED, "fisheye"],
+    ["◉", "fisheye"],
     [REMOTE_GLYPH, "dotted circle"],
-    [ICON_DISABLED, "circle with vertical fill"],
+    ["◍", "circle with vertical fill"],
   ];
 
   // act

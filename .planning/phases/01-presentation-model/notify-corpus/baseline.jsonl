@@ -2484,7 +2484,7 @@
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Some operations have failed.\n\n\u2298 official [user] (failed) {network unreachable}\n  \u2298 alpha (failed) {not found}","severity":"error","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Some operations have failed.\n\n\u2298 official [user] (failed)\n  \u2298 alpha (failed) {not found}","severity":"error","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Some operations need attention.\n\n\u25cf demo [user]\n  \u2298 alpha v1.0.0 (skipped) {not installed}\n  \u2298 beta v2.0.0 (skipped) {not installed}\n\n\u25cf other [user] (skipped)","severity":"warning","argc":2}
-{"file":"tests/shared/notification-dispatch.test.ts","message":"Some operations need attention.\n\n\u25cf official [user] (skipped) {not found}\n  alpha (skipped)","severity":"warning","argc":2}
+{"file":"tests/shared/notification-dispatch.test.ts","message":"Some operations need attention.\n\n\u25cf official [user] (skipped) {not found}\n  \u2298 alpha (skipped) {not installed}","severity":"warning","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Some plugin operations have failed.\n\n\u25cf demo [user] (added)\n  \u2298 alpha v1.0.0 (failed) {permission denied}\n    cause: alpha-root\n  \u2298 beta v2.0.0 (failed) {network unreachable}\n    cause: beta-root","severity":"error","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Some plugin operations have failed.\n\n\u25cf demo [user] (added)\n  \u2298 alpha v1.0.0 (failed) {permission denied}\n  \u2298 beta v2.0.0 (failed) {network unreachable}","severity":"error","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Stop hook override cap reached.\n\n`official:guard`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.","severity":"warning","argc":2}
@@ -2596,15 +2596,12 @@
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user] <autoupdate>\ngithub: anthropics/claude-plugins-official#main\nlast_updated: 2026-06-03T00:00:00Z\ndescription: Official Claude plugin marketplace.","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user] <no autoupdate>\nurl: https://example.com/marketplace.git","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]","severity":null,"argc":1}
-{"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  alpha (available)\n\nPlugin list: 1 success","severity":null,"argc":1}
-{"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  alpha (available)\n\nPlugin update: nothing to update","severity":null,"argc":1}
-{"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  alpha (installed)\n  beta (reinstalled)","severity":null,"argc":1}
-{"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  controlled installed alpha\n\nPlugin install: 1 success\n\n/reload to pick up changes","severity":null,"argc":1}
-{"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  first (installed)\n  second (available)\n\n/reload to pick up changes","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u2296 delta (partially-available) {lsp}\n    Unsupported plugin that still surfaces its description.","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u2298 delta (unavailable) {unsupported hooks}\n    Unavailable plugin that still surfaces its description.","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25c9 degraded-plugin v1.0.0 (partially-installed) {lsp}","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25c9 helper v1.0.0 (partially-installed) {lsp, requires pi-subagents}\n\n/reload to pick up changes","severity":null,"argc":1}
+{"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cb alpha (available)\n\nPlugin list: 1 success","severity":null,"argc":1}
+{"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cb alpha (available)\n\nPlugin update: nothing to update","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cb alpha v1.0.0 (available)","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cb gamma (available)","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cb gamma (available)\n    AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","severity":null,"argc":1}
@@ -2618,44 +2615,47 @@
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cd foo-plugin (disabled)","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cd foo-plugin v1.2.3 (disabled)","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cd foo-plugin v1.2.3 (disabled)\n    Disabled plugin that still surfaces its description.","severity":null,"argc":1}
+{"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed) {requires pi-subagents}\n  \u25cf beta (reinstalled)","severity":null,"argc":1}
+{"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed)\n\nPlugin install: 1 success\n\n/reload to pick up changes","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cf alpha v1.0.0 (installed)","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cf alpha v1.0.0 (installed)\n    A short description of the alpha plugin.","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cf alpha v1.0.0 (installed)\n\n/reload to pick up changes","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cf alpha v1.0.0 (installed)\n\n/reload to pick up changes","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cf alpha v1.0.0 (installed)\n\n/reload to pick up changes","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cf beta v1.0.0 (upgradable)\n    Beta plugin description.","severity":null,"argc":1}
+{"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cf first (installed)\n  \u25cb second (available)\n\n/reload to pick up changes","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf official [user]\n  \u25cf helper v1.0.0 (installed) {orphan rewake}\n\n/reload to pick up changes","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf remote-mp [user] <autoupdate>\nurl: https://example.test/repo.git#main\nlast_updated: 2026-08-29T12:00:00Z\ndescription: Remote marketplace","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf remote-mp [user] <no autoupdate>\n  \u25cf remote-plugin v1.0.0 (installed)\n    Remote plugin sourced from an external npm package.\n    components: not resolved","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf shared [project]\n  \u25cf alpha [user] (will install)","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf shared [user]\n  \u25cd foo-plugin [project] v1.2.3 (disabled)","severity":null,"argc":1}
 {"file":"tests/shared/notification-summary.test.ts","message":"(no marketplaces)","severity":null,"argc":1}
-{"file":"tests/shared/notification-summary.test.ts","message":"A plugin operation has failed.\n\n\u25cf official [user]\n  alpha (failed)\n\nPlugin install: 1 failure\n\n/reload to pick up changes","severity":"error","argc":2}
-{"file":"tests/shared/notification-summary.test.ts","message":"A plugin operation has failed.\n\n\u25cf official [user]\n  alpha (failed)\n\nReconcile: 1 failure","severity":"error","argc":2}
+{"file":"tests/shared/notification-summary.test.ts","message":"A plugin operation has failed.\n\n\u25cf official [user]\n  \u2298 alpha (failed) {not found}\n\nPlugin install: 1 failure\n\n/reload to pick up changes","severity":"error","argc":2}
+{"file":"tests/shared/notification-summary.test.ts","message":"A plugin operation has failed.\n\n\u25cf official [user]\n  \u2298 alpha (failed) {not found}\n\nReconcile: 1 failure","severity":"error","argc":2}
 {"file":"tests/shared/notification-summary.test.ts","message":"Plugin update: nothing to update","severity":null,"argc":1}
 {"file":"tests/shared/notification-summary.test.ts","message":"\u25cf first [project] (added)\n\n\u25cf second [user] (added)\n\nMarketplace autoupdate: 2 successes","severity":null,"argc":1}
 {"file":"tests/shared/notification-summary.test.ts","message":"\u25cf official [user] (added)","severity":null,"argc":1}
 {"file":"tests/shared/notification-summary.test.ts","message":"\u25cf official [user] (added)\n\nMarketplace autoupdate: 1 success","severity":null,"argc":1}
 {"file":"tests/shared/notification-summary.test.ts","message":"\u25cf official [user] (added)\n\nMarketplace autoupdate: 1 success","severity":null,"argc":1}
-{"file":"tests/shared/notification-summary.test.ts","message":"\u25cf official [user]\n  alpha (partially-upgradable)\n\nPlugin update: nothing to update","severity":null,"argc":1}
+{"file":"tests/shared/notification-summary.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (partially-upgradable) {lsp}\n\nPlugin update: nothing to update","severity":null,"argc":1}
 {"file":"tests/shared/notify-context.test.ts","message":"(no marketplaces)","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"A plugin operation has failed.\n\n\u25cf official [user]\n  orphan (failed) {internal: no render arm for \"disabled\"}\n  controlled available neighbor [user]","severity":"error","argc":2}
+{"file":"tests/shared/notify-context.test.ts","message":"A plugin operation has failed.\n\n\u25cf official [user]\n  orphan (failed) {internal: no render arm for \"disabled\"}\n  \u25cb neighbor (available)","severity":"error","argc":2}
 {"file":"tests/shared/notify-context.test.ts","message":"Plugin update: nothing to update","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [project]\n  controlled available alpha [project]","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [project]\n  controlled available alpha [project]\n\nPlugin update: 1 updated","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [project]\n  controlled available alpha [project]\n\nPlugin update: 37 updated","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  ? (failed) {internal: no render arm for \"unknown\"}\n  controlled available neighbor [user]","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  alpha {requires pi-subagents}","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  alpha {requires pi-subagents}","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  alpha {requires pi-subagents}\n\nPlugin inspect: 1 success","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  alpha {requires pi-subagents}\n\nPlugin update: nothing to update","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  alpha {}","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  alpha {}","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  alpha {}\n\nPlugin inspect: 1 success","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  alpha {}\n\nPlugin update: nothing to update","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  controlled available alpha [user]","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  controlled available alpha [user]\n  controlled available beta [user]\n\n\u25cf community [project]\n  controlled disabled gamma [project]\n\nPlugin inspect: 3 successes","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  controlled available alpha [user]\n\nPlugin inspect: 1 success","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  controlled available alpha [user]\n\nPlugin reconcile: 1 success","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  controlled available alpha [user]\n\nfirst advisory\nsecond advisory\n\nPlugin inspect: 1 success","severity":null,"argc":1}
-{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  controlled disabled alpha [user]\n\nPlugin update: nothing to update","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [project]\n  \u25cb alpha (available)","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [project]\n  \u25cb alpha (available)\n\nPlugin update: 1 updated","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [project]\n  \u25cb alpha (available)\n\nPlugin update: 37 updated","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  ? (failed) {internal: no render arm for \"unknown\"}\n  \u25cb neighbor (available)","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cb alpha (available)","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cb alpha (available)\n  \u25cb beta (available)\n\n\u25cf community [project]\n  \u25cd gamma (disabled)\n\nPlugin inspect: 3 successes","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cb alpha (available)\n\nPlugin inspect: 1 success","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cb alpha (available)\n\nPlugin reconcile: 1 success","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cb alpha (available)\n\nfirst advisory\nsecond advisory\n\nPlugin inspect: 1 success","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cd alpha (disabled)\n\nPlugin update: nothing to update","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed) {requires pi-subagents}","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed) {requires pi-subagents}","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed) {requires pi-subagents}\n\nPlugin inspect: 1 success","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed) {requires pi-subagents}\n\nPlugin update: nothing to update","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed)","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed)","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed)\n\nPlugin inspect: 1 success","severity":null,"argc":1}
+{"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed)\n\nPlugin update: nothing to update","severity":null,"argc":1}

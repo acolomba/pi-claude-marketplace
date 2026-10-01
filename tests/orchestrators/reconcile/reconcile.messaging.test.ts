@@ -7,9 +7,53 @@ import {
   type PendingMsg,
   type ReconcileAppliedMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type * as ReconcileMessaging from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+
+test("applied uninstall suppresses content while preserving the optional version", () => {
+  // arrange
+  const rows = [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        {
+          status: "uninstalled",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["lsp"],
+          severity: "info",
+          needsReload: true,
+        },
+      ],
+    },
+  ] as const;
+
+  // act
+  const resolved = resolveRows(
+    rows,
+    runWithNothingLoaded().softDeps,
+    RECONCILE_APPLIED_CONTEXT.rowPolicies,
+  );
+  const lines = composePluginLines(resolved[0]!.plugins[0]!, "user");
+
+  // assert
+  assert.deepStrictEqual(resolved[0]!.plugins, [
+    {
+      status: "uninstalled",
+      name: "alpha",
+      version: "1.0.0",
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+  ]);
+  assert.deepStrictEqual(lines, ["  ○ alpha v1.0.0 (uninstalled)"]);
+});
 
 // Both status sets are private literal unions; each render map is pinned to
 // its own with `as const satisfies CommandContext<...>`, so a status without an
@@ -79,15 +123,15 @@ test("reconcile contexts expose their exact labels and declared render arms", ()
   ];
   const expectedAppliedStatuses = [
     "installed",
+    "partially-installed",
     "uninstalled",
     "disabled",
     "failed",
-    "partially-installed",
   ];
 
   // act
-  const pendingRenderArms = Object.keys(PENDING_CONTEXT.render);
-  const appliedRenderArms = Object.keys(RECONCILE_APPLIED_CONTEXT.render);
+  const pendingRenderArms = Object.keys(PENDING_CONTEXT.rowPolicies);
+  const appliedRenderArms = Object.keys(RECONCILE_APPLIED_CONTEXT.rowPolicies);
 
   // assert
   assert.deepStrictEqual(pendingRenderArms, expectedPendingStatuses);
@@ -105,7 +149,7 @@ test("pending will-install omits optional tokens when they are absent", () => {
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render["will install"](message, "user");
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, { name: "alpha", status: "will install", reasons: [] });
@@ -123,7 +167,7 @@ test("pending will-install renders the partial token and cross-scope bracket", (
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render["will install"](message, "user");
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(rendered, "● alpha [project] (will partially install)");
@@ -139,7 +183,7 @@ test("pending will-uninstall renders its glyph and cross-scope bracket", () => {
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render["will uninstall"](message, "project");
+  const rendered = composePluginLines(message, "project")[0]!.slice(2);
 
   // assert
   assert.equal(rendered, "○ alpha [user] (will uninstall)");
@@ -154,7 +198,7 @@ test("pending will-enable renders its exact row bytes", () => {
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render["will enable"](message, "user");
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(rendered, "● alpha (will enable)");
@@ -169,7 +213,7 @@ test("pending will-disable renders its exact row bytes", () => {
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render["will disable"](message, "user");
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(rendered, "◍ alpha (will disable)");
@@ -193,7 +237,7 @@ test("pending failed folds scope, version, and reasons while leaving failure det
   } as const satisfies ResolvedRow<PendingMsg>;
 
   // act
-  const rendered = PENDING_CONTEXT.render.failed(message, "user");
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(message.failure, failure);
@@ -211,7 +255,7 @@ test("applied installed omits optional row tokens when they are absent", () => {
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render.installed(message, "user");
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, {
@@ -237,7 +281,7 @@ test("applied installed renders content reasons before the resolved markers", ()
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render.installed(message, "user");
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(
@@ -259,7 +303,7 @@ test("applied uninstalled renders scope and version", () => {
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render.uninstalled(message, "user");
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(rendered, "○ alpha [project] v1.2.3 (uninstalled)");
@@ -278,7 +322,7 @@ test("applied disabled renders optional reasons with its exact glyph", () => {
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render.disabled(message, "user");
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(rendered, "◍ alpha [project] v1.2.3 (disabled) {not in manifest}");
@@ -301,7 +345,7 @@ test("applied failed renders the shared failure row and preserves its stamps", (
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render.failed(message, "user");
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(message.needsReload, false);
@@ -323,11 +367,39 @@ test("applied partially-installed renders content reasons before the resolved ma
   } as const satisfies ResolvedRow<ReconcileAppliedMsg>;
 
   // act
-  const rendered = RECONCILE_APPLIED_CONTEXT.render["partially-installed"](message, "user");
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(
     rendered,
     "◉ alpha [project] v1.2.3 (partially-installed) {lsp, requires pi-subagents, requires pi-mcp}",
   );
+});
+
+test("PENDING_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = PENDING_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    "will install": { markers: false, contentReasons: false },
+    "will uninstall": { markers: false, contentReasons: false },
+    "will enable": { markers: false, contentReasons: false },
+    "will disable": { markers: false, contentReasons: false },
+    failed: { markers: false, contentReasons: true },
+  });
+});
+
+test("RECONCILE_APPLIED_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = RECONCILE_APPLIED_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    uninstalled: { markers: false, contentReasons: false },
+    disabled: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+  });
 });

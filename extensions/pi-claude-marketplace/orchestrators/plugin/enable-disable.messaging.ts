@@ -1,14 +1,5 @@
 import { isErrnoException, PluginShapeError } from "../../shared/errors.ts";
 import {
-  ICON_UNINSTALLABLE,
-  installedLikeRow,
-  partiallyInstalledRow,
-  pluginRow,
-  renderDisabledRow,
-  renderVersion,
-  ICON_INSTALLED,
-} from "../../shared/notification-grammar.ts";
-import {
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
@@ -18,24 +9,7 @@ import {
 } from "../../shared/notification-types.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
-import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
-
-/**
- * enable-disable.messaging.ts -- the command-local notification vocabulary for
- * BOTH `/claude:plugin enable` and `/claude:plugin disable` (MOD-01). The two
- * verbs share one orchestrator file, so this module declares TWO command
- * contexts -- `ENABLE_CONTEXT` and `DISABLE_CONTEXT` -- each with its OWN render
- * map total over its OWN statuses (D-10). The render-arm bodies are lifted
- * VERBATIM from the central `renderPluginRow` switch; the shared presentation
- * vocabulary stays central in `shared/notification-grammar.ts` (D-11) and is CALLED here,
- * never duplicated.
- *
- * UAT-03 / RLD-05 / D-07: the fresh-disable `(disabled)` row's
- * `/reload to pick up changes` trailer is NOT a render concern -- it is driven
- * by the row's caller-stamped `needsReload: true` (the RLD-02 OR-reduce),
- * while the inventory `(disabled)` row stamps `needsReload: false`. The row
- * bytes are byte-identical across both.
- */
+import type { CommandContext } from "../../shared/notify-context.ts";
 
 /**
  * enable's private status set: a fresh `installed` row, a fresh
@@ -61,77 +35,31 @@ type DisableStatus = "disabled" | "skipped" | "failed";
 /** disable's row message union. */
 export type DisableMsg = PluginDisabledMessage | PluginSkippedMessage | PluginFailedMessage;
 
-/**
- * Render map total over enable's OWN statuses (D-10). The fresh `installed` arm
- * is byte-identical to install's installed arm -- the enable verb constructs the
- * row with `dependencies: []`, so `resolveRows` appends no soft-dep marker.
- *
- * ENBL-07 / FSTAT-07 / D-66-04: the `partially-installed` arm CALLS the shared
- * `partiallyInstalledRow` composition site (D-11), so a re-enable that drops
- * component kinds renders the same `◉ ... (partially-installed) {kinds}` bytes
- * the install cascade and the `list` inventory row render for the very same
- * record.
- */
-const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status: K }>> } = {
-  installed: (p, mpScope) =>
-    installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(installed)"),
-  "partially-installed": (p, mpScope) => partiallyInstalledRow(p, mpScope),
-  skipped: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)"),
-  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
-};
-
-/**
- * Render map total over disable's OWN statuses (D-10). The `disabled` arm uses
- * the dedicated `ICON_DISABLED` glyph.
- *
- * ENBL-16 / D-100-07: the row's `reasons` are THREADED, as in the two sibling
- * arms (`notify.ts`'s central `disabled` arm and `list.messaging.ts`). This
- * command's producer stamps none today -- a fresh disable reaches the requested
- * state, so there is nothing to report and the brace collapses -- so the
- * threading changes no byte now and cannot silently drop a reason a later
- * producer stamps. The marker policy maps `disabled` to off, which keeps a
- * disabled row free of a soft-dep marker whatever inventory the record retained
- * (ENBL-15 / D-100-06, D-12).
- */
-const DISABLE_RENDER: { [K in DisableStatus]: RenderFn<Extract<DisableMsg, { status: K }>> } = {
-  disabled: (p, mpScope) => renderDisabledRow(p, mpScope),
-  skipped: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)"),
-  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
-};
-
-/**
- * D-04 / D-05: enable's `CommandContext`. The `as const satisfies` pin enforces
- * that enable supplies both `Messaging.label` and a total render map.
- */
+/** The command label and complete per-status reason policy. */
 export const ENABLE_CONTEXT = {
   Messaging: { label: "Plugin enable" },
-  render: ENABLE_RENDER,
-  markers: {
-    installed: true,
-    "partially-installed": true,
-    skipped: false,
-    failed: false,
+  rowPolicies: {
+    installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
   },
-} as const satisfies CommandContext<EnableStatus, EnableMsg>;
+} as const satisfies CommandContext<EnableStatus>;
 
-/**
- * D-04 / D-05: disable's `CommandContext`. Distinct label and render map from
- * `ENABLE_CONTEXT`.
- */
+/** The command label and complete per-status reason policy. */
 export const DISABLE_CONTEXT = {
   Messaging: { label: "Plugin disable" },
-  render: DISABLE_RENDER,
-  markers: {
-    disabled: false,
-    skipped: false,
-    failed: false,
+  rowPolicies: {
+    disabled: { markers: false, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
   },
-} as const satisfies CommandContext<DisableStatus, DisableMsg>;
+} as const satisfies CommandContext<DisableStatus>;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Failure -> reasons narrowing for both verbs, moved from enable-disable.ts
 // where `staleGateDropped` was reached through a `__test_` re-export. These
-// three produce the reason tokens this module's render map renders, so they
+// three produce the reason tokens the shared grammar renders, so they
 // belong on this side of the line. The private `isErrnoException` copy they
 // shared went to shared/errors.ts, which was already holding two identical
 // twins of it (FLOW-09).

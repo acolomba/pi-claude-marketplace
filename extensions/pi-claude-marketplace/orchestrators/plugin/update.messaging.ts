@@ -1,12 +1,4 @@
 import {
-  ICON_UNINSTALLABLE,
-  composeVersionArrow,
-  partiallyInstalledRow,
-  installedLikeRow,
-  pluginRow,
-  ICON_INSTALLED,
-} from "../../shared/notification-grammar.ts";
-import {
   type PluginFailedMessage,
   type PluginPartiallyInstalledMessage,
   type PluginPartiallyUpgradableMessage,
@@ -14,16 +6,7 @@ import {
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 
-import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
-
-/**
- * update.messaging.ts -- the command-local notification vocabulary for
- * `/claude:plugin update` (MOD-01). Co-locates update's private status set, its
- * cascade row message shapes, and a render map total over update's OWN statuses
- * (D-10) lifting the matching `renderPluginRow` arm bodies VERBATIM. The shared
- * presentation vocabulary stays central in `shared/notification-grammar.ts`
- * (D-11) and is CALLED here, never duplicated.
- */
+import type { CommandContext } from "../../shared/notify-context.ts";
 
 /**
  * update's private status set. The update cascade emits `updated` rows
@@ -46,47 +29,14 @@ export type UpdateMsg =
   | PluginSkippedMessage
   | PluginFailedMessage;
 
-/**
- * Render map total over update's OWN statuses (D-10): a missing arm is a TS2741
- * compile error at the `satisfies` site. Arm bodies are byte-identical to the
- * central `renderPluginRow` switch. The `updated` arm renders its resolved
- * `reasons`, which can end with a companion-extension soft-dep marker (D-12);
- * `skipped` / `failed` route through `pluginRow`.
- */
-const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status: K }>> } = {
-  // WR-12: thread the optional `reasons` brace. This map -- not the central
-  // `renderPluginRow` arm -- is what actually renders this verb's rows, so a fix
-  // applied only centrally would raise the severity while still dropping the
-  // brace.
-  updated: (p, mpScope) =>
-    installedLikeRow(ICON_INSTALLED, p, mpScope, composeVersionArrow(p.from, p.to), "(updated)"),
-  // FSTAT-07 / D-66-04: a partial update whose candidate re-resolved `partially-available`
-  // reports (partially-installed) with the dropped-component detail. WR-03 /
-  // D-12: its marker policy is on, so the soft-dep markers appear on a degraded
-  // update exactly as on a clean `(updated)` row.
-  "partially-installed": (p, mpScope) => partiallyInstalledRow(p, mpScope),
-  skipped: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)"),
-  // XSURF-03: the partially-upgradable manual update-decline row. Byte-identical to
-  // the central `renderPluginRow` arm -- reuses `ICON_INSTALLED` (`●`) because
-  // the installed plugin is currently clean. The `--partial` trailer is composed
-  // centrally by the renderer, not here.
-  "partially-upgradable": (p, mpScope) =>
-    pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)"),
-  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
-};
-
-/**
- * D-04 / D-05: update's `CommandContext`. The `as const satisfies` pin enforces
- * that update supplies both `Messaging.label` and a total render map.
- */
+/** The command label and complete per-status reason policy. */
 export const UPDATE_CONTEXT = {
   Messaging: { label: "Plugin update" },
-  render: UPDATE_RENDER,
-  markers: {
-    updated: true,
-    "partially-installed": true,
-    skipped: false,
-    "partially-upgradable": false,
-    failed: false,
+  rowPolicies: {
+    updated: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    "partially-upgradable": { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
   },
-} as const satisfies CommandContext<UpdateStatus, UpdateMsg>;
+} as const satisfies CommandContext<UpdateStatus>;

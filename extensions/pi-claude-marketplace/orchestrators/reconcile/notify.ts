@@ -980,12 +980,14 @@ function reasonAsContent(reason: Reason): readonly ContentReason[] {
  */
 export function buildReconcileAppliedCascade(
   outcomes: readonly PerEntryOutcome[],
-): ReconcileAppliedCascadeMessage {
+): ReconcileAppliedCascadeMessage & {
+  readonly marketplaces: readonly MarketplaceRows<ReconcileAppliedMsg>[];
+} {
   // RECON-04 / WR-02: pin the block's plugin children to the applied context's
   // `ReconcileAppliedMsg` union so each `applyOutcomeToBlock` push is checked
-  // against the render map's status set (installed/uninstalled/disabled/failed).
-  // A status drift between this producer and `RECONCILE_APPLIED_CONTEXT.render`
-  // is then a compile error here, not a reachable `dispatchRow` fallback at load
+  // against the policy map's status set (installed/uninstalled/disabled/failed).
+  // A status drift between this producer and `RECONCILE_APPLIED_CONTEXT.rowPolicies`
+  // is then a compile error here, not a missing-policy diagnostic at load
   // time. The resulting rows widen to the broad `ReconcileAppliedCascadeMessage`
   // shape (a safe upcast, mirroring the pending-cascade pattern).
   const byMp = new Map<string, MarketplaceBlock<ReconcileAppliedMsg>>();

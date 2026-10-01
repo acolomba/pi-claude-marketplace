@@ -269,6 +269,7 @@ export interface ResolvedRowFacts {
   readonly reasons: readonly Reason[];
   readonly failure?: ResolvedFailure;
   readonly hint?: RowHint;
+  readonly missingPolicy?: true;
 }
 
 /**
@@ -285,40 +286,39 @@ export type ResolvedRow<M extends PluginNotificationMessage = PluginNotification
         ResolvedRowFacts
     : never;
 
-/**
- * D-12: a command's marker policy. A status mapped to `true` lets its rows
- * carry the `{requires ...}` markers their `dependencies` call for; a status
- * mapped to `false` or not named carries none.
- */
-export type MarkerPolicy = Partial<Readonly<Record<PluginNotificationMessage["status"], boolean>>>;
+/** Semantic reason inclusion for a command's plugin row. */
+export interface RowPolicy {
+  readonly markers: boolean;
+  readonly contentReasons: boolean;
+}
 
-/**
- * D-12: the marker policy of the legacy central `notify()` path and the
- * standalone `reconcile-applied-cascade` arm. Markers are on for the four
- * statuses whose row can declare `dependencies`. MSG-SD-3 keeps removal rows
- * marker-free, and ENBL-15 keeps `disabled` rows marker-free.
- */
-export const CENTRAL_MARKER_POLICY = {
-  installed: true,
-  updated: true,
-  reinstalled: true,
-  "partially-installed": true,
-  uninstalled: false,
-  disabled: false,
-  available: false,
-  remote: false,
-  unavailable: false,
-  "partially-available": false,
-  upgradable: false,
-  "partially-upgradable": false,
-  failed: false,
-  skipped: false,
-  "manual recovery": false,
-  "will install": false,
-  "will uninstall": false,
-  "will enable": false,
-  "will disable": false,
-} as const satisfies Record<PluginNotificationMessage["status"], boolean>;
+/** Runtime lookup of command policies; absent entries produce diagnostic rows. */
+export type RowPolicyMap = Readonly<
+  Partial<Record<PluginNotificationMessage["status"], RowPolicy>>
+>;
+
+/** The central notification path's complete row policy. */
+export const CENTRAL_ROW_POLICY = {
+  installed: { markers: true, contentReasons: true },
+  updated: { markers: true, contentReasons: true },
+  reinstalled: { markers: true, contentReasons: true },
+  "partially-installed": { markers: true, contentReasons: true },
+  uninstalled: { markers: false, contentReasons: true },
+  disabled: { markers: false, contentReasons: true },
+  available: { markers: false, contentReasons: false },
+  remote: { markers: false, contentReasons: false },
+  unavailable: { markers: false, contentReasons: true },
+  "partially-available": { markers: false, contentReasons: true },
+  upgradable: { markers: false, contentReasons: true },
+  "partially-upgradable": { markers: false, contentReasons: true },
+  failed: { markers: false, contentReasons: true },
+  skipped: { markers: false, contentReasons: true },
+  "manual recovery": { markers: false, contentReasons: true },
+  "will install": { markers: false, contentReasons: false },
+  "will uninstall": { markers: false, contentReasons: false },
+  "will enable": { markers: false, contentReasons: false },
+  "will disable": { markers: false, contentReasons: false },
+} as const satisfies Record<PluginNotificationMessage["status"], RowPolicy>;
 
 /** A marketplace row whose plugin rows are resolved. */
 export type ResolvedMarketplace = WithPlugins<MarketplaceNotificationMessage, ResolvedRow>;
@@ -332,60 +332,28 @@ export type ResolvedMarketplace = WithPlugins<MarketplaceNotificationMessage, Re
  */
 type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMessage[K] };
 
-/**
- * Resolves the plugin rows of `marketplaces` before any text is composed.
- *
- * D-12 / PMOD-01: each row's `reasons` is its content reasons followed by the
- * soft-dependency markers `softDepMarkers` derives from `snapshot` and from the
- * row's declared `dependencies`. The markers apply only when `markers` maps the
- * row's status to `true`. The two lists are concatenated as they stand, never
- * sorted or de-duplicated, so the brace keeps producer order and then the
- * agents, mcp, workflows marker order.
- *
- * WR-02 / SEV-02: when `hasRenderArm` reports that a row's status has no
- * render arm, the row is an internal-drift error. `resolveRows` stamps
- * `severity: "error"` on the INPUT row, so the envelope, which MAX-reduces the
- * same row objects, floors at error. A frozen out-of-band row rejects the
- * write; it keeps its stamped severity, and the rejection goes to the debug
- * log so the throw cannot escape the single `ctx.ui.notify` seam.
- *
- * D-11: each resolved row is a new object without `cause` and
- * `rollbackPartial`. A failed or manual-recovery row gains a `failure` member
- * that holds the serialized cause chain, the manual-recovery leaks, and the
- * rollback phases. No other key is added, so a row the producer left without a
- * `name` stays without one.
- *
- * D-10: a row's `partialHint` or `enableHint` flag becomes a `hint` id. Each id
- * is keyed on a distinct status, so at most one applies:
- *   - SEV-02 / D-69-03 / XSURF-01: `partial-install` on an `unavailable` or
- *     `partially-available` install-failure row. The structural `unavailable`
- *     arm omits `partialHint` because `--partial` cannot help it.
- *   - SEV-04 / XSURF-03: `partial-update` on a `partially-upgradable` manual
- *     update-decline row; the list inventory row omits `partialHint`.
- *   - CR-01 / D-98-03: `stale-gate-update` on a `failed` row. Only the
- *     stale-gate enable failure stamps `partialHint` on a `failed` row, and its
- *     remedy names `update`, because `enable` accepts no `--partial` flag.
- *   - OUT-04 / D-102-10: `enable` on a `disabled` row. Only the install surface
- *     stamps `enableHint`.
- */
+/** Resolves ordered row facts; an absent own policy marks a diagnostic and floors input severity. */
 export function resolveRows(
   marketplaces: readonly MarketplaceNotificationMessage[],
   snapshot: SoftDepStatus,
-  markers: MarkerPolicy,
-  hasRenderArm?: (status: string) => boolean,
+  rowPolicies: RowPolicyMap,
 ): readonly ResolvedMarketplace[] {
   return marketplaces.map((mp) => ({
     ...mp,
     plugins: mp.plugins.map((row) => {
-      if (hasRenderArm !== undefined && !hasRenderArm(row.status)) {
+      const policy = Object.hasOwn(rowPolicies, row.status) ? rowPolicies[row.status] : undefined;
+      if (policy === undefined) {
         floorMissingArmSeverity(row);
       }
 
-      // A status the policy does not name counts as off.
-      const on = markers[row.status] === true;
-      return resolveRow(row, (content, dependencies) =>
-        composeRowReasons(content ?? [], on ? (dependencies ?? []) : [], snapshot),
+      const resolved = resolveRow(row, (content, dependencies) =>
+        composeRowReasons(
+          policy?.contentReasons === false ? [] : (content ?? []),
+          policy?.markers === true ? (dependencies ?? []) : [],
+          snapshot,
+        ),
       );
+      return policy === undefined ? { ...resolved, missingPolicy: true } : resolved;
     }),
   }));
 }

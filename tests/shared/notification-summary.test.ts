@@ -6,6 +6,7 @@ import {
   emitReconcileAppliedContextCascade,
   emitUpdateNoOpCascade,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { CENTRAL_ROW_POLICY } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import {
   buildSummaryLine,
   composeLeftoverRemovalAdvisories,
@@ -18,7 +19,6 @@ import {
 
 import { runWithSoftDeps } from "./notification-run-seeds.ts";
 
-import type { ResolvedRow } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type {
   CascadeNotificationMessage,
@@ -33,11 +33,6 @@ function createContext(t: TestContext): NotificationContext {
   return { ui: { notify: t.mock.fn() } };
 }
 
-/** A render map that covers every row status, so no row is floored to error. */
-function hasRenderArm(): boolean {
-  return true;
-}
-
 /** pi-subagents and pi-mcp-adapter are loaded; the workflow engine is not. */
 function notificationRun(): NotificationRun {
   return runWithSoftDeps({
@@ -47,14 +42,10 @@ function notificationRun(): NotificationRun {
   });
 }
 
-function renderRow(row: ResolvedRow): string {
-  return `${row.name} (${row.status})`;
-}
-
 function emitContext(t: TestContext, message: CascadeNotificationMessage): readonly unknown[] {
   const ctx = createContext(t);
 
-  emitContextCascade(ctx as never, notificationRun(), message, renderRow, {}, hasRenderArm);
+  emitContextCascade(ctx as never, notificationRun(), message, CENTRAL_ROW_POLICY);
 
   assert.equal(ctx.ui.notify.mock.callCount(), 1);
   return ctx.ui.notify.mock.calls[0]!.arguments;
@@ -187,7 +178,7 @@ test("nonempty all-failure summary, tally, and reload hint retain their exact or
 
   // assert
   assert.deepStrictEqual(notification, [
-    "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)\n\nPlugin install: 1 failure\n\n/reload to pick up changes",
+    "A plugin operation has failed.\n\n● official [user]\n  ⊘ alpha (failed) {not found}\n\nPlugin install: 1 failure\n\n/reload to pick up changes",
     "error",
   ]);
 });
@@ -553,29 +544,15 @@ test("update no-op fold preserves empty and non-empty bodies", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitUpdateNoOpCascade(
-    emptyContext as never,
-    notificationRun(),
-    emptyMessage,
-    renderRow,
-    {},
-    hasRenderArm,
-  );
-  emitUpdateNoOpCascade(
-    bodyContext as never,
-    notificationRun(),
-    bodyMessage,
-    renderRow,
-    {},
-    hasRenderArm,
-  );
+  emitUpdateNoOpCascade(emptyContext as never, notificationRun(), emptyMessage, CENTRAL_ROW_POLICY);
+  emitUpdateNoOpCascade(bodyContext as never, notificationRun(), bodyMessage, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(emptyContext.ui.notify.mock.calls[0]!.arguments, [
     "Plugin update: nothing to update",
   ]);
   assert.deepStrictEqual(bodyContext.ui.notify.mock.calls[0]!.arguments, [
-    "● official [user]\n  alpha (partially-upgradable)\n\nPlugin update: nothing to update",
+    "● official [user]\n  ● alpha (partially-upgradable) {lsp}\n\nPlugin update: nothing to update",
   ]);
 });
 
@@ -604,18 +581,11 @@ test("reconcile applied fold suppresses reload while preserving severity and tal
   } satisfies Parameters<typeof emitReconcileAppliedContextCascade>[2];
 
   // act
-  emitReconcileAppliedContextCascade(
-    ctx as never,
-    notificationRun(),
-    message,
-    renderRow,
-    {},
-    hasRenderArm,
-  );
+  emitReconcileAppliedContextCascade(ctx as never, notificationRun(), message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)\n\nReconcile: 1 failure",
+    "A plugin operation has failed.\n\n● official [user]\n  ⊘ alpha (failed) {not found}\n\nReconcile: 1 failure",
     "error",
   ]);
 });

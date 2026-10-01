@@ -32,7 +32,6 @@ import {
 } from "../../shared/errors.ts";
 import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
-import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
@@ -1317,14 +1316,9 @@ export function emitMarketplaceNotAdded(args: {
  *     present) renders the `[scope]` bracket; the bare both-scopes-miss form
  *     carries no bracket and, per `crossScopeFlag`, is owed no sibling probe.
  *
- * The only per-verb variable is the `CommandContext`, so it is the only
- * parameter: `notifyWithContext` reads `Messaging.label` and dispatches the row
- * body through `render.skipped`, both of which stay the caller's own. Narrowing
- * the parameter to `CommandContext<"skipped", PluginSkippedMessage>` -- rather
- * than making this function generic over the caller's full `Status`/`Msg` pair
- * -- is what lets the row literal below stay a checked `PluginSkippedMessage`
- * instead of an unchecked widening; a verb whose render map omits a `skipped`
- * arm is a compile error at ITS call site.
+ * The caller supplies its command label and skipped-row policy. Requiring
+ * `CommandContext<"skipped">` keeps missing policies a compile error while the
+ * row literal remains checked against the shared producer contract.
  *
  * SEV-04 / D-01: the row is stamped `error`. Its reasons always lead with
  * `not installed` -- an absent target, i.e. the requested operation was NOT
@@ -1338,7 +1332,7 @@ export async function emitMarketplaceNotAddedSignal(args: {
   readonly ctx: NotificationContext;
   readonly run: NotificationRun;
   readonly cwd: string;
-  readonly context: CommandContext<"skipped", PluginSkippedMessage>;
+  readonly context: CommandContext<"skipped">;
   readonly cardinality: "single" | "plural";
   readonly err: MarketplaceNotAddedSignal;
 }): Promise<void> {

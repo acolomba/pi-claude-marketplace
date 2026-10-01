@@ -1,17 +1,4 @@
 import {
-  ICON_AVAILABLE,
-  ICON_DISABLED,
-  ICON_INSTALLED,
-  ICON_UNINSTALLABLE,
-  installedLikeRow,
-  joinTokens,
-  partiallyInstalledRow,
-  pluginRow,
-  renderScopeBracket,
-  renderVersion,
-  composeReasons,
-} from "../../shared/notification-grammar.ts";
-import {
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
@@ -23,39 +10,7 @@ import {
   type PluginWillUninstallMessage,
 } from "../../shared/notification-types.ts";
 
-import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
-
-/**
- * reconcile/reconcile.messaging.ts -- the command-local notification vocabulary
- * for the load-time reconcile cascade (MOD-01/MOD-03). The reconcile producer is
- * not a slash command but a cascade producer (RECON-04): it reuses the same
- * per-status plugin-row shapes other commands emit. Two distinct surfaces share
- * this module:
- *
- *   - PENDING_CONTEXT renders the read-only `/claude:plugin pending` diff -- the
- *     pending-tense plugin rows (`will install` / `will uninstall` /
- *     `will enable` / `will disable`) plus a per-plugin `failed` row
- *     (source-mismatch dangling reference).
- *   - RECONCILE_APPLIED_CONTEXT renders the load-time
- *     `reconcile-applied-cascade` -- the REALIZED transition rows (`installed` /
- *     `uninstalled` / `disabled`) plus a per-plugin `failed` row.
- *
- * Each render map renders only the per-PLUGIN-ROW body. The marketplace header
- * (a bare untokened header for pending; `added` / `removed` for applied;
- * `failed` for both), the cause-chain / rollback trailers, the
- * `(no marketplaces)` sentinel, and the severity/summary surface all stay
- * central in `notify.ts` and route byte-identically: the pending cascade through
- * `emitContextCascade` (plain `CascadeNotificationMessage`), the applied cascade
- * through `emitReconcileAppliedContextCascade` (the `reconcile-applied-cascade`
- * standalone envelope, whose content-derived severity must be preserved).
- *
- * The standalone `reconcile-pending-empty` advisory (`pending.ts`, the
- * `Pending: next reload will apply 0 actions.` line) is NOT a row surface; it
- * stays on the central standalone dispatch and owns no render map here.
- *
- * D-10: each context is pinned via `as const satisfies CommandContext<...>`, so
- * omitting a render arm for a declared status is a TS2741 compile error.
- */
+import type { CommandContext } from "../../shared/notify-context.ts";
 
 // ---------------------------------------------------------------------------
 // Pending diff: pending-tense rows.
@@ -65,7 +20,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * The plugin-row statuses the pending diff emits. The pending-tense rows carry
  * no `version` slot and no `reasons` (they are pre-transition); the `failed`
  * row (source-mismatch dangling reference) carries its `reasons` via the shared
- * `pluginRow` primitive.
+ * row grammar.
  */
 type PendingStatus = "will install" | "will uninstall" | "will enable" | "will disable" | "failed";
 
@@ -77,62 +32,20 @@ export type PendingMsg =
   | PluginFailedMessage;
 
 /**
- * `(will install)` -- lifted verbatim from the central `renderPluginRow` arm.
- * FSTAT-06 / D-66-04: the `partial` modifier renders `(will partially install)` in
- * place of `(will install)` when the planned install would degrade (candidate
- * resolves `partially-available`). D-66-05: there is no `will partially update` analog --
- * the reconcile plan has no update bucket.
- */
-const renderWillInstall: RenderFn<PluginWillInstallMessage> = (p, mpScope) =>
-  joinTokens([
-    ICON_INSTALLED,
-    p.name,
-    renderScopeBracket(p.scope, mpScope),
-    p.partial === true ? "(will partially install)" : "(will install)",
-  ]);
-
-/** `(will uninstall)` -- lifted verbatim; reuses ICON_AVAILABLE (`○`). */
-const renderWillUninstall: RenderFn<PluginWillUninstallMessage> = (p, mpScope) =>
-  joinTokens([ICON_AVAILABLE, p.name, renderScopeBracket(p.scope, mpScope), "(will uninstall)"]);
-
-/** `(will enable)` -- lifted verbatim; reuses ICON_INSTALLED. */
-const renderWillEnable: RenderFn<PluginWillEnableMessage> = (p, mpScope) =>
-  joinTokens([ICON_INSTALLED, p.name, renderScopeBracket(p.scope, mpScope), "(will enable)"]);
-
-/** `(will disable)` -- lifted verbatim; uses ICON_DISABLED (`◌`). */
-const renderWillDisable: RenderFn<PluginWillDisableMessage> = (p, mpScope) =>
-  joinTokens([ICON_DISABLED, p.name, renderScopeBracket(p.scope, mpScope), "(will disable)"]);
-
-/**
- * `(failed)` -- per-plugin failure row. Lifted verbatim from the central
- * `renderPluginRow` `failed` arm (shared `pluginRow` primitive, no soft-dep
- * gating). The cause-chain trailer is composed centrally, not here.
- */
-const renderFailed: RenderFn<PluginFailedMessage> = (p, mpScope) =>
-  pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)");
-
-/**
  * D-04 / D-05: the pending diff's `CommandContext`. `Messaging.label` is the
- * human operation name `"Reconcile pending"`. The `render` map is total over
+ * human operation name `"Reconcile pending"`. The `rowPolicies` map is total over
  * `PendingStatus` (D-10).
  */
 export const PENDING_CONTEXT = {
   Messaging: { label: "Reconcile pending" },
-  render: {
-    "will install": renderWillInstall,
-    "will uninstall": renderWillUninstall,
-    "will enable": renderWillEnable,
-    "will disable": renderWillDisable,
-    failed: renderFailed,
+  rowPolicies: {
+    "will install": { markers: false, contentReasons: false },
+    "will uninstall": { markers: false, contentReasons: false },
+    "will enable": { markers: false, contentReasons: false },
+    "will disable": { markers: false, contentReasons: false },
+    failed: { markers: false, contentReasons: true },
   },
-  markers: {
-    "will install": false,
-    "will uninstall": false,
-    "will enable": false,
-    "will disable": false,
-    failed: false,
-  },
-} as const satisfies CommandContext<PendingStatus, PendingMsg>;
+} as const satisfies CommandContext<PendingStatus>;
 
 // ---------------------------------------------------------------------------
 // Applied cascade: realized transition rows.
@@ -161,75 +74,19 @@ export type ReconcileAppliedMsg =
   | PluginPartiallyInstalledMessage;
 
 /**
- * `(installed)` -- realized install row. Its resolved `reasons` carry any
- * soft-dep marker the context's marker policy allows (D-12). Lifted verbatim
- * from the central `renderPluginRow` `installed` arm.
- */
-const renderInstalled: RenderFn<PluginInstalledMessage> = (p, mpScope) =>
-  installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(installed)");
-
-/**
- * `(uninstalled)` -- realized uninstall row. NO soft-dep marker (uninstalled
- * rows forbid it -- the context's marker policy maps `uninstalled` to off).
- * Lifted verbatim from the central `renderPluginRow` `uninstalled` arm.
- */
-const renderUninstalled: RenderFn<PluginUninstalledMessage> = (p, mpScope) =>
-  joinTokens([
-    ICON_AVAILABLE,
-    p.name,
-    renderScopeBracket(p.scope, mpScope),
-    renderVersion(p.version),
-    "(uninstalled)",
-    composeReasons(undefined),
-  ]);
-
-/**
- * `(partially-installed)` -- BFILL-01 / D-68-04 realized partial-backfill row. A
- * load-time backfill re-materialized the plugin's now-supported components but
- * its re-resolved unsupported set is still non-empty, so it stays degraded.
- * Routes through the SOLE `partiallyInstalledRow` composition site (the `◉` glyph);
- * its marker policy is on, so the soft-dep markers appear exactly as on a clean
- * `(installed)` row. The byte-exact token is frozen later; severity is a
- * sensible default here.
- */
-const renderForceInstalled: RenderFn<PluginPartiallyInstalledMessage> = (p, mpScope) =>
-  partiallyInstalledRow(p, mpScope);
-
-/**
- * `(disabled)` -- realized disable row. NO dependencies. Lifted verbatim from
- * the central `renderPluginRow` `disabled` arm, including its ENBL-16 /
- * D-100-07 reason threading: the plain toggle path stamps no reason (the row
- * reports a transition the user asked for), while the DFEN-04 install-disabled
- * cascade already stamps `reasons: ["installs disabled"]` (apply.ts). `pluginRow`
- * threads whichever `p.reasons` the producer supplies, so an absent field still
- * collapses the brace, but a reason a producer stamps cannot be dropped here
- * without a byte change anyone can see. The context's marker policy maps
- * `disabled` to off (ENBL-15 / D-100-06, D-12).
- */
-const renderDisabled: RenderFn<PluginDisabledMessage> = (p, mpScope) =>
-  pluginRow(ICON_DISABLED, p, mpScope, "(disabled)");
-
-/**
  * D-04 / D-05: the applied cascade's `CommandContext`. `Messaging.label` is the
- * human operation name `"Reconcile"`. The `render` map is total over
+ * human operation name `"Reconcile"`. The `rowPolicies` map is total over
  * `ReconcileAppliedStatus` (D-10). Both reconcile contexts reuse the shared
  * closed reason set (`notify-reasons.ts`); reconcile declares no command-private
  * reasons.
  */
 export const RECONCILE_APPLIED_CONTEXT = {
   Messaging: { label: "Reconcile" },
-  render: {
-    installed: renderInstalled,
-    uninstalled: renderUninstalled,
-    disabled: renderDisabled,
-    failed: renderFailed,
-    "partially-installed": renderForceInstalled,
+  rowPolicies: {
+    installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    uninstalled: { markers: false, contentReasons: false },
+    disabled: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
   },
-  markers: {
-    installed: true,
-    "partially-installed": true,
-    uninstalled: false,
-    disabled: false,
-    failed: false,
-  },
-} as const satisfies CommandContext<ReconcileAppliedStatus, ReconcileAppliedMsg>;
+} as const satisfies CommandContext<ReconcileAppliedStatus>;

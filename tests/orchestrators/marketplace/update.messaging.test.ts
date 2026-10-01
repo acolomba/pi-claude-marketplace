@@ -6,6 +6,7 @@ import {
   outcomeToCascadePluginMessage,
   type UpdateRowMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
 import type { PluginUpdateOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -39,7 +40,7 @@ void ({
 test("exports the complete marketplace update context in declared order", () => {
   // arrange
   const expectedContext = {
-    keys: ["Messaging", "render", "markers"],
+    keys: ["Messaging", "rowPolicies"],
     label: "Marketplace update",
     renderKeys: ["updated", "partially-installed", "skipped", "failed"],
   };
@@ -48,7 +49,7 @@ test("exports the complete marketplace update context in declared order", () => 
   const context = {
     keys: Object.keys(UPDATE_CONTEXT),
     label: UPDATE_CONTEXT.Messaging.label,
-    renderKeys: Object.keys(UPDATE_CONTEXT.render),
+    renderKeys: Object.keys(UPDATE_CONTEXT.rowPolicies),
   };
 
   // assert
@@ -69,7 +70,7 @@ test("renders an updated row with its ordered resolved reasons", () => {
   } as const satisfies ResolvedRow<UpdateRowMsg>;
 
   // act
-  const row = UPDATE_CONTEXT.render.updated(message, "user");
+  const row = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(
@@ -101,7 +102,7 @@ test("renders a partially-installed row with a folded scope and its resolved mar
   } as const satisfies ResolvedRow<UpdateRowMsg>;
 
   // act
-  const row = UPDATE_CONTEXT.render["partially-installed"](message, "user");
+  const row = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(
@@ -132,7 +133,7 @@ test("renders a skipped row without failure-only metadata", () => {
   } as const satisfies ResolvedRow<UpdateRowMsg>;
 
   // act
-  const row = UPDATE_CONTEXT.render.skipped(message, "user");
+  const row = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(row, "⊘ gamma [project] v3.0.0 (skipped) {not installed, concurrently uninstalled}");
@@ -173,7 +174,7 @@ test("renders a failed row while preserving its failure detail", () => {
   } as const satisfies ResolvedRow<UpdateRowMsg>;
 
   // act
-  const row = UPDATE_CONTEXT.render.failed(message, "user");
+  const row = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(row, "⊘ delta [project] v4.0.0 (failed) {rollback partial}");
@@ -886,5 +887,18 @@ test("classifies an unknown failure note as an unreadable manifest", () => {
     reasons: ["unreadable manifest"],
     severity: "error",
     needsReload: false,
+  });
+});
+
+test("UPDATE_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = UPDATE_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    updated: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
   });
 });

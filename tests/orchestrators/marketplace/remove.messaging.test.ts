@@ -5,6 +5,7 @@ import {
   REMOVE_CONTEXT,
   type RemoveRowMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.messaging.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
@@ -47,12 +48,12 @@ void failedWithInfoSeverity;
 
 test("exports the complete marketplace-remove command context", () => {
   // arrange
-  const expectedContextKeys = ["Messaging", "render", "markers"];
+  const expectedContextKeys = ["Messaging", "rowPolicies"];
   const expectedRenderKeys = ["uninstalled", "failed"];
 
   // act
   const contextKeys = Object.keys(REMOVE_CONTEXT);
-  const renderKeys = Object.keys(REMOVE_CONTEXT.render);
+  const renderKeys = Object.keys(REMOVE_CONTEXT.rowPolicies);
 
   // assert
   assert.deepStrictEqual(contextKeys, expectedContextKeys);
@@ -71,7 +72,7 @@ test("renders an uninstalled row with truly omitted optional fields", () => {
   } as const satisfies ResolvedRow<RemoveRowMsg>;
 
   // act
-  const renderedRow = REMOVE_CONTEXT.render.uninstalled(row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -104,7 +105,7 @@ test("folds an uninstalled row scope into its marketplace and preserves its vers
   } as const satisfies ResolvedRow<RemoveRowMsg>;
 
   // act
-  const renderedRow = REMOVE_CONTEXT.render.uninstalled(row, "project");
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -130,7 +131,7 @@ test("renders a failed row with truly omitted optional fields", () => {
   } as const satisfies ResolvedRow<RemoveRowMsg>;
 
   // act
-  const renderedRow = REMOVE_CONTEXT.render.failed(row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -169,7 +170,7 @@ test("renders a cross-scope failed row without consuming its failure detail or l
   } as const satisfies ResolvedRow<RemoveRowMsg>;
 
   // act
-  const renderedRow = REMOVE_CONTEXT.render.failed(row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -186,4 +187,15 @@ test("renders a cross-scope failed row without consuming its failure detail or l
     renderedRow,
     "⊘ tool [project] v2.0.0 (failed) {permission denied, source missing}",
   );
+});
+
+test("REMOVE_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = REMOVE_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    uninstalled: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+  });
 });

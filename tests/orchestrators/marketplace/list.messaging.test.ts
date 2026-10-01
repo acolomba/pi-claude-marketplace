@@ -7,8 +7,7 @@ test("exports only the complete marketplace-list context identity", () => {
   // arrange
   const expected = {
     Messaging: { label: "Marketplace list" },
-    render: {},
-    markers: {},
+    rowPolicies: {},
   } as const;
 
   // act
@@ -16,7 +15,15 @@ test("exports only the complete marketplace-list context identity", () => {
 
   // assert
   assert.deepEqual(actual, expected);
-  assert.deepEqual(Object.keys(actual), ["Messaging", "render", "markers"]);
+  assert.deepEqual(Object.keys(actual), ["Messaging", "rowPolicies"]);
   assert.deepEqual(Object.keys(actual.Messaging), ["label"]);
-  assert.deepEqual(Object.keys(actual.render), []);
+  assert.deepEqual(Object.keys(actual.rowPolicies), []);
+});
+
+test("LIST_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = LIST_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {});
 });

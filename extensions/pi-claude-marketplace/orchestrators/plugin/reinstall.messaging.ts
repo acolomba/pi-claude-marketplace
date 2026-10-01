@@ -1,12 +1,5 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
-  ICON_INSTALLED,
-  ICON_UNINSTALLABLE,
-  installedLikeRow,
-  pluginRow,
-  renderVersion,
-} from "../../shared/notification-grammar.ts";
-import {
   type ContentReason,
   type PluginFailedMessage,
   type PluginManualRecoveryMessage,
@@ -19,33 +12,13 @@ import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reas
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type {
-  CommandContext,
-  MarketplaceRows,
-  Plural,
-  RenderFn,
-} from "../../shared/notify-context.ts";
+import type { CommandContext, MarketplaceRows, Plural } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   ReinstallFailedOutcome,
   ReinstallPluginOutcome,
   ReinstallReinstalledOutcome,
 } from "../types.ts";
-
-/**
- * reinstall.messaging.ts -- the command-local notification vocabulary for
- * `/claude:plugin reinstall` (MOD-01). Co-locates reinstall's private status
- * set, its cascade row message shapes, and a render map total over reinstall's
- * OWN statuses (D-10) lifting the matching `renderPluginRow` arm bodies
- * VERBATIM. The shared presentation vocabulary stays central in
- * `shared/notification-grammar.ts` (D-11) and is CALLED here, never duplicated.
- *
- * NFR-9: the `manual recovery` / `failed` cause-chain and rollback-partial
- * trailing lines are NOT composed here. The render map renders only the single
- * row body; the central `emitContextCascade` seam appends the indented
- * cause-chain / rollback-partial lines through `redactAbsolutePaths` (D-11), so
- * the path-redaction security seam is never bypassed.
- */
 
 /**
  * reinstall's private status set: a success `reinstalled` row, a `skipped` row
@@ -64,40 +37,16 @@ type ReinstallMsg =
   | PluginFailedMessage
   | PluginManualRecoveryMessage;
 
-/**
- * Render map total over reinstall's OWN statuses (D-10): a missing arm is a
- * TS2741 compile error at the `satisfies` site. Arm bodies are byte-identical
- * to the central `renderPluginRow` switch. The `manual recovery` status
- * discriminator is the literal `"manual recovery"` WITH a space.
- */
-const REINSTALL_RENDER: {
-  [K in ReinstallStatus]: RenderFn<Extract<ReinstallMsg, { status: K }>>;
-} = {
-  // WR-09: threads the optional `reasons` brace, matching the central arm. A
-  // reinstall that degraded a component names the kind here; a clean one passes
-  // an undefined list and renders the same brace-less row as before.
-  reinstalled: (p, mpScope) =>
-    installedLikeRow(ICON_INSTALLED, p, mpScope, renderVersion(p.version), "(reinstalled)"),
-  skipped: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)"),
-  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
-  "manual recovery": (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)"),
-};
-
-/**
- * D-04 / D-05: reinstall's `CommandContext`. The `as const satisfies` pin
- * enforces that reinstall supplies both `Messaging.label` and a total render
- * map.
- */
+/** The command label and complete per-status reason policy. */
 export const REINSTALL_CONTEXT = {
   Messaging: { label: "Plugin reinstall" },
-  render: REINSTALL_RENDER,
-  markers: {
-    reinstalled: true,
-    skipped: false,
-    failed: false,
-    "manual recovery": false,
+  rowPolicies: {
+    reinstalled: { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    "manual recovery": { markers: false, contentReasons: true },
   },
-} as const satisfies CommandContext<ReinstallStatus, ReinstallMsg>;
+} as const satisfies CommandContext<ReinstallStatus>;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Outcome -> row projection.
@@ -186,7 +135,7 @@ export function renderReinstallPartitionAndNotify(
   // WR-01: the per-block plugin rows are built through the `outcomeToPluginMessage`
   // helper, now typed to `ReinstallMsg`, so the `MarketplaceRows<ReinstallMsg>`
   // annotation holds without a cast -- a status drift between the producer and
-  // the render map is a compile error here.
+  // the policy map is a compile error here.
   const marketplaces: Plural<MarketplaceRows<ReinstallMsg>> = sortedBlocks.map((block) => {
     const plugins: ReinstallMsg[] = block.outcomes.map((o) => outcomeToPluginMessage(o));
     return { name: block.name, scope: block.scope, plugins };

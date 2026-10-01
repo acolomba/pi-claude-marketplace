@@ -14,6 +14,7 @@ import {
   notifyUsageError,
   notifyUsageInfo,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { CENTRAL_ROW_POLICY } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 import {
   runWithAllLoaded,
@@ -21,7 +22,6 @@ import {
   runWithSoftDeps,
 } from "./notification-run-seeds.ts";
 
-import type { ResolvedRow } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
   CascadeNotificationMessage,
   NotificationMessage,
@@ -35,11 +35,6 @@ interface NotificationContext {
 
 function createContext(t: TestContext): NotificationContext {
   return { ui: { notify: t.mock.fn() } };
-}
-
-/** A render map that covers every row status, so no row is floored to error. */
-function hasRenderArm(): boolean {
-  return true;
 }
 
 test("notify renders single installed plugin with empty deps under added marketplace (info severity + reload-hint)", (t) => {
@@ -5109,9 +5104,7 @@ test("context emission renders the disabled enable hint", (t) => {
   // arrange
   const ctx = createContext(t);
   const run = runWithAllLoaded();
-  const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(
-    () => "◍ alpha v1.0.0 (disabled)",
-  );
+
   const message = {
     kind: "cascade",
     marketplaces: [
@@ -5133,7 +5126,7 @@ test("context emission renders the disabled enable hint", (t) => {
   } satisfies Parameters<typeof emitContextCascade>[2];
 
   // act
-  emitContextCascade(ctx as never, run, message, renderRow, {}, hasRenderArm);
+  emitContextCascade(ctx as never, run, message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5223,14 +5216,12 @@ for (const { name, message, expected } of [
     // arrange
     const ctx = createContext(t);
     const run = runWithAllLoaded();
-    const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(() => "unused");
 
     // act
-    emitContextCascade(ctx as never, run, message as never, renderRow, {}, hasRenderArm);
+    emitContextCascade(ctx as never, run, message as never, CENTRAL_ROW_POLICY);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, expected);
-    assert.strictEqual(renderRow.mock.callCount(), 0);
   });
 }
 
@@ -5714,15 +5705,11 @@ test("raw dispatch preserves absent and explicit severity once each", (t) => {
   );
 });
 
-function renderOwnedRow(row: ResolvedRow): string {
-  return `${row.name} (${row.status})`;
-}
-
 test("context dispatch preserves ordered rows and stamped reload hint", (t) => {
   // arrange
   const ctx = createContext(t);
   const run = runWithAllLoaded();
-  const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(renderOwnedRow);
+
   const message = {
     marketplaces: [
       {
@@ -5748,25 +5735,19 @@ test("context dispatch preserves ordered rows and stamped reload hint", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, run, message, renderRow, {}, hasRenderArm);
+  emitContextCascade(ctx as never, run, message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "● official [user]\n  first (installed)\n  second (available)\n\n/reload to pick up changes",
+    "● official [user]\n  ● first (installed)\n  ○ second (available)\n\n/reload to pick up changes",
   ]);
-  assert.equal(renderRow.mock.callCount(), 2);
 });
 
-test("context dispatch forwards the row and the enclosing marketplace scope, and no probe", (t) => {
+test("context dispatch preserves the success tally and reload trailer", (t) => {
   // arrange
-  // The renderer is an argument, so `(row, mpScope)` is a contract of the
-  // emitter: the scope must be the ENCLOSING marketplace's, not the row's, and
-  // D-13 gives the renderer no probe argument.
   const ctx = createContext(t);
   const run = runWithAllLoaded();
-  const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(
-    (row) => `controlled ${row.status} ${row.name}`,
-  );
+
   const message = {
     kind: "cascade",
     cardinality: "plural",
@@ -5789,27 +5770,19 @@ test("context dispatch forwards the row and the enclosing marketplace scope, and
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, run, message, renderRow, {}, hasRenderArm);
+  emitContextCascade(ctx as never, run, message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "● official [user]\n  controlled installed alpha\n\nPlugin install: 1 success\n\n/reload to pick up changes",
+    "● official [user]\n  ● alpha (installed)\n\nPlugin install: 1 success\n\n/reload to pick up changes",
   ]);
-  assert.deepStrictEqual(
-    renderRow.mock.calls.map((call) => [call.arguments[0].name, ...call.arguments.slice(1)]),
-    [["alpha", "user"]],
-  );
 });
 
 test("D-12: context dispatch composes each row's markers under the caller's marker policy", (t) => {
   // arrange
   const ctx = createContext(t);
   const run = runWithNothingLoaded();
-  const renderedReasons: (readonly string[])[] = [];
-  const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>((row) => {
-    renderedReasons.push(row.reasons);
-    return `${row.name} (${row.status})`;
-  });
+
   const message = {
     marketplaces: [
       {
@@ -5836,17 +5809,15 @@ test("D-12: context dispatch composes each row's markers under the caller's mark
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(
-    ctx as never,
-    run,
-    message,
-    renderRow,
-    { installed: true, reinstalled: false },
-    hasRenderArm,
-  );
+  emitContextCascade(ctx as never, run, message, {
+    installed: { markers: true, contentReasons: true },
+    reinstalled: { markers: false, contentReasons: true },
+  });
 
   // assert
-  assert.deepStrictEqual(renderedReasons, [["requires pi-subagents"], []]);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● official [user]\n  ● alpha (installed) {requires pi-subagents}\n  ● beta (reinstalled)",
+  ]);
 });
 
 test("context dispatch keeps independent parallel captures", async (t) => {
@@ -5854,25 +5825,22 @@ test("context dispatch keeps independent parallel captures", async (t) => {
   const first = createContext(t);
   const second = createContext(t);
   const run = runWithAllLoaded();
-  const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(renderOwnedRow);
+
   const message = { marketplaces: [] } satisfies CascadeNotificationMessage;
 
   // act
   await Promise.all([
     Promise.resolve().then(() => {
-      emitContextCascade(first as never, run, message, renderRow, {}, hasRenderArm);
+      emitContextCascade(first as never, run, message, CENTRAL_ROW_POLICY);
     }),
     Promise.resolve().then(() => {
-      emitContextCascade(second as never, run, message, renderRow, {}, hasRenderArm);
+      emitContextCascade(second as never, run, message, CENTRAL_ROW_POLICY);
     }),
   ]);
 
   // assert
   assert.deepStrictEqual(first.ui.notify.mock.calls[0]!.arguments, ["(no marketplaces)"]);
   assert.deepStrictEqual(second.ui.notify.mock.calls[0]!.arguments, ["(no marketplaces)"]);
-  // The `(no marketplaces)` sentinel is composed without any row, so a renderer
-  // call here would mean a phantom row the emitted bytes cannot reveal.
-  assert.equal(renderRow.mock.callCount(), 0);
 });
 
 test("update no-op dispatch preserves empty and non-empty folds", (t) => {
@@ -5880,8 +5848,7 @@ test("update no-op dispatch preserves empty and non-empty folds", (t) => {
   const empty = createContext(t);
   const nonEmpty = createContext(t);
   const run = runWithAllLoaded();
-  const emptyRenderRow = t.mock.fn<Parameters<typeof emitUpdateNoOpCascade>[3]>(renderOwnedRow);
-  const nonEmptyRenderRow = t.mock.fn<Parameters<typeof emitUpdateNoOpCascade>[3]>(renderOwnedRow);
+
   const emptyMessage = { marketplaces: [] } satisfies CascadeNotificationMessage;
   const message = {
     marketplaces: [
@@ -5901,26 +5868,23 @@ test("update no-op dispatch preserves empty and non-empty folds", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitUpdateNoOpCascade(empty as never, run, emptyMessage, emptyRenderRow, {}, hasRenderArm);
-  emitUpdateNoOpCascade(nonEmpty as never, run, message, nonEmptyRenderRow, {}, hasRenderArm);
+  emitUpdateNoOpCascade(empty as never, run, emptyMessage, CENTRAL_ROW_POLICY);
+  emitUpdateNoOpCascade(nonEmpty as never, run, message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(empty.ui.notify.mock.calls[0]!.arguments, [
     "Plugin update: nothing to update",
   ]);
   assert.deepStrictEqual(nonEmpty.ui.notify.mock.calls[0]!.arguments, [
-    "● official [user]\n  alpha (available)\n\nPlugin update: nothing to update",
+    "● official [user]\n  ○ alpha (available)\n\nPlugin update: nothing to update",
   ]);
-  assert.equal(emptyRenderRow.mock.callCount(), 0);
-  assert.equal(nonEmptyRenderRow.mock.callCount(), 1);
 });
 
 test("reconcile context dispatch keeps its tally and omits reload", (t) => {
   // arrange
   const ctx = createContext(t);
   const run = runWithAllLoaded();
-  const renderRow =
-    t.mock.fn<Parameters<typeof emitReconcileAppliedContextCascade>[3]>(renderOwnedRow);
+
   const message = {
     kind: "reconcile-applied-cascade",
     cardinality: "plural",
@@ -5938,13 +5902,12 @@ test("reconcile context dispatch keeps its tally and omits reload", (t) => {
   } as const;
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, run, message, renderRow, {}, hasRenderArm);
+  emitReconcileAppliedContextCascade(ctx as never, run, message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     "● official [user] (added)\n\nReconcile: 1 success",
   ]);
-  assert.equal(renderRow.mock.callCount(), 0);
 });
 
 test("reconcile context dispatch suppresses reload and stamps error severity", (t) => {
@@ -5956,9 +5919,7 @@ test("reconcile context dispatch suppresses reload and stamps error severity", (
   // failure tally, and the stamped severity argument are pinned here.
   const ctx = createContext(t);
   const run = runWithAllLoaded();
-  const renderRow = t.mock.fn<Parameters<typeof emitReconcileAppliedContextCascade>[3]>(
-    () => "⊘ alpha (failed) {not found}",
-  );
+
   const message = {
     kind: "reconcile-applied-cascade",
     cardinality: "plural",
@@ -5981,14 +5942,13 @@ test("reconcile context dispatch suppresses reload and stamps error severity", (
   } satisfies Parameters<typeof emitReconcileAppliedContextCascade>[2];
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, run, message, renderRow, {}, hasRenderArm);
+  emitReconcileAppliedContextCascade(ctx as never, run, message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     "A plugin operation has failed.\n\n● official [user]\n  ⊘ alpha (failed) {not found}\n\nReconcile: 1 failure",
     "error",
   ]);
-  assert.equal(renderRow.mock.callCount(), 1);
 });
 
 /*
@@ -6026,18 +5986,11 @@ test("a mixed actionable-skip cascade emits the plural attention summary", (t) =
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(
-    ctx as never,
-    run,
-    message,
-    (row) => `${row.name} (${row.status})`,
-    {},
-    hasRenderArm,
-  );
+  emitContextCascade(ctx as never, run, message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "Some operations need attention.\n\n● official [user] (skipped) {not found}\n  alpha (skipped)",
+    "Some operations need attention.\n\n● official [user] (skipped) {not found}\n  ⊘ alpha (skipped) {not installed}",
     "warning",
   ]);
 });
@@ -6053,14 +6006,7 @@ test("a marketplace-only failure cascade emits the marketplace failure summary",
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(
-    ctx as never,
-    run,
-    message,
-    (row) => `${row.name} (${row.status})`,
-    {},
-    hasRenderArm,
-  );
+  emitContextCascade(ctx as never, run, message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6082,18 +6028,11 @@ test("an unstamped cascade plugin defaults to info severity and a success tally"
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(
-    ctx as never,
-    run,
-    message,
-    (row) => `${row.name} (${row.status})`,
-    {},
-    hasRenderArm,
-  );
+  emitContextCascade(ctx as never, run, message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "● official [user]\n  alpha (available)\n\nPlugin list: 1 success",
+    "● official [user]\n  ○ alpha (available)\n\nPlugin list: 1 success",
   ]);
 });
 

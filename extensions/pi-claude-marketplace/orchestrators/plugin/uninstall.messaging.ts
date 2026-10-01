@@ -1,23 +1,4 @@
-import {
-  pluginRow,
-  renderUninstalledRow,
-  ICON_UNINSTALLABLE,
-} from "../../shared/notification-grammar.ts";
-import {
-  type PluginFailedMessage,
-  type PluginUninstalledMessage,
-} from "../../shared/notification-types.ts";
-
-import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
-
-/**
- * uninstall.messaging.ts -- the command-local notification vocabulary for
- * `/claude:plugin uninstall` (MOD-01). Co-locates uninstall's private status
- * set, its row message shapes, its command-private reason, and a render map
- * total over uninstall's OWN statuses (D-10) lifting the matching
- * `renderPluginRow` arm bodies VERBATIM. Shared presentation vocabulary stays
- * central in `shared/notification-grammar.ts` (D-11) and is CALLED here, never duplicated.
- */
+import type { CommandContext } from "../../shared/notify-context.ts";
 
 /**
  * uninstall's private status set: a success `uninstalled` row or a `failed`
@@ -26,34 +7,11 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  */
 type UninstallStatus = "uninstalled" | "failed";
 
-/**
- * uninstall's row message union -- the subset of central plugin shapes whose
- * status uninstall emits.
- */
-type UninstallMsg = PluginUninstalledMessage | PluginFailedMessage;
-
-/**
- * Render map total over uninstall's OWN statuses (D-10): a missing arm is a
- * TS2741 compile error at the `satisfies` site. Arm bodies are byte-identical
- * to the central `renderPluginRow` switch.
- */
-const UNINSTALL_RENDER: {
-  [K in UninstallStatus]: RenderFn<Extract<UninstallMsg, { status: K }>>;
-} = {
-  uninstalled: (p, mpScope) => renderUninstalledRow(p, mpScope),
-  failed: (p, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)"),
-};
-
-/**
- * D-04 / D-05: uninstall's `CommandContext`. The `as const satisfies` pin
- * enforces that uninstall supplies both `Messaging.label` and a total render
- * map.
- */
+/** The command label and complete per-status reason policy. */
 export const UNINSTALL_CONTEXT = {
   Messaging: { label: "Plugin uninstall" },
-  render: UNINSTALL_RENDER,
-  markers: {
-    uninstalled: false,
-    failed: false,
+  rowPolicies: {
+    uninstalled: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
   },
-} as const satisfies CommandContext<UninstallStatus, UninstallMsg>;
+} as const satisfies CommandContext<UninstallStatus>;

@@ -9,6 +9,7 @@ import {
   formatOrchestratedCause,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type {
@@ -33,7 +34,7 @@ describe("INSTALL_CONTEXT", () => {
     // act
     const contextShape = {
       label: INSTALL_CONTEXT.Messaging.label,
-      renderArms: Object.keys(INSTALL_CONTEXT.render).sort(),
+      renderArms: Object.keys(INSTALL_CONTEXT.rowPolicies).sort(),
     };
 
     // assert
@@ -56,7 +57,7 @@ describe("INSTALL_CONTEXT", () => {
     } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render.installed(message, "user");
+    const row = composePluginLines(message, "user")[0]!.slice(2);
 
     // assert
     assert.strictEqual(
@@ -78,7 +79,7 @@ describe("INSTALL_CONTEXT", () => {
     } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render["partially-installed"](message, "user");
+    const row = composePluginLines(message, "user")[0]!.slice(2);
 
     // assert
     assert.strictEqual(
@@ -97,7 +98,7 @@ describe("INSTALL_CONTEXT", () => {
     } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render.unavailable(message, "project");
+    const row = composePluginLines(message, "project")[0]!.slice(2);
 
     // assert
     assert.strictEqual(row, "⊘ helper (unavailable) {unsupported source}");
@@ -115,7 +116,7 @@ describe("INSTALL_CONTEXT", () => {
     } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render["partially-available"](message, "project");
+    const row = composePluginLines(message, "project")[0]!.slice(2);
 
     // assert
     assert.strictEqual(row, "⊖ helper v3.1.0 (partially-available) {unsupported hooks, lsp}");
@@ -134,7 +135,7 @@ describe("INSTALL_CONTEXT", () => {
     } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render.failed(message, "user");
+    const row = composePluginLines(message, "user")[0]!.slice(2);
 
     // assert
     assert.strictEqual(row, "⊘ helper [project] v1.0.0 (failed) {permission denied}");
@@ -154,7 +155,7 @@ describe("INSTALL_CONTEXT", () => {
     } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render.disabled(message, "user");
+    const row = composePluginLines(message, "user")[0]!.slice(2);
 
     // assert
     assert.strictEqual(row, "◍ helper v4.0.0 (disabled) {installs disabled, malformed skill}");
@@ -895,5 +896,20 @@ describe("classifyInstallFailure", () => {
       error: new Error("formatted opaque failure"),
       cause: "formatted opaque failure",
     });
+  });
+});
+
+test("INSTALL_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = INSTALL_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    unavailable: { markers: false, contentReasons: true },
+    "partially-available": { markers: false, contentReasons: true },
+    disabled: { markers: false, contentReasons: true },
   });
 });

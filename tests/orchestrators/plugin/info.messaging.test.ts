@@ -5,6 +5,7 @@ import {
   PLUGIN_INFO_CONTEXT,
   type PluginInfoCascadeMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
@@ -23,12 +24,12 @@ void ({
 
 test("exports the complete plugin-info cascade context", () => {
   // arrange
-  const expectedContextKeys = ["Messaging", "render", "markers"];
+  const expectedContextKeys = ["Messaging", "rowPolicies"];
   const expectedRenderKeys = ["skipped"];
 
   // act
   const contextKeys = Object.keys(PLUGIN_INFO_CONTEXT);
-  const renderKeys = Object.keys(PLUGIN_INFO_CONTEXT.render);
+  const renderKeys = Object.keys(PLUGIN_INFO_CONTEXT.rowPolicies);
 
   // assert
   assert.deepStrictEqual(contextKeys, expectedContextKeys);
@@ -45,7 +46,7 @@ test("renders a bare skipped row with truly omitted optional fields", () => {
   } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
 
   // act
-  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -68,7 +69,7 @@ test("folds a same-scope skipped row and preserves version and ordered reasons",
   } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
 
   // act
-  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, "project");
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -92,7 +93,7 @@ test("renders a cross-scope skipped row with its resolved reasons", () => {
   } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
 
   // act
-  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -103,4 +104,12 @@ test("renders a cross-scope skipped row with its resolved reasons", () => {
     reasons: ["not in manifest"],
   });
   assert.strictEqual(renderedRow, "⊘ gamma [project] v#2ea95f8 (skipped) {not in manifest}");
+});
+
+test("PLUGIN_INFO_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = PLUGIN_INFO_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, { skipped: { markers: false, contentReasons: true } });
 });

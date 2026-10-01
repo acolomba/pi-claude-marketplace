@@ -1,6 +1,6 @@
 import {
   composeMarketplaceBlock,
-  composePluginLinesWith,
+  composePluginLines,
   composeReconcileAppliedBody,
   formatNotificationText,
   renderMarketplaceInfo,
@@ -11,7 +11,7 @@ import {
   renderPluginInfoCascade,
 } from "./notification-grammar.ts";
 import {
-  CENTRAL_MARKER_POLICY,
+  CENTRAL_ROW_POLICY,
   resolveEnvelope,
   resolveNotAddedReason,
   resolveRows,
@@ -20,10 +20,9 @@ import {
 import { isInfoKind } from "./notification-summary.ts";
 
 import type {
-  MarkerPolicy,
+  RowPolicyMap,
   ResolvedEnvelope,
   ResolvedMarketplace,
-  ResolvedRow,
 } from "./notification-resolve.ts";
 import type { NotificationRun } from "./notification-run.ts";
 import type { StandaloneKind } from "./notification-summary.ts";
@@ -34,7 +33,6 @@ import type {
   Severity,
   UsageErrorMessage,
 } from "./notification-types.ts";
-import type { Scope } from "./types.ts";
 import type { NotificationContext, SoftDepStatus } from "../platform/pi-api.ts";
 
 /**
@@ -59,7 +57,7 @@ import type { NotificationContext, SoftDepStatus } from "../platform/pi-api.ts";
  *  severity and a computed reload-hint trailer. The command's run
  *  supplies the soft-dep snapshot (D-05). `resolveRows` composes the
  *  per-row {requires pi-subagents} / {requires pi-mcp} markers from
- *  that snapshot under `CENTRAL_MARKER_POLICY` (D-12).
+ *  that snapshot under `CENTRAL_ROW_POLICY` (D-12).
  *  - notifyUsageError(ctx, UsageErrorMessage)
  *  Argv-validation errors. On-the-wire string is
  *  `${message.message}\n\n${message.usage}` at "error" severity
@@ -78,28 +76,6 @@ import type { NotificationContext, SoftDepStatus } from "../platform/pi-api.ts";
  * dispatch behavior directly from this file. No barrel re-exports.
  */
 
-/**
- * Emit one summary-composed payload at the sole Pi notification boundary:
- * format the resolved envelope around `body`, then make one `ctx.ui.notify`
- * call. An info envelope passes one argument and a warning or error envelope
- * passes its severity as the second. `body` carries the rendered rows and any
- * advisory lines; the tally, the no-op headline, the reload trailer, and the
- * summary line all come from the envelope.
- *
- * Each cascade caller runs `resolveRows` before it resolves the envelope.
- * `resolveRows` floors a row with no render arm to error, and the envelope
- * must read that floored stamp.
- *
- * Module-private: the state-change dispatch paths -- `notify`,
- * `emitContextCascade`, `emitUpdateNoOpCascade`, and
- * `emitReconcileAppliedContextCascade` (the latter three via the shared
- * `emitCascadeWith` helper) -- route through it, so those paths' emitted
- * bytes and one-call-per-invocation discipline are this seam's contract. The
- * remaining public functions (`notifyUsageError`, `notifyUsageInfo`,
- * `notifyDiagnostic`, `notifyAsyncRewakeSummary`, `notifyStopHookOverrideCap`,
- * `makeRawNotifyFn`) carry no summary/tally/reload-hint to compose, so they
- * call `ctx.ui.notify` directly instead.
- */
 function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, body: string): void {
   const text = formatNotificationText(envelope, body);
   if (envelope.severity === "info") {
@@ -260,7 +236,7 @@ function dispatchInfoMessage(
       // apply is a plural mixed-subject operation, so its envelope carries the
       // tally, exactly as on the `emitReconcileAppliedContextCascade` path.
       body = composeReconcileAppliedBody(
-        resolveRows(message.marketplaces, softDeps, CENTRAL_MARKER_POLICY),
+        resolveRows(message.marketplaces, softDeps, CENTRAL_ROW_POLICY),
       );
       break;
   }
@@ -313,7 +289,7 @@ export function notify(
   }
 
   // D-11: the rows resolve first, then the envelope, then the body text.
-  const marketplaces = resolveRows(message.marketplaces, run.softDeps, CENTRAL_MARKER_POLICY);
+  const marketplaces = resolveRows(message.marketplaces, run.softDeps, CENTRAL_ROW_POLICY);
   const envelope = resolveEnvelope(message);
 
   // Cascade body. Caller-supplied order honored end-to-end (no internal
@@ -366,18 +342,11 @@ function foldAdvisories(body: string, advisories: readonly string[] | undefined)
   return lines.length === 0 ? body : `${body}\n\n${lines.join("\n")}`;
 }
 
-/**
- * Render one block per resolved marketplace: the header, then each plugin's
- * lines with the row body from the caller's render map.
- */
-function composeContextBlocks(
-  marketplaces: readonly ResolvedMarketplace[],
-  renderPluginRowBody: (p: ResolvedRow, mpScope: Scope) => string,
-): string[] {
+function composeContextBlocks(marketplaces: readonly ResolvedMarketplace[]): string[] {
   return marketplaces.map((mp) => {
-    const lines: string[] = [renderMpHeader(mp)];
-    for (const p of mp.plugins) {
-      lines.push(...composePluginLinesWith(p, mp.scope, renderPluginRowBody));
+    const lines = [renderMpHeader(mp)];
+    for (const row of mp.plugins) {
+      lines.push(...composePluginLines(row, mp.scope));
     }
 
     return lines.join("\n");
@@ -388,17 +357,15 @@ function emitCascadeWith(
   ctx: NotificationContext,
   run: NotificationRun,
   message: CascadeNotificationMessage | ReconcileAppliedCascadeMessage,
-  renderPluginRowBody: (p: ResolvedRow, mpScope: Scope) => string,
-  markers: MarkerPolicy,
-  hasRenderArm: (status: string) => boolean,
+  rowPolicies: RowPolicyMap,
   // WR-06: caller-composed advisory body lines. Only the plain cascade carrier
   // declares them; the reconcile-applied carrier passes `undefined`, so the
   // member stays on the two shapes that can actually produce one.
   advisories: readonly string[] | undefined,
 ): void {
-  const marketplaces = resolveRows(message.marketplaces, run.softDeps, markers, hasRenderArm);
+  const marketplaces = resolveRows(message.marketplaces, run.softDeps, rowPolicies);
   const envelope = resolveEnvelope(message);
-  const blocks = composeContextBlocks(marketplaces, renderPluginRowBody);
+  const blocks = composeContextBlocks(marketplaces);
   const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
   // WR-06: advisory body lines sit between the body and the tally, exactly as
   // they do on the central dispatch, so a command that can emit either arm
@@ -408,47 +375,26 @@ function emitCascadeWith(
   emitWithSummary(ctx, envelope, body);
 }
 
-/**
- * Dispatch a state-change cascade with its stamped reload decision.
- * `markers` is the caller's D-12 marker policy. `hasRenderArm` reports whether
- * the caller's render map covers a row status; `resolveRows` floors an
- * uncovered row to error.
- */
+/** Emits resolved command rows, advisories, and the stamped envelope. */
 export function emitContextCascade(
   ctx: NotificationContext,
   run: NotificationRun,
   message: CascadeNotificationMessage,
-  renderPluginRowBody: (p: ResolvedRow, mpScope: Scope) => string,
-  markers: MarkerPolicy,
-  hasRenderArm: (status: string) => boolean,
+  rowPolicies: RowPolicyMap,
 ): void {
-  emitCascadeWith(
-    ctx,
-    run,
-    message,
-    renderPluginRowBody,
-    markers,
-    hasRenderArm,
-    message.advisories,
-  );
+  emitCascadeWith(ctx, run, message, rowPolicies, message.advisories);
 }
 
-/**
- * Dispatch the never-silent zero-transition update result. `markers` and
- * `hasRenderArm` are the marker policy and the render-map coverage predicate
- * `emitContextCascade` takes.
- */
+/** Emits surviving rows followed by the fixed zero-update headline. */
 export function emitUpdateNoOpCascade(
   ctx: NotificationContext,
   run: NotificationRun,
   message: CascadeNotificationMessage,
-  renderPluginRowBody: (p: ResolvedRow, mpScope: Scope) => string,
-  markers: MarkerPolicy,
-  hasRenderArm: (status: string) => boolean,
+  rowPolicies: RowPolicyMap,
 ): void {
-  const marketplaces = resolveRows(message.marketplaces, run.softDeps, markers, hasRenderArm);
+  const marketplaces = resolveRows(message.marketplaces, run.softDeps, rowPolicies);
   const envelope = resolveUpdateNoOpEnvelope(message);
-  const blocks = composeContextBlocks(marketplaces, renderPluginRowBody);
+  const blocks = composeContextBlocks(marketplaces);
   // No `(no marketplaces)` sentinel here: an empty no-op renders the headline
   // alone.
   const body = blocks.join("\n\n");
@@ -456,18 +402,12 @@ export function emitUpdateNoOpCascade(
   emitWithSummary(ctx, envelope, body);
 }
 
-/**
- * Dispatch an applied reconcile cascade without a redundant reload hint.
- * `markers` and `hasRenderArm` are the marker policy and the render-map
- * coverage predicate `emitContextCascade` takes.
- */
+/** Emits an applied reconcile cascade without a reload trailer. */
 export function emitReconcileAppliedContextCascade(
   ctx: NotificationContext,
   run: NotificationRun,
   message: ReconcileAppliedCascadeMessage,
-  renderPluginRowBody: (p: ResolvedRow, mpScope: Scope) => string,
-  markers: MarkerPolicy,
-  hasRenderArm: (status: string) => boolean,
+  rowPolicies: RowPolicyMap,
 ): void {
-  emitCascadeWith(ctx, run, message, renderPluginRowBody, markers, hasRenderArm, undefined);
+  emitCascadeWith(ctx, run, message, rowPolicies, undefined);
 }

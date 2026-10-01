@@ -37,7 +37,6 @@ import {
   CrossPluginConflictError,
   MarketplaceNotFoundError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { type PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
@@ -47,7 +46,6 @@ import type { ScopeConfig } from "../../../extensions/pi-claude-marketplace/pers
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type { CommandContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -1804,17 +1802,10 @@ describe("emitMarketplaceNotAdded", () => {
 describe("emitMarketplaceNotAddedSignal", () => {
   test("renders the plugin row when nothing of the container is installed at the named scope", async () => {
     // arrange
-    const renderedRows: ResolvedRow<PluginSkippedMessage>[] = [];
     const context = {
       Messaging: { label: "Plugin reinstall" },
-      render: {
-        skipped: (row) => {
-          renderedRows.push(row);
-          return `⊘ ${row.name} (skipped)`;
-        },
-      },
-      markers: { skipped: false },
-    } satisfies CommandContext<"skipped", PluginSkippedMessage>;
+      rowPolicies: { skipped: { markers: false, contentReasons: false } },
+    } satisfies CommandContext<"skipped">;
     const notifications: { message: string; severity?: string }[] = [];
     const { ctx } = makeRecordingBoundary(notifications);
 
@@ -1829,15 +1820,9 @@ describe("emitMarketplaceNotAddedSignal", () => {
     });
 
     // assert
-    assert.deepStrictEqual(renderedRows, [
-      {
-        status: "skipped",
-        name: "hello",
-        reasons: ["not installed", "marketplace in user scope"],
-        severity: "error",
-        needsReload: false,
-      },
-    ]);
+    assert.deepStrictEqual(context.rowPolicies, {
+      skipped: { markers: false, contentReasons: false },
+    });
     assert.deepStrictEqual(notifications, [
       {
         message:
@@ -1855,11 +1840,8 @@ describe("emitMarketplaceNotAddedSignal", () => {
       // arrange
       const context = {
         Messaging: { label: "Plugin reinstall" },
-        render: {
-          skipped: (row) => `⊘ ${row.name} (skipped)`,
-        },
-        markers: { skipped: false },
-      } satisfies CommandContext<"skipped", PluginSkippedMessage>;
+        rowPolicies: { skipped: { markers: false, contentReasons: false } },
+      } satisfies CommandContext<"skipped">;
       const notifications: { message: string; severity?: string }[] = [];
       const { ctx } = makeRecordingBoundary(notifications);
 

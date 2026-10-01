@@ -16,17 +16,12 @@ import type {
   MarketplaceInfoCascadeMessage,
   MarketplaceInfoMessage,
   MarketplaceNotAddedMessage,
-  PluginAvailableMessage,
-  PluginDisabledMessage,
   PluginInfoCascadeMessage,
   PluginInfoComponentsResolved,
   PluginInfoMessage,
   PluginInfoRow,
   PluginNotificationMessage,
-  PluginPartiallyAvailableMessage,
-  PluginRemoteMessage,
-  PluginUnavailableMessage,
-  PluginUninstalledMessage,
+  PluginUpdatedMessage,
   Reason,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
@@ -41,20 +36,12 @@ import type { Scope } from "./types.ts";
 //
 // SNM-17 / SNM-18 contract: the marketplace-header grammar and per-status
 // icon discipline live HERE as the sole site that knows them.
-// `renderMpHeader` + `renderPluginRow` compose into the public `notify`
 // entry point.
 // ---------------------------------------------------------------------------
 
-/**
- * Grammar icon literals.
- *
- * D-11: the shared presentation vocabulary stays central in this file;
- * `export` only widens visibility so sibling command modules can CALL these
- * glyphs from their own render maps without redeclaring them.
- */
-export const ICON_INSTALLED = "●";
-export const ICON_AVAILABLE = "○";
-export const ICON_UNINSTALLABLE = "⊘";
+const ICON_INSTALLED = "●";
+const ICON_AVAILABLE = "○";
+const ICON_UNINSTALLABLE = "⊘";
 /**
  * D-54-01 / ENBL-04: dedicated glyph for the deliberate, user-requested
  * disabled-class rows -- `(disabled)` (realized inventory) and
@@ -68,18 +55,8 @@ export const ICON_UNINSTALLABLE = "⊘";
  * D-80-01: uses `◍` (U+25CD, circle with vertical fill), distinct from `◌`
  * (U+25CC, dotted circle), which `ICON_REMOTE` uses instead.
  */
-export const ICON_DISABLED = "◍";
+const ICON_DISABLED = "◍";
 
-/**
- * RSTA-02 / D-80-01: dedicated glyph (`◌` U+25CC, dotted circle) for the
- * `(remote)` row -- a not-installed git-source plugin whose clone/mirror is not
- * yet materialized locally. The dotted circle reads "declared but not
- * present". Distinct from `ICON_DISABLED`, which uses `◍` (U+25CD).
- *
- * Module-private: two renderers carry this glyph to a row -- `renderRemoteRow`
- * below and `pluginInfoStatusGlyph`'s `remote` arm, which the `info` plugin row
- * joins -- so those rows' bytes are its public contract.
- */
 const ICON_REMOTE = "◌";
 
 /**
@@ -91,7 +68,7 @@ const ICON_REMOTE = "◌";
  * clean -- only its candidate would degrade), mirroring the `upgradable`
  * precedent.
  */
-export const ICON_PARTIALLY_INSTALLED = "◉";
+const ICON_PARTIALLY_INSTALLED = "◉";
 
 /**
  * USTAT-02 / D-64-01: dedicated glyph for a not-installed, partially-available
@@ -182,56 +159,6 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
   return lines;
 }
 
-/**
- * Renders the marketplace header line. SOLE site for marketplace-header
- * grammar (SNM-17). File-private; consumed by notify(). The
- * `case undefined:` arm explicitly guards mp.details === undefined, matching
- * the optional-independent details? field.
- *
- * Byte forms (one per arm):
- *   "added"              -> `${ICON_INSTALLED} ${name} [${scope}] (added)`
- *   "removed"            -> `${ICON_INSTALLED} ${name} [${scope}] (removed)`
- *   "updated"            -> `${ICON_INSTALLED} ${name} [${scope}] (updated)`
- *   "failed"             -> `${ICON_UNINSTALLABLE} ${name} [${scope}] (failed)`
- *   "autoupdate enabled" -> `${ICON_INSTALLED} ${name} [${scope}] <autoupdate>`
- *                           (UXG-04 fresh state-flip; marker-as-outcome,
- *                           never carries mp.reasons.)
- *   "autoupdate disabled"-> `${ICON_INSTALLED} ${name} [${scope}] <no autoupdate>`
- *                           (UXG-04 fresh state-flip; explicit off-marker,
- *                           never carries mp.reasons.)
- *   "skipped"            -> `${ICON_INSTALLED} ${name} [${scope}] (skipped)`
- *                           (+ ` {<reason>,...}` iff `mp.reasons` is defined
- *                           and non-empty, formatted via `composeReasons`;
- *                           mp-level skipped never emits soft-dep markers,
- *                           because resolve composes markers on plugin rows
- *                           only.) UXG-04 SPECIAL CASE: when
- *                           `mp.reasons` contains `"already autoupdate"` /
- *                           `"already no autoupdate"` the row renders
- *                           `... <autoupdate> {already autoupdate}` /
- *                           `... <no autoupdate> {already no autoupdate}`
- *                           (marker-as-outcome + idempotence brace, no
- *                           `(skipped)` token).
- *   undefined (list-surface):
- *     SUB-BRANCH A (mp.details === undefined): `${ICON_INSTALLED} ${name} [${scope}]`
- *     SUB-BRANCH B (mp.details !== undefined): `${ICON_INSTALLED} ${name} [${scope}]`
- *       + " <autoupdate>" iff mp.details.autoupdate === true (marker omitted
- *         entirely when autoupdate is false)
- *       The `mp.details.lastUpdatedAt` field is retained in state/type but is
- *       NOT rendered on the list surface (UXG-01 -- the raw ISO timestamp is
- *       noise and meaningless for path-source marketplaces).
- *
- * No marketplace arm renders ICON_AVAILABLE (○): every arm is either ok (●)
- * or failure-class (⊘). Marketplace add/remove are immediate (WILL-01 /
- * D-65.1-02 / D-65.1-03), so they carry no marketplace-level pending token --
- * a remove's reload-deferred plugin-uninstall cascade renders as ○ PLUGIN
- * `will uninstall` child rows under a bare (●) header. The open-circle uses
- * are the available / uninstalled / will-uninstall PLUGIN rows that
- * `renderPluginRow` owns.
- *
- * The `"failed"` and `"skipped"` arms format `mp.reasons` with
- * `composeReasons`. Soft-dep markers are composed on plugin rows only, in
- * `resolveRows` (D-12), so no marker can reach a marketplace header.
- */
 export function renderMpHeader(mp: ResolvedMarketplace): string {
   switch (mp.status) {
     case "added":
@@ -318,12 +245,10 @@ export function renderMpHeader(mp: ResolvedMarketplace): string {
 }
 
 // ---------------------------------------------------------------------------
-// File-private renderPluginRow + supporting helpers.
 //
 // MOD-03 / D-02 / D-10: this central switch is not the per-row dispatch path
 // for any command's cascade rows. Every state-change producer routes its
 // rows through `notifyWithContext` / `notifyReconcileAppliedWithContext`, which
-// dispatch each per-plugin body via the command's OWN `context.render[status]`
 // map (`emitContextCascade` / `emitReconcileAppliedContextCascade`). A missing
 // or extra arm is now a per-command compile error, not a central concern.
 // This switch survives only as a STATICALLY-REFERENCED seam on the central
@@ -355,7 +280,7 @@ export function renderMpHeader(mp: ResolvedMarketplace): string {
 // HERE as the single source of the byte-stable presentation vocabulary; the
 // `export` keyword only widens their visibility so sibling command render maps
 // can CALL them without duplicating the brace/space/join logic.
-export function joinTokens(parts: readonly string[]): string {
+function joinTokens(parts: readonly string[]): string {
   return parts.filter((p) => p !== "").join(" ");
 }
 
@@ -427,7 +352,7 @@ function formatShaVersionForDisplay(v: string): string {
  * a string the other owns, so the order is irrelevant. Single canonical
  * implementation.
  */
-export function renderVersion(version: string | undefined): string {
+function renderVersion(version: string | undefined): string {
   if (version === undefined || version === "") {
     return "";
   }
@@ -435,30 +360,7 @@ export function renderVersion(version: string | undefined): string {
   return `v${formatShaVersionForDisplay(formatHashVersionForDisplay(version))}`;
 }
 
-/**
- * Conditional `[<pluginScope>]` emitter -- orphan-fold contract.
- * SOLE site for plugin-row scope-bracket emission inside
- * `renderPluginRow`: per-arm code MUST funnel `p.scope` (or `undefined` for
- * the MSG-PL-6 / SNM-11 carve-out variants) AND the parent marketplace scope
- * through this helper.
- *
- * The bracket emits ONLY when `pluginScope !== undefined AND
- * pluginScope !== mpScope` -- the orphan-fold case. When the
- * plugin's scope matches the parent marketplace's scope, the bracket is
- * suppressed because the marketplace header already carries the
- * `[mpScope]` token; emitting a redundant per-row bracket would
- * contradict the binding contract at `docs/messaging-style-guide.md:73`
- * ("plugin row emits `[<scope>]` ONLY when its scope differs from the
- * parent marketplace's scope").
- *
- * `mpScope` is non-optional: the renderer always has the parent
- * marketplace's scope from `composeMarketplaceBlock` threading. The
- * `available` / `unavailable` arms (which have NO `scope?` field per
- * MSG-PL-6 / SNM-11) call with `pluginScope: undefined`; the same-scope
- * and orphan-fold short-circuits in the body cover both that carve-out
- * and the same-scope case uniformly.
- */
-export function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): string {
+function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): string {
   if (pluginScope === undefined || pluginScope === mpScope) {
     return "";
   }
@@ -466,19 +368,7 @@ export function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scop
   return `[${pluginScope}]`;
 }
 
-/**
- * Compose the MSG-PL-3 version-transition slot for the `updated` arm
- * (`v<from> → v<to>`). Caller precondition: both
- * `from` and `to` are REQUIRED on the `updated` variant, so the helper
- * is only ever invoked with both values defined. Sole caller is the
- * `updated` arm in renderPluginRow.
- *
- * Both sides route through `renderVersion` so both carry the `v` prefix:
- * SemVer pairs render `v<from> → v<to>` (e.g. `v1.0.0 → v1.1.0`) and
- * hash pairs render `v#<7hex> → v#<7hex>` (e.g. `v#2ea95f8 → v#1c3d9a0`,
- * SNM-35).
- */
-export function composeVersionArrow(from: string, to: string): string {
+function composeVersionArrow(from: string, to: string): string {
   return `${renderVersion(from)} → ${renderVersion(to)}`;
 }
 
@@ -495,7 +385,7 @@ export function composeVersionArrow(from: string, to: string): string {
  * rejects out-of-set strings at the call sites at compile time (CMC-11
  * closed-set discipline).
  */
-export function composeReasons(reasons: readonly Reason[] | undefined): string {
+function composeReasons(reasons: readonly Reason[] | undefined): string {
   if (reasons === undefined || reasons.length === 0) {
     return "";
   }
@@ -503,449 +393,60 @@ export function composeReasons(reasons: readonly Reason[] | undefined): string {
   return `{${reasons.join(", ")}}`;
 }
 
-/**
- * Compose a scope-bearing, reasons-bearing plugin row that carries NO
- * soft-dep marker. Folds the structurally-identical `renderPluginRow` arms
- * (`upgradable` / `partially-upgradable` / `skipped` / `failed` / `manual recovery`) that
- * differ only in their icon and their parenthesized status `label`. `label` is
- * the FULL parenthesized token (the caller passes `"(upgradable)"` etc.,
- * INCLUDING the parens, so the `"(manual recovery)"` literal keeps its space
- * verbatim). The `p` param is the structural subset those variants share: a
- * required `name` and an optional `scope` / `version` / `reasons`. It adds no
- * soft-dep marker: a resolved row's `reasons` already carries any marker its
- * command's policy allows.
- *
- * `reasons` is OPTIONAL so the composer accepts any row shape;
- * `composeReasons` treats `undefined` as the empty list. This is what lets the
- * `disabled` arm share this composer instead of restating its body.
- *
- * D-13: the `dependencies?: never` refusal rejects an unresolved producer row,
- * whose markers `resolveRows` has not yet composed into `reasons`.
- */
-export function pluginRow(
-  icon: string,
-  p: {
-    readonly name: string;
-    readonly scope?: Scope;
-    readonly version?: string;
-    readonly reasons?: readonly Reason[];
-    readonly dependencies?: never;
-  },
-  mpScope: Scope,
-  label: string,
-): string {
-  return joinTokens([
-    icon,
-    p.name,
-    renderScopeBracket(p.scope, mpScope),
-    renderVersion(p.version),
-    label,
-    composeReasons(p.reasons),
-  ]);
+/** Text-only row layout; semantic reason selection happens in resolution. */
+interface PluginRowLayout {
+  readonly icon: string;
+  readonly scope: boolean;
+  readonly version: "single" | "arrow" | "none";
 }
 
-/**
- * WR-03: SOLE composition site for the `(partially-installed)` row -- shared by the
- * central `renderPluginRow` switch AND the install / update command-local
- * render maps, so the bytes stay identical across surfaces (D-11 "call, never
- * duplicate"). Uses the dedicated `ICON_PARTIALLY_INSTALLED` (`◉`) glyph; the
- * reasons brace carries the dropped-component detail. A partial-install or
- * partial-update success row still stages the SUPPORTED components, so its
- * resolved `reasons` can end with the `{requires pi-subagents}` /
- * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` markers, after the
- * dropped-component reasons (MSG-GR-4).
- *
- * D-13: the `dependencies?: never` refusal rejects an unresolved producer row,
- * whose markers `resolveRows` has not yet composed into `reasons`.
- */
-export function partiallyInstalledRow(
-  p: {
-    readonly name: string;
-    readonly scope?: Scope;
-    readonly version?: string;
-    readonly reasons: readonly Reason[];
-    readonly dependencies?: never;
-  },
-  mpScope: Scope,
-): string {
-  return joinTokens([
-    ICON_PARTIALLY_INSTALLED,
-    p.name,
-    renderScopeBracket(p.scope, mpScope),
-    renderVersion(p.version),
-    "(partially-installed)",
-    composeReasons(p.reasons),
-  ]);
-}
+const PLUGIN_ROW_LAYOUT = {
+  installed: { icon: ICON_INSTALLED, scope: true, version: "single" },
+  updated: { icon: ICON_INSTALLED, scope: true, version: "arrow" },
+  reinstalled: { icon: ICON_INSTALLED, scope: true, version: "single" },
+  uninstalled: { icon: ICON_AVAILABLE, scope: true, version: "single" },
+  available: { icon: ICON_AVAILABLE, scope: false, version: "single" },
+  remote: { icon: ICON_REMOTE, scope: false, version: "single" },
+  unavailable: { icon: ICON_UNINSTALLABLE, scope: false, version: "single" },
+  "partially-available": { icon: ICON_PARTIALLY_AVAILABLE, scope: false, version: "single" },
+  upgradable: { icon: ICON_INSTALLED, scope: true, version: "single" },
+  "partially-installed": { icon: ICON_PARTIALLY_INSTALLED, scope: true, version: "single" },
+  "partially-upgradable": { icon: ICON_INSTALLED, scope: true, version: "single" },
+  skipped: { icon: ICON_UNINSTALLABLE, scope: true, version: "single" },
+  failed: { icon: ICON_UNINSTALLABLE, scope: true, version: "single" },
+  "manual recovery": { icon: ICON_UNINSTALLABLE, scope: true, version: "single" },
+  "will install": { icon: ICON_INSTALLED, scope: true, version: "none" },
+  "will uninstall": { icon: ICON_AVAILABLE, scope: true, version: "none" },
+  "will enable": { icon: ICON_INSTALLED, scope: true, version: "none" },
+  "will disable": { icon: ICON_DISABLED, scope: true, version: "none" },
+  disabled: { icon: ICON_DISABLED, scope: true, version: "single" },
+} as const satisfies Record<PluginNotificationMessage["status"], PluginRowLayout>;
 
-/**
- * WR-03: SOLE composition site for the soft-dep-bearing
- * `installed` / `updated` / `reinstalled` plugin rows. The command arms differ
- * ONLY in their version token (`renderVersion(p.version)` vs
- * `composeVersionArrow(p.from, p.to)`), their parenthesized `label`, and the
- * reasons they thread. Those three remain caller-supplied so the byte form is
- * verbatim; the `composeReasons` composition is owned here (D-11 "call, never
- * duplicate"), keeping every soft-dep arm byte-identical to one another and to
- * the central `renderPluginRow` `installed` arm.
- *
- * `versionToken` is the already-rendered version slot (the caller passes
- * `renderVersion(...)` or `composeVersionArrow(...)`); `reasons` is the
- * resolved reason list, which already ends with any `{requires pi-subagents}` /
- * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` marker (D-12).
- *
- * WR-13 / WR-12: which callers thread `reasons`, over the seven command arms
- * folded here -- ALL of them now pass `p.reasons`: the five `(installed)` arms
- * (install, enable, list, import, reconcile), the `(reinstalled)` arm (WR-09),
- * and the `(updated)` arm (WR-12). The `(updated)` arm was the last caller
- * passing `undefined`, because `PluginUpdatedMessage` carried no `reasons`
- * field; since `update` stages through the same bridges and degrades a
- * component exactly as install / enable / reinstall do, that gap rendered a
- * clean `(updated)` row over a degraded component. The field is optional on
- * every one of these message types, so a caller with nothing to report still
- * composes the brace-less row byte for byte.
- *
- * D-13: the `dependencies?: never` refusal rejects an unresolved producer row,
- * whose markers `resolveRows` has not yet composed into `reasons`.
- */
-export function installedLikeRow(
-  icon: string,
-  p: {
-    readonly name: string;
-    readonly scope?: Scope;
-    readonly dependencies?: never;
-    readonly reasons?: readonly Reason[];
-  },
-  mpScope: Scope,
-  versionToken: string,
-  label: string,
-): string {
-  return joinTokens([
-    icon,
-    p.name,
-    renderScopeBracket(p.scope, mpScope),
-    versionToken,
-    label,
-    composeReasons(p.reasons),
-  ]);
-}
-
-/**
- * The not-installed and realized-removal row renderers, exported so the
- * per-command render maps in `orchestrators/*.messaging.ts` CALL the central
- * presentation vocabulary (D-11) instead of re-inlining byte-identical arm
- * bodies. `renderPluginRow` dispatches to exactly these, so the central switch
- * and every command map cannot drift.
- */
-export function renderUninstalledRow(
-  p: ResolvedRow<PluginUninstalledMessage>,
-  mpScope: Scope,
-): string {
-  return joinTokens([
-    ICON_AVAILABLE,
-    p.name,
-    renderScopeBracket(p.scope, mpScope),
-    renderVersion(p.version),
-    "(uninstalled)",
-    // WLIF-06: the row's own `reasons`, formatted exactly as the `installed` /
-    // `updated` / `reinstalled` arms format theirs. MSG-SD-3: every marker
-    // policy maps `uninstalled` to off (D-12), so a removal row carries no
-    // soft-dep marker, whatever the removed record declared.
-    composeReasons(p.reasons),
-  ]);
-}
-
-/**
- * MSG-PL-6 / SNM-11 carve-out: `available` has NO `scope?` field.
- *
- * OUT-02: `reasons` is a REQUIRED parameter rather than a read of `p.reasons`,
- * because whether this row carries a reason brace is a fact about the calling
- * SURFACE, not about the status. Only the list surface's producer stamps the
- * entry-derived `installs disabled` token; every other surface that composes an
- * `(available)` row builds it without reasons and always has, so forwarding
- * there would be plumbing with no producer behind it. Making the parameter
- * required rather than optional is what forces each surface to state its own
- * answer at the call site instead of inheriting one silently.
- *
- * SNM-11: the no-scope-bracket carve-out family never emits soft-dependency
- * markers. Every marker policy maps `available` to off (D-12), and the
- * caller-supplied `reasons` carry only what the surface stamped.
- */
-export function renderAvailableRow(
-  p: ResolvedRow<PluginAvailableMessage>,
-  mpScope: Scope,
-  reasons: readonly Reason[] | undefined,
-): string {
-  return joinTokens([
-    ICON_AVAILABLE,
-    p.name,
-    renderScopeBracket(undefined, mpScope),
-    renderVersion(p.version),
-    "(available)",
-    composeReasons(reasons),
-  ]);
-}
-
-/**
- * RSTA-01 / D-80-03: a not-installed git-source row whose clone or mirror is
- * not materialized locally. It is the `available` row with the glyph swapped
- * (`○` -> `◌`) and the token swapped. SNM-11 carve-out: no `scope?` field.
- *
- * OUT-02 / OUT-05: D-80-03's bare-row rule NARROWS here rather than reversing.
- * What the row still refuses is every probe-derived reason and every soft-dep
- * marker -- there is no materialized tree to derive either from, which is why
- * every marker policy maps `remote` to off (D-12). What it admits is the one
- * entry-derived token, `installs disabled`, which needs no tree at all because
- * the marketplace entry is readable with no clone (DOC-02). That is what lets
- * an unfetched row state what an install would do.
- *
- * `reasons` is a REQUIRED parameter for the reason given on
- * `renderAvailableRow`: only the list surface's producer stamps the token, and
- * each surface states its own answer at the call site.
- */
-export function renderRemoteRow(
-  p: ResolvedRow<PluginRemoteMessage>,
-  mpScope: Scope,
-  reasons: readonly Reason[] | undefined,
-): string {
-  return joinTokens([
-    ICON_REMOTE,
-    p.name,
-    renderScopeBracket(undefined, mpScope),
-    renderVersion(p.version),
-    "(remote)",
-    composeReasons(reasons),
-  ]);
-}
-
-/** MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field. */
-export function renderUnavailableRow(
-  p: ResolvedRow<PluginUnavailableMessage>,
-  mpScope: Scope,
-): string {
-  return joinTokens([
-    ICON_UNINSTALLABLE,
-    p.name,
-    renderScopeBracket(undefined, mpScope),
-    renderVersion(p.version),
-    "(unavailable)",
-    composeReasons(p.reasons),
-  ]);
-}
-
-/**
- * USTAT-01 / D-64-01: the not-installed partially-available row. It is the
- * `unavailable` row with the glyph swapped (`⊘` -> `⊖`) and the token swapped.
- * MSG-PL-6 / SNM-11 carve-out: no `scope?` field.
- */
-export function renderPartiallyAvailableRow(
-  p: ResolvedRow<PluginPartiallyAvailableMessage>,
-  mpScope: Scope,
-): string {
-  return joinTokens([
-    ICON_PARTIALLY_AVAILABLE,
-    p.name,
-    renderScopeBracket(undefined, mpScope),
-    renderVersion(p.version),
-    "(partially-available)",
-    composeReasons(p.reasons),
-  ]);
-}
-
-/**
- * D-54-01 / ENBL-04: the list/info inventory row for a recorded-but-disabled
- * plugin. Subject-first grammar, using the dedicated ICON_DISABLED (`◍`) glyph
- * -- the same glyph the `(will disable)` pending-tense row carries.
- *
- * ENBL-16: the caller's `reasons` are threaded and the caller stamps at most
- * `not in manifest`. ENBL-15: every marker policy maps `disabled` to off
- * (D-12), which is what keeps a disabled row free of a soft-dep marker
- * whatever inventory the record retained.
- */
-export function renderDisabledRow(p: ResolvedRow<PluginDisabledMessage>, mpScope: Scope): string {
-  return joinTokens([
-    ICON_DISABLED,
-    p.name,
-    renderScopeBracket(p.scope, mpScope),
-    renderVersion(p.version),
-    "(disabled)",
-    composeReasons(p.reasons),
-  ]);
-}
-
-/**
- * DIFF-02 pending-tense rows: the pre-transition analogs the reconcile plan
- * projects. None carries a `version` slot (the transition has not happened
- * yet) and none carries reasons.
- *
- * Glyphs mirror the realized row of the same class, which is the established
- * precedent: `●` for `(installed)` / `(will install)` / `(will enable)`, `○`
- * for `(available)` / `(will uninstall)`, and `◍` for `(disabled)` /
- * `(will disable)`.
- *
- * FSTAT-06 / D-66-04: the `partial` modifier renders
- * `(will partially install)` when the planned install would degrade (it
- * resolves `partially-available`). There is deliberately NO
- * `will partially update` analog -- the reconcile plan has no update bucket
- * (D-66-05).
- *
- * D-53-02 / ENBL-05: the `will enable` bucket is populated only when the
- * recorded-but-disabled marker (the record's explicit `enabled: false`
- * boolean, and nothing else) is paired with a config entry whose
- * `enabled !== false`. The arm is always present so enable-wiring stays
- * type-complete.
- */
-function renderPendingRow(
-  p: ResolvedRow<
-    Extract<
-      PluginNotificationMessage,
-      { status: "will install" | "will uninstall" | "will enable" | "will disable" }
-    >
-  >,
-  mpScope: Scope,
-): string {
-  const bracket = renderScopeBracket(p.scope, mpScope);
-  switch (p.status) {
-    case "will install":
-      return joinTokens([
-        ICON_INSTALLED,
-        p.name,
-        bracket,
-        p.partial === true ? "(will partially install)" : "(will install)",
-      ]);
-    case "will uninstall":
-      return joinTokens([ICON_AVAILABLE, p.name, bracket, "(will uninstall)"]);
-    case "will enable":
-      return joinTokens([ICON_INSTALLED, p.name, bracket, "(will enable)"]);
-    case "will disable":
-      return joinTokens([ICON_DISABLED, p.name, bracket, "(will disable)"]);
+function formatPluginRow(row: ResolvedRow, mpScope: Scope): string {
+  if (row.missingPolicy === true) {
+    return `${"name" in row ? row.name : "?"} (failed) {internal: no render arm for "${row.status}"}`;
   }
-}
 
-/**
- * Renders the plugin row (no leading indent -- caller adds it). SOLE
- * site for plugin-row grammar (SNM-17). The switch lists every status and
- * has no default arm, which is the compile-time exhaustiveness gate.
- *
- * Token order follows the grammar `icon name [scope] versionToken
- * (status) {reasons}` (MSG-GR-1). Scope bracket is emitted via the
- * orphan-fold contract: the 8 scope-bearing arms
- * pass `(p.scope, mpScope)` to `renderScopeBracket`, which emits the
- * bracket ONLY when `p.scope !== undefined AND p.scope !== mpScope`. The
- * `available` / `unavailable` arms unconditionally omit the bracket per
- * MSG-PL-6 / SNM-11 by passing `(undefined, mpScope)`.
- *
- * `mpScope` is threaded from `composeMarketplaceBlock` -> `composePluginLines`
- * -> here so every per-arm bracket call has the parent marketplace's scope
- * available.
- *
- * Soft-dep markers: `p` is a resolved row, so its `reasons` already ends with
- * the markers `CENTRAL_MARKER_POLICY` allows for the `installed` / `updated` /
- * `reinstalled` / `partially-installed` rows (D-12). No arm adds a marker.
- *
- * Per-variant `composeReasons` argument, over the 19 plugin statuses:
- *  - 7 reasons-less variants (uninstalled, available, remote,
- *  will install, will uninstall, will enable, will disable) pass `undefined` --
- *  or, on the arms that can carry no marker of any kind (remote and the four
- *  pending-tense rows), drop the call entirely;
- *  - 12 reasons-bearing variants (installed, updated, reinstalled, disabled,
- *  unavailable, upgradable, failed, skipped, manual recovery, partially-installed,
- *  partially-upgradable, partially-available) pass `p.reasons`, which a
- *  resolved row always carries (empty when it has no reason).
- *
- * NOT rendered here (`notify` composes them as additional
- * indented lines AFTER the row):
- *  - `failed.cause` / `manual recovery.cause` cause-chain trailers.
- *  - `failed.rollbackPartial[]` child rows.
- */
-function renderPluginRow(p: ResolvedRow, mpScope: Scope): string {
-  switch (p.status) {
-    // `installed` (cascade transition AND the list-surface inventory row) --
-    // SURF-05 / D-63-08 threads the `reasons` brace through composeReasons;
-    // the resolved soft-dep markers sit in the SAME brace block per MSG-GR-4 (a plugin with orphan-rewake AND a missing companion extension
-    // renders as `(installed) {orphan rewake, requires pi-subagents}`). BOTH
-    // surfaces can carry a brace: INV-01 stamps `{not in manifest}` on the
-    // list inventory row. The brace is omitted only when the composed list is
-    // empty, which is the ordinary case on both surfaces -- not a property of
-    // the inventory row.
-    case "installed":
-      return joinTokens([
-        ICON_INSTALLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        "(installed)",
-        composeReasons(p.reasons),
-      ]);
-    // `updated` -- WR-12 threads the optional `reasons` brace exactly as the
-    // `installed` and `reinstalled` arms do, so an update that degraded a
-    // component names the kind instead of rendering a bare success row over it.
-    // The resolved soft-dep markers sit in the SAME brace per MSG-GR-4.
-    case "updated":
-      return joinTokens([
-        ICON_INSTALLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        composeVersionArrow(p.from, p.to),
-        "(updated)",
-        composeReasons(p.reasons),
-      ]);
-    // `reinstalled` -- WR-09 threads the optional `reasons` brace exactly as the
-    // `installed` arm above, so a reinstall that degraded a component names the
-    // kind instead of rendering a bare success row over it. The resolved
-    // soft-dep markers sit in the SAME brace per MSG-GR-4.
-    case "reinstalled":
-      return joinTokens([
-        ICON_INSTALLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        "(reinstalled)",
-        composeReasons(p.reasons),
-      ]);
-    case "uninstalled":
-      return renderUninstalledRow(p, mpScope);
-    case "available":
-      // OUT-02: no producer that renders through THIS arm stamps `reasons`, so
-      // the `undefined` is the drop stated by construction, not an omission.
-      return renderAvailableRow(p, mpScope, undefined);
-    case "remote":
-      // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is
-      // not materialized locally. Clones the `available` arm, swapping the
-      // glyph (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11
-      // carve-out: `remote` has NO `scope?` field, so the scope bracket is
-      // omitted. D-80-03 as narrowed by OUT-05: the row refuses probe- and
-      // soft-dep-derived reasons and admits only the entry-derived `installs
-      // disabled` token. No producer that renders through THIS arm stamps it,
-      // so the `undefined` is the drop stated by construction, not an omission.
-      return renderRemoteRow(p, mpScope, undefined);
-    case "unavailable":
-      return renderUnavailableRow(p, mpScope);
-    case "partially-available":
-      return renderPartiallyAvailableRow(p, mpScope);
-    case "upgradable":
-      return pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)");
-    case "partially-installed":
-      return partiallyInstalledRow(p, mpScope);
-    case "partially-upgradable":
-      // FSTAT-04 / D-66-02 / D-66-03: currently-clean installed plugin whose
-      // newer candidate would newly degrade. REUSES ICON_INSTALLED (`●`) -- the
-      // row is clean today -- exactly like the `upgradable` arm above.
-      return pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)");
-    case "skipped":
-      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)");
-    case "failed":
-      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)");
-    case "manual recovery":
-      // `(manual recovery)` discriminator preserved verbatim WITH A SPACE.
-      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)");
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
-      return renderPendingRow(p, mpScope);
-    case "disabled":
-      return renderDisabledRow(p, mpScope);
+  const layout: PluginRowLayout = PLUGIN_ROW_LAYOUT[row.status];
+  let version = "";
+  if (layout.version === "single") {
+    version = renderVersion("version" in row ? row.version : undefined);
+  } else if (layout.version === "arrow") {
+    // Only the updated layout selects the from/to version slot.
+    const updated = row as ResolvedRow<PluginUpdatedMessage>;
+    version = composeVersionArrow(updated.from, updated.to);
   }
+
+  const status =
+    row.status === "will install" && row.partial === true ? "will partially install" : row.status;
+  return joinTokens([
+    layout.icon,
+    row.name,
+    renderScopeBracket(layout.scope && "scope" in row ? row.scope : undefined, mpScope),
+    version,
+    `(${status})`,
+    composeReasons(row.reasons),
+  ]);
 }
 
 /**
@@ -1004,22 +505,6 @@ const ROW_HINT_TRAILERS = {
   "stale-gate-update": STALE_GATE_UPDATE_HINT_TRAILER,
   enable: ENABLE_HINT_TRAILER,
 } as const satisfies Record<RowHint, string>;
-
-/**
- * Compose the multi-line block for a single plugin row: the 2-space-indented
- * plugin row, the optional 4-space-indented cause-chain trailer, the AS-7
- * leaked-paths child rows, and any rollbackPartial child rows + nested
- * phase-cause trailers. The caller pushes these lines into the marketplace
- * block's accumulator in order.
- */
-function composePluginLines(p: ResolvedRow, mpScope: Scope): string[] {
-  // Byte-identical to dispatching through the central `renderPluginRow` switch:
-  // delegate to the body-parameterized variant with `renderPluginRow` as the
-  // row renderer, so the PL-4 description line, the cause-chain / AS-7
-  // leaked-paths trailers, and the rollback-partial lines are composed in
-  // exactly one place (`composePluginLinesWith`).
-  return composePluginLinesWith(p, mpScope, renderPluginRow);
-}
 
 /**
  * INFO-01: compose the marketplace-info marketplace header line.
@@ -1414,21 +899,9 @@ function isDescriptionBearingRow(
   return DESCRIPTION_BEARING_STATUS[p.status];
 }
 
-/**
- * `composePluginLines` parameterized over the per-row body renderer (D-02).
- * Byte-identical to `composePluginLines` except the column-0-indented row body
- * comes from `renderRow` rather than the central `renderPluginRow`. The
- * description / cause-chain / rollback-partial trailing lines stay composed by
- * the shared helpers so a migrated command's render map only owns the single
- * row line, never the multi-line trailers (those route through the central
- * path-redaction seam, NFR-9).
- */
-export function composePluginLinesWith(
-  p: ResolvedRow,
-  mpScope: Scope,
-  renderRow: (p: ResolvedRow, mpScope: Scope) => string,
-): string[] {
-  const lines: string[] = [`  ${renderRow(p, mpScope)}`];
+/** Composes a resolved row, then its description, hint, and failure trailers. */
+export function composePluginLines(p: ResolvedRow, mpScope: Scope): string[] {
+  const lines: string[] = [`  ${formatPluginRow(p, mpScope)}`];
 
   if (isDescriptionBearingRow(p) && p.description !== undefined && p.description.length > 0) {
     lines.push(`    ${truncateDescription(p.description)}`);

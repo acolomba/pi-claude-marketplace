@@ -11,6 +11,7 @@ import {
   type EnableMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
@@ -21,12 +22,12 @@ test("exports the complete enable and disable command contexts", () => {
 
   // act
   const contextKeys = Object.keys(DISABLE_CONTEXT);
-  const disableRenderKeys = Object.keys(DISABLE_CONTEXT.render).sort();
-  const enableRenderKeys = Object.keys(ENABLE_CONTEXT.render).sort();
+  const disableRenderKeys = Object.keys(DISABLE_CONTEXT.rowPolicies).sort();
+  const enableRenderKeys = Object.keys(ENABLE_CONTEXT.rowPolicies).sort();
 
   // assert
-  assert.deepStrictEqual(contextKeys, ["Messaging", "render", "markers"]);
-  assert.deepStrictEqual(Object.keys(ENABLE_CONTEXT), ["Messaging", "render", "markers"]);
+  assert.deepStrictEqual(contextKeys, ["Messaging", "rowPolicies"]);
+  assert.deepStrictEqual(Object.keys(ENABLE_CONTEXT), ["Messaging", "rowPolicies"]);
   assert.deepStrictEqual(DISABLE_CONTEXT.Messaging, { label: "Plugin disable" });
   assert.deepStrictEqual(ENABLE_CONTEXT.Messaging, { label: "Plugin enable" });
   assert.deepStrictEqual(disableRenderKeys, expectedDisableRenderKeys);
@@ -46,7 +47,7 @@ test("the disable context renders a complete bare disabled transition", () => {
   } as const satisfies ResolvedRow<DisableMsg>;
 
   // act
-  const actual = DISABLE_CONTEXT.render.disabled(row, "user");
+  const actual = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(actual, "◍ alpha [project] v1.2.3 (disabled)");
@@ -82,7 +83,7 @@ test("the disable context renders a complete failed row without leaking its fail
   } as const satisfies ResolvedRow<DisableMsg>;
 
   // act
-  const actual = DISABLE_CONTEXT.render.failed(row, "user");
+  const actual = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(actual, "⊘ beta v2.0.0 (failed) {permission denied, rollback partial}");
@@ -112,7 +113,7 @@ test("the disable context renders a complete idempotent skipped row", () => {
   } as const satisfies ResolvedRow<DisableMsg>;
 
   // act
-  const actual = DISABLE_CONTEXT.render.skipped(row, "project");
+  const actual = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.equal(actual, "⊘ gamma [user] v3.0.0 (skipped) {already disabled}");
@@ -148,7 +149,7 @@ test("the enable context renders a complete failed stale-gate row body", () => {
   } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const actual = ENABLE_CONTEXT.render.failed(row, "user");
+  const actual = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(actual, "⊘ delta v4.0.0 (failed) {lsp}");
@@ -177,7 +178,7 @@ test("the enable context renders a complete bare installed transition", () => {
   } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const actual = ENABLE_CONTEXT.render.installed(row, "project");
+  const actual = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.equal(actual, "● epsilon v5.0.0 (installed)");
@@ -206,7 +207,7 @@ test("the enable context renders installed content reasons before the resolved m
   } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const actual = ENABLE_CONTEXT.render.installed(row, "user");
+  const actual = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(
@@ -237,7 +238,7 @@ test("the enable context renders a partially-installed row with its resolved mar
   } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const actual = ENABLE_CONTEXT.render["partially-installed"](row, "user");
+  const actual = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(actual, "◉ theta v7.0.0 (partially-installed) {lsp, requires pi-mcp}");
@@ -265,7 +266,7 @@ test("the enable context renders a complete idempotent skipped row with optional
   } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const actual = ENABLE_CONTEXT.render.skipped(row, "user");
+  const actual = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(actual, "⊘ zeta [project] (skipped) {already enabled}");
@@ -509,4 +510,29 @@ test("staleGateDropped preserves first-seen unsupported-kind order and deduplica
 
   // assert
   assert.deepStrictEqual(actual, ["lsp", "unsupported hooks", "unsupported component"]);
+});
+
+test("ENABLE_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = ENABLE_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+  });
+});
+
+test("DISABLE_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = DISABLE_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    disabled: { markers: false, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+  });
 });

@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
+  CENTRAL_ROW_POLICY,
   resolveEnvelope,
   resolveNotAddedReason,
   resolveRows,
@@ -12,7 +13,7 @@ import {
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Dependency } from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
 import type {
-  MarkerPolicy,
+  RowPolicyMap,
   ResolvedEnvelope,
   ResolvedMarketplace,
   ResolvedRow,
@@ -42,6 +43,39 @@ void ({
   // @ts-expect-error a resolved failed row carries no live Error
   cause: new Error("x"),
 } satisfies ResolvedRow<PluginFailedMessage>);
+
+test("resolves absent policies as explicit diagnostic facts", () => {
+  // arrange
+  const row = { status: "available", name: "alpha" } satisfies PluginNotificationMessage;
+
+  // act
+  const marketplaces = resolveRows(marketplaceWith([row]), allLoaded(), {});
+
+  // assert
+  assert.deepStrictEqual(marketplaces[0]!.plugins, [
+    { status: "available", name: "alpha", severity: "error", reasons: [], missingPolicy: true },
+  ]);
+});
+
+test("a present all-false policy suppresses content without marking a diagnostic", () => {
+  // arrange
+  const row = { status: "available", name: "alpha", reasons: ["installs disabled"] } as const;
+
+  // act
+  const marketplaces = resolveRows(marketplaceWith([row]), noneLoaded(), {
+    available: { markers: false, contentReasons: false },
+  });
+
+  // assert
+  assert.deepStrictEqual(marketplaces[0]!.plugins, [
+    { status: "available", name: "alpha", reasons: [] },
+  ]);
+  assert.deepStrictEqual(row, {
+    status: "available",
+    name: "alpha",
+    reasons: ["installs disabled"],
+  });
+});
 
 describe("resolveEnvelope", () => {
   for (const { name, message, expectedEnvelope } of [
@@ -562,7 +596,7 @@ describe("resolveRows", () => {
     ]);
 
     // act
-    const resolved = resolveRows(marketplaces, allLoaded(), {});
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
 
     // assert
     assert.deepStrictEqual(resolved, [
@@ -596,7 +630,7 @@ describe("resolveRows", () => {
     ]);
 
     // act
-    const resolved = resolveRows(marketplaces, allLoaded(), {});
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
 
     // assert
     assert.deepStrictEqual(resolved[0]!.plugins, [
@@ -623,7 +657,7 @@ describe("resolveRows", () => {
     ]);
 
     // act
-    const resolved = resolveRows(marketplaces, allLoaded(), {});
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
 
     // assert
     assert.deepStrictEqual(resolved[0]!.plugins, [
@@ -654,7 +688,7 @@ describe("resolveRows", () => {
     ]);
 
     // act
-    const resolved = resolveRows(marketplaces, allLoaded(), {});
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
 
     // assert
     assert.deepStrictEqual(resolved[0]!.plugins, [
@@ -685,7 +719,7 @@ describe("resolveRows", () => {
     ]);
 
     // act
-    const resolved = resolveRows(marketplaces, allLoaded(), {});
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
 
     // assert
     assert.deepStrictEqual(resolved[0]!.plugins, [
@@ -705,7 +739,7 @@ describe("resolveRows", () => {
     } satisfies PluginFailedMessage;
 
     // act
-    resolveRows(marketplaceWith([row]), allLoaded(), {}, () => true);
+    resolveRows(marketplaceWith([row]), allLoaded(), CENTRAL_ROW_POLICY);
 
     // assert
     assert.deepStrictEqual(row, {
@@ -727,7 +761,7 @@ describe("resolveRows", () => {
     } satisfies PluginNotificationMessage;
 
     // act
-    const resolved = resolveRows(marketplaceWith([row]), allLoaded(), {}, () => false);
+    const resolved = resolveRows(marketplaceWith([row]), allLoaded(), {});
 
     // assert
     assert.deepStrictEqual(row, {
@@ -737,7 +771,14 @@ describe("resolveRows", () => {
       name: "orphan",
     });
     assert.deepStrictEqual(resolved[0]!.plugins, [
-      { status: "disabled", severity: "error", needsReload: false, name: "orphan", reasons: [] },
+      {
+        status: "disabled",
+        severity: "error",
+        needsReload: false,
+        name: "orphan",
+        reasons: [],
+        missingPolicy: true,
+      },
     ]);
   });
 
@@ -746,12 +787,12 @@ describe("resolveRows", () => {
     const row = Object.freeze({ status: "unknown", severity: "info" });
 
     // act
-    const resolved = resolveRows(marketplaceWith([row as never]), allLoaded(), {}, () => false);
+    const resolved = resolveRows(marketplaceWith([row as never]), allLoaded(), {});
 
     // assert
     assert.deepStrictEqual(row, { status: "unknown", severity: "info" });
     assert.deepStrictEqual(resolved[0]!.plugins, [
-      { status: "unknown", severity: "info", reasons: [] },
+      { status: "unknown", severity: "info", reasons: [], missingPolicy: true },
     ]);
   });
 
@@ -823,7 +864,7 @@ describe("resolveRows", () => {
   }[]) {
     test(`resolves the ${expectedRow.hint} hint on a flagged ${row.status} row`, () => {
       // act
-      const resolved = resolveRows(marketplaceWith([row]), allLoaded(), {});
+      const resolved = resolveRows(marketplaceWith([row]), allLoaded(), CENTRAL_ROW_POLICY);
 
       // assert
       assert.deepStrictEqual(resolved[0]!.plugins, [expectedRow]);
@@ -865,7 +906,7 @@ describe("resolveRows", () => {
   }[]) {
     test(`resolves no hint from ${flag} on a ${row.status} row`, () => {
       // act
-      const resolved = resolveRows(marketplaceWith([row]), allLoaded(), {});
+      const resolved = resolveRows(marketplaceWith([row]), allLoaded(), CENTRAL_ROW_POLICY);
 
       // assert
       assert.deepStrictEqual(resolved[0]!.plugins, [expectedRow]);
@@ -877,7 +918,7 @@ describe("resolveRows", () => {
     const row = { status: "upgradable", name: "alpha", reasons: [], partialHint: true };
 
     // act
-    const resolved = resolveRows(marketplaceWith([row as never]), allLoaded(), {});
+    const resolved = resolveRows(marketplaceWith([row as never]), allLoaded(), CENTRAL_ROW_POLICY);
 
     // assert
     assert.deepStrictEqual(resolved[0]!.plugins, [
@@ -987,7 +1028,7 @@ describe("resolveRows", () => {
         dependencies: [dependency],
         reasons: ["orphan rewake"],
       } satisfies PluginNotificationMessage;
-      const markers = { installed: policy === "on" };
+      const markers = { installed: { markers: policy === "on", contentReasons: true } };
 
       // act
       const resolved = resolveRows(marketplaceWith([row]), snapshot, markers);
@@ -1018,7 +1059,7 @@ describe("resolveRows", () => {
         dependencies: ["workflows", "mcp", "agents"],
         reasons: ["orphan rewake", "malformed skill"],
       },
-      markers: { updated: true },
+      markers: { updated: { markers: true, contentReasons: true } },
       expectedRow: {
         status: "updated",
         severity: "info",
@@ -1043,7 +1084,7 @@ describe("resolveRows", () => {
         dependencies: ["mcp"],
         reasons: ["lsp", "lsp"],
       },
-      markers: { "partially-installed": true },
+      markers: { "partially-installed": { markers: true, contentReasons: true } },
       expectedRow: {
         status: "partially-installed",
         name: "alpha",
@@ -1053,11 +1094,11 @@ describe("resolveRows", () => {
     {
       title: "D-12: a row without dependencies gets no marker with the policy on",
       row: { status: "partially-installed", name: "alpha", reasons: ["lsp"] },
-      markers: { "partially-installed": true },
+      markers: { "partially-installed": { markers: true, contentReasons: true } },
       expectedRow: { status: "partially-installed", name: "alpha", reasons: ["lsp"] },
     },
     {
-      title: "D-12: a status the policy does not name gets no marker",
+      title: "D-12: an absent policy produces a marker-free diagnostic",
       row: {
         status: "reinstalled",
         severity: "info",
@@ -1065,19 +1106,20 @@ describe("resolveRows", () => {
         name: "alpha",
         dependencies: ["agents"],
       },
-      markers: { installed: true },
+      markers: { installed: { markers: true, contentReasons: true } },
       expectedRow: {
         status: "reinstalled",
-        severity: "info",
+        severity: "error",
         needsReload: true,
         name: "alpha",
         reasons: [],
+        missingPolicy: true,
       },
     },
   ] as const satisfies readonly {
     title: string;
     row: PluginNotificationMessage;
-    markers: MarkerPolicy;
+    markers: RowPolicyMap;
     expectedRow: ResolvedRow;
   }[]) {
     test(title, () => {

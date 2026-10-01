@@ -7,8 +7,7 @@ test("exports the complete marketplace-add command context", () => {
   // arrange
   const expected = {
     Messaging: { label: "Marketplace add" },
-    render: {},
-    markers: {},
+    rowPolicies: {},
   } as const;
 
   // act
@@ -16,7 +15,15 @@ test("exports the complete marketplace-add command context", () => {
 
   // assert
   assert.deepStrictEqual(context, expected);
-  assert.deepStrictEqual(Object.keys(context), ["Messaging", "render", "markers"]);
+  assert.deepStrictEqual(Object.keys(context), ["Messaging", "rowPolicies"]);
   assert.deepStrictEqual(Object.keys(context.Messaging), ["label"]);
-  assert.deepStrictEqual(Object.keys(context.render), []);
+  assert.deepStrictEqual(Object.keys(context.rowPolicies), []);
+});
+
+test("ADD_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = ADD_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {});
 });

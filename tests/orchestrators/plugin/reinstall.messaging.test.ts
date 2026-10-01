@@ -4,6 +4,7 @@ import test from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import {
+  REINSTALL_CONTEXT,
   narrowReasons,
   renderReinstallPartitionAndNotify,
   reinstalledRowFromOutcome,
@@ -790,4 +791,17 @@ test("WLIF-06: a reinstall that retired nothing renders the row it always render
     needsReload: true,
   });
   assert.equal(Object.hasOwn(row, "reasons"), false, "no present-and-empty reasons key");
+});
+
+test("REINSTALL_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = REINSTALL_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    reinstalled: { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    "manual recovery": { markers: false, contentReasons: true },
+  });
 });

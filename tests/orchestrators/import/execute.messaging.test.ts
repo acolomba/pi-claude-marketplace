@@ -5,6 +5,7 @@ import {
   IMPORT_CONTEXT,
   type ImportMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
@@ -39,7 +40,7 @@ test("exports the complete import command context", () => {
   // act
   const context = {
     Messaging: IMPORT_CONTEXT.Messaging,
-    render: Object.keys(IMPORT_CONTEXT.render),
+    render: Object.keys(IMPORT_CONTEXT.rowPolicies),
   };
 
   // assert
@@ -65,7 +66,7 @@ test("renders an installed row with optional fields omitted", () => {
   const expectedRow = "● alpha-plugin (installed)";
 
   // act
-  const row = IMPORT_CONTEXT.render.installed(message, "project");
+  const row = composePluginLines(message, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
@@ -103,7 +104,7 @@ test("renders installed content reasons before the resolved markers", () => {
     "● beta-plugin [user] v1.2.3 (installed) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp}";
 
   // act
-  const row = IMPORT_CONTEXT.render.installed(message, "project");
+  const row = composePluginLines(message, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
@@ -133,7 +134,7 @@ test("renders a skipped row with a compact hash version", () => {
   const expectedRow = "⊘ delta-plugin v#2ea95f8 (skipped) {already installed}";
 
   // act
-  const row = IMPORT_CONTEXT.render.skipped(message, "project");
+  const row = composePluginLines(message, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
@@ -170,7 +171,7 @@ test("renders a failed row without composing its failure lines", () => {
   const expectedRow = "⊘ epsilon-plugin [user] v3.0.0 (failed) {not in manifest}";
 
   // act
-  const row = IMPORT_CONTEXT.render.failed(message, "project");
+  const row = composePluginLines(message, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
@@ -189,7 +190,7 @@ test("renders a source-mismatch failure with optional fields omitted", () => {
   const expectedRow = "⊘ zeta-plugin (failed) {source mismatch}";
 
   // act
-  const row = IMPORT_CONTEXT.render.failed(message, "user");
+  const row = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(Object.keys(message), [
@@ -223,10 +224,23 @@ test("renders an unavailable row without a scope bracket", () => {
   const expectedRow = "⊘ eta-plugin v4.0.0 (unavailable) {no longer installable}";
 
   // act
-  const row = IMPORT_CONTEXT.render.unavailable(message, "project");
+  const row = composePluginLines(message, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
   assert.strictEqual(Object.hasOwn(message, "scope"), false);
   assert.strictEqual(row, expectedRow);
+});
+
+test("IMPORT_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = IMPORT_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    installed: { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    unavailable: { markers: false, contentReasons: true },
+  });
 });

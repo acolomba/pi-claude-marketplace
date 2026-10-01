@@ -2,25 +2,24 @@
  * tests/architecture/soft-dep-marker-policy.test.ts -- SC-5 statement of the
  * per-verb soft-dependency marker table.
  *
- * D-12: each command's marker policy is data on its `CommandContext`, in a
- * `markers` map total over the command's own statuses. The legacy central
- * `notify()` path reads `CENTRAL_MARKER_POLICY`. `resolveRows` appends a
- * `{requires ...}` marker only for a status its policy maps to `true`.
+ * D-12: each command's reason policy is data on its `CommandContext`, in a
+ * `rowPolicies` map total over the command's own statuses. The central
+ * `notify()` path reads `CENTRAL_ROW_POLICY`. `resolveRows` appends a
+ * `{requires ...}` marker only when the status policy enables `markers`.
  *
  * Soft-dependency markers are possible only on the four statuses whose row can
  * declare `dependencies`: `installed`, `updated`, `reinstalled`, and
  * `partially-installed`. Every other status is off in every policy.
  *
  * `plugin list`'s `partially-installed` is the one deliberate off among those
- * four. Its arm composes the row through `pluginRow`, and its producer never
- * sets `dependencies` on that row, so the value has no byte effect today; it
- * is recorded as data all the same.
+ * four. Its producer never sets `dependencies` on that row. The explicit
+ * policy also suppresses markers if a future producer supplies dependencies.
  *
  * MSG-SD-3 keeps removal rows (`uninstalled`) marker-free, and ENBL-15 /
  * ENBL-18 keep `disabled` rows marker-free.
  *
  * The table below is written out as an independent literal, one row per
- * context plus `CENTRAL_MARKER_POLICY`, so a changed policy value turns exactly
+ * context plus `CENTRAL_ROW_POLICY`, so a changed policy value turns exactly
  * that row red. This suite only restates data. The derivation (policy x
  * dependencies x snapshot -> markers) is owned by
  * tests/shared/notification-resolve.test.ts.
@@ -61,7 +60,7 @@ import {
   PENDING_CONTEXT,
   RECONCILE_APPLIED_CONTEXT,
 } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
-import { CENTRAL_MARKER_POLICY } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import { CENTRAL_ROW_POLICY } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 import {
   EXTENSION_ROOT_REL,
@@ -72,29 +71,30 @@ import { REPO_ROOT, filesMatching, stripComments } from "./source-scan.ts";
 import { plantOffender, withTempRoot } from "./temp-root-control.ts";
 
 /** The one `DECLARED_MARKERS` entry that is not a `CommandContext`. */
-const CENTRAL_POLICY_NAME = "CENTRAL_MARKER_POLICY (legacy notify)";
+const CENTRAL_POLICY_NAME = "CENTRAL_ROW_POLICY (legacy notify)";
 
 /** The marker policy each named table row states, read from its module. */
 const DECLARED_MARKERS = {
-  "INSTALL_CONTEXT (plugin/install.messaging.ts)": INSTALL_CONTEXT.markers,
-  "LIST_CONTEXT (plugin/list.messaging.ts)": PLUGIN_LIST_CONTEXT.markers,
-  "FETCH_CONTEXT (plugin/fetch.messaging.ts)": FETCH_CONTEXT.markers,
-  "UPDATE_CONTEXT (plugin/update.messaging.ts)": PLUGIN_UPDATE_CONTEXT.markers,
-  "ENABLE_CONTEXT (plugin/enable-disable.messaging.ts)": ENABLE_CONTEXT.markers,
-  "DISABLE_CONTEXT (plugin/enable-disable.messaging.ts)": DISABLE_CONTEXT.markers,
-  "REINSTALL_CONTEXT (plugin/reinstall.messaging.ts)": REINSTALL_CONTEXT.markers,
-  "UNINSTALL_CONTEXT (plugin/uninstall.messaging.ts)": UNINSTALL_CONTEXT.markers,
-  "PLUGIN_INFO_CONTEXT (plugin/info.messaging.ts)": PLUGIN_INFO_CONTEXT.markers,
-  "IMPORT_CONTEXT (import/execute.messaging.ts)": IMPORT_CONTEXT.markers,
-  "UPDATE_CONTEXT (marketplace/update.messaging.ts)": MARKETPLACE_UPDATE_CONTEXT.markers,
-  "REMOVE_CONTEXT (marketplace/remove.messaging.ts)": REMOVE_CONTEXT.markers,
-  "AUTOUPDATE_CONTEXT (marketplace/autoupdate.messaging.ts)": AUTOUPDATE_CONTEXT.markers,
-  "NOAUTOUPDATE_CONTEXT (marketplace/autoupdate.messaging.ts)": NOAUTOUPDATE_CONTEXT.markers,
-  "ADD_CONTEXT (marketplace/add.messaging.ts)": ADD_CONTEXT.markers,
-  "LIST_CONTEXT (marketplace/list.messaging.ts)": MARKETPLACE_LIST_CONTEXT.markers,
-  "PENDING_CONTEXT (reconcile/reconcile.messaging.ts)": PENDING_CONTEXT.markers,
-  "RECONCILE_APPLIED_CONTEXT (reconcile/reconcile.messaging.ts)": RECONCILE_APPLIED_CONTEXT.markers,
-  "CENTRAL_MARKER_POLICY (legacy notify)": CENTRAL_MARKER_POLICY,
+  "INSTALL_CONTEXT (plugin/install.messaging.ts)": INSTALL_CONTEXT.rowPolicies,
+  "LIST_CONTEXT (plugin/list.messaging.ts)": PLUGIN_LIST_CONTEXT.rowPolicies,
+  "FETCH_CONTEXT (plugin/fetch.messaging.ts)": FETCH_CONTEXT.rowPolicies,
+  "UPDATE_CONTEXT (plugin/update.messaging.ts)": PLUGIN_UPDATE_CONTEXT.rowPolicies,
+  "ENABLE_CONTEXT (plugin/enable-disable.messaging.ts)": ENABLE_CONTEXT.rowPolicies,
+  "DISABLE_CONTEXT (plugin/enable-disable.messaging.ts)": DISABLE_CONTEXT.rowPolicies,
+  "REINSTALL_CONTEXT (plugin/reinstall.messaging.ts)": REINSTALL_CONTEXT.rowPolicies,
+  "UNINSTALL_CONTEXT (plugin/uninstall.messaging.ts)": UNINSTALL_CONTEXT.rowPolicies,
+  "PLUGIN_INFO_CONTEXT (plugin/info.messaging.ts)": PLUGIN_INFO_CONTEXT.rowPolicies,
+  "IMPORT_CONTEXT (import/execute.messaging.ts)": IMPORT_CONTEXT.rowPolicies,
+  "UPDATE_CONTEXT (marketplace/update.messaging.ts)": MARKETPLACE_UPDATE_CONTEXT.rowPolicies,
+  "REMOVE_CONTEXT (marketplace/remove.messaging.ts)": REMOVE_CONTEXT.rowPolicies,
+  "AUTOUPDATE_CONTEXT (marketplace/autoupdate.messaging.ts)": AUTOUPDATE_CONTEXT.rowPolicies,
+  "NOAUTOUPDATE_CONTEXT (marketplace/autoupdate.messaging.ts)": NOAUTOUPDATE_CONTEXT.rowPolicies,
+  "ADD_CONTEXT (marketplace/add.messaging.ts)": ADD_CONTEXT.rowPolicies,
+  "LIST_CONTEXT (marketplace/list.messaging.ts)": MARKETPLACE_LIST_CONTEXT.rowPolicies,
+  "PENDING_CONTEXT (reconcile/reconcile.messaging.ts)": PENDING_CONTEXT.rowPolicies,
+  "RECONCILE_APPLIED_CONTEXT (reconcile/reconcile.messaging.ts)":
+    RECONCILE_APPLIED_CONTEXT.rowPolicies,
+  "CENTRAL_ROW_POLICY (legacy notify)": CENTRAL_ROW_POLICY,
 };
 
 /** SC-5: the independent literal each declared policy is compared with. */
@@ -102,89 +102,119 @@ const MARKER_POLICY_TABLE = [
   {
     name: "INSTALL_CONTEXT (plugin/install.messaging.ts)",
     markers: {
-      installed: true,
-      "partially-installed": true,
-      failed: false,
-      unavailable: false,
-      "partially-available": false,
-      disabled: false,
+      installed: { markers: true, contentReasons: true },
+      "partially-installed": { markers: true, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
+      unavailable: { markers: false, contentReasons: true },
+      "partially-available": { markers: false, contentReasons: true },
+      disabled: { markers: false, contentReasons: true },
     },
   },
   {
     name: "LIST_CONTEXT (plugin/list.messaging.ts)",
     markers: {
-      installed: true,
-      available: false,
-      "partially-available": false,
-      unavailable: false,
-      upgradable: false,
-      "partially-installed": false,
-      "partially-upgradable": false,
-      disabled: false,
-      failed: false,
-      remote: false,
+      installed: { markers: true, contentReasons: true },
+      available: { markers: false, contentReasons: true },
+      "partially-available": { markers: false, contentReasons: true },
+      unavailable: { markers: false, contentReasons: true },
+      upgradable: { markers: false, contentReasons: true },
+      "partially-installed": { markers: false, contentReasons: true },
+      "partially-upgradable": { markers: false, contentReasons: true },
+      disabled: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
+      remote: { markers: false, contentReasons: true },
     },
   },
   {
     name: "FETCH_CONTEXT (plugin/fetch.messaging.ts)",
     markers: {
-      available: false,
-      "partially-available": false,
-      unavailable: false,
-      remote: false,
-      skipped: false,
-      failed: false,
+      available: { markers: false, contentReasons: false },
+      "partially-available": { markers: false, contentReasons: true },
+      unavailable: { markers: false, contentReasons: true },
+      remote: { markers: false, contentReasons: false },
+      skipped: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
     },
   },
   {
     name: "UPDATE_CONTEXT (plugin/update.messaging.ts)",
     markers: {
-      updated: true,
-      "partially-installed": true,
-      skipped: false,
-      "partially-upgradable": false,
-      failed: false,
+      updated: { markers: true, contentReasons: true },
+      "partially-installed": { markers: true, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
+      "partially-upgradable": { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
     },
   },
   {
     name: "ENABLE_CONTEXT (plugin/enable-disable.messaging.ts)",
-    markers: { installed: true, "partially-installed": true, skipped: false, failed: false },
+    markers: {
+      installed: { markers: true, contentReasons: true },
+      "partially-installed": { markers: true, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
+    },
   },
   {
     name: "DISABLE_CONTEXT (plugin/enable-disable.messaging.ts)",
-    markers: { disabled: false, skipped: false, failed: false },
+    markers: {
+      disabled: { markers: false, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
+    },
   },
   {
     name: "REINSTALL_CONTEXT (plugin/reinstall.messaging.ts)",
-    markers: { reinstalled: true, skipped: false, failed: false, "manual recovery": false },
+    markers: {
+      reinstalled: { markers: true, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
+      "manual recovery": { markers: false, contentReasons: true },
+    },
   },
   {
     name: "UNINSTALL_CONTEXT (plugin/uninstall.messaging.ts)",
-    markers: { uninstalled: false, failed: false },
+    markers: {
+      uninstalled: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
+    },
   },
   {
     name: "PLUGIN_INFO_CONTEXT (plugin/info.messaging.ts)",
-    markers: { skipped: false },
+    markers: { skipped: { markers: false, contentReasons: true } },
   },
   {
     name: "IMPORT_CONTEXT (import/execute.messaging.ts)",
-    markers: { installed: true, skipped: false, failed: false, unavailable: false },
+    markers: {
+      installed: { markers: true, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
+      unavailable: { markers: false, contentReasons: true },
+    },
   },
   {
     name: "UPDATE_CONTEXT (marketplace/update.messaging.ts)",
-    markers: { updated: true, "partially-installed": true, skipped: false, failed: false },
+    markers: {
+      updated: { markers: true, contentReasons: true },
+      "partially-installed": { markers: true, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
+    },
   },
   {
     name: "REMOVE_CONTEXT (marketplace/remove.messaging.ts)",
-    markers: { uninstalled: false, failed: false },
+    markers: {
+      uninstalled: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
+    },
   },
   {
     name: "AUTOUPDATE_CONTEXT (marketplace/autoupdate.messaging.ts)",
-    markers: { failed: false },
+    markers: { failed: { markers: false, contentReasons: true } },
   },
   {
     name: "NOAUTOUPDATE_CONTEXT (marketplace/autoupdate.messaging.ts)",
-    markers: { failed: false },
+    markers: { failed: { markers: false, contentReasons: true } },
   },
   {
     name: "ADD_CONTEXT (marketplace/add.messaging.ts)",
@@ -197,50 +227,52 @@ const MARKER_POLICY_TABLE = [
   {
     name: "PENDING_CONTEXT (reconcile/reconcile.messaging.ts)",
     markers: {
-      "will install": false,
-      "will uninstall": false,
-      "will enable": false,
-      "will disable": false,
-      failed: false,
+      "will install": { markers: false, contentReasons: false },
+      "will uninstall": { markers: false, contentReasons: false },
+      "will enable": { markers: false, contentReasons: false },
+      "will disable": { markers: false, contentReasons: false },
+      failed: { markers: false, contentReasons: true },
     },
   },
   {
     name: "RECONCILE_APPLIED_CONTEXT (reconcile/reconcile.messaging.ts)",
     markers: {
-      installed: true,
-      "partially-installed": true,
-      uninstalled: false,
-      disabled: false,
-      failed: false,
+      installed: { markers: true, contentReasons: true },
+      "partially-installed": { markers: true, contentReasons: true },
+      uninstalled: { markers: false, contentReasons: false },
+      disabled: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
     },
   },
   {
-    name: "CENTRAL_MARKER_POLICY (legacy notify)",
+    name: "CENTRAL_ROW_POLICY (legacy notify)",
     markers: {
-      installed: true,
-      updated: true,
-      reinstalled: true,
-      "partially-installed": true,
-      uninstalled: false,
-      disabled: false,
-      available: false,
-      remote: false,
-      unavailable: false,
-      "partially-available": false,
-      upgradable: false,
-      "partially-upgradable": false,
-      failed: false,
-      skipped: false,
-      "manual recovery": false,
-      "will install": false,
-      "will uninstall": false,
-      "will enable": false,
-      "will disable": false,
+      installed: { markers: true, contentReasons: true },
+      updated: { markers: true, contentReasons: true },
+      reinstalled: { markers: true, contentReasons: true },
+      "partially-installed": { markers: true, contentReasons: true },
+      uninstalled: { markers: false, contentReasons: true },
+      disabled: { markers: false, contentReasons: true },
+      available: { markers: false, contentReasons: false },
+      remote: { markers: false, contentReasons: false },
+      unavailable: { markers: false, contentReasons: true },
+      "partially-available": { markers: false, contentReasons: true },
+      upgradable: { markers: false, contentReasons: true },
+      "partially-upgradable": { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
+      "manual recovery": { markers: false, contentReasons: true },
+      "will install": { markers: false, contentReasons: false },
+      "will uninstall": { markers: false, contentReasons: false },
+      "will enable": { markers: false, contentReasons: false },
+      "will disable": { markers: false, contentReasons: false },
     },
   },
 ] satisfies readonly {
   name: keyof typeof DECLARED_MARKERS;
-  markers: Readonly<Record<string, boolean>>;
+  markers: Readonly<
+    Record<string, { readonly markers: boolean; readonly contentReasons: boolean }>
+  >;
 }[];
 
 for (const { name, markers } of MARKER_POLICY_TABLE) {
@@ -329,9 +361,8 @@ test("SC-5: the context scan reports a context planted in a copy of a real messa
       [
         "export const PLANTED_CONTEXT = {",
         '  Messaging: { label: "Planted" },',
-        "  render: {},",
-        "  markers: {},",
-        "} as const satisfies CommandContext<never, never>;",
+        "  rowPolicies: {},",
+        "} as const satisfies CommandContext<never>;",
       ].join("\n"),
     );
 
@@ -353,12 +384,11 @@ test("SC-5: an unexported context keeps its own name after an exported render ma
       root,
       PLANTED_CONTEXT_HOST,
       [
-        "export const PLANTED_RENDER = {};",
+        "export const PLANTED_POLICY = {};",
         "const PLANTED_CONTEXT = {",
         '  Messaging: { label: "Planted" },',
-        "  render: PLANTED_RENDER,",
-        "  markers: {},",
-        "} as const satisfies CommandContext<never, never>;",
+        "  rowPolicies: PLANTED_POLICY,",
+        "} as const satisfies CommandContext<never>;",
       ].join("\n"),
     );
 

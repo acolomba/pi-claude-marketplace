@@ -3,34 +3,15 @@ import { test } from "node:test";
 
 import {
   composeMarketplaceBlock,
-  composePluginLinesWith,
+  composePluginLines,
   composeReconcileAppliedBody,
-  composeReasons,
-  composeVersionArrow,
   formatNotificationText,
-  ICON_AVAILABLE,
-  ICON_DISABLED,
-  ICON_INSTALLED,
-  ICON_PARTIALLY_INSTALLED,
-  ICON_UNINSTALLABLE,
-  installedLikeRow,
-  joinTokens,
-  partiallyInstalledRow,
-  pluginRow,
-  renderAvailableRow,
-  renderDisabledRow,
   renderMarketplaceInfo,
   renderMarketplaceInfoCascade,
   renderMarketplaceNotAdded,
   renderMpHeader,
-  renderPartiallyAvailableRow,
   renderPluginInfo,
   renderPluginInfoCascade,
-  renderRemoteRow,
-  renderScopeBracket,
-  renderUnavailableRow,
-  renderUninstalledRow,
-  renderVersion,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
 import type {
@@ -47,7 +28,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /**
- * PL-4: `composePluginLinesWith` selects the description-bearing rows by their
+ * PL-4: `composePluginLines` selects the description-bearing rows by their
  * status discriminant. These two spellings of that set -- by the presence of the
  * optional member, and by the status literals -- must stay the same set, so the
  * control below pins them against each other in BOTH directions and fails if a
@@ -79,26 +60,35 @@ void (true satisfies MutuallyAssignable<DescriptionBearingByMember, DescriptionB
  * markers `resolveRows` has not composed yet.
  */
 type Assignable<A, B> = [A] extends [B] ? true : false;
-type PluginRowInput = Parameters<typeof pluginRow>[1];
-type PartiallyInstalledRowInput = Parameters<typeof partiallyInstalledRow>[0];
-type InstalledLikeRowInput = Parameters<typeof installedLikeRow>[1];
-
+type PluginRowInput = Parameters<typeof composePluginLines>[0];
 void (true satisfies Assignable<ResolvedRow<PluginPartiallyInstalledMessage>, PluginRowInput>);
-void (false satisfies Assignable<PluginPartiallyInstalledMessage, PluginRowInput>);
-void (true satisfies Assignable<
-  ResolvedRow<PluginPartiallyInstalledMessage>,
-  PartiallyInstalledRowInput
->);
-void (false satisfies Assignable<PluginPartiallyInstalledMessage, PartiallyInstalledRowInput>);
-void (true satisfies Assignable<ResolvedRow<PluginInstalledMessage>, InstalledLikeRowInput>);
-void (false satisfies Assignable<PluginInstalledMessage, InstalledLikeRowInput>);
+void (false satisfies Assignable<PluginInstalledMessage, PluginRowInput>);
+
+for (const { row, expected } of [
+  {
+    row: { status: "unknown", name: "alpha", reasons: [], missingPolicy: true },
+    expected: '  alpha (failed) {internal: no render arm for "unknown"}',
+  },
+  {
+    row: { status: "unknown", reasons: [], missingPolicy: true },
+    expected: '  ? (failed) {internal: no render arm for "unknown"}',
+  },
+]) {
+  test(`formats the missing-policy diagnostic ${expected}`, () => {
+    // act
+    const lines = composePluginLines(row as never, "user");
+
+    // assert
+    assert.deepStrictEqual(lines, [expected]);
+  });
+}
 
 test("exports notification grammar from its named owner", () => {
   // arrange
   const expectedType = "function";
 
   // act
-  const actualType = typeof joinTokens;
+  const actualType = typeof composePluginLines;
 
   // assert
   assert.equal(actualType, expectedType);
@@ -359,7 +349,7 @@ test("composes descriptions, hints, causes, leaks, and rollback failures in orde
   } satisfies ResolvedRow<PluginFailedMessage>;
 
   // act
-  const lines = composePluginLinesWith(plugin, "user", () => "⊘ alpha (failed) {rollback partial}");
+  const lines = composePluginLines(plugin, "user");
 
   // assert
   assert.deepStrictEqual(lines, [
@@ -383,7 +373,7 @@ for (const { plugin, expectedLines } of [
       hint: "partial-install",
     },
     expectedLines: [
-      "  row",
+      "  ⊖ alpha (partially-available) {lsp}",
       "    summary",
       "    Re-run with --partial to install the supported components.",
     ],
@@ -397,7 +387,7 @@ for (const { plugin, expectedLines } of [
       hint: "partial-update",
     },
     expectedLines: [
-      "  row",
+      "  ● alpha (partially-upgradable) {lsp}",
       "    summary",
       "    Re-run with --partial to update with the supported components.",
     ],
@@ -412,7 +402,11 @@ for (const { plugin, expectedLines } of [
       reasons: [],
       hint: "enable",
     },
-    expectedLines: ["  row", "    summary", "    Run enable on this plugin to use its components."],
+    expectedLines: [
+      "  ◍ alpha (disabled)",
+      "    summary",
+      "    Run enable on this plugin to use its components.",
+    ],
   },
   {
     plugin: {
@@ -428,7 +422,7 @@ for (const { plugin, expectedLines } of [
       },
     },
     expectedLines: [
-      "  row",
+      "  ⊘ alpha (failed)",
       "    Run update --partial on this plugin, then enable it again.",
       "    cause: gate",
     ],
@@ -436,7 +430,7 @@ for (const { plugin, expectedLines } of [
 ] as const satisfies readonly { plugin: ResolvedRow; expectedLines: readonly string[] }[]) {
   test(`renders the ${plugin.hint} hint after the description and before any failure line`, () => {
     // act
-    const lines = composePluginLinesWith(plugin, "user", () => "row");
+    const lines = composePluginLines(plugin, "user");
 
     // assert
     assert.deepStrictEqual(lines, expectedLines);
@@ -448,20 +442,18 @@ test("truncates a long inventory description and preserves a short one", () => {
   const longDescription = "x".repeat(67);
 
   // act
-  const longLines = composePluginLinesWith(
-    { status: "available", name: "alpha", description: longDescription } as never,
+  const longLines = composePluginLines(
+    { status: "available", name: "alpha", description: longDescription, reasons: [] },
     "user",
-    () => "row",
   );
-  const shortLines = composePluginLinesWith(
-    { status: "available", name: "alpha", description: "short" } as never,
+  const shortLines = composePluginLines(
+    { status: "available", name: "alpha", description: "short", reasons: [] },
     "user",
-    () => "row",
   );
 
   // assert
-  assert.deepStrictEqual(longLines, ["  row", `    ${"x".repeat(63)}...`]);
-  assert.deepStrictEqual(shortLines, ["  row", "    short"]);
+  assert.deepStrictEqual(longLines, ["  ○ alpha (available)", `    ${"x".repeat(63)}...`]);
+  assert.deepStrictEqual(shortLines, ["  ○ alpha (available)", "    short"]);
 });
 
 const INFO_DETAILS = { autoupdate: false, lastUpdatedAt: "2025-01-02T03:04:05.000Z" } as const;
@@ -737,7 +729,7 @@ test("covers the unavailable install hint and long single-word wrap boundaries",
   const longWord = "x".repeat(70);
 
   // act
-  const hint = composePluginLinesWith(
+  const hint = composePluginLines(
     {
       status: "unavailable",
       name: "alpha",
@@ -745,7 +737,6 @@ test("covers the unavailable install hint and long single-word wrap boundaries",
       hint: "partial-install",
     } satisfies ResolvedRow,
     "user",
-    () => "row",
   );
   const info = renderPluginInfo({
     marketplaceName: "official",
@@ -762,7 +753,7 @@ test("covers the unavailable install hint and long single-word wrap boundaries",
 
   // assert
   assert.deepStrictEqual(hint, [
-    "  row",
+    "  ⊘ alpha (unavailable) {unsupported source}",
     "    Re-run with --partial to install the supported components.",
   ]);
   assert.equal(info.endsWith(`\n    ${longWord}`), true);
@@ -770,8 +761,16 @@ test("covers the unavailable install hint and long single-word wrap boundaries",
 
 test("optional dependency and empty cause branches collapse without extra tokens", () => {
   // arrange / act
-  const partial = partiallyInstalledRow({ name: "alpha", reasons: [] }, "user");
-  const failed = composePluginLinesWith(
+  const partial = composePluginLines(
+    {
+      ...{ name: "alpha", reasons: [] },
+      status: "partially-installed",
+      severity: "warning",
+      needsReload: true,
+    },
+    "user",
+  )[0]!.slice(2);
+  const failed = composePluginLines(
     {
       status: "failed",
       severity: "error",
@@ -780,29 +779,11 @@ test("optional dependency and empty cause branches collapse without extra tokens
       failure: { leaks: [], rollbackPartial: [] },
     } satisfies ResolvedRow<PluginFailedMessage>,
     "user",
-    () => "row",
   );
 
   // assert
   assert.equal(partial, "◉ alpha (partially-installed)");
-  assert.deepStrictEqual(failed, ["  row"]);
-});
-
-test("notification glyph constants preserve exact public values", () => {
-  // arrange
-  const expectedGlyphs = ["●", "○", "⊘", "◍", "◉"];
-
-  // act
-  const glyphs = [
-    ICON_INSTALLED,
-    ICON_AVAILABLE,
-    ICON_UNINSTALLABLE,
-    ICON_DISABLED,
-    ICON_PARTIALLY_INSTALLED,
-  ];
-
-  // assert
-  assert.deepStrictEqual(glyphs, expectedGlyphs);
+  assert.deepStrictEqual(failed, ["  ⊘ alpha (failed)"]);
 });
 
 test("the remote and partially-available glyphs preserve exact values on their rows", () => {
@@ -815,36 +796,17 @@ test("the remote and partially-available glyphs preserve exact values on their r
 
   // act
   const glyphs = [
-    renderRemoteRow({ status: "remote", name: "alpha", reasons: [] }, "user", undefined).slice(
-      0,
-      1,
-    ),
-    renderPartiallyAvailableRow(
-      { status: "partially-available", name: "alpha", reasons: [] },
-      "user",
-    ).slice(0, 1),
+    composePluginLines({ status: "remote", name: "alpha", reasons: [] }, "user")[0]!
+      .slice(2)
+      .slice(0, 1),
+    composePluginLines({ status: "partially-available", name: "alpha", reasons: [] }, "user")[0]!
+      .slice(2)
+      .slice(0, 1),
   ];
 
   // assert
   assert.deepStrictEqual(glyphs, expectedGlyphs);
 });
-
-for (const { name, parts, expected } of [
-  { name: "joins non-empty tokens with one space", parts: ["a", "b"], expected: "a b" },
-  { name: "drops empty token slots", parts: ["a", "", "b", ""], expected: "a b" },
-  { name: "joins an empty token list as an empty string", parts: [], expected: "" },
-] as const) {
-  test(name, () => {
-    // arrange
-    const expectedText = expected;
-
-    // act
-    const text = joinTokens(parts);
-
-    // assert
-    assert.equal(text, expectedText);
-  });
-}
 
 for (const { name, version, expected } of [
   { name: "omits an undefined version", version: undefined, expected: "" },
@@ -880,10 +842,18 @@ for (const { name, version, expected } of [
 ] as const) {
   test(name, () => {
     // arrange
-    const expectedVersion = expected;
+    const expectedVersion = `  ○ alpha${expected === "" ? "" : ` ${expected}`} (available)`;
 
     // act
-    const renderedVersion = renderVersion(version);
+    const renderedVersion = composePluginLines(
+      {
+        status: "available",
+        name: "alpha",
+        reasons: [],
+        ...(version === undefined ? {} : { version }),
+      },
+      "user",
+    )[0];
 
     // assert
     assert.equal(renderedVersion, expectedVersion);
@@ -912,10 +882,20 @@ for (const { name, pluginScope, marketplaceScope, expected } of [
 ] as const) {
   test(name, () => {
     // arrange
-    const expectedBracket = expected;
+    const expectedBracket = `  ● alpha${expected === "" ? "" : ` ${expected}`} (installed)`;
 
     // act
-    const bracket = renderScopeBracket(pluginScope, marketplaceScope);
+    const bracket = composePluginLines(
+      {
+        status: "installed",
+        name: "alpha",
+        reasons: [],
+        severity: "info",
+        needsReload: false,
+        ...(pluginScope === undefined ? {} : { scope: pluginScope }),
+      },
+      marketplaceScope,
+    )[0];
 
     // assert
     assert.equal(bracket, expectedBracket);
@@ -924,10 +904,21 @@ for (const { name, pluginScope, marketplaceScope, expected } of [
 
 test("composeVersionArrow renders complete version bytes on both sides", () => {
   // arrange
-  const expectedArrow = "v#0123456 → v2.0.0";
+  const expectedArrow = "  ● alpha v#0123456 → v2.0.0 (updated)";
 
   // act
-  const arrow = composeVersionArrow("hash-0123456789ab", "2.0.0");
+  const arrow = composePluginLines(
+    {
+      status: "updated",
+      name: "alpha",
+      from: "hash-0123456789ab",
+      to: "2.0.0",
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+    "user",
+  )[0];
 
   // assert
   assert.equal(arrow, expectedArrow);
@@ -952,10 +943,13 @@ for (const { name, reasons, expected } of [
 ] as const) {
   test(name, () => {
     // arrange
-    const expectedReasons = expected;
+    const expectedReasons = `  ○ alpha (available)${expected === "" ? "" : ` ${expected}`}`;
 
     // act
-    const renderedReasons = composeReasons(reasons);
+    const renderedReasons = composePluginLines(
+      { status: "available", name: "alpha", reasons: reasons ?? [] },
+      "user",
+    )[0];
 
     // assert
     assert.equal(renderedReasons, expectedReasons);
@@ -967,12 +961,14 @@ test("pluginRow composes scope, version, label, and reasons exactly", () => {
   const expectedRow = "⊘ alpha [project] v1.0.0 (failed) {not found}";
 
   // act
-  const row = pluginRow(
-    "⊘",
-    { name: "alpha", scope: "project", version: "1.0.0", reasons: ["not found"] },
+  const row = composePluginLines(
+    {
+      ...{ name: "alpha", scope: "project", version: "1.0.0", reasons: ["not found"] },
+      status: "failed",
+      severity: "error",
+    },
     "user",
-    "(failed)",
-  );
+  )[0]!.slice(2);
 
   // assert
   assert.equal(row, expectedRow);
@@ -983,10 +979,15 @@ test("partiallyInstalledRow composes its resolved reasons in order", () => {
   const expectedRow = "◉ alpha v1.0.0 (partially-installed) {lsp, requires pi-subagents}";
 
   // act
-  const row = partiallyInstalledRow(
-    { name: "alpha", version: "1.0.0", reasons: ["lsp", "requires pi-subagents"] },
+  const row = composePluginLines(
+    {
+      ...{ name: "alpha", version: "1.0.0", reasons: ["lsp", "requires pi-subagents"] },
+      status: "partially-installed",
+      severity: "warning",
+      needsReload: true,
+    },
     "user",
-  );
+  )[0]!.slice(2);
 
   // assert
   assert.equal(row, expectedRow);
@@ -997,13 +998,16 @@ test("installedLikeRow composes an exact transition row", () => {
   const expectedRow = "● alpha [project] v1.0.0 (installed) {orphan rewake}";
 
   // act
-  const row = installedLikeRow(
-    "●",
-    { name: "alpha", scope: "project", reasons: ["orphan rewake"] },
+  const row = composePluginLines(
+    {
+      ...{ name: "alpha", scope: "project", reasons: ["orphan rewake"] },
+      status: "installed",
+      version: "1.0.0",
+      severity: "info",
+      needsReload: true,
+    },
     "user",
-    "v1.0.0",
-    "(installed)",
-  );
+  )[0]!.slice(2);
 
   // assert
   assert.equal(row, expectedRow);
@@ -1013,7 +1017,7 @@ for (const { name, row, expected } of [
   {
     name: "renderUninstalledRow renders a realized removal",
     row: () =>
-      renderUninstalledRow(
+      composePluginLines(
         {
           status: "uninstalled",
           name: "alpha",
@@ -1024,49 +1028,55 @@ for (const { name, row, expected } of [
           reasons: [],
         },
         "user",
-      ),
+      )[0]!.slice(2),
     expected: "○ alpha [project] v1.0.0 (uninstalled)",
   },
   {
     name: "renderAvailableRow renders an entry-derived reason",
     row: () =>
-      renderAvailableRow(
-        { status: "available", name: "alpha", version: "1.0.0", reasons: [] },
+      composePluginLines(
+        {
+          ...{ status: "available", name: "alpha", version: "1.0.0", reasons: [] },
+          reasons: ["installs disabled"],
+        },
         "user",
-        ["installs disabled"],
-      ),
+      )[0]!.slice(2),
     expected: "○ alpha v1.0.0 (available) {installs disabled}",
   },
   {
     name: "renderRemoteRow renders an entry-derived reason",
     row: () =>
-      renderRemoteRow({ status: "remote", name: "alpha", version: "1.0.0", reasons: [] }, "user", [
-        "installs disabled",
-      ]),
+      composePluginLines(
+        {
+          ...{ status: "remote", name: "alpha", version: "1.0.0", reasons: [] },
+          reasons: ["installs disabled"],
+        },
+        "user",
+      )[0]!.slice(2),
     expected: "◌ alpha v1.0.0 (remote) {installs disabled}",
   },
   {
     name: "renderUnavailableRow renders structural reasons",
     row: () =>
-      renderUnavailableRow(
+      composePluginLines(
         { status: "unavailable", name: "alpha", version: "1.0.0", reasons: ["invalid manifest"] },
         "user",
-      ),
+      )[0]!.slice(2),
     expected: "⊘ alpha v1.0.0 (unavailable) {invalid manifest}",
   },
   {
     name: "renderPartiallyAvailableRow renders dropped kinds",
     row: () =>
-      renderPartiallyAvailableRow(
+      composePluginLines(
         { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
         "user",
-      ),
+      )[0]!.slice(2),
     expected: "⊖ alpha v1.0.0 (partially-available) {lsp}",
   },
   {
     name: "renderDisabledRow renders an orphan-fold scope and reason",
     row: () =>
-      renderDisabledRow(
+      composePluginLines(
         {
           status: "disabled",
           name: "alpha",
@@ -1077,7 +1087,7 @@ for (const { name, row, expected } of [
           needsReload: false,
         },
         "user",
-      ),
+      )[0]!.slice(2),
     expected: "◍ alpha [project] v1.0.0 (disabled) {not in manifest}",
   },
 ] as const) {
