@@ -27,8 +27,9 @@ boundaries and production dead-code with no new suppression, the
 unused-type-member gate, and 100% coverage. Each phase also leaves the text byte
 form unchanged. `docs/output-catalog.md` diffs empty, and the wire corpus
 captured in Phase 1 re-diffs empty, except for PMOD-04 credential redaction.
-On 2026-10-01 the user also approved replacing exactly 25 synthetic callback
-test emissions during Phase 2, with an exact before/after record. Phase 2
+On 2026-10-01 the user also approved replacing exactly 28 synthetic callback
+test emissions during Phase 2 (25 initially, then three explicitly approved
+summary-owner occurrences), with an exact before/after record. Phase 2
 CONTEXT.md D-07 and RESEARCH.md enumerate this exception; all production
 catalog bytes and every other corpus occurrence remain fixed.
 Phase 7's close-out amends one piece of catalog prose, with no fenced-block
@@ -116,14 +117,14 @@ Plans:
 
 1. Every `CommandContext` carries a total row-policy map keyed by status. The map holds data, such as marker and content-reason switches, and keeps the `satisfies` exhaustiveness anchor. The `(row, probe, mpScope) => string` render callbacks, the central `renderPluginRow` switch, and the `dispatchRow` string fallback are deleted.
 2. Each known per-command divergence has an owner test that asserts both the policy value and the rendered text. The known divergences are: `partially-installed` without markers on `plugin list`; `available` and `remote` with content reasons on `plugin list`; `uninstalled` without reasons in reconcile-applied; the two row forms of `disabled`; and pending rows that ignore the probe.
-3. The 70 direct render-arm test calls in 12 test files assert policies plus text formatting instead. No temporary adapter survives the phase.
+3. The direct render-arm test calls in 12 test files assert policies plus text formatting instead. Execution's AST census corrected the original 70-call estimate to 69 invocations; all are migrated. No temporary adapter survives the phase.
 4. The `pending` retained-workflow-staging advisory travels as structured data (`{name, envelopeCount?}`). The text strategy composes the sentence and its indent, and the `pending` output is byte-identical to the baseline.
-5. The catalog diff is empty. The wire corpus changes only the 25 synthetic test occurrences approved in Phase 2 D-07, with an exact before/after ledger; all other occurrences remain unchanged.
+5. The catalog diff is empty. The wire corpus changes only the 28 synthetic test occurrences approved in Phase 2 D-07, with an exact before/after ledger; all other occurrences remain unchanged.
 
-**Plans:** 2 plans, sequential (waves 1-2)
+**Plans:** 1/2 plans executed, sequential (waves 1-2)
 
 **Wave 1**
-- [ ] 02-01-PLAN.md — Row-policy migration, owner tests, and the approved synthetic corpus patch
+- [x] 02-01-PLAN.md — Row-policy migration, owner tests, and the approved synthetic corpus patch
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 02-02-PLAN.md — Pending workflow facts, edge tests, and full quality gates
@@ -211,7 +212,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Presentation Model | 16/16 | Complete    | 2026-10-01 |
-| 2. Row Policies | 0/TBD | Not started | - |
+| 2. Row Policies | 1/2 | In Progress|  |
 | 3. Typed Raw Surfaces | 0/TBD | Not started | - |
 | 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |
 | 5. Mode-Selected JSON Sink | 0/TBD | Not started | - |

@@ -57,8 +57,11 @@ on 2026-10-01; no new Claude Code behavior or divergence requires research.
   output unchanged. Starting baseline: 2,661 corpus entries and the catalog
   at upstream commit `e40d3dda` (206 states, 26,848 bytes). On 2026-10-01 the
   user approved a narrow exception: "yes, narrow update is fine". Replace
-  only the 25 synthetic callback emissions enumerated in `02-RESEARCH.md`
-  with the migrated tests' real-policy emissions. Record exact before/after
+  only the 25 synthetic callback emissions enumerated in `02-RESEARCH.md`,
+  plus the three summary-owner occurrences at original lines 2633, 2634,
+  and 2640 identified during execution. The user explicitly approved this
+  extension with "yes": 28 replacements total, 2,633 unchanged occurrences.
+  Replace them with the migrated tests' real-policy emissions. Record exact before/after
   triples, owner files, multiplicities, and the behavior each test preserves.
   Keep severity, argument count, and all other corpus occurrences unchanged;
   keep the production catalog unchanged. No full recapture, blanket acceptance,

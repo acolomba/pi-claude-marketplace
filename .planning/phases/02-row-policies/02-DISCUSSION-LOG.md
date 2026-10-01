@@ -44,6 +44,30 @@ The assumption-delta scan found the word `fallback` in the deletion requirement.
 Disposition: no change. The primary noun remains command row policy; removing
 the old fallback does not introduce another provider or a new selectable mode.
 
+## Additional Corpus Census Omission
+
+The complete execution capture found three more callback-only emissions in
+`tests/shared/notification-summary.test.ts`, omitted from the research census.
+At immutable baseline lines 2633 and 2634, `  alpha (failed)` becomes
+`  ⊘ alpha (failed) {not found}`. At line 2640,
+`  alpha (partially-upgradable)` becomes
+`  ● alpha (partially-upgradable) {lsp}`. Severity remains error/error/null;
+argument counts remain 2/2/1. All other output matches after the approved
+25 replacements; the production catalog remains unchanged.
+
+The agent asked for explicit approval to extend the exception from 25 to 28.
+**User decision:** "yes". This authorizes exactly the three additional
+occurrences above: 28 replacements, 2,633 unchanged, 2,661 total. Severity,
+argument counts, metadata, and the complete production catalog stay fixed.
+The execution checkpoint is resolved; finish the narrow patch and verification.
+
+Execution evidence: `npm run check` passed completely with 7,572 unit tests,
+100% line/branch/function coverage, 36 integration tests, the type-member
+gate, and seven negative controls. The subsequent complete corpus run had
+7,607 passing tests, zero failures, one environment skip, and only the three
+missing/extra pairs above. Logs: `/tmp/row-policy-check4.log` and
+`/tmp/row-policy-corpus3.log`.
+
 ## Deferred Ideas
 
 None.

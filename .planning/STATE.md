@@ -4,11 +4,11 @@ milestone: json-output
 current_phase: 2
 current_phase_name: Row Policies
 status: executing
-stopped_at: "Autonomous from phase 2: narrow corpus exception approved; planning resumes"
-last_updated: "2026-10-01T21:39:27.664Z"
+stopped_at: Approved all 28 synthetic corpus replacements; finish row-policy commits and continue pending facts
+last_updated: "2026-10-01T23:02:21.598Z"
 last_activity: 2026-10-01
-last_activity_desc: Phase 1 complete, transitioned to Phase 2
-state_head: ef3ebfdae8ec023c85940bbf9e46aa7d982c7882
+last_activity_desc: Phase 2 execution started
+state_head: 1c363b91e0fb401daec19fa33c2aff1c50161291
 progress:
   total_phases: 7
   completed_phases: 1
@@ -26,14 +26,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-01 after json-output Phase 1 verifi
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 2: Row Policies
+**Current focus:** Phase 2 — Row Policies
 
 ## Current Position
 
-Phase: 2 (Row Policies) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-01 — Phase 1 complete, transitioned to Phase 2
+Phase: 2 (Row Policies) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 2
+Last activity: 2026-10-01 — Phase 2 execution started
 
 Progress: [█░░░░░░░░░] 14% (1 of 7 phases fully verified; 16 plans complete)
 
@@ -168,9 +168,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-01T21:27:17.478Z
-**Stopped at:** Autonomous from phase 2: narrow corpus exception approved; planning resumes
-**Resume file:** .planning/phases/02-row-policies/02-CONTEXT.md
+**Last session:** 2026-10-01T23:02:21.432Z
+**Stopped at:** Approved all 28 synthetic corpus replacements; finish row-policy commits and continue pending facts
+**Resume file:** .planning/phases/02-row-policies/02-EXECUTION-CHECKPOINT.md
 
 **Current work:** Milestone json-output on `features/json`. GSD now selects
 this root milestone. All six current review findings are fixed, and the
