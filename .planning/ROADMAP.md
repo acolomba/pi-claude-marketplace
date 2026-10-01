@@ -12,7 +12,7 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 
 ## Phases
 
-- [x] **Phase 1: Presentation Model** — Every presentation decision is computed once, upstream of a text renderer that no longer probes state or walks `Error` objects (completed 2026-09-30)
+- [ ] **Phase 1: Presentation Model** — Every presentation decision is computed once, upstream of a text renderer that no longer probes state or walks `Error` objects (16 plans complete; human verification pending)
 - [ ] **Phase 2: Row Policies** — Per-verb rendering differences become a total row-policy map of data instead of string render callbacks
 - [ ] **Phase 3: Typed Raw Surfaces** — Every raw-string output surface becomes a typed model kind, so text is a pure formatter of the model
 - [ ] **Phase 4: Wire Schema and JSON Strategy** — A versioned typebox wire schema and a format-only JSON strategy, validated as a pure function and first consumed by the LLM tools
@@ -200,7 +200,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Presentation Model | 16/16 | Complete | 2026-09-30 |
+| 1. Presentation Model | 16/16 | Human verification pending | - |
 | 2. Row Policies | 0/TBD | Not started | - |
 | 3. Typed Raw Surfaces | 0/TBD | Not started | - |
 | 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |

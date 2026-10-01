@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 2
-current_phase_name: Row Policies
-status: planning
-stopped_at: Phase 01 complete, ready to plan Phase 2
-last_updated: "2026-09-30T18:29:25.960Z"
-last_activity: 2026-09-30
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: 5491c394bc871a6617f28cba8f5b194c395603e5
+current_phase: 1
+current_phase_name: Presentation Model
+status: awaiting_verification
+stopped_at: Phase 01 review fixes complete; two human review items pending
+last_updated: "2026-10-01T17:27:53Z"
+last_activity: 2026-10-01
+last_activity_desc: Six review findings fixed; automated verification passed; human review pending
+state_head: 0cb47dae
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 0
   total_plans: 16
   completed_plans: 16
-  percent: 14
+  percent: 0
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-09-30 after json-output Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 2 — Row Policies
+**Current focus:** Phase 1 human verification
 
 ## Current Position
 
-Phase: 2 — Row Policies
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-09-30 — Phase 01 complete, transitioned to Phase 2
+Phase: 1 — Presentation Model
+Plan: 16/16 complete
+Status: Awaiting two human review decisions
+Last activity: 2026-10-01 — Six findings fixed; automated checks and corpus comparison passed
 
-Progress: [█░░░░░░░░░] 14% (1 of 7 phases)
+Progress: [░░░░░░░░░░] 0% (0 of 7 phases fully verified; 16 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,14 +169,17 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-30T18:40:00Z
-**Stopped at:** Phase 01 complete, ready to plan Phase 2
-**Resume file:** None
+**Last session:** 2026-10-01T17:27:53Z
+**Stopped at:** Phase 01 automated verification passed; two human review items pending
+**Resume file:** phases/01-presentation-model/01-UAT.md
 
-**Current work:** Milestone json-output on `features/json`. Phase 1
-(Presentation Model) is complete and verified 5/5: 16 plans, PMOD-01 and
-PMOD-03 checked off, text bytes unchanged against the wire corpus and
-`docs/output-catalog.md`. Phases 2-7 are not planned yet.
+**Current work:** Milestone json-output on `features/json`. GSD now selects
+this root milestone. All six current review findings are fixed, and the
+independent review is clean. Phase 1 has 16 completed plans and automated
+evidence for all five criteria. The corpus matches all 2,661 entries.
+Verification is `human_needed` because two plan prohibitions require human
+review. The report records the accepted catalog baseline after the upstream
+merge. Phases 2-7 are not planned yet.
 
 **Release context (unchanged):** The 0.19.1 and 0.19.2 releases are tagged and
 published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218 and
@@ -190,14 +193,10 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Continue with Phase 2 (Row Policies): `/gsd-autonomous --interactive --from 2`,
-  or `/gsd-discuss-phase 2` to go step by step.
-- Phase 1 code review left 7 findings open in
-  `phases/01-presentation-model/01-REVIEW-DISPOSITION.md`. The two warnings are
-  test gaps on the marker-policy seam Phase 2 extends: WR-01 (the context
-  wrappers are tested only with markers on) and WR-02 (the SC-5 table has no
-  completeness check). The verifier recommends fixing both before or early in
-  Phase 2 (`/gsd-code-review 1 --fix`).
+- Run `/gsd-verify-work 1` to resolve the two human review items in
+  `phases/01-presentation-model/01-UAT.md` before planning Phase 2.
+- The code review is clean. The disposition ledger has no open findings.
+- After verification passes, continue with `/gsd-discuss-phase 2`.
 - Phase 1's verify-time Nyquist validation and security audit have not run:
   `/gsd-validate-phase 1` and `/gsd-secure-phase 1`.
 - `BACKLOG.md` still holds the six carriers the workflows-replay close named

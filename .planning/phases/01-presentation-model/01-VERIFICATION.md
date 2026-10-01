@@ -1,7 +1,7 @@
 ---
 phase: 01-presentation-model
-verified: 2026-09-30T18:29:00Z
-status: passed
+verified: 2026-10-01T17:26:02Z
+status: human_needed
 score: 5/5 must-haves verified
 covered_files:
   - .planning/phases/01-presentation-model/01-01-PLAN.md
@@ -36,6 +36,9 @@ covered_files:
   - .planning/phases/01-presentation-model/01-15-SUMMARY.md
   - .planning/phases/01-presentation-model/01-16-PLAN.md
   - .planning/phases/01-presentation-model/01-16-SUMMARY.md
+  - .planning/phases/01-presentation-model/notify-corpus/baseline.jsonl
+  - .planning/phases/01-presentation-model/notify-corpus/meta.json
+  - docs/output-catalog.md
   - eslint.config.js
   - extensions/pi-claude-marketplace/edge/args-schema.ts
   - extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts
@@ -218,27 +221,42 @@ covered_files:
   - tests/shared/notification-summary.test.ts
   - tests/shared/notification-types.test.ts
   - tests/shared/notify-context.test.ts
-covered_digest: "v2:sha256:3016d90ea72de61488decf306815f9c0b0b9eb5798a3beb6e198cc20a22d7383"
+covered_digest: "v2:sha256:1e57b1498b6ce641e93bdde4b0dee5e11d9282ddc7d80422fc8e8ed439075e98"
 behavior_unverified: 0
-overrides_applied: 0
-re_verification: false
-advisory:
-  - finding: "WR-01: the four context wrappers are tested only with markers on, so a wrapper that ignored context.markers would pass the owner suites"
-    category: other
-    reason: "Production code is correct (all four wrappers pass context.markers at notify-context.ts:180,225,267,308). Test-oracle gap only; the off direction is tested at emitContextCascade."
-    evidence_status: "code read; review finding open"
-  - finding: "WR-02: soft-dep-marker-policy.test.ts has no totality check between its table rows, DECLARED_MARKERS, and the exported contexts"
-    category: other
-    reason: "The table is total today (18 exported CommandContext constants + CENTRAL_MARKER_POLICY = 19 rows, each present). The gap is a missing future-proofing guard, not a current failure of SC-5."
-    evidence_status: "enumerated by hand; review finding open"
+overrides_applied: 1
+overrides:
+  - must_have: "SC-1 / D-03 phase-end gate: `node scripts/notify-corpus.mjs check` passes (every baseline entry present with its multiplicity), `git diff --exit-code 2f173031 -- docs/output-catalog.md` is empty, and catalog-contract still pins EXPECTED_STATE_COUNT = 205 and EXPECTED_UTF8_BYTES = 26_619"
+    reason: "Merged upstream commit e40d3dda added one catalog state; user-authored commit 557d39a3 explicitly re-baselined the wire corpus after merging main, and 52863f55 removed two test-only emissions. The current catalog pins 206 states and 26,848 bytes; compare phase changes against this committed post-merge baseline."
+    accepted_by: "acolomba (user-authored baseline commits)"
+    accepted_at: "2026-10-01T06:45:44Z"
+re_verification:
+  previous_status: passed
+  previous_score: 5/5
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
+unverified_prohibitions:
+  - statement: "PMOD-01: MUST NOT withhold a required soft-dependency marker or lower a warning or error severity"
+    verdict: "No violation found in code, tests, or committed-corpus comparison; non-authoritative LLM judgment"
+    flag: "unverified-prohibition — human review recommended"
+  - statement: "PMOD-03: MUST NOT drop cause-chain links, truncation, rollback rows, or leaked paths"
+    verdict: "No violation found in code, tests, or committed-corpus comparison; non-authoritative LLM judgment"
+    flag: "unverified-prohibition — human review recommended"
+human_verification:
+  - test: "Review the marker and severity negative claim against the committed corpus and representative unexercised command paths"
+    expected: "No previously shown required marker is absent and no warning or error is lowered"
+    why_human: "Plans 01-04 and 01-16 classify this broad prohibition as judgment-tier; finite tests and corpus captures cannot establish every possible output path"
+  - test: "Review the failure-detail negative claim against serialized cause, rollback, and leak cases"
+    expected: "No cause link, truncation indicator, rollback phase row, or leaked path is lost"
+    why_human: "Plans 01-03 and 01-16 classify this broad prohibition as judgment-tier; finite tests and corpus captures cannot establish every possible failure path"
 ---
 
 # Phase 1: Presentation Model Verification Report
 
 **Phase Goal:** Every presentation decision for structured notifications is computed once, in a resolve step upstream of rendering. The text renderer formats that result without probing Pi state or walking `Error` objects, and its bytes do not change.
-**Verified:** 2026-09-30
-**Status:** passed
-**Re-verification:** No, initial verification
+**Verified:** 2026-10-01
+**Status:** human_needed — code criteria verified; two judgment-tier prohibitions await explicit human review
+**Re-verification:** Yes — fresh check after the merged upstream change and six review fixes; the previous report had no gaps
 
 ## Goal Achievement
 
@@ -246,26 +264,39 @@ advisory:
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Wire-corpus baseline captured first; at phase end corpus re-diffs empty, `docs/output-catalog.md` diff empty, catalog counts do not move | VERIFIED | Baseline `notify-corpus/baseline.jsonl` (2622 entries, argc recorded) was committed in `89eb1fcf`, the first plan, before the first `extensions/` change (`37a79818`). I re-ran `node scripts/notify-corpus.mjs check`: "2622 baseline entries present, 8 extra", exit 0, 7392 tests pass. The 8 extras are new tests, which the check allows. `git diff --exit-code 2f173031 -- docs/output-catalog.md` exits 0 (empty), so byte and state counts are identical. |
+| 1 | A committed pre-refactor corpus protects existing `(message, severity, argc)` bytes, and the catalog pins the same documented states after the merged upstream change | VERIFIED | The original 2,622-entry capture predates the renderer extraction. User-authored commits `557d39a3` and `52863f55` explicitly re-baselined after the upstream merge and removal of two read-counting tests. I independently ran `node scripts/notify-corpus.mjs check`: **2,661/2,661 baseline entries present, 0 extra, exit 0**. Upstream `e40d3dda` added one catalog state: 206 states and 26,848 bytes. `git diff --exit-code e40d3dda -- docs/output-catalog.md` exits 0. The plan's literal original-base diff and 205/26,619 pins are superseded by the documented override below; the original-base diff is **not** empty. |
 | 2 | One resolve step produces severity, `needsReload`, tally, summary facts, hints, and final reasons (content first, then `{requires}` in agents, mcp, workflows order); dispatch no longer calls `softDepStatus`; the text renderer takes no probe | VERIFIED | `shared/notification-resolve.ts` holds `resolveEnvelope` (severity, summary, `needsReload`, tally, no-op) and `resolveRows` (reasons, failure, `hint`). `composeRowReasons` spreads `content` then `softDepMarkers(agents, mcp, workflows)`. `softDepStatus` has one production caller, `notification-run.ts:22`. Grep of dispatch, grammar, and summary finds no probe use. `RenderFn` is `(row: ResolvedRow, mpScope) => string`. `notify()` reads only `run.softDeps` and hands it to `resolveRows`. |
 | 3 | One soft-dep probe per command invocation feeds severity stamping and marker composition; a test whose probe answers differently on a second call proves it | VERIFIED | `openNotificationRun(pi)` is called only at `edge/register.ts:135` and `index.ts:123`. Severity stamps at `install-flow.ts:411`, `enable-disable.ts:1350`, and `update-cascade.ts:194` read `run.softDeps`, the same object `resolveRows` uses. `tests/edge/register.test.ts:1106` (SC-3, D-08) drives a real registered install. The inventory answers "no companion" for the first three reads and "subagent loaded" after. It asserts a warning severity with `{requires pi-subagents}` on the row and exactly 3 inventory reads. `tests/shared/notification-run.test.ts` pins a snapshot that does not follow later inventory changes. All pass. |
 | 4 | Failure detail reaches the renderer as serialized `causeChain: string[]` plus `truncated`, per-phase rollback entries, and leaks as strings; no live `Error` crosses into rendering; cause text byte-identical | VERIFIED | `errors.ts` defines `SerializedCauseChain {causeChain: readonly string[]; truncated: boolean}` and `serializeCauseChain`. `resolveRow` strips `cause`/`rollbackPartial` and adds `failure: ResolvedFailure` (`leaks: string[]`, `rollbackPartial[{phase, cause?: SerializedCauseChain}]`). `ResolvedRow` omits `cause`/`rollbackPartial`/`dependencies` at the type level. The grammar only calls `formatCauseChain(chain)` on the serialized form and has no `instanceof`. The corpus check proves the bytes are unchanged. |
-| 5 | Probe-to-marker derivation has its own owner test that states the per-verb suppression table as data; `workflows-marker-coverage` scans the new derivation site and is not deleted | VERIFIED | `tests/architecture/soft-dep-marker-policy.test.ts` states an independent literal table: 18 per-verb contexts plus `CENTRAL_MARKER_POLICY` (19 rows), each compared to the module's declared `markers`. The grep for `satisfies CommandContext` finds exactly those 18 exported contexts. The derivation is owned by `tests/shared/notification-resolve.test.ts`. `workflows-marker-coverage.test.ts` exists and `gate-targets.ts` has `SOFT_DEP_MARKER_DERIVATION_TARGETS = [".../shared/notification-resolve.ts"]`. It includes a planted-offender control for the single `softDepMarkers` call site. All pass. |
+| 5 | Probe-to-marker derivation has its own owner test that states the per-verb suppression table as data; `workflows-marker-coverage` scans the new derivation site and is not deleted | VERIFIED | `soft-dep-marker-policy.test.ts` independently states 18 context policies plus `CENTRAL_MARKER_POLICY`. New totality checks compare its names with `DECLARED_MARKERS` and discover every source context; a planted unexported context is labeled correctly. `notification-resolve.test.ts` owns derivation behavior. `workflows-marker-coverage.test.ts` scans `notification-resolve.ts` and plants an offender to prove its gate. |
 
-**Score:** 5/5 truths verified (0 present, behavior-unverified)
+**Score:** 5/5 roadmap truths verified; 0 behavior-unverified; 1 documented plan-literal override; 2 judgment-tier prohibition flags
+
+### Accepted Baseline Deviation
+
+The literal Phase 01 plan calls for an empty diff from `2f173031` and catalog pins of 205 states / 26,619 bytes. Those claims are false after the user's merged upstream commit `e40d3dda`: the diff adds the MA-14 state, and the current pins are 206 / 26,848. The user-authored `557d39a3` commit explicitly re-baselined the wire corpus after that merge. `52863f55` removed two test-only emissions and re-baselined again. The frontmatter override records this acceptance and keeps the original-base mismatch visible. It does not excuse a byte change in any entry of the current committed corpus.
+
+### Advisory (New Scope, Unevidenced)
+
+None. The prior WR-01/WR-02 test-oracle warnings were closed by specific tests and the six current review fixes; the incremental review is clean.
 
 ### Required Artifacts
 
+The canonical `verify.artifacts` query passed 37/37 declared artifacts across all 16 plans. The rows below trace the goal-critical artifacts beyond existence.
+
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `shared/notification-resolve.ts` | Resolve step (envelope, rows, markers, failure, hints) | VERIFIED | 540 lines, substantive, imported by dispatch and grammar. |
+| `shared/notification-resolve.ts` | Resolve step (envelope, rows, markers, failure, hints) | VERIFIED | Substantive `resolveEnvelope`/`resolveRows`; called by dispatch and context emitters. |
 | `shared/notification-run.ts` | Per-invocation run with the soft-dep snapshot | VERIFIED | 23 lines. One `softDepStatus` call, two production roots. |
 | `shared/notification-dispatch.ts` | No probe; `notify(ctx, run, message)` | VERIFIED | Imports only the `SoftDepStatus` type; reads `run.softDeps`. |
 | `shared/notification-grammar.ts` | Text strategy on resolved rows | VERIFIED | Takes `ResolvedRow`/`ResolvedEnvelope`; no probe, no `instanceof`. |
-| `scripts/notify-corpus*.mjs`, `notify-corpus/baseline.jsonl` | Corpus tooling and baseline | VERIFIED | Check passes; the baseline has not changed since its capture commit. |
-| `tests/architecture/soft-dep-marker-policy.test.ts` | SC-5 table | VERIFIED | Total over the current contexts; see WR-02. |
+| `scripts/notify-corpus*.mjs`, `notify-corpus/baseline.jsonl` | Corpus tooling and baseline | VERIFIED | Current committed baseline contains 2,661 entries; the capture and diff tools have planted-drift and malformed-argument controls. |
+| `tests/architecture/soft-dep-marker-policy.test.ts` | SC-5 table | VERIFIED | Literal table, declared-name totality, source-context census, planted context, and unexported-name control. |
+| `shared/notification-summary.ts` and `orchestrators/marketplace/add.ts` | Merged MA-14 cleanup advisory composition | VERIFIED | Orchestrator selects the cleanup error; presentation composer redacts paths and indents the advisory. The direct test asserts the complete line. |
 
 ### Key Link Verification
+
+The canonical `verify.key-links` query passed 31/31 declared links across all 16 plans. The paths below were also traced in current source.
 
 | From | To | Via | Status |
 |------|----|-----|--------|
@@ -274,6 +305,7 @@ advisory:
 | install, enable, update-cascade severity stamps | `run.softDeps` | same snapshot as marker composition | WIRED |
 | `resolveRows` | `serializeCauseChain` / `manualRecoveryLeaks` | `resolveFailure` | WIRED |
 | grammar `composeFailureLines` | `formatCauseChain(SerializedCauseChain)` | no live `Error` | WIRED |
+| `orchestrators/marketplace/add.ts` | `composeLeftoverRemovalAdvisories` | cleanup leak passed to presentation composer, whose result reaches notify | WIRED |
 
 ### Data-Flow Trace (Level 4)
 
@@ -281,22 +313,28 @@ advisory:
 |----------|------|--------|-----------|--------|
 | resolved row `reasons` | content reasons plus markers | producer rows plus `run.softDeps` (real `getAllTools` inventory) | Yes, shown end to end by the SC-3 register test | FLOWING |
 | resolved `failure` | cause chain, leaks, rollback | real `Error` objects at the producer | Yes | FLOWING |
+| leftover advisory | cleanup error leak | `UnremovableLeftoverCloneError.removalLeak` through summary composer | Yes; direct complete-line assertion | FLOWING |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Wire corpus unchanged | `node scripts/notify-corpus.mjs check` | 2622 present, 8 extra, 7392 pass / 0 fail, exit 0 | PASS |
-| Catalog unchanged | `git diff --exit-code 2f173031 -- docs/output-catalog.md` | exit 0 | PASS |
-| Notify owner, gate, and SC-3 suites | `node --test` over 8 files (marker policy, workflows-marker-coverage, resolve, run, dispatch, notify-context, register, no-probe-in-workflows-bridge) | 471 pass / 0 fail | PASS |
-| Typecheck | `npm run typecheck` | exit 0 | PASS |
-| No code drift since the phase-end gate | `git diff 94ed9ffc HEAD -- . ':!.planning'` | empty | PASS |
+| Committed wire corpus | `node scripts/notify-corpus.mjs check` | Exit 0; 2,661 baseline entries present, 0 extra; capture suite 7,587 pass, 0 fail, 1 environment skip | PASS |
+| Current catalog | `git diff --exit-code e40d3dda -- docs/output-catalog.md` | exit 0, unchanged from merged upstream | PASS |
+| Original plan catalog literal | `git diff --exit-code 2f173031 -- docs/output-catalog.md` | exit 1; one added upstream MA-14 state and revised prose | ACCEPTED OVERRIDE |
+| Project gate, all stages | One sandboxed `npm run check`; permission-enabled continuation from failed stage | Initial run exited 1 at unit coverage after typecheck, lint, workflow gates, Fallow, formatting, correspondence, and direct-coverage negative controls passed. Retried unit: 7,552/7,552 and 100% line/branch/function. Then integration: 36/36; positive type-member gate passed; negative controls 7/7. No source change between stages. | PASS after permission-enabled continuation |
+| SC-3 snapshot sharing | Registered-install two-answer test | Named test passed in the permission-enabled unit run; complete text, warning severity, and three inventory reads asserted | PASS |
+| SC-5 suppression table | `soft-dep-marker-policy.test.ts` within unit coverage | Independent literals, totality census, and planted unexported-context case passed | PASS |
 
-I did not re-run the full `npm run check`. The 01-16 summary reports an unpiped run on `94ed9ffc` with `CHECK_EXIT=0`, and no non-`.planning` file has changed since. The corpus run above executed the whole unit and integration set (7392 tests, 0 fail).
+The first full check ran once in the sandbox and exited 1 at unit coverage, with 11 opaque file-level failures and no useful per-case diagnostic. The FIFO cases and every other unit case passed when the failed stage was rerun with normal process permissions. The remaining integration and type-member stages then passed. This is split-stage evidence of every `npm run check` component, not a claim that the original sandboxed command exited 0. The initial log is `/tmp/json-phase1-full-check.log`; the continuation logs are `/tmp/json-phase1-unit-escalated.log` and `/tmp/json-phase1-remaining-check.log`.
 
 ### Probe Execution
 
-No phase-declared probe scripts. SKIPPED.
+| Probe | Command | Result | Status |
+|---|---|---|---|
+| Committed notify corpus | `node scripts/notify-corpus.mjs check` | Exit 0; 2,661 baseline entries present with multiplicity; 0 missing and 0 extra | PASS |
+
+The corpus run's single skip was AGSK-06's pi-subagents resolver integration: its external resolver module was unavailable in this environment. It is unrelated to Phase 01's notification criteria. No `scripts/*/tests/probe-*.sh` file is declared by this phase. The corpus negative controls were run on the final tool by the fixer and independent reviewer; this verifier did not rerun them.
 
 ### Requirements Coverage
 
@@ -305,28 +343,46 @@ No phase-declared probe scripts. SKIPPED.
 | PMOD-01 | Phase 1 plans | Every presentation decision computed in one model step; neither strategy probes state or walks `Error` objects; render-time `softDepStatus` leaves dispatch; one probe per invocation shared with severity | SATISFIED | Truths 2 and 3. |
 | PMOD-03 | Phase 1 plans | Failure detail carried as serialized cause chain (`causeChain: string[]` plus `truncated`) and per-phase rollback entries, never a live `Error` | SATISFIED | Truth 4. The "redacted" part of the wording is PMOD-04 (Phase 4), and `serializeCauseChain` is documented as the single site where redaction will land. |
 
-No orphaned requirements: REQUIREMENTS.md maps only PMOD-01 and PMOD-03 to Phase 1. The checkboxes are still unchecked, as the verification notes intended, and `phase.complete` should tick them.
+No orphaned requirements: all 16 plans claim only PMOD-01 or PMOD-03, and REQUIREMENTS.md maps only those two IDs to Phase 1. Both are currently marked Complete. PMOD-03's credential-redaction clause is assigned to PMOD-04 in Phase 4 by the phase context; current cause text remains byte-identical to the accepted baseline.
+
+### Decision Coverage
+
+`check.decision-coverage-verify` reports 13/13 trackable CONTEXT decisions honored; none missing. This is an advisory translation check, not a substitute for code evidence.
+
+### Test Quality Audit
+
+| Test evidence | Linked requirement | Disabled | Oracle and assertion | Verdict |
+|---|---|---:|---|---|
+| `notification-resolve.test.ts` and `notification-run.test.ts` | PMOD-01/03 | 0 | Independent complete resolved values, ordered reasons, serialized failure facts, and a retained snapshot | Sound for named behaviors |
+| `register.test.ts` SC-3 case | PMOD-01 | 0 | A two-answer inventory drives a registered install; exact full text, warning severity, and three reads are asserted | Sound for snapshot sharing |
+| `soft-dep-marker-policy.test.ts` and `workflows-marker-coverage.test.ts` | PMOD-01 | 0 | Independent policy literals, totality census, and planted-offender controls | Sound for the current derivation site |
+| `catalog-contract.test.ts` and committed corpus | PMOD-01/03 | 0 | Catalog has fixed documented bytes; corpus began before refactor and is diffed against a committed capture | Sound for exercised byte paths; finite coverage |
+
+No requirement-linked owner test is disabled. The original baseline predates the renderer extraction; the later baseline adjustments are explicitly committed and explained above. No expected value in these owner tests is generated by calling the formatter under test.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
 | `scripts/notify-corpus*.mjs` | header | four `fallow-ignore-file` markers | Info | The milestone invariant says no new suppression. The operator explicitly accepted these (recorded in the 01-01 summary and review). They cover operator-run tooling, not production code, and are scheduled for deletion at milestone close with the corpus tooling. |
-| `tests/architecture/soft-dep-marker-policy.test.ts` | 59-231 | no table-totality check (WR-02) | Warning (open) | The table is total today. A future context or a deleted row would go unnoticed. SC-5 is met as written. |
-| `tests/shared/notify-context.test.ts` | 420-497 | wrappers tested only with markers on (WR-01) | Warning (open) | Production passes `context.markers` correctly in all four wrappers. The "off" direction is tested at `emitContextCascade` only. |
-| various | - | stale probe wording in comments, dead `probingEmissions` test member, structural row-composer param types, corpus tool fragilities (IN-01 to IN-05) | Info (open) | No behavior effect. |
+| `scripts/notify-corpus.hook.mjs` | header | Exact-spelling raw-text rewrite boundary | Info | Current notification calls use the captured spelling. The hook documents unsupported optional-chain, whitespace, `.call`, and destructured spellings and possible string-literal rewriting; this is a documented tool limit, not a current missed call. |
 
-No `TBD`/`FIXME`/`XXX`/`TODO`/`HACK` markers were added in `extensions/`, `tests/`, or `scripts/` (grep of the diff from `d9eabb72`).
+No unreferenced `TBD`/`FIXME`/`XXX` debt marker was found in `extensions/`, `tests/`, or `scripts/`. The seven review-disposition findings are recorded as fixed; the refreshed review of the 19-file fix diff is clean. That review covers the fix diff, not every milestone file. The older WR-02 totality gap is now covered by the SC-5 tests.
 
 ### Human Verification Required
 
-None. Every success criterion is checked by the committed corpus, the catalog diff, or a passing automated test, and no truth depends on runtime behavior that lacks a test.
+Two judgment-tier negative claims from the PLAN frontmatter require explicit human disposition under the verifier's prohibition gate. The automated tests and corpus found no violation; their finite coverage does not itself convert a `verification: judgment` item into an authoritative pass.
+
+1. **Markers and severity.** Review the committed corpus and any command paths it does not exercise. Confirm that no previously shown `{requires ...}` marker is withheld and no warning or error severity is lowered.
+2. **Failure detail.** Review serialized cause, truncation, rollback, and manual-recovery leak paths. Confirm that none of those details is dropped from rendered failures.
+
+The review-fix report's generic “requires human verification” labels for IN-02 and IN-03 do **not** add human items: exact malformed-argument negative controls and the planted unexported-context test exercise those transitions.
 
 ### Gaps Summary
 
-No gaps. Weighing WR-02 against SC-5: the criterion requires an owner test that "states the per-verb suppression table as data". That test exists, is independent of the production map (it restates literals and compares them with the declared `markers`), and covers all 18 exported contexts plus the central policy. WR-02 asks for a stronger guarantee, namely that the table cannot silently lose rows or miss new contexts. That guarantee is hardening, not part of SC-5's wording. I recommend closing WR-01 and WR-02 before or early in Phase 2, because Phase 2 extends this policy seam and adds contexts.
+No implementation gap has been found. The original-base catalog-count check is a documented, user-accepted baseline deviation, not a phase regression. The two unresolved items are the explicit human decisions above. `01-VALIDATION.md` remains a draft, and this report does not assert a separate security audit.
 
 ---
 
-_Verified: 2026-09-30_
-_Verifier: Claude (gsd-verifier)_
+_Verified: 2026-10-01_
+_Verifier: Codex (gsd-verifier)_
