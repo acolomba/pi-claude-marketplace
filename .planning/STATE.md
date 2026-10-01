@@ -2,11 +2,11 @@
 gsd_state_version: "1.0"
 milestone: none
 status: between milestones; any-git-host archived; npm 0.19.2 released
-stopped_at: brittle CI assertions removed; separate Sonar workflow retained
-last_updated: "2026-10-01T18:13:11.334Z"
+stopped_at: local check optimizations and GSD verification guidance completed
+last_updated: "2026-10-01T18:58:01.667Z"
 last_activity: 2026-10-01
-last_activity_desc: removed brittle CI configuration assertions; retained separate Sonar workflow
-state_head: f69e50231269dfa7ad56f19c3ec2bf20aacbdb4e
+last_activity_desc: optimized local checks and GSD verification; full checks passed
+state_head: 462f3f249790aa86669f834452e4ebdce6d56fdc
 progress:
   total_phases: 3
   completed_phases: 3
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 Phase: No active milestone
 Plan: —
 Status: any-git-host complete (3/3 phases, 11/11 plans) and archived 2026-10-01
-Last activity: 2026-10-01 — Completed quick task 261001-jpu: remove brittle CI configuration assertions
+Last activity: 2026-10-01 — Completed quick task 261001-jwu: optimize local checks and GSD verification
 
 Five milestones have closed since the last root-scope milestone ran here.
 `test-backlog` and `refine-unit-tests` closed in root scope. `workflows` and
@@ -183,16 +183,18 @@ hit the same wall; convert it rather than re-disclosing it.
 | 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./quick/260924-q0m-keep-only-plugin-qualified-interactive-s/) |
 | 261001-iad | Deduplicate CI checks and run isolated direct coverage pairs concurrently | 2026-10-01 | b0d45f4f | complete | [261001-iad-deduplicate-ci-checks-and-run-isolated-d](./quick/261001-iad-deduplicate-ci-checks-and-run-isolated-d/) |
 | 261001-jpu | Remove brittle CI configuration assertions and retain the separate Sonar workflow | 2026-10-01 | f69e5023 | complete | [261001-jpu-remove-brittle-ci-configuration-assertio](./quick/261001-jpu-remove-brittle-ci-configuration-assertio/) |
+| 261001-jwu | Optimize local checks and GSD verification with native caches and conservative changed-file checks | 2026-10-01 | 462f3f24 | complete | [261001-jwu-optimize-local-checks-and-gsd-verificati](./quick/261001-jwu-optimize-local-checks-and-gsd-verificati/) |
 
 ## Session Continuity
 
 **Last session:** 2026-10-01
-**Stopped at:** Brittle CI assertions removed; separate Sonar workflow retained
+**Stopped at:** Local check optimizations and GSD verification guidance completed
 **Resume file:** None
 
-**Current work:** Quick tasks 261001-iad and 261001-jpu completed on
-`features/ci-check-efficiency`. The approved local check optimizations remain in
-the 261001-iad plan as follow-up work.
+**Current work:** Quick tasks 261001-iad, 261001-jpu, and 261001-jwu completed on
+`features/ci-check-efficiency`. CI deduplication, parallel direct coverage,
+local check optimizations, and GSD verification guidance are implemented.
+The full check and all 251 direct-coverage pairs passed on Node 24.21.0.
 The 0.19.1 and 0.19.2 releases are tagged and
 published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218
 through #232 landed after it. `main` carries the workflows bridge from PR #205
