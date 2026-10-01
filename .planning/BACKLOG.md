@@ -3295,8 +3295,9 @@ http-backend behind HTTPS + Basic auth on `localhost:8443`) with a real
 it. A run against a hosted forge (GitLab, Gitea, Forgejo, Bitbucket) is still
 unexercised; keep this entry only if that distinction matters.
 
-Carried from the `any-git-host` milestone at Phase 3 close (ROADMAP.md Phase 3
-SC6; STATE.md § Deferred Verification).
+Carried from the `any-git-host` milestone at Phase 3 close (SC6 in
+`milestones/ws-git-hosts-2026-10-01/milestones/any-git-host-ROADMAP.md`; § Deferred
+Verification in `milestones/ws-git-hosts-2026-10-01/STATE.md`).
 
 Every seam in the chain -- `buildAuthForHost`, `credentialOps.fill`, the
 `git credential fill` shell-out, `buildAuthCallbacks.onAuth`'s host-match guard
@@ -3325,8 +3326,9 @@ confirm the clone succeeds. Resume with `/gsd-verify-work 1`.
 smart-HTTP server (git http-backend behind HTTPS) that answers only at the
 verbatim path and 404s the `.git` form: both succeeded with no `.git` request.
 
-Carried from the `any-git-host` milestone at Phase 3 close (ROADMAP.md Phase 3
-SC6; STATE.md § Deferred Verification).
+Carried from the `any-git-host` milestone at Phase 3 close (SC6 in
+`milestones/ws-git-hosts-2026-10-01/milestones/any-git-host-ROADMAP.md`; § Deferred
+Verification in `milestones/ws-git-hosts-2026-10-01/STATE.md`).
 
 Every phase-2 test proves the URL that is SENT through the offline
 `createGitOpsFake`; none exercises a real HTTP round trip. What remains is one

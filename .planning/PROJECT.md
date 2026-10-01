@@ -13,7 +13,8 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 ## Current Milestone: none
 
 No active milestone. any-git-host (workstream `git-hosts`) closed 2026-09-30 and is
-on main via PR #221. Start the next one with `/gsd-new-milestone`.
+on main via PR #221; the workstream was archived to `milestones/ws-git-hosts-2026-10-01/`
+on 2026-10-01, and no workstream is active. Start the next one with `/gsd-new-milestone`.
 
 ## Previous Milestone: any-git-host -- Any Git Host (workstream: git-hosts, branch: features/git-hosts, completed 2026-09-30, merged via PR #221, no npm release)
 
@@ -319,7 +320,8 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 ## Current State
 
 **Landed on main, unreleased (workstream):** milestone `any-git-host` (2026-09-30, Phases 1-3,
-11 plans; archived to `.planning/workstreams/git-hosts/milestones/any-git-host-*`). Private https
+11 plans; archived to
+`.planning/milestones/ws-git-hosts-2026-10-01/milestones/any-git-host-*`). Private https
 sources authenticate on any git host from the git credential helper, credentials stay bound to
 their host across redirects, `url` sources clone at the verbatim URL, and `marketplace add`
 recovers from its own leftover clone. Merged in PR #221 (`a0d3aef1`) on 2026-09-30.
@@ -869,3 +871,5 @@ _Last updated: 2026-09-14 after starting test-backlog._
 _Last updated: 2026-09-21 after the workflows-replay milestone closed in workstream `workflows`. Nine phases, 39 plans, 46/46 requirements; the `workflows` bridge replayed onto main on `features/workflow` and hardened; audit `tech_debt` cleared or carried before the archive; unmerged._
 
 _Last updated: 2026-09-30 after the any-git-host milestone closed in workstream `git-hosts`. Three phases, 11 plans, 10/10 requirements; private repos on any git host, verbatim-URL endpoints and leftover-clone recovery, reimplemented from PR #153 and merged to main in PR #221. Audit `passed` after PR #231 closed the review debt (GHRED-01, GHADD-01)._
+
+_Last updated: 2026-10-01 after the `git-hosts` workstream was archived to `milestones/ws-git-hosts-2026-10-01/`. No workstream is active; any-git-host is on main and in no npm release yet._
