@@ -1204,8 +1204,10 @@ async function runEnableCascadeWithRoot(args: {
     state,
     members,
   );
-  phases.push(buildEnableRootPhase(transaction, opts, scope, locations, state, installed, rootKey));
-  phases.push(buildEnableCascadeConfigPhase(transaction, locations, state, { write, selection }));
+  phases.push(
+    buildEnableRootPhase(transaction, opts, scope, locations, state, installed, rootKey),
+    buildEnableCascadeConfigPhase(transaction, locations, state, { write, selection }),
+  );
   const result = await runPhases(phases, run);
   if (!result.ok) {
     assertFailedPhasesHasError(result);

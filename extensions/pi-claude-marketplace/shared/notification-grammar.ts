@@ -1147,7 +1147,7 @@ function composeMpInfoHeader(name: string, scope: Scope, details: MarketplaceDet
 function renderAllowedMarketplaces(names: readonly string[]): string {
   return JSON.stringify(names).replace(
     /[\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/g,
-    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    (character) => String.raw`\u${Number(character.codePointAt(0)).toString(16).padStart(4, "0")}`,
   );
 }
 
