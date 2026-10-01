@@ -11,9 +11,9 @@ The central question for every case: **would a plausible wrong implementation st
 
 ## Verify with the toolchain
 
-Run `node --test <test-path>` for the module under review and `npm run test:coverage:direct -- <path>` for the source-test pair (`:all` after a shared contract, fake, or harness change). A red command, or a review that never ran them, is itself a finding.
+Require passing owner tests and direct coverage for the source-test pair (`:all` after a shared contract, fake, or harness change). Use the writer's or commit hook's evidence when it covers the reviewed inputs under `skills/local-verification/SKILL.md`; otherwise run `node --test <test-path>` and `npm run test:coverage:direct -- <path>`. A failed command or missing applicable evidence is a finding.
 
-Run `npm run check` only when the change touched a shared contract, fake, harness, or gate script. Otherwise the writer's green run and CI already cover the whole gate; a third run adds nothing.
+Use the same project's scheduling policy for full verification: shared/uncertain changes trigger the selector's full fallback, and combined GSD merge/phase or final PR/release gates require a full result. An ordinary task review may accept focused evidence; do not imply that it proves the full project passed. Do not repeat a full check when valid unchanged-input evidence already supplies it.
 
 ## Tools
 

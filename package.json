@@ -74,10 +74,12 @@
     "url": "git+https://github.com/acolomba/pi-claude-marketplace.git"
   },
   "scripts": {
-    "check": "npm run typecheck && npm run lint && npm run lint:workflows && npm run lint:workflows:negative && npm run fallow && npm run format:check && npm run test:corresponding && npm run test:corresponding:negative && npm run test:coverage:direct:negative && npm run test:coverage:unit && npm run test:integration && npm run lint:type-members && npm run lint:type-members:negative",
+    "check": "npm run typecheck && npm run lint && npm run lint:workflows && npm run lint:workflows:negative && npm run fallow && npm run format:check && npm run test:corresponding && npm run test:corresponding:negative && npm run check:changed:negative && npm run test:coverage:direct:negative && npm run test:coverage:unit && npm run test:integration && npm run lint:type-members && npm run lint:type-members:negative",
+    "check:changed": "node scripts/check-changed.mjs",
+    "check:changed:negative": "node scripts/check-changed.negative.mjs",
     "fallow": "fallow dead-code --fail-on-issues --format human && fallow dead-code --no-production --circular-deps --re-export-cycles --fail-on-issues --format human && fallow health --fail-on-issues --format human && fallow dupes --fail-on-issues --format human",
-    "format": "prettier --write \"**/*.{js,json,ts}\" \"scripts/**/*.mjs\"",
-    "format:check": "prettier --check \"**/*.{js,json,ts}\" \"scripts/**/*.mjs\"",
+    "format": "prettier --write \"**/*.{js,json,ts}\" \"scripts/**/*.mjs\" --cache --cache-strategy content",
+    "format:check": "prettier --check \"**/*.{js,json,ts}\" \"scripts/**/*.mjs\" --cache --cache-strategy content",
     "lint": "eslint extensions tests scripts eslint.config.js",
     "lint:fix": "eslint extensions tests scripts eslint.config.js --fix",
     "lint:type-members": "node scripts/check-unused-type-members.mjs",
@@ -86,6 +88,8 @@
     "lint:workflows": "node scripts/check-workflow-install-scripts.mjs",
     "lint:workflows:negative": "node scripts/check-workflow-install-scripts.negative.mjs",
     "test": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,scripts,shared,transaction}/**/*.test.ts\" \"tests/index.test.ts\"",
+    "test:analyzers": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/scripts/**/*.test.ts\"",
+    "test:architecture": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/architecture/**/*.test.ts\"",
     "test:corresponding": "node scripts/check-corresponding-tests.mjs",
     "test:corresponding:negative": "node scripts/check-corresponding-tests.negative.mjs",
     "test:coverage": "rm -rf coverage && mkdir -p coverage && npm run test:coverage:unit && npm run test:coverage:integration && npm run test:coverage:e2e",
@@ -100,7 +104,8 @@
     "test:e2e": "PI_CM_E2E_REF=pinned node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/e2e/**/*.test.ts\"",
     "test:e2e:nightly": "PI_CM_E2E_REF=main node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/e2e/**/*.test.ts\"",
     "test:integration": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/integration/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "test:modules": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/{bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts\" \"tests/index.test.ts\"",
+    "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/typescript/tsconfig.tsbuildinfo"
   },
   "type": "module",
   "version": "0.19.2"

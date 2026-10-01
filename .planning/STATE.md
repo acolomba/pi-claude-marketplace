@@ -1,12 +1,12 @@
 ---
 gsd_state_version: "1.0"
 milestone: none
-status: "between milestones; any-git-host archived; npm 0.19.2 released"
-stopped_at: git-hosts workstream archived; root planning records reconciled
-last_updated: "2026-10-01T09:55:01Z"
+status: between milestones; any-git-host archived; npm 0.19.2 released
+stopped_at: build optimizations opened in PR 234 after full local verification
+last_updated: "2026-10-01T21:01:47Z"
 last_activity: 2026-10-01
-last_activity_desc: archived the git-hosts workstream; reconciled root planning records
-state_head: 3723699a13eea53f0186c77f9c0d6ebfb44853ed
+last_activity_desc: opened PR 234; full check and all direct-coverage pairs passed
+state_head: b8e5594688d9423d76f7530d08b2bfb9a8d12a71
 progress:
   total_phases: 3
   completed_phases: 3
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 Phase: No active milestone
 Plan: —
 Status: any-git-host complete (3/3 phases, 11/11 plans) and archived 2026-10-01
-Last activity: 2026-10-01 — Archived the git-hosts workstream and reconciled the root planning records
+Last activity: 2026-10-01 — Opened [PR #234](https://github.com/acolomba/pi-claude-marketplace/pull/234) for the completed build optimization quick tasks after full local verification.
 
 Five milestones have closed since the last root-scope milestone ran here.
 `test-backlog` and `refine-unit-tests` closed in root scope. `workflows` and
@@ -181,14 +181,25 @@ hit the same wall; convert it rather than re-disclosing it.
 | 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na/) |
 | 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | b07ae35c | complete | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew/) |
 | 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./quick/260924-q0m-keep-only-plugin-qualified-interactive-s/) |
+| 261001-iad | Deduplicate CI checks and run isolated direct coverage pairs concurrently | 2026-10-01 | b0d45f4f | complete | [261001-iad-deduplicate-ci-checks-and-run-isolated-d](./quick/261001-iad-deduplicate-ci-checks-and-run-isolated-d/) |
+| 261001-jpu | Remove brittle CI configuration assertions and retain the separate Sonar workflow | 2026-10-01 | f69e5023 | complete | [261001-jpu-remove-brittle-ci-configuration-assertio](./quick/261001-jpu-remove-brittle-ci-configuration-assertio/) |
+| 261001-jwu | Optimize local checks and GSD verification with native caches and conservative changed-file checks | 2026-10-01 | 462f3f24 | complete | [261001-jwu-optimize-local-checks-and-gsd-verificati](./quick/261001-jwu-optimize-local-checks-and-gsd-verificati/) |
+| 261001-mlt | Schedule focused task gates and full combined verification without duplicate local runs | 2026-10-01 | d9b672b9 | complete | [261001-mlt-schedule-focused-task-gates-and-full-pha](./quick/261001-mlt-schedule-focused-task-gates-and-full-pha/) |
 
 ## Session Continuity
 
 **Last session:** 2026-10-01
-**Stopped at:** git-hosts workstream archived; root planning records reconciled
+**Stopped at:** Focused task completion and full combined-gate policy implemented
 **Resume file:** None
 
-**Current work:** None in flight. The 0.19.1 and 0.19.2 releases are tagged and
+**Current work:** Quick task 261001-mlt completed on `features/ci-check-efficiency`.
+Ordinary quick/plan tasks and review fixes may finish with task-wide focused
+evidence from the required hooks; full gates remain at combined GSD merge/phase
+and final PR/release boundaries. TypeScript skills follow the same policy.
+Document hooks and skill validation passed; runtime code and CI are unchanged
+from the previously verified optimization work. The disposable experiment and
+its measurements remain on `features/build-check-trial`.
+The 0.19.1 and 0.19.2 releases are tagged and
 published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218
 through #232 landed after it. `main` carries the workflows bridge from PR #205
 and any-git-host from PRs #221 and #231, which no tag includes yet. The
