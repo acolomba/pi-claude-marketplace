@@ -1,11 +1,13 @@
 # Phase 2: Row Policies - Research
 
-> Disposition recorded after research: on 2026-10-01 the user approved the
-> narrow 25-entry synthetic corpus update: "yes, narrow update is fine".
-> Current CONTEXT.md D-07 supersedes the original frozen-corpus constraint
-> quoted below and resolves the open question. Use appendix option 2 with
-> exact before/after evidence; every other occurrence and catalog byte stays
-> unchanged. Historical research observations below are retained as evidence.
+> Current disposition: the user approved the original 25 synthetic replacements
+> on 2026-10-01, then explicitly approved three additional summary-owner
+> replacements (original baseline lines 2633, 2634, 2640) with "yes".
+> CONTEXT.md D-07 now authorizes exactly 28 replacements: severity, arity,
+> the other 2,633 occurrences, metadata, and every catalog byte stay unchanged.
+> Execution measured 69 actual render calls in 12 owner files, rather than
+> the planning estimate of 70; all 69 calls are migrated. Historical research
+> observations and the original 25-entry appendix below remain as evidence.
 
 **Researched:** 2026-10-01
 **Domain:** Internal TypeScript notification policy and text formatting
