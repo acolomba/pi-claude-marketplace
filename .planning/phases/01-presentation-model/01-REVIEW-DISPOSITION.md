@@ -6,47 +6,47 @@ findings:
   - id: WR-01
     severity: warning
     disposition: fixed
-    title: "The context wrappers are only tested with markers on, so ignoring `context.markers` would pass every test"
+    title: "The merged `marketplace add` leftover advisory is redacted and indented in the orchestrator, not in the resolve step"
+  - id: IN-01
+    severity: info
+    disposition: fixed
+    title: "The strict corpus hook still misses some `notify` spellings, and it rewrites inside string literals"
+  - id: IN-02
+    severity: info
+    disposition: fixed
+    title: "`capture --files` with no values silently captures the whole suite"
+  - id: IN-03
+    severity: info
+    disposition: fixed
+    title: "The SC-5 context scan doc says an unexported pin is labelled `(unexported)`, but it can take a preceding export's name"
+  - id: IN-04
+    severity: info
+    disposition: fixed
+    title: "Comments next to the IN-01 edits still describe removed or incomplete surfaces"
+  - id: IN-05
+    severity: info
+    disposition: fixed
+    title: "`installedLikeRow` takes `reasons` as a separate parameter, which the D-13 refusal does not cover"
   - id: WR-02
     severity: warning
     disposition: fixed
     title: "The SC-5 marker-policy table does not check that it lists every context"
-  - id: IN-01
-    severity: info
-    disposition: fixed
-    title: "Comments still describe render-time probes"
-  - id: IN-02
-    severity: info
-    disposition: fixed
-    title: "`CommandProbes.probingEmissions` is a dead test member that describes surfaces that no longer exist"
-  - id: IN-03
-    severity: info
-    disposition: fixed
-    title: "Row composers accept unresolved producer rows structurally, so markers can be dropped silently"
-  - id: IN-04
-    severity: info
-    disposition: fixed
-    title: "Corpus tooling fragilities"
-  - id: IN-05
-    severity: info
-    disposition: fixed
-    title: "Resolve's read order is constrained by a test's getter-backed `kind`"
 open: 0
 total: 7
-recorded: 2026-10-01T10:55:27.913Z
+recorded: 2026-10-01T16:51:24.129Z
 ---
 
 # Phase 01: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | fixed | 01-REVIEW-FIX.md |
-| WR-02 | warning | fixed | 01-REVIEW-FIX.md |
-| IN-01 | info | fixed | 01-REVIEW-FIX.md |
-| IN-02 | info | fixed | 01-REVIEW-FIX.md |
-| IN-03 | info | fixed | 01-REVIEW-FIX.md |
-| IN-04 | info | fixed | 01-REVIEW-FIX.md |
-| IN-05 | info | fixed | 01-REVIEW-FIX.md |
+| WR-01 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| IN-01 | info | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| IN-02 | info | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| IN-03 | info | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| IN-04 | info | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| IN-05 | info | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| WR-02 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
