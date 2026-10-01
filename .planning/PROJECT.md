@@ -910,3 +910,5 @@ _Last updated: 2026-09-28 after starting json-output._
 _Last updated: 2026-09-30 after json-output Phase 1 (Presentation Model): 16 plans, PMOD-01 and PMOD-03 validated, text bytes unchanged._
 
 _Last updated: 2026-09-30 after the any-git-host milestone closed in workstream `git-hosts`. Three phases, 11 plans, 10/10 requirements; private repos on any git host, verbatim-URL endpoints and leftover-clone recovery, reimplemented from PR #153 and merged to main in PR #221. Audit `passed` after PR #231 closed the review debt (GHRED-01, GHADD-01)._
+
+_Last updated: 2026-10-01 after json-output Phase 1 verification. Both human checks passed. Test coverage validation passed, and the level 1 security review closed all 29 registered threats. Phase 2 awaits planning._

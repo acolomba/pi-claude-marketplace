@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 1
-current_phase_name: Presentation Model
-status: awaiting_verification
-stopped_at: Phase 01 review fixes complete; two human review items pending
-last_updated: "2026-10-01T17:27:53Z"
+current_phase: 2
+current_phase_name: Row Policies
+status: planning
+stopped_at: Phase 1 complete, ready to plan Phase 2
+last_updated: "2026-10-01T18:39:06.898Z"
 last_activity: 2026-10-01
-last_activity_desc: Six review findings fixed; automated verification passed; human review pending
-state_head: 0cb47dae
+last_activity_desc: Phase 1 complete, transitioned to Phase 2
+state_head: d09a686ae2307819ec07528bfaa435a0eab5f8b2
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 16
   completed_plans: 16
-  percent: 0
+  percent: 14
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -22,21 +22,21 @@ milestone_name: Mode-Keyed Presentation Strategies
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-30 after json-output Phase 1)
+See: `.planning/PROJECT.md` (updated 2026-10-01 after json-output Phase 1 verification)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 1 human verification
+**Current focus:** Phase 2: Row Policies
 
 ## Current Position
 
-Phase: 1 — Presentation Model
-Plan: 16/16 complete
-Status: Awaiting two human review decisions
-Last activity: 2026-10-01 — Six findings fixed; automated checks and corpus comparison passed
+Phase: 2 — Row Policies
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-01 — Phase 1 complete, transitioned to Phase 2
 
-Progress: [░░░░░░░░░░] 0% (0 of 7 phases fully verified; 16 plans complete)
+Progress: [█░░░░░░░░░] 14% (1 of 7 phases fully verified; 16 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,17 +169,18 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-01T17:27:53Z
-**Stopped at:** Phase 01 automated verification passed; two human review items pending
-**Resume file:** phases/01-presentation-model/01-UAT.md
+**Last session:** 2026-10-01T18:39:39Z
+**Stopped at:** Phase 1 complete, ready to plan Phase 2
+**Resume file:** None
 
 **Current work:** Milestone json-output on `features/json`. GSD now selects
 this root milestone. All six current review findings are fixed, and the
 independent review is clean. Phase 1 has 16 completed plans and automated
 evidence for all five criteria. The corpus matches all 2,661 entries.
-Verification is `human_needed` because two plan prohibitions require human
-review. The report records the accepted catalog baseline after the upstream
-merge. Phases 2-7 are not planned yet.
+Verification is `passed`: the user passed both human review items. Test
+coverage validation is complete, and the level 1 security review closed all
+29 registered threats. The report records the accepted catalog baseline after
+the upstream merge. Phases 2-7 are not planned yet.
 
 **Release context (unchanged):** The 0.19.1 and 0.19.2 releases are tagged and
 published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218 and
@@ -193,12 +194,11 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Run `/gsd-verify-work 1` to resolve the two human review items in
-  `phases/01-presentation-model/01-UAT.md` before planning Phase 2.
+- Phase 1 is complete: both human review items passed, with no UAT issues.
 - The code review is clean. The disposition ledger has no open findings.
-- After verification passes, continue with `/gsd-discuss-phase 2`.
-- Phase 1's verify-time Nyquist validation and security audit have not run:
-  `/gsd-validate-phase 1` and `/gsd-secure-phase 1`.
+- Continue with `/gsd-discuss-phase 2` to settle row-policy decisions before planning.
+- Phase 1 test coverage validation and security review are complete:
+  `01-VALIDATION.md` is validated; `01-SECURITY.md` has no open threats.
 - `BACKLOG.md` still holds the six carriers the workflows-replay close named
   (VSTALE-01, WLREC-01, RLHINT-01, PCERR-01, WSTOR-01, WPIN-01). This
   milestone closes MRO-01 in Phase 7.

@@ -1,7 +1,7 @@
 ---
 phase: 01-presentation-model
 verified: 2026-10-01T17:26:02Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - .planning/phases/01-presentation-model/01-01-PLAN.md
@@ -221,6 +221,7 @@ covered_files:
   - tests/shared/notification-summary.test.ts
   - tests/shared/notification-types.test.ts
   - tests/shared/notify-context.test.ts
+
 covered_digest: "v2:sha256:1e57b1498b6ce641e93bdde4b0dee5e11d9282ddc7d80422fc8e8ed439075e98"
 behavior_unverified: 0
 overrides_applied: 1
@@ -235,13 +236,14 @@ re_verification:
   gaps_closed: []
   gaps_remaining: []
   regressions: []
-unverified_prohibitions:
+unverified_prohibitions: []
+resolved_prohibitions:
   - statement: "PMOD-01: MUST NOT withhold a required soft-dependency marker or lower a warning or error severity"
     verdict: "No violation found in code, tests, or committed-corpus comparison; non-authoritative LLM judgment"
-    flag: "unverified-prohibition — human review recommended"
+    resolution: "User explicitly passed the corresponding 01-UAT.md check on 2026-10-01"
   - statement: "PMOD-03: MUST NOT drop cause-chain links, truncation, rollback rows, or leaked paths"
     verdict: "No violation found in code, tests, or committed-corpus comparison; non-authoritative LLM judgment"
-    flag: "unverified-prohibition — human review recommended"
+    resolution: "User explicitly passed the corresponding 01-UAT.md check on 2026-10-01"
 human_verification:
   - test: "Review the marker and severity negative claim against the committed corpus and representative unexercised command paths"
     expected: "No previously shown required marker is absent and no warning or error is lowered"
@@ -255,7 +257,7 @@ human_verification:
 
 **Phase Goal:** Every presentation decision for structured notifications is computed once, in a resolve step upstream of rendering. The text renderer formats that result without probing Pi state or walking `Error` objects, and its bytes do not change.
 **Verified:** 2026-10-01
-**Status:** human_needed — code criteria verified; two judgment-tier prohibitions await explicit human review
+**Status:** passed — code criteria verified; the user passed both judgment-tier prohibition checks on 2026-10-01
 **Re-verification:** Yes — fresh check after the merged upstream change and six review fixes; the previous report had no gaps
 
 ## Goal Achievement
@@ -270,7 +272,7 @@ human_verification:
 | 4 | Failure detail reaches the renderer as serialized `causeChain: string[]` plus `truncated`, per-phase rollback entries, and leaks as strings; no live `Error` crosses into rendering; cause text byte-identical | VERIFIED | `errors.ts` defines `SerializedCauseChain {causeChain: readonly string[]; truncated: boolean}` and `serializeCauseChain`. `resolveRow` strips `cause`/`rollbackPartial` and adds `failure: ResolvedFailure` (`leaks: string[]`, `rollbackPartial[{phase, cause?: SerializedCauseChain}]`). `ResolvedRow` omits `cause`/`rollbackPartial`/`dependencies` at the type level. The grammar only calls `formatCauseChain(chain)` on the serialized form and has no `instanceof`. The corpus check proves the bytes are unchanged. |
 | 5 | Probe-to-marker derivation has its own owner test that states the per-verb suppression table as data; `workflows-marker-coverage` scans the new derivation site and is not deleted | VERIFIED | `soft-dep-marker-policy.test.ts` independently states 18 context policies plus `CENTRAL_MARKER_POLICY`. New totality checks compare its names with `DECLARED_MARKERS` and discover every source context; a planted unexported context is labeled correctly. `notification-resolve.test.ts` owns derivation behavior. `workflows-marker-coverage.test.ts` scans `notification-resolve.ts` and plants an offender to prove its gate. |
 
-**Score:** 5/5 roadmap truths verified; 0 behavior-unverified; 1 documented plan-literal override; 2 judgment-tier prohibition flags
+**Score:** 5/5 roadmap truths verified; 0 behavior-unverified; 1 documented plan-literal override; 2 judgment-tier prohibitions resolved by human UAT
 
 ### Accepted Baseline Deviation
 
@@ -369,9 +371,9 @@ No requirement-linked owner test is disabled. The original baseline predates the
 
 No unreferenced `TBD`/`FIXME`/`XXX` debt marker was found in `extensions/`, `tests/`, or `scripts/`. The seven review-disposition findings are recorded as fixed; the refreshed review of the 19-file fix diff is clean. That review covers the fix diff, not every milestone file. The older WR-02 totality gap is now covered by the SC-5 tests.
 
-### Human Verification Required
+### Human Verification Completed
 
-Two judgment-tier negative claims from the PLAN frontmatter require explicit human disposition under the verifier's prohibition gate. The automated tests and corpus found no violation; their finite coverage does not itself convert a `verification: judgment` item into an authoritative pass.
+Two judgment-tier negative claims from the PLAN frontmatter required explicit human disposition under the verifier's prohibition gate. The user explicitly passed both checks in `01-UAT.md` on 2026-10-01. The automated tests and corpus found no violation; their finite coverage does not itself convert a `verification: judgment` item into an authoritative pass.
 
 1. **Markers and severity.** Review the committed corpus and any command paths it does not exercise. Confirm that no previously shown `{requires ...}` marker is withheld and no warning or error severity is lowered.
 2. **Failure detail.** Review serialized cause, truncation, rollback, and manual-recovery leak paths. Confirm that none of those details is dropped from rendered failures.
@@ -380,7 +382,7 @@ The review-fix report's generic “requires human verification” labels for IN-
 
 ### Gaps Summary
 
-No implementation gap has been found. The original-base catalog-count check is a documented, user-accepted baseline deviation, not a phase regression. The two unresolved items are the explicit human decisions above. `01-VALIDATION.md` remains a draft, and this report does not assert a separate security audit.
+No implementation gap has been found. The original-base catalog-count check is a documented, user-accepted baseline deviation, not a phase regression. Both human decisions above are resolved by the user's UAT responses. The post-UAT workflows validated `01-VALIDATION.md` and produced `01-SECURITY.md` with 29 closed threats and no open threats. This updates the human disposition only; the automated evidence and covered digest remain unchanged.
 
 ---
 
