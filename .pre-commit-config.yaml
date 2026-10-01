@@ -95,76 +95,14 @@ repos:
     hooks:
       - id: prettier
         name: prettier
-        entry: node_modules/.bin/prettier --write
+        entry: node_modules/.bin/prettier --write --cache --cache-strategy content
         language: system
         files: '\.(js|json|ts)$|^scripts/.*\.mjs$'
-      - id: npm-lint
-        name: npm lint
-        entry: npm run lint
+      # Includes deletions and shared inputs. Full lint and member analysis run
+      # at completion; tool/config changes broaden to the full check here too.
+      - id: npm-check-changed
+        name: npm changed checks
+        entry: npm run check:changed
         language: system
         pass_filenames: false
-        files: '^(eslint\.config\.js|tsconfig\.json|(extensions|tests)/.*\.ts|scripts/.*\.mjs|package(-lock)?\.json)$'
-      - id: npm-format-check
-        name: npm format check
-        entry: npm run format:check
-        language: system
-        pass_filenames: false
-        files: '^(\.prettierrc\.json|\.prettierignore|eslint\.config\.js|(extensions|tests)/.*\.ts|scripts/.*\.mjs|package(-lock)?\.json|tsconfig\.json)$'
-      - id: npm-typecheck
-        name: npm typecheck
-        entry: npm run typecheck
-        language: system
-        pass_filenames: false
-        files: '^((extensions|tests)/.*\.ts|package(-lock)?\.json|tsconfig\.json)$'
-      - id: npm-fallow
-        name: npm fallow
-        entry: npm run fallow
-        language: system
-        pass_filenames: false
-        files: '^(\.fallowrc\.json|rule-packs/.*\.json|tsconfig\.json|eslint\.config\.js|(extensions|tests)/.*\.(ts|mjs)|scripts/.*\.mjs|package(-lock)?\.json)$'
-      # Fails any workflow that installs npm packages without --ignore-scripts.
-      # It runs on the change itself, before the code is committed.
-      - id: workflow-install-scripts
-        name: npm lint workflows
-        entry: npm run lint:workflows
-        language: system
-        pass_filenames: false
-        files: '^\.github/workflows/.*\.ya?ml$'
-      # RCOV-03. The same changed-pair gate the CI `direct-coverage` job runs,
-      # at the same strictness, with a commit-scoped base instead of the
-      # branch-scoped default (D-08-A07). Cost: one focused test run per pair
-      # this commit touches, plus the pinned pairs the gate always measures.
-      # The pin file is listed so a pin edit re-runs the comparison.
-      - id: npm-coverage-direct
-        name: npm direct coverage (changed pairs)
-        entry: npm run test:coverage:direct:commit
-        language: system
-        pass_filenames: false
-        files: '^(extensions/pi-claude-marketplace/.*\.ts|tests/.*\.ts|scripts/test-coverage-direct\.pin\.json)$'
-      # MEMBER-01. The whole-project unread-member gate. `pass_filenames` is
-      # false because the gate analyses the entire program in one pass: the
-      # change it exists to catch is the removal of the sole reader of a member
-      # declared in a DIFFERENT file, which a per-file invocation cannot see.
-      # Cost: one whole-program analysis, roughly 85 seconds.
-      - id: npm-type-members
-        name: npm type members
-        entry: npm run lint:type-members
-        language: system
-        pass_filenames: false
-        files: '^(scripts/check-unused-type-members(\.[a-z]+)?\.(mjs|json)|(extensions|tests)/.*\.ts|tsconfig\.json|package(-lock)?\.json|\.pre-commit-config\.yaml)$'
-      # MEMBER-02. The sensitivity controls around that gate, which plant a real
-      # offender into a real declaration and require the gate to report it.
-      #
-      # The trigger is deliberately NARROWER than the gate's own: these controls
-      # measure whether the GATE can still see an offender, and that question is
-      # settled by the analyzer, its decision and contract records, the compiler
-      # inputs, and the declaration the plant goes into -- never by an ordinary
-      # edit under extensions/. Cost: five whole-program analyses, roughly seven
-      # minutes and 2.1 GiB, which is why it does not ride on every `.ts` commit.
-      # It still runs in full on every `npm run check`, local and CI alike.
-      - id: npm-type-members-negative
-        name: npm type members (negative controls)
-        entry: npm run lint:type-members:negative
-        language: system
-        pass_filenames: false
-        files: '^(scripts/check-unused-type-members(\.[a-z]+)?\.(mjs|json)|extensions/pi-claude-marketplace/edge/types\.ts|tests/edge/types\.test\.ts|tsconfig\.json|package(-lock)?\.json|\.pre-commit-config\.yaml)$'
+        always_run: true

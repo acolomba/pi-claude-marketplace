@@ -17,6 +17,7 @@ import {
   pairForPath,
   productionPaths,
   runPair,
+  runPairs,
   shortfallReadingOf,
 } from "./test-coverage-direct.mjs";
 
@@ -125,18 +126,23 @@ async function main() {
   // The callback passes exactly one argument. `pairForPath` takes a repository root as its second
   // parameter, and `Array.prototype.map` supplies the element index there, which resolves a path
   // against a number.
-  for (const pair of modulePaths.map((modulePath) => pairForPath(modulePath))) {
-    const record = await rowFor(pair);
-    appendFileSync(reportPath, `${JSON.stringify(record)}\n`);
+  await runPairs(
+    modulePaths.map((modulePath) => pairForPath(modulePath)),
+    rowFor,
+    {
+      onRecord: (record) => {
+        appendFileSync(reportPath, `${JSON.stringify(record)}\n`);
 
-    // The accepted rows already announced themselves through the gate. A refused row prints nothing
-    // on its own, so it would otherwise be visible only after the run ended.
-    if (record.exitCode !== 0) {
-      process.stdout.write(
-        `Direct coverage shortfall: ${record.sourcePath} (${record.coverage})\n`,
-      );
-    }
-  }
+        // The accepted rows already announced themselves through the gate. A refused row prints nothing
+        // on its own, so it would otherwise be visible only after the run ended.
+        if (record.exitCode !== 0) {
+          process.stdout.write(
+            `Direct coverage shortfall: ${record.sourcePath} (${record.coverage})\n`,
+          );
+        }
+      },
+    },
+  );
 
   // Read the rows back out of the report rather than out of an in-memory array, so a lost append or
   // a clobbered file is caught. See `assertReportComplete` in the gate for why the witness matters.

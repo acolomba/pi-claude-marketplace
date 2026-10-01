@@ -29,7 +29,7 @@ Do not add another runner, assertion library, or mocking library. Do not import 
 - Test modules and test support (fakes, seeds, contracts) need no meta-tests; a fake is verified through its shared contract.
 - Each source-test pair reaches 100% function, line, and branch coverage when run alone. Aggregate coverage does not count.
 - Do not add coverage exceptions or `/* node:coverage ignore */` directives. Remove dead code or cover it through a public-behavior case.
-- Run `node --test <test-path>` while developing, `npm run test:coverage:direct -- <path>` for the pair (`:all` after a shared contract, fake, or harness change), and `npm run check` before completion.
+- Run `node --test <test-path>` while developing. Follow `skills/local-verification/SKILL.md` for task and full-project gates. The required pre-commit hook runs selected direct coverage; use `npm run test:coverage:direct -- <path>` separately when needed for earlier feedback. Shared contract, fake, or harness changes require all-pair coverage through the selector's full fallback. Ordinary task completion needs focused evidence; combined GSD merge/phase and final PR/release gates need the full check.
 
 ## Case structure
 
@@ -265,4 +265,4 @@ A unit-test change is complete when:
 - [ ] Shared support is organized by concern, with no generic helper directory.
 - [ ] Real and fake adapters pass the same contract, and the contract has a proven negative control.
 - [ ] The focused source-test pair has 100% direct function, line, and branch coverage, with no coverage exception added.
-- [ ] Focused `node --test`, direct coverage, and `npm run check` pass.
+- [ ] Owner tests, direct coverage, and the gate required by `skills/local-verification/SKILL.md` pass; the summary states focused or full scope accurately.

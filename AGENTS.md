@@ -37,6 +37,10 @@ Rules for TypeScript live under `skills/` and are not registered with any runtim
 - `skills/typescript-google-style-review/SKILL.md` and `skills/typescript-comments/SKILL.md` for every `.ts` file
 - `skills/typescript-unit-testing/SKILL.md` (write) and `skills/typescript-unit-testing-review/SKILL.md` (check) for `tests/**/*.ts`
 
+### Build verification
+
+Read `skills/local-verification/SKILL.md` when planning or running checks. Ordinary quick tasks, individual plan tasks, and review fixes may complete with task-wide focused evidence, normally supplied by the required pre-commit hooks. Do not routinely run `check:changed` separately before those hooks. Full `npm run check` remains required for combined GSD merge/phase gates and final PR/release handoff, with unchanged-input reuse as defined in the skill. This project scheduling policy governs the TypeScript and GSD skill instructions; a focused result is not full-project verification.
+
 ### Versioning
 
 Before creating a PR, offer to bump the version in `package.json` and `sonar-project.properties` and update `package-lock.json`. Concisely record changes in `CHANGELOG.md`

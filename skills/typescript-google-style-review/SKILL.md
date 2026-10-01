@@ -11,7 +11,7 @@ Review the files in the change under review. New files follow the rules complete
 
 ## Gate on the toolchain first
 
-Confirm `npx tsc --noEmit` and `npx eslint . --max-warnings=0` pass. A failure of either is itself a finding; do not hand-review what the tools report. The toolchain gates: compilation, indentation, quotes, semicolons, trailing commas, brace placement and spacing, `case` indentation, line length, mandatory braces on control-flow bodies, `===` with the `== null` exception, dot notation, declare-before-use, unused variables, `namespace`, `require()`, `@ts-ignore`, and bare `any`. Do not open findings for these when the gate is green.
+Require passing type checking and lint at the scope defined in `skills/local-verification/SKILL.md`. Reuse the writer's or commit hook's valid evidence for the reviewed inputs; do not automatically repeat whole-project commands for an ordinary task review. A failure of either check is itself a finding; do not hand-review what the tools report. The toolchain gates: compilation, indentation, quotes, semicolons, trailing commas, brace placement and spacing, `case` indentation, line length, mandatory braces on control-flow bodies, `===` with the `== null` exception, dot notation, declare-before-use, unused variables, `namespace`, `require()`, `@ts-ignore`, and bare `any`. Do not open findings for these when the gate is green.
 
 Where a rule overlaps the linter, review the part the linter cannot judge: every `eslint-disable` directive names one rule, carries a `-- <reason>`, and the reason holds for that line.
 

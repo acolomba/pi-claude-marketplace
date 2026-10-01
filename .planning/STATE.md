@@ -681,6 +681,10 @@ hit the same wall; convert it rather than re-disclosing it.
 | 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na/) |
 | 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | b07ae35c | complete | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew/) |
 | 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./quick/260924-q0m-keep-only-plugin-qualified-interactive-s/) |
+| 261001-iad | Deduplicate CI checks and run isolated direct coverage pairs concurrently | 2026-10-01 | b0d45f4f | complete | [261001-iad-deduplicate-ci-checks-and-run-isolated-d](./quick/261001-iad-deduplicate-ci-checks-and-run-isolated-d/) |
+| 261001-jpu | Remove brittle CI configuration assertions and retain the separate Sonar workflow | 2026-10-01 | f69e5023 | complete | [261001-jpu-remove-brittle-ci-configuration-assertio](./quick/261001-jpu-remove-brittle-ci-configuration-assertio/) |
+| 261001-jwu | Optimize local checks and GSD verification with native caches and conservative changed-file checks | 2026-10-01 | 462f3f24 | complete | [261001-jwu-optimize-local-checks-and-gsd-verificati](./quick/261001-jwu-optimize-local-checks-and-gsd-verificati/) |
+| 261001-mlt | Schedule focused task gates and full combined verification without duplicate local runs | 2026-10-01 | d9b672b9 | complete | [261001-mlt-schedule-focused-task-gates-and-full-pha](./quick/261001-mlt-schedule-focused-task-gates-and-full-pha/) |
 
 ## Session Continuity
 

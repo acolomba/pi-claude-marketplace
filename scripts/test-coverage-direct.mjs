@@ -1,7 +1,8 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdtemp, open, rm } from "node:fs/promises";
+import { availableParallelism, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -612,21 +613,33 @@ export async function runPair({ sourcePath, testPath }) {
   const startedAt = process.hrtime.bigint();
 
   try {
-    const testRun = spawnSync(
-      process.execPath,
-      [
-        "--test",
-        "--experimental-test-coverage",
-        "--test-reporter=spec",
-        "--test-reporter-destination=stdout",
-        "--test-reporter=lcov",
-        `--test-reporter-destination=${lcovPath}`,
-        testPath,
-      ],
-      { cwd: projectRoot, stdio: "inherit" },
-    );
+    const outputPath = path.join(coverageDirectory, "test.log");
+    const output = await open(outputPath, "w");
+    let exitCode;
 
-    if (testRun.status !== 0) {
+    try {
+      const testRun = spawn(
+        process.execPath,
+        [
+          "--test",
+          "--experimental-test-coverage",
+          "--test-reporter=spec",
+          "--test-reporter-destination=stdout",
+          "--test-reporter=lcov",
+          `--test-reporter-destination=${lcovPath}`,
+          testPath,
+        ],
+        { cwd: projectRoot, stdio: ["ignore", output.fd, output.fd] },
+      );
+      [exitCode] = await once(testRun, "close");
+    } finally {
+      await output.close();
+    }
+
+    // Keep each pair's output together, including diagnostics from failed tests.
+    process.stdout.write(readFileSync(outputPath, "utf8"));
+
+    if (exitCode !== 0) {
       throw new Error(`Focused test failed: ${testPath}`);
     }
 
@@ -644,6 +657,51 @@ export async function runPair({ sourcePath, testPath }) {
   } finally {
     await rm(coverageDirectory, { force: true, recursive: true });
   }
+}
+
+/**
+ * Measures independent pairs with bounded concurrency. Results retain input order;
+ * onRecord sees completion order so interrupted reports keep every finished pair.
+ * A failed worker stops new work. Started workers drain before the failure escapes.
+ */
+export async function runPairs(pairs, run, options = {}) {
+  const concurrency =
+    options.concurrency ?? (process.env.TEST_CONCURRENCY || Math.min(4, availableParallelism()));
+  const limit = Number(concurrency);
+
+  if (!/^[1-9][0-9]*$/.test(String(concurrency)) || !Number.isSafeInteger(limit)) {
+    throw new Error("TEST_CONCURRENCY must be a positive safe integer");
+  }
+
+  const records = new Array(pairs.length);
+  let next = 0;
+  let stopped = false;
+
+  async function worker() {
+    while (!stopped && next < pairs.length) {
+      const index = next++;
+
+      try {
+        const record = await run(pairs[index]);
+        records[index] = record;
+        options.onRecord?.(record);
+      } catch (error) {
+        stopped = true;
+        throw error;
+      }
+    }
+  }
+
+  const workers = await Promise.allSettled(
+    Array.from({ length: Math.min(limit, pairs.length) }, () => worker()),
+  );
+  const failed = workers.find((worker) => worker.status === "rejected");
+
+  if (failed !== undefined) {
+    throw failed.reason;
+  }
+
+  return records;
 }
 
 /**
@@ -712,14 +770,7 @@ async function measurePair(pair, observed, run) {
  */
 export async function enforcePairs(pairs, pinRows, enumeratedModules, run = runPair, hooks = {}) {
   const observed = [];
-  const records = [];
-
-  for (const pair of pairs) {
-    const record = await measurePair(pair, observed, run);
-
-    records.push(record);
-    hooks.onRecord?.(record);
-  }
+  const records = await runPairs(pairs, (pair) => measurePair(pair, observed, run), hooks);
 
   hooks.beforeCompare?.(records);
   assertPinnedReadings(observed, pinRows, enumeratedModules);
@@ -865,26 +916,23 @@ async function main() {
     throw new Error("--base takes one ref name: --base <ref>");
   }
 
-  if (args.length === 1) {
-    // Through the same comparison as every other arm. `.claude/rules/typescript-unit-testing.md`
-    // sends a developer here while working on one pair, so this is the most-used arm; running it
-    // against `runPair` alone made it the ONE arm that does not know about the pin, and a developer
-    // editing a pinned module got a bare refusal with nothing to distinguish "you broke coverage"
-    // from "this pair reads exactly as recorded".
-    //
-    // The pin is narrowed to this pair. The whole pin cannot apply: the other rows name modules this
-    // run never measures, so comparing against them would refuse every single-path run as a set of
-    // stale rows.
-    const pair = pairForPath(args[0]);
-    const rowsForPair = loadCoveragePin().filter((row) => row.sourcePath === pair.sourcePath);
+  if (args.length > 0 && args.every((arg) => !arg.startsWith("--"))) {
+    // Explicit paths compare only the pins they measure, with the same strictness as other arms.
+    const pairs = new Map(
+      args.map((arg) => {
+        const pair = pairForPath(arg);
+        return [pair.sourcePath, pair];
+      }),
+    );
+    const rowsForPairs = loadCoveragePin().filter((row) => pairs.has(row.sourcePath));
 
-    await enforcePairs([pair], rowsForPair, productionPaths());
+    await enforcePairs([...pairs.values()], rowsForPairs, productionPaths());
     return;
   }
 
   if (args.length !== 0) {
     throw new Error(
-      "Pass one source or test path, --all, --all --report <path>, --base <ref>, or no arguments",
+      "Pass source or test paths, --all, --all --report <path>, --base <ref>, or no arguments",
     );
   }
 
