@@ -96,19 +96,23 @@ async function listMarketplaceCandidateTags(
 
   try {
     const names = await seam.listTags({ dir: marketplaceRoot });
-    const candidates: ReleaseTagCandidate[] = [];
-    for (const name of names) {
-      // Each peel is an independent local read; isomorphic-git has no batched
-      // API to resolve every tag oid in one call.
-      const oid = await seam.resolveTagOid({ dir: marketplaceRoot, name });
-      // WR-06: `undefined` means the tag peeled to a non-commit object (a
-      // blob/tree tag) or a peel chain that never terminated -- neither is a
-      // candidate `selectHighestSatisfyingTag` can check out, so it is
-      // dropped rather than handed a checkout-breaking oid.
-      if (oid !== undefined) {
-        candidates.push({ name, oid });
-      }
-    }
+    // Each peel is an independent local read, so the peels run concurrently;
+    // isomorphic-git has no batched API to resolve every tag oid in one call.
+    // The peels share one object cache, so the clone's packfile is loaded once
+    // per listing rather than once per tag. `Promise.all` keeps the listing's
+    // tag order.
+    const cache = {};
+    const peeled = await Promise.all(
+      names.map(async (name) => {
+        const oid = await seam.resolveTagOid({ dir: marketplaceRoot, name, cache });
+        // WR-06: `undefined` means the tag peeled to a non-commit object (a
+        // blob/tree tag) or a peel chain that never terminated -- neither is a
+        // candidate `selectHighestSatisfyingTag` can check out, so it is
+        // dropped rather than handed a checkout-breaking oid.
+        return oid === undefined ? [] : [{ name, oid }];
+      }),
+    );
+    const candidates: readonly ReleaseTagCandidate[] = peeled.flat();
 
     memo?.set(marketplaceRoot, candidates);
     return { kind: "listed", tags: candidates };

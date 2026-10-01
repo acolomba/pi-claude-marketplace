@@ -1985,7 +1985,7 @@ describe("resolveTagOid", () => {
     await git.tag({ fs, dir: repository.dir, ref: "v1.0.0", object: repository.initialOid });
 
     // act
-    const oid = await resolveTagOid({ dir: repository.dir, name: "v1.0.0" });
+    const oid = await resolveTagOid({ dir: repository.dir, name: "v1.0.0", cache: {} });
 
     // assert
     assert.strictEqual(oid, repository.initialOid);
@@ -2008,7 +2008,7 @@ describe("resolveTagOid", () => {
     });
 
     // act
-    const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag" });
+    const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag", cache: {} });
 
     // assert: a lightweight tag's target is not decided by the throw alone --
     // a commit target still resolves, so a non-commit target must be checked
@@ -2036,7 +2036,7 @@ describe("resolveTagOid", () => {
     assert.notStrictEqual(tagObjectOid, repository.initialOid);
 
     // act
-    const oid = await resolveTagOid({ dir: repository.dir, name: "v2.0.0" });
+    const oid = await resolveTagOid({ dir: repository.dir, name: "v2.0.0", cache: {} });
 
     // assert
     assert.strictEqual(oid, repository.initialOid);
@@ -2065,7 +2065,7 @@ describe("resolveTagOid", () => {
     });
 
     // act
-    const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag" });
+    const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag", cache: {} });
 
     // assert: WR-06 -- a non-commit tagged type is not a checkout-able
     // candidate, so `undefined` signals it rather than handing back an oid
@@ -2102,7 +2102,7 @@ describe("resolveTagOid", () => {
     }
 
     // act
-    const oid = await resolveTagOid({ dir: repository.dir, name: outermostName });
+    const oid = await resolveTagOid({ dir: repository.dir, name: outermostName, cache: {} });
 
     // assert: WR-06 -- hop exhaustion never reached a commit, so `undefined`
     // signals that rather than handing back an intermediate tag-object oid a

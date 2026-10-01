@@ -158,6 +158,11 @@ export interface ResolveTagOidOptions {
   dir: string;
   /** Tag name, with no `refs/tags/` prefix. */
   name: string;
+  /**
+   * isomorphic-git object cache. Peels that share one cache load each packfile
+   * into memory once instead of once per peel.
+   */
+  cache: object;
 }
 
 export interface ForceUpdateRefOptions {
@@ -611,7 +616,7 @@ const MAX_TAG_PEEL_HOPS = 10;
  *     the same reason -- there is no commit oid to hand back.
  *
  * Source: node_modules/isomorphic-git/index.d.ts -- resolveRef({ fs, dir, ref
- * }) => Promise<string>; readTag({ fs, dir, gitdir, oid }) => Promise<{ oid,
+ * }) => Promise<string>; readTag({ fs, dir, gitdir, oid, cache }) => Promise<{ oid,
  * tag: TagObject, payload }>, where TagObject.type is "blob" | "tree" |
  * "commit" | "tag" and TagObject.object is the oid of the tagged object.
  */
@@ -621,13 +626,13 @@ export async function resolveTagOid(opts: ResolveTagOidOptions): Promise<string 
   for (let hop = 0; hop < MAX_TAG_PEEL_HOPS; hop++) {
     let read: Awaited<ReturnType<typeof git.readTag>>;
     try {
-      read = await git.readTag({ fs, dir: opts.dir, oid });
+      read = await git.readTag({ fs, dir: opts.dir, oid, cache: opts.cache });
     } catch {
       // Not a tag object: a LIGHTWEIGHT tag names its target directly. Only a
       // commit is checkout-able, so anything else -- a blob, a tree, or an
       // unreadable object -- is dropped like an annotated blob/tree tag is.
       try {
-        await git.readCommit({ fs, dir: opts.dir, oid });
+        await git.readCommit({ fs, dir: opts.dir, oid, cache: opts.cache });
         return oid;
       } catch {
         return undefined;

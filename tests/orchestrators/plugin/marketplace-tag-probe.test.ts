@@ -24,12 +24,12 @@ interface FakeSeamOptions {
 interface FakeSeam {
   readonly seam: MarketplaceTagListingSeam;
   readonly listTagsCalls: { dir: string }[];
-  readonly resolveTagOidCalls: { dir: string; name: string }[];
+  readonly resolveTagOidCalls: { dir: string; name: string; cache: object }[];
 }
 
 function createFakeSeam(options: FakeSeamOptions = {}): FakeSeam {
   const listTagsCalls: { dir: string }[] = [];
-  const resolveTagOidCalls: { dir: string; name: string }[] = [];
+  const resolveTagOidCalls: { dir: string; name: string; cache: object }[] = [];
   const tagsByName = options.tagsByName ?? {};
 
   const seam: MarketplaceTagListingSeam = {
@@ -193,6 +193,24 @@ describe("probeMarketplaceTags", () => {
     await probeMarketplaceTags(options({ pluginName: "linter", seam: fake.seam, tagMemo }));
 
     assert.strictEqual(fake.listTagsCalls.length, 1);
+  });
+
+  test("every peel of one listing shares one object cache, and each listing gets its own", async () => {
+    // arrange
+    const fake = createFakeSeam({
+      tagsByName: { "formatter--v1.0.0": "oid-1", "formatter--v2.1.0": "oid-2" },
+    });
+
+    // act
+    await probeMarketplaceTags(options({ seam: fake.seam, marketplaceRoot: "/marketplace/a" }));
+    await probeMarketplaceTags(options({ seam: fake.seam, marketplaceRoot: "/marketplace/b" }));
+
+    // assert
+    const caches = fake.resolveTagOidCalls.map((call) => call.cache);
+    assert.deepStrictEqual(
+      [caches.length, caches[1] === caches[0], caches[2] === caches[0], caches[3] === caches[2]],
+      [4, true, false, true],
+    );
   });
 
   test("a failed listing is never memoized, so a later attempt re-lists instead of replaying the error", async () => {
