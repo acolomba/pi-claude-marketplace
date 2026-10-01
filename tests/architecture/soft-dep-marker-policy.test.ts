@@ -264,21 +264,26 @@ test("SC-5: the table states every declared marker policy exactly once", () => {
 /** The pin every command context carries (D-04). */
 const CONTEXT_PIN = /\bsatisfies\s+CommandContext</;
 
-/** A top-level exported const, whose name labels the context pin after it. */
-const EXPORTED_CONST = /^export const (\w+)/gm;
+/** A top-level const, whose name and export status label the context pin after it. */
+const CONTEXT_CONST = /^(export )?const (\w+)/gm;
 
 /**
  * The name of each context pinned in `stripped`, in source order.
  *
- * Each pin takes the last exported const between it and the previous pin. A
- * pin with no exported const before it is labelled `(unexported)`, so it can
- * never match a table name and cannot pass unseen.
+ * Each pin takes the last const between it and the previous pin. Unexported
+ * declarations carry an `(unexported)` prefix and cannot match a table name.
+ * The scan strips block and whole-line comments; trailing line comments must
+ * not contain a context pin, because this text scan would count it as code.
  */
 function contextNamesIn(stripped: string): string[] {
   return stripped
     .split(CONTEXT_PIN)
     .slice(0, -1)
-    .map((before) => [...before.matchAll(EXPORTED_CONST)].at(-1)?.[1] ?? "(unexported)");
+    .map((before) => {
+      const declaration = [...before.matchAll(CONTEXT_CONST)].at(-1);
+      const name = declaration?.[2] ?? "";
+      return declaration?.[1] === undefined ? `(unexported) ${name}`.trimEnd() : name;
+    });
 }
 
 /**
@@ -337,6 +342,33 @@ test("SC-5: the context scan reports a context planted in a copy of a real messa
     assert.deepStrictEqual(discovered, [
       "INSTALL_CONTEXT (plugin/install.messaging.ts)",
       "PLANTED_CONTEXT (plugin/install.messaging.ts)",
+    ]);
+  });
+});
+
+test("SC-5: an unexported context keeps its own name after an exported render map", async () => {
+  await withTempRoot("marker-policy-context-", async (root) => {
+    // arrange
+    await plantOffender(
+      root,
+      PLANTED_CONTEXT_HOST,
+      [
+        "export const PLANTED_RENDER = {};",
+        "const PLANTED_CONTEXT = {",
+        '  Messaging: { label: "Planted" },',
+        "  render: PLANTED_RENDER,",
+        "  markers: {},",
+        "} as const satisfies CommandContext<never, never>;",
+      ].join("\n"),
+    );
+
+    // act
+    const discovered = await declaredContextsUnder(root);
+
+    // assert
+    assert.deepStrictEqual(discovered, [
+      "(unexported) PLANTED_CONTEXT (plugin/install.messaging.ts)",
+      "INSTALL_CONTEXT (plugin/install.messaging.ts)",
     ]);
   });
 });
