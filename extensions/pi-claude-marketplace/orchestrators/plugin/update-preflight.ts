@@ -16,12 +16,18 @@ import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import {
+  DEFAULT_CREDENTIAL_OPS,
+  buildCloneAuth,
+  buildStoredCredentialAuth,
+  hostFromCloneUrl,
+} from "../auth-host.ts";
 
 import {
   canonicalCloneUrl,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  networkCloneUrl,
   resolveGitSubdirRoot,
   resolvePluginPin,
 } from "./clone-cache.ts";
@@ -36,7 +42,7 @@ import type { NotificationContext, ToolInventory } from "../../platform/pi-api.t
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { GitOps } from "../marketplace/shared.ts";
+import type { GitAuthBundle, GitOps } from "../marketplace/shared.ts";
 import type {
   PluginUpdateFailedOutcome,
   PluginUpdateSkippedOutcome,
@@ -145,6 +151,13 @@ interface UpdateCloneProbe {
   readonly resolvedSha: () => string | undefined;
 }
 
+/**
+ * `cloneAuth` supplies the host-bound auth bundle for both arms below. The
+ * autoupdate cascade calls this probe with no notification context, so it gets
+ * `buildStoredCredentialAuth`'s bundle: the Device Flow renders a user code
+ * through the context and the cascade has none (D-3-04). Every other caller
+ * gets `buildCloneAuth`'s bundle.
+ */
 function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
   locations: ScopedLocations,
@@ -157,28 +170,21 @@ function makeUpdateCloneProbe(
 ): UpdateCloneProbe {
   let captured: string | undefined;
 
-  const buildBundle = (gitSource: GitBackedSource, cloneUrl: string) => {
-    if (auth.ctx === undefined) {
-      return undefined;
-    }
-
-    return buildAuthForHost({
-      host: hostFromCloneUrl(cloneUrl, gitSource.kind),
-      credentialOps: auth.credentialOps,
-      ctx: auth.ctx,
-      ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
-      ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
-    });
-  };
+  function cloneAuth(cloneUrl: string, kind: GitBackedSource["kind"]): GitAuthBundle {
+    return auth.ctx === undefined
+      ? buildStoredCredentialAuth(hostFromCloneUrl(cloneUrl, kind), auth.credentialOps)
+      : buildCloneAuth(cloneUrl, kind, { ...auth, ctx: auth.ctx });
+  }
 
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
     const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = buildBundle(gitSource, cloneUrl);
+    const authBundle = cloneAuth(cloneUrl, gitSource.kind);
     const materialized = await seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
+      networkUrl: networkCloneUrl(gitSource),
       ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
-      ...(authBundle !== undefined && { auth: authBundle }),
+      auth: authBundle,
     });
     if (gitSource.kind === "git-subdir") {
       const subdir = await resolveGitSubdirRoot(materialized.pluginRoot, gitSource.path);
@@ -199,17 +205,18 @@ function makeUpdateCloneProbe(
   }
 
   async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
-    const authBundle = buildBundle(gitSource, canonicalCloneUrl(gitSource));
+    const authBundle = cloneAuth(canonicalCloneUrl(gitSource), gitSource.kind);
     const pin = await seam.resolvePluginPin({
       source: gitSource,
-      ...(authBundle !== undefined && { auth: authBundle }),
+      auth: authBundle,
     });
     const cloneRoot = await seam.materializePluginClone({
       locations,
       cloneUrl: pin.cloneUrl,
+      networkUrl: networkCloneUrl(gitSource),
       pin: pin.pin,
       ...(pin.ref !== undefined && { ref: pin.ref }),
-      ...(authBundle !== undefined && { auth: authBundle }),
+      auth: authBundle,
     });
     if (gitSource.kind === "git-subdir") {
       const subdir = await resolveGitSubdirRoot(cloneRoot, gitSource.path);

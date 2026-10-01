@@ -5,20 +5,29 @@ import { mock, verify, when } from "strong-mock";
 
 import {
   DEFAULT_CREDENTIAL_OPS,
-  NO_PROVIDER_CAUSE,
+  NO_STORED_CREDENTIAL_CAUSE,
   buildAuthForHost,
   buildCloneAuth,
+  buildStoredCredentialAuth,
   hostFromCloneUrl,
 } from "../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createCredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
+import type { GitAuthBundle } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type { CredentialSpawn } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+/** Narrows a bundle the case expects to run a Device Flow, and fails the case otherwise. */
+function expectDeviceFlow(auth: GitAuthBundle): Extract<GitAuthBundle, { kind: "device-flow" }> {
+  assert.ok(auth.kind === "device-flow", `expected a device-flow bundle for ${auth.host}`);
+  return auth;
+}
 
 describe("DEFAULT_CREDENTIAL_OPS", () => {
   test("composes the platform credential protocol without launching a process", () => {
@@ -84,34 +93,160 @@ describe("hostFromCloneUrl", () => {
   });
 });
 
-describe("NO_PROVIDER_CAUSE", () => {
-  test("renders the exact unsupported-provider cause", () => {
+describe("NO_STORED_CREDENTIAL_CAUSE", () => {
+  test("names the host and the command that stores a credential for it", () => {
     // arrange
     const host = "git.example:8443";
 
     // act
-    const cause = NO_PROVIDER_CAUSE(host);
+    const cause = NO_STORED_CREDENTIAL_CAUSE(host);
 
     // assert
-    assert.strictEqual(cause, "no auth provider is registered for git.example:8443");
+    assert.strictEqual(
+      cause,
+      "no credential was obtained for git.example:8443; store one with: printf " +
+        "'protocol=https\\nhost=git.example:8443\\nusername=<user>\\npassword=<token>\\n\\n' " +
+        "| git credential approve",
+    );
   });
 });
 
 describe("buildAuthForHost", () => {
-  test("returns exact absence for an unsupported provider without touching collaborators", () => {
+  test("forwards an unregistered host's stored credential through the real auth callbacks", async () => {
+    // arrange
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [["git.example.invalid", { username: "user", password: "stored-credential" }]],
+    });
+    const auth = buildAuthForHost({
+      host: "git.example.invalid",
+      credentialOps: credentials.credentialOps,
+      ctx,
+    });
+    const callbacks = buildAuthCallbacks(auth);
+
+    // act
+    const credential = await callbacks.onAuth("https://git.example.invalid/owner/repo.git");
+
+    // assert
+    assert.deepStrictEqual(credential, { username: "user", password: "stored-credential" });
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: "git.example.invalid" }],
+      approve: [],
+      reject: [],
+    });
+    verify(ctx);
+  });
+
+  test("cancels on an unregistered host whose helper is empty", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const auth = buildAuthForHost({
+      host: "git.example.invalid",
+      credentialOps: credentials.credentialOps,
+      ctx,
+    });
+    const callbacks = buildAuthCallbacks(auth);
+
+    // act
+    const credential = await callbacks.onAuth("https://git.example.invalid/owner/repo.git");
+
+    // assert
+    assert.deepStrictEqual(credential, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: "git.example.invalid" }],
+      approve: [],
+      reject: [],
+    });
+    assert.deepStrictEqual(logged, ["[auth] onAuth: no stored credential for git.example.invalid"]);
+    verify(ctx);
+  });
+
+  test("CR-01: keeps an unregistered host's rejected credential in the keychain", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const irreplaceable = { username: "user", password: "self-hosted-token" };
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [["git.example.invalid", irreplaceable]],
+    });
+    const auth = buildAuthForHost({
+      host: "git.example.invalid",
+      credentialOps: credentials.credentialOps,
+      ctx,
+    });
+    const callbacks = buildAuthCallbacks(auth);
+
+    // act
+    const cancellation = await callbacks.onAuthFailure(
+      "https://git.example.invalid/owner/repo.git",
+      irreplaceable,
+    );
+
+    // assert
+    assert.deepStrictEqual(cancellation, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+    assert.deepStrictEqual(credentials.storedCredential("git.example.invalid"), irreplaceable);
+    assert.deepStrictEqual(logged, [
+      "[auth] onAuthFailure: keeping the stored credential for git.example.invalid, nothing can re-mint it",
+    ]);
+    verify(ctx);
+  });
+
+  test("CR-01 / AUTH-07: evicts a GitHub credential the server rejected", async () => {
+    // arrange
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const rejected = { username: "x-access-token", password: "expired-token" };
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [["github.com", rejected]],
+    });
+    const auth = buildAuthForHost({
+      host: "github.com",
+      credentialOps: credentials.credentialOps,
+      ctx,
+    });
+    const callbacks = buildAuthCallbacks(auth);
+
+    // act
+    const cancellation = await callbacks.onAuthFailure(
+      "https://github.com/owner/repo.git",
+      rejected,
+    );
+
+    // assert
+    assert.deepStrictEqual(cancellation, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [],
+      approve: [],
+      reject: [{ host: "github.com", credential: rejected }],
+    });
+    assert.strictEqual(credentials.storedCredential("github.com"), null);
+    verify(ctx);
+  });
+
+  test("returns a stored-credential bundle for an unregistered host without notifying", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const credentials = createCredentialOpsFake({ boundary: "memory" });
 
     // act
     const auth = buildAuthForHost({
-      host: "git.example",
+      host: "git.example.invalid",
       credentialOps: credentials.credentialOps,
       ctx,
     });
 
     // assert
-    assert.strictEqual(auth, undefined);
+    assert.deepStrictEqual(auth, {
+      kind: "stored-credential",
+      credentialOps: credentials.credentialOps,
+      host: "git.example.invalid",
+    });
     assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
     verify(ctx);
   });
@@ -123,12 +258,13 @@ describe("buildAuthForHost", () => {
       boundary: "memory",
       credentials: [["github.com", { username: "x-access-token", password: "stored-credential" }]],
     });
-    const auth = buildAuthForHost({
-      host: "github.com",
-      credentialOps: credentials.credentialOps,
-      ctx,
-    });
-    assert.ok(auth !== undefined);
+    const auth = expectDeviceFlow(
+      buildAuthForHost({
+        host: "github.com",
+        credentialOps: credentials.credentialOps,
+        ctx,
+      }),
+    );
 
     // act
     const credential = await auth.credentialOps.fill(auth.host);
@@ -137,6 +273,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      kind: "device-flow",
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(credential, {
@@ -155,12 +292,13 @@ describe("buildAuthForHost", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const auth = buildAuthForHost({
-      host: "gitlab.com",
-      credentialOps: credentials.credentialOps,
-      ctx,
-    });
-    assert.ok(auth !== undefined);
+    const auth = expectDeviceFlow(
+      buildAuthForHost({
+        host: "gitlab.com",
+        credentialOps: credentials.credentialOps,
+        ctx,
+      }),
+    );
 
     // act
     const credential = await auth.credentialOps.fill(auth.host);
@@ -169,6 +307,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "gitlab.com",
+      kind: "device-flow",
       onAuthRequired: auth.onAuthRequired,
     });
     assert.strictEqual(credential, null);
@@ -218,13 +357,14 @@ describe("buildAuthForHost", () => {
         },
       ],
     });
-    const auth = buildAuthForHost({
-      host: "github.com",
-      credentialOps: credentials.credentialOps,
-      ctx,
-      deviceFlowHttp: deviceFlow.http,
-    });
-    assert.ok(auth !== undefined);
+    const auth = expectDeviceFlow(
+      buildAuthForHost({
+        host: "github.com",
+        credentialOps: credentials.credentialOps,
+        ctx,
+        deviceFlowHttp: deviceFlow.http,
+      }),
+    );
 
     // act
     const firstAuthentication = await auth.onAuthRequired();
@@ -234,6 +374,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      kind: "device-flow",
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(firstAuthentication, {
@@ -303,14 +444,15 @@ describe("buildAuthForHost", () => {
       requestCodeError: new Error("provider unavailable"),
     });
     const authMemo = new Map<string, AuthAttemptResult>();
-    const auth = buildAuthForHost({
-      host: "github.com",
-      credentialOps: credentials.credentialOps,
-      ctx,
-      deviceFlowHttp: deviceFlow.http,
-      authMemo,
-    });
-    assert.ok(auth !== undefined);
+    const auth = expectDeviceFlow(
+      buildAuthForHost({
+        host: "github.com",
+        credentialOps: credentials.credentialOps,
+        ctx,
+        deviceFlowHttp: deviceFlow.http,
+        authMemo,
+      }),
+    );
 
     // act
     const authentication = await auth.onAuthRequired();
@@ -319,6 +461,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      kind: "device-flow",
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(authentication, {
@@ -368,14 +511,15 @@ describe("buildAuthForHost", () => {
       ],
     });
     const authMemo = new Map<string, AuthAttemptResult>();
-    const auth = buildAuthForHost({
-      host: "github.com",
-      credentialOps: credentials.credentialOps,
-      ctx,
-      deviceFlowHttp: deviceFlow.http,
-      authMemo,
-    });
-    assert.ok(auth !== undefined);
+    const auth = expectDeviceFlow(
+      buildAuthForHost({
+        host: "github.com",
+        credentialOps: credentials.credentialOps,
+        ctx,
+        deviceFlowHttp: deviceFlow.http,
+        authMemo,
+      }),
+    );
 
     // act
     const firstAuthentication = await auth.onAuthRequired();
@@ -385,6 +529,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      kind: "device-flow",
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(firstAuthentication, {
@@ -456,20 +601,24 @@ describe("buildAuthForHost", () => {
       ],
     });
     const authMemo = new Map<string, AuthAttemptResult>();
-    const githubAuth = buildAuthForHost({
-      host: "github.com",
-      credentialOps: credentials.credentialOps,
-      ctx,
-      deviceFlowHttp: deviceFlow.http,
-      authMemo,
-    });
-    const gitlabAuth = buildAuthForHost({
-      host: "gitlab.com",
-      credentialOps: credentials.credentialOps,
-      ctx,
-      deviceFlowHttp: deviceFlow.http,
-      authMemo,
-    });
+    const githubAuth = expectDeviceFlow(
+      buildAuthForHost({
+        host: "github.com",
+        credentialOps: credentials.credentialOps,
+        ctx,
+        deviceFlowHttp: deviceFlow.http,
+        authMemo,
+      }),
+    );
+    const gitlabAuth = expectDeviceFlow(
+      buildAuthForHost({
+        host: "gitlab.com",
+        credentialOps: credentials.credentialOps,
+        ctx,
+        deviceFlowHttp: deviceFlow.http,
+        authMemo,
+      }),
+    );
     assert.ok(githubAuth !== undefined);
     assert.ok(gitlabAuth !== undefined);
 
@@ -483,11 +632,13 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(githubAuth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      kind: "device-flow",
       onAuthRequired: githubAuth.onAuthRequired,
     });
     assert.deepStrictEqual(gitlabAuth, {
       credentialOps: credentials.credentialOps,
       host: "gitlab.com",
+      kind: "device-flow",
       onAuthRequired: gitlabAuth.onAuthRequired,
     });
     assert.deepStrictEqual(githubAuthentication, {
@@ -607,13 +758,14 @@ describe("buildAuthForHost", () => {
       },
     );
     const authMemo = new Map<string, AuthAttemptResult>();
-    const auth = buildAuthForHost({
-      host: "github.com",
-      credentialOps: credentials.credentialOps,
-      ctx,
-      authMemo,
-    });
-    assert.ok(auth !== undefined);
+    const auth = expectDeviceFlow(
+      buildAuthForHost({
+        host: "github.com",
+        credentialOps: credentials.credentialOps,
+        ctx,
+        authMemo,
+      }),
+    );
 
     // act
     const authentication = await auth.onAuthRequired();
@@ -622,6 +774,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      kind: "device-flow",
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(authentication, {
@@ -647,6 +800,49 @@ describe("buildAuthForHost", () => {
     });
     verify(ctx);
     verify(ui);
+  });
+});
+
+describe("buildStoredCredentialAuth", () => {
+  test("binds a stored-credential bundle to the host without any credential I/O", () => {
+    // arrange
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    const auth = buildStoredCredentialAuth("git.example.invalid", credentials.credentialOps);
+
+    // assert
+    assert.deepStrictEqual(auth, {
+      kind: "stored-credential",
+      credentialOps: credentials.credentialOps,
+      host: "git.example.invalid",
+    });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+  });
+
+  test("D-3-04: cancels a github.com helper miss without starting a Device Flow", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const auth = buildStoredCredentialAuth("github.com", credentials.credentialOps);
+    const callbacks = buildAuthCallbacks(auth);
+
+    // act
+    const credential = await callbacks.onAuth("https://github.com/owner/repo.git");
+
+    // assert
+    assert.deepStrictEqual(auth, {
+      kind: "stored-credential",
+      credentialOps: credentials.credentialOps,
+      host: "github.com",
+    });
+    assert.deepStrictEqual(credential, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: "github.com" }],
+      approve: [],
+      reject: [],
+    });
+    assert.deepStrictEqual(logged, ["[auth] onAuth: no stored credential for github.com"]);
   });
 });
 
@@ -684,13 +880,14 @@ describe("buildCloneAuth", () => {
       ],
     });
     const authMemo = new Map<string, AuthAttemptResult>();
-    const auth = buildCloneAuth("not a valid URL", "github", {
-      ctx,
-      credentialOps: credentials.credentialOps,
-      deviceFlowHttp: deviceFlow.http,
-      authMemo,
-    });
-    assert.ok(auth !== undefined);
+    const auth = expectDeviceFlow(
+      buildCloneAuth("not a valid URL", "github", {
+        ctx,
+        credentialOps: credentials.credentialOps,
+        deviceFlowHttp: deviceFlow.http,
+        authMemo,
+      }),
+    );
 
     // act
     const authentication = await auth.onAuthRequired();
@@ -699,6 +896,7 @@ describe("buildCloneAuth", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      kind: "device-flow",
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(authentication, {
@@ -744,7 +942,6 @@ describe("buildCloneAuth", () => {
     });
     const authOptions = { credentialOps: credentials.credentialOps, ctx };
     const auth = buildCloneAuth("https://gitlab.com/team/plugin.git", "url", authOptions);
-    assert.ok(auth !== undefined);
     const callbacks = buildAuthCallbacks(auth);
 
     // act
@@ -782,16 +979,17 @@ describe("buildCloneAuth", () => {
       },
       requestCodeError: initializationError,
     });
-    const auth = buildCloneAuth(cloneUrl, "url", {
-      ctx,
-      credentialOps: credentials.credentialOps,
-      deviceFlowHttp: deviceFlow.http,
-    });
-    assert.ok(auth !== undefined);
+    const auth = expectDeviceFlow(
+      buildCloneAuth(cloneUrl, "url", {
+        ctx,
+        credentialOps: credentials.credentialOps,
+        deviceFlowHttp: deviceFlow.http,
+      }),
+    );
     const git = createGitOpsFake({ boundary: "memory", allowedRemoteUrls: [cloneUrl] });
     await git.gitOps.clone({ dir: "/memory/plugin", url: cloneUrl, auth });
     const recordedAuth = git.state.calls.clone[0]?.auth;
-    assert.ok(recordedAuth !== undefined);
+    assert.ok(recordedAuth?.kind === "device-flow");
 
     // act
     const authentication = await recordedAuth.onAuthRequired();
@@ -817,7 +1015,7 @@ describe("buildCloneAuth", () => {
     verify(ctx);
   });
 
-  test("returns exact absence for an unsupported port-bearing git-subdir host", () => {
+  test("binds an unregistered port-bearing git-subdir host to its own bundle", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const credentials = createCredentialOpsFake({ boundary: "memory" });
@@ -830,7 +1028,11 @@ describe("buildCloneAuth", () => {
     );
 
     // assert
-    assert.strictEqual(auth, undefined);
+    assert.deepStrictEqual(auth, {
+      kind: "stored-credential",
+      credentialOps: credentials.credentialOps,
+      host: "gitlab.com:8443",
+    });
     assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
     verify(ctx);
   });
