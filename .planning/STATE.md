@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 01
 current_phase_name: Pi 1.0 floor and adapter-only detection
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-10-02T19:17:12.429Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-10-02T20:08:32.972Z"
 last_activity: 2026-10-02
-last_activity_desc: Completed 01-04 (MCP soft-dependency marker rename)
-state_head: 5821ffec30e9b2d50cf5a44a5122b6e2fd933fc1
+last_activity_desc: Completed 01-05 (adapter-only MCP detection)
+state_head: acde7128d70eaa5e8ffdeb447315e7c4d5dbbc91
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 01 (Pi 1.0 floor and adapter-only detection) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
-Last activity: 2026-10-02 — Completed 01-04 (MCP soft-dependency marker rename)
+Last activity: 2026-10-02 — Completed 01-05 (adapter-only MCP detection)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -254,6 +254,7 @@ still open with a comment explaining what landed.
 | Phase 01 P02 | 37min | 2 tasks | 46 files |
 | Phase 01 P03 | 30min | 2 tasks | 3 files |
 | Phase 01 P04 | 45min | 2 tasks | 46 files |
+| Phase 01 P05 | 70min | 2 tasks | 42 files |
 
 ## Accumulated Context
 
@@ -563,6 +564,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Strict Pi doubles state soft-dependency snapshots through expectSoftDepProbes (tests/edge/notification-boundary.ts), the one place that turns a snapshot into Pi reads, so the getCommands() read changes one function
 - [Phase 01]: pi-subagents peer tests share tests/integration/pi-subagents-peer.ts; the floor is semver.minVersion of the declared peer range, and an explicit PI_SUBAGENTS_ROOT that names no pi-subagents package fails instead of skipping
 - [Phase 01]: The MCP soft-dependency marker is {requires pi-mcp-adapter}, at the old member's Reason position; MCP marker assertions end at `}` or `,` so neither token passes on a prefix
+- [Phase 01]: pi-mcp-adapter counts as loaded by an extension command named mcp-adapter (optional :<digits> suffix, exact case) or by a command or tool sourceInfo.source containing pi-mcp-adapter; a bare mcp tool and Pi's built-in MCP do not count (ADET-02)
+- [Phase 01]: Only the command-name match requires source === extension; a pi-mcp-adapter source counts whatever the command kind
 
 ### Pending Todos
 
@@ -707,11 +710,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-04-PLAN.md
+**Stopped at:** Completed 01-05-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-02T19:17:12.355Z
+Last session: 2026-10-02T20:08:32.894Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
