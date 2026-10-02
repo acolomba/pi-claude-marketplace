@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 01
 current_phase_name: Pi 1.0 floor and adapter-only detection
 status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-10-02T20:44:31.030Z"
+stopped_at: Completed 01-07-PLAN.md
+last_updated: "2026-10-02T21:37:15.739Z"
 last_activity: 2026-10-02
-last_activity_desc: Completed 01-06 (e2e adapter detection matrix and PRD rule)
-state_head: e571ac67a300e7b2030686a71de832881e1f84bd
+last_activity_desc: Completed 01-07 (info requires line)
+state_head: 8d2dfec61d1224bf4b31a0b6dc9b1db6b1fd3d18
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 01 (Pi 1.0 floor and adapter-only detection) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
-Last activity: 2026-10-02 — Completed 01-06 (e2e adapter detection matrix and PRD rule)
+Last activity: 2026-10-02 — Completed 01-07 (info requires line)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -256,6 +256,7 @@ still open with a comment explaining what landed.
 | Phase 01 P04 | 45min | 2 tasks | 46 files |
 | Phase 01 P05 | 70min | 2 tasks | 42 files |
 | Phase 01 P06 | 35min | 2 tasks | 4 files |
+| Phase 01 P07 | 60min | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -568,6 +569,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: pi-mcp-adapter counts as loaded by an extension command named mcp-adapter (optional :<digits> suffix, exact case) or by a command or tool sourceInfo.source containing pi-mcp-adapter; a bare mcp tool and Pi's built-in MCP do not count (ADET-02)
 - [Phase 01]: Only the command-name match requires source === extension; a pi-mcp-adapter source counts whatever the command kind
 - [Phase 01]: The e2e soft-dep matrix runs one install-and-list case per detection state and compares the whole reasons block of the plugin's installed row, so a missing row or an extra reason fails the case
+- [Phase 01]: Info names each companion a resolved row needs on a requires: line, stamped by the orchestrator from one softDepStatus snapshot and only formatted by the renderer
 
 ### Pending Todos
 
@@ -712,11 +714,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-06-PLAN.md
+**Stopped at:** Completed 01-07-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-02T20:44:30.948Z
+Last session: 2026-10-02T21:37:15.657Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
