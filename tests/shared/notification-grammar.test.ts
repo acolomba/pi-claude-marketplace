@@ -66,6 +66,9 @@ type Assignable<A, B> = [A] extends [B] ? true : false;
 type PluginRowInput = Parameters<typeof composePluginLines>[0];
 void (true satisfies Assignable<ResolvedRow<PluginPartiallyInstalledMessage>, PluginRowInput>);
 void (false satisfies Assignable<PluginInstalledMessage, PluginRowInput>);
+void ((row: PluginPartiallyInstalledMessage) =>
+  // @ts-expect-error an unresolved producer row still declares its dependencies
+  composePluginLines(row, "user"));
 
 for (const { row, expected } of [
   {
