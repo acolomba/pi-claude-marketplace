@@ -504,11 +504,10 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
     //
     // Driven through the list surface's own `CommandContext` via `emit`, for
     // the same reason the bulk-update no-op states are: the reason brace on a
-    // `(available)` / `(remote)` row is composed by `LIST_RENDER`, while the
-    // central `renderPluginRow` arms omit `composeReasons` by construction --
-    // no producer that renders through THEM stamps `reasons` on those two
-    // statuses (OUT-05 / RSTA-01). `notifyWithContext` is the seam `listPlugins`
-    // itself
+    // `(available)` / `(remote)` row comes from list's row policies, which
+    // enable content reasons there, while the central row policy turns them
+    // off -- no producer that uses it stamps `reasons` on those two statuses
+    // (OUT-05 / RSTA-01). `notifyWithContext` is the seam `listPlugins` itself
     // calls, so the block below is byte-paired with the real list surface.
     "available-installs-disabled": {
       pi: piWithBothLoaded(),

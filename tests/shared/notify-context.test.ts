@@ -428,7 +428,7 @@ for (const { entry, emit, markedMessage, unmarkedMessage } of [
   });
 }
 
-test("a missing render arm reports its named row before the adjacent present arm", () => {
+test("a missing row policy reports its named row before the adjacent present row", () => {
   // arrange
   const harness = createHarness({
     message: [

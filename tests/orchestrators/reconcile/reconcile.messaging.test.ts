@@ -112,7 +112,7 @@ void ({ name: "plugin", status: "failed" } satisfies PendingMsg);
 // @ts-expect-error -- applied rows cannot use a pending status.
 void ({ name: "plugin", status: "will install" } satisfies ReconcileAppliedMsg);
 
-test("reconcile contexts expose their exact labels and declared render arms", () => {
+test("reconcile contexts expose their exact labels and row policy statuses", () => {
   // arrange
   const expectedPendingStatuses = [
     "will install",
@@ -130,12 +130,12 @@ test("reconcile contexts expose their exact labels and declared render arms", ()
   ];
 
   // act
-  const pendingRenderArms = Object.keys(PENDING_CONTEXT.rowPolicies);
-  const appliedRenderArms = Object.keys(RECONCILE_APPLIED_CONTEXT.rowPolicies);
+  const pendingPolicyStatuses = Object.keys(PENDING_CONTEXT.rowPolicies);
+  const appliedPolicyStatuses = Object.keys(RECONCILE_APPLIED_CONTEXT.rowPolicies);
 
   // assert
-  assert.deepStrictEqual(pendingRenderArms, expectedPendingStatuses);
-  assert.deepStrictEqual(appliedRenderArms, expectedAppliedStatuses);
+  assert.deepStrictEqual(pendingPolicyStatuses, expectedPendingStatuses);
+  assert.deepStrictEqual(appliedPolicyStatuses, expectedAppliedStatuses);
   assert.equal(PENDING_CONTEXT.Messaging.label, "Reconcile pending");
   assert.equal(RECONCILE_APPLIED_CONTEXT.Messaging.label, "Reconcile");
 });

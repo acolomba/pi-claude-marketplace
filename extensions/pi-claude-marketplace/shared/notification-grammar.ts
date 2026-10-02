@@ -80,8 +80,8 @@ const ICON_PARTIALLY_INSTALLED = "◉";
  * (`ICON_UNINSTALLABLE`, reserved for unavailable / blocked / failed / manual-
  * recovery) and from `◉` (`ICON_PARTIALLY_INSTALLED`, the *installed*-degraded row).
  *
- * Module-private: two places carry this glyph to a row -- the row status
- * glyph table below and `pluginInfoStatusGlyph`'s `partially-available` arm,
+ * Module-private: two places carry this glyph to a row -- `PLUGIN_ROW_LAYOUT`
+ * below and `pluginInfoStatusGlyph`'s `partially-available` arm,
  * which the `info` plugin row joins -- so those rows' bytes are its public
  * contract.
  */
@@ -245,29 +245,16 @@ export function renderMpHeader(mp: ResolvedMarketplace): string {
 }
 
 // ---------------------------------------------------------------------------
+// MOD-03 / D-02 / D-10: every producer routes its rows through
+// `notifyWithContext` / `notifyReconcileAppliedWithContext`. `resolveRows`
+// applies the command's own `rowPolicies`, and `composePluginLines` formats
+// each resolved row through `PLUGIN_ROW_LAYOUT`. That table is total over the
+// plugin status union, so a new `PluginNotificationMessage` variant is a type
+// error there.
 //
-// MOD-03 / D-02 / D-10: this central switch is not the per-row dispatch path
-// for any command's cascade rows. Every state-change producer routes its
-// rows through `notifyWithContext` / `notifyReconcileAppliedWithContext`, which
-// map (`emitContextCascade` / `emitReconcileAppliedContextCascade`). A missing
-// or extra arm is now a per-command compile error, not a central concern.
-// This switch survives only as a STATICALLY-REFERENCED seam on the central
-// envelope: the central `notify(ctx, run, message)` cascade arm (reached
-// only by the `{ marketplaces: [] }` empty sentinel, which short-circuits to
-// `(no marketplaces)` before the plugin loop runs) and the
-// `composeReconcileAppliedBody` arm of `dispatchInfoMessage` (kept for the
-// `reconcile-applied-cascade` StandaloneKind exhaustiveness; its live emitter
-// goes through `emitReconcileAppliedContextCascade`, not this body). Removing
-// it would either break that exhaustiveness switch or require rewriting the
-// legacy envelope the deferred-central standalone surfaces still depend on, so
-// it stays until those surfaces relocate.
-//
-// SNM-16 / D-12: soft-dep markers are composed in `resolveRows` from the
-// per-row `dependencies?` declaration, the soft-dep snapshot, and the
-// command's marker policy, so each row arrives with its final `reasons`. The
-// switch lists every status and has no default arm, so a future
-// `PluginNotificationMessage` variant becomes a type and lint error at this
-// switch.
+// SNM-16 / D-12: `resolveRows` composes soft-dep markers from the row's
+// `dependencies`, the soft-dep snapshot, and the command's marker policy, so
+// each row arrives with its final `reasons`.
 // ---------------------------------------------------------------------------
 
 /**

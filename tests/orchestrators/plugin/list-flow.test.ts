@@ -1785,8 +1785,8 @@ test("ENBL-06 / ENBL-16: a manifest-absent disabled PARTIAL renders `(disabled) 
 // soft-dependency markers derive from, and ENBL-18 lets a disabled record keep
 // them populated, so this is the pair that could leak. The guarantee is
 // STRUCTURAL, not test-enforced: `PluginDisabledMessage` declares no
-// `dependencies` field and the render arm hard-codes both soft-dep arguments
-// false. `makeCtx` seeds BOTH companions as UNLOADED, which is exactly the
+// `dependencies` field and list's `disabled` row policy turns markers off.
+// `makeCtx` seeds BOTH companions as UNLOADED, which is exactly the
 // condition under which a leak would render `{requires pi-subagents, requires
 // pi-mcp}` -- so a bare row here is evidence, not an accident of the harness.
 const DISABLED_BARE_ROW = ["● mp1 [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n");

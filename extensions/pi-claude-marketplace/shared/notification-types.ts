@@ -779,8 +779,8 @@ export type MarketplaceNotificationMessage =
  * type back to `readonly MarketplaceNotificationMessage[]` is a genuine
  * assignability relationship -- the `notifyWithContext` widening seam is a single
  * safe upcast, not an `as unknown as` reinterpretation, so a status drift between
- * a producer and the context's row policies surfaces as a real compile error
- * rather than as a diagnostic row at run time.
+ * a producer and the context's row policies surfaces as a compile error at the
+ * producer.
  *
  * Combined with the `Msg extends { status: Status }` bound on
  * `notifyWithContext`, a call site that pushes a plugin row whose `status` the

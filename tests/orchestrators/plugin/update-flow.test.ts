@@ -8547,9 +8547,9 @@ test("WR-12: an update whose new source skill will not parse names the kind on t
       });
 
       // This is exercised through the public verb, not through the renderer function:
-      // `update` renders its rows through the verb-local `UPDATE_RENDER` map,
-      // so a fix applied only to the central `renderPluginRow` arm would raise
-      // the severity while still dropping the brace.
+      // `update` resolves its rows through its own row policies, so a fix
+      // applied only to the central row policy would raise the severity while
+      // still dropping the brace.
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
       assert.equal(

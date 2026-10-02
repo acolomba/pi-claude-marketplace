@@ -24,9 +24,9 @@ import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shar
 import type { ContentReason } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 describe("INSTALL_CONTEXT", () => {
-  test("exposes the install label and all six render arms", () => {
+  test("exposes the install label and all six row policy statuses", () => {
     // arrange
-    const expectedRenderArms = [
+    const expectedPolicyStatuses = [
       "disabled",
       "failed",
       "installed",
@@ -38,13 +38,13 @@ describe("INSTALL_CONTEXT", () => {
     // act
     const contextShape = {
       label: INSTALL_CONTEXT.Messaging.label,
-      renderArms: Object.keys(INSTALL_CONTEXT.rowPolicies).sort(),
+      policyStatuses: Object.keys(INSTALL_CONTEXT.rowPolicies).sort(),
     };
 
     // assert
     assert.deepStrictEqual(contextShape, {
       label: "Plugin install",
-      renderArms: expectedRenderArms,
+      policyStatuses: expectedPolicyStatuses,
     });
   });
 

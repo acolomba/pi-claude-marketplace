@@ -835,7 +835,7 @@ describe("resolveRows", () => {
     ]);
   });
 
-  test("leaves the input row unchanged when every status has a render arm", () => {
+  test("leaves the input row unchanged when every status has a row policy", () => {
     // arrange
     const cause = new Error("outer");
     const row = {
@@ -859,7 +859,7 @@ describe("resolveRows", () => {
     });
   });
 
-  test("floors the input row to error when its status has no render arm", () => {
+  test("floors the input row to error when its status has no row policy", () => {
     // arrange
     const row = {
       status: "disabled",

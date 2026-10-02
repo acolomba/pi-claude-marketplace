@@ -119,9 +119,9 @@ function failureRows(subject: CascadeFailureSubject): readonly CascadeMsg[] {
 }
 
 describe("CASCADE_CONTEXT", () => {
-  test("adds exactly the RESV-05 skip arm to install's own render map", () => {
+  test("adds exactly the RESV-05 skipped policy to install's own row policies", () => {
     // arrange
-    const expectedArms = [
+    const expectedPolicyStatuses = [
       "disabled",
       "failed",
       "installed",
@@ -134,11 +134,14 @@ describe("CASCADE_CONTEXT", () => {
     // act
     const shape = {
       label: CASCADE_CONTEXT.Messaging.label,
-      renderArms: Object.keys(CASCADE_CONTEXT.rowPolicies).sort(),
+      policyStatuses: Object.keys(CASCADE_CONTEXT.rowPolicies).sort(),
     };
 
     // assert
-    assert.deepStrictEqual(shape, { label: "Plugin install", renderArms: expectedArms });
+    assert.deepStrictEqual(shape, {
+      label: "Plugin install",
+      policyStatuses: expectedPolicyStatuses,
+    });
   });
 });
 

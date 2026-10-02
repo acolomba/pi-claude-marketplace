@@ -1260,8 +1260,8 @@ test("MSG-SD-3: uninstall NEVER emits soft-dep markers (structural via V2 Plugin
       // trigger per-row `{requires pi-subagents}` + `{requires pi-mcp}`
       // markers; on the uninstall path the marker is structurally
       // impossible because PluginUninstalledMessage has no `dependencies`
-      // field (D-15-02 / MSG-SD-3) so renderPluginRow's
-      // composeReasons call passes (false, false) for both declares-flags.
+      // field (D-15-02 / MSG-SD-3), so resolveRows has no dependency to
+      // compose a marker from.
       const { ctx, run, notifications } = makeCtx();
       await uninstallWithFreshOwner({
         ctx,

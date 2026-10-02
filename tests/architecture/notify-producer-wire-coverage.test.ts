@@ -1,7 +1,7 @@
 /**
  * Cross-producer severity/reload parity for the standalone plugin command
  * contexts. Each case names and drives both producers through the real
- * notifyWithContext reducer/wire seam. Command-local labels, render arms, and
+ * notifyWithContext reducer/wire seam. Command-local labels, row policies, and
  * exact row bytes belong to the corresponding mirrored presenter owners.
  */
 

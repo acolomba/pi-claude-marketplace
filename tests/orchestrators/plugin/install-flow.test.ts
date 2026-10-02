@@ -1641,9 +1641,9 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
       });
 
-      // ENBL-15 / D-100-06: BOTH companion extensions report UNLOADED. If the
-      // `disabled` render arm ever threaded the real soft-dep flags instead of
-      // hard-coding them false, this fixture is the one that would emit
+      // ENBL-15 / D-100-06: BOTH companion extensions report UNLOADED. If
+      // install's `disabled` row policy ever turned markers on, this fixture is
+      // the one that would emit
       // `{requires pi-subagents, requires pi-mcp}` and fail below.
       const { ctx, run, notifications } = makeCtx();
       await installPlugin({
