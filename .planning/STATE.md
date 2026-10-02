@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 3
+current_phase: 03
 current_phase_name: Typed Raw Surfaces
 status: executing
-stopped_at: Phase 3 planned (4 plans), ready to execute
-last_updated: "2026-10-02T19:05:53.894Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-10-02T21:23:13.439Z"
 last_activity: 2026-10-02
-last_activity_desc: Phase 3 planned (4 plans)
-state_head: 727c5884867773f8ebebf705289d4bec138a06a8
+last_activity_desc: Completed 03-01 typed load-time and usage surfaces
+state_head: d7009faa2a90dbe9781032f25e7bb7bcb08ce989
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 22
-  completed_plans: 18
+  completed_plans: 19
   percent: 29
 milestone_name: Mode-Keyed Presentation Strategies
 ---
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-10-01 after json-output Phase 1 verifi
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 3 — Typed Raw Surfaces
+**Current focus:** Phase 03 — Typed Raw Surfaces
 
 ## Current Position
 
-Phase: 3 (Typed Raw Surfaces) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-02 — Completed quick task 261002-dys: deterministic prune backup naming
+Phase: 03 (Typed Raw Surfaces) — EXECUTING
+Plan: 2 of 4
+Status: Executing Phase 03
+Last activity: 2026-10-02 — Completed 03-01 (typed load-time and usage surfaces)
 
-Progress: [███░░░░░░░] 29% (2 of 7 phases fully verified; 18 plans complete)
+Progress: [███░░░░░░░] 29% (2 of 7 phases fully verified; 19 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -170,8 +170,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-02T13:36:26Z
-**Stopped at:** Phase 2 complete, ready to plan Phase 3
+**Last session:** 2026-10-02T21:23:13.255Z
+**Stopped at:** Completed 03-01-PLAN.md
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -222,6 +222,7 @@ archived milestone artifacts.
 | Phase 01 P14 | 77 min | 2 tasks | 17 files |
 | Phase 01 P15 | 50 min | 2 tasks | 32 files |
 | Phase 01 P16 | 78 min | 2 tasks | 26 files |
+| Phase 03 P01 | 1h 17m | 2 tasks | 10 files |
 
 ## Decisions
 
@@ -258,3 +259,5 @@ archived milestone artifacts.
 - [Phase 01]: Plugin info takes GetPluginInfoOptions.run; the fan-out and the failure loop render from one snapshot per command, and makeListHandler, makePluginInfoHandler, and makeBrowseHandler take no pi, so no edge handler factory takes pi (D-05, D-07)
 - [Phase 01]: createNotificationBoundary takes (emissions, cwd?) and holds no Pi mock; the probe count belongs to the root suites register.test.ts and index.test.ts, which build their own strict Pi mocks, and loadExtension states rootReads (three per discover pass that reaches the reconcile and per registered-command run) (D-05, D-07)
 - [Phase 01]: The notify family takes run: NotificationRun only; the dispatcher reads run.softDeps and imports no probe, and the catalog driver opens one run per fixture from the fixture's inventory (SC-2, D-05, D-06)
+- [Phase 03]: 03-01: RawSurface is spelled as an explicit union while LoadSurface is its only member (sonarjs/redundant-type-aliases); 03-01 Task 2 widened it to UsageErrorSurface | UsageInfoSurface | LoadSurface
+- [Phase 03]: 03-01: each TDD task lands as one feat commit with its owner tests, because the full-check pre-commit hook rejects a failing RED commit; RED is observed locally

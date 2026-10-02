@@ -97,14 +97,14 @@ model that already carries every presentation decision.
 
 ### Raw-Surface Coverage
 
-- [ ] **RAWS-01**: Usage errors and help are typed payloads (`usage-error` with
+- [x] **RAWS-01**: Usage errors and help are typed payloads (`usage-error` with
   message and usage, `usage-info`) for every verb.
 - [ ] **RAWS-02**: Diagnostics are typed payloads (`diagnostic {header,
   lines[]}`).
 - [ ] **RAWS-03**: The device-flow prompt is a typed payload carrying
   `verificationUri` and `userCode` as fields; the domain passes the values, not
   a pre-formatted string.
-- [ ] **RAWS-04**: The load-time "reconcile aborted" and "plugin PATH not
+- [x] **RAWS-04**: The load-time "reconcile aborted" and "plugin PATH not
   refreshed" warnings are typed payloads (`reconcile-aborted`,
   `plugin-path-skipped`) -- the two raw surfaces D2's list missed.
 - [ ] **RAWS-05**: Hook rewake summaries and the Stop-hook override-cap warning
@@ -210,10 +210,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JOUT-03 | Phase 6 | Pending |
 | JOUT-04 | Phase 6 | Pending |
 | JOUT-05 | Phase 5 | Pending |
-| RAWS-01 | Phase 3 | Pending |
+| RAWS-01 | Phase 3 | Complete |
 | RAWS-02 | Phase 3 | Pending |
 | RAWS-03 | Phase 3 | Pending |
-| RAWS-04 | Phase 3 | Pending |
+| RAWS-04 | Phase 3 | Complete |
 | RAWS-05 | Phase 3 | Pending |
 | MODE-01 | Phase 5 | Pending |
 | MODE-02 | Phase 5 | Pending |
