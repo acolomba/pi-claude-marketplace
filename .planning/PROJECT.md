@@ -10,11 +10,39 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Current Milestone: none
+## Current Milestone: mcp-4 -- MCP 4 (branch: features/mcp-4, started 2026-10-01)
 
-No active milestone. any-git-host (workstream `git-hosts`) closed 2026-09-30 and is
-on main via PR #221; the workstream was archived to `milestones/ws-git-hosts-2026-10-01/`
-on 2026-10-01, and no workstream is active. Start the next one with `/gsd-new-milestone`.
+**Goal:** Make Pi 1.0 the baseline and deliver plugin MCP servers through pi-mcp-adapter 5,
+using its tool search, naming, status and variable features at Claude Code parity -- without
+adopting Pi's built-in MCP.
+
+**Target features:**
+
+- **Dependency floor.** Pi `>=1.0.0` (dev `^1.0.0`, with pi-tui), pi-subagents `>=0.74.0`,
+  pi-mcp-adapter `>=5.0.0` as the documented MCP soft dependency. Re-apply the Pi 0.99 typing
+  fixes from features/mcp `74162ca6` and its peer-test and canary fixes (`5b1d8ef6`, `dac3a245`,
+  `69e0870a`, `4f82096f`) at the 1.0 floor; bump all devDependencies; re-verify the workflow
+  engine (`@quintinshaw/pi-dynamic-workflows` 3.13.1) canaries on Pi 1.0.
+- **mcp-adapter.json delivery.** Stage and unstage marked entries in `<scopeRoot>/mcp-adapter.json`
+  instead of `<scopeRoot>/mcp.json`; the NFR-10 write set changes to match, and the collision
+  walk follows adapter 5's nine-source precedence (closes MCPSRC-01).
+- **Auto migration.** Reconcile moves marked entries out of both `mcp.json` files into
+  `mcp-adapter.json` on `/reload`, atomically, with no reinstall (NFR-2).
+- **Tool-search exposure.** Write `directTools: "search"`, Claude Code's default tool search.
+- **Upstream server naming.** Name servers from Claude Code's `plugin:<plugin>:<server>` key,
+  normalized.
+- **`${VAR:-default}` parity.** Expand variables with Claude Code's rules and escape what the
+  adapter would expand again (closes MENVX-01, ENVLIT-01).
+- **Live status in `info`.** Show each plugin MCP server's adapter runtime state.
+- **Adapter-only detection.** A missing adapter stays `{pi-mcp-adapter}` even when Pi's built-in
+  MCP is active; detection keeps working now that adapter 5 owns `/mcp`.
+
+**Key context:** The features/mcp `builtin-mcp` milestone (Pi 0.99 built-in MCP via
+`pi.registerMcpServer()`) is abandoned: moving off pi-mcp-adapter would regress users. Adapter
+3.x/4.x stopped reading `mcp.json`; 5.0.0 (2026-10-01) reads Pi's `mcp.json` again and replaces
+the built-in `/mcp`, but runtime-registered servers are proxy-only there, so the bridge writes the
+adapter-native file to reach every adapter field. Adapter 5.0's optional `@earendil-works/pi-ai`
+peer range stops at `^0.99.0`; record it as an upstream gap, do not work around it.
 
 ## Previous Milestone: any-git-host -- Any Git Host (workstream: git-hosts, branch: features/git-hosts, completed 2026-09-30, merged via PR #221, no npm release)
 
@@ -542,11 +570,10 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ## Requirements
 
-### Active — awaiting next milestone
+### Active — mcp-4
 
-No active requirements are defined. The completed v1.20 requirements are in
-[the archive](milestones/v1.20-REQUIREMENTS.md). All validated requirements
-below remain historical completed work.
+Scoped requirements for mcp-4 live in [REQUIREMENTS.md](REQUIREMENTS.md). The completed
+v1.20 requirements are in [the archive](milestones/v1.20-REQUIREMENTS.md).
 
 ### Validated
 
@@ -1114,3 +1141,5 @@ _Last updated: 2026-09-21 after the workflows-replay milestone closed in workstr
 _Last updated: 2026-09-30 after the any-git-host milestone closed in workstream `git-hosts`. Three phases, 11 plans, 10/10 requirements; private repos on any git host, verbatim-URL endpoints and leftover-clone recovery, reimplemented from PR #153 and merged to main in PR #221. Audit `passed` after PR #231 closed the review debt (GHRED-01, GHADD-01)._
 
 _Last updated: 2026-10-01 after the `git-hosts` workstream was archived to `milestones/ws-git-hosts-2026-10-01/`. No workstream is active; any-git-host is on main and in no npm release yet._
+
+_Last updated: 2026-10-01 after milestone mcp-4 started._

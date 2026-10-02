@@ -1,19 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: v1.20
-milestone_name: transitive-dependencies
-status: Awaiting next milestone
-stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-01T18:37:22.326Z"
+milestone: mcp-4
+milestone_name: MCP 4
+status: planning
+last_updated: "2026-10-02T02:42:23.504Z"
 last_activity: 2026-10-01
-last_activity_desc: Completed quick task 261001-g4u (PR 198 SonarCloud findings)
-state_head: 4455c76f52ca9e94f458687d19a2930272b5edc4
 progress:
-  total_phases: 12
-  completed_phases: 12
-  total_plans: 55
-  completed_plans: 55
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -31,10 +28,10 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 
 ## Current Position
 
-Phase: Milestone v1.20 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-10-01 — Completed quick task 261001-g4u: resolved the 23 SonarCloud findings on PR 198
+Status: Defining requirements
+Last activity: 2026-10-01 — Milestone mcp-4 started
 
 ### workflows-replay closeout (merged from main)
 
