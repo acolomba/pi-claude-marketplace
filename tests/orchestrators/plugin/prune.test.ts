@@ -25,15 +25,28 @@ import { makeCtx } from "../../e2e/_helpers.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
+import type { PruneRestoreOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts";
 import type { UninstallTransaction } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
+
+// Mirrors mkdtemp with a fixed suffix, so a retained backup has a known name.
+// The name matches the catalog fixture's.
+const restoreOps = {
+  createBackupRoot: async (prefix: string): Promise<string> => {
+    const backupRoot = `${prefix}ABC123`;
+    await mkdir(backupRoot);
+    return backupRoot;
+  },
+  removeBackup: rm,
+} satisfies PruneRestoreOps;
 
 function prune(transaction: UninstallTransaction = REAL_UNINSTALL_TRANSACTION) {
   return createPrunePlugin(
     transaction,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
+    restoreOps,
   );
 }
 
@@ -663,12 +676,8 @@ test("a failed state save retains a missing skill directory and restores state",
     await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
       code: "ENOENT",
     });
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.ok(backupName);
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName, "0", "SKILL.md")),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", "0", "SKILL.md")),
       skillBefore,
     );
     assert.deepStrictEqual(notifications, [
@@ -676,7 +685,7 @@ test("a failed state save retains a missing skill directory and restores state",
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
         severity: "error",
@@ -1125,6 +1134,7 @@ test("a lock-release rejection reports committed removal and completes cleanup",
         },
       },
       createCompletionCache(),
+      restoreOps,
     );
     const { ctx, notifications } = makeCtx(cwd);
 

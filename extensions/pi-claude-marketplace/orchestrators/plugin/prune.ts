@@ -1,8 +1,6 @@
 // A standalone, same-scope orphan sweep. Actual removals share one locked
 // snapshot; preview selects from one nonpersisting read.
 
-import { rm } from "node:fs/promises";
-
 import { pruneOrphans } from "../../domain/dependency-orphans.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -16,7 +14,7 @@ import { preparePruneRollback } from "./prune-rollback.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 import { finalizePrunedMembers, sweepOrphans } from "./uninstall.ts";
 
-import type { PruneRestoreFailure } from "./prune-rollback.ts";
+import type { PruneRestoreFailure, PruneRestoreOps } from "./prune-rollback.ts";
 import type { PrunedMember, UninstallHooksRouting, UninstallTransaction } from "./uninstall.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -199,11 +197,15 @@ function notifyCommitted(
   );
 }
 
-/** Binds the standalone sweep to uninstall's guarded removal capabilities. */
+/**
+ * Binds the standalone sweep to uninstall's guarded removal capabilities and to
+ * the backup operations its rollback snapshot uses.
+ */
 export function createPrunePlugin(
   transaction: UninstallTransaction,
   hooksRouting: UninstallHooksRouting,
   completionCache: CompletionCache,
+  restoreOps: PruneRestoreOps,
 ): (options: PrunePluginOptions) => Promise<void> {
   return async (options): Promise<void> => {
     const scope = options.scope ?? "user";
@@ -275,7 +277,7 @@ export function createPrunePlugin(
           );
           const backup =
             candidates.length > 0
-              ? await preparePruneRollback(locations, candidates, { removeBackup: rm })
+              ? await preparePruneRollback(locations, candidates, restoreOps)
               : undefined;
           let members: Awaited<ReturnType<typeof sweepOrphans>>;
           try {
