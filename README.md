@@ -35,9 +35,11 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 
 ## Prerequisites
 
-- [Pi Coding Agent](https://pi.dev) 0.86.1 or newer
+- [Pi Coding Agent](https://pi.dev) 1.0.0 or newer
 - [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (optional but recommended, `pi install npm:pi-mcp-adapter`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.0.0 or newer (optional but recommended, `pi install npm:pi-mcp-adapter`)
+  - Pi's built-in MCP support does not satisfy this requirement.
+  - Adapter 5.0.0 declares an optional `@earendil-works/pi-ai` peer range that stops before Pi 1.0's version. This is an upstream issue. `pi install` is not affected because it skips peer checks.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Usage

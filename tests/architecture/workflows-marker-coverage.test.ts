@@ -43,8 +43,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { Type } from "typebox";
-
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -64,6 +62,7 @@ import { saveState } from "../../extensions/pi-claude-marketplace/persistence/st
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { toolInfo } from "../platform/pi-inventory-seed.ts";
 
 import { filesMatching } from "./source-scan.ts";
 
@@ -74,7 +73,6 @@ import type {
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
 const installPlugin = createInstallOperation(
   createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -92,20 +90,6 @@ const DECOY_TOOL = "workflow";
 
 function toolNamesFor(engineLoaded: boolean): readonly string[] {
   return engineLoaded ? [ENGINE_TOOL] : [DECOY_TOOL];
-}
-
-function toolInfo(name: string): ToolInfo {
-  return {
-    name,
-    description: `test tool ${name}`,
-    parameters: Type.Object({}),
-    sourceInfo: {
-      origin: "top-level",
-      path: `/test/tools/${name}.ts`,
-      scope: "temporary",
-      source: "test",
-    },
-  } satisfies ToolInfo;
 }
 
 interface NotifyRecord {

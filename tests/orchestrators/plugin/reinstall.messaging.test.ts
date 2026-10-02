@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { mock, verify, when } from "strong-mock";
-import { Type } from "typebox";
 
 import {
   narrowReasons,
@@ -10,6 +9,7 @@ import {
   reinstalledRowFromOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { toolInfo } from "../../platform/pi-inventory-seed.ts";
 
 import type {
   ReinstallFailedOutcome,
@@ -20,7 +20,6 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
 // reinstall's row union is module-private; the public carrier of its
 // `reinstalled` arm is the row composer's own return type.
@@ -57,20 +56,6 @@ interface NotifyHarness {
   readonly ctx: ExtensionContext;
   readonly pi: ExtensionAPI;
   readonly ui: ExtensionContext["ui"];
-}
-
-function toolInfo(name: string): ToolInfo {
-  return {
-    name,
-    description: `test tool ${name}`,
-    parameters: Type.Object({}),
-    sourceInfo: {
-      path: `/test/tools/${name}.ts`,
-      source: "test",
-      scope: "temporary",
-      origin: "top-level",
-    },
-  } satisfies ToolInfo;
 }
 
 function createNotifyHarness(

@@ -316,11 +316,11 @@ type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMes
 /**
  * Dispatch a single plugin row through the command's render map. The row's
  * `status` selects the arm; the arm reproduces the verbatim bytes of the
- * central switch arm it lifted, so the output is byte-identical. The cast
- * bridges the broad `PluginNotificationMessage` the cascade seam threads to the
- * command's own narrower `Status` / `Msg`; `notifyWithContext` constrains its
- * rows to `Msg` (WR-01), so a command only ever supplies rows whose statuses
- * its render map covers and the lookup is total at the call site.
+ * central switch arm it lifted, so the output is byte-identical. The render
+ * map is read through a string-keyed view, and the selected arm is cast to the
+ * command's own `Msg` arm for the broad `PluginNotificationMessage` the cascade
+ * seam threads; `notifyWithContext` constrains its rows to `Msg` (WR-01), so a
+ * command only supplies rows whose statuses its render map covers.
  *
  * WR-02: the lookup is read as possibly-`undefined`. Because the producers are
  * now typed to their command's `Msg` (the `MarketplaceRows<Msg>` distributive
@@ -342,8 +342,8 @@ function dispatchRow<Status extends string, Msg extends PluginNotificationMessag
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
-  const arm = context.render[row.status as Status] as
-    RenderFn<Extract<Msg, { status: Status }>> | undefined;
+  const render: Readonly<Record<string, unknown>> = context.render;
+  const arm = render[row.status] as RenderFn<Extract<Msg, { status: Status }>> | undefined;
   if (arm === undefined) {
     // WR-02 / SEV-02: the fallback is an internal-drift error condition, so it
     // must not surface as a quiet `info`. `cascadeSeverity` MAX-reduces the

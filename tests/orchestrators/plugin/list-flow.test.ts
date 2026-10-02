@@ -33,7 +33,6 @@ import test from "node:test";
 
 import * as git from "isomorphic-git";
 import { mock, verify, when } from "strong-mock";
-import { Type } from "typebox";
 
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -52,13 +51,13 @@ import {
 } from "../../edge/handlers/marketplace-seed.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { toolInfo } from "../../platform/pi-inventory-seed.ts";
 
 import type { ListPluginsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
 type ListPluginsWithoutConnections = Omit<ListPluginsOptions, "ctx" | "pi">;
 void ({ cwd: "/workspace", scope: "user" } satisfies ListPluginsWithoutConnections);
@@ -74,20 +73,6 @@ type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
 type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
   readonly notify: (message: string, severity?: NotificationSeverity) => void;
 };
-
-function toolInfo(name: string): ToolInfo {
-  return {
-    name,
-    description: `test tool ${name}`,
-    parameters: Type.Object({}),
-    sourceInfo: {
-      origin: "top-level",
-      path: `/test/tools/${name}.ts`,
-      scope: "temporary",
-      source: "test",
-    },
-  } satisfies ToolInfo;
-}
 
 function makeCtx(
   options: { readonly toolNames?: readonly string[]; readonly recordTally?: boolean } = {},

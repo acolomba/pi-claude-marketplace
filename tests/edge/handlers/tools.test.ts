@@ -38,11 +38,9 @@ import { saveState } from "../../../extensions/pi-claude-marketplace/persistence
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionAPI } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
+import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 
 /**
  * The tool definition shape `registerTool` receives, minus the two optional
@@ -67,7 +65,7 @@ type ToolRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 };
 
 interface ToolBoundary {
-  readonly ctx: ExtensionContext;
+  readonly ctx: ExtensionToolContext;
   readonly pi: ExtensionAPI;
   /** Every tool definition the registration function installed, in call order. */
   readonly registrations: readonly ToolRegistration[];
@@ -75,7 +73,7 @@ interface ToolBoundary {
 }
 
 interface RegisteredToolBoundary {
-  readonly ctx: ExtensionContext;
+  readonly ctx: ExtensionToolContext;
   readonly registration: ToolRegistration;
   readonly verifyBoundary: () => void;
 }
@@ -302,7 +300,7 @@ function createToolBoundary(cwd?: {
   readonly reads: number;
 }): ToolBoundary {
   const registrations: ToolRegistration[] = [];
-  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const ctx = mock<ExtensionToolContext>({ exactParams: true, name: "extension context" });
   const pi = mock<ToolRegistrar>({ exactParams: true, name: "extension API" });
   when(() => pi.registerTool)
     .thenReturn((tool) => {

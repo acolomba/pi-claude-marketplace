@@ -188,10 +188,10 @@ Two further facts about the installed name. If a command of that name is already
 
 The marketplace and the workflow engine each declare a minimum Pi version.
 
-- `pi-claude-marketplace` peers on `@earendil-works/pi-coding-agent >=0.86.1`.
+- `pi-claude-marketplace` peers on `@earendil-works/pi-coding-agent >=1.0.0`.
 - `@quintinshaw/pi-dynamic-workflows` 3.13.0 peers on `@earendil-works/pi-coding-agent >=0.80.8` and `@earendil-works/pi-tui >=0.80.6` (verified against the published package metadata; the same floors 3.10.1 declared).
 
-The marketplace requires the higher Pi version because workflow children need their tools. In the tested pairing, Pi 0.85.1 hosted an engine with a Pi 0.87.0 dependency. The children received no tools. Pi 0.86.1 passed the same OpenAI tool test with the unpatched engine. Install Pi 0.86.1 or a newer version before you install this extension.
+The marketplace requires the higher Pi version because workflow children need their tools. In the tested pairing, Pi 0.85.1 hosted an engine with a Pi 0.87.0 dependency. The children received no tools. Pi 0.86.1 passed the same OpenAI tool test with the unpatched engine. Install Pi 1.0.0 or a newer version before you install this extension.
 
 On 2026-09-23, a saved workflow installed through this bridge ran with Pi 0.86.1 and the published engine 3.13.0. Pi loaded both packages through normal extension discovery. The engine resolved its Pi dependency at 0.87.1. An OpenAI child called `read` and `structured_output`, returned the expected value, and posted it to the parent session. The run then cleared its pending-delivery marker.
 

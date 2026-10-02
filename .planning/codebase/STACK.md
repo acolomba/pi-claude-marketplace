@@ -14,7 +14,7 @@
 ## Runtime
 
 **Environment:**
-- Node.js `>=20.19.0` declared in `package.json` `engines`; CI pins and runs the pipeline on Node 24 only (`.github/workflows/ci.yml`, D-01: single-Node-version matrix, justified there by `write-file-atomic@^8`'s `^22.22.2 || ^24.15.0 || >=26.0.0` engine floor and native TS-strip support)
+- Node.js `^22.22.2 || ^24.15.0 || >=26.0.0` declared in `package.json` `engines`; CI pins and runs the pipeline on Node 24 only (`.github/workflows/ci.yml`, D-01: single-Node-version matrix, justified there by `write-file-atomic@^8`'s `^22.22.2 || ^24.15.0 || >=26.0.0` engine floor and native TS-strip support)
 - ESM-only (`"type": "module"` in `package.json`)
 - `tsconfig.json` targets `ES2022`, `module`/`moduleResolution: NodeNext`, `noEmit: true` (type-checking only; no build/transpile step -- Node's native TS stripping runs `.ts` files directly)
 
@@ -25,9 +25,10 @@
 
 **Core:**
 - No web/app framework -- this is a Pi extension (library-style), not a server or SPA
-- `@earendil-works/pi-coding-agent` (peer dep `>=0.86.1`, dev dep `^0.86.1`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
-- `@earendil-works/pi-tui` (peer dep `*`, dev dep `^0.84.2`) - Pi terminal UI primitives
-- `pi-subagents` (optional peer dep `>=0.35.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent
+- `@earendil-works/pi-coding-agent` (peer dep `>=1.0.0`, dev dep `^1.0.0`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
+- `@earendil-works/pi-tui` (peer dep `*`, dev dep `^1.0.0`) - Pi terminal UI primitives
+- `pi-subagents` (optional peer dep `>=0.74.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent
+- `pi-mcp-adapter` (optional peer dep `>=5.0.0`) - soft-dependency companion extension that serves MCP servers; never installed into this repository
 
 **Testing:**
 - `node:test` (Node's built-in test runner) - suites under `tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,scripts,shared,transaction}/**/*.test.ts` plus `tests/index.test.ts` (`npm test`), plus a separate `tests/integration/**/*.test.ts` suite (`npm run test:integration`) and `tests/e2e/**/*.test.ts` (`npm run test:e2e`, pinned ref; `npm run test:e2e:nightly` runs against floating `main`)
@@ -37,8 +38,8 @@
 **Build/Dev:**
 - No bundler/build step -- TypeScript is type-checked only (`tsc --noEmit`); Node runs `.ts` sources natively
 - `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~400 lines), including custom architecture-boundary and output-discipline rules (`no-restricted-syntax` forbids `process.stdout.write`/`process.stderr.write` in `extensions/pi-claude-marketplace/**`)
-- `prettier` `^3.8.3` for formatting (`npm run format` / `format:check`)
-- `fallow` `^3.27.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` chains four subcommands, each `--fail-on-issues --format human`:
+- `prettier` `^3.9.9` for formatting (`npm run format` / `format:check`)
+- `fallow` `^3.31.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` chains four subcommands, each `--fail-on-issues --format human`:
   - `fallow dead-code` (entry point `extensions/pi-claude-marketplace/index.ts`), scoped to production reachability by `production.deadCode`
   - `fallow dead-code --no-production --circular-deps --re-export-cycles`, which carries the two cycle classes across `tests/` and `scripts/`
   - `fallow health` (`maxCyclomatic: 20`, `maxCognitive: 15`, `maxUnitSize: 60`, plus `maxCrap: 0`, which switches CRAP OFF -- see the CRAP note in TESTING.md before touching it)
@@ -69,7 +70,7 @@
 
 **Build:**
 - `tsconfig.json` - strict TypeScript compiler options (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noUnusedLocals`, etc.), includes `extensions/**/*.ts` and `tests/**/*.ts`
-- `eslint.config.js` - flat ESLint config with `typescript-eslint`, `@stylistic/eslint-plugin`, `eslint-plugin-import-x`, `eslint-plugin-sonarjs`, plus project-specific architecture-boundary rules
+- `eslint.config.js` - flat ESLint config with `typescript-eslint` `^8.71.0`, `@stylistic/eslint-plugin`, `eslint-plugin-import-x` `^4.17.1`, `eslint-plugin-sonarjs` `^4.2.2` and `globals` `^17.13.0`, plus project-specific architecture-boundary rules
 - `.fallowrc.json` - fallow zone/boundary/health/dupes configuration (see Build/Dev above)
 - `.prettierrc.json` / `.prettierignore` - formatting config
 - `sonar-project.properties` - SonarCloud project settings (`sonar.projectKey=acolomba_pi-claude-marketplace`, `sonar.organization=acolomba`), coverage report paths, and a documented `sonar.cpd.exclusions` list for deliberately-parallel-structure files (agents/commands bridge `stage.ts`, `orchestrators/plugin/shared.ts`, several `*.messaging.ts` files)
@@ -77,7 +78,7 @@
 ## Platform Requirements
 
 **Development:**
-- Node `>=20.19.0` (engines floor); CI and local `.pre-commit-config.yaml` Node setup both use Node 24
+- Node `^22.22.2 || ^24.15.0 || >=26.0.0` (engines floor); CI and local `.pre-commit-config.yaml` Node setup both use Node 24
 - npm for dependency install
 - `pre-commit` (Python-based framework, Python 3.12 in CI) for the git hook pipeline
 
