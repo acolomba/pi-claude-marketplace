@@ -70,8 +70,15 @@ import type { NotificationContext, SoftDepStatus } from "../platform/pi-api.ts";
  * dispatch behavior directly from this file. No barrel re-exports.
  */
 
-/** D-02: the single sink. Makes exactly one notify call from `args`. */
-function deliver(ctx: NotificationContext, args: NotifyArguments): void {
+/**
+ * D-02 / D-15: the single sink. Makes exactly one notify call from `args`, or
+ * none when the text strategy returns `undefined` for an empty surface.
+ */
+function deliver(ctx: NotificationContext, args: NotifyArguments | undefined): void {
+  if (args === undefined) {
+    return;
+  }
+
   if (args.length === 1) {
     ctx.ui.notify(args[0]);
   } else {
@@ -138,34 +145,30 @@ export function notifyUsageInfo(ctx: NotificationContext, usage: string): void {
 }
 
 /**
- * S2 / PR #51: post-cascade hygiene warnings out-of-band notification seam.
+ * S2 / PR #51: the out-of-band seam for post-cascade hygiene warnings
+ * (RAWS-02).
  *
  * Surfaces post-state-commit warnings (data-dir mkdir deferred,
  * completion-cache refresh deferred, agent foreign-content preserved,
  * bridge-side soft warnings) that have no representation in the
- * `MarketplaceNotificationMessage` cascade body. The reconcile apply
- * pass collects these from `InstallPluginOutcome.postCommitWarnings`
- * across the install bucket and fires this helper exactly once -- a
- * sanctioned exception to the per-cascade single-notify discipline
- * (RECON-04 / IL-2) that mirrors `import/execute.ts`'s `pushDiagnostic`
- * channel.
+ * `MarketplaceNotificationMessage` cascade body. The reconcile apply pass
+ * collects these from `InstallPluginOutcome.postCommitWarnings` across the
+ * install bucket and calls this helper once -- a sanctioned exception to the
+ * per-cascade single-notify discipline (RECON-04 / IL-2) that mirrors
+ * `import/execute.ts`'s `pushDiagnostic` channel.
  *
- * The on-the-wire form is `${header}\n\n${lines.join("\n")}` at
- * `"warning"` severity. The header counts the per-warning lines so the
- * operator sees both the total and the per-warning detail without
- * re-flowing the cascade body. Standalone-mode commands swallow these
- * per D-19-01; orchestrated-mode (cascade) callers use this seam.
+ * The producers compose the header, which counts the lines, and redact the
+ * lines (D-05). This helper builds the `diagnostic` kind, and the text strategy
+ * joins the header and the lines at `"warning"` severity. A zero-length line
+ * list emits nothing. Standalone-mode commands swallow these per D-19-01;
+ * orchestrated-mode (cascade) callers use this seam.
  */
 export function notifyDiagnostic(
   ctx: NotificationContext,
   header: string,
   lines: readonly string[],
 ): void {
-  if (lines.length === 0) {
-    return;
-  }
-
-  ctx.ui.notify(`${header}\n\n${lines.join("\n")}`, "warning");
+  emitRawSurface(ctx, { kind: "diagnostic", header, lines });
 }
 
 /**

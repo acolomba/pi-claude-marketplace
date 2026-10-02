@@ -1019,8 +1019,20 @@ export interface UsageInfoSurface {
 }
 
 /**
+ * RAWS-02 / D-05: an out-of-band warning block. The producer composes the
+ * header and redacts the lines; the text strategy joins them. The kind belongs
+ * to no fixed-origin group (D-14), because its origin depends on the caller:
+ * import is a command, and reconcile post-install is load.
+ */
+export interface DiagnosticSurface {
+  readonly kind: "diagnostic";
+  readonly header: string;
+  readonly lines: readonly string[];
+}
+
+/**
  * D-01 / D-04: every raw output surface. It is deliberately not a
  * `NotificationMessage` member, so `notify()`'s run never reaches a raw call
  * site.
  */
-export type RawSurface = UsageErrorSurface | UsageInfoSurface | LoadSurface;
+export type RawSurface = UsageErrorSurface | UsageInfoSurface | DiagnosticSurface | LoadSurface;

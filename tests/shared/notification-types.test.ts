@@ -7,6 +7,7 @@ import {
   pluginVersion,
   type ContentReason,
   type CascadeNotificationMessage,
+  type DiagnosticSurface,
   type MarketplaceNotificationMessage,
   type MarketplaceStatus,
   type NotificationMessage,
@@ -317,6 +318,14 @@ void ({ kind: "usage-info", usage: "Usage: x" } satisfies UsageInfoSurface);
 void ({ kind: "usage-error", message: "Unknown plugin" } satisfies UsageErrorSurface);
 // @ts-expect-error D-01: a usage surface is not a NotificationMessage
 void ({ kind: "usage-info", usage: "Usage: x" } satisfies NotificationMessage);
+void ({ kind: "diagnostic", header: "Warnings", lines: ["first"] } satisfies DiagnosticSurface);
+void ({ kind: "diagnostic", header: "Warnings", lines: [] } satisfies DiagnosticSurface);
+void ({
+  kind: "diagnostic",
+  header: "Warnings",
+  // @ts-expect-error RAWS-02 / D-05: diagnostic lines are data, not a pre-joined block
+  lines: "first\nsecond",
+} satisfies DiagnosticSurface);
 void installedMessage;
 void skippedMessage;
 void contentReason;

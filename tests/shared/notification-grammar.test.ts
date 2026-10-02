@@ -1499,6 +1499,10 @@ const RAW_SURFACE_ROWS: {
     surface: { kind: "usage-info", usage: "Usage: /claude:plugin help [marketplace]" },
     expectedArguments: ["Usage: /claude:plugin help [marketplace]", "info"],
   },
+  diagnostic: {
+    surface: { kind: "diagnostic", header: "Warnings", lines: ["first", "second"] },
+    expectedArguments: ["Warnings\n\nfirst\nsecond", "warning"],
+  },
 };
 
 for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_ROWS)) {
@@ -1512,7 +1516,9 @@ for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_
 }
 
 // RAWS-01 / D-06: the usage kinds join the producer's strings as-is with one
-// blank line, and have no no-op.
+// blank line, and have no no-op. RAWS-02 / D-05: a diagnostic keeps its lines
+// in caller order, duplicates and empty strings included, and only a
+// zero-length line list emits nothing.
 for (const { title, surface, expectedArguments } of [
   {
     title: "keeps both blocks when the message equals the usage",
@@ -1539,10 +1545,25 @@ for (const { title, surface, expectedArguments } of [
     surface: { kind: "usage-error", message: "Plugin «café» introuvable ⊘", usage: "Usage: x" },
     expectedArguments: ["Plugin «café» introuvable ⊘\n\nUsage: x", "error"],
   },
+  {
+    title: "emits nothing for a diagnostic with zero lines",
+    surface: { kind: "diagnostic", header: "Warnings", lines: [] },
+    expectedArguments: undefined,
+  },
+  {
+    title: "renders a single-line diagnostic as the header, one blank line, and the line",
+    surface: { kind: "diagnostic", header: "Warnings", lines: ["only"] },
+    expectedArguments: ["Warnings\n\nonly", "warning"],
+  },
+  {
+    title: "keeps duplicate and empty diagnostic lines in caller order",
+    surface: { kind: "diagnostic", header: "Warnings", lines: ["a", "", "a"] },
+    expectedArguments: ["Warnings\n\na\n\na", "warning"],
+  },
 ] satisfies readonly {
   readonly title: string;
   readonly surface: ResolvedRawSurface;
-  readonly expectedArguments: NotifyArguments;
+  readonly expectedArguments: NotifyArguments | undefined;
 }[]) {
   test(`formatRawSurface ${title}`, () => {
     // act
