@@ -247,7 +247,7 @@ still open with a comment explaining what landed.
 
 ### Roadmap Evolution
 
-- Phases 6-12 added 2026-09-18 (operator decision: extend v1.20 rather than open v1.21): Load-time dependency check and allowed uninstall; Marketplace-repository tag resolution for path-source dependencies; Enablement parity for dependencies; Reload installs missing declared dependencies; Constraint-aware update; Cross-marketplace dependency allowlist; Standalone prune with dry-run. Source: `HANDOFF-upstream-dependency-parity.md`. Order changed from the handoff's: load-time check leads.
+- Phases 6-12 added 2026-09-18 (operator decision: extend v1.20 rather than open v1.21): Load-time dependency check and allowed uninstall; Marketplace-repository tag resolution for path-source dependencies; Enablement parity for dependencies; Reload installs missing declared dependencies; Constraint-aware update; Cross-marketplace dependency allowlist; Standalone prune with dry-run. Source: `milestones/v1.20-HANDOFF-upstream-dependency-parity.md`. Order changed from the handoff's: load-time check leads.
 
 ### Decisions
 
