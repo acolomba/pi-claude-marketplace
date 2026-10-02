@@ -10,6 +10,8 @@ import {
   notify,
   notifyAsyncRewakeSummary,
   notifyDiagnostic,
+  notifyPluginPathSkipped,
+  notifyReconcileAborted,
   notifyStopHookOverrideCap,
   notifyUsageError,
   notifyUsageInfo,
@@ -5737,6 +5739,39 @@ test("usage info dispatch preserves usage message at info severity", (t) => {
     "Usage: /claude:plugin ...",
     "info",
   ]);
+});
+
+test("notifyReconcileAborted emits the serialized cause at error severity", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyReconcileAborted(ctx as never, new Error("boom"));
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [["reconcile aborted: boom", "error"]],
+  );
+});
+
+test("notifyPluginPathSkipped emits the skipped scope and reason at warning severity", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyPluginPathSkipped(ctx as never, "project", "schema unsupported");
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "plugin PATH not refreshed for project scope (install state unreadable): schema unsupported",
+        "warning",
+      ],
+    ],
+  );
 });
 
 test("raw dispatch preserves absent and explicit severity once each", (t) => {

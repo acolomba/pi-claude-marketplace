@@ -8,6 +8,7 @@ import {
   CENTRAL_ROW_POLICY,
   resolveEnvelope,
   resolveNotAddedReason,
+  resolveRawSurface,
   resolveRows,
   resolveUpdateNoOpEnvelope,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -27,6 +28,7 @@ import type {
   NotificationMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
+  PluginPathSkippedSurface,
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
@@ -1285,6 +1287,51 @@ describe("resolveNotAddedReason", () => {
       assert.strictEqual(reason, expectedReason);
     });
   }
+});
+
+describe("resolveRawSurface", () => {
+  test("serializes an Error cause to its message", () => {
+    // arrange
+    const surface = { kind: "reconcile-aborted", cause: new Error("boom") } as const;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(resolved, { kind: "reconcile-aborted", causeMessage: "boom" });
+  });
+
+  for (const { title, cause, causeMessage } of [
+    { title: "a string cause", cause: "boom", causeMessage: "boom" },
+    { title: "a number cause", cause: 42, causeMessage: "42" },
+    { title: "an undefined cause", cause: undefined, causeMessage: "undefined" },
+  ] as const satisfies readonly { title: string; cause: unknown; causeMessage: string }[]) {
+    test(`serializes ${title} to its string form`, () => {
+      // arrange
+      const surface = { kind: "reconcile-aborted", cause } as const;
+
+      // act
+      const resolved = resolveRawSurface(surface);
+
+      // assert
+      assert.deepStrictEqual(resolved, { kind: "reconcile-aborted", causeMessage });
+    });
+  }
+
+  test("returns a plugin-path-skipped surface as the same object", () => {
+    // arrange
+    const surface = {
+      kind: "plugin-path-skipped",
+      scope: "user",
+      reason: "state.json is unreadable",
+    } satisfies PluginPathSkippedSurface;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.strictEqual(resolved, surface);
+  });
 });
 
 test("an inherited prototype-name policy cannot authorize a malformed row", () => {

@@ -7,6 +7,7 @@ import type {
   ResolvedEnvelope,
   ResolvedFailure,
   ResolvedMarketplace,
+  ResolvedRawSurface,
   ResolvedRow,
   ResolvedTally,
   RowHint,
@@ -23,6 +24,7 @@ import type {
   PluginNotificationMessage,
   PluginUpdatedMessage,
   Reason,
+  Severity,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
 
@@ -1064,6 +1066,12 @@ function tallySentence(tally: ResolvedTally | undefined): string {
 }
 
 /**
+ * D-02 / D-15: the exact arguments of one notify call, the text and then an
+ * optional severity. The text strategy decides how many there are.
+ */
+export type NotifyArguments = readonly [text: string] | readonly [text: string, severity: Severity];
+
+/**
  * Formats one resolved envelope around a rendered body. It folds `body`, then
  * the no-op headline or the tally sentence, then the reload trailer, dropping
  * each absent segment and joining the rest with one blank line. A warning or
@@ -1071,8 +1079,11 @@ function tallySentence(tally: ResolvedTally | undefined): string {
  * one blank line, never a single `\n`, which would glue the host `Error:` /
  * `Warning:` label onto the first detail row. An info envelope carries no
  * summary line.
+ *
+ * D-15: an info envelope yields one argument, the text alone. A warning or
+ * error envelope yields two, the text and its severity.
  */
-export function formatNotificationText(envelope: ResolvedEnvelope, body: string): string {
+export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string): NotifyArguments {
   const folded = [
     body,
     envelope.noOp ? UPDATE_NO_OP_HEADLINE : tallySentence(envelope.tally),
@@ -1081,5 +1092,23 @@ export function formatNotificationText(envelope: ResolvedEnvelope, body: string)
     .filter((segment) => segment !== "")
     .join("\n\n");
 
-  return envelope.severity === "info" ? folded : `${envelope.summary}\n\n${folded}`;
+  return envelope.severity === "info"
+    ? [folded]
+    : [`${envelope.summary}\n\n${folded}`, envelope.severity];
+}
+
+/**
+ * D-15: formats one resolved raw surface as its notify arguments. Every raw kind
+ * passes its severity explicitly, so each arm yields two arguments.
+ */
+export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments {
+  switch (surface.kind) {
+    case "reconcile-aborted":
+      return [`reconcile aborted: ${surface.causeMessage}`, "error"];
+    case "plugin-path-skipped":
+      return [
+        `plugin PATH not refreshed for ${surface.scope} scope (install state unreadable): ${surface.reason}`,
+        "warning",
+      ];
+  }
 }

@@ -587,20 +587,20 @@
       "necessity": "extensions/pi-claude-marketplace/index.ts:92:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:204:43",
+      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:229:43",
       "owner": "dispatchInfoMessage.message",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:204:12"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:229:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:912:32",
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:914:32",
       "owner": "isDescriptionBearingRow",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within ResolvedRow by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:912:9"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:914:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-summary.ts:46:40",
@@ -624,8 +624,8 @@
       "key": "skillPaths",
       "category": "external-output",
       "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/index.ts:184:11",
-      "boundary": "extensions/pi-claude-marketplace/index.ts:183:9"
+      "origin": "extensions/pi-claude-marketplace/index.ts:177:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:176:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:107:3",
@@ -633,8 +633,8 @@
       "key": "promptPaths",
       "category": "external-output",
       "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/index.ts:185:11",
-      "boundary": "extensions/pi-claude-marketplace/index.ts:183:9"
+      "origin": "extensions/pi-claude-marketplace/index.ts:178:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:176:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:236:3",

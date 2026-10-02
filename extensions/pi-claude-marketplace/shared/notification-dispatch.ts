@@ -3,7 +3,8 @@ import {
   composeMarketplaceBlock,
   composePluginLines,
   composeReconcileAppliedBody,
-  formatNotificationText,
+  formatEnvelopeArguments,
+  formatRawSurface,
   renderMarketplaceInfo,
   renderMarketplaceInfoCascade,
   renderMarketplaceNotAdded,
@@ -15,12 +16,14 @@ import {
   CENTRAL_ROW_POLICY,
   resolveEnvelope,
   resolveNotAddedReason,
+  resolveRawSurface,
   resolveRows,
   resolveUpdateNoOpEnvelope,
 } from "./notification-resolve.ts";
 import { composeRetainedWorkflowsAdvisories, isInfoKind } from "./notification-summary.ts";
 import { redactCauseChain } from "./redact-absolute-paths.ts";
 
+import type { NotifyArguments } from "./notification-grammar.ts";
 import type {
   RowPolicyMap,
   ResolvedEnvelope,
@@ -30,62 +33,84 @@ import type { NotificationRun } from "./notification-run.ts";
 import type { StandaloneKind } from "./notification-summary.ts";
 import type {
   CascadeNotificationMessage,
+  LoadSurface,
   NotificationMessage,
+  RawSurface,
   ReconcileAppliedCascadeMessage,
   RetainedWorkflowStaging,
   Severity,
   UsageErrorMessage,
 } from "./notification-types.ts";
+import type { Scope } from "./types.ts";
 import type { NotificationContext, SoftDepStatus } from "../platform/pi-api.ts";
 
 /**
- * shared/notification-dispatch.ts -- the SOLE sanctioned ctx.ui.notify call
- * site and the
- * single source of truth for the structured-notification surface. Severity is
- * a caller-stamped per-row field (`Severity`): each producer stamps every row's
- * `severity`, and `computeSeverity` takes the numeric MAX over the rows (SEV-02)
- * to derive the magic-string `"info" | "warning" | "error"` second arg the Pi
- * API's `notify(msg, type?)` accepts -- NOT content inference. The standalone
- * info-surface kinds (`marketplace-not-added`, `plugin-info`, and the read-only
- * info/cascade kinds) carry no per-row severity array, so they keep a tiny
- * kind->severity map. The eslint per-file override in eslint.config.js disables
- * `no-restricted-syntax` for this file so inline `eslint-disable-next-line`
+ * shared/notification-dispatch.ts -- the sole site that calls the Pi notify
+ * API (IL-2). Every emission ends in the private `deliver` sink, which makes
+ * exactly one notify call from the argument tuple the text strategy returns
+ * (D-02). The text strategy in notification-grammar.ts supplies both the text
+ * and the argument count (D-15).
+ *
+ * Two paths reach the sink:
+ *
+ *  - The structured path. `notify(ctx, run, NotificationMessage)` and the
+ *    cascade emitters resolve the rows and the envelope (notification-resolve.ts),
+ *    compose the body, and hand both to `formatEnvelopeArguments`. Severity is a
+ *    caller-stamped per-row field, reduced to the envelope's severity at resolve
+ *    time (SEV-02). The command's run supplies the soft-dep snapshot (D-05).
+ *  - The raw-surface path. Each helper builds one `RawSurface` kind, which
+ *    `resolveRawSurface` serializes and `formatRawSurface` turns into text
+ *    (D-13). Raw kinds carry no run, so no raw call site needs one (D-01, D-04).
+ *
+ * The eslint per-file override in eslint.config.js disables
+ * `no-restricted-syntax` for this file, so inline `eslint-disable-next-line`
  * comments are unnecessary here.
- *
- * Public API:
- *
- *  - notify(ctx, run, NotificationMessage)
- *  Single state-change entry. Renders the marketplace/plugin tree
- *  to a single string and routes through ctx.ui.notify with computed
- *  severity and a computed reload-hint trailer. The command's run
- *  supplies the soft-dep snapshot (D-05). `resolveRows` composes the
- *  per-row {requires pi-subagents} / {requires pi-mcp} markers from
- *  that snapshot under `CENTRAL_ROW_POLICY` (D-12).
- *  - notifyUsageError(ctx, UsageErrorMessage)
- *  Argv-validation errors. On-the-wire string is
- *  `${message.message}\n\n${message.usage}` at "error" severity
- *  (SNM-13).
- *
- * Closed-set source of truth: the `Reason`, `StatusToken`, `PluginStatus` and
- * `MarketplaceStatus` literal-union vocabularies live in
- * `notification-types.ts`. No `MARKERS` / `PATTERN_CLASSES`
- * vocabularies sit alongside them: the `<autoupdate>` / `<no autoupdate>` chevron
- * tokens are written as literals at their render sites in `renderMpHeader`,
- * and the pattern-class labels only ever named message shapes in prose. The
- * `compare-name-scope.ts` owns the single per-scope row-order policy across
- * every list-rendering surface.
  *
  * Callers import vocabulary from `notification-types.ts` and rendering or
  * dispatch behavior directly from this file. No barrel re-exports.
  */
 
-function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, body: string): void {
-  const text = formatNotificationText(envelope, body);
-  if (envelope.severity === "info") {
-    ctx.ui.notify(text);
+/** D-02: the single sink. Makes exactly one notify call from `args`. */
+function deliver(ctx: NotificationContext, args: NotifyArguments): void {
+  if (args.length === 1) {
+    ctx.ui.notify(args[0]);
   } else {
-    ctx.ui.notify(text, envelope.severity);
+    ctx.ui.notify(args[0], args[1]);
   }
+}
+
+function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, body: string): void {
+  deliver(ctx, formatEnvelopeArguments(envelope, body));
+}
+
+/** D-02 / D-13: resolves, formats, and delivers one raw surface. */
+function emitRawSurface(ctx: NotificationContext, surface: RawSurface): void {
+  deliver(ctx, formatRawSurface(resolveRawSurface(surface)));
+}
+
+/** D-14: the entry point for the load-origin group of raw surfaces. */
+function emitLoadSurface(ctx: NotificationContext, surface: LoadSurface): void {
+  emitRawSurface(ctx, surface);
+}
+
+/**
+ * RAWS-04 / D-13: reports that the load-time reconcile aborted. `cause` is the
+ * live thrown value; resolve serializes it.
+ */
+export function notifyReconcileAborted(ctx: NotificationContext, cause: unknown): void {
+  emitLoadSurface(ctx, { kind: "reconcile-aborted", cause });
+}
+
+/**
+ * RAWS-04 / D-13: reports that the load pass could not refresh `scope`'s
+ * plugin PATH because its install state is unreadable.
+ */
+export function notifyPluginPathSkipped(
+  ctx: NotificationContext,
+  scope: Scope,
+  reason: string,
+): void {
+  emitLoadSurface(ctx, { kind: "plugin-path-skipped", scope, reason });
 }
 
 /**

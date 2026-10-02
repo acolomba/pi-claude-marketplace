@@ -5,7 +5,8 @@ import {
   composeMarketplaceBlock,
   composePluginLines,
   composeReconcileAppliedBody,
-  formatNotificationText,
+  formatEnvelopeArguments,
+  formatRawSurface,
   renderMarketplaceInfo,
   renderMarketplaceInfoCascade,
   renderMarketplaceNotAdded,
@@ -15,8 +16,10 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { shouldEmitReloadHint } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
 
+import type { NotifyArguments } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import type {
   ResolvedMarketplace,
+  ResolvedRawSurface,
   ResolvedRow,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
@@ -1294,19 +1297,22 @@ for (const { name, row, expected } of [
   });
 }
 
-test("formatNotificationText returns an info body byte for byte", () => {
+test("formatEnvelopeArguments returns an info body byte for byte as its only argument", () => {
   // arrange
   const body = "● official [user]\n  alpha (installed)";
 
   // act
-  const text = formatNotificationText({ severity: "info", needsReload: false, noOp: false }, body);
+  const notifyArguments = formatEnvelopeArguments(
+    { severity: "info", needsReload: false, noOp: false },
+    body,
+  );
 
   // assert
-  assert.equal(text, "● official [user]\n  alpha (installed)");
+  assert.deepStrictEqual(notifyArguments, ["● official [user]\n  alpha (installed)"]);
 });
 
 for (const severity of ["warning", "error"] as const) {
-  test(`formatNotificationText prepends a ${severity} summary as its own block`, () => {
+  test(`formatEnvelopeArguments prepends a ${severity} summary as its own block`, () => {
     // arrange
     const envelope = {
       severity,
@@ -1316,10 +1322,16 @@ for (const severity of ["warning", "error"] as const) {
     };
 
     // act
-    const text = formatNotificationText(envelope, "● official [user]\n  alpha (failed)");
+    const notifyArguments = formatEnvelopeArguments(
+      envelope,
+      "● official [user]\n  alpha (failed)",
+    );
 
     // assert
-    assert.equal(text, "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)");
+    assert.deepStrictEqual(notifyArguments, [
+      "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)",
+      severity,
+    ]);
   });
 }
 
@@ -1381,19 +1393,19 @@ for (const { name, envelope, expectedText } of [
   },
 ] satisfies readonly {
   readonly name: string;
-  readonly envelope: Parameters<typeof formatNotificationText>[0];
+  readonly envelope: Parameters<typeof formatEnvelopeArguments>[0];
   readonly expectedText: string;
 }[]) {
-  test(`formatNotificationText composes a tally sentence with ${name}`, () => {
+  test(`formatEnvelopeArguments composes a tally sentence with ${name}`, () => {
     // act
-    const text = formatNotificationText(envelope, "body");
+    const notifyArguments = formatEnvelopeArguments(envelope, "body");
 
     // assert
-    assert.equal(text, expectedText);
+    assert.deepStrictEqual(notifyArguments, [expectedText]);
   });
 }
 
-for (const { name, envelope, body, expectedText } of [
+for (const { name, envelope, body, expectedArguments } of [
   {
     name: "orders the body, the tally, and the reload trailer",
     envelope: {
@@ -1403,25 +1415,25 @@ for (const { name, envelope, body, expectedText } of [
       tally: { label: "Plugin install", failures: 0, warnings: 0, success: { count: 1 } },
     },
     body: "body",
-    expectedText: "body\n\nPlugin install: 1 success\n\n/reload to pick up changes",
+    expectedArguments: ["body\n\nPlugin install: 1 success\n\n/reload to pick up changes"],
   },
   {
     name: "leaves one blank line between the body and the trailer without a tally",
     envelope: { severity: "info", needsReload: true, noOp: false },
     body: "body",
-    expectedText: "body\n\n/reload to pick up changes",
+    expectedArguments: ["body\n\n/reload to pick up changes"],
   },
   {
     name: "puts the no-op headline in the tally slot",
     envelope: { severity: "info", needsReload: false, noOp: true },
     body: "body",
-    expectedText: "body\n\nPlugin update: nothing to update",
+    expectedArguments: ["body\n\nPlugin update: nothing to update"],
   },
   {
     name: "renders the no-op headline alone over an empty body",
     envelope: { severity: "info", needsReload: false, noOp: true },
     body: "",
-    expectedText: "Plugin update: nothing to update",
+    expectedArguments: ["Plugin update: nothing to update"],
   },
   {
     name: "prepends the summary over the folded body",
@@ -1433,21 +1445,57 @@ for (const { name, envelope, body, expectedText } of [
       tally: { label: "Plugin install", failures: 1, warnings: 0 },
     },
     body: "body",
-    expectedText:
+    expectedArguments: [
       "A plugin operation has failed.\n\nbody\n\nPlugin install: 1 failure\n\n/reload to pick up changes",
+      "error",
+    ],
   },
 ] satisfies readonly {
   readonly name: string;
-  readonly envelope: Parameters<typeof formatNotificationText>[0];
+  readonly envelope: Parameters<typeof formatEnvelopeArguments>[0];
   readonly body: string;
-  readonly expectedText: string;
+  readonly expectedArguments: NotifyArguments;
 }[]) {
-  test(`formatNotificationText ${name}`, () => {
+  test(`formatEnvelopeArguments ${name}`, () => {
     // act
-    const text = formatNotificationText(envelope, body);
+    const notifyArguments = formatEnvelopeArguments(envelope, body);
 
     // assert
-    assert.equal(text, expectedText);
+    assert.deepStrictEqual(notifyArguments, expectedArguments);
+  });
+}
+
+/**
+ * D-15: every raw kind passes its severity explicitly, so each formats to two
+ * arguments. The mapped type requires one row per resolved kind, so a kind
+ * without a row fails typecheck.
+ */
+const RAW_SURFACE_ROWS: {
+  readonly [K in ResolvedRawSurface["kind"]]: {
+    readonly surface: Extract<ResolvedRawSurface, { kind: K }>;
+    readonly expectedArguments: NotifyArguments;
+  };
+} = {
+  "reconcile-aborted": {
+    surface: { kind: "reconcile-aborted", causeMessage: "boom" },
+    expectedArguments: ["reconcile aborted: boom", "error"],
+  },
+  "plugin-path-skipped": {
+    surface: { kind: "plugin-path-skipped", scope: "user", reason: "state.json is unreadable" },
+    expectedArguments: [
+      "plugin PATH not refreshed for user scope (install state unreadable): state.json is unreadable",
+      "warning",
+    ],
+  },
+};
+
+for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_ROWS)) {
+  test(`formatRawSurface renders ${kind} with its explicit severity`, () => {
+    // act
+    const notifyArguments = formatRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(notifyArguments, expectedArguments);
   });
 }
 

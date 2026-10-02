@@ -18,7 +18,7 @@ import { loadState } from "./persistence/state-io.ts";
 import { createCompletionCache } from "./shared/completion-cache.ts";
 import { hookDebugLog } from "./shared/debug-log.ts";
 import { errorMessage } from "./shared/errors.ts";
-import { makeRawNotifyFn } from "./shared/notification-dispatch.ts";
+import { notifyPluginPathSkipped, notifyReconcileAborted } from "./shared/notification-dispatch.ts";
 import { openNotificationRun } from "./shared/notification-run.ts";
 import { applySessionEnv } from "./shared/session-env.ts";
 
@@ -131,15 +131,11 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
         });
       } catch (err) {
         try {
-          // AUTH-01 / IL-2 escape: makeRawNotifyFn is the sanctioned raw-text
-          // notify wrapper -- the last-ditch error path predates any structured
-          // NotificationMessage construction and routes through this seam to
-          // surface a single error string. The inner try/catch ensures a notify
-          // failure NEVER propagates past resources_discover (NFR-2).
-          // Y7 (PR #51): route through shared errorMessage so a non-Error
-          // throw (e.g. a literal string) renders its stringified form
-          // instead of `reconcile aborted: undefined`.
-          makeRawNotifyFn(ctx)(`reconcile aborted: ${errorMessage(err)}`, "error");
+          // RAWS-04 / D-13: the load pass reports the abort as the
+          // `reconcile-aborted` kind. Resolve renders a non-Error throw (e.g. a
+          // literal string) as its string form (Y7). The inner try/catch keeps
+          // a notify failure inside resources_discover (NFR-2).
+          notifyReconcileAborted(ctx, err);
         } catch (notifyErr) {
           // Last-ditch: never let a notify failure propagate past
           // resources_discover (NFR-2 boundary preservation); record it on
@@ -160,10 +156,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
         const pathResult = await recomputePluginPath(event.cwd);
         for (const skip of pathResult.skipped) {
           try {
-            makeRawNotifyFn(ctx)(
-              `plugin PATH not refreshed for ${skip.scope} scope (install state unreadable): ${skip.reason}`,
-              "warning",
-            );
+            notifyPluginPathSkipped(ctx, skip.scope, skip.reason);
           } catch (notifyErr) {
             // A notify failure must never propagate past resources_discover
             // (NFR-2 boundary preservation); record it on the debug seam so the

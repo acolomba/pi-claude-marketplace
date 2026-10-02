@@ -17,7 +17,9 @@ import type {
   NotificationMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
+  RawSurface,
   Reason,
+  ReconcileAbortedSurface,
   WithPlugins,
 } from "./notification-types.ts";
 import type { SoftDepStatus } from "../platform/pi-api.ts";
@@ -33,7 +35,7 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  *
  * D-10: severity, the composed summary line, `needsReload`, the numeric tally,
  * and the update no-op flag are resolved here, once. The text strategy
- * (`formatNotificationText` in notification-grammar.ts) reads the summary line
+ * (`formatEnvelopeArguments` in notification-grammar.ts) reads the summary line
  * verbatim and composes the tally sentence, the no-op headline, and the reload
  * trailer from these facts.
  *
@@ -529,4 +531,28 @@ export function resolveNotAddedReason(message: MarketplaceNotAddedMessage): Reas
   return message.scope === "user"
     ? "marketplace not added to user scope"
     : "marketplace not added to project scope";
+}
+
+/** D-13: a reconcile abort whose live cause has been serialized to text. */
+export interface ResolvedReconcileAborted {
+  readonly kind: "reconcile-aborted";
+  readonly causeMessage: string;
+}
+
+/** D-13: a raw surface after resolve. No member carries a live thrown value. */
+export type ResolvedRawSurface =
+  Exclude<RawSurface, ReconcileAbortedSurface> | ResolvedReconcileAborted;
+
+/**
+ * D-13: the one place a raw surface's live value becomes text, and the site
+ * where PMOD-04 redaction lands. A `reconcile-aborted` cause becomes
+ * `errorMessage(cause)`: an Error's message, or the string form of any other
+ * thrown value. Every other kind comes back as the same object.
+ */
+export function resolveRawSurface(surface: RawSurface): ResolvedRawSurface {
+  if (surface.kind === "reconcile-aborted") {
+    return { kind: "reconcile-aborted", causeMessage: errorMessage(surface.cause) };
+  }
+
+  return surface;
 }

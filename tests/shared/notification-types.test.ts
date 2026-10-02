@@ -13,10 +13,12 @@ import {
   type PluginAvailableMessage,
   type PluginInstalledMessage,
   type PluginNotificationMessage,
+  type PluginPathSkippedSurface,
   type PluginSkippedMessage,
   type PluginUpdateSkippedMessage,
   type PluginStatus,
   type Reason,
+  type ReconcileAbortedSurface,
   type ReconcilePendingEmptyMessage,
   type RetainedWorkflowStaging,
   type Severity,
@@ -287,6 +289,22 @@ void ({
 } satisfies NotificationMessage);
 // @ts-expect-error a committed prune warning must carry its failure cause
 void ({ kind: "prune-committed-warning", scope: "project" } satisfies NotificationMessage);
+void ({ kind: "reconcile-aborted", cause: new Error("boom") } satisfies ReconcileAbortedSurface);
+void ({ kind: "reconcile-aborted", cause: "boom" } satisfies ReconcileAbortedSurface);
+void ({ kind: "reconcile-aborted", cause: undefined } satisfies ReconcileAbortedSurface);
+void ({
+  kind: "plugin-path-skipped",
+  scope: "project",
+  reason: "schema unsupported",
+} satisfies PluginPathSkippedSurface);
+// @ts-expect-error D-01: a load surface is not a NotificationMessage
+void ({ kind: "reconcile-aborted", cause: "boom" } satisfies NotificationMessage);
+void ({
+  kind: "plugin-path-skipped",
+  // @ts-expect-error a skipped scope is only user or project
+  scope: "local",
+  reason: "schema unsupported",
+} satisfies PluginPathSkippedSurface);
 void installedMessage;
 void skippedMessage;
 void contentReason;

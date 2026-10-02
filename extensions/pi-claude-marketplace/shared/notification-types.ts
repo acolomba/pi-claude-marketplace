@@ -990,3 +990,26 @@ export type NotificationMessage =
   | PruneEmptyMessage
   | PruneCommittedWarningMessage
   | ReconcileAppliedCascadeMessage;
+
+/** RAWS-04 / D-13: the load-time reconcile aborted; `cause` is the live thrown value. */
+export interface ReconcileAbortedSurface {
+  readonly kind: "reconcile-aborted";
+  readonly cause: unknown;
+}
+
+/** RAWS-04 / D-13: the load pass could not refresh one scope's plugin PATH. */
+export interface PluginPathSkippedSurface {
+  readonly kind: "plugin-path-skipped";
+  readonly scope: Scope;
+  readonly reason: string;
+}
+
+/** D-14: the load-origin group of raw output surfaces. */
+export type LoadSurface = ReconcileAbortedSurface | PluginPathSkippedSurface;
+
+/**
+ * D-01 / D-04: every raw output surface. It is deliberately not a
+ * `NotificationMessage` member, so `notify()`'s run never reaches a raw call
+ * site.
+ */
+export type RawSurface = ReconcileAbortedSurface | PluginPathSkippedSurface;
