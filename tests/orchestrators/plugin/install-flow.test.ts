@@ -70,6 +70,7 @@ import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -85,8 +86,9 @@ import type { InstallFailureCapture } from "../../../extensions/pi-claude-market
 import type { MarketplaceTagProbeOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
+  CommandInventoryItem,
   NotificationContext,
-  ToolInventory,
+  PiInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -272,7 +274,7 @@ function retryStagingMkdirPrefix(stagingDir: string): string {
 //   PI-9: 7-phase ordering + rollback on phase-N failure (end-state assertion).
 //   PI-10: ${CLAUDE_PLUGIN_ROOT} substitution observable in staged skill body.
 //   PI-11: subagents warning -- pi.getAllTools returns no "subagent" -> warning.
-//   PI-12: mcp-adapter warning -- pi.getAllTools returns no "mcp" -> warning.
+//   PI-12: mcp-adapter warning -- no `mcp-adapter` command (ADET-02) -> warning.
 //   PI-13: dependencies declaration -> manual-install note appended to body.
 //   PI-14: PathContainmentError bypass -- verbatim message, NO rollback partial.
 //   PI-15: concurrent install (state pre-seeded) -> ConcurrentInstallError path
@@ -294,9 +296,12 @@ function toolInfo(name: string): ToolInventoryItem {
   };
 }
 
-function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
+function makeCtx(piOverrides?: {
+  readonly toolNames?: readonly string[];
+  readonly commands?: readonly CommandInventoryItem[];
+}): {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -307,8 +312,9 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
       },
     },
   };
-  const pi: ToolInventory = {
+  const pi: PiInventory = {
     getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInfo),
+    getCommands: () => piOverrides?.commands ?? [],
   };
   return { ctx, pi, notifications };
 }
@@ -5735,7 +5741,7 @@ async function seedDependencyInstalled(
 ): Promise<{
   readonly before: ExtensionState;
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly notifications: NotifyRecord[];
 }> {
   const locations = locationsFor("project", cwd);
@@ -5935,7 +5941,7 @@ async function assertPromotionRefused(args: {
   readonly installPlugin: InstallOperation;
   readonly seeded: {
     readonly ctx: NotificationContext;
-    readonly pi: ToolInventory;
+    readonly pi: PiInventory;
     readonly notifications: NotifyRecord[];
   };
   readonly flags: { readonly pinVersionOverride?: string; readonly partial?: boolean };
@@ -6079,7 +6085,7 @@ test("D-04-07: --partial is the consent that promotes a partially installed depe
 async function disableSeededDependency(
   cwd: string,
   hooksRouting: InstallHooksRouting,
-  seeded: { readonly ctx: NotificationContext; readonly pi: ToolInventory },
+  seeded: { readonly ctx: NotificationContext; readonly pi: PiInventory },
 ): Promise<void> {
   const { createEnableOperation } =
     await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
@@ -10590,7 +10596,10 @@ test("retry proof: install: commands prepare failure after a committed skill con
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -10724,7 +10733,10 @@ test("retry proof: install: skills prepare failure with no committed phases conv
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -10846,7 +10858,10 @@ test("retry proof: install: agents prepare failure after committed commands unwi
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -10999,7 +11014,10 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -11157,7 +11175,10 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -11284,7 +11305,10 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -11422,7 +11446,10 @@ test("retry proof: install: containment failure preserves the refused residue an
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -11563,7 +11590,10 @@ test("retry proof: install: state commit race after staged work retries from unc
         activeSchedule,
       );
       const cacheDrops = observeCompletionDrops(t, completionCache);
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({

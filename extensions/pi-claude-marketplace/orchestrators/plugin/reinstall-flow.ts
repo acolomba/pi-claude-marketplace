@@ -101,7 +101,7 @@ import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
@@ -123,7 +123,7 @@ export type ReinstallHooksRouting = Pick<
 /** Complete inputs for one installed plugin reinstall. */
 export interface ReinstallPluginOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly scope: Scope;
   readonly cwd: string;
   readonly marketplace: string;
@@ -152,7 +152,7 @@ export interface ReinstallPluginOptions {
 /** Complete inputs for targeted or bulk plugin reinstall. */
 export interface ReinstallPluginsOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly target: ReinstallPluginsTarget;

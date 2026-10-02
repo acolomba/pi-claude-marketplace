@@ -42,7 +42,7 @@ import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
@@ -75,7 +75,7 @@ export interface UpdateCloneCacheSeam {
 /** Direct update request validated and classified by the update flow. */
 export interface UpdatePluginsOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly target: UpdatePluginsTarget;

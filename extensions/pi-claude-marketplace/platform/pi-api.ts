@@ -6,12 +6,12 @@
 //
 // The soft-dependency probes (`hasLoadedPiSubagents` /
 // `hasLoadedPiMcpAdapter` / `hasLoadedWorkflowEngine` / `softDepStatus`) live
-// here because they inspect `pi.getAllTools()`, which belongs to the external
-// Pi API surface. `softDepStatus(pi)` returns a `SoftDepStatus` snapshot that
-// `shared/notification-dispatch.ts` reads once per render to decide whether to
-// append the `requires pi-subagents` / `requires pi-mcp-adapter` /
-// `requires pi-dynamic-workflows` markers to a plugin row whose
-// `dependencies` declare the kind.
+// here because they inspect `pi.getAllTools()` and `pi.getCommands()`, which
+// belong to the external Pi API surface. `softDepStatus(pi)` returns a
+// `SoftDepStatus` snapshot that `shared/notification-dispatch.ts` reads once per
+// render to decide whether to append the `requires pi-subagents` /
+// `requires pi-mcp-adapter` / `requires pi-dynamic-workflows` markers to a
+// plugin row whose `dependencies` declare the kind.
 
 export { getAgentDir } from "@earendil-works/pi-coding-agent";
 
@@ -146,16 +146,27 @@ export interface ToolInventoryItem {
   readonly sourceInfo?: { readonly source?: unknown };
 }
 
-/** Consumer-owned view of the Pi API used only to inspect registered tools. */
-export interface ToolInventory {
+/** The slash-command metadata inspected by the pi-mcp-adapter probe. */
+export interface CommandInventoryItem {
+  readonly name?: unknown;
+  readonly source?: unknown;
+  readonly sourceInfo?: { readonly source?: unknown };
+}
+
+/**
+ * Consumer-owned view of the Pi API used only to inspect registered tools and
+ * slash commands.
+ */
+export interface PiInventory {
   getAllTools(): readonly ToolInventoryItem[];
+  getCommands(): readonly CommandInventoryItem[];
 }
 
 /**
  * RH-3: pi-subagents loaded iff `pi.getAllTools()` contains a tool named
  * "subagent". Probe failures degrade to unloaded.
  */
-function hasLoadedPiSubagents(pi: ToolInventory): boolean {
+function hasLoadedPiSubagents(pi: PiInventory): boolean {
   try {
     return pi.getAllTools().some((tool) => tool.name === "subagent");
   } catch {
@@ -170,7 +181,7 @@ function hasLoadedPiSubagents(pi: ToolInventory): boolean {
  * registers only `workflow`, so probing the bare name would report a different
  * engine as the host. Probe failures degrade to unloaded.
  */
-function hasLoadedWorkflowEngine(pi: ToolInventory): boolean {
+function hasLoadedWorkflowEngine(pi: PiInventory): boolean {
   try {
     return pi.getAllTools().some((tool) => tool.name === "workflow_control");
   } catch {
@@ -178,27 +189,57 @@ function hasLoadedWorkflowEngine(pi: ToolInventory): boolean {
   }
 }
 
-/**
- * RH-4: pi-mcp-adapter loaded iff a tool named "mcp" exists OR any tool's
- * `sourceInfo.source` substring-matches "pi-mcp-adapter". Probe failures
- * degrade to unloaded.
- */
-function hasLoadedPiMcpAdapter(pi: ToolInventory): boolean {
-  try {
-    return pi.getAllTools().some((tool) => {
-      if (tool.name === "mcp") {
-        return true;
-      }
+// ADET-02: pi-mcp-adapter registers the `mcp-adapter` command. When two
+// extensions register the same command name, Pi lists each one under the name
+// with a `:<n>` occurrence suffix (`mcp-adapter:1`, `mcp-adapter:2`).
+const ADAPTER_COMMAND_NAME = /^mcp-adapter(?::\d+)?$/;
 
-      const src = tool.sourceInfo?.source;
-      return typeof src === "string" && src.includes("pi-mcp-adapter");
-    });
+function isAdapterSource(source: unknown): boolean {
+  return typeof source === "string" && source.includes("pi-mcp-adapter");
+}
+
+function isAdapterCommand(command: CommandInventoryItem): boolean {
+  if (isAdapterSource(command.sourceInfo?.source)) {
+    return true;
+  }
+
+  return (
+    command.source === "extension" &&
+    typeof command.name === "string" &&
+    ADAPTER_COMMAND_NAME.test(command.name)
+  );
+}
+
+/**
+ * Runs one probe arm. An arm that throws reports "not loaded", so a Pi read
+ * failure can raise a false warning but never a false all-clear.
+ */
+function probeArm(arm: () => boolean): boolean {
+  try {
+    return arm();
   } catch {
     return false;
   }
 }
 
-export function softDepStatus(pi: ToolInventory): SoftDepStatus {
+/**
+ * ADET-02: pi-mcp-adapter is loaded iff `pi.getCommands()` lists an extension
+ * command named `mcp-adapter`, or a command or tool `sourceInfo.source`
+ * contains "pi-mcp-adapter". The command is present with `disableProxyTool` and
+ * in a fork. A bare tool named `mcp` does not count, and neither does Pi's
+ * built-in MCP (`mcp__*` tools and an `mcp` command from `builtin:mcp`). Each
+ * arm is guarded on its own and both always run, so one snapshot makes the
+ * same reads in every state and a throwing arm leaves the other one deciding.
+ */
+function hasLoadedPiMcpAdapter(pi: PiInventory): boolean {
+  const viaCommands = probeArm(() => pi.getCommands().some((command) => isAdapterCommand(command)));
+  const viaTools = probeArm(() =>
+    pi.getAllTools().some((tool) => isAdapterSource(tool.sourceInfo?.source)),
+  );
+  return viaCommands || viaTools;
+}
+
+export function softDepStatus(pi: PiInventory): SoftDepStatus {
   return {
     piSubagentsLoaded: hasLoadedPiSubagents(pi),
     piMcpAdapterLoaded: hasLoadedPiMcpAdapter(pi),

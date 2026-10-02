@@ -119,7 +119,7 @@ import type {
 } from "../../domain/dependency-closure.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus, PiInventory } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -209,7 +209,7 @@ export interface EnableDisableSubject {
 export interface EnableDisablePluginOptions {
   readonly ctx: NotificationContext;
   /** Factory `pi` reference -- threaded into `notify()` for the single softDepStatus(pi) probe. */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
   readonly marketplace: string;
@@ -1838,7 +1838,7 @@ async function resolveIdempotentOutcome(
  */
 async function emitUnresolvedTarget(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
@@ -2430,7 +2430,7 @@ function classifyTransactionThrow(cause: Error): ContentReason {
  */
 function emitResolutionFailure(args: {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   marketplace: string;
   plugin: string;
   requestedScope: Scope | undefined;
@@ -2482,7 +2482,7 @@ function emitResolutionFailure(args: {
  */
 function emitEnableDisableFailedRow(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly enable: boolean;
   readonly marketplace: string;
   readonly scope: Scope;
@@ -2647,7 +2647,7 @@ function outcomeToTypedResult(args: {
  */
 function dispatchOutcome(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;

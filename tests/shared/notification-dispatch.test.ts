@@ -14,8 +14,12 @@ import {
   notifyUsageError,
   notifyUsageInfo,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { adapterCommand } from "../platform/pi-inventory-seed.ts";
 
-import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  CommandInventoryItem,
+  SoftDepStatus,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   CascadeNotificationMessage,
   NotificationMessage,
@@ -38,6 +42,7 @@ interface ToolDefinition {
 
 interface NotificationApi {
   readonly getAllTools: () => ToolDefinition[];
+  readonly getCommands: () => CommandInventoryItem[];
 }
 
 /**
@@ -47,25 +52,29 @@ interface NotificationApi {
  */
 function piWithAllLoaded(): NotificationApi {
   return {
-    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
+    getAllTools: () => [{ name: "subagent" }, { name: "workflow_control" }],
+    getCommands: () => [adapterCommand()],
   };
 }
 
 function piWithSubagentsLoaded(): NotificationApi {
   return {
     getAllTools: () => [{ name: "subagent" }],
+    getCommands: () => [],
   };
 }
 
 function piWithMcpLoaded(): NotificationApi {
   return {
-    getAllTools: () => [{ name: "mcp" }],
+    getAllTools: () => [],
+    getCommands: () => [adapterCommand()],
   };
 }
 
 function piWithNothingLoaded(): NotificationApi {
   return {
     getAllTools: () => [],
+    getCommands: () => [],
   };
 }
 

@@ -99,7 +99,7 @@ import type {
   ResolvedPluginUnavailable,
   ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver-types.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
@@ -117,7 +117,7 @@ export interface GetPluginInfoOptions {
    * surfaces do not emit soft-dep markers, but the probe argument is
    * threaded for signature parity with the cascade arm).
    */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly marketplace: string;
   readonly plugin: string;
   /** When omitted, fan-out across BOTH scopes (project-first per INFO-03). */

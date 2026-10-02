@@ -25,10 +25,11 @@
 import { mock, verify, when } from "strong-mock";
 
 import type {
+  CommandInventoryItem,
   ExtensionAPI,
   ExtensionCommandContext,
   ExtensionContext,
-  ToolInventory,
+  PiInventory,
   ToolInventoryItem,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -51,21 +52,27 @@ export interface NotificationBoundary {
 }
 
 /**
- * States `probes` soft-dependency probes on `pi`, each answering with `tools`.
- * `notify()` takes one `softDepStatus(pi)` snapshot per emission, and this is the
- * one place that says how many Pi reads one snapshot makes: one `getAllTools()`
- * read per companion target. A change to the probe's read shape breaks here once
- * (WR-08). A `probes` of 0 states nothing, because `times(0)` is no limit.
+ * States `probes` soft-dependency probes on `pi`, each answering with `tools`
+ * and `commands`. `notify()` takes one `softDepStatus(pi)` snapshot per
+ * emission, and this is the one place that says how many Pi reads one snapshot
+ * makes: three `getAllTools()` reads (one per companion target) and one
+ * `getCommands()` read (the pi-mcp-adapter command arm). A change to the
+ * probe's read shape breaks here once (WR-08). A `probes` of 0 states nothing,
+ * because `times(0)` is no limit.
  */
 export function expectSoftDepProbes(
-  pi: ToolInventory,
+  pi: PiInventory,
   probes: number,
   tools: readonly ToolInventoryItem[] = [],
+  commands: readonly CommandInventoryItem[] = [],
 ): void {
   if (probes > 0) {
     when(() => pi.getAllTools())
       .thenReturn(tools)
       .times(probes * 3);
+    when(() => pi.getCommands())
+      .thenReturn(commands)
+      .times(probes);
   }
 }
 

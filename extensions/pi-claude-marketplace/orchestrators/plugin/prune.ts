@@ -18,14 +18,14 @@ import { finalizePrunedMembers, sweepOrphans } from "./uninstall.ts";
 
 import type { PruneRestoreFailure } from "./prune-rollback.ts";
 import type { PrunedMember, UninstallHooksRouting, UninstallTransaction } from "./uninstall.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /** Inputs for an orphan sweep or read-only preview in exactly one scope. */
 export interface PrunePluginOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly cwd: string;
   readonly scope?: Scope;
   readonly dryRun?: boolean;

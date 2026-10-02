@@ -1,15 +1,17 @@
 import { mock, verify, when } from "strong-mock";
 
 import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
+import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 
 import type {
+  CommandInventoryItem,
   NotificationContext,
-  ToolInventory,
+  PiInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 export type MockCtx = NotificationContext;
-export type MockPi = ToolInventory;
+export type MockPi = PiInventory;
 type NotifyArguments = [message: string, severity?: "info" | "warning" | "error"];
 interface MockNotificationUi {
   readonly notify: (...args: NotifyArguments) => void;
@@ -55,9 +57,12 @@ export function makeCtx(): MockContextBoundary {
   };
 }
 
-function makePi(tools: readonly ToolInventoryItem[]): MockPi {
-  const pi = mock<ToolInventory>({ exactParams: true, name: "catalog Pi API" });
-  expectSoftDepProbes(pi, 1, tools);
+function makePi(
+  tools: readonly ToolInventoryItem[],
+  commands: readonly CommandInventoryItem[] = [],
+): MockPi {
+  const pi = mock<PiInventory>({ exactParams: true, name: "catalog Pi API" });
+  expectSoftDepProbes(pi, 1, tools, commands);
   return pi;
 }
 
@@ -67,12 +72,12 @@ function makePi(tools: readonly ToolInventoryItem[]): MockPi {
  * that row declares.
  */
 export function piWithAllLoaded(): MockPi {
-  return makePi([{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }]);
+  return makePi([{ name: "subagent" }, { name: "workflow_control" }], [adapterCommand()]);
 }
 
 /** Reports pi-subagents and pi-mcp-adapter loaded, the host workflow engine NOT loaded. */
 export function piWithBothLoaded(): MockPi {
-  return makePi([{ name: "subagent" }, { name: "mcp" }]);
+  return makePi([{ name: "subagent" }], [adapterCommand()]);
 }
 
 /**
@@ -88,7 +93,7 @@ export function piWithoutWorkflowEngine(): MockPi {
 
 /** Reports only the MCP companion extension loaded. */
 export function piWithMcpLoaded(): MockPi {
-  return makePi([{ name: "mcp" }]);
+  return makePi([], [adapterCommand()]);
 }
 
 /** Reports no companion extension loaded. */

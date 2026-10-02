@@ -33,7 +33,7 @@ import type {
   UsageErrorMessage,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus, PiInventory } from "../platform/pi-api.ts";
 
 /**
  * shared/notification-dispatch.ts -- the SOLE sanctioned ctx.ui.notify call
@@ -282,7 +282,7 @@ function dispatchInfoMessage(
  */
 export function notify(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   message: NotificationMessage,
 ): void {
   // Single soft-dep probe per invocation; threaded into every renderPluginRow
@@ -383,7 +383,7 @@ function foldAdvisories(body: string, advisories: readonly string[] | undefined)
 
 function emitCascadeWith(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   message: CascadeNotificationMessage | ReconcileAppliedCascadeMessage,
   renderPluginRowBody: (
     p: PluginNotificationMessage,
@@ -418,7 +418,7 @@ function emitCascadeWith(
 /** Dispatch a state-change cascade with its stamped reload decision. */
 export function emitContextCascade(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   message: CascadeNotificationMessage,
   renderPluginRowBody: (
     p: PluginNotificationMessage,
@@ -434,7 +434,7 @@ export function emitContextCascade(
 /** Dispatch the never-silent zero-transition update result. */
 export function emitUpdateNoOpCascade(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   message: CascadeNotificationMessage,
   renderPluginRowBody: (
     p: PluginNotificationMessage,
@@ -460,7 +460,7 @@ export function emitUpdateNoOpCascade(
 /** Dispatch an applied reconcile cascade without a redundant reload hint. */
 export function emitReconcileAppliedContextCascade(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   message: ReconcileAppliedCascadeMessage,
   renderPluginRowBody: (
     p: PluginNotificationMessage,

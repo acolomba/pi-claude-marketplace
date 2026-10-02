@@ -38,6 +38,7 @@ import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type {
@@ -48,7 +49,7 @@ import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/p
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type {
   NotificationContext,
-  ToolInventory,
+  PiInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -184,7 +185,7 @@ interface NotifyRecord {
 
 function makeCtx(): {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -195,7 +196,7 @@ function makeCtx(): {
       },
     },
   };
-  const pi: ToolInventory = { getAllTools: () => [] };
+  const pi = emptyPiInventory();
   return { ctx, pi, notifications };
 }
 

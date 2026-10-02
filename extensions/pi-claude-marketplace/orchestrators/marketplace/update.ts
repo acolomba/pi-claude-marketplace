@@ -149,7 +149,7 @@ import type { ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
@@ -173,7 +173,7 @@ export interface UpdateMarketplaceOptions {
    * optional) so every `notify(ctx, pi, ...)` call has a non-null reference;
    * the renderer threads `softDepStatus(pi)` internally at notify-time.
    */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
@@ -206,7 +206,7 @@ export interface UpdateAllMarketplacesOptions {
   readonly gitOps?: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
   /** See `UpdateMarketplaceOptions.pi`. */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
@@ -312,7 +312,7 @@ interface RefreshOneArgs {
   readonly locations: ScopedLocations;
   readonly gitOps: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly stateTransaction?: LockedStateTransactionDeps;

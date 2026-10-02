@@ -57,7 +57,7 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type {
   NotificationContext,
   ResourcesDiscoverEvent,
-  ToolInventory,
+  PiInventory,
 } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -334,7 +334,7 @@ export type DependencyDisableStamp = (
  */
 export interface ApplyReconcileOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   /** Project-scope cwd (ignored for the user scope). */
   readonly cwd: string;
   /** Lifecycle-owned route effects shared with registered hook callbacks. */

@@ -60,10 +60,11 @@ import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketp
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { emptyPiInventory } from "../platform/pi-inventory-seed.ts";
 
 import type {
   NotificationContext,
-  ToolInventory,
+  PiInventory,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // ---------------------------------------------------------------------------
@@ -97,11 +98,11 @@ function createReinstallPlugins() {
 
 function makeCtx(): {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
-  const pi: ToolInventory = { getAllTools: () => [] };
+  const pi = emptyPiInventory();
   const ctx = {
     ui: {
       notify: (m: string, s?: string): void => {
@@ -137,7 +138,7 @@ interface Emission {
  */
 type Invoker = (env: {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   cwd: string;
   mode: "explicit" | "bare";
 }) => Promise<void>;

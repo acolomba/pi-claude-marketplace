@@ -16,7 +16,7 @@ import {
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
 
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   CommandContext,
@@ -148,7 +148,7 @@ export const REINSTALL_CONTEXT = {
 // - Reference: catalog UAT plugin-reinstall fixtures.
 export function renderReinstallPartitionAndNotify(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   outcomes: readonly ReinstallPluginOutcome[],
   cardinality: "single" | "plural",
 ): void {

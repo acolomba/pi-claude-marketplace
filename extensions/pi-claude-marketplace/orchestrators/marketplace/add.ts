@@ -105,7 +105,7 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -168,7 +168,7 @@ export interface AddMarketplaceOptions {
   /**
    * Required by `notify(ctx, pi, message)` for soft-dep probing.
    */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   /** SC-5: the edge layer defaults this to "user"; orchestrator receives a fully resolved Scope. */
   readonly scope: Scope;
   /** Used to compute project-scope locations (`<cwd>/.pi`). Ignored when scope === "user". */

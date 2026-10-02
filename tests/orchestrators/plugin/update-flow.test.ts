@@ -76,7 +76,7 @@ import type { PluginUpdateFn } from "../../../extensions/pi-claude-marketplace/o
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   NotificationContext,
-  ToolInventory,
+  PiInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
@@ -271,7 +271,7 @@ async function createCaseDir(prefix: string): Promise<string> {
 
 function makeCtx(piOverrides?: { getAllTools?: () => readonly ToolInventoryItem[] }): {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -282,8 +282,9 @@ function makeCtx(piOverrides?: { getAllTools?: () => readonly ToolInventoryItem[
       },
     },
   };
-  const pi: ToolInventory = {
+  const pi: PiInventory = {
     getAllTools: piOverrides?.getAllTools ?? (() => []),
+    getCommands: () => [],
   };
   return { ctx, pi, notifications };
 }

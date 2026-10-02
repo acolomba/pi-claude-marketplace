@@ -18,7 +18,7 @@ import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
 import type { DirectRenderableOutcome } from "./update-swap.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus, PiInventory } from "../../platform/pi-api.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateSkippedOutcome } from "../types.ts";
@@ -198,7 +198,7 @@ function groupCascadeOutcomes(
 /** Composes and emits one exact update cascade from ordered plugin outcomes. */
 export function composeUpdateCascade(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   abortedByFailure = false,

@@ -14,8 +14,12 @@ import {
   isInfoKind,
   shouldEmitReloadHint,
 } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
+import { adapterCommand } from "../platform/pi-inventory-seed.ts";
 
-import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  CommandInventoryItem,
+  SoftDepStatus,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   CascadeNotificationMessage,
   NotificationMessage,
@@ -27,6 +31,7 @@ interface NotificationContext {
 
 interface NotificationApi {
   readonly getAllTools: () => readonly { readonly name: string }[];
+  readonly getCommands: () => readonly CommandInventoryItem[];
 }
 
 function createContext(t: TestContext): NotificationContext {
@@ -34,7 +39,7 @@ function createContext(t: TestContext): NotificationContext {
 }
 
 function notificationApi(): NotificationApi {
-  return { getAllTools: () => [{ name: "subagent" }, { name: "mcp" }] };
+  return { getAllTools: () => [{ name: "subagent" }], getCommands: () => [adapterCommand()] };
 }
 
 function messageWithKindSequence(

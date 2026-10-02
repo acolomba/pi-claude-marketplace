@@ -81,7 +81,7 @@ import type { ClosureLookupResult, ClosureSubject } from "../../domain/dependenc
 import type { PluginConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
@@ -113,7 +113,7 @@ import type { InstallPluginOutcome } from "../types.ts";
 export interface InstallPluginOptions {
   readonly ctx: NotificationContext;
   /** Factory `pi` reference -- carries `getAllTools()` for RH-3/RH-4 soft-dep probes. */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly scope: Scope;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
@@ -910,7 +910,7 @@ function composeInstalledRow(installCtx: InstallLedgerSummary, probe: SoftDepSta
  */
 function failedRowOutcome(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
@@ -1180,7 +1180,7 @@ async function materializePromotedRecord(
  */
 function promotedRowOutcome(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
@@ -1236,7 +1236,7 @@ function promotedRowOutcome(args: {
 function handleInstallThrow(args: {
   readonly err: unknown;
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
@@ -1292,7 +1292,7 @@ function handleInstallThrow(args: {
  */
 function handleCascadeThrow(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
@@ -2106,7 +2106,7 @@ export function createInstallPlugin(
  */
 export interface InstallMissingDependencyOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly scope: Scope;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;

@@ -14,6 +14,8 @@ import {
   softDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
+import { adapterCommand, forkAdapterCommand } from "./pi-inventory-seed.ts";
+
 import type * as PiBoundary from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type * as Peer from "@earendil-works/pi-coding-agent";
 
@@ -64,8 +66,11 @@ type PeerChecksLocalResourcesDiscoverHandler = Peer.ExtensionAPI["on"] extends (
   ? true
   : false;
 
-function toolInventory(tools: ToolDeclaration[]): PiBoundary.ToolInventory {
-  return { getAllTools: () => tools };
+function toolInventory(
+  tools: ToolDeclaration[],
+  commands: PiBoundary.CommandInventoryItem[] = [],
+): PiBoundary.PiInventory {
+  return { getAllTools: () => tools, getCommands: () => commands };
 }
 
 void (true satisfies Same<PiBoundary.AgentEndEvent, Peer.AgentEndEvent>);
@@ -116,11 +121,14 @@ void (true satisfies Same<
   Extract<PiBoundary.AgentMessage, { role: "assistant" }>
 >);
 void (true satisfies Same<PiBoundary.StopReason, PiBoundary.AssistantMessage["stopReason"]>);
-void (true satisfies PiBoundary.ExtensionAPI extends PiBoundary.ToolInventory ? true : false);
+void (true satisfies PiBoundary.ExtensionAPI extends PiBoundary.PiInventory ? true : false);
 void (true satisfies PiBoundary.ExtensionContext extends PiBoundary.NotificationContext
   ? true
   : false);
-void ({ getAllTools: () => [{ name: "subagent" }] } satisfies PiBoundary.ToolInventory);
+void ({
+  getAllTools: () => [{ name: "subagent" }],
+  getCommands: () => [{ name: "mcp-adapter", source: "extension" }],
+} satisfies PiBoundary.PiInventory);
 void ({
   ui: { notify: (_message: string): void => undefined },
 } satisfies PiBoundary.NotificationContext);
@@ -141,8 +149,10 @@ void ({ role: "unsupported" } satisfies PiBoundary.AgentMessage);
 void ({ role: "user" } satisfies PiBoundary.AssistantMessage);
 // @ts-expect-error a stop reason has a closed value set
 void ("unsupported" satisfies PiBoundary.StopReason);
-// @ts-expect-error a tool inventory must expose getAllTools
-void ({} satisfies PiBoundary.ToolInventory);
+// @ts-expect-error a Pi inventory must expose getAllTools
+void ({ getCommands: () => [] } satisfies PiBoundary.PiInventory);
+// @ts-expect-error a Pi inventory must expose getCommands
+void ({ getAllTools: () => [] } satisfies PiBoundary.PiInventory);
 // @ts-expect-error a notification context must expose ui.notify
 void ({ ui: {} } satisfies PiBoundary.NotificationContext);
 
@@ -301,46 +311,59 @@ describe("softDepStatus", () => {
     });
   }
 
-  for (const { tools, expectedLoaded, behavior } of [
+  for (const { tools, commands, expectedLoaded, behavior } of [
     {
-      behavior: "recognizes the mcp tool name",
-      tools: [{ name: "mcp" }],
+      behavior: "ADET-02 recognizes the mcp-adapter command",
+      tools: [],
+      commands: [adapterCommand()],
+      expectedLoaded: true,
+    },
+    {
+      behavior: "ADET-02 recognizes a fork's mcp-adapter command",
+      tools: [],
+      commands: [forkAdapterCommand()],
       expectedLoaded: true,
     },
     {
       behavior: "recognizes the adapter source",
       tools: [{ name: "other", sourceInfo: { source: "pi-mcp-adapter" } }],
+      commands: [],
       expectedLoaded: true,
     },
     {
       behavior: "recognizes the adapter within a source path",
       tools: [{ sourceInfo: { source: "wrapper/pi-mcp-adapter-clone" } }],
+      commands: [],
       expectedLoaded: true,
     },
     {
       behavior: "rejects a partial adapter source name",
       tools: [{ sourceInfo: { source: "pi-mcp" } }],
+      commands: [],
       expectedLoaded: false,
     },
     {
       behavior: "rejects an empty adapter source",
       tools: [{ sourceInfo: { source: "" } }],
+      commands: [],
       expectedLoaded: false,
     },
     {
       behavior: "accepts a tool without source metadata",
       tools: [{}],
+      commands: [],
       expectedLoaded: false,
     },
     {
       behavior: "rejects a non-string adapter source",
       tools: [{ sourceInfo: { source: 42 } }],
+      commands: [],
       expectedLoaded: false,
     },
   ]) {
     test(behavior, () => {
       // arrange
-      const extensionApi = toolInventory(tools);
+      const extensionApi = toolInventory(tools, commands);
 
       // act
       const status = softDepStatus(extensionApi);
@@ -418,10 +441,11 @@ describe("softDepStatus", () => {
     });
   }
 
-  for (const { tools, expectedStatus, behavior } of [
+  for (const { tools, commands, expectedStatus, behavior } of [
     {
       behavior: "reports every dependency as loaded",
-      tools: [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
+      tools: [{ name: "subagent" }, { name: "workflow_control" }],
+      commands: [adapterCommand()],
       expectedStatus: {
         piSubagentsLoaded: true,
         piMcpAdapterLoaded: true,
@@ -431,6 +455,7 @@ describe("softDepStatus", () => {
     {
       behavior: "reports only subagents as loaded",
       tools: [{ name: "subagent" }],
+      commands: [],
       expectedStatus: {
         piSubagentsLoaded: true,
         piMcpAdapterLoaded: false,
@@ -440,6 +465,7 @@ describe("softDepStatus", () => {
     {
       behavior: "reports only the MCP adapter as loaded",
       tools: [{ sourceInfo: { source: "pi-mcp-adapter" } }],
+      commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
         piMcpAdapterLoaded: true,
@@ -452,6 +478,7 @@ describe("softDepStatus", () => {
       // and it moves no other field.
       behavior: "WDEP-01 reports the host engine alone as loaded",
       tools: [{ name: "workflow_control" }],
+      commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
         piMcpAdapterLoaded: false,
@@ -461,6 +488,7 @@ describe("softDepStatus", () => {
     {
       behavior: "reports every dependency as unloaded",
       tools: [],
+      commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
         piMcpAdapterLoaded: false,
@@ -470,7 +498,7 @@ describe("softDepStatus", () => {
   ]) {
     test(behavior, () => {
       // arrange
-      const extensionApi = toolInventory(tools);
+      const extensionApi = toolInventory(tools, commands);
 
       // act
       const status = softDepStatus(extensionApi);
@@ -482,8 +510,11 @@ describe("softDepStatus", () => {
 
   test("degrades every dependency to unloaded when discovery fails", () => {
     // arrange
-    const extensionApi: PiBoundary.ToolInventory = {
+    const extensionApi: PiBoundary.PiInventory = {
       getAllTools: () => {
+        throw new Error("not ready");
+      },
+      getCommands: () => {
         throw new Error("not ready");
       },
     };

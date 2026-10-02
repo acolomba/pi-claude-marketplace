@@ -47,12 +47,13 @@ import {
   mergeMarketplaceIntoState,
 } from "../edge/handlers/marketplace-seed.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { emptyPiInventory } from "../platform/pi-inventory-seed.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type { ClosureLookupResult } from "../../extensions/pi-claude-marketplace/domain/dependency-closure.ts";
 import type {
   NotificationContext,
-  ToolInventory,
+  PiInventory,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /** The marketplace entry every case resolves. Its own version is tier 2. */
@@ -276,9 +277,9 @@ for (const { label, prepare } of [
  * Builds the two ports `getPluginInfo` takes: a recording notifier and an
  * empty tool inventory.
  */
-function makeCtx(): { ctx: NotificationContext; pi: ToolInventory; notifications: string[] } {
+function makeCtx(): { ctx: NotificationContext; pi: PiInventory; notifications: string[] } {
   const notifications: string[] = [];
-  const pi: ToolInventory = { getAllTools: () => [] };
+  const pi = emptyPiInventory();
   const ctx: NotificationContext = {
     ui: {
       notify: (message) => {

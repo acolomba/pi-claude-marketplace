@@ -98,7 +98,7 @@ import type { IndexedRecord, ScopeDeclarationIndexResult } from "./dependency-in
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
@@ -159,7 +159,7 @@ export type UninstallPluginOutcome =
 export interface UninstallPluginOptions {
   readonly ctx: NotificationContext;
   /** Factory `pi` reference -- threaded into `notify()` for the single softDepStatus(pi) probe. */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly scope?: Scope;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
@@ -362,7 +362,7 @@ function narrowCascadeFailure(cause: Error): ContentReason {
  */
 function emitCascadeFailure(args: {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   marketplace: string;
   scope: Scope;
   plugin: string;
@@ -436,7 +436,7 @@ function emitCascadeFailure(args: {
  */
 function emitConfigInvalid(args: {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   marketplace: string;
   scope: Scope;
   plugin: string;
@@ -931,7 +931,7 @@ async function runPostUninstallCleanup({
  */
 function emitAlreadyGone(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;

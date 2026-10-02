@@ -29,6 +29,9 @@ import test, { mock } from "node:test";
 
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { adapterCommand } from "../platform/pi-inventory-seed.ts";
+
+import type { CommandInventoryItem } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // ---------------------------------------------------------------------------
 // Mock helpers -- mirror the catalog-uat harness (makeCtx + piWith*Loaded).
@@ -49,6 +52,7 @@ interface MockTool {
 
 interface MockPi {
   getAllTools: () => MockTool[];
+  getCommands: () => CommandInventoryItem[];
 }
 
 /**
@@ -57,7 +61,8 @@ interface MockPi {
  */
 function piWithAllLoaded(): MockPi {
   return {
-    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
+    getAllTools: () => [{ name: "subagent" }, { name: "workflow_control" }],
+    getCommands: () => [adapterCommand()],
   };
 }
 

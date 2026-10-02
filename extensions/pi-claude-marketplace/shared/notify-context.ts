@@ -13,7 +13,7 @@ import {
 } from "./notification-types.ts";
 
 import type { Scope } from "./types.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus, PiInventory } from "../platform/pi-api.ts";
 
 /**
  * shared/notify-context.ts -- the horizontal command-context spine every
@@ -154,7 +154,7 @@ export function notifyWithContext<
   Msg extends PluginNotificationMessage & { status: Status },
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
   kind: "cascade" | undefined,
@@ -211,7 +211,7 @@ export function notifyUpdateWithContext<
   Msg extends PluginNotificationMessage & { status: Status },
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
   cardinality: "single" | "plural",
@@ -249,7 +249,7 @@ export function notifyUpdateNoOpWithContext<
   Msg extends PluginNotificationMessage & { status: Status },
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
   cardinality: "single" | "plural",
@@ -283,7 +283,7 @@ export function notifyReconcileAppliedWithContext<
   Msg extends Extract<PluginNotificationMessage, { status: Status }>,
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   context: CommandContext<Status, Msg>,
   message: ReconcileAppliedCascadeMessage,
 ): void {

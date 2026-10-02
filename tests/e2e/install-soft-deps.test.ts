@@ -4,6 +4,11 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import {
+  adapterCommand,
+  builtinMcpCommand,
+  builtinMcpTool,
+} from "../platform/pi-inventory-seed.ts";
 
 import { installTargetWithMockPi, withE2EEnvironment } from "./_helpers.ts";
 
@@ -64,3 +69,33 @@ for (const loaded of MATRIX) {
     });
   });
 }
+
+// ADET-01 / ADET-02: an install through the real extension takes its marker
+// decision from the adapter's own command. With `disableProxyTool` the adapter
+// exposes no tool and only its `mcp-adapter` command remains.
+test("ADET-02: a command-only pi-mcp-adapter clears the {requires pi-mcp-adapter} marker", async () => {
+  await withE2EEnvironment(async (env) => {
+    // act
+    const install = await installTargetWithMockPi(env, "context7", [], [adapterCommand()]);
+
+    // assert
+    const messages = install.notifications.map((notification) => notification.message).join("\n");
+    assert.equal(messages.includes(REQUIRES_PI_MCP_MARKER), false);
+  });
+});
+
+test("ADET-01: Pi's built-in MCP alone leaves the {requires pi-mcp-adapter} marker", async () => {
+  await withE2EEnvironment(async (env) => {
+    // act
+    const install = await installTargetWithMockPi(
+      env,
+      "context7",
+      [builtinMcpTool()],
+      [builtinMcpCommand()],
+    );
+
+    // assert
+    const messages = install.notifications.map((notification) => notification.message).join("\n");
+    assert.equal(messages.includes(REQUIRES_PI_MCP_MARKER), true);
+  });
+});

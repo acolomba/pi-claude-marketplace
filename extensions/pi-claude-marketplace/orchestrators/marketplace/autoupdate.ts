@@ -85,7 +85,7 @@ import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging
 import { classifyAutoupdateFlip, crossScopeFlag } from "./shared.ts";
 
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -106,7 +106,7 @@ export interface AutoupdateOptions {
    * mp-level rows never inject soft-dep markers, the probe is threaded through
    * every notify entry for invariant symmetry.
    */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   /** When undefined, flip every marketplace in target scope(s). */
   readonly name?: string;
   /** true -> autoupdate; false -> noautoupdate. */

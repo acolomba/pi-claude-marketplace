@@ -23,6 +23,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { makeCtx } from "../../e2e/_helpers.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
 
 import type { UninstallTransaction } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -187,7 +188,7 @@ test("removes an orphan from the default user scope and reports it", async () =>
     const { ctx, notifications } = makeCtx(cwd);
     const locations = locationsFor("user", cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd });
 
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins, {});
     assert.deepStrictEqual(notifications, [
@@ -239,7 +240,7 @@ test("prunes legacy state with one durable save", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins, {});
@@ -264,7 +265,7 @@ test("previews an orphan without writing state or taking a lock", async () => {
     const before = await readFile(locations.stateJsonPath);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, dryRun: true });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, dryRun: true });
 
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
@@ -281,7 +282,7 @@ test("preview refuses an unreadable declarer without a write", async () => {
     const before = await readFile(locations.stateJsonPath);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, dryRun: true });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, dryRun: true });
 
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
@@ -295,8 +296,8 @@ test("preview without orphans leaves the selected scope absent", async () => {
     const locations = locationsFor("project", cwd);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project", dryRun: true });
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project", dryRun: true });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun: true });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun: true });
 
     await assert.rejects(stat(locations.extensionRoot), { code: "ENOENT" });
     assert.deepStrictEqual(notifications, [
@@ -313,7 +314,7 @@ test("reports an empty project sweep without saving state", async () => {
     const before = await readFile(locations.stateJsonPath);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
     assert.deepStrictEqual(notifications, [
@@ -340,7 +341,7 @@ test("actual prune with a missing state skips snapshot and save", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.equal(saves, 0);
@@ -363,7 +364,7 @@ test("refuses an unreadable declarer before saving or removing it", async () => 
     const before = await readFile(locations.stateJsonPath);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd });
 
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
     assert.deepStrictEqual(
@@ -402,7 +403,7 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
 
     await prune()({
       ctx: preview.ctx,
-      pi: { getAllTools: () => [] },
+      pi: emptyPiInventory(),
       cwd,
       scope: "project",
       dryRun: true,
@@ -418,7 +419,7 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
       },
     ]);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     assert.deepStrictEqual(installedKeys(await loadState(project.extensionRoot)), [
       "disabled@alpha",
@@ -458,7 +459,7 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
       },
     ]);
     const after = await readFile(project.stateJsonPath);
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
     assert.deepStrictEqual(await readFile(project.stateJsonPath), after);
     assert.deepStrictEqual(notifications[1], {
       message: "Nothing to prune in project scope: no orphaned dependency installs were found.",
@@ -479,7 +480,7 @@ test("reports only explicit and held user installs as an empty sweep without sav
     const beforeStat = await stat(locations.stateJsonPath);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd });
 
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
     assert.equal((await stat(locations.stateJsonPath)).ino, beforeStat.ino);
@@ -526,7 +527,7 @@ test("a failed member keeps its dependent chain while an independent orphan comm
     };
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), [
       "a@alpha",
@@ -568,7 +569,7 @@ for (const dryRun of [true, false] as const) {
       const { ctx, notifications } = makeCtx(cwd);
 
       // act
-      await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project", dryRun });
+      await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun });
 
       // assert
       assert.deepStrictEqual(await readFile(locations.stateJsonPath, "utf8"), "{");
@@ -596,7 +597,7 @@ test("actual prune reports a held lock without changing state", async () => {
 
     try {
       // act
-      await prune()({ ctx, pi: { getAllTools: () => [] }, cwd });
+      await prune()({ ctx, pi: emptyPiInventory(), cwd });
 
       // assert
       assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
@@ -622,7 +623,7 @@ test("actual prune reports a non-Error transaction rejection", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -655,7 +656,7 @@ test("a failed state save retains a missing skill directory and restores state",
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
@@ -702,7 +703,7 @@ test("a failed save without directory artifacts completes rollback", async () =>
     };
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
     assert.deepStrictEqual(
@@ -742,7 +743,7 @@ test("a save that writes then rejects restores state and retains the skill backu
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
@@ -795,7 +796,7 @@ test("a failed save removes newly created state and retains the skill backup", a
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     await assert.rejects(stat(locations.stateJsonPath), { code: "ENOENT" });
@@ -849,7 +850,7 @@ test("an occupied restore target reports rollback partial and retains the backup
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
@@ -904,7 +905,7 @@ test("a missing skill directory reports manual recovery and restores state", asy
     };
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     await assert.rejects(stat(path.dirname(skill)), { code: "ENOENT" });
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
@@ -967,7 +968,7 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.mcpJsonPath), currentMcp);
@@ -1032,7 +1033,7 @@ test("an MCP edit after a cascade with no MCP resources survives failed persiste
     };
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     assert.deepStrictEqual(await readFile(locations.mcpJsonPath), independent);
     assert.match(notifications[0]?.message ?? "", /\{rollback partial\}/);
@@ -1081,7 +1082,7 @@ test("rollback details survive a simultaneous lock-release failure", async (t) =
     };
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     const message = notifications[0]?.message ?? "";
     assert.equal(notifications[0]?.severity, "error");
@@ -1128,7 +1129,7 @@ test("a lock-release rejection reports committed removal and completes cleanup",
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await pruneWithRoutes({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await pruneWithRoutes({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
@@ -1172,7 +1173,7 @@ test("an undefined release rejection still reports the committed scope", async (
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
@@ -1221,7 +1222,7 @@ test("post-commit cleanup failure reports committed members and continues cleanu
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(cleaned, ["a", "b"]);
@@ -1269,7 +1270,7 @@ test("cleanup failure on the second member warns only that member and keeps its 
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(cleaned, ["a", "b"]);
@@ -1319,7 +1320,7 @@ test("lock-release and second-member cleanup failures keep separate causes", asy
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
@@ -1382,7 +1383,7 @@ test("a post-save failure preserves the original cause when every member failed"
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), ["orphan@mp"]);

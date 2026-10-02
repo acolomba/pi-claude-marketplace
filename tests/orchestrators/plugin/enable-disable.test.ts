@@ -45,6 +45,7 @@ import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketpl
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
@@ -54,8 +55,9 @@ import type {
   EnableDisablePluginOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type {
+  CommandInventoryItem,
   NotificationContext,
-  ToolInventory,
+  PiInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -120,8 +122,11 @@ function toolInfo(name: string): ToolInventoryItem {
   };
 }
 
-function makePi(toolNames: readonly string[] = []): ToolInventory {
-  return { getAllTools: () => toolNames.map(toolInfo) };
+function makePi(
+  toolNames: readonly string[] = [],
+  commands: readonly CommandInventoryItem[] = [],
+): PiInventory {
+  return { getAllTools: () => toolNames.map(toolInfo), getCommands: () => commands };
 }
 
 function createUpdatePlugins() {
@@ -195,7 +200,7 @@ test("enable-disable exposes its required transaction factory", () => {
  * default `makePi()` above reports BOTH companions unloaded, which is what
  * makes a row with a staged agent take the soft-dep marker.
  */
-function makePiWithSubagents(): ToolInventory {
+function makePiWithSubagents(): PiInventory {
   return makePi(["subagent"]);
 }
 
@@ -1411,7 +1416,7 @@ async function seedWorkflowRoundTrip(
   cwd: string,
   scripts: readonly { sourceName: string; metaName?: string }[],
 ): Promise<{
-  args: { pi: ToolInventory; cwd: string; marketplace: string; plugin: string; scope: "user" };
+  args: { pi: PiInventory; cwd: string; marketplace: string; plugin: string; scope: "user" };
   statePath: string;
   mpRoot: string;
   savedDir: string;
@@ -3483,7 +3488,7 @@ test("orchestrated enable returns every live degradation and companion signal wi
       enable: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(["mcp", "subagent"]),
+      pi: makePi(["subagent"], [adapterCommand()]),
       plugin: "foo",
       scope: "user",
     });
@@ -4391,7 +4396,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
       cwd,
       enable: true,
       marketplace: "mp",
-      pi: makePi(["mcp"]),
+      pi: makePi([], [adapterCommand()]),
       plugin: "foo",
       scope: "user",
     });

@@ -48,7 +48,7 @@ import type {
 } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
@@ -1405,7 +1405,7 @@ export function applyPartialCascadeFold(
  */
 export function emitMarketplaceNotAdded(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly marketplace: string;
   readonly requestedScope: Scope | undefined;
   readonly orchestrated: boolean;
@@ -1473,7 +1473,7 @@ export function emitMarketplaceNotAdded(args: {
  */
 export async function emitMarketplaceNotAddedSignal(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly cwd: string;
   readonly context: CommandContext<"skipped", PluginSkippedMessage>;
   readonly cardinality: "single" | "plural";

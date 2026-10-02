@@ -103,7 +103,7 @@ import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { RemoteTag } from "../../platform/git.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
@@ -115,7 +115,7 @@ type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
 /** Folds flow outcomes through the extracted cascade owner. */
 type UpdateCascadeComposer = (
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   abortedByFailure?: boolean,
@@ -499,7 +499,7 @@ function isPhase3aAggregateFailure(
  */
 function renderUpdateCascadeIfAny(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   composeCascade: UpdateCascadeComposer,
@@ -641,7 +641,7 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
 
 interface NotifyDirectFailureArgs {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly cardinality: "single" | "plural";
   readonly marketplace: string;
   readonly scope: Scope;
@@ -778,7 +778,7 @@ function narrowDirectFailReason(err: Error): ContentReason {
  */
 function notifyBareFormEnumerateFailure(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly scope: Scope | undefined;
   readonly err: Error;
   readonly cardinality: "single" | "plural";

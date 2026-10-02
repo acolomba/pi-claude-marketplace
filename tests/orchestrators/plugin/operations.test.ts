@@ -34,6 +34,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
 
 import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
@@ -44,7 +45,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
   NotificationContext,
-  ToolInventory,
+  PiInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -101,7 +102,7 @@ function makeFetchBoundary(): FetchBoundary {
 
 function makeCtx(): {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -112,7 +113,7 @@ function makeCtx(): {
       },
     },
   };
-  return { ctx, pi: { getAllTools: () => [] }, notifications };
+  return { ctx, pi: emptyPiInventory(), notifications };
 }
 
 /**

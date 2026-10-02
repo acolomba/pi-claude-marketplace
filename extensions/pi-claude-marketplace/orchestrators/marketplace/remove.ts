@@ -84,7 +84,7 @@ import {
 } from "./shared.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -138,7 +138,7 @@ export type RemoveMarketplaceOutcome =
 export interface RemoveMarketplaceOptions {
   readonly ctx: NotificationContext;
   /** Factory `pi` reference -- carries `getAllTools()` for RH-5 soft-dep probes. */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly name: string;
   /** Lifecycle-owned completion cache shared with the command's readers. */
   readonly completionCache: CompletionCache;

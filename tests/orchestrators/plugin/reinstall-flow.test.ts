@@ -79,6 +79,7 @@ import { createNotificationBoundary } from "../../edge/notification-boundary.ts"
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 import {
@@ -110,8 +111,9 @@ import type {
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type {
+  CommandInventoryItem,
   NotificationContext,
-  ToolInventory,
+  PiInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -177,9 +179,12 @@ function toolInfo(name: string): ToolInventoryItem {
   return { name };
 }
 
-function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
+function makeCtx(piOverrides?: {
+  readonly toolNames?: readonly string[];
+  readonly commands?: readonly CommandInventoryItem[];
+}): {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -190,8 +195,9 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
       },
     },
   };
-  const pi: ToolInventory = {
+  const pi: PiInventory = {
     getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInfo),
+    getCommands: () => piOverrides?.commands ?? [],
   };
   return { ctx, pi, notifications };
 }
@@ -322,7 +328,7 @@ async function seedMarketplace(opts: {
   });
 
   if (opts.install === true) {
-    const { ctx, pi } = makeCtx({ toolNames: ["subagent", "mcp"] });
+    const { ctx, pi } = makeCtx({ toolNames: ["subagent"], commands: [adapterCommand()] });
     const installPlugin = createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
@@ -508,7 +514,7 @@ async function writeManifest(
   return manifestPath;
 }
 
-async function reinstallDefault(cwd: string, ctx: NotificationContext, pi: ToolInventory) {
+async function reinstallDefault(cwd: string, ctx: NotificationContext, pi: PiInventory) {
   return reinstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 }
 
@@ -5776,7 +5782,7 @@ test("a replacement failure aborts every prepared bridge and preserves foreign c
       await mkdir(foreignTarget, { recursive: true });
       await writeFile(path.join(foreignTarget, "foreign.txt"), "foreign\n");
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-      const { ctx, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, pi } = makeCtx({ toolNames: ["subagent"], commands: [adapterCommand()] });
 
       // act
       const outcome = await reinstallPlugin({
@@ -6445,7 +6451,10 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       const activeSchedule = { current: firstSchedule };
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -6593,7 +6602,10 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
       const activeSchedule = { current: firstSchedule };
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -6731,7 +6743,10 @@ test("retry proof: reinstall: a rollback cleanup leak reports manual recovery an
         },
       };
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -6879,7 +6894,10 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
           }
         }),
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -7056,7 +7074,10 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       const activeSchedule = { current: firstSchedule };
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -7183,7 +7204,10 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
       const activeSchedule = { current: firstSchedule };
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -7324,7 +7348,10 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         activeSchedule,
         observeReinstallOperations(activeSchedule),
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -7492,7 +7519,10 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
         persistence: persistenceFault,
       });
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -7621,7 +7651,10 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         activeSchedule,
         observeReinstallOperations(activeSchedule),
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -7812,7 +7845,10 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
         },
       );
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -7923,7 +7959,10 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
       const activeSchedule = { current: firstSchedule };
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -8061,7 +8100,10 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
         createCompletionCache(),
       );
 
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -8219,7 +8261,10 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         completionCache,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -8312,7 +8357,10 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
         data: dataFault,
       });
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await reinstall({
@@ -8428,7 +8476,10 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
       const betaRecordBefore = (await loadState(locations.extensionRoot)).marketplaces["mp"]
         ?.plugins["beta"];
       const maintenance: string[] = [];
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
       const removeDataDir: RemoveDataDirFn = async (target, options) => {
         maintenance.push(`remove:data:${path.basename(target)}`);
         await rm(target, options);
@@ -9337,7 +9388,7 @@ test("PRL-03: a bulk cascade forwards the state-transaction seam to every per-pl
           await saveState(extensionRoot, state);
         },
       };
-      const { ctx, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, pi } = makeCtx({ toolNames: ["subagent"], commands: [adapterCommand()] });
 
       // act
       const outcomes = await reinstallPlugins({
@@ -9392,7 +9443,10 @@ test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification th
       const beforeRecord = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins
         .hello;
       assert.ok(beforeRecord !== undefined);
-      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent", "mcp"] });
+      const { ctx, pi, notifications } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
       const reinstallPlugin = createReinstallPlugin(
         REAL_REINSTALL_TRANSACTION,
         createHooksRouting(createHooksRuntime(), { readHooksJson }),

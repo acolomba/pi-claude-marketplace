@@ -131,7 +131,7 @@ import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts"
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
@@ -187,7 +187,7 @@ export interface ThreePhaseArgsBase {
 export interface DirectThreePhaseArgs extends ThreePhaseArgsBase {
   readonly cascade: false;
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly cardinality: "single" | "plural";
   readonly notifyPhaseFailure: (error: Error, failures: readonly UpdatePhase3Failure[]) => void;
 }
