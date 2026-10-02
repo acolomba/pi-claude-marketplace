@@ -114,7 +114,9 @@ and exact absent/zero/one/three-count output. No new notifying case is needed.
 Existing infrastructure covers all phase requirements. No runner or harness
 installation is needed. Preserve paired direct coverage for every changed owner.
 The user approved replacing only the 28 synthetic callback occurrences listed
-in RESEARCH.md and current CONTEXT.md D-07. Verify exact old/new triples and multiplicities; preserve
+in RESEARCH.md and current CONTEXT.md D-07, plus the one CR-01 review-fix
+occurrence (29 in total; the execution evidence above records the 28 that
+existed at plan completion). Verify exact old/new triples and multiplicities; preserve
 severity, argument count, every other occurrence, and the complete catalog.
 The baseline source blob is `25f4e3c0a943a15a91d5231afef1551e5e5a6259`;
 the unchanged metadata blob is `5304d88af67d0b4d58c3572aea6f9e5d3e73be7b`.

@@ -474,5 +474,22 @@
     "multiplicity": 1,
     "test": "the no-op update wrapper dispatches surviving rows before its headline",
     "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 1907,
+    "file": "tests/orchestrators/plugin/shared.test.ts",
+    "before": {
+      "message": "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped)\n\nPlugin reinstall: 1 failure",
+      "severity": "error",
+      "argc": 2
+    },
+    "after": {
+      "message": "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed, marketplace in user scope}\n\nPlugin reinstall: 1 failure",
+      "severity": "error",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "renders the plugin row when nothing of the container is installed at the named scope",
+    "preserves": "Exact severity and notify arity, emission count, row order, name and scope, tally, and the producer's not-installed and marketplace-scope reasons under a content-enabled policy (CR-01)."
   }
 ]

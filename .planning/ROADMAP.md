@@ -31,7 +31,9 @@ form unchanged. `docs/output-catalog.md` diffs empty, and the wire corpus
 captured in Phase 1 re-diffs empty, except for PMOD-04 credential redaction.
 On 2026-10-01 the user also approved replacing exactly 28 synthetic callback
 test emissions during Phase 2 (25 initially, then three explicitly approved
-summary-owner occurrences), with an exact before/after record. Phase 2
+summary-owner occurrences), with an exact before/after record. On 2026-10-02
+the user approved one more, the CR-01 review fix that restores a
+marketplace-miss owner's reasons, for 29 in total. Phase 2
 CONTEXT.md D-07 and RESEARCH.md enumerate this exception; all production
 catalog bytes and every other corpus occurrence remain fixed.
 Phase 7's close-out amends one piece of catalog prose, with no fenced-block
@@ -121,7 +123,7 @@ Plans:
 2. Each known per-command divergence has an owner test that asserts both the policy value and the rendered text. The known divergences are: `partially-installed` without markers on `plugin list`; `available` and `remote` with content reasons on `plugin list`; `uninstalled` without reasons in reconcile-applied; the two row forms of `disabled`; and pending rows that ignore the probe.
 3. The direct render-arm test calls in 12 test files assert policies plus text formatting instead. Execution's AST census corrected the original 70-call estimate to 69 invocations; all are migrated. No temporary adapter survives the phase.
 4. The `pending` retained-workflow-staging advisory travels as structured data (`{name, envelopeCount?}`). The text strategy composes the sentence and its indent, and the `pending` output is byte-identical to the baseline.
-5. The catalog diff is empty. The wire corpus changes only the 28 synthetic test occurrences approved in Phase 2 D-07, with an exact before/after ledger; all other occurrences remain unchanged.
+5. The catalog diff is empty. The wire corpus changes only the 29 synthetic test occurrences approved in Phase 2 D-07, with an exact before/after ledger; all other occurrences remain unchanged.
 
 **Plans:** 2/2 plans executed, sequential (waves 1-2)
 

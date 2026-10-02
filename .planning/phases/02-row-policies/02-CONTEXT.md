@@ -61,6 +61,12 @@ on 2026-10-01; no new Claude Code behavior or divergence requires research.
   plus the three summary-owner occurrences at original lines 2633, 2634,
   and 2640 identified during execution. The user explicitly approved this
   extension with "yes": 28 replacements total, 2,633 unchanged occurrences.
+  On 2026-10-02 code review finding CR-01 required one more: the
+  `emitMarketplaceNotAddedSignal` owner case in
+  `tests/orchestrators/plugin/shared.test.ts` (original line 1907) gains its
+  produced `{not installed, marketplace in user scope}` reasons. The user
+  approved it with "Yes, approve this one replacement": 29 replacements
+  total, 2,632 unchanged, 2,661 total in the immutable original blob.
   Replace them with the migrated tests' real-policy emissions. Record exact before/after
   triples, owner files, multiplicities, and the behavior each test preserves.
   Keep severity, argument count, and all other corpus occurrences unchanged;

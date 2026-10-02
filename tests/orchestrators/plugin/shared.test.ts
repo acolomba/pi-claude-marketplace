@@ -2098,7 +2098,7 @@ describe("emitMarketplaceNotAddedSignal", () => {
     // arrange
     const context = {
       Messaging: { label: "Plugin reinstall" },
-      rowPolicies: { skipped: { markers: false, contentReasons: false } },
+      rowPolicies: { skipped: { markers: false, contentReasons: true } },
     } satisfies CommandContext<"skipped">;
     const notifications: { message: string; severity?: string }[] = [];
     const { ctx } = makeRecordingBoundary(notifications);
@@ -2115,14 +2115,14 @@ describe("emitMarketplaceNotAddedSignal", () => {
 
     // assert
     assert.deepStrictEqual(context.rowPolicies, {
-      skipped: { markers: false, contentReasons: false },
+      skipped: { markers: false, contentReasons: true },
     });
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n\n" +
           "● mp [project]\n" +
-          "  ⊘ hello (skipped)\n\n" +
+          "  ⊘ hello (skipped) {not installed, marketplace in user scope}\n\n" +
           "Plugin reinstall: 1 failure",
         severity: "error",
       },

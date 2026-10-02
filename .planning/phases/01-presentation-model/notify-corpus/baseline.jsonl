@@ -2281,7 +2281,7 @@
 {"file":"tests/orchestrators/plugin/shared.test.ts","message":"A marketplace operation has failed.\n\n\u2298 ghost (failed) {marketplace not added}","severity":"error","argc":2}
 {"file":"tests/orchestrators/plugin/shared.test.ts","message":"A marketplace operation has failed.\n\n\u2298 ghost [user] (failed) {marketplace not added}","severity":"error","argc":2}
 {"file":"tests/orchestrators/plugin/shared.test.ts","message":"A marketplace operation has failed.\n\n\u2298 ghost [user] (failed) {marketplace not added}","severity":"error","argc":2}
-{"file":"tests/orchestrators/plugin/shared.test.ts","message":"A plugin operation has failed.\n\n\u25cf mp [project]\n  \u2298 hello (skipped)\n\nPlugin reinstall: 1 failure","severity":"error","argc":2}
+{"file":"tests/orchestrators/plugin/shared.test.ts","message":"A plugin operation has failed.\n\n\u25cf mp [project]\n  \u2298 hello (skipped) {not installed, marketplace in user scope}\n\nPlugin reinstall: 1 failure","severity":"error","argc":2}
 {"file":"tests/orchestrators/plugin/shared.test.ts","message":"Plugin \"alpha\" installed; 1 declared component has a note.\n\nCould not read alpha-skill","severity":"warning","argc":2}
 {"file":"tests/orchestrators/plugin/shared.test.ts","message":"Plugin \"alpha\" updated; 2 declared components have notes.\n\nfirst warning\nsecond warning","severity":"warning","argc":2}
 {"file":"tests/orchestrators/plugin/uninstall.test.ts","message":"A marketplace operation has failed.\n\n\u2298 missing-mp [project] (failed) {marketplace not added}","severity":"error","argc":2}

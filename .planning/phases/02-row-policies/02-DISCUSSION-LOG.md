@@ -71,3 +71,19 @@ missing/extra pairs above. Logs: `/tmp/row-policy-check4.log` and
 ## Deferred Ideas
 
 None.
+
+## Review Fix CR-01 Corpus Occurrence
+
+Code review finding CR-01 showed that the migrated `emitMarketplaceNotAddedSignal`
+owner case no longer observed its produced reasons. The fix enables content
+reasons in that case's policy, so its one corpus occurrence changes. At
+immutable baseline line 1907, `  ⊘ hello (skipped)` becomes
+`  ⊘ hello (skipped) {not installed, marketplace in user scope}`. Severity
+stays error and the argument count stays 2.
+
+The agent asked for approval of this one replacement.
+**User decision:** "Yes, approve this one replacement". This authorizes
+exactly that occurrence: 29 replacements, 2,632 unchanged, 2,661 total in the
+immutable original blob. The merge from main re-baselined the corpus to 3,133
+entries before the fix landed (`e514ea67`). The occurrence sits at line 2,284 of
+that baseline, and it is the only change from it.
