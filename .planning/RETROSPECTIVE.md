@@ -73,10 +73,11 @@
 - Notable: the close's four parallel sonnet re-verifications took 6-7 minutes each and ~90-175k tokens apiece; the one gaps-only re-run took 2 minutes. The full `npm run check` chain is ~15 minutes and was run once, detached.
 ## Milestone: v1.20 transitive-dependencies
 
-**Completed:** 2026-09-24 (no npm release)
+**Completed:** 2026-09-24; merged to main 2026-10-01 via PR #198 (no npm release)
 **Phases:** 12 | **Plans:** 55 | **Tasks:** 94 | **Requirements:** 45/45
 **Gate:** 7,760 unit tests, 63 integration tests, 100% aggregate production
-coverage in a clean checkout; audit `tech_debt`, one deferred live UAT subcase.
+coverage in a clean checkout; audit `tech_debt`, one deferred live UAT subcase
+(passed 2026-09-30).
 
 ### What Was Built
 
@@ -99,8 +100,11 @@ coverage in a clean checkout; audit `tech_debt`, one deferred live UAT subcase.
 - Older verification reports named planning files that later phases changed.
   Their fingerprints had to be refreshed together at close.
 - A successful private-repository credential challenge could not be exercised
-  without an accessible private GitHub or GitLab repository. Its UAT status
-  remains `testing` and the operator deferred it explicitly.
+  without an accessible private GitHub or GitLab repository. The operator
+  deferred it explicitly; it passed on 2026-09-30, after #221 merged.
+- Closeout ran a week before the merge. The PR kept changing (Sonar fixes, the
+  deferred UAT), so the closeout records went stale and two handoffs were left
+  at the `.planning/` root.
 - The active worktree's operator-owned `.planning/config.json` formatting drift
   prevented its chained `npm run check`; a clean checkout with copied
   dependencies was needed to measure the committed tree.

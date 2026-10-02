@@ -3,7 +3,7 @@
 ## Milestones
 
 - **any-git-host** — completed 2026-09-30, merged to main 2026-09-30 (PR #221); [archive](milestones/ws-git-hosts-2026-10-01/milestones/any-git-host-ROADMAP.md).
-- **v1.20 transitive-dependencies** — shipped 2026-09-24; 12 phases, 55 plans, 45/45 requirements. [Archive](milestones/v1.20-ROADMAP.md), [requirements](milestones/v1.20-REQUIREMENTS.md), [audit](milestones/v1.20-MILESTONE-AUDIT.md). Closeout used an explicit UAT exception for the private-repository credential challenge.
+- **v1.20 transitive-dependencies** — completed 2026-09-24, merged to main 2026-10-01 (PR #198); 12 phases, 55 plans, 45/45 requirements. [Archive](milestones/v1.20-ROADMAP.md), [requirements](milestones/v1.20-REQUIREMENTS.md), [audit](milestones/v1.20-MILESTONE-AUDIT.md). The private-repository credential challenge deferred at closeout passed on 2026-09-30.
 - **workflows-replay** — completed 2026-09-21, merged to main 2026-09-24 (PR #205); [archive](milestones/ws-workflows-2026-09-27/milestones/workflows-replay-ROADMAP.md).
 - **test-backlog** — shipped 2026-09-18; [archive](milestones/test-backlog-ROADMAP.md).
 - **refine-unit-tests** — shipped 2026-09-13; [archive](milestones/refine-unit-tests-ROADMAP.md).
@@ -34,11 +34,6 @@ under [v1.20-phases](milestones/v1.20-phases/).
 
 ## Carried Forward
 
-- Phase 3 UAT still needs one successful credential challenge against a private
-  GitHub or GitLab repository. The live annotated-tag and 401 paths passed;
-  the success path was deferred to later UAT by the operator. Its archived
-  [UAT record](milestones/v1.20-phases/03-dependency-resolution/03-UAT.md)
-  remains `testing`.
 - `PRUNE-GUARD-MR-01` remains in [BACKLOG.md](BACKLOG.md). Marketplace removal
   can leave a dependent unsatisfied; the load-time check reports that state.
 
