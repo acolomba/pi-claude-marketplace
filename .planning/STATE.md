@@ -5,10 +5,10 @@ current_phase: 3
 current_phase_name: Typed Raw Surfaces
 status: planning
 stopped_at: Phase 2 complete, ready to plan Phase 3
-last_updated: "2026-10-02T13:36:04.585Z"
+last_updated: "2026-10-02T15:10:55.387Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 2 complete, transitioned to Phase 3
-state_head: 571b6883cda8fa497654c58c62e5b68899457769
+state_head: 741581f8c2ffe2b662ff2e3630e678160687a1a6
 progress:
   total_phases: 7
   completed_phases: 2
@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: 3 — Typed Raw Surfaces
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-10-02 — Phase 2 complete, transitioned to Phase 3
+Last activity: 2026-10-02 — Completed quick task 261002-dys: deterministic prune backup naming
 
 Progress: [███░░░░░░░] 29% (2 of 7 phases fully verified; 18 plans complete)
 
@@ -166,6 +166,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na/) |
 | 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | b07ae35c | complete | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew/) |
 | 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./quick/260924-q0m-keep-only-plugin-qualified-interactive-s/) |
+| 261002-dys | Make prune rollback backup naming deterministic in tests | 2026-10-02 | 741581f8 | complete | [261002-dys-make-prune-rollback-backup-naming-determ](./quick/261002-dys-make-prune-rollback-backup-naming-determ/) |
 
 ## Session Continuity
 
@@ -179,17 +180,13 @@ findings fixed (CR-01, WR-01..WR-06, IN-01..IN-03); D-07 now records 29 approved
 corpus replacements (29 / 2,632 / 2,661 against the original blob). The full
 `npm run check` passed at `571b6883`. Phase 3 (Typed Raw Surfaces) is next.
 
-**Carried concern -- corpus nondeterminism:** `node scripts/notify-corpus.mjs
-check` exits 1 on 8 missing/extra pairs in
-`tests/orchestrators/plugin/prune.test.ts`. Those messages embed a random
-`prune-backup-XXXXXX` directory name (`prune-rollback.ts`), which
-`normalizeMessage` does not normalize, so the `e514ea67` post-merge re-baseline
-captured random suffixes. With the suffix normalized, all 37 prune entries match.
-It arrived with main's prune tests (#198), not with phase 2. Until the tool
-normalizes it and those 8 entries are re-captured, the corpus gate cannot exit
-0 in phases 3-7. Later phases also compare the catalog against main's
-`8b6ac3bc` (or the latest merged main) rather than `e40d3dda`, because #198
-changed catalog bytes.
+**Corpus determinism (resolved by quick task 261002-dys):** prune rollback
+now receives its backup-directory creator through `PruneRestoreOps`, so tests
+name a fixed `prune-backup-ABC123`. The 8 prune.test.ts corpus entries that
+held random suffixes were re-captured; `node scripts/notify-corpus.mjs check`
+exits 0 (3,133 present, 0 extra). Later phases compare the catalog against
+main's `8b6ac3bc` (or the latest merged main) rather than `e40d3dda`, because
+#198 changed catalog bytes.
 
 **Release context (unchanged):** The 0.19.1 and 0.19.2 releases are tagged and
 published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218 and
@@ -203,8 +200,6 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Decide how to fix the prune corpus nondeterminism (normalizer rule plus an
-  8-entry re-capture) before the Phase 3 corpus gate.
 - Plan Phase 3 (Typed Raw Surfaces) under the original autonomous run.
 
 ## Performance Metrics
