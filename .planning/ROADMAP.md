@@ -97,7 +97,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. The Stop canary (re-run from `4f82096f`, not cherry-picked) and the workflow-engine canary pass live on Pi 1.0 with `@quintinshaw/pi-dynamic-workflows` 3.13.1, and `scripts/pi.sh` pins adapter 5.0.0, pi-subagents 0.74.0 and engine 3.13.1. (PIFL-07)
 5. With only Pi's built-in MCP active, install, list and info mark the plugin's MCP component as needing pi-mcp-adapter, and a built-in-only negative test proves it. An adapter that runs with `disableProxyTool`, or that was installed from a fork, is still detected as present through its `mcp-adapter` command. (ADET-01, ADET-02)
 
-**Plans**: 7/9 plans executed in 6 waves
+**Plans**: 8/9 plans executed in 6 waves
 
 **Wave 1**
 - [x] 01-01-PLAN.md
@@ -117,7 +117,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 - [x] 01-07-PLAN.md
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 01-08-PLAN.md
+- [x] 01-08-PLAN.md
 - [ ] 01-09-PLAN.md
 
 **Notes.** Mechanical work: research `STACK.md` carries the measured commands and a per-commit change table. Re-implement the features/mcp fixes rather than cherry-picking them, because the contract pins are line:col and break across merges, and the pi-subagents tests skip silently without `PI_SUBAGENTS_ROOT`. Detection lives in `platform/pi-api.ts` beside the pins this phase moves, so the pins move once.
@@ -256,7 +256,7 @@ plan these phases with the UI gate skipped.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 7/9 | In Progress|  |
+| 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 8/9 | In Progress|  |
 | 2. Adapter-file delivery | mcp-4 | 0/TBD | Not started | - |
 | 3. Claude Code tool names and tool search | mcp-4 | 0/TBD | Not started | - |
 | 4. Variable expansion at Claude Code parity | mcp-4 | 0/TBD | Not started | - |

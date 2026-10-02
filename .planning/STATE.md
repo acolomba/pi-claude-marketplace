@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 01
 current_phase_name: Pi 1.0 floor and adapter-only detection
 status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-10-02T21:37:15.739Z"
+stopped_at: Completed 01-08-PLAN.md
+last_updated: "2026-10-02T22:19:32.364Z"
 last_activity: 2026-10-02
-last_activity_desc: Completed 01-07 (info requires line)
-state_head: 8d2dfec61d1224bf4b31a0b6dc9b1db6b1fd3d18
+last_activity_desc: Completed 01-08 (real-Pi adapter detection)
+state_head: d409121b6babacf4962f2b8557feb16a8a0b2891
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 01 (Pi 1.0 floor and adapter-only detection) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
-Last activity: 2026-10-02 — Completed 01-07 (info requires line)
+Last activity: 2026-10-02 — Completed 01-08 (real-Pi adapter detection)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -257,6 +257,7 @@ still open with a comment explaining what landed.
 | Phase 01 P05 | 70min | 2 tasks | 42 files |
 | Phase 01 P06 | 35min | 2 tasks | 4 files |
 | Phase 01 P07 | 60min | 2 tasks | 15 files |
+| Phase 01 P08 | 45min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -570,6 +571,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Only the command-name match requires source === extension; a pi-mcp-adapter source counts whatever the command kind
 - [Phase 01]: The e2e soft-dep matrix runs one install-and-list case per detection state and compares the whole reasons block of the plugin's installed row, so a missing row or an extra reason fails the case
 - [Phase 01]: Info names each companion a resolved row needs on a requires: line, stamped by the orchestrator from one softDepStatus snapshot and only formatted by the renderer
+- [Phase 01]: Pi 1.0 starts each stdio MCP server in its own process group and stops it on shutdown, so the RPC harness proves its clean-exit group sweep with a same-group sentinel child, not the stub MCP server's PID
 
 ### Pending Todos
 
@@ -714,11 +716,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-07-PLAN.md
+**Stopped at:** Completed 01-08-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-02T21:37:15.657Z
+Last session: 2026-10-02T22:19:32.279Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
