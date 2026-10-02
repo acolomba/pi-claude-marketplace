@@ -33,6 +33,7 @@ import type { NotificationRun } from "./notification-run.ts";
 import type { StandaloneKind } from "./notification-summary.ts";
 import type {
   CascadeNotificationMessage,
+  HookSurface,
   LoadSurface,
   NotificationMessage,
   RawSurface,
@@ -93,6 +94,11 @@ function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, b
 /** D-02 / D-13: resolves, formats, and delivers one raw surface. */
 function emitRawSurface(ctx: NotificationContext, surface: RawSurface): void {
   deliver(ctx, formatRawSurface(resolveRawSurface(surface)));
+}
+
+/** D-14: the entry point for the hook-origin group of raw surfaces. */
+function emitHookSurface(ctx: NotificationContext, surface: HookSurface): void {
+  emitRawSurface(ctx, surface);
 }
 
 /** D-14: the entry point for the load-origin group of raw surfaces. */
@@ -172,56 +178,48 @@ export function notifyDiagnostic(
 }
 
 /**
- * T-62-09 IL-2 EXEMPTION: surfaces the `rewakeSummary` UI message at
- * `"info"` severity from the asyncRewake exit handler. This is the
- * single sanctioned runtime notify call originating from
- * `bridges/hooks/async-rewake/registry.ts`; the exemption exists
- * because `rewakeSummary` is the upstream Claude-Code-mandated UI
- * status surface declared in the plugin author's hook handler -- the
- * hooks bridge does not have a structured `NotificationMessage` arm
- * for it (HOOK-06).
+ * T-62-09 IL-2 EXEMPTION: surfaces the `rewakeSummary` UI message from the
+ * asyncRewake exit handler as the `async-rewake-summary` hook kind (RAWS-05,
+ * D-08). This is the single sanctioned runtime notify originating from
+ * `bridges/hooks/async-rewake/registry.ts`. The exemption exists because
+ * `rewakeSummary` is the upstream Claude-Code-mandated UI status surface
+ * declared in the plugin author's hook handler, and the hooks bridge has no
+ * structured `NotificationMessage` arm for it (HOOK-06).
  *
- * Empty strings are silently ignored so the caller can pass an
- * `entry.rewakeSummary` field unconditionally without a guard.
+ * The text strategy renders the summary verbatim at `"info"` severity. A
+ * zero-length summary emits nothing, so the caller can pass an
+ * `entry.rewakeSummary` field without a guard.
  */
 export function notifyAsyncRewakeSummary(ctx: NotificationContext, summary: string): void {
-  if (summary.length === 0) {
-    return;
-  }
-
-  ctx.ui.notify(summary, "info");
+  emitHookSurface(ctx, { kind: "async-rewake-summary", summary });
 }
 
 /**
  * STOP-07 / D-88-01 IL-2 bridge seam: the one-shot Stop-hook override-cap
- * warning. The settle dispatcher (`bridges/hooks/settle.ts`) fires this
- * exactly once when Stop hooks drive 8 consecutive bridge re-entries -- block
- * decisions and additionalContext continuations share one consecutive
- * re-entry counter (D-88-08) -- the loop protection suppresses the 8th
- * re-entry and surfaces this warning so a livelocking hook is visible to the
- * user rather than silently overridden (the transparency prohibition behind
- * D-88-01). Warning severity per the tri-state model: the turn DID end (the
- * protection worked) but the plugin's block desire was deliberately
- * suppressed, so the user should notice.
+ * warning, built as the `stop-override-cap` hook kind (RAWS-05). The settle
+ * dispatcher (`bridges/hooks/settle.ts`) calls this exactly once when Stop
+ * hooks drive `cap` consecutive bridge re-entries -- block decisions and
+ * additionalContext continuations share one consecutive re-entry counter
+ * (D-88-08). The loop protection suppresses that re-entry, and this warning
+ * makes a livelocking hook visible to the user rather than silently overridden
+ * (the transparency prohibition behind D-88-01). Warning severity per the
+ * tri-state model: the turn DID end (the protection worked) but the plugin's
+ * block desire was deliberately suppressed, so the user should notice.
  *
- * On-the-wire form mirrors `notifyDiagnostic`: a non-empty summary first line
- * ("Stop hook override cap reached.") followed by a `\n\n` separator and a
- * detail block naming the plugin and stating the 8-consecutive-re-entry /
- * turn-ended-despite-active-block fact. The host UI prepends the `Warning:` label
- * to the summary line (the same shape `notifyDiagnostic` /
- * `notifyAsyncRewakeSummary` already ship without tripping the notify-grammar
- * invariant, which only walks structured `NotificationMessage` fixtures). The
- * literal `8` is the fixed override cap (STOP-07); it is duplicated here rather
- * than imported from the bridge layer so `shared/` does not depend on
- * `bridges/`. The byte form is locked by
+ * `cap` is the settle bridge's own re-entry cap, so the warning states the
+ * number that tripped it (D-07). The text strategy composes a non-empty summary
+ * first line ("Stop hook override cap reached.") and, after a `\n\n`
+ * separator, a detail block naming the plugin and the cap. The host UI prepends
+ * the `Warning:` label to the summary line. The byte form is locked by
  * `tests/architecture/hooks-cap-notify.test.ts` against the
  * `stop-override-cap` block in `docs/output-catalog.md`.
  */
-export function notifyStopHookOverrideCap(ctx: NotificationContext, pluginId: string): void {
-  ctx.ui.notify(
-    `Stop hook override cap reached.\n\n\`${pluginId}\`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.`,
-    "warning",
-  );
+export function notifyStopHookOverrideCap(
+  ctx: NotificationContext,
+  pluginId: string,
+  cap: number,
+): void {
+  emitHookSurface(ctx, { kind: "stop-override-cap", pluginId, cap });
 }
 
 /**

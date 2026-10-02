@@ -19,6 +19,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test, { mock } from "node:test";
 
+import { STOP_OVERRIDE_CAP } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { notifyStopHookOverrideCap } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 
 import { VOCABULARY_GUARD_DOC_TARGETS } from "./gate-targets.ts";
@@ -103,7 +104,7 @@ function makeCtx(): MockCtx {
 
 test("STOP-07 / D-88-01: notifyStopHookOverrideCap emits one warning-severity ctx.ui.notify call", () => {
   const { ctx, notify } = makeCtx();
-  notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID);
+  notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID, STOP_OVERRIDE_CAP);
 
   assert.equal(
     notify.mock.calls.length,
@@ -116,7 +117,7 @@ test("STOP-07 / D-88-01: notifyStopHookOverrideCap emits one warning-severity ct
 
 test("STOP-07 / D-88-01: cap-trip first line is a non-empty summary followed by a `\\n\\n` detail block naming the plugin", () => {
   const { ctx, notify } = makeCtx();
-  notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID);
+  notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID, STOP_OVERRIDE_CAP);
 
   const emitted = (notify.mock.calls[0]!.arguments as [string, string?])[0];
   const firstNewline = emitted.indexOf("\n");
@@ -137,7 +138,7 @@ test("STOP-07 / D-88-01: cap-trip output is byte-equal to the docs/output-catalo
   const expected = await readCatalogBlock("stop-override-cap");
 
   const { ctx, notify } = makeCtx();
-  notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID);
+  notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID, STOP_OVERRIDE_CAP);
 
   const emitted = (notify.mock.calls[0]!.arguments as [string, string?])[0];
   assert.equal(

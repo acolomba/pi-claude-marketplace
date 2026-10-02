@@ -5,9 +5,12 @@ import {
   isScopeBearingListRow,
   pluginScopeOrFallback,
   pluginVersion,
+  type AsyncRewakeSummarySurface,
   type ContentReason,
   type CascadeNotificationMessage,
   type DiagnosticSurface,
+  type HookSurface,
+  type LoadSurface,
   type MarketplaceNotificationMessage,
   type MarketplaceStatus,
   type NotificationMessage,
@@ -24,6 +27,7 @@ import {
   type RetainedWorkflowStaging,
   type Severity,
   type StatusToken,
+  type StopOverrideCapSurface,
   type UsageErrorSurface,
   type UsageInfoSurface,
   type WithPlugins,
@@ -326,6 +330,21 @@ void ({
   // @ts-expect-error RAWS-02 / D-05: diagnostic lines are data, not a pre-joined block
   lines: "first\nsecond",
 } satisfies DiagnosticSurface);
+void ({ kind: "async-rewake-summary", summary: "ready" } satisfies AsyncRewakeSummarySurface);
+void ({
+  kind: "stop-override-cap",
+  pluginId: "official:guard",
+  cap: 8,
+} satisfies StopOverrideCapSurface);
+void ({ kind: "stop-override-cap", pluginId: "official:guard", cap: 8 } satisfies HookSurface);
+// @ts-expect-error D-14: a hook surface is not a load surface
+void ({ kind: "async-rewake-summary", summary: "ready" } satisfies LoadSurface);
+void ({
+  kind: "stop-override-cap",
+  pluginId: "official:guard",
+  // @ts-expect-error D-07: the cap is a number, not text
+  cap: "8",
+} satisfies StopOverrideCapSurface);
 void installedMessage;
 void skippedMessage;
 void contentReason;

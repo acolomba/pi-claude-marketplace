@@ -1100,9 +1100,10 @@ export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string
 /**
  * D-15: formats one resolved raw surface as its notify arguments. Every raw kind
  * passes its severity explicitly, so each emitting arm yields two arguments.
- * `undefined` means nothing is emitted: the diagnostic arm reads the line count,
- * so only a zero-length line list is a no-op (D-05). Producer strings pass
- * through verbatim.
+ * `undefined` means nothing is emitted. The diagnostic arm reads the line count
+ * and the async-rewake arm reads the summary length, so only a zero-length line
+ * list or summary is a no-op (D-05, D-08). Producer strings pass through
+ * verbatim.
  */
 export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments | undefined {
   switch (surface.kind) {
@@ -1115,6 +1116,14 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
       return surface.lines.length === 0
         ? undefined
         : [`${surface.header}\n\n${surface.lines.join("\n")}`, "warning"];
+    case "async-rewake-summary":
+      return surface.summary.length === 0 ? undefined : [surface.summary, "info"];
+    case "stop-override-cap":
+      // D-07: the cap arrives as data from the settle bridge.
+      return [
+        `Stop hook override cap reached.\n\n\`${surface.pluginId}\`'s Stop hook blocked ${surface.cap} times in a row; the turn ended despite its active block.`,
+        "warning",
+      ];
     case "reconcile-aborted":
       return [`reconcile aborted: ${surface.causeMessage}`, "error"];
     case "plugin-path-skipped":

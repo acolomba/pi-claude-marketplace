@@ -1030,9 +1030,33 @@ export interface DiagnosticSurface {
   readonly lines: readonly string[];
 }
 
+/** RAWS-05 / D-08: a plugin author's async-rewake summary, kept verbatim. */
+export interface AsyncRewakeSummarySurface {
+  readonly kind: "async-rewake-summary";
+  readonly summary: string;
+}
+
+/**
+ * RAWS-05 / D-07: the one-shot Stop-hook override-cap warning. `cap` is the
+ * re-entry cap the settle bridge compares against, so the warning states the
+ * number that tripped it.
+ */
+export interface StopOverrideCapSurface {
+  readonly kind: "stop-override-cap";
+  readonly pluginId: string;
+  readonly cap: number;
+}
+
+/**
+ * D-14: the hook-origin group of raw output surfaces. Hook callbacks get no run
+ * object.
+ */
+export type HookSurface = AsyncRewakeSummarySurface | StopOverrideCapSurface;
+
 /**
  * D-01 / D-04: every raw output surface. It is deliberately not a
  * `NotificationMessage` member, so `notify()`'s run never reaches a raw call
  * site.
  */
-export type RawSurface = UsageErrorSurface | UsageInfoSurface | DiagnosticSurface | LoadSurface;
+export type RawSurface =
+  UsageErrorSurface | UsageInfoSurface | DiagnosticSurface | HookSurface | LoadSurface;

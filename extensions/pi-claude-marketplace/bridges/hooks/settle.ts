@@ -20,11 +20,11 @@ import { notifyStopHookOverrideCap } from "../../shared/notification-dispatch.ts
 
 import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
+import { STOP_OVERRIDE_CAP, type HooksRuntime } from "./runtime.ts";
 
 import type { HookExecutor } from "./dispatch.ts";
 import type { StopFailureEvent } from "./payloads/stop-failure.ts";
 import type { StopEvent } from "./payloads/stop.ts";
-import type { HooksRuntime } from "./runtime.ts";
 import type { StopFailureErrorType } from "../../domain/components/hook-events.ts";
 import type {
   AgentEndEvent,
@@ -375,7 +375,7 @@ function reenterBounded(
 ): void {
   const transition = runtime.recordStopReentry();
   if (transition.notifyCap) {
-    notifyStopHookOverrideCap(ctx, pluginId);
+    notifyStopHookOverrideCap(ctx, pluginId, STOP_OVERRIDE_CAP);
   }
 
   if (!transition.reenter) {

@@ -1503,6 +1503,17 @@ const RAW_SURFACE_ROWS: {
     surface: { kind: "diagnostic", header: "Warnings", lines: ["first", "second"] },
     expectedArguments: ["Warnings\n\nfirst\nsecond", "warning"],
   },
+  "async-rewake-summary": {
+    surface: { kind: "async-rewake-summary", summary: "ready" },
+    expectedArguments: ["ready", "info"],
+  },
+  "stop-override-cap": {
+    surface: { kind: "stop-override-cap", pluginId: "official:guard", cap: 8 },
+    expectedArguments: [
+      "Stop hook override cap reached.\n\n`official:guard`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.",
+      "warning",
+    ],
+  },
 };
 
 for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_ROWS)) {
@@ -1518,7 +1529,9 @@ for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_
 // RAWS-01 / D-06: the usage kinds join the producer's strings as-is with one
 // blank line, and have no no-op. RAWS-02 / D-05: a diagnostic keeps its lines
 // in caller order, duplicates and empty strings included, and only a
-// zero-length line list emits nothing.
+// zero-length line list emits nothing. RAWS-05 / D-07 / D-08: the hook kinds
+// pass the author's summary and the plugin id through untouched, the cap is
+// data, and only a zero-length summary emits nothing.
 for (const { title, surface, expectedArguments } of [
   {
     title: "keeps both blocks when the message equals the usage",
@@ -1559,6 +1572,32 @@ for (const { title, surface, expectedArguments } of [
     title: "keeps duplicate and empty diagnostic lines in caller order",
     surface: { kind: "diagnostic", header: "Warnings", lines: ["a", "", "a"] },
     expectedArguments: ["Warnings\n\na\n\na", "warning"],
+  },
+  {
+    title: "emits nothing for an empty async-rewake summary",
+    surface: { kind: "async-rewake-summary", summary: "" },
+    expectedArguments: undefined,
+  },
+  {
+    title: "returns a whitespace-padded async-rewake summary verbatim",
+    surface: { kind: "async-rewake-summary", summary: "  ready  " },
+    expectedArguments: ["  ready  ", "info"],
+  },
+  {
+    title: "states the stop-override cap it is given",
+    surface: { kind: "stop-override-cap", pluginId: "official:guard", cap: 3 },
+    expectedArguments: [
+      "Stop hook override cap reached.\n\n`official:guard`'s Stop hook blocked 3 times in a row; the turn ended despite its active block.",
+      "warning",
+    ],
+  },
+  {
+    title: "passes a backtick in the stop-override plugin id through unescaped",
+    surface: { kind: "stop-override-cap", pluginId: "a`b", cap: 8 },
+    expectedArguments: [
+      "Stop hook override cap reached.\n\n`a`b`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.",
+      "warning",
+    ],
   },
 ] satisfies readonly {
   readonly title: string;

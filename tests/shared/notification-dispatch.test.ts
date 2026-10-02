@@ -5718,7 +5718,7 @@ test("stop override dispatch preserves exact warning bytes", (t) => {
   const ctx = createContext(t);
 
   // act
-  notifyStopHookOverrideCap(ctx as never, "official:guard");
+  notifyStopHookOverrideCap(ctx as never, "official:guard", 8);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
