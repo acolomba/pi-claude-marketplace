@@ -759,12 +759,8 @@ test("a save that writes then rejects restores state and retains the skill backu
     await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
       code: "ENOENT",
     });
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.ok(backupName);
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName, "0", "SKILL.md")),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", "0", "SKILL.md")),
       skillBefore,
     );
     assert.deepStrictEqual(notifications, [
@@ -772,7 +768,7 @@ test("a save that writes then rejects restores state and retains the skill backu
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save rejected after write\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save rejected after write\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
         severity: "error",
@@ -813,12 +809,8 @@ test("a failed save removes newly created state and retains the skill backup", a
     await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
       code: "ENOENT",
     });
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.ok(backupName);
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName, "0", "SKILL.md")),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", "0", "SKILL.md")),
       skillBefore,
     );
     assert.deepStrictEqual(notifications, [
@@ -826,7 +818,7 @@ test("a failed save removes newly created state and retains the skill backup", a
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save rejected after create\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save rejected after create\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
         severity: "error",
@@ -864,12 +856,11 @@ test("an occupied restore target reports rollback partial and retains the backup
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
     assert.equal(await readFile(skill, "utf8"), "replacement\n");
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.match(backupName ?? "", /^prune-backup-[\w-]+$/);
     const manifest = JSON.parse(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "manifest.json"), "utf8"),
+      await readFile(
+        path.join(locations.extensionRoot, "prune-backup-ABC123", "manifest.json"),
+        "utf8",
+      ),
     ) as { entries: Array<{ phase: string; root: string; target: string; backup: string | null }> };
     assert.deepStrictEqual(
       manifest.entries.filter((entry) => entry.phase === "skills"),
@@ -887,7 +878,7 @@ test("an occupied restore target reports rollback partial and retains the backup
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback found an occupied artifact at mp-orphan-skill.",
         severity: "error",
@@ -918,11 +909,7 @@ test("a missing skill directory reports manual recovery and restores state", asy
 
     await assert.rejects(stat(path.dirname(skill)), { code: "ENOENT" });
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.ok(backupName);
-    const backupRoot = path.join(locations.extensionRoot, backupName);
+    const backupRoot = path.join(locations.extensionRoot, "prune-backup-ABC123");
     const manifest = JSON.parse(await readFile(path.join(backupRoot, "manifest.json"), "utf8")) as {
       entries: Array<{ phase: string; root: string; target: string; backup: string | null }>;
     };
@@ -943,7 +930,7 @@ test("a missing skill directory reports manual recovery and restores state", asy
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
         severity: "error",
@@ -986,23 +973,22 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
       code: "ENOENT",
     });
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.match(backupName ?? "", /^prune-backup-[\w-]+$/);
     const manifest = JSON.parse(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "manifest.json"), "utf8"),
+      await readFile(
+        path.join(locations.extensionRoot, "prune-backup-ABC123", "manifest.json"),
+        "utf8",
+      ),
     ) as { entries: Array<{ phase: string; root: string; target: string; backup: string | null }> };
     assert.deepStrictEqual(
       manifest.entries.filter((entry) => entry.phase === "mcp"),
       [{ phase: "mcp", root: ".", target: "mcp.json", backup: "3" }],
     );
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "3")),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", "3")),
       originalMcp,
     );
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "0", "SKILL.md")),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", "0", "SKILL.md")),
       skillBefore,
     );
     assert.deepStrictEqual(notifications, [
@@ -1010,7 +996,7 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.\n" +
           "    [mcp] (rollback failed)\n" +
@@ -1047,17 +1033,16 @@ test("an MCP edit after a cascade with no MCP resources survives failed persiste
     assert.deepStrictEqual(await readFile(locations.mcpJsonPath), independent);
     assert.match(notifications[0]?.message ?? "", /\{rollback partial\}/);
     assert.match(notifications[0]?.message ?? "", /\[mcp\] \(rollback failed\)/);
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.ok(backupName);
     const manifest = JSON.parse(
-      await readFile(path.join(locations.extensionRoot, backupName, "manifest.json"), "utf8"),
+      await readFile(
+        path.join(locations.extensionRoot, "prune-backup-ABC123", "manifest.json"),
+        "utf8",
+      ),
     ) as { entries: Array<{ phase: string; backup: string | null }> };
     const entry = manifest.entries.find(({ phase }) => phase === "mcp");
     assert.ok(entry?.backup);
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName, entry.backup)),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", entry.backup)),
       original,
     );
   });
@@ -1097,7 +1082,7 @@ test("rollback details survive a simultaneous lock-release failure", async (t) =
     assert.equal(notifications[0]?.severity, "error");
     assert.match(message, /\{rollback partial\}/);
     assert.match(message, /\[mcp\] \(rollback failed\)/);
-    assert.match(message, /prune-backup-[\w-]+\/manifest\.json/);
+    assert.match(message, /Inspect prune-backup-ABC123\/manifest\.json/);
     assert.match(message, /state save failed/);
     assert.match(message, /lock release also failed: lock release failed/);
     assert.doesNotMatch(message, /\/tmp\//);
