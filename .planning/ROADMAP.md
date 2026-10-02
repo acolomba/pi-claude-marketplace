@@ -15,7 +15,7 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 ## Phases
 
 - [x] **Phase 1: Presentation Model** — Every presentation decision is computed once, upstream of a text renderer that no longer probes state or walks `Error` objects (16 plans complete; verification passed) (completed 2026-10-01)
-- [ ] **Phase 2: Row Policies** — Per-verb rendering differences become a total row-policy map of data instead of string render callbacks
+- [x] **Phase 2: Row Policies** — Per-verb rendering differences become a total row-policy map of data instead of string render callbacks (completed 2026-10-02)
 - [ ] **Phase 3: Typed Raw Surfaces** — Every raw-string output surface becomes a typed model kind, so text is a pure formatter of the model
 - [ ] **Phase 4: Wire Schema and JSON Strategy** — A versioned typebox wire schema and a format-only JSON strategy, validated as a pure function and first consumed by the LLM tools
 - [ ] **Phase 5: Mode-Selected JSON Sink** — `ctx.mode` selects the strategy, and `json`/`rpc` output reaches consumers through `pi.appendEntry` from every output site
@@ -125,7 +125,7 @@ Plans:
 4. The `pending` retained-workflow-staging advisory travels as structured data (`{name, envelopeCount?}`). The text strategy composes the sentence and its indent, and the `pending` output is byte-identical to the baseline.
 5. The catalog diff is empty. The wire corpus changes only the 29 synthetic test occurrences approved in Phase 2 D-07, with an exact before/after ledger; all other occurrences remain unchanged.
 
-**Plans:** 2/2 plans executed, sequential (waves 1-2)
+**Plans:** 2/2 plans complete, sequential (waves 1-2)
 
 **Wave 1**
 - [x] 02-01-PLAN.md — Row-policy migration, owner tests, and the approved synthetic corpus patch
@@ -216,7 +216,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Presentation Model | 16/16 | Complete    | 2026-10-01 |
-| 2. Row Policies | 2/2 | In Progress|  |
+| 2. Row Policies | 2/2 | Complete    | 2026-10-02 |
 | 3. Typed Raw Surfaces | 0/TBD | Not started | - |
 | 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |
 | 5. Mode-Selected JSON Sink | 0/TBD | Not started | - |

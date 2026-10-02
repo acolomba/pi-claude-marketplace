@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Row Policies",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "3",
@@ -40,9 +40,9 @@
     }
   ],
   "next": {
-    "command": "$gsd-resume-work",
-    "label": "Resume paused review fixes",
-    "reason": "Phase 2 of 7 paused; both plans complete, review fixes pending; 29th corpus replacement approved"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step (plan phase 3)",
+    "reason": "Phase 3 of 7 — needs a plan"
   },
-  "updated_at": "2026-10-02T01:10:17.335Z"
+  "updated_at": "2026-10-02T13:36:04.634Z"
 }

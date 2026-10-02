@@ -30,7 +30,7 @@ model that already carries every presentation decision.
   neither strategy probes state or walks `Error` objects. The render-time
   `softDepStatus` probe leaves `shared/notification-dispatch.ts`, and one probe
   per invocation is shared with severity computation.
-- [ ] **PMOD-02**: Per-verb rendering differences are expressed as model data
+- [x] **PMOD-02**: Per-verb rendering differences are expressed as model data
   (row policies) instead of the `CommandContext` render callbacks in
   orchestrators' `*.messaging.ts`; every known per-command divergence is
   preserved.
@@ -41,7 +41,7 @@ model that already carries every presentation decision.
   every presentation, text and JSON; the model redacts them before either
   strategy sees them, and the credential-leak gate (AUTH-09) covers the JSON
   path.
-- [ ] **PMOD-05**: The `pending` retained-workflow-staging advisory is
+- [x] **PMOD-05**: The `pending` retained-workflow-staging advisory is
   structured model data (`{name, envelopeCount?}`), and the text strategy
   composes its sentence.
 
@@ -191,10 +191,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PMOD-01 | Phase 1 | Complete |
-| PMOD-02 | Phase 2 | Pending |
+| PMOD-02 | Phase 2 | Complete |
 | PMOD-03 | Phase 1 | Complete |
 | PMOD-04 | Phase 4 | Pending |
-| PMOD-05 | Phase 2 | Pending |
+| PMOD-05 | Phase 2 | Complete |
 | TEXT-01 | Phase 3 | Pending |
 | WIRE-01 | Phase 4 | Pending |
 | WIRE-02 | Phase 6 | Pending |

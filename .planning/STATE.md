@@ -1,19 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 2
-current_phase_name: Row Policies
-status: paused
-stopped_at: Paused during review fixes; 29th synthetic corpus replacement approved
-last_updated: "2026-10-02T01:10:17.335Z"
+current_phase: 3
+current_phase_name: Typed Raw Surfaces
+status: planning
+stopped_at: Phase 2 complete, ready to plan Phase 3
+last_updated: "2026-10-02T13:36:04.585Z"
 last_activity: 2026-10-02
-last_activity_desc: Both plans complete; review fixes paused with approval saved
-state_head: 1c363b91e0fb401daec19fa33c2aff1c50161291
+last_activity_desc: Phase 2 complete, transitioned to Phase 3
+state_head: 571b6883cda8fa497654c58c62e5b68899457769
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 18
   completed_plans: 18
+  percent: 29
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -30,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 2 (Row Policies) — PAUSED
-Plan: 2 of 2 complete; review fixes in progress
-Status: Paused at user request
-Last activity: 2026-10-02 — Both plans complete; review fixes paused
+Phase: 3 — Typed Raw Surfaces
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-02 — Phase 2 complete, transitioned to Phase 3
 
-Progress: [█░░░░░░░░░] 14% (1 of 7 phases fully verified; 18 plans complete)
+Progress: [███░░░░░░░] 29% (2 of 7 phases fully verified; 18 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,18 +169,27 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-02T01:10:17.335Z
-**Stopped at:** Paused during review fixes; 29th synthetic corpus replacement approved
-**Resume file:** .planning/phases/02-row-policies/.continue-here.md
+**Last session:** 2026-10-02T13:36:26Z
+**Stopped at:** Phase 2 complete, ready to plan Phase 3
+**Resume file:** None
 
-**Current work:** json-output on `features/json`. Phase 1 is complete. Both
-Phase 2 plans are committed and full checks pass. Independent review found
-CR-01 (lost reasons assertion) and WR-01 (lost formatter type refusal).
-WR-01 is implemented and focused checks pass, but its two files are uncommitted;
-precommit was cancelled for this pause. CR-01's exact additional synthetic
-replacement is approved: 29 changed / 2,632 unchanged / 2,661 total. It is not
-yet applied. No human action is pending. See HANDOFF.json for exact evidence
-and approved before/after text. Phase 2 verification remains pending.
+**Current work:** json-output on `features/json`. Phases 1 and 2 are complete
+and verified. Phase 2's review-fix loop closed after three iterations with ten
+findings fixed (CR-01, WR-01..WR-06, IN-01..IN-03); D-07 now records 29 approved
+corpus replacements (29 / 2,632 / 2,661 against the original blob). The full
+`npm run check` passed at `571b6883`. Phase 3 (Typed Raw Surfaces) is next.
+
+**Carried concern -- corpus nondeterminism:** `node scripts/notify-corpus.mjs
+check` exits 1 on 8 missing/extra pairs in
+`tests/orchestrators/plugin/prune.test.ts`. Those messages embed a random
+`prune-backup-XXXXXX` directory name (`prune-rollback.ts`), which
+`normalizeMessage` does not normalize, so the `e514ea67` post-merge re-baseline
+captured random suffixes. With the suffix normalized, all 37 prune entries match.
+It arrived with main's prune tests (#198), not with phase 2. Until the tool
+normalizes it and those 8 entries are re-captured, the corpus gate cannot exit
+0 in phases 3-7. Later phases also compare the catalog against main's
+`8b6ac3bc` (or the latest merged main) rather than `e40d3dda`, because #198
+changed catalog bytes.
 
 **Release context (unchanged):** The 0.19.1 and 0.19.2 releases are tagged and
 published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218 and
@@ -193,10 +203,9 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Resume with `$gsd-resume-work`; preserve the uncommitted WR-01 edits.
-- Apply the already-approved CR-01 test and exact corpus/ledger replacement.
-- Finish review-fix gates/commits, independent re-review, and phase verification.
-- Continue the original autonomous run through phases 3-7 after phase 2 passes.
+- Decide how to fix the prune corpus nondeterminism (normalizer rule plus an
+  8-entry re-capture) before the Phase 3 corpus gate.
+- Plan Phase 3 (Typed Raw Surfaces) under the original autonomous run.
 
 ## Performance Metrics
 
