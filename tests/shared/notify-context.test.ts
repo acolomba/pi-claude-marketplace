@@ -152,7 +152,9 @@ test("an empty plural cascade emits only its sentinel", () => {
   const controlled = createControlledContext("Plugin inspect");
 
   // act
-  notifyWithContext(harness.ctx, harness.run, controlled, [], undefined, "plural");
+  notifyWithContext(harness.ctx, harness.run, controlled, [], undefined, "plural", {
+    retainedWorkflows: [],
+  });
 
   // assert
   verify(harness.ctx);
@@ -173,10 +175,9 @@ test("WR-06: folds caller-supplied advisory lines before the tally", () => {
   ];
 
   // act
-  notifyWithContext(harness.ctx, harness.run, controlled, rows, undefined, "plural", [
-    "first advisory",
-    "second advisory",
-  ]);
+  notifyWithContext(harness.ctx, harness.run, controlled, rows, undefined, "plural", {
+    advisories: ["first advisory", "second advisory"],
+  });
 
   // assert
   verify(harness.ctx);

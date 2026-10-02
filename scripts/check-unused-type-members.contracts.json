@@ -250,20 +250,20 @@
       "filter": "extensions/pi-claude-marketplace/domain/resolver-types.ts:53:13"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:611:35",
+      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:606:35",
       "owner": "addMarketplace.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:611:9"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:606:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:611:52",
+      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:606:52",
       "owner": "addMarketplace.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:611:9"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:606:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:706:38",
@@ -596,12 +596,12 @@
       "necessity": "extensions/pi-claude-marketplace/index.ts:92:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:201:43",
+      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:202:43",
       "owner": "dispatchInfoMessage.message",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:201:12"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:202:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:898:32",
@@ -612,12 +612,12 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:898:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-summary.ts:43:40",
+      "id": "extensions/pi-claude-marketplace/shared/notification-summary.ts:44:40",
       "owner": "isInfoKind",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-summary.ts:43:9"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-summary.ts:44:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-types.ts:458:48",

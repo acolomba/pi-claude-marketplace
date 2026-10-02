@@ -1699,6 +1699,7 @@ test("WR-06: notify folds caller-supplied advisory lines between the body and th
   const msg: NotificationMessage = {
     marketplaces: [],
     advisories: ["first advisory", "second advisory"],
+    retainedWorkflows: [],
   };
 
   // act
@@ -5089,7 +5090,10 @@ test("reconcile-pending-empty emits the exact zero-action advisory", (t) => {
   // arrange
   const ctx = createContext(t);
   const run = runWithAllLoaded();
-  const message = { kind: "reconcile-pending-empty" } satisfies NotificationMessage;
+  const message = {
+    kind: "reconcile-pending-empty",
+    retainedWorkflows: [],
+  } satisfies NotificationMessage;
 
   // act
   notify(ctx as never, run, message);

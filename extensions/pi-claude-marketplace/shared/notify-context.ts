@@ -53,7 +53,10 @@ export function notifyWithContext<
   rows: readonly MarketplaceRows<Msg>[],
   kind: "cascade" | undefined,
   cardinality: "single" | "plural",
-  advisories?: readonly string[],
+  {
+    advisories,
+    retainedWorkflows,
+  }: Pick<CascadeNotificationMessage, "advisories" | "retainedWorkflows"> = {},
 ): void {
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
   // row-policy map omits is a compile error there); the cascade envelope consumes
@@ -79,6 +82,7 @@ export function notifyWithContext<
     label: context.Messaging.label,
     cardinality,
     ...(advisories !== undefined && { advisories }),
+    ...(retainedWorkflows !== undefined && { retainedWorkflows }),
   };
 
   emitContextCascade(ctx, run, message, context.rowPolicies);

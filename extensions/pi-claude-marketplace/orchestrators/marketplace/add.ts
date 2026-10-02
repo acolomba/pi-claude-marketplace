@@ -568,15 +568,10 @@ function handleAddFailure(
         plugins: [],
       },
     ];
-    notifyWithContext(
-      opts.ctx,
-      opts.run,
-      ADD_CONTEXT,
-      failedRows,
-      undefined,
-      "single",
-      removalAdvisories(err),
-    );
+    const advisories = removalAdvisories(err);
+    notifyWithContext(opts.ctx, opts.run, ADD_CONTEXT, failedRows, undefined, "single", {
+      ...(advisories !== undefined && { advisories }),
+    });
   }
 
   return { status: "failed", reason, error: wrapped, cause: errorMessage(err) };

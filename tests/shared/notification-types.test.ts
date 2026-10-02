@@ -6,6 +6,7 @@ import {
   pluginScopeOrFallback,
   pluginVersion,
   type ContentReason,
+  type CascadeNotificationMessage,
   type MarketplaceNotificationMessage,
   type MarketplaceStatus,
   type NotificationMessage,
@@ -15,12 +16,41 @@ import {
   type PluginSkippedMessage,
   type PluginStatus,
   type Reason,
+  type ReconcilePendingEmptyMessage,
+  type RetainedWorkflowStaging,
   type Severity,
   type StatusToken,
   type WithPlugins,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
+
+void ({ name: "staging" } satisfies RetainedWorkflowStaging);
+void ({ name: "staging", envelopeCount: 0 } satisfies RetainedWorkflowStaging);
+void ({
+  marketplaces: [],
+  retainedWorkflows: [{ name: "staging" }],
+} satisfies CascadeNotificationMessage);
+void ({
+  kind: "reconcile-pending-empty",
+  retainedWorkflows: [{ name: "staging", envelopeCount: 1 }],
+} satisfies ReconcilePendingEmptyMessage);
+// @ts-expect-error retained workflow observations carry facts, not formatted lines.
+void ({ marketplaces: [], retainedWorkflows: ["staging"] } satisfies CascadeNotificationMessage);
+void ({
+  kind: "reconcile-pending-empty",
+  // @ts-expect-error pending empty observations carry facts, not formatted lines.
+  retainedWorkflows: ["staging"],
+} satisfies ReconcilePendingEmptyMessage);
+// @ts-expect-error an unobserved count is absent, never null.
+void ({ name: "staging", envelopeCount: null } satisfies RetainedWorkflowStaging);
+// @ts-expect-error cascade observations cannot be null.
+void ({ marketplaces: [], retainedWorkflows: null } satisfies CascadeNotificationMessage);
+void ({
+  kind: "reconcile-pending-empty",
+  // @ts-expect-error pending empty observations cannot be null.
+  retainedWorkflows: null,
+} satisfies ReconcilePendingEmptyMessage);
 
 /**
  * The four closed vocabularies are declared privately by their owner and reach

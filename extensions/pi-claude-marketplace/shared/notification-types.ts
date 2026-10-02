@@ -603,6 +603,12 @@ export type WithPlugins<MP, Msg> = MP extends unknown
   ? Omit<MP, "plugins"> & { readonly plugins: readonly Msg[] }
   : never;
 
+/** A retained workflow staging basename and its observed envelope count. */
+export interface RetainedWorkflowStaging {
+  readonly name: string;
+  readonly envelopeCount?: number;
+}
+
 /** Standard marketplace/plugin notification cascade. */
 export interface CascadeNotificationMessage {
   readonly kind?: "cascade";
@@ -620,6 +626,7 @@ export interface CascadeNotificationMessage {
    * either one byte-identical.
    */
   readonly advisories?: readonly string[];
+  readonly retainedWorkflows?: readonly RetainedWorkflowStaging[];
 }
 
 /** Marketplace information message. */
@@ -738,6 +745,7 @@ export interface ReconcilePendingEmptyMessage {
    * the reader it exists for.
    */
   readonly advisories?: readonly string[];
+  readonly retainedWorkflows?: readonly RetainedWorkflowStaging[];
 }
 
 /** Marketplace-absence failure message. */

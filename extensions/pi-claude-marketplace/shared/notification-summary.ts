@@ -4,6 +4,7 @@ import type {
   CascadeNotificationMessage,
   MarketplaceNotificationMessage,
   NotificationMessage,
+  RetainedWorkflowStaging,
   Severity,
 } from "./notification-types.ts";
 
@@ -406,7 +407,7 @@ export function tallyCategory(count: number, singular: string, plural: string): 
  * a count nobody read is not a fact the line may state.
  */
 export function composeRetainedWorkflowsAdvisories(
-  retained: readonly { readonly name: string; readonly envelopeCount?: number }[],
+  retained: readonly RetainedWorkflowStaging[],
 ): readonly string[] {
   return retained.map((tree) => {
     const count = tree.envelopeCount;

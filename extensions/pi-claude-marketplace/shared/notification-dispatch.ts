@@ -17,7 +17,7 @@ import {
   resolveRows,
   resolveUpdateNoOpEnvelope,
 } from "./notification-resolve.ts";
-import { isInfoKind } from "./notification-summary.ts";
+import { composeRetainedWorkflowsAdvisories, isInfoKind } from "./notification-summary.ts";
 
 import type {
   RowPolicyMap,
@@ -30,6 +30,7 @@ import type {
   CascadeNotificationMessage,
   NotificationMessage,
   ReconcileAppliedCascadeMessage,
+  RetainedWorkflowStaging,
   Severity,
   UsageErrorMessage,
 } from "./notification-types.ts";
@@ -226,7 +227,11 @@ function dispatchInfoMessage(
       // DIFF-01 SC #2: catalog-locked free-form advisory body line. Hard-coded
       // here so the byte form cannot drift from `docs/output-catalog.md`'s
       // `empty-steady-state` state.
-      body = foldAdvisories("Pending: next reload will apply 0 actions.", message.advisories);
+      body = foldAdvisories(
+        "Pending: next reload will apply 0 actions.",
+        message.advisories,
+        message.retainedWorkflows,
+      );
       break;
     case "reconcile-applied-cascade":
       // RECON-04: compose the same cascade body the cascade arm renders
@@ -299,7 +304,7 @@ export function notify(
   const blocks = marketplaces.map((mp) => composeMarketplaceBlock(mp));
   const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
   // WR-06: advisory body lines sit between the body and the tally.
-  const body = foldAdvisories(composed, message.advisories);
+  const body = foldAdvisories(composed, message.advisories, message.retainedWorkflows);
 
   // Emit through the shared summary seam (GRAM-04). The resolved envelope
   // carries the summary line (error/warning only), the OUT-03 tally, and the
@@ -337,8 +342,15 @@ export function makeRawNotifyFn(
  * member gets the identical byte form whichever arm of a command produced it,
  * because the arms differ only in what they hand this function as `body`.
  */
-function foldAdvisories(body: string, advisories: readonly string[] | undefined): string {
-  const lines = advisories ?? [];
+function foldAdvisories(
+  body: string,
+  advisories: readonly string[] | undefined,
+  retainedWorkflows: readonly RetainedWorkflowStaging[] | undefined,
+): string {
+  const lines = [
+    ...(advisories ?? []),
+    ...composeRetainedWorkflowsAdvisories(retainedWorkflows ?? []),
+  ];
   return lines.length === 0 ? body : `${body}\n\n${lines.join("\n")}`;
 }
 
@@ -362,6 +374,7 @@ function emitCascadeWith(
   // declares them; the reconcile-applied carrier passes `undefined`, so the
   // member stays on the two shapes that can actually produce one.
   advisories: readonly string[] | undefined,
+  retainedWorkflows: readonly RetainedWorkflowStaging[] | undefined,
 ): void {
   const marketplaces = resolveRows(message.marketplaces, run.softDeps, rowPolicies);
   const envelope = resolveEnvelope(message);
@@ -370,7 +383,7 @@ function emitCascadeWith(
   // WR-06: advisory body lines sit between the body and the tally, exactly as
   // they do on the central dispatch, so a command that can emit either arm
   // renders the identical trailer from either one.
-  const body = foldAdvisories(composed, advisories);
+  const body = foldAdvisories(composed, advisories, retainedWorkflows);
 
   emitWithSummary(ctx, envelope, body);
 }
@@ -382,7 +395,7 @@ export function emitContextCascade(
   message: CascadeNotificationMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  emitCascadeWith(ctx, run, message, rowPolicies, message.advisories);
+  emitCascadeWith(ctx, run, message, rowPolicies, message.advisories, message.retainedWorkflows);
 }
 
 /** Emits surviving rows followed by the fixed zero-update headline. */
@@ -409,5 +422,5 @@ export function emitReconcileAppliedContextCascade(
   message: ReconcileAppliedCascadeMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  emitCascadeWith(ctx, run, message, rowPolicies, undefined);
+  emitCascadeWith(ctx, run, message, rowPolicies, undefined, undefined);
 }

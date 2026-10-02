@@ -39,7 +39,6 @@ import { buildConfigFromState } from "../../persistence/migrate-config.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
-import { composeRetainedWorkflowsAdvisories } from "../../shared/notification-summary.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
@@ -135,8 +134,8 @@ function mergedViewForPlanning(outcome: ScopeLoadOutcome, state: ExtensionState)
 }
 
 /**
- * WR-06: the advisory body lines naming the workflow staging trees the sweeper
- * keeps forever, or `undefined` when there are none.
+ * WR-06: observations of the workflow staging trees the sweeper
+ * keeps forever. The optional field is absent when there are none.
  *
  * `workflowsStagingDir` and `workflowsHomeDir` are scope-INDEPENDENT, so the
  * scope handed to `locationsFor` is immaterial and one call answers for the
@@ -150,22 +149,11 @@ function mergedViewForPlanning(outcome: ScopeLoadOutcome, state: ExtensionState)
  * containment refusal all resolve to the empty result rather than rejecting --
  * so a try/catch around it would be a branch nothing can reach.
  */
-async function retainedWorkflowsAdvisories(cwd: string): Promise<readonly string[] | undefined> {
-  const lines = composeRetainedWorkflowsAdvisories(
-    await scanRetainedWorkflowsStaging(locationsFor("user", cwd)),
-  );
-  return lines.length === 0 ? undefined : lines;
-}
-
-/**
- * DIFF-01 SC #2: the empty-steady-state message. WR-06: the advisory key is
- * ABSENT rather than present-and-empty when nothing is retained, so a steady
- * state with no retained tree emits the bytes it has always emitted.
- */
-function pendingEmptyMessage(
-  advisories: readonly string[] | undefined,
-): ReconcilePendingEmptyMessage {
-  return { kind: "reconcile-pending-empty", ...(advisories !== undefined && { advisories }) };
+async function retainedWorkflowsFacts(
+  cwd: string,
+): Promise<Pick<ReconcilePendingEmptyMessage, "retainedWorkflows">> {
+  const retainedWorkflows = await scanRetainedWorkflowsStaging(locationsFor("user", cwd));
+  return retainedWorkflows.length === 0 ? {} : { retainedWorkflows };
 }
 
 export async function pendingReconcile(opts: PendingReconcileOptions): Promise<void> {
@@ -254,7 +242,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // `workflowsStagingDir` and `workflowsHomeDir` are scope-INDEPENDENT, so the
   // scope handed to `locationsFor` is immaterial and a call inside the loop
   // would render the identical advisory twice whenever no scope was given.
-  const advisories = await retainedWorkflowsAdvisories(opts.cwd);
+  const retained = await retainedWorkflowsFacts(opts.cwd);
 
   // DIFF-01 SC #2 empty-steady-state: no invalid-config rows AND every plan
   // is empty -> dispatch the dedicated ReconcilePendingEmptyMessage variant
@@ -263,7 +251,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // routing through notify() exactly once. WR-06: the retained-tree lines ride
   // the same variant, so the steady-state reader meets the identical trailer.
   if (invalidBlocks.length === 0 && isReconcilePlanListEmpty(plans)) {
-    notify(opts.ctx, opts.run, pendingEmptyMessage(advisories));
+    notify(opts.ctx, opts.run, { kind: "reconcile-pending-empty", ...retained });
     return;
   }
 
@@ -315,8 +303,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     ...invalidBlocks,
   ].sort((a, b) => compareByNameThenScope(a, b));
 
-  // WR-06: the cascade arm carries the identical advisory lines the empty arm
-  // carries, from the one render site that composes both.
+  // WR-06: both message arms carry the same observations from the single scan.
   notifyWithContext(
     opts.ctx,
     opts.run,
@@ -324,6 +311,6 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     marketplaces,
     undefined,
     "plural",
-    advisories,
+    retained,
   );
 }
