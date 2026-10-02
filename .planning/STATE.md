@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 2
 current_phase_name: Row Policies
-status: executing
-stopped_at: Approved all 28 synthetic corpus replacements; finish row-policy commits and continue pending facts
-last_updated: "2026-10-01T23:02:21.598Z"
-last_activity: 2026-10-01
-last_activity_desc: Phase 2 execution started
+status: paused
+stopped_at: Paused during review fixes; 29th synthetic corpus replacement approved
+last_updated: "2026-10-02T01:10:17.335Z"
+last_activity: 2026-10-02
+last_activity_desc: Both plans complete; review fixes paused with approval saved
 state_head: 1c363b91e0fb401daec19fa33c2aff1c50161291
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 18
-  completed_plans: 16
+  completed_plans: 18
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -30,12 +30,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 2 (Row Policies) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 2
-Last activity: 2026-10-01 — Phase 2 execution started
+Phase: 2 (Row Policies) — PAUSED
+Plan: 2 of 2 complete; review fixes in progress
+Status: Paused at user request
+Last activity: 2026-10-02 — Both plans complete; review fixes paused
 
-Progress: [█░░░░░░░░░] 14% (1 of 7 phases fully verified; 16 plans complete)
+Progress: [█░░░░░░░░░] 14% (1 of 7 phases fully verified; 18 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -168,18 +168,18 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-01T23:02:21.432Z
-**Stopped at:** Approved all 28 synthetic corpus replacements; finish row-policy commits and continue pending facts
-**Resume file:** .planning/phases/02-row-policies/02-EXECUTION-CHECKPOINT.md
+**Last session:** 2026-10-02T01:10:17.335Z
+**Stopped at:** Paused during review fixes; 29th synthetic corpus replacement approved
+**Resume file:** .planning/phases/02-row-policies/.continue-here.md
 
-**Current work:** Milestone json-output on `features/json`. GSD now selects
-this root milestone. All six current review findings are fixed, and the
-independent review is clean. Phase 1 has 16 completed plans and automated
-evidence for all five criteria. The corpus matches all 2,661 entries.
-Verification is `passed`: the user passed both human review items. Test
-coverage validation is complete, and the level 1 security review closed all
-29 registered threats. The report records the accepted catalog baseline after
-the upstream merge. Phases 2-7 are not planned yet.
+**Current work:** json-output on `features/json`. Phase 1 is complete. Both
+Phase 2 plans are committed and full checks pass. Independent review found
+CR-01 (lost reasons assertion) and WR-01 (lost formatter type refusal).
+WR-01 is implemented and focused checks pass, but its two files are uncommitted;
+precommit was cancelled for this pause. CR-01's exact additional synthetic
+replacement is approved: 29 changed / 2,632 unchanged / 2,661 total. It is not
+yet applied. No human action is pending. See HANDOFF.json for exact evidence
+and approved before/after text. Phase 2 verification remains pending.
 
 **Release context (unchanged):** The 0.19.1 and 0.19.2 releases are tagged and
 published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218 and
@@ -193,14 +193,10 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Phase 1 is complete: both human review items passed, with no UAT issues.
-- The code review is clean. The disposition ledger has no open findings.
-- Continue with `/gsd-discuss-phase 2` to settle row-policy decisions before planning.
-- Phase 1 test coverage validation and security review are complete:
-  `01-VALIDATION.md` is validated; `01-SECURITY.md` has no open threats.
-- `BACKLOG.md` still holds the six carriers the workflows-replay close named
-  (VSTALE-01, WLREC-01, RLHINT-01, PCERR-01, WSTOR-01, WPIN-01). This
-  milestone closes MRO-01 in Phase 7.
+- Resume with `$gsd-resume-work`; preserve the uncommitted WR-01 edits.
+- Apply the already-approved CR-01 test and exact corpus/ledger replacement.
+- Finish review-fix gates/commits, independent re-review, and phase verification.
+- Continue the original autonomous run through phases 3-7 after phase 2 passes.
 
 ## Performance Metrics
 

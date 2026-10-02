@@ -1,0 +1,115 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-10-02T01:10:17.335Z",
+  "phase": "2",
+  "phase_name": "Row Policies",
+  "phase_dir": ".planning/phases/02-row-policies",
+  "plan": 2,
+  "task": 1,
+  "total_tasks": 2,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "02-01 row-policy migration and owner tests",
+      "status": "done",
+      "commit": "c479c427"
+    },
+    {
+      "id": 2,
+      "name": "02-02 retained workflow facts and gates",
+      "status": "done",
+      "commit": "e793eeed"
+    },
+    {
+      "id": 3,
+      "name": "Independent 53-file review",
+      "status": "done",
+      "commit": "699f33de"
+    },
+    {
+      "id": 4,
+      "name": "WR-01 formatter type refusal",
+      "status": "in_progress",
+      "progress": "Two uncommitted files; typecheck, 109 owner tests, 100% direct coverage, focused lint/format and compiler mutation control pass. Precommit cancelled at user pause; no fix commit."
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 5,
+      "name": "Apply approved CR-01 owner assertion and exact 29th corpus replacement; update ledger and current decision records",
+      "status": "not_started"
+    },
+    {
+      "id": 6,
+      "name": "Finish both review fixes with mandatory gates and atomic commits; write fix/disposition reports; independent re-review",
+      "status": "not_started"
+    },
+    {
+      "id": 7,
+      "name": "Refresh independent phase verification, complete phase 2, continue autonomous phases 3-7 and lifecycle",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {
+      "decision": "Approve exact CR-01 extra synthetic replacement:29 changed/2632 unchanged/2661 total; error severity and argc2 preserved.",
+      "rationale": "Restore behavioral reasons assertion removed by test migration. Approval is already granted; do not ask again.",
+      "phase": "2"
+    },
+    {
+      "decision": "Sequential native execution in existing features/json worktree; run-scoped isolation none.",
+      "rationale": "GSD helper branch namespace conflicts with user-required features/*; global use_worktrees remains true.",
+      "phase": "2"
+    },
+    {
+      "decision": "Pause autonomous work at explicit user request.",
+      "rationale": "Preserve uncommitted formatter fix; cancelled precommit rather than continuing work.",
+      "phase": "2"
+    }
+  ],
+  "uncommitted_files": [
+    " M .planning/STATE.md",
+    " M .planning/state.json",
+    " M extensions/pi-claude-marketplace/shared/notification-grammar.ts",
+    " M tests/shared/notification-grammar.test.ts",
+    "?? .planning/HANDOFF.json",
+    "?? .planning/milestone.lock",
+    "?? .planning/phases/02-row-policies/.continue-here.md"
+  ],
+  "approved_corpus_change": {
+    "finding": "CR-01",
+    "file": "tests/orchestrators/plugin/shared.test.ts",
+    "baselineLine": 1907,
+    "alreadyApproved": false,
+    "multiplicity": 1,
+    "before": {
+      "message": "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped)\n\nPlugin reinstall: 1 failure",
+      "severity": "error",
+      "argc": 2
+    },
+    "after": {
+      "message": "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed, marketplace in user scope}\n\nPlugin reinstall: 1 failure",
+      "severity": "error",
+      "argc": 2
+    },
+    "approvedReplacementsBefore": 28,
+    "replacementsAfterApproval": 29,
+    "unchangedOccurrencesAfterApproval": 2632,
+    "totalOccurrences": 2661,
+    "productionChanges": false,
+    "approval": "User explicitly approved this one replacement immediately before requesting pause."
+  },
+  "background_processes": {
+    "running": false,
+    "cancelled_session": 54363,
+    "cancelled_process_group": 2371446,
+    "exit_code": 143,
+    "log": "/tmp/reviewfix-wr01-precommit.log"
+  },
+  "next_action": "Read phase handoff and REVIEW; inspect preserved WR-01 diff; implement already-approved CR-01 proposal, then run focused checks/corpus/ledger and mandatory commit gates before atomic commits.",
+  "context_notes": "Original objective remains gsd-autonomous --from 2 --interactive, routine choices delegated. Both phase2 plans complete; phase itself not independently verified yet. Source at e793eeed passed fullcheck (7580unit/36integration/100% coverage), corpus2661zeroextras, ledger28/2633. Review adds type-only WR01 and test-only CR01. Do not rerun fullsuite without concrete risk; focused owner/type/mutation checks plus required precommit and exact corpus suffice if runtime remains unchanged. Historical28 evidence stays historical; new approval29 is recorded here but not yet in CONTEXT/ledger/baseline. STATE was stale and is corrected by this pause. uncommitted_files is the measured snapshot before the handoff-only commit; the two WR-01 files and milestone.lock will remain afterward."
+}

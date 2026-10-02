@@ -40,9 +40,9 @@
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 2 of 7 · executing"
+    "command": "$gsd-resume-work",
+    "label": "Resume paused review fixes",
+    "reason": "Phase 2 of 7 paused; both plans complete, review fixes pending; 29th corpus replacement approved"
   },
-  "updated_at": "2026-10-01T21:41:11.758Z"
+  "updated_at": "2026-10-02T01:10:17.335Z"
 }
