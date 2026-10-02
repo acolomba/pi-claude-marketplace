@@ -14,7 +14,7 @@
 // named by `PI_WORKFLOW_ENGINE_ROOT`:
 //
 //   mkdir -p /var/tmp/wf-engine tmp/pi-uat/wf-store
-//   npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.13.0
+//   npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.13.1
 //   PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-store \
 //   PI_WORKFLOW_ENGINE_ROOT=/var/tmp/wf-engine/node_modules \
 //     node tests/live-uat/workflow-storage-canary.mjs

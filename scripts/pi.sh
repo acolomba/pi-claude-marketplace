@@ -91,13 +91,14 @@ try {
 }
 ' "$repo_root/tests/pi-runtime.ts" "$repo_root")
 
-# Companion extensions, pinned here only -- never in package.json or
-# package-lock.json (NFR-5, D-98-10). 3.13.0 is the engine version
-# docs/workflows-compatibility.md grades.
+# Companion extensions, pinned here only (PIFL-07): never as dependencies,
+# devDependencies or package-lock.json entries (NFR-5, D-98-10). package.json
+# declares pi-mcp-adapter and pi-subagents as optional peers. 3.13.1 is the
+# engine version docs/workflows-compatibility.md grades.
 pi_cm_pins=(
-  "pi-mcp-adapter@2.37.0"
-  "pi-subagents@0.71.0"
-  "@quintinshaw/pi-dynamic-workflows@3.13.0"
+  "pi-mcp-adapter@5.0.0"
+  "pi-subagents@0.74.0"
+  "@quintinshaw/pi-dynamic-workflows@3.13.1"
 )
 
 # Prefix resolved against the invocation directory, before the --cd change
