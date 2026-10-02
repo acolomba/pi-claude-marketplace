@@ -40,16 +40,25 @@ created: "2026-10-02"
 
 ## Per-Task Verification Map
 
-Filled by the planner per task; requirement-level map from RESEARCH.md:
+All commands run from the checkout root. Each PLAN `<automated>` command has a
+paired `<fails_when>`. The corpus tool accepts extras by design, so exit 0 alone
+is insufficient: the corpus wrapper commands in the plans assert the exact
+missing and extra lines.
 
-| Requirement | Behavior | Test Type | Automated Command | File Exists | Status |
-|-------------|----------|-----------|-------------------|-------------|--------|
-| RAWS-01 | usage-error / usage-info bytes and arity (SNM-13) | unit | `node --test tests/shared/notification-dispatch.test.ts tests/edge/handlers/plugin/help.test.ts` | ✅ | ⬜ pending |
-| RAWS-02 | diagnostic join and empty no-op | unit | `node --test tests/shared/notification-dispatch.test.ts tests/orchestrators/import/execute.test.ts tests/orchestrators/reconcile/apply.test.ts` | ✅ | ⬜ pending |
-| RAWS-03 | domain passes values; prompt bytes; AUTH-09 retarget | unit + arch | `node --test tests/domain/github-auth.test.ts tests/orchestrators/auth-host.test.ts tests/architecture/no-credential-leak.test.ts` | ✅ (planted controls ❌ W0) | ⬜ pending |
-| RAWS-04 | reconcile-aborted / plugin-path-skipped bytes; resolve serializes cause | unit | `node --test tests/index.test.ts tests/shared/notification-resolve.test.ts` | ✅ | ⬜ pending |
-| RAWS-05 | rewake passthrough; cap from the bridge constant | unit + arch | `node --test tests/bridges/hooks/settle.test.ts tests/bridges/hooks/async-rewake/registry.test.ts tests/architecture/hooks-cap-notify.test.ts` | ✅ | ⬜ pending |
-| TEXT-01 | per-kind arity (D-15); sink-only strings (D-16); bytes | unit + arch + tooling | `node --test tests/shared/notification-grammar.test.ts tests/architecture/<sink-gate>.test.ts && node scripts/notify-corpus.mjs check` | ❌ W0 (sink gate) | ⬜ pending |
+| Task ID | Wave | Requirement | Behavior and owner | Automated command | Threat Ref | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| 03-01-01 | 1 | RAWS-04, TEXT-01 | Tracer: load-time kinds through resolve, text strategy, and the single sink; structured path on the same sink; real extension load unchanged | `npm run typecheck && node --test tests/index.test.ts tests/shared/notification-types.test.ts tests/shared/notification-resolve.test.ts tests/shared/notification-grammar.test.ts tests/shared/notification-dispatch.test.ts` | T-03-01, T-03-02, T-03-03 | ⬜ pending |
+| 03-01-01 | 1 | TEXT-01 | Corpus: no missing entry, exactly the two approved dispatch-test extras | The corpus wrapper `node --input-type=module -e` command in 03-01 Task 1 | T-03-05 | ⬜ pending |
+| 03-01-02 | 1 | RAWS-01 | usage-error and usage-info kinds; SNM-13 bytes; RAWS-01 edges; callers unchanged | `npm run typecheck && node --test tests/shared/notification-types.test.ts tests/shared/notification-grammar.test.ts tests/shared/notification-dispatch.test.ts tests/edge/handlers/plugin/help.test.ts tests/edge/router.test.ts tests/edge/handlers/shared.test.ts` and the D-03 `git diff --exit-code 4e6c568a -- …` caller command | T-03-01, T-03-03 | ⬜ pending |
+| 03-02-01 | 2 | RAWS-02 | diagnostic kind; joins and the empty no-op in the text strategy; producers unchanged | `npm run typecheck && node --test tests/shared/notification-types.test.ts tests/shared/notification-grammar.test.ts tests/shared/notification-dispatch.test.ts tests/orchestrators/import/execute.test.ts tests/orchestrators/plugin/shared.test.ts tests/orchestrators/reconcile/apply.test.ts` | T-03-06, T-03-08 | ⬜ pending |
+| 03-02-02 | 2 | RAWS-05 | Hook kinds; rewake passthrough; cap from STOP_OVERRIDE_CAP; byte pins hold | `npm run typecheck && node --test tests/shared/notification-types.test.ts tests/shared/notification-grammar.test.ts tests/shared/notification-dispatch.test.ts tests/architecture/hooks-cap-notify.test.ts tests/architecture/hooks-async-rewake.test.ts tests/bridges/hooks/settle.test.ts tests/bridges/hooks/runtime.test.ts tests/bridges/hooks/async-rewake/registry.test.ts` | T-03-06, T-03-07 | ⬜ pending |
+| 03-03-01 | 3 | RAWS-03 | Domain passes values; prompt bytes; raw callback deleted; AUTH-09 retargeted with positive counts | `npm run typecheck && node --test tests/domain/github-auth.test.ts tests/domain/device-flow-fake.test.ts tests/orchestrators/auth-host.test.ts tests/orchestrators/marketplace/add.test.ts tests/shared/notification-types.test.ts tests/shared/notification-grammar.test.ts tests/shared/notification-dispatch.test.ts tests/architecture/no-credential-leak.test.ts tests/integration/auth-e2e.test.ts` | T-03-09, T-03-10, T-03-12 | ⬜ pending |
+| 03-03-02 | 3 | TEXT-01 | D-17 ledger: exactly two removals and three additions against blob `225a5161a97bc3952a41cfae067592fe2c8bc6ca` | The ledger `node --input-type=module -e` command in 03-03 Task 2, which must print `Approved corpus changes: 2 removals, 3 additions; unchanged occurrences: 3131; total: 3134` | T-03-11 | ⬜ pending |
+| 03-04-01 | 4 | RAWS-03 | AUTH-09 planted offenders reject; benign and comment near-miss pass | `node --test tests/architecture/no-credential-leak.test.ts` | T-03-13 | ⬜ pending |
+| 03-04-02 | 4 | TEXT-01 | D-16 presentation-sink gate and its planted controls | `node --test tests/architecture/presentation-sink.test.ts tests/architecture/gate-targets.test.ts tests/architecture/source-scan.test.ts` | T-03-14, T-03-15 | ⬜ pending |
+| All | 1-4 | All | Changed source owners keep 100% direct coverage | `npm run test:coverage:direct -- <changed sources>` per task; `npm run test:coverage:direct:all` through each full-fallback pre-commit | T-03-01 | ⬜ pending |
+| All | 1-4 | All | Full project quality gates | `npm run check`, unpiped, exit code written to a log | T-03-01, T-03-11 | ⬜ pending |
+| All | 1-4 | TEXT-01 | Corpus: 3134 present, 0 extra after 03-03; catalog unchanged with 260 states and 39,143 bytes | Corpus wrapper; `git diff --exit-code 4e6c568a -- docs/output-catalog.md`; `node --test tests/architecture/catalog-uat/catalog-contract.test.ts` | T-03-05, T-03-11 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -57,10 +66,10 @@ Filled by the planner per task; requirement-level map from RESEARCH.md:
 
 ## Wave 0 Requirements
 
-- [ ] Sink-gate architecture test with planted controls (D-16)
-- [ ] Planted-control cases in `tests/architecture/no-credential-leak.test.ts` (D-11)
-- [ ] D-15 per-kind arity rows in the text-strategy test
-- [ ] `.planning/phases/03-typed-raw-surfaces/03-CORPUS-CHANGES.json` ledger (D-17)
+- [ ] Sink-gate architecture test with planted controls (D-16): 03-04 Task 2
+- [ ] Planted-control cases in `tests/architecture/no-credential-leak.test.ts` (D-11): 03-04 Task 1; the retarget with positive counts lands with the rename in 03-03 Task 1
+- [ ] D-15 per-kind arity rows in the text-strategy test: created in 03-01 Task 1; a mapped type over every resolved kind forces one row per kind added in 03-01 Task 2, 03-02, and 03-03
+- [ ] `.planning/phases/03-typed-raw-surfaces/03-CORPUS-CHANGES.json` ledger (D-17): 03-03 Task 2
 
 ---
 
