@@ -1,491 +1,455 @@
-# Architecture Research: v1.19 Unit Test Refactor
+# Architecture Research: mcp-4 (Pi 1.0 baseline + pi-mcp-adapter 5 delivery)
 
-**Domain:** Brownfield TypeScript unit-test ownership and direct-coverage refactor
-**Researched:** 2026-08-28
-**Confidence:** HIGH
+**Domain:** Brownfield Pi extension -- retarget the MCP bridge from Pi's `mcp.json` to the adapter-native `mcp-adapter.json`, migrate existing entries on `/reload`, and surface adapter runtime state
+**Researched:** 2026-10-01
+**Confidence:** HIGH for seams, gates and adapter behavior (read from this repo at `8b6ac3bc` and from the published `pi-mcp-adapter@5.0.0` / `@earendil-works/pi-coding-agent@1.0.0` tarballs). MEDIUM for the hooks/agents naming ripple (depends on a naming decision that is still open).
 
 ## Executive Recommendation
 
-Keep the production architecture that exists at HEAD. Build the milestone around its
-204 current production modules, not around the abandoned Phase 106/107 partition.
-Each executable plan must own exactly one production source and its mirrored unit
-test. Each plan must finish with one atomic commit for that pair.
+Almost all of this milestone lands on seams that already exist. The MCP bridge
+(`bridges/mcp/*`) keeps its prepare/commit/abort triplet, its `_piClaudeMarketplace`
+marker (MC-5), and its replacement handles. The file it writes changes. The entry
+it writes gains adapter fields. The collision walk is rewritten to the adapter's
+real precedence. Three things are genuinely new:
 
-The roadmap should start at Phase 108 and follow the live dependency direction:
-domain and platform, shared contracts, persistence and transaction, bridges,
-orchestrators, edge commands, and finally the extension entry point. This order lets
-lower-level public contracts stabilize before their consumers receive direct tests.
-It also makes the large lifecycle and composition modules depend on already-proven
-seams.
+1. **A legacy-move step** in reconcile (`orchestrators/reconcile/`), shaped like
+   the existing `backfill.ts` sibling step. It calls a new bridge function that
+   moves marked entries out of `<scopeRoot>/mcp.json`.
+2. **A status tracker** in `platform/` that subscribes to the adapter's
+   `pi-mcp-adapter/status/v1` event-bus channel at factory time. It is created in
+   `index.ts`, like `createCompletionCache`, and injected through `EdgeDeps` into
+   `orchestrators/plugin/info.ts`.
+3. **A pure entry translator** in `bridges/mcp/`. It runs the generated name,
+   `directTools: "search"`, and Claude-rule variable expansion with adapter
+   escaping. Stage and migration share it, so they cannot drift.
 
-Treat every one of the 204 pairs as open. The audit labels and retained commits are
-diagnostic brownfield evidence. They are never completion proof. A `PASS` pair still
-needs a v1.19 plan, current direct-coverage evidence, and its own commit.
+Use the file location as the version discriminator. An entry in legacy `mcp.json`
+was written by old code and is untranslated. An entry in `mcp-adapter.json` was
+written by new code and is translated. Applying the translator exactly once per
+move is then structural, with no marker version field and no persisted flag.
+COMPAT-01 forbids a new persisted record key without a sanctioned route.
 
-Cross-cutting work must ride with a source-test pair that owns the contract. For
-example, the resolver pair owns the required `installable: true | false`
-discriminant. Structural gates run throughout the milestone, but they do not justify
-gate-only executable plans.
+Build order: **floor bump first** (it moves contract pins and peer gates that every
+later phase touches). Then the adapter-file foundation, then the translator, then
+migration (which needs the final translator). Live status can run in parallel with
+migration once the naming is final.
 
-## Current HEAD Architecture
-
-The live extension is a layered TypeScript system under
-`extensions/pi-claude-marketplace/`. The dependency flow is mostly inward from the
-entry point and command surface toward orchestration, domain, persistence, and
-platform seams.
-
-```text
-Pi extension entry (index.ts)
-            |
-            v
-       edge commands
-            |
-            v
- lifecycle and composition orchestrators
-       |          |          |
-       v          v          v
-    bridges   transaction  persistence
-       |          |          |
-       +----------+----------+
-                  |
-                  v
-          domain / shared / platform
-```
-
-This is a dependency diagram, not a request to create new directories. Some shared
-and platform modules are intentionally used by higher and lower layers. The roadmap
-must use actual imports and callers to sequence pairs, not enforce a theoretical
-layer model that the repository does not have.
-
-### Component Boundaries
-
-| Component           | Modules | Responsibility                                                                                   | Main dependencies                                         |
-| ------------------- | ------: | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| `domain/`           |      20 | Resolution, manifests, identities, versions, hook metadata, GitHub authentication rules          | `platform/`, `shared/`                                    |
-| `platform/`         |       3 | Git, credential, and Pi runtime ports                                                            | `shared/`                                                 |
-| `shared/`           |      19 | Errors, notifications, formatting, paths, configuration, concurrency, and common value utilities | selected platform types/APIs                              |
-| `persistence/`      |       9 | Atomic durable stores for registries, ledgers, settings, caches, and snapshots                   | `domain/`, `platform/`, `shared/`                         |
-| `transaction/`      |       3 | Install and lifecycle transaction coordination and rollback                                      | `persistence/`, `shared/`                                 |
-| `bridges/agents/`   |       9 | Claude agent to Pi agent translation and staging                                                 | domain, persistence, platform, shared                     |
-| `bridges/commands/` |       5 | Claude command to Pi prompt-template translation and staging                                     | domain, persistence, platform, shared                     |
-| `bridges/skills/`   |       8 | Claude skill to Pi skill translation and staging                                                 | domain, persistence, platform, shared                     |
-| `bridges/mcp/`      |       9 | Claude MCP to Pi MCP adapter translation and staging                                             | domain, persistence, platform, shared                     |
-| `bridges/hooks/`    |      31 | Hook conversion, routing, dispatch, execution, and state                                         | domain, persistence, platform, shared                     |
-| `orchestrators/`    |      57 | Plugin, marketplace, import, reconcile, discovery, and presentation workflows                    | all lower layers                                          |
-| `edge/`             |      30 | Command parsing, validation, scope choice, and user-facing dispatch                              | orchestrators, domain, shared, platform                   |
-| root `index.ts`     |       1 | Extension composition, command registration, hook installation, and reload lifecycle             | edge, hooks, orchestrators, persistence, platform, shared |
-
-### Boundary Facts That Plans Must Preserve
-
-- Hook routing state is isolated in `bridges/hooks/routing-state.ts` to break a live
-  dependency cycle.
-- Plugin and marketplace ledgers do not import each other. Workflows cross that
-  boundary through leaf seams such as `orchestrators/marketplace/shared.ts` or through
-  injected dependencies.
-- The bridge families do not import one another. They share domain and persistence
-  contracts instead.
-- Plugin install uses the transaction runner. Other lifecycle operations have their
-  own rollback shapes and must not be forced into install's transaction abstraction.
-- Offline and no-network behavior is an architectural contract. Read-only commands
-  and warm-cache paths must not gain network dependencies.
-- User-visible output goes through `ctx.ui.notify`. Direct stdout or stderr writes are
-  outside the command and bridge contract.
-- Whole-repository cycle and unused-boundary checks remain the job of Fallow. Pair
-  tests should not reproduce a second dependency scanner.
-
-## Unit-Test Ownership Architecture
-
-The milestone adds a strict one-to-one ownership view over the existing production
-tree.
+## System Overview (new = `+`, modified = `~`)
 
 ```text
-extensions/pi-claude-marketplace/<relative-path>.ts
-                         |
-                         | exactly one mirrored owner
-                         v
-tests/<relative-path>.test.ts
-                         |
-                         +-- imports the production module directly
-                         +-- covers its exported behavior directly
-                         +-- reaches 100% functions, lines, and branches
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ index.ts (entry)                                                               │
+│   ~ createMcpStatusTracker(pi.events)  ── factory-time subscribe (before the  │
+│     adapter's async init publishes its first snapshot)                         │
+│   ~ EdgeDeps gains `mcpStatus` (same route as completionCache)                 │
+└──────────┬───────────────────────────────┬───────────────────────────────────┘
+           │ resources_discover             │ /claude:plugin info
+           ▼                                ▼
+┌───────────────────────────────┐  ┌──────────────────────────────────────────┐
+│ orchestrators/reconcile/       │  │ orchestrators/plugin/info.ts  ~           │
+│  apply.ts ~ per scope:         │  │  joins generated server names to the       │
+│   + mcp-migration.ts (FIRST,   │  │  tracker snapshot; manifest arm maps raw   │
+│     before applyPlan)          │  │  keys through generatedMcpServerName       │
+│   applyPlan / backfill / ...   │  └──────────────┬───────────────────────────┘
+└──────────┬────────────────────┘                 │ reads
+           │ calls                                ▼
+           ▼                         ┌──────────────────────────────────────────┐
+┌─────────────────────────────────┐ │ platform/                                  │
+│ bridges/mcp/                     │ │  + mcp-status.ts  (consumer-owned mirror,  │
+│  ~ stage.ts   → mcp-adapter.json │ │    typebox-checked, latest snapshot only)  │
+│     + legacy sweep of own        │ │  ~ pi-api.ts hasLoadedPiMcpAdapter         │
+│       entries in mcp.json        │ │    (exclude `builtin:` sources)            │
+│  ~ unstage.ts → both files       │ └──────────────────────────────────────────┘
+│  ~ collision-slots.ts            │
+│     nine-source, last-wins,      │ ┌──────────────────────────────────────────┐
+│     overlay-aware (MCPSRC-01)    │ │ domain/name.ts                             │
+│  ~ substitute.ts ${VAR:-d} +     │ │  + generatedMcpServerName(plugin, server)  │
+│     adapter escaping             │ │    (sibling of generatedAgentName)         │
+│  + adapter-entry.ts (translator) │ └──────────────────────────────────────────┘
+│  + migrate.ts (legacy move)      │
+│  + adapter-doc.ts (JSONC read,   │ ┌──────────────────────────────────────────┐
+│     mcpServers|mcp-servers key)  │ │ persistence/locations.ts ~                 │
+│  = marker.ts (unchanged, MC-5)   │ │  + mcpAdapterJsonPath                      │
+└─────────────────────────────────┘ │  = mcpJsonPath (now legacy: read + sweep)  │
+                                    └──────────────────────────────────────────┘
+Disk (per scope):  <scopeRoot>/mcp-adapter.json  (+ write target)
+                   <scopeRoot>/mcp.json          (~ sweep-only: our marked entries leave)
+                   <scopeRoot>/pi-claude-marketplace/state.json (resources.mcpServers renamed)
+Event bus:         pi.events "pi-mcp-adapter/status/v1"  (adapter → us, read-only)
 ```
 
-Tests in `tests/architecture/` and `tests/integration/` can prove cross-module
-contracts. They are supplemental evidence only. They cannot replace a mirrored unit
-test or contribute ownership credit for a source pair.
+## Mapping Table: New Behavior → Existing Seam → True Delta
 
-### Current Pair Baseline
+| New behavior | Existing seam that carries it | Delta (what actually changes) |
+|---|---|---|
+| Write marked entries to `<scopeRoot>/mcp-adapter.json` | `ScopedLocations` path bundle; `prepareStageMcpServers` / `commitPreparedMcp` read-partition-merge-`atomicWriteJson` | **MOD** `persistence/locations.ts`: add `mcpAdapterJsonPath` (hard-coded suffix on `scopeRoot`, same containment-by-construction disposition as `mcpJsonPath`). **MOD** `stage.ts` / `unstage.ts` / `types.ts`: target `mcpAdapterJsonPath`; `StagedMcpRecord.targetPath` follows automatically (W-05). |
+| NFR-10 write set | `PROJECT.md` Constraints + `locations.ts` containment comment | The set **grows**, it does not swap: `mcp-adapter.json` is added, and `mcp.json` stays because the legacy move and sweep rewrite it. Retiring `mcp.json` from the write set is a later decision, made after the migration window. |
+| Read the adapter file the way the adapter does | `readScopedDoc` + `classifyMcpServers` in `stage.ts` | **NEW** `bridges/mcp/adapter-doc.ts`. (a) JSONC: comments, trailing commas and a BOM are legal in `mcp-adapter.json` (`readValidatedConfig` uses `parseJsonWithComments`). (b) The server map key is `mcpServers` **or** the legacy `mcp-servers`. Write back into whichever key exists, as the adapter's own `writeProjectServerDisabledOverride` does. (c) An unparseable adapter file is **refused**, not "treated as empty and replaced". Today's malformed-overwrite tolerance would destroy the user's `settings`/`imports`/`claudePlugins`. |
+| Collision walk = adapter 5 precedence (MCPSRC-01) | `bridges/mcp/collision-slots.ts::loadEffectiveServerNames` | **MOD**: the slot list becomes the adapter's `getConfigSources()` order. The rule becomes LAST-wins (the current code is first-declarer-wins, which is the inversion BACKLOG records). Our own target file sits at position 5 (user) or 9 (project). The ancestor slot (6) appears only when `settings.ancestorConfigRoots` is set in a user-global source. Partial **overlay** entries (no `command`/`url`/`socket`) are not collisions; see Pattern 3. Non-file sources (`pi.mcp` packages, `agentPluginPaths`, `claudePlugins`, runtime registrations, host discovery) are documented as outside the contract. |
+| Server name `plugin:<plugin>:<server>`, normalized | `domain/name.ts` generators (`generatedAgentName`, `declaredAgentName`, ...) | **NEW** `generatedMcpServerName(plugin, server)`. Called from the translator. Output must match `[A-Za-z0-9_-]+`: that is the class Pi's `mcp.json` translation accepts and the class the adapter's `sanitizeServerPrefix` leaves unencoded. Otherwise `:` becomes `_3a_` in every tool name. `StagedMcpRecord.generatedName` stops being "== input key". `state.json` picks the new name up through the existing `recorded` hand-off; there is no new state code. |
+| `directTools: "search"` | `stampServers` in `stage.ts` | **NEW** field set by the translator. Only on entries the plugin did not set `directTools` on. Whether a plugin-declared value is honored is a FEATURES decision. |
+| `${VAR:-default}` parity + escape adapter re-expansion (MENVX-01, ENVLIT-01) | `bridges/mcp/substitute.ts` (bridge-local by design; `shared/vars.ts` owns content substitution and stays untouched) | **MOD** `substitute.ts`: add a Claude-rule expansion pass and an escaping pass for what the adapter would expand again. A leading `!` becomes `!!` in env/secret fields. `${NAME}` / `$env:NAME` / `{env:NAME}` are re-interpolated by `interpolateEnvVars`; for `env`, `literalEnv: true` is the only lever. The rules are a FEATURES/PITFALLS question. Architecturally they live here and nowhere else. |
+| Move existing marked entries out of both `mcp.json` files on `/reload` | `applyReconcileWithReader` per-scope loop; `backfill.ts` as the template for a version-agnostic sibling step with its own `withStateGuard` (CR-01: no outer lock, `proper-lockfile` is not re-entrant) | **NEW** `orchestrators/reconcile/mcp-migration.ts` (thin: lock, call bridge, rename record names, `tx.save`). **NEW** `bridges/mcp/migrate.ts` (the move itself, reusing the adapter-doc reader, marker partition, translator, collision walk and replacement-handle rollback). **MOD** `apply.ts`: call it first in each scope, before `applyPlan`, so every later step in the same pass sees the adapter file. |
+| A lifecycle op on a not-yet-migrated plugin must not leave a duplicate | `unstageMcpServers` (marker-keyed, not name-keyed) and the replacement handles in `stage.ts` | **MOD** unstage sweeps own marked entries from BOTH files. **MOD** stage commit also removes this plugin's own marked entries from legacy `mcp.json`. After the rename, a leftover legacy copy has a DIFFERENT name and both copies would run. The replacement handle snapshots two files instead of one. |
+| Prune rollback covers the new file | `orchestrators/plugin/prune-rollback.ts` snapshots `locations.mcpJsonPath` | **MOD**: snapshot `mcpAdapterJsonPath` too (unstage now writes both). |
+| Live adapter runtime status in `info` | `GetPluginInfoOptions` already threads `pi: ToolInventory`; `HookSummaryEntry` is the precedent for a richer per-component entry; the `EdgeDeps` → handler route is how `completionCache` reaches handlers | **NEW** `platform/mcp-status.ts` (tracker). **MOD** `index.ts` (create + inject), `orchestrators/edge-deps.ts`, `edge/handlers/plugin/info.ts`, `orchestrators/plugin/info.ts` (join), `shared/notification-types.ts` (`components.mcp` → entry with optional runtime token), `shared/notification-grammar.ts` (render), `docs/output-catalog.md`. |
+| Adapter-only detection | `platform/pi-api.ts::hasLoadedPiMcpAdapter` (RH-4) | **MOD**: ignore tools whose source is Pi's built-in (`sourceInfo.source`/`path` with the `builtin:` prefix, `BUILTIN_PATH_PREFIX` in Pi 1.0 `core/source-info.d.ts`). Keep the `name === "mcp"` arm only for a non-builtin source. `ToolInventoryItem` widens by `sourceInfo.path` if the check needs it. The marker vocabulary (`{requires pi-mcp}`) does not change. |
+| Pi 1.0 floor | `platform/pi-api.ts` (sole Pi import site), `tests/architecture/peer-floor.test.ts`, `scripts/check-unused-type-members.contracts.json` external-mirror pins | Re-apply `74162ca6` (typing + pins), `5b1d8ef6`/`dac3a245`/`69e0870a` (pi-subagents peer tests), `4f82096f` (Stop canary) at `>=1.0.0`. Mechanical, but it moves pins that later phases also move. |
+| Hooks and agents that name MCP tools | `domain/components/hooks/matcher.ts` keeps `mcp__<S>__<T>` literals; `bridges/agents/convert.ts` drops `mcp__*` tool tokens and points users to pi-subagents `mcp:<server>` overrides | **No code change is required for the listed features.** The rename changes the names users type in `/mcp-adapter`, pi-subagents `mcp:<server>` overrides and approvals. Literal hook matchers do not match adapter tool names today, and still will not. See the open decision under "Integration Points". |
 
-The canonical pair audit contains 204 rows.
+## Component Responsibilities
 
-| Audit label     |   Pairs | Planning meaning                                       |
-| --------------- | ------: | ------------------------------------------------------ |
-| `PASS`          |      59 | Existing evidence to inspect; pair remains open        |
-| `COVERAGE_FAIL` |      83 | Mirrored test exists but direct coverage is incomplete |
-| `MISSING`       |      60 | Mirrored test is absent                                |
-| `TEST_FAIL`     |       2 | Focused test or environment failed; pair remains open  |
-| **Total open**  | **204** | **Every pair receives one executable plan and commit** |
+### New
 
-The current corresponding-test gate reports 107 violations: 60 missing tests, 43
-unexpected tests, and four wrong imports. Both planted negative controls pass. These
-numbers are a starting diagnostic, not a completion ledger.
+| Component | File | Responsibility | Talks to |
+|---|---|---|---|
+| Adapter doc model | `bridges/mcp/adapter-doc.ts` | JSONC-tolerant read of `mcp-adapter.json`; `mcpServers` vs `mcp-servers` key selection; refuse-not-replace on unparseable input; preserve every other top-level key (`settings`, `imports`, `claudePlugins`) verbatim | `stage.ts`, `unstage.ts`, `migrate.ts`, `collision-slots.ts` |
+| Entry translator | `bridges/mcp/adapter-entry.ts` | Pure: `(sourceKey, entry, ctx) → { name, entry, warnings }`. Composes `substituteAndInject`, the variable-expansion/escape pass, `generatedMcpServerName`, and adapter defaults (`directTools: "search"`). The marker is NOT applied here; the caller stamps it, as today | `stage.ts::stampServers`, `migrate.ts` |
+| Legacy move | `bridges/mcp/migrate.ts` | Given `ScopedLocations` + `cwd`: read legacy `mcp.json`, take every marked entry, translate, collision-check against the new walk, write `mcp-adapter.json` then `mcp.json`, return `{ renamed: Map<(mp,plugin), old→new[]>, skipped, warnings }`. Owns a two-file rollback via the replacement-handle pattern | reconcile `mcp-migration.ts` |
+| Reconcile migration step | `orchestrators/reconcile/mcp-migration.ts` | Per scope, under its own `withStateGuard`: pristine gate (no `state.json` → skip, WR-05), call `migrateLegacyMcpEntries`, rewrite `resources.mcpServers` names of the affected records, `tx.save()` through `saveState` (SPLIT-02). Coerce throws into `invalid-block`-style outcomes (WR-01 isolation) | `apply.ts`, `bridges/mcp`, `transaction/with-state-guard.ts` |
+| Status tracker | `platform/mcp-status.ts` | `createMcpStatusTracker(events: McpStatusEventSource)`: subscribe to `"pi-mcp-adapter/status/v1"`, validate the payload with a typebox schema of ONLY the fields we read, keep the latest snapshot, expose `lookup(name) → runtime state | "unknown"` and `received: boolean`. Holds the unsubscribe and drops it on `session_shutdown` | `index.ts` (creates), `info.ts` (reads) |
+| MCP name generator | `domain/name.ts::generatedMcpServerName` | The one place the Claude Code `plugin:<plugin>:<server>` key is normalized into the adapter-safe name | translator, `info.ts` manifest arm |
 
-One audit failure for `orchestrators/marketplace/add.ts` passes when the unchanged
-test can create its Unix socket, so its plan must preserve the behavior while making
-the test hermetic. `orchestrators/plugin/update.ts` has three reproducible assertion
-failures around unavailable Git-source candidates. Its own lifecycle pair must own
-that correction.
+### Modified
 
-## Recommended Phase Architecture
+| Component | File | Change |
+|---|---|---|
+| Path bundle | `persistence/locations.ts` | `+ mcpAdapterJsonPath`; doc comment marks `mcpJsonPath` as legacy (read + sweep only) |
+| Stage | `bridges/mcp/stage.ts` | Target the adapter file; overlay-aware partition; translator call; two-file commit/rollback (adapter write + legacy sweep of own entries) |
+| Unstage | `bridges/mcp/unstage.ts` | Sweep own marked entries from both files; the legacy file tolerates malformed input with a warning (it is no longer the authoritative store) |
+| Collision walk | `bridges/mcp/collision-slots.ts` | Nine-source list, last-wins, overlay-aware, owning-path reporting corrected; rewrite of the "four slots" MC-4/RN-5 contract text |
+| Substitution | `bridges/mcp/substitute.ts` | `${VAR:-default}` expansion and adapter escaping |
+| Types | `bridges/mcp/types.ts` | `RawMcpDoc` gains the server-key discriminant; `StagedMcpRecord.generatedName` doc; replacement internals hold two `oldText`s |
+| Reconcile apply | `orchestrators/reconcile/apply.ts` | Call the migration step first in each scope |
+| Prune rollback | `orchestrators/plugin/prune-rollback.ts` | Snapshot `mcpAdapterJsonPath` as well |
+| Info | `orchestrators/plugin/info.ts` | Manifest arm maps raw keys through `generatedMcpServerName` so both arms show the same names; join runtime state from the injected tracker |
+| Edge wiring | `orchestrators/edge-deps.ts`, `edge/register.ts`, `edge/handlers/plugin/info.ts`, `index.ts` | Thread `mcpStatus` the way `completionCache` is threaded |
+| Notification vocabulary | `shared/notification-types.ts`, `shared/notification-grammar.ts`, `docs/output-catalog.md` | `components.mcp` becomes an entry list carrying an optional runtime token; the renderer formats it; the catalog is amended deliberately |
+| Detection | `platform/pi-api.ts` | Adapter-only probe; Pi 1.0 typing |
 
-The following grouping covers each production module exactly once. The phase counts
-sum to 204.
+### Unchanged (deliberately)
 
-| Phase | Group                               | Pair count | Dependency rationale                                                                                                  |
-| ----: | ----------------------------------- | ---------: | --------------------------------------------------------------------------------------------------------------------- |
-|   108 | Domain and Platform                 |         23 | Stabilize foundational values, resolver result, Git ports, credentials, and GitHub authentication before consumers    |
-|   109 | Shared Contracts                    |         19 | Prove errors, paths, configuration, notifications, and common utilities used by all later layers                      |
-|   110 | Persistence and Transaction         |         12 | Prove formats, atomic writes, idempotency, ledger isolation, and rollback coordination after their value contracts    |
-|   111 | Non-Hook Component Bridges          |         31 | Cover agents, commands, skills, and MCP conversion and staging on stable lower seams                                  |
-|   112 | Hook Runtime                        |         31 | Isolate the larger hook conversion, routing, dispatch, and execution subsystem                                        |
-|   113 | Orchestrator Support and Presenters |         35 | Prove small seams, classifiers, discovery helpers, messaging modules, and planning helpers before lifecycle composers |
-|   114 | Plugin and Marketplace Lifecycle    |         14 | Cover the large state-changing plugin and marketplace workflows after their collaborators                             |
-|   115 | Composition Orchestrators           |          8 | Cover import, reconcile, bootstrap, and edge-dependency composition after lifecycle primitives                        |
-|   116 | Edge Surface                        |         30 | Cover parsing and command dispatch after all invoked workflows have stable contracts                                  |
-|   117 | Extension Entry and Final Gate      |          1 | Cover root registration and composition, then close all global structural gates                                       |
+`bridges/mcp/marker.ts` (MC-5 key and shape: a byte-stable user contract), `bridges/mcp/safe-set.ts`, `domain/mcp-resolution.ts` (it still resolves raw plugin servers; naming is a stage-time concern), `shared/vars.ts`, `transaction/*`, the state schema (`resources.mcpServers: string[]` keeps its shape, and only its values change).
 
-Phases 111 and 112 can be prepared in parallel after Phase 110 because their source
-trees are independent. Keep their commits and plans separate. Phase 113 must precede
-the lifecycle phase because the lifecycle modules depend on these helpers and
-presenters. Phase 115 follows lifecycle because its modules compose those workflows.
+## Recommended Project Structure (delta only)
 
-### Phase 113 Boundary
+```text
+extensions/pi-claude-marketplace/
+├── bridges/mcp/
+│   ├── adapter-doc.ts        # + JSONC read, server-key alias, refuse-not-replace
+│   ├── adapter-entry.ts      # + pure translator shared by stage and migrate
+│   ├── migrate.ts            # + legacy mcp.json → mcp-adapter.json move
+│   ├── collision-slots.ts    # ~ nine-source, last-wins, overlay-aware
+│   ├── stage.ts              # ~ new target, two-file commit, translator
+│   ├── unstage.ts            # ~ sweep both files
+│   ├── substitute.ts         # ~ ${VAR:-default} + adapter escaping
+│   ├── types.ts              # ~
+│   ├── marker.ts             # = MC-5 unchanged
+│   └── index.ts              # ~ export migrateLegacyMcpEntries
+├── domain/name.ts            # ~ + generatedMcpServerName
+├── orchestrators/reconcile/
+│   ├── mcp-migration.ts      # + per-scope locked step
+│   └── apply.ts              # ~ call it first
+├── orchestrators/plugin/{info,prune-rollback}.ts   # ~
+├── orchestrators/edge-deps.ts                      # ~ + mcpStatus
+├── persistence/locations.ts  # ~ + mcpAdapterJsonPath
+├── platform/
+│   ├── mcp-status.ts         # + event-bus tracker
+│   └── pi-api.ts             # ~ Pi 1.0 types, adapter-only probe, McpStatusEventSource view
+└── index.ts                  # ~ create tracker, inject
+tests/ mirrors every new module (test:corresponding requires pairs)
+```
 
-Use the live modules, not a new support directory. The intended 35 pairs are:
+### Structure Rationale
 
-- Five top-level support modules: authentication host, discovery, plugin path,
-  scope fan-out, and orchestrator types.
-- Fifteen plugin support and presentation modules: clone cache, clone garbage
-  collection, name discovery, Git-source probing, state classification, shared
-  helpers, update-row formatting, and the eight current messaging modules.
-- Six marketplace support and presentation modules: shared helpers and five current
-  messaging modules.
-- Five import support modules: execute messaging, marketplaces, references, settings,
-  and types.
-- Four reconcile support modules: apply outcomes, planning, reconcile messaging, and
-  types.
+- **The move belongs in `bridges/mcp/`, the trigger in `orchestrators/reconcile/`.**
+  Only the bridge knows the marker, the partition, the adapter document shape and
+  the rollback handles. Reconcile owns "when" and the `state.json` write. This
+  matches the fallow zones (orchestrators → bridges-mcp is allowed; bridges-mcp →
+  persistence/domain/shared/platform is allowed) and keeps `reconcile/plan.ts` pure
+  (RECONCILE_PURITY_TARGETS).
+- **The tracker belongs in `platform/`.** It is the only module that knows an
+  external extension's event channel name and payload shape. That is the same job
+  `pi-api.ts` does for Pi, and `platform` → `shared` is the only import it needs.
+  Do not import from `pi-mcp-adapter`. Its `.` export is TypeScript source that
+  pulls in `@earendil-works/pi-ai` (whose peer range stops at `^0.99.0`, the
+  recorded upstream gap). Even a type-only import turns a soft dependency into a
+  build dependency.
+- **The translator is its own module** because two callers need the identical
+  transform and `stage.ts` (436 lines) already sits near the fallow
+  `maxUnitSize: 60` / cognitive-15 ceilings per function.
 
-### Phase 114 Boundary
+## Architectural Patterns
 
-The 14 lifecycle pairs are the eight plugin workflows (`enable-disable`, `fetch`,
-`info`, `install`, `list`, `reinstall`, `uninstall`, and `update`) and the six
-marketplace workflows (`add`, `autoupdate`, `info`, `list`, `remove`, and `update`).
-These are high-value integration boundaries, but each remains one source-test pair.
+### Pattern 1: File location is the version discriminator
 
-### Phase 115 Boundary
+**What:** Entries in legacy `mcp.json` are untranslated by construction (old code
+wrote them). Entries in `mcp-adapter.json` are translated by construction. The
+migration translates exactly the entries it moves, once.
+**When to use:** Any transform that is not idempotent. `!` → `!!` escaping is the
+example: applied twice it gives `!!!`.
+**Trade-offs:** No marker field or persisted flag is needed, so COMPAT-01's
+persisted-key clause stays quiet and MC-5 stays byte-stable. The cost: the
+translator must also be total over legacy entries. The old stage already
+substituted `${CLAUDE_*}`, so the expansion pass must accept an
+already-substituted entry. It does, because the substituted values are absolute
+paths that contain no `${`.
 
-The eight composition pairs are `edge-deps`, the two import composers (`execute` and
-the import barrel), plugin bootstrap, and four reconcile composers (`apply`,
-`backfill`, `notify`, and `pending`).
+### Pattern 2: One translator, two callers
 
-## Within-Phase Execution Sequence
-
-The pair is the smallest executable unit. A phase can use waves, but a wave must not
-change pair ownership.
-
-1. Test type-only contracts, leaf values, and leaf adapter ports first.
-2. Test small exported helpers that are imported by other modules in the phase.
-3. Test stateful modules and persistence adapters after their schemas and values.
-4. Test presenters before the workflows that call them.
-5. Test lifecycle workflows before composition modules.
-6. Test barrels after their leaf exports are stable.
-7. Test the root entry point last.
-
-Serialize pairs when one changes a public contract used by the other or when both
-must edit the same concern-local test support file. Other pairs in the same phase can
-run in parallel. Never let parallel plans share ownership of a source, mirrored test,
-or commit.
-
-## Executable Pair Plan Shape
-
-Every plan should use the same evidence-producing sequence.
-
-### 1. Declare Ownership
-
-Name one exact production source and its one exact mirrored test. Record the audit
-label as baseline context only. Name any supplemental tests that contain behavior
-currently owned by the source.
-
-### 2. Trace the Public Contract
-
-Read the source, its exports, its callers and importers, the mirrored test, and related
-architecture or integration tests. Decide which observable behavior belongs in the
-mirrored test. Do not infer the contract from the old patch or retired phase plans.
-
-### 3. Consolidate Test Ownership
-
-Move source-owned cases from unexpected supplemental unit files into the mirrored
-test. Keep a supplemental test only when it genuinely proves a multi-module contract.
-Do not delete tests solely to make the corresponding-test gate green.
-
-### 4. Make the Smallest Production Change
-
-If the module cannot be tested through its exported surface, add a narrow production
-dependency or port that improves the real design. Prefer an optional dependency,
-explicit callback, clock, filesystem port, process boundary, or existing adapter.
-Keep the change inside the current module boundary unless current callers prove that
-a new production module is necessary.
-
-### 5. Write Direct Unit Tests
-
-Use `node:test` and `node:assert/strict`. Use explicit Arrange, Act, and Assert
-comments. Create fresh mutable state and a fresh temporary directory per case. Use
-strong mocks for promised interactions. Cover success, failure, absence, boundary,
-and retry behavior through exports only.
-
-Type-only files still require a mirrored test with compile-time contract assertions.
-Barrels must prove runtime binding identity for value exports and compile-time
-availability for type exports. The behaviorful root `index.ts` is not a barrel.
-
-### 6. Prove the Pair
-
-Run the focused test and the direct-coverage command for the exact source. Require
-100% functions, lines, and branches. Run type checking, linting, and affected
-contract tests when the public surface changes. Confirm that no test-only export,
-module replacement, or shared mutable state was introduced.
-
-### 7. Commit the Pair
-
-Create one commit that represents one source-test pair. Concern-local support edits
-may ride in the commit only when they exist to test that pair. A plan must not combine
-two production sources to reduce commit count.
-
-## Cross-Cutting Contract Carriers
-
-Cross-cutting concerns still need a single accountable source pair. Use these carrier
-pairs instead of creating non-pair executable plans.
-
-| Contract                                                          | Owning pair or pairs                                               |    Phase | Verification boundary                                                                |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------ | -------: | ------------------------------------------------------------------------------------ |
-| Resolver root safety                                              | `domain/resolver.ts`                                               |      108 | Runtime arm tests plus compile-time rejection of `pluginRoot` on unavailable results |
-| Git and credential adapter parity                                 | `platform/git.ts`, `platform/git-credential.ts`                    |      108 | Public port behavior and concern-local adapter contract cases                        |
-| Device Flow HTTP reachability                                     | `domain/github-auth.ts`                                            |      108 | Public authentication workflow with a production-reachable injected HTTP port        |
-| Version internals remain private                                  | `domain/version.ts`                                                |      108 | Test public version behavior; remove tests of private hashing constants              |
-| Hook metadata and diagnostics                                     | Relevant domain metadata pair and hook routing/dispatch pairs      | 108, 112 | Public translation and dispatch behavior; no private tool-name exports               |
-| Notification grammar and output routing                           | Shared notify/reason/context pairs and each current messaging pair | 109, 113 | Direct message tests plus supplemental architecture checks                           |
-| Durable formats and atomic writes                                 | Each persistence module                                            |      110 | Round trip, corrupted/absent state, retry, and atomic replacement behavior           |
-| Bridge atomicity and foreign-content preservation                 | Each bridge stage/unstage module                                   | 111, 112 | Direct bridge pair tests plus supplemental cross-bridge integration cases            |
-| Update preload, staging warnings, and unavailable-source behavior | `orchestrators/plugin/update.ts`                                   |      114 | Public update outcomes and rollback/notification effects                             |
-| Reconcile entry isolation                                         | `orchestrators/reconcile/apply.ts`                                 |      115 | One entry failure does not stop other entries or arms                                |
-| Correspondence and direct-coverage enforcement                    | Every pair; final closure with root `index.ts`                     | All, 117 | Pair checks continuously; full gates and negative controls at milestone close        |
-
-If a carrier exposes a defect in gate code, repair that gate in the carrier's pair
-commit. Do not introduce a gate-only phase or plan. Gate implementation already at
-HEAD is baseline infrastructure, not proof that any pair is complete.
-
-## Resolver Discriminant Contract
-
-The resolver's three-state `state` field and the new boolean discriminant serve
-different purposes. Keep both. `state` distinguishes fully installable from partially
-available results. `installable` makes root access type-safe.
+**What:** `stampServers` (stage) and `migrateLegacyMcpEntries` call the same pure
+`translateForAdapter`. The marker is stamped by the caller afterwards, as today
+("the marker never enters the walk", D-92-01).
 
 ```typescript
-type ResolvedPlugin =
-  | {
-      installable: true;
-      state: "installable";
-      pluginRoot: string;
-      // Current installable fields remain here.
-    }
-  | {
-      installable: true;
-      state: "partially-available";
-      pluginRoot: string;
-      // Current partial-result fields remain here.
-    }
-  | {
-      installable: false;
-      state: "unavailable";
-      name: string;
-      notes: readonly string[];
-      // No pluginRoot.
-    };
+// bridges/mcp/adapter-entry.ts (shape, not final code)
+export function translateForAdapter(
+  plugin: string,
+  sourceKey: string,
+  entry: Record<string, unknown>,
+  ctx: McpSubstitutionContext,
+): { readonly name: string; readonly entry: Record<string, unknown>; readonly warnings: readonly string[] } {
+  const name = generatedMcpServerName(plugin, sourceKey);
+  const expanded = expandAndEscape(substituteAndInject(entry, ctx)); // substitute.ts
+  return { name, entry: withAdapterDefaults(expanded), warnings: [] };
+}
 ```
 
-The `domain/resolver.ts` pair must update its runtime schema or constructors together
-with the exported type. Its mirrored test must prove all runtime arms and include a
-compile-time negative assertion for `pluginRoot` on the unavailable arm. The change
-is additive for consumers that only inspect `state`, so it does not require a mass
-consumer rewrite or a separate migration plan. It does not change a persisted format.
+**Trade-offs:** The legacy move needs `pluginRoot`/`pluginData` for the
+substitution context, but legacy entries are already substituted. Give the move
+a context-free variant (expansion/escape + name + defaults only) instead of
+reconstructing paths. Name the two entry points distinctly so a reviewer sees
+which steps run on which path.
 
-## Verification Boundaries
+### Pattern 3: Overlay-aware ownership partition
 
-### Pair Boundary
+**What:** `mcp-adapter.json` is a shared file. The adapter itself writes into it:
+`/mcp-adapter disable` adds `disabled: true` to the project file, and panel Save
+persists `directTools` changes. Both use `{ ...existing, field }`, so the adapter
+can modify OUR marked entry in place (the marker survives the spread), and it can
+add an unmarked partial entry under our name in the other scope's file.
+**Rules:**
+- A same-name entry with no transport key (`command`/`url`/`socket`) is an
+  **overlay**, not a collision. Neither the stage collision check nor the
+  partition's `theirs` arm may throw on it.
+- On re-stage (update/reinstall/enable), carry forward adapter-owned user
+  preference fields from our existing marked entry (at minimum `disabled`;
+  decide on `directTools`, `includeTools`, `excludeTools`, `approveTools`).
+  Otherwise an update silently re-enables a server the user disabled.
+- On unstage, drop the whole marked entry, overlay fields included (the plugin
+  is gone). Leave unmarked overlays in the other file alone. They are the
+  user's, and the adapter ignores an overlay with no base.
 
-- The mirrored test imports the production source directly.
-- The focused test passes.
-- Direct coverage for that source is 100% functions, lines, and branches.
-- Tests use only the exported surface.
-- Exactly one mirrored test owns the source.
-- The commit contains one production source-test pair.
+**Trade-offs:** The field list is a contract with the adapter. Record it with a
+decision ID and pin it against `ServerEntry` in the adapter's `types.ts`.
 
-### Wave Boundary
+### Pattern 4: Consumer-owned mirror of an external event, injected, not global
 
-- Type checking and linting pass for the accumulated wave.
-- Direct dependents are retested when a public contract changes.
-- Shared support files have one current owner and no parallel edit collision.
+**What:** `platform/pi-api.ts` already declares consumer-owned views
+(`ToolInventory`, `NotificationContext`). Add `McpStatusEventSource { on(channel,
+handler): () => void }` (structurally satisfied by Pi's `EventBus`). The tracker
+owns a typebox schema with only `servers[].name`, `.status`, `.disabled`, and
+`blockedReason`/`failedAgoSeconds` if rendered. `version` is checked against
+`1`. The tracker is created once in the factory and passed down, the same as
+`createCompletionCache()`. There is no module-global and no `_setForTest` seam
+(no-test-only-production-surface).
+**When:** Any cross-extension read-only data.
+**Trade-offs:** Mirroring only the read fields keeps `lint:type-members` from
+demanding `external-input` pins for `totalTools`, `listenState` and the other
+unread fields. The snapshot is push-only: there is no "give me the current state"
+request. Hence factory-time subscription, and an explicit `"unknown"` when no
+snapshot has arrived. The adapter withholds its first snapshot until direct-tool
+sync finishes, so an early `info` races it, and an empty snapshot arrives on
+session shutdown.
 
-### Phase Boundary
+### Pattern 5: Names are generated in `domain/name.ts`, consumed everywhere else
 
-- Every pair in the phase passes direct coverage independently.
-- Relevant architecture and integration suites pass.
-- `npm run check` remains green, apart from a separately recorded pre-existing
-  structural-gate gap that the phase has strictly reduced.
-- The global corresponding-test violation count never increases. It may remain nonzero
-  until later phases because the later source pairs are still open.
+**What:** As with `generatedAgentName`/`declaredAgentName`, the MCP server name
+is minted in one domain function. `stage.ts` records it (W-05 `recorded`),
+`state.json` stores it, `info.ts` displays it (both arms), and the tracker
+lookup joins on it.
+**Trade-offs:** `info`'s state-only arm already says "MCP servers are the sole
+exception by data shape, holding their raw source keys". After this milestone
+that sentence is false and must be rewritten. The two arms then agree for the
+first time.
 
-### Milestone Boundary
+## Data Flow
 
-Phase 117 closes the full repository, not only the entry pair. Require all of the
-following:
+### Install / update / reinstall / enable (modified)
 
-- `npm run test:corresponding`
-- `npm run test:coverage:direct:all`
-- the corresponding-test planted negative control
-- the direct-coverage planted negative control
-- `npm run check`
-- no missing, unexpected, or wrong-import pair violations
-- 204 pair commits represented by 204 completed pair plans
+```text
+mcpPhase (install-outcome.ts) / update-swap.ts / reinstall-replace.ts
+  → prepareStageMcpServers(input)
+      read mcp-adapter.json (adapter-doc: JSONC, key alias; unparseable → refuse)
+      partition: ours (marker) | overlays | theirs
+      translate each server (adapter-entry) → generated names
+      collision walk (nine sources, last-wins, overlay-aware)   ── throws McpServerCollisionError
+      read legacy mcp.json → own marked entries to sweep (tolerant)
+      build next adapter doc + next legacy doc IN MEMORY
+  → commitPreparedMcp: atomicWriteJson(adapter) then atomicWriteJson(legacy, only if it changed)
+  → recorded[].generatedName → state.json resources.mcpServers (unchanged plumbing)
+```
 
-If the new structural gates are not yet part of `npm run check`, the root entry pair
-plan can own the final package-script wiring as a supporting task. This keeps the
-roadmap free of a non-pair executable plan. Supplemental architecture and integration
-tests remain contract evidence; they never replace direct pair proof.
+### `/reload` legacy move (new)
 
-## Patterns to Follow
+```text
+resources_discover → applyReconcile → for scope in [project, user]:
+  readPassForScope (unchanged)
+  + applyMcpMigrationForScopeIsolated            (WR-01 isolation, own lock)
+      no state.json → skip (WR-05, no unsolicited files)
+      legacy mcp.json absent / no marked entries → return (RECON-05: zero writes)
+      bridges/mcp/migrate.ts:
+        snapshot both files (replacement handles)
+        write mcp-adapter.json (moved + translated)       ┐ crash here → next /reload
+        write mcp.json without moved entries             ┘ finds the same marked entries,
+                                                           re-translates to the same names,
+                                                           partition sees them as "ours" → idempotent
+      rename resources.mcpServers in affected records → tx.save()
+      failure → restore snapshots, structured outcome row
+  applyPlan / backfill / routing rebuild (unchanged order after it)
+```
 
-### Public-Surface Testability
+Orphans: a marked legacy entry whose `(plugin, marketplace)` has no record in
+that scope. Recommend leaving it in place with a warning: moving an entry no
+record owns makes it unremovable by any lifecycle op. This is a decision to
+record.
 
-Refactor a hidden dependency into a production-useful port, then test behavior through
-the exported workflow. Good seams include the existing filesystem, Git, Pi API,
-process, clock, and notification boundaries.
+### `info` runtime status (new)
 
-### Concern-Local Test Support
+```text
+factory: tracker = createMcpStatusTracker(pi.events)   ← adapter publishes after init, on change, on shutdown
+/claude:plugin info p@m → edge handler (deps.mcpStatus) → getPluginInfo({..., mcpStatus})
+  names = record.resources.mcpServers  |  manifest keys → generatedMcpServerName
+  entry = { name, runtime: tracker.lookup(name) }    // connected | cached | failed | needs-auth |
+                                                     // not-connected | blocked | disabled | unknown
+  softDepStatus(pi).piMcpAdapterLoaded === false → no runtime token; the existing {requires pi-mcp} path applies
+```
 
-Place a fake or contract suite with the concern it represents. A Git fake can support
-Git adapter pairs. A generic mock bucket shared by unrelated layers weakens ownership
-and creates parallel edit conflicts.
+The status data is display-only. It is never persisted and never decides
+severity. Severity stays with the command (memory: "notify.ts is a dumb
+renderer").
 
-### Stable Mutable-State Isolation
+## Architecture Gates That Will Fire
 
-Construct ledgers, registries, hook routers, environment views, and temporary paths
-inside each test. An explicit state holder is preferable to a module-reset hook or
-module replacement.
+| Gate | Fires because | Do this |
+|---|---|---|
+| `tests/architecture/peer-floor.test.ts` | Literal `">=0.86.1"` | Update the literal and the lock in the floor phase (as `74162ca6` did for 0.99.2) |
+| `npm run lint:type-members` + `scripts/check-unused-type-members.contracts.json` | `external-mirror` pin `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:414:5` moves on 1.0. Line:col pins in `platform/pi-api.ts` (100, 106-108, 124), `persistence/locations.ts:41`, `bridges/mcp/stage.ts` (49, 371, 416), `bridges/mcp/types.ts:94` shift with any edit above them | Run prettier first, then repin by shifting the LINE only (memory: prettier invalidates pins). New mirror interfaces declare only the fields that are read |
+| Same gate, `UNUSED_TYPE_MEMBER_GATE_TARGETS` (includes `orchestrators/edge-deps.ts`) | New `EdgeDeps.mcpStatus` member | It must be read on a production path (the info handler) |
+| `no-orchestrator-network.test.ts` / `NETWORK_FREE_TARGETS` | `info.ts` and reconcile `pending/plan/notify` are targets | The tracker and the migration modules name no git surface. Consider registering `reconcile/mcp-migration.ts` in `NETWORK_FREE_TARGETS` (full literal path, D-07-05/D-07-06) |
+| `reconcile-planner-purity.test.ts` | Anything I/O in `plan.ts` | The migration is a sibling step in `apply.ts`, never in the planner |
+| `import-boundaries.test.ts` + fallow `boundaries` | New cross-zone edges | `entry → platform` (tracker), `orchestrators → bridges-mcp` (migration), `bridges-mcp → domain` (name generator): all allowed. The tracker must not import `orchestrators/` |
+| `config-state-write-seams.test.ts` | The migration rewrites record names | Through `withStateGuard`/`tx.save` → `saveState` only, never `atomicWriteJson(stateJsonPath)` |
+| `compat-01-no-expansion.test.ts` | Any new `Reason`/`StatusToken`/glyph, any grammar-owner declaration growth, any persisted record key | The runtime token is a new sub-vocabulary on the info component line, NOT a `StatusToken`. A new reason for a migration failure would amend `Reason`. Either is a deliberate amendment with a decision ID and an output-catalog edit. Do not add a record key |
+| `notify-closed-set-locks`, `closed-set-enrollment`, `messaging-guide-doc-pins`, `VOCABULARY_GUARD_DOC_TARGETS` | `components.mcp` shape and rendering change | Amend `docs/output-catalog.md` with the code |
+| `integration-materialization-gate.test.ts` | Reads `locations.mcpJsonPath` after commit | Point it at `mcpAdapterJsonPath` |
+| `tests/bridges/mcp/collision-slots.test.ts` (frozen slot order snapshot) | Deliberate reorder (BACKLOG: "a deliberate reorder plus a comment rewrite plus a snapshot update") | Rewrite with the nine-source order and last-wins assertions |
+| `tests/e2e/install-soft-deps.test.ts` | Mocks `{ name: "mcp", sourceInfo: { source: "pi-mcp-adapter" } }` | Must stay green under the adapter-only probe; add a `builtin:` negative case |
+| `no-test-only-production-surface.test.ts` | A test hook on the tracker | Inject the event source instead |
+| `test:corresponding` | Each new `extensions/**` module | Add paired tests |
+| `workflows-doc-pins.test.ts`, `workflows-marker-coverage.test.ts` | Touched by `74162ca6` (Pi version prose) | Re-apply with the 1.0 numbers |
+| fallow `health` (cognitive 15, unit 60) and ESLint `sonarjs/cognitive-complexity` 15 | `stage.ts` growth (two-file commit, overlay carry-forward) | Extract into `adapter-doc.ts` / `adapter-entry.ts` up front, not after a red run |
 
-### Supplemental Contract Catalogs
+## Suggested Build Order
 
-Keep architecture tests for invariants that span multiple modules: import direction,
-no-network commands, output routing, persistence compatibility, foreign-content
-preservation, and public-surface shape. Use these tests at phase boundaries while
-unit pairs retain direct behavior ownership.
+| # | Phase | Depends on | Contents | Why here |
+|---|---|---|---|---|
+| 1 | **Pi 1.0 floor + adapter-only detection** | -- | Peer/dev bumps (Pi, pi-tui, pi-subagents `>=0.74.0`, all devDeps); re-apply `74162ca6`, `5b1d8ef6`, `dac3a245`, `69e0870a`, `4f82096f` at 1.0; repin contracts; workflow-engine 3.13.1 canary on Pi 1.0; `hasLoadedPiMcpAdapter` adapter-only; document `pi-mcp-adapter >=5.0.0` as the MCP soft dependency (decide optional-peer vs docs-only); record the `@earendil-works/pi-ai ^0.99.0` peer gap | Moves pins and gates every later phase touches; detection lives in the same file (`pi-api.ts`), so the pins move once |
+| 2 | **Adapter-file foundation** | 1 | `mcpAdapterJsonPath`; `adapter-doc.ts`; stage/unstage retarget; legacy sweep in stage and unstage; overlay-aware partition + carry-forward; nine-source collision walk (closes MCPSRC-01); prune-rollback snapshot; NFR-10 text | Highest-risk core. It must be correct before any entry content changes, so failures stay attributable |
+| 3 | **Entry translation** | 2 | `generatedMcpServerName`; `adapter-entry.ts`; `directTools: "search"`; `${VAR:-default}` + escaping (closes MENVX-01, ENVLIT-01); info manifest-arm name mapping | Fixes what "translated" means before the migration bakes it into users' files |
+| 4 | **Auto migration** | 2, 3 | `bridges/mcp/migrate.ts`; `reconcile/mcp-migration.ts`; `apply.ts` ordering; record renames; outcome/notify wording | Needs the final translator (Pattern 1 relies on running it exactly once) |
+| 5 | **Live status in `info`** | 1 (event bus types), 3 (final names for the join) | `platform/mcp-status.ts`; `EdgeDeps` wiring; info join; grammar + catalog amendment | Independent of 4; can run in parallel with it |
+| 6 | **Close-out** | all | `docs/env-vars.md` (ENVDOC-01 overlap), README/docs NFR-10 text, live UAT canary: real adapter 5 reads our `mcp-adapter.json`, `/reload` migration on a seeded legacy file, `info` shows `connected`/`cached` | Live proof that the adapter accepts what we write; unit tests can only prove we wrote it |
 
-## Anti-Patterns to Avoid
+Research flags: Phase 3 (the exact Claude Code normalization and expansion
+rules, the escape set) and Phase 2 (the overlay carry-forward field list)
+need targeted research. Phase 1 and Phase 5 follow established patterns.
 
-### Replaying the Abandoned Partition
+## Anti-Patterns
 
-Do not recreate the retired resolver subtrees, source schema subtrees, notify shards,
-hook dispatcher shards, or per-verb orchestrator partitions from the old patch. Those
-paths describe an abandoned implementation attempt, not the current architecture.
+### Treating an unparseable `mcp-adapter.json` as empty
 
-### Migration-History Commentary
+**What people do:** Reuse `readScopedDoc`'s "malformed → `{}` → overwrite with a
+warning" tolerance.
+**Why it's wrong:** The adapter accepts JSONC. A file with one comment is valid to
+the adapter and "malformed" to `JSON.parse`. Overwriting it deletes the user's
+`settings`, `imports`, `claudePlugins` and every hand-written server.
+**Do this instead:** Parse JSONC. If parsing still fails, refuse with a typed error
+and write nothing.
 
-Do not add source comments that explain the retired patch, Phase 106/107, old sharded
-coverage, or previous ownership mechanisms. Comments must explain current behavior
-only.
+### Writing `mcpServers` next to an existing `mcp-servers`
 
-### Test-Only Production Surface
+**Why it's wrong:** The adapter reads `raw.mcpServers ?? raw["mcp-servers"]`. Adding
+`mcpServers` hides every server under the legacy key.
+**Do this instead:** Write into whichever key exists, and choose `mcpServers` only
+when neither does.
 
-Do not export private constants, reset functions, singleton accessors, default
-adapters, or internal hook names only for tests. Use public workflow assertions or a
-real dependency seam.
+### Delivering through the adapter's `claudePlugins` option or Pi's `registerMcpServer()`
 
-### Parallel Coverage Systems
+**Why it's wrong:** `claudePlugins` reads only the root `.mcp.json` (not inline
+`mcpServers` or custom paths), keeps names as written, has no `CLAUDE_PLUGIN_DATA`,
+sits below every normal source, and a higher-precedence `claudePlugins` array
+REPLACES a lower one, which would clobber the user's own. `registerMcpServer()`
+servers are proxy-only (no `directTools: "search"`). PROJECT.md already rejects
+the latter.
+**Do this instead:** Write full translated entries into `mcp-adapter.json`.
 
-Do not restore the sharded LCOV runner, reconciliation protocol, direct-coverage
-matrix baseline, ownership registry, adapter participation scanner, or targeted
-Fallow inventory. Use the current direct pair runner, correspondence gate, negative
-controls, normal type/lint checks, and whole-repository Fallow.
+### A migration flag in `state.json` or in the marker
 
-### Historical Completion Credit
+**Why it's wrong:** It trips COMPAT-01's persisted-key clause and changes a
+byte-stable MC-5 contract, for information the file location already carries.
 
-Do not convert an audit `PASS`, an existing test, a retained commit, or a green
-supplemental suite directly into roadmap completion. Current isolated pair evidence is
-the only completion proof.
+### Moving the snapshot cache into `shared/` as a module global
 
-### Large Refactors for Coverage
+**Why it's wrong:** It is process-lifetime state with an external lifecycle
+(reload, shutdown). Conventions prefer an injected collaborator, and a global
+invites a test seam.
 
-Do not split a production file simply because it is large or hard to cover. First add
-the smallest real seam within the current module. A new production extraction creates
-another source pair and changes callers, so it requires explicit architectural need
-and revised pair accounting.
+### Name-keyed unstage
 
-## Hotspots and Integration Risks
+**Why it's wrong:** After the rename, legacy and new copies have different names.
+**Do this instead:** Stay marker-keyed (MC-5), as today. That is why unstage needs
+no rename awareness.
 
-Large files deserve smaller test scenarios and stricter caller tracing, not automatic
-module splits.
+## Integration Points
 
-| Hotspot                                  | Approximate size | Main risk                                                                 | Recommended handling                                                 |
-| ---------------------------------------- | ---------------: | ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `shared/notify.ts`                       |      4,135 lines | Message grammar and output paths are shared broadly                       | Stabilize in Phase 109; keep catalog-level checks supplemental       |
-| `orchestrators/plugin/update.ts`         |      3,240 lines | Network/cache selection, preload, staging warnings, and rollback interact | Give its pair a late lifecycle wave and retest all direct dependents |
-| `orchestrators/plugin/install.ts`        |      2,442 lines | Transaction phases and bridge staging interact                            | Prove transaction and bridge ports first                             |
-| `orchestrators/plugin/info.ts`           |      2,403 lines | Read-only behavior and presentation are intertwined                       | Prove presenters first; retain no-network checks                     |
-| `domain/resolver.ts`                     |      1,744 lines | Public union, schemas, paths, and availability rules meet                 | Make the discriminant change in Phase 108 before consumers           |
-| `orchestrators/plugin/reinstall.ts`      |      1,687 lines | Uninstall/install state preservation and retry behavior                   | Reuse public lifecycle seams; avoid shared mutable fixtures          |
-| `orchestrators/plugin/list.ts`           |      1,589 lines | Scope aggregation and presentation                                        | Prove fan-out and messaging modules first                            |
-| `orchestrators/plugin/enable-disable.ts` |      1,252 lines | Install ledger and staged artifact state must agree                       | Test durable state and retry paths directly                          |
-| `orchestrators/plugin/shared.ts`         |      1,243 lines | Many lifecycle callers depend on small semantic details                   | Complete in Phase 113 before lifecycle pairs                         |
-| `orchestrators/import/execute.ts`        |      1,130 lines | Multiple external formats converge into lifecycle calls                   | Complete import leaf helpers before composer                         |
+### External
 
-The pair for marketplace add must account for sandbox-sensitive Unix socket setup.
-The pair should inject or isolate the relevant boundary so ordinary unit execution
-does not depend on host socket permission, without changing marketplace behavior.
+| Service | Integration pattern | Notes |
+|---|---|---|
+| pi-mcp-adapter 5 config loader | Files: we write `<agentDir>/mcp-adapter.json` (precedence 5) and `<cwd>/.pi/mcp-adapter.json` (precedence 9); `/reload` re-reads | Merge is **per field** (`mergeServerMaps`), so a same-name full definition elsewhere merges with ours rather than replacing it (except transport switches, which strip the other transport's fields). Project-file servers need project trust plus a per-definition approval. A rename or a `directTools` change re-prompts. OAuth credentials are keyed by server name: **the rename forces re-sign-in** for OAuth servers |
+| pi-mcp-adapter status channel | `pi.events.on("pi-mcp-adapter/status/v1", h)`; payload `{version:1, servers:[{name,status,toolCount,directToolCount,disabled,listenState,...}], ...}` | Statuses: `connected`, `cached`, `failed`, `needs-auth`, `not-connected`, `blocked`, `disabled`. Adapter 5 stops lazy servers after discovery, so `cached`/`not-connected` is the normal resting state, not a fault |
+| pi-mcp-adapter as a concurrent writer | It rewrites `mcp-adapter.json` with tmp+rename under no lock we share | Lost-update window between our read and our rename. Keep the read-modify-write span short (read inside commit, not at prepare time), or accept and document it. Our `proper-lockfile` guard serializes only our own processes |
+| Pi 1.0 | `pi.events` (`EventBus.on` returns an unsubscribe), `SourceInfo` with `builtin:` paths, `getAllTools()` | Built-in MCP is turned off by adapter 5 (`-builtin:mcp`); when the adapter is absent and the built-in is on, the built-in serves only Pi's `mcp.json`, which no longer contains our entries after migration. Detection must therefore report `{requires pi-mcp}` |
+| Project config dir | We hard-code `<cwd>/.pi`; the adapter uses `getConfigDirName()` (`piConfig.configDir`) | Same CFGDIR-01 gap as today; not widened by this milestone |
 
-## Scalability Considerations
+### Internal Boundaries
 
-This milestone scales by pair count and dependency coordination, not by runtime user
-load.
+| Boundary | Communication | Notes |
+|---|---|---|
+| reconcile `apply.ts` ↔ `mcp-migration.ts` | Direct call, own lock (CR-01) | Runs before `applyPlan` in each scope; WR-01 isolation |
+| `mcp-migration.ts` ↔ `bridges/mcp/migrate.ts` | Barrel export | Bridge returns the rename map; orchestrator writes state |
+| stage ↔ legacy sweep | Same prepare/commit, two-file replacement handle | Rollback restores both files |
+| `index.ts` → `EdgeDeps` → info handler → `info.ts` | Injected tracker | Mirrors `completionCache` |
+| hooks matchers / agents tool tokens ↔ adapter tool names | None today | **Open decision.** Literal `mcp__<S>__<T>` matchers (`domain/components/hooks/matcher.ts`) compare against Pi's `event.toolName`, which under the adapter is `mcp` (proxy) or `<prefix>_<tool>` (direct, default prefix = sanitized server name). They do not match today. Exact Claude names are reachable with a per-entry `toolPrefix: "mcp"` plus a server name that ends in `_`: `formatToolName` yields `mcp__<server>_<tool>`, so server `plugin_<p>_<s>_` gives `mcp__plugin_<p>_<s>__<tool>`. If Claude Code's plugin tool form is `mcp__plugin_<p>_<s>__<tool>` (MEDIUM: assumed, not re-verified this session; confirm with `claude-code-compat-research`), that would make matchers, `PreToolUse` `tool_name`, and agent `tools:` tokens line up with no translation layer. Not in the listed features. Decide at naming time, because changing names twice costs users two OAuth re-sign-ins |
 
-| Concern               | Early phases                                    | Middle phases                                       | Final phases                                             |
-| --------------------- | ----------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------- |
-| Parallel work         | Leaf pairs with separate files can run together | Serialize public-contract carriers before consumers | Serialize edge and entry composition behind workflows    |
-| Shared test support   | Add only concern-local support                  | Assign one owner per shared support edit            | Freeze support before final global proof                 |
-| Structural-gate noise | Record baseline and prevent regression          | Violation count must decline as pairs close         | Require zero violations and passing negative controls    |
-| Coverage runtime      | Run exact source pair per plan                  | Run phase direct suite at phase close               | Run all 204 pairs plus full check                        |
-| Failure localization  | Pair command identifies one owner               | Phase suites identify integration regressions       | Global gates validate completeness only after pair proof |
+## Open Questions for Requirements
 
-## Sources and Confidence
+1. Overlay carry-forward field list (`disabled` at least; `directTools`/`includeTools`/`excludeTools`/`approveTools`?).
+2. Orphan marked legacy entries (no owning record in scope): leave with a warning (recommended) or move.
+3. Whether a successful migration is silent (RECON-05 style) or announced once, given that it can force OAuth re-sign-in and project re-approval.
+4. Whether to adopt the exact-Claude tool-name alignment (the `toolPrefix: "mcp"` + trailing-`_` naming) as part of "upstream server naming".
+5. `pi-mcp-adapter` as an optional peer dependency (pi-subagents precedent) or docs-only.
+6. When `mcp.json` leaves the NFR-10 write set (a future milestone, after the migration window).
 
-All conclusions come from repository-local primary evidence at HEAD. External ecosystem
-research is not needed for this architecture decision.
+## Sources
 
-| Source                                                  | Use                                                                        | Confidence                                      |
-| ------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------- |
-| `.planning/PROJECT.md`                                  | v1.19 decisions, constraints, and Phase 108 start                          | HIGH                                            |
-| `.planning/codebase/ARCHITECTURE.md`                    | Live layer and dependency descriptions                                     | HIGH                                            |
-| `extensions/pi-claude-marketplace/**/*.ts`              | Actual modules, exports, callers, and imports                              | HIGH                                            |
-| `tests/**/*.test.ts`                                    | Current mirrored and supplemental test topology                            | HIGH                                            |
-| `docs/guidelines/typescript-unit-testing-guidelines.md` | Required pair, public-surface, coverage, and gate model                    | HIGH                                            |
-| `.claude/rules/typescript-unit-testing.md`              | Repository-enforced testing rules                                          | HIGH                                            |
-| `.planning/inputs/unit-test-refactor-handoff/`          | Retained contracts, corrections, abandoned mechanisms, and replay cautions | HIGH for decisions; LOW as implementation proof |
-| `/tmp/pi-cm-pair-audit.CJWiph/results.tsv`              | Current 204-pair diagnostic inventory                                      | HIGH as baseline; NONE as completion proof      |
-| `package.json` and test runner scripts                  | Current check and structural-gate wiring                                   | HIGH                                            |
+- Repo at `8b6ac3bc` (features/mcp-4): `bridges/mcp/{stage,unstage,collision-slots,marker,substitute,safe-set,types,index}.ts`, `persistence/locations.ts`, `platform/pi-api.ts`, `orchestrators/reconcile/{apply,backfill}.ts`, `orchestrators/plugin/{info,prune-rollback}.ts`, `index.ts`, `domain/name.ts`, `domain/components/hooks/matcher.ts`, `bridges/agents/convert.ts`, `.fallowrc.json`, `scripts/check-unused-type-members.contracts.json`, `tests/architecture/{peer-floor,gate-targets,compat-01-no-expansion,config-state-write-seams,integration-materialization-gate}.test.ts` -- HIGH
+- `.planning/BACKLOG.md` MCPSRC-01, MENVX-01, ENVLIT-01, ENVDOC-01, CFGDIR-01 -- HIGH (cross-checked against 5.0.0 source)
+- `pi-mcp-adapter@5.0.0` tarball: `docs/configuration.md` (file layout, nine-source precedence, built-in replacement, project trust), `docs/extension-api.md` (Runtime status snapshots, runtime registration, `claudePlugins`), `docs/tools.md` (`directTools: "search"`), `config.ts` (`getConfigSources`, `mergeServerMaps`, `translatePiMcpServer`, `readValidatedConfig` JSONC, `writeProjectServerDisabledOverride`), `types.ts` (`MCP_STATUS_EVENT`, `McpStatusSnapshot`, `formatToolName`, `sanitizeServerPrefix`), `mcp-status.ts`, `index.ts` (publication timing), `utils.ts` (`interpolateEnvVars`, `resolveCommandSecret`), `CHANGELOG.md` 5.0.0 -- HIGH
+- `@earendil-works/pi-coding-agent@1.0.0` tarball: `dist/core/source-info.d.ts` (`BUILTIN_PATH_PREFIX`), `dist/core/event-bus.d.ts`, `dist/core/extensions/types.d.ts` (`events`, `registerMcpServer`), `dist/extensions/mcp/*` (the built-in registers no tool named `mcp`), `CHANGELOG.md` (`builtin:<name>` naming) -- HIGH
+- Commits `74162ca6`, `5b1d8ef6`, `dac3a245`, `69e0870a`, `4f82096f` (file lists only) -- HIGH for scope, not re-verified against 1.0
 
-## Open Planning Questions
-
-- Decide the exact wave size within each phase after the planner builds the caller
-  graph for that phase. Do not change pair ownership to meet a target wave size.
-- Decide whether structural-gate package-script wiring is still absent when Phase 117
-  starts. If it is absent, keep it as support work in the root entry pair.
-- Re-run the audit immediately before roadmap finalization if HEAD changes. Counts in
-  this document describe the researched HEAD and must not silently drift.
+---
+*Architecture research for: mcp-4 (MCP 4)*
+*Researched: 2026-10-01*
