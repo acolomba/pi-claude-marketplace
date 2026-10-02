@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 01
 current_phase_name: Pi 1.0 floor and adapter-only detection
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-10-02T18:12:14.416Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-10-02T19:17:12.429Z"
 last_activity: 2026-10-02
-last_activity_desc: Completed 01-03 (pi-subagents peer floor proof)
-state_head: 27b03261d957eb634b482a8fe4fe1391f9200840
+last_activity_desc: Completed 01-04 (MCP soft-dependency marker rename)
+state_head: 5821ffec30e9b2d50cf5a44a5122b6e2fd933fc1
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 01 (Pi 1.0 floor and adapter-only detection) — EXECUTING
-Plan: 4 of 9
+Plan: 5 of 9
 Status: Ready to execute
-Last activity: 2026-10-02 — Completed 01-03 (pi-subagents peer floor proof)
+Last activity: 2026-10-02 — Completed 01-04 (MCP soft-dependency marker rename)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -253,6 +253,7 @@ still open with a comment explaining what landed.
 | Phase 01 P01 | 30min | 3 tasks | 19 files |
 | Phase 01 P02 | 37min | 2 tasks | 46 files |
 | Phase 01 P03 | 30min | 2 tasks | 3 files |
+| Phase 01 P04 | 45min | 2 tasks | 46 files |
 
 ## Accumulated Context
 
@@ -561,6 +562,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: One shared Pi ToolInfo seed (tests/platform/pi-inventory-seed.ts) replaces the three Pi-typed copies; ToolInventoryItem-typed helpers stay local
 - [Phase 01]: Strict Pi doubles state soft-dependency snapshots through expectSoftDepProbes (tests/edge/notification-boundary.ts), the one place that turns a snapshot into Pi reads, so the getCommands() read changes one function
 - [Phase 01]: pi-subagents peer tests share tests/integration/pi-subagents-peer.ts; the floor is semver.minVersion of the declared peer range, and an explicit PI_SUBAGENTS_ROOT that names no pi-subagents package fails instead of skipping
+- [Phase 01]: The MCP soft-dependency marker is {requires pi-mcp-adapter}, at the old member's Reason position; MCP marker assertions end at `}` or `,` so neither token passes on a prefix
 
 ### Pending Todos
 
@@ -705,11 +707,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-03-PLAN.md
+**Stopped at:** Completed 01-04-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-02T18:12:14.344Z
+Last session: 2026-10-02T19:17:12.355Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
