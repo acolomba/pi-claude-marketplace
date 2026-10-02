@@ -31,7 +31,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
   finding is fixed in code, and the fallow `lint.yml` action SHA matches the bumped fallow.
 - [x] **PIFL-06**: `engines.node` is raised to the floor Pi 1.0 and `write-file-atomic@8` actually
   require, and NFR-4 is amended to match in AGENTS.md and PROJECT.md.
-- [ ] **PIFL-07**: The Stop canary (features/mcp `4f82096f`, re-run, not cherry-picked) and the
+- [x] **PIFL-07**: The Stop canary (features/mcp `4f82096f`, re-run, not cherry-picked) and the
   workflow-engine canary pass live on Pi 1.0 with `@quintinshaw/pi-dynamic-workflows` 3.13.1, and
   `scripts/pi.sh` pins adapter 5.0.0, pi-subagents 0.74.0 and engine 3.13.1.
 
@@ -163,7 +163,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | PIFL-04 | Phase 1 | Complete |
 | PIFL-05 | Phase 1 | Complete |
 | PIFL-06 | Phase 1 | Complete |
-| PIFL-07 | Phase 1 | Pending |
+| PIFL-07 | Phase 1 | Complete |
 | ADET-01 | Phase 1 | Complete |
 | ADET-02 | Phase 1 | Complete |
 | AFILE-01 | Phase 2 | Pending |

@@ -4,17 +4,17 @@ milestone: mcp-4
 milestone_name: MCP 4
 current_phase: 01
 current_phase_name: Pi 1.0 floor and adapter-only detection
-status: executing
-stopped_at: Completed 01-08-PLAN.md
-last_updated: "2026-10-02T22:19:32.364Z"
+status: verifying
+stopped_at: Completed 01-09-PLAN.md
+last_updated: "2026-10-02T23:05:44.003Z"
 last_activity: 2026-10-02
-last_activity_desc: Completed 01-08 (real-Pi adapter detection)
-state_head: d409121b6babacf4962f2b8557feb16a8a0b2891
+last_activity_desc: Completed 01-09 (live canaries on Pi 1.0)
+state_head: 374bf698681173784723065a2c530089c64ffa90
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
   percent: 0
 ---
 
@@ -36,8 +36,8 @@ sign-ins and approvals.
 
 Phase: 01 (Pi 1.0 floor and adapter-only detection) — EXECUTING
 Plan: 9 of 9
-Status: Ready to execute
-Last activity: 2026-10-02 — Completed 01-08 (real-Pi adapter detection)
+Status: Phase complete — ready for verification
+Last activity: 2026-10-02 — Completed 01-09 (live canaries on Pi 1.0)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -258,6 +258,7 @@ still open with a comment explaining what landed.
 | Phase 01 P06 | 35min | 2 tasks | 4 files |
 | Phase 01 P07 | 60min | 2 tasks | 15 files |
 | Phase 01 P08 | 45min | 2 tasks | 3 files |
+| Phase 01 P09 | 16 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -572,6 +573,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: The e2e soft-dep matrix runs one install-and-list case per detection state and compares the whole reasons block of the plugin's installed row, so a missing row or an extra reason fails the case
 - [Phase 01]: Info names each companion a resolved row needs on a requires: line, stamped by the orchestrator from one softDepStatus snapshot and only formatted by the renderer
 - [Phase 01]: Pi 1.0 starts each stdio MCP server in its own process group and stops it on shutdown, so the RPC harness proves its clean-exit group sweep with a same-group sentinel child, not the stub MCP server's PID
+- [Phase 01]: Stop canary exit contract: a proven STOP-07 regression exits 2; the expected headless cap-trip-warning result and an inconclusive drive exit 1 (PIFL-07)
+- [Phase 01]: Every canary passed on Pi 1.0.0 / engine 3.13.1, so the upstream-failure path did not fire; BACKLOG and PIFL-07 text unchanged
 
 ### Pending Todos
 
@@ -716,11 +719,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-08-PLAN.md
+**Stopped at:** Completed 01-09-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-02T22:19:32.279Z
+Last session: 2026-10-02T23:05:43.914Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
