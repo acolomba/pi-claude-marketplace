@@ -121,13 +121,13 @@ Plans:
 4. The `pending` retained-workflow-staging advisory travels as structured data (`{name, envelopeCount?}`). The text strategy composes the sentence and its indent, and the `pending` output is byte-identical to the baseline.
 5. The catalog diff is empty. The wire corpus changes only the 28 synthetic test occurrences approved in Phase 2 D-07, with an exact before/after ledger; all other occurrences remain unchanged.
 
-**Plans:** 1/2 plans executed, sequential (waves 1-2)
+**Plans:** 2/2 plans executed, sequential (waves 1-2)
 
 **Wave 1**
 - [x] 02-01-PLAN.md — Row-policy migration, owner tests, and the approved synthetic corpus patch
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 02-02-PLAN.md — Pending workflow facts, edge tests, and full quality gates
+- [x] 02-02-PLAN.md — Pending workflow facts, edge tests, and full quality gates
 
 ### Phase 3: Typed Raw Surfaces
 
@@ -212,7 +212,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Presentation Model | 16/16 | Complete    | 2026-10-01 |
-| 2. Row Policies | 1/2 | In Progress|  |
+| 2. Row Policies | 2/2 | In Progress|  |
 | 3. Typed Raw Surfaces | 0/TBD | Not started | - |
 | 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |
 | 5. Mode-Selected JSON Sink | 0/TBD | Not started | - |
