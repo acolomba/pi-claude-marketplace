@@ -1189,7 +1189,7 @@ test("installedLikeRow composes an exact transition row", () => {
 
 for (const { name, row, expected } of [
   {
-    name: "renderUninstalledRow renders a realized removal",
+    name: "composePluginLines renders a realized uninstalled row",
     row: () =>
       composePluginLines(
         {
@@ -1206,7 +1206,7 @@ for (const { name, row, expected } of [
     expected: "○ alpha [project] v1.0.0 (uninstalled)",
   },
   {
-    name: "renderUninstalledRow renders the data disposition of a realized removal",
+    name: "composePluginLines renders the data disposition of an uninstalled row",
     row: () =>
       composePluginLines(
         {
@@ -1223,7 +1223,7 @@ for (const { name, row, expected } of [
     expected: "○ alpha [project] v1.0.0 (uninstalled) {data kept}",
   },
   {
-    name: "renderAvailableRow renders an entry-derived reason",
+    name: "composePluginLines renders an available row's entry-derived reason",
     row: () =>
       composePluginLines(
         {
@@ -1235,7 +1235,7 @@ for (const { name, row, expected } of [
     expected: "○ alpha v1.0.0 (available) {installs disabled}",
   },
   {
-    name: "renderRemoteRow renders an entry-derived reason",
+    name: "composePluginLines renders a remote row's entry-derived reason",
     row: () =>
       composePluginLines(
         {
@@ -1247,7 +1247,7 @@ for (const { name, row, expected } of [
     expected: "◌ alpha v1.0.0 (remote) {installs disabled}",
   },
   {
-    name: "renderUnavailableRow renders structural reasons",
+    name: "composePluginLines renders an unavailable row's structural reasons",
     row: () =>
       composePluginLines(
         { status: "unavailable", name: "alpha", version: "1.0.0", reasons: ["invalid manifest"] },
@@ -1256,7 +1256,7 @@ for (const { name, row, expected } of [
     expected: "⊘ alpha v1.0.0 (unavailable) {invalid manifest}",
   },
   {
-    name: "renderPartiallyAvailableRow renders dropped kinds",
+    name: "composePluginLines renders a partially-available row's dropped kinds",
     row: () =>
       composePluginLines(
         { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
@@ -1265,7 +1265,7 @@ for (const { name, row, expected } of [
     expected: "⊖ alpha v1.0.0 (partially-available) {lsp}",
   },
   {
-    name: "renderDisabledRow renders an orphan-fold scope and reason",
+    name: "composePluginLines renders a disabled row's orphan-fold scope and reason",
     row: () =>
       composePluginLines(
         {

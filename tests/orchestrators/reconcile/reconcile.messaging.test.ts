@@ -55,10 +55,10 @@ test("applied uninstall suppresses content while preserving the optional version
   assert.deepStrictEqual(lines, ["  ○ alpha v1.0.0 (uninstalled)"]);
 });
 
-// Both status sets are private literal unions; each render map is pinned to
-// its own with `as const satisfies CommandContext<...>`, so a status without an
-// arm is a TS2741 compile error and the arm keys asserted below are the exact
-// set. Restoring the export makes the `satisfies` resolve and turns the
+// Both status sets are private literal unions; each row policy map is pinned
+// to its own with `as const satisfies CommandContext<...>`, so a status without
+// a policy is a TS2741 compile error and the policy keys asserted below are the
+// exact set. Restoring the export makes the `satisfies` resolve and turns the
 // directive below into an unused one (TS2578).
 // @ts-expect-error reconcile.messaging.ts does not expose the pending status set
 void ({} satisfies { readonly retired?: typeof ReconcileMessaging.PENDING_STATUSES });

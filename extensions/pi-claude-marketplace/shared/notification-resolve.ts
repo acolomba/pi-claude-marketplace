@@ -391,7 +391,7 @@ type ReasonComposer = (
 
 function floorMissingArmSeverity(row: PluginNotificationMessage): void {
   // The field is declared `readonly`; this single localized write is the seam
-  // that lets a row with no render arm contribute its severity.
+  // that lets a row with no row policy contribute its severity.
   try {
     (row as WritableRowSeverity).severity = "error";
   } catch (err) {

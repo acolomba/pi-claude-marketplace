@@ -921,8 +921,8 @@ async function runPostUninstallCleanup({
  *
  * D-01: the STANDALONE user command names an absent target it cannot operate
  * on, so it emits an error row (it was literal silence before). The row is
- * `failed` carrying the `not installed` reason -- uninstall's render map has
- * no `skipped` arm -- and carries no `cause`, so no path redaction applies.
+ * `failed` carrying the `not installed` reason -- uninstall has no `skipped`
+ * row policy -- and carries no `cause`, so no path redaction applies.
  *
  * SCOPE-01: `notInstalledAt` separates the two callers. The cross-scope caller
  * passes the scope the operator named, and the brace additionally names where

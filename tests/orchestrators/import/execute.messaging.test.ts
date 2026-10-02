@@ -34,13 +34,13 @@ test("exports the complete import command context", () => {
   // arrange
   const expectedContext = {
     Messaging: { label: "Import" },
-    render: ["installed", "skipped", "failed", "unavailable"],
+    rowPolicyStatuses: ["installed", "skipped", "failed", "unavailable"],
   };
 
   // act
   const context = {
     Messaging: IMPORT_CONTEXT.Messaging,
-    render: Object.keys(IMPORT_CONTEXT.rowPolicies),
+    rowPolicyStatuses: Object.keys(IMPORT_CONTEXT.rowPolicies),
   };
 
   // assert

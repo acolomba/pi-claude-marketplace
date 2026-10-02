@@ -1488,9 +1488,8 @@ export async function importClaudeSettings(
   // executeScopedPlan try/catch covers expected loadState failures.
   // D-12 / OUT-07: the import cascade is bulk (one import touches many
   // marketplaces) -> Plural row cardinality. D-02: thread IMPORT_CONTEXT + the
-  // rows through notifyWithContext, so import's per-row rendering dispatches
-  // through its own render map (MOD-03), never the central renderPluginRow
-  // switch.
+  // rows through notifyWithContext, so import's rows resolve through its own
+  // row policies (MOD-03).
   const marketplaces: Plural<MarketplaceRows<ImportMsg>> =
     buildImportNotificationMarketplaces(result);
   // OUT-04 / D-04: import is a plural (bulk) operation -> emit the trailing

@@ -344,7 +344,7 @@ export async function resolvePendingForceInstalls(
 /**
  * Pure projection: ReconcilePlan[] -> pending marketplace rows. The rows are
  * typed `MarketplaceRows<PendingMsg>` so the projection's plugin children are
- * statically pinned to the pending render map's status set -- the consumer
+ * statically pinned to the pending row policies' status set -- the consumer
  * (`pendingReconcile`) routes them through `notifyWithContext` without a cast.
  *
  * Every plan action is folded into its `(scope, marketplace)` block. The

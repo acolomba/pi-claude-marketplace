@@ -292,8 +292,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   const projection = buildReconcilePendingNotification(plans, forceInstallKeys);
   // D-12 / OUT-07: the pending diff is bulk (it spans both scopes and many
   // marketplaces) -> Plural row cardinality. D-02: thread PENDING_CONTEXT so the
-  // pending-tense rows render through reconcile's own render map (MOD-03), never
-  // the central renderPluginRow switch.
+  // pending-tense rows resolve through reconcile's own row policies (MOD-03).
   // WR-01: the pending rows are assembled from the projection and invalid-block
   // builders, both typed to `MarketplaceRows<PendingMsg>`, so the annotation
   // holds without a cast -- every emitted plugin row is a PendingMsg member by

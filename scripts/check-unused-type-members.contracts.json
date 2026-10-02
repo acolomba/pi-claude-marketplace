@@ -595,12 +595,12 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:204:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:927:32",
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:925:32",
       "owner": "isDescriptionBearingRow",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within ResolvedRow by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:927:9"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:925:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-summary.ts:46:40",

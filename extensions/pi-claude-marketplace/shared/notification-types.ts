@@ -778,14 +778,14 @@ export type MarketplaceNotificationMessage =
  * command's `Msg`. Because it is built FROM the union, assigning a value of this
  * type back to `readonly MarketplaceNotificationMessage[]` is a genuine
  * assignability relationship -- the `notifyWithContext` widening seam is a single
- * safe upcast, not an `as unknown as` reinterpretation, so a status-drift between
- * a producer and the render map surfaces as a real compile error rather than a
- * runtime `TypeError` inside `dispatchRow`.
+ * safe upcast, not an `as unknown as` reinterpretation, so a status drift between
+ * a producer and the context's row policies surfaces as a real compile error
+ * rather than as a diagnostic row at run time.
  *
  * Combined with the `Msg extends { status: Status }` bound on
  * `notifyWithContext`, a call site that pushes a plugin row whose `status` the
- * context's render map does not declare is a compile error at the call site --
- * the design's stated exhaustiveness guarantee in BOTH directions (render map
+ * context's row policies do not declare is a compile error at the call site --
+ * the design's stated exhaustiveness guarantee in BOTH directions (row policies
  * total over `Status`, AND rows carry only `Status`).
  */
 export type WithPlugins<MP, Msg> = MP extends unknown

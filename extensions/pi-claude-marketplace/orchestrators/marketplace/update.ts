@@ -855,7 +855,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // -> warning; otherwise info), reload-hint (fires only when a plugin row
   // carries a status in {installed, updated, reinstalled, uninstalled} -- the
   // marketplace status never triggers it), and the per-row soft-dep marker
-  // (single probe per notify call, threaded into every renderPluginRow).
+  // (single probe per notify call, applied to every row by its row policy).
   // Caller-supplied plugin order is honored verbatim.
   // OUT-07 / D-12: one marketplace block carrying the per-plugin cascade child
   // rows -> Single. The `(updated)` header renders via the central seam; the

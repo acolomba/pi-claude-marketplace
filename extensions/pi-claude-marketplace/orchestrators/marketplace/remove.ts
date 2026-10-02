@@ -814,8 +814,8 @@ async function runRemoveOutcome(
   // One MarketplaceNotificationMessage per outcome, emitted via one
   // notify(opts.ctx, opts.run, ...) call; `plugins[]` carries one
   // PluginUninstalledMessage per successfully unstaged plugin (D-22-02).
-  // Per-plugin `PluginFailedMessage.cause` renders at 4-space indent via
-  // renderPluginRow. There is no marketplace-level cause-chain trailer.
+  // Per-plugin `PluginFailedMessage.cause` renders at 4-space indent under its
+  // row. There is no marketplace-level cause-chain trailer.
   // - No retry anchor is emitted per D-17-09.
   // - Severity (error on partial, info on clean) is computed by notify()
   // ; the `/reload to pick up changes` trailer is computed per

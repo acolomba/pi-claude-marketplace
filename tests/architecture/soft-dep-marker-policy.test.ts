@@ -391,7 +391,7 @@ test("SC-5: the context scan reports a context planted in a copy of a real messa
   });
 });
 
-test("SC-5: an unexported context keeps its own name after an exported render map", async () => {
+test("SC-5: an unexported context keeps its own name after an exported row policy map", async () => {
   await withTempRoot("marker-policy-context-", async (root) => {
     // arrange
     await plantOffender(

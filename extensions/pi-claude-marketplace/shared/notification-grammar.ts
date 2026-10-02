@@ -80,10 +80,10 @@ const ICON_PARTIALLY_INSTALLED = "◉";
  * (`ICON_UNINSTALLABLE`, reserved for unavailable / blocked / failed / manual-
  * recovery) and from `◉` (`ICON_PARTIALLY_INSTALLED`, the *installed*-degraded row).
  *
- * Module-private: two renderers carry this glyph to a row --
- * `renderPartiallyAvailableRow` below and `pluginInfoStatusGlyph`'s
- * `partially-available` arm, which the `info` plugin row joins -- so those
- * rows' bytes are its public contract.
+ * Module-private: two places carry this glyph to a row -- the row status
+ * glyph table below and `pluginInfoStatusGlyph`'s `partially-available` arm,
+ * which the `info` plugin row joins -- so those rows' bytes are its public
+ * contract.
  */
 const ICON_PARTIALLY_AVAILABLE = "⊖";
 
@@ -276,10 +276,8 @@ export function renderMpHeader(mp: ResolvedMarketplace): string {
  * never produce a double-space. Single canonical implementation.
  */
 // D-11: the row-composition primitives below (joinTokens, renderScopeBracket,
-// renderVersion, composeVersionArrow, composeReasons, pluginRow) stay declared
-// HERE as the single source of the byte-stable presentation vocabulary; the
-// `export` keyword only widens their visibility so sibling command render maps
-// can CALL them without duplicating the brace/space/join logic.
+// renderVersion, composeVersionArrow, composeReasons) stay declared HERE as
+// the single source of the byte-stable presentation vocabulary.
 function joinTokens(parts: readonly string[]): string {
   return parts.filter((p) => p !== "").join(" ");
 }

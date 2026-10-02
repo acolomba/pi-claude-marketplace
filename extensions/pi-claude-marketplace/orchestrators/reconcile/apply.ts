@@ -1356,8 +1356,8 @@ async function applyReconcileWithReader(
   // error.message never reaches the notify body.
   //
   // D-02 / MOD-03: thread RECONCILE_APPLIED_CONTEXT so the realized transition
-  // rows render through reconcile's own render map, never the central
-  // renderPluginRow switch. The `reconcile-applied-cascade` standalone envelope
+  // rows resolve through reconcile's own row policies. The
+  // `reconcile-applied-cascade` standalone envelope
   // (its content-derived severity + the load-time silence contract) stays
   // central and byte-identical via emitReconcileAppliedContextCascade.
   const message = buildReconcileAppliedCascade(outcomes);
