@@ -931,13 +931,15 @@ function isDescriptionBearingRow(
 /**
  * Composes a resolved row, then its description, hint, and failure trailers.
  *
- * D-13: a producer row that still declares `dependencies` is refused, because
- * `resolveRows` has not composed its markers into `reasons` yet. The refusal is
- * a conditional on the argument's keys rather than a `dependencies?: never`
- * member, so it declares no member that nothing reads.
+ * D-13: the argument's type must not contain a producer row that declares
+ * `dependencies`, because `resolveRows` composes those markers into `reasons`.
+ * The check runs on each member of a union argument.
  */
 export function composePluginLines<R extends ResolvedRow>(
-  p: R & ("dependencies" extends keyof R ? never : unknown),
+  p: R &
+    ([R extends unknown ? ("dependencies" extends keyof R ? R : never) : never] extends [never]
+      ? unknown
+      : never),
   mpScope: Scope,
 ): string[] {
   const lines: string[] = [`  ${formatPluginRow(p, mpScope)}`];

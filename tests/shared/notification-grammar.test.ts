@@ -58,9 +58,9 @@ type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : fals
 void (true satisfies MutuallyAssignable<DescriptionBearingByMember, DescriptionBearingByStatus>);
 
 /**
- * D-13: the row composers accept a resolved row and refuse the producer row it
- * was resolved from, so a caller cannot render a row whose `{requires ...}`
- * markers `resolveRows` has not composed yet.
+ * D-13: `composePluginLines` accepts a resolved row and refuses the producer row
+ * it was resolved from, alone or inside a union, so a caller cannot render a row
+ * whose `{requires ...}` markers `resolveRows` has not composed yet.
  */
 type Assignable<A, B> = [A] extends [B] ? true : false;
 type PluginRowInput = Parameters<typeof composePluginLines>[0];
@@ -68,6 +68,9 @@ void (true satisfies Assignable<ResolvedRow<PluginPartiallyInstalledMessage>, Pl
 void (false satisfies Assignable<PluginInstalledMessage, PluginRowInput>);
 void ((row: PluginPartiallyInstalledMessage) =>
   // @ts-expect-error an unresolved producer row still declares its dependencies
+  composePluginLines(row, "user"));
+void ((row: PluginPartiallyInstalledMessage | ResolvedRow<PluginInstalledMessage>) =>
+  // @ts-expect-error a union with an unresolved member still declares its dependencies
   composePluginLines(row, "user"));
 
 for (const { row, expected } of [
