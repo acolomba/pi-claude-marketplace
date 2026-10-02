@@ -18,12 +18,12 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 - [x] **PIFL-01**: A user on Pi 1.0 can install the extension: the `@earendil-works/pi-coding-agent`
   peer floor is `>=1.0.0`, dev dependencies are `^1.0.0` for pi-coding-agent and pi-tui, and the
   FLOOR-01 gate pins the new literal.
-- [ ] **PIFL-02**: The optional `pi-subagents` peer floor is `>=0.74.0`, and both pi-subagents peer
+- [x] **PIFL-02**: The optional `pi-subagents` peer floor is `>=0.74.0`, and both pi-subagents peer
   integration tests run (zero skips) against 0.74.0 through `PI_SUBAGENTS_ROOT`.
 - [x] **PIFL-03**: `pi-mcp-adapter >=5.0.0` is declared as an optional peer dependency (never a
   devDependency), and the README states the floor and the adapter's `pi-ai` peer gap at Pi 1.0 as
   an upstream issue.
-- [ ] **PIFL-04**: The Pi 0.99 typing fixes and peer-test fixes from features/mcp (`74162ca6`,
+- [x] **PIFL-04**: The Pi 0.99 typing fixes and peer-test fixes from features/mcp (`74162ca6`,
   `5b1d8ef6`, `dac3a245`, `69e0870a`) are re-implemented at the 1.0 floor, with the `types.d.ts`
   contract pins re-derived from the installed Pi 1.0 types.
 - [x] **PIFL-05**: Every devDependency is at its latest release except TypeScript, held at
@@ -158,9 +158,9 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PIFL-01 | Phase 1 | Complete |
-| PIFL-02 | Phase 1 | Pending |
+| PIFL-02 | Phase 1 | Complete |
 | PIFL-03 | Phase 1 | Complete |
-| PIFL-04 | Phase 1 | Pending |
+| PIFL-04 | Phase 1 | Complete |
 | PIFL-05 | Phase 1 | Complete |
 | PIFL-06 | Phase 1 | Complete |
 | PIFL-07 | Phase 1 | Pending |
