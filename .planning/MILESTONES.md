@@ -36,7 +36,7 @@ tasks are in `.planning/milestones/ws-git-hosts-2026-10-01/`.
 
 ---
 
-## v1.20 transitive-dependencies (Completed: 2026-09-24; no npm release)
+## v1.20 transitive-dependencies (Completed: 2026-09-24; merged to main 2026-10-01 via PR #198, not yet in an npm release)
 
 **Delivered:** Dependency-aware install, load, enablement, update, uninstall,
 and standalone pruning, with bare manifest support and explicit install
@@ -75,8 +75,10 @@ operator deferred that check to later UAT. It passed on 2026-09-30 on the
 stored-credential path that #221 opened to every host, and the UAT artifact
 is now `complete`.
 
-**Archive:** `.planning/milestones/v1.20-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`
-and phase records under `.planning/milestones/v1.20-phases/`.
+**Archive:** `.planning/milestones/v1.20-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`,
+the closeout and upstream-parity handoffs in
+`.planning/milestones/v1.20-HANDOFF{,-upstream-dependency-parity}.md`, and phase
+records under `.planning/milestones/v1.20-phases/`.
 
 ---
 

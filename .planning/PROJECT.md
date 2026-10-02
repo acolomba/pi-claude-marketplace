@@ -14,7 +14,9 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 No active milestone. any-git-host (workstream `git-hosts`) closed 2026-09-30 and is
 on main via PR #221; the workstream was archived to `milestones/ws-git-hosts-2026-10-01/`
-on 2026-10-01, and no workstream is active. Start the next one with `/gsd-new-milestone`.
+on 2026-10-01, and no workstream is active. v1.20 transitive-dependencies closed
+2026-09-24 and is on main via PR #198, merged 2026-10-01. Start the next one with
+`/gsd-new-milestone`.
 
 ## Previous Milestone: any-git-host -- Any Git Host (workstream: git-hosts, branch: features/git-hosts, completed 2026-09-30, merged via PR #221, no npm release)
 
@@ -37,7 +39,7 @@ Code marketplaces (Claude Code 2.1.274 reads neither path); the PR stays open wi
 explaining what landed. The close fixed the autoupdate cascade cloning authless (D-3-04) and
 carried the open review findings to `BACKLOG.md` GHRED-01 and GHADD-01.
 
-## Previous Milestone: v1.20 transitive-dependencies -- Dependency Provenance, Manifest Fallback and Uninstall Flags (branch: features/manifest, shipped 2026-09-24; no npm release)
+## Previous Milestone: v1.20 transitive-dependencies -- Dependency Provenance, Manifest Fallback and Uninstall Flags (branch: features/manifest, completed 2026-09-24, merged via PR #198 on 2026-10-01, no npm release)
 
 **Outcome:** All 12 phases, 55 plans, and 45 requirements completed. The
 milestone audit found no requirement or integration gaps; the full clean-tree
@@ -76,7 +78,7 @@ installing missing declared dependencies; constraint-aware `update`; the
 `allowCrossMarketplaceDependenciesOn` allowlist; and a standalone `prune
 --dry-run`. Kept divergences: fail-clean on an unresolvable dependency
 (NFR-1/3), `sha` refused on a dependency element, the `name@mp@^range` string
-superset. Decision table: `.planning/HANDOFF-upstream-dependency-parity.md`.
+superset. Decision table: `.planning/milestones/v1.20-HANDOFF-upstream-dependency-parity.md`.
 
 **Delivered 2026-09-14:** Manifest read fidelity is verified. All three readers
 share the ordered manifest candidates; component discovery avoids duplicate
