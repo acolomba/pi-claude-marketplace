@@ -6,7 +6,7 @@
     {
       "number": "1",
       "name": "Pi 1.0 floor and adapter-only detection",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "2",
@@ -44,5 +44,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 01 of 7 · 0% · executing"
   },
-  "updated_at": "2026-10-02T16:35:09.035Z"
+  "updated_at": "2026-10-02T17:15:11.082Z"
 }

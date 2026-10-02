@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 01
 current_phase_name: Pi 1.0 floor and adapter-only detection
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-10-02T16:35:12.487Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-10-02T17:15:23.259Z"
 last_activity: 2026-10-02
-last_activity_desc: Completed 01-01 (Pi 1.0 floor and toolchain refresh)
-state_head: 49e09af5b4124e8d2bc7afc7067a4dcb58212a78
+last_activity_desc: Completed 01-02 (soft-dependency probes in one test helper)
+state_head: b2964dd6702bd845310420069585224bf4a58f87
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 01 (Pi 1.0 floor and adapter-only detection) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
-Last activity: 2026-10-02 — Completed 01-01 (Pi 1.0 floor and toolchain refresh)
+Last activity: 2026-10-02 — Completed 01-02 (soft-dependency probes in one test helper)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -251,6 +251,7 @@ still open with a comment explaining what landed.
 | Phase 10-constraint-aware-update P03 | 56 min | 3 tasks | 26 files |
 | Phase 10 P04 | 48min | 2 tasks | 8 files |
 | Phase 01 P01 | 30min | 3 tasks | 19 files |
+| Phase 01 P02 | 37min | 2 tasks | 46 files |
 
 ## Accumulated Context
 
@@ -557,6 +558,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Pi 1.0 floor: pi-coding-agent peer >=1.0.0 (dev ^1.0.0); pi-subagents >=0.74.0 and pi-mcp-adapter >=5.0.0 are optional peers only, never installed
 - [Phase 01]: dispatchRow reads the render map through a Readonly<Record<string, unknown>> view, so no-unsafe-enum-assignment is fixed in code with no rule override
 - [Phase 01]: One shared Pi ToolInfo seed (tests/platform/pi-inventory-seed.ts) replaces the three Pi-typed copies; ToolInventoryItem-typed helpers stay local
+- [Phase 01]: Strict Pi doubles state soft-dependency snapshots through expectSoftDepProbes (tests/edge/notification-boundary.ts), the one place that turns a snapshot into Pi reads, so the getCommands() read changes one function
 
 ### Pending Todos
 
@@ -701,11 +703,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-01-PLAN.md
+**Stopped at:** Completed 01-02-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-02T16:35:12.414Z
+Last session: 2026-10-02T17:15:18.840Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
