@@ -39,7 +39,9 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 
 - [ ] **ADET-01**: When only Pi's built-in MCP is active (no pi-mcp-adapter), install, list and
   info report the plugin's MCP component as needing pi-mcp-adapter, proven by a built-in-only
-  negative test.
+  negative test. Install and list rows carry `{requires pi-mcp-adapter}`; info gains a
+  `requires:` line that names every companion the plugin needs and tags a missing one
+  `(missing)` (D-01-18).
 - [ ] **ADET-02**: The adapter is detected through its `mcp-adapter` command or a
   `pi-mcp-adapter` source, so installs with `disableProxyTool` or from a fork still count as
   present; a bare tool named `mcp` from another extension does not count (amended in Phase 1

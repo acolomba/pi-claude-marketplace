@@ -111,3 +111,20 @@
 ## Deferred Ideas
 
 None.
+
+---
+
+## Post-research decisions (2026-10-02)
+
+Research found that `info` never shows a soft-dependency marker for any
+companion, so ADET-01's "and info" clause had no existing surface.
+
+| Question | Selected |
+|----------|----------|
+| info marker: amend ADET-01 to install + list, or add to info | Add a `requires:` line to info listing every needed companion, `(missing)` when not loaded; all three companions; names match the renamed markers |
+| Delimited guard against the old `requires pi-mcp` token | No guard |
+| Update PRD NFR-4 / RH-4 rows | Yes |
+| Pause before `npm install` of days-old devDependencies | No, approved in advance |
+
+**Notes:** The user corrected a framing error: the missing info marker is our
+renderer's behavior, unrelated to the Pi version.

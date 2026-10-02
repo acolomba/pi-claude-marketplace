@@ -158,6 +158,35 @@ phase cite the requirement ID (`ADET-01`, `PIFL-04`, ...) instead of a
   names an empty enum), so the fix should make the computed access plainly
   non-enum rather than suppress the rule.
 
+### Decided after research
+- **D-01-18:** `/claude:plugin info` gains a `requires:` line. Today no info
+  row carries a soft-dependency marker for any companion, so ADET-01's "and
+  info" asked for something info never did. The line lists every companion
+  the plugin's components need: agents need `pi-subagents`, mcp needs
+  `pi-mcp-adapter`, workflows need `pi-dynamic-workflows`. A companion that is
+  not loaded is tagged `(missing)`, for example
+  `requires: pi-mcp-adapter (missing), pi-subagents`. The line is omitted when
+  the plugin needs no companion. The names match the `{requires <name>}`
+  marker names (D-01-01), so `pi-mcp-adapter`, never `pi-mcp`. The info plugin
+  row itself gets no `{requires …}` brace (unchanged from today); the line
+  carries the fact once. Placement, sort order of names, and whether the line
+  appears on the `components: not resolved` row are planner decisions to settle
+  against the existing info line order (`dependencies:` last, `note:` after it)
+  and recorded in `docs/output-catalog.md` as a closed-catalog amendment with
+  new `catalog-state` blocks. — **Reversibility:** costly — new catalog states
+  and pinned info fixtures.
+- **D-01-19:** No guard test for the old `requires pi-mcp` token. Tests pin the
+  full new token (D-01-02) and that is the protection.
+- **D-01-20:** The PRD rows that state NFR-4 (`prd.md:1038`) and RH-4
+  (`prd.md:122`, `:629`) are updated in this phase alongside AGENTS.md and
+  PROJECT.md, so no document keeps the old Node floor or the old detection
+  rule.
+- **D-01-21:** The operator approved the devDependency bump set in advance
+  (Pi 1.0.0, pi-tui 1.0.0, typescript-eslint 8.71.0, eslint-plugin-sonarjs
+  4.2.2, fallow 3.31.0, prettier 3.9.9, globals 17.13.0,
+  eslint-plugin-import-x 4.17.1). The package-legitimacy check rated them
+  "too new" only. No human-verify checkpoint before `npm install`.
+
 ### Claude's Discretion
 - Plan split and wave order, with one constraint: contract pins move once.
   Detection lives in `platform/pi-api.ts` beside the two `types.d.ts` pins
