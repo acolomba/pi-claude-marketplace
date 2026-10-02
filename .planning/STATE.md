@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
 status: planning
-last_updated: "2026-10-02T02:42:23.504Z"
-last_activity: 2026-10-01
+last_updated: "2026-10-02T07:59:16.000Z"
+last_activity: 2026-10-02
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,21 +17,24 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-24 after v1.20 closeout)
+See: `.planning/PROJECT.md` (updated 2026-10-01 at the mcp-4 start)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone. v1.20 closed with 12/12 phases
-and 45/45 requirements. The private-repository credential challenge deferred
-in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
+**Current focus:** mcp-4 (MCP 4), Phase 1: Pi 1.0 floor and adapter-only
+detection. The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
+go out in one release, because every entry-shape change costs users new
+sign-ins and approvals.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-10-01 — Milestone mcp-4 started
+Phase: 1 of 7 (Pi 1.0 floor and adapter-only detection)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-02 — Roadmap created (7 phases, 36/36 requirements mapped)
+
+Progress: [░░░░░░░░░░] 0%
 
 ### workflows-replay closeout (merged from main)
 
@@ -247,6 +250,13 @@ still open with a comment explaining what landed.
 
 ### Roadmap Evolution
 
+- mcp-4 roadmap created 2026-10-02 with phase numbering reset to 1: 1 Pi 1.0
+  floor and adapter-only detection; 2 adapter-file delivery; 3 Claude Code tool
+  names and tool search; 4 variable expansion at Claude Code parity; 5 automatic
+  migration on `/reload`; 6 live MCP status in info (can run alongside 4 and 5);
+  7 docs and live proof. The research spine's translation phase was split into
+  naming (3) and variables (4) because the variables work needs its own threat
+  model. Migration follows both, and Phases 2 to 5 go out in one release.
 - Phases 6-12 added 2026-09-18 (operator decision: extend v1.20 rather than open v1.21): Load-time dependency check and allowed uninstall; Marketplace-repository tag resolution for path-source dependencies; Enablement parity for dependencies; Reload installs missing declared dependencies; Constraint-aware update; Cross-marketplace dependency allowlist; Standalone prune with dry-run. Source: `milestones/v1.20-HANDOFF-upstream-dependency-parity.md`. Order changed from the handoff's: load-time check leads.
 
 ### Decisions
@@ -541,22 +551,19 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 
 ### Pending Todos
 
-Four open decisions carried by the v1.20 roadmap, each bound to the discuss
-session that must settle it:
+The mcp-4 open decisions are listed in `ROADMAP.md` under "Open decisions",
+each bound to the discuss session that settles it. Two prerequisites gate
+planning:
 
-1. **Version-constraint grammar (RESV-03) — Phase 3 discuss.** No semver library
-   is in the dependency tree and PL-5 compares versions as strings deliberately.
-   Add a dependency or document a constraint subset with a stated refusal.
-2. **Where a dependency-installed plugin stands relative to
-   `claude-plugins.json` — Phase 3 discuss.** `buildUninstallBucket`
-   (`orchestrators/reconcile/plan.ts:352`) uninstalls every recorded plugin the
-   merged config does not name, so a cascade install must be reconciled with that
-   config or it vanishes on the next `/reload`.
-3. **Stale-record wording and recovery command (PROV-04) — Phase 4 discuss.**
-   MIGR-01's own unresolved design question, scoped to the "stale state, absent
-   config" message. Answer that much only.
-4. **`--prune`'s value on the reconcile path — Phase 5 discuss.**
-   `applyPluginUninstalls()` carries no command line and takes the default.
+1. **Phase 3:** measure the tool-name length Pi 1.0 accepts with a long fixture
+   before the phase is planned (ANAME-03), and confirm the Claude plugin tool
+   form with `skills/claude-code-compat-research`.
+2. **Phase 4:** write a threat model before planning (secrets on disk, the
+   credential deny-list, shell execution through a leading `!`).
+
+The four v1.20 discuss-bound decisions this list used to carry are closed:
+the archived v1.20 roadmap marks three as settled, and RESV-03, the fourth,
+is complete in the archived v1.20 requirements.
 
 ### Blockers/Concerns
 
@@ -685,11 +692,15 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** v1.20 archived; awaiting next milestone
+**Stopped at:** mcp-4 roadmap created; Phase 1 ready to plan
 
 **Resume file:** None
 
-Last session: 2026-09-24
+Last session: 2026-10-02
+The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
+numbering reset to 1. No phase directories exist yet.
+
+Previous session: 2026-09-24
 v1.20 is archived. All 12 phases and 45 requirements are complete. The clean
 committed tree passed the full gate. The Phase 3 private-repository credential
 challenge remains deferred to later UAT and acknowledged in the audit. The
@@ -823,4 +834,5 @@ The workstream archive removed the old routing blocker.
 
 ## Operator Next Steps
 
-- Start the next milestone with $gsd-new-milestone
+- Discuss Phase 1 with `/gsd-discuss-phase 1` (it has open decisions), then
+  plan it with `/gsd-plan-phase 1`.
