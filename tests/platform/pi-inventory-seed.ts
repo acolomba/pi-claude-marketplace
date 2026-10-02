@@ -64,11 +64,12 @@ export function forkAdapterCommand(): SlashCommandInfo {
   return adapterCommand("mcp-adapter", "git:github.com/example/mcp-fork");
 }
 
-// ADET-01: Pi's built-in MCP client, as a sandboxed Pi 1.0.0 RPC run listed it
-// on 2026-10-02 with one stub stdio server `stub` exposing one tool `echo`.
-// The real-Pi RPC test for ADET-01 re-captures that inventory and checks it
-// against these two seeds. The capture names the namespace only; `description`
-// and `parameters` are placeholders that `ToolInfo` requires.
+// ADET-01: Pi's built-in MCP client, as a sandboxed Pi 1.0.0 RPC run lists it
+// with one stub stdio server `stub` exposing one tool `echo`.
+// `tests/e2e/adapter-detection-rpc.test.ts` captures that inventory on every
+// run and checks it against these two seeds. The live namespace carries only
+// its name; `description` and `parameters` are placeholders that `ToolInfo`
+// requires.
 
 /** ADET-01: the built-in MCP client's tool for the stub server's `echo`. */
 export function builtinMcpTool(): ToolInfo {
