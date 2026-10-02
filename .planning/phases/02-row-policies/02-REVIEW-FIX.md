@@ -2,9 +2,9 @@
 phase: 02-row-policies
 fixed_at: 2026-10-02T09:42:43Z
 review_path: .planning/phases/02-row-policies/02-REVIEW.md
-iteration: 1
-findings_in_scope: 2
-fixed: 2
+iteration: 2
+findings_in_scope: 6
+fixed: 6
 skipped: 0
 status: all_fixed
 ---
@@ -13,12 +13,12 @@ status: all_fixed
 
 **Fixed at:** 2026-10-02T09:42:43Z
 **Source review:** `.planning/phases/02-row-policies/02-REVIEW.md`
-**Iteration:** 1
+**Iteration:** 2 (iteration 1: CR-01, WR-01; iteration 2: WR-02, WR-03, WR-04, IN-01)
 
 **Summary:**
 
-- Findings in scope: 2
-- Fixed: 2
+- Findings in scope: 6 (2 in iteration 1, 4 in iteration 2)
+- Fixed: 6
 - Skipped: 0
 
 ## Fixed Issues
@@ -82,8 +82,55 @@ exactly. No other file has a missing or extra entry. This nondeterminism arrived
 with main's prune tests (#198) and is independent of both fixes. It needs a
 corpus normalization fix before the corpus gate can report a clean exit.
 
+## Iteration 2 Fixes
+
+The iteration-2 review (source revision `6e222b1f`) confirmed CR-01 and WR-01
+resolved and raised four new findings.
+
+### WR-02: The `dependencies` refusal does not apply to union-typed arguments
+
+**Files modified:** `extensions/pi-claude-marketplace/shared/notification-grammar.ts`, `tests/shared/notification-grammar.test.ts`
+**Commit:** c9c4f16b
+**Applied fix:** the refusal now distributes over the members of `R`:
+`R & ([R extends unknown ? ("dependencies" extends keyof R ? R : never) : never] extends [never] ? unknown : never)`.
+The reviewer's named helper type `UnresolvedRowMembers<R>` failed fallow with a
+private-type leak from the exported signature, so the conditional is inline. The
+grammar test adds a union negative,
+`PluginPartiallyInstalledMessage | ResolvedRow<PluginInstalledMessage>`.
+
+**Evidence:** typecheck passes. The non-distributive form fails the union negative
+with TS2578, and removing the refusal fails both negatives. fallow dead-code and
+health pass, the type-member gate passes with 3 recorded exceptions, and
+pre-commit passed.
+
+### WR-03, WR-04, IN-01: Stale names of deleted render helpers
+
+**Files modified:** comments in `shared/notification-grammar.ts`,
+`shared/notification-types.ts`, `shared/notification-resolve.ts`,
+`orchestrators/reconcile/{pending,notify,apply}.ts`,
+`orchestrators/marketplace/{update,remove}.ts`, `orchestrators/import/execute.ts`
+and `orchestrators/plugin/uninstall.ts`. Test titles and keys in
+`tests/shared/notification-grammar.test.ts`,
+`tests/orchestrators/import/execute.messaging.test.ts`,
+`tests/orchestrators/reconcile/reconcile.messaging.test.ts` and
+`tests/architecture/soft-dep-marker-policy.test.ts`.
+`scripts/check-unused-type-members.contracts.json` changes because one pin moved.
+**Commit:** 50566a24
+**Applied fix:** comments now describe row policies, `resolveRows` and
+`composePluginLines`. No `renderPluginRow`, `dispatchRow`, `render*Row` or "render
+map" reference remains in `extensions/`, apart from the unrelated local
+`renderPluginRow` in `edge/handlers/tools.ts` and the frozen `no render arm for`
+output bytes. The shorter D-11 comment moved the pinned
+`isDescriptionBearingRow` declaration from line 927 to 925, and the pin moved with
+it. IN-01's JSDoc and test-comment wording was rewritten as part of the WR-02 commit.
+
+**Evidence:** 164 owner tests pass across the four touched test files. The
+type-member gate passes, and pre-commit passed with `npm changed checks`.
+
+_Iteration 2 fixed: 2026-10-02T11:29:14Z_
+
 ---
 
 _Fixed: 2026-10-02T09:42:43Z_
 _Fixer: Claude (orchestrator, inline)_
-_Iteration: 1_
+_Iteration: 2_
