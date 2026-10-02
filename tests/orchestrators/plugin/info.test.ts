@@ -63,6 +63,7 @@ import {
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
 } from "../../edge/handlers/marketplace-seed.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -300,9 +301,7 @@ function makeCtx(expectedNotifications = 1): {
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(expectedNotifications);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(expectedNotifications * 3);
+  expectSoftDepProbes(pi, expectedNotifications);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push(severity === undefined ? { message } : { message, severity });

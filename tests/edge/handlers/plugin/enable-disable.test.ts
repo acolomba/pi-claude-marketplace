@@ -21,15 +21,12 @@
 //
 // Measured counts, taken against the real module through a counting proxy before
 // a case was written, because the two emission paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` SIX times -- the orchestrator's context cascade runs
-//     two soft-dependency probes and each probe reads the tool list once per
-//     companion target;
-//   * the handler's own failure conversion reads `pi.getAllTools()` THREE times
-//     -- it
-//     calls `notify()` directly, so it runs one probe.
+//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and takes no
+//     soft-dependency probe -- `notifyUsageError` writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and takes TWO
+//     soft-dependency probes -- the orchestrator's context cascade runs both;
+//   * the handler's own failure conversion takes ONE soft-dependency probe --
+//     it calls `notify()` directly.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope,
 // and `<HOME>/.pi/agent` for the user scope with the agent-directory variable
@@ -504,7 +501,7 @@ for (const { enable, expectedFootprint, label, seedDisabled, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, seedDisabled);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -553,7 +550,7 @@ for (const { args, label, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -591,7 +588,7 @@ for (const { args, label, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -646,7 +643,7 @@ for (const { args, enable, expectedMessage, failure, label, reported } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1);
     const enableDisableHandler = makeHandlerUnderTest(pi, enable);
 
     // act
@@ -670,7 +667,7 @@ test("EDEP-01: an enable cascade's member row reaches the rendered output throug
     JSON.stringify({ name: "alpha", version: "1.0.0", dependencies: [{ name: "beta" }] }),
     "utf8",
   );
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -710,7 +707,7 @@ test("removes only the owning runtime route after a successful disable", async (
   const peerRuntime = createHooksRuntime();
   const ownerRouting = await populateRuntimeRoute(workspace, ownerRuntime, "echo owner");
   await populateRuntimeRoute(workspace, peerRuntime, "echo peer");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
     value: workspace.cwd,
     reads: 1,
   });

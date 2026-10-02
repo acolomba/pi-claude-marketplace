@@ -14,6 +14,7 @@ import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/or
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -55,9 +56,7 @@ function notificationBoundary(expectation?: NotificationExpectation): {
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
+    expectSoftDepProbes(pi, 1);
     if (expectation.severity === undefined) {
       when(() => {
         ui.notify(expectation.message);
@@ -91,9 +90,7 @@ function multiNotificationBoundary(expectations: readonly NotificationExpectatio
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(expectations.length);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(expectations.length * 3);
+  expectSoftDepProbes(pi, expectations.length);
   for (const expectation of expectations) {
     if (expectation.severity === undefined) {
       when(() => {

@@ -36,6 +36,7 @@ import {
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -332,9 +333,7 @@ function makeCtx(expectedNotifications = 1): {
     when(() => ctx.ui)
       .thenReturn(ui)
       .times(expectedNotifications);
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(expectedNotifications === 2 ? 3 : expectedNotifications * 3);
+    expectSoftDepProbes(pi, expectedNotifications === 2 ? 1 : expectedNotifications);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         notifications.push(severity === undefined ? { message } : { message, severity });

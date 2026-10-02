@@ -58,11 +58,10 @@
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- the usage-error channel writes straight to `ctx.ui`;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` THREE times, on every target form, scope and flag
-//     combination.
+//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and takes no
+//     soft-dependency probe -- the usage-error channel writes straight to `ctx.ui`;
+//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and takes ONE
+//     soft-dependency probe, on every target form, scope and flag combination.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -366,7 +365,7 @@ test("re-materialises every installed plugin in both scopes when no positional i
   // arrange
   const workspace = await createHermeticWorkspace(t, "all-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -393,7 +392,7 @@ test("re-materialises only the named marketplace when a bare marketplace referen
   // arrange
   const workspace = await createHermeticWorkspace(t, "marketplace-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -420,7 +419,7 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
   // arrange
   const workspace = await createHermeticWorkspace(t, "plugin-form");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -500,7 +499,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `scope-${scopeValue}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -525,7 +524,7 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -564,7 +563,7 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -592,7 +591,7 @@ test("honours a scope flag and the scope-target flag driven together (WB-02)", a
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -647,7 +646,7 @@ test("answers a cold git source from the no-network resolver without opening a c
       ),
     },
   });
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
     value: workspace.cwd,
     reads: 1,
   });

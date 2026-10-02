@@ -20,8 +20,8 @@
 // the working directory UNSTATED. `getMarketplaceInfo` reads `opts.cwd` inside
 // its scope fan-out before it can emit anything, so a workflow that ran would
 // carry strong-mock's pending-call proxy into that read and fail there. A
-// delegating case states one emission, two tool probes (one soft-dependency
-// probe reading twice), and one working-directory read -- all four counts
+// delegating case states one emission, one soft-dependency probe, and one
+// working-directory read -- all four counts
 // measured against the real module through a counting proxy before this file
 // was written.
 //
@@ -167,7 +167,7 @@ for (const { expectedMessage, flags, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "delegates");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       reads: 1,
       value: workspace.cwd,
     });
@@ -281,7 +281,7 @@ for (const { name, autoupdate } of [
       '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
     await writeFile(locations.configJsonPath, sharedBytes);
     await writeFile(locations.configLocalJsonPath, localBytes);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       value: cwd,
       reads: 1,
     });

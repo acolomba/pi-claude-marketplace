@@ -42,10 +42,10 @@
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` THREE times, on every scope and fixture combination.
+//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and takes no
+//     soft-dependency probe -- `notifyUsageError` writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and takes ONE
+//     soft-dependency probe, on every scope and fixture combination.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -229,7 +229,7 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const expectedListings = await bothTreeListings(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -295,7 +295,7 @@ test("previews a planned install of a cold git source without opening a connecti
     configBytes("mp", "./mp-src", ["far@mp", "near@mp"]),
   );
   const expectedListings = await bothTreeListings(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
     value: workspace.cwd,
     reads: 1,
   });

@@ -14,6 +14,7 @@ import { listMarketplaces } from "../../../extensions/pi-claude-marketplace/orch
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ListMarketplacesOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
@@ -60,9 +61,7 @@ function notificationBoundary(name: string, expectsNotification: boolean): Notif
   const notifications: CapturedNotification[] = [];
   if (expectsNotification) {
     when(() => ctx.ui).thenReturn(ui);
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
+    expectSoftDepProbes(pi, 1);
     when(() => ui.notify).thenReturn((message, severity) => {
       notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
     });

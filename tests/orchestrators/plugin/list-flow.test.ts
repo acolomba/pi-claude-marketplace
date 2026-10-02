@@ -49,6 +49,7 @@ import {
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
 } from "../../edge/handlers/marketplace-seed.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { toolInfo } from "../../platform/pi-inventory-seed.ts";
@@ -89,9 +90,7 @@ function makeCtx(
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
-  when(() => pi.getAllTools())
-    .thenReturn((options.toolNames ?? []).map(toolInfo))
-    .times(3);
+  expectSoftDepProbes(pi, 1, (options.toolNames ?? []).map(toolInfo));
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       // Most of this owner suite predates operation tallies and owns the list
@@ -4401,9 +4400,7 @@ test("listPlugins normalizes a non-Error notification failure before reporting i
     when(() => ctx.ui)
       .thenReturn(ui)
       .twice();
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(6);
+    expectSoftDepProbes(pi, 2);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         notifyCall += 1;

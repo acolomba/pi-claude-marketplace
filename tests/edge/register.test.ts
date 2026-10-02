@@ -72,7 +72,7 @@ import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
-import { createNotificationBoundary } from "./notification-boundary.ts";
+import { createNotificationBoundary, expectSoftDepProbes } from "./notification-boundary.ts";
 
 import type { Notification } from "./notification-boundary.ts";
 import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
@@ -352,9 +352,7 @@ function registerCommandWithCache(
     .thenReturn()
     .times(1);
   if (expectedNotifications > 0) {
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(expectedNotifications * 3);
+    expectSoftDepProbes(pi, expectedNotifications);
   }
 
   registerClaudePluginCommand(

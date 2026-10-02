@@ -9133,7 +9133,7 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
       });
       await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 6);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 2);
       await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       assert.deepStrictEqual(notifications, [

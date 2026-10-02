@@ -9355,7 +9355,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
       // The collision lives in the NEW version's tree, so the swap reaches it.
       await seedCollidingSkills(seeded.marketplaceRoot);
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 6);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 2);
       await updatePlugins({
         ctx,
         pi,
@@ -9475,7 +9475,7 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
       await seedCollidingSkills(seeded.marketplaceRoot, "hello");
       await seedCollidingSkills(seeded.marketplaceRoot, "world");
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 6);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 2);
       await updatePlugins({
         ctx,
         pi,
@@ -10601,7 +10601,7 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
         },
         installedVersions: { hello: "1.0.0" },
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 6);
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
       const operations = createPluginUpdateOperations(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),

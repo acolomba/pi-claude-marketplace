@@ -253,12 +253,12 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
  */
 async function loadExtension(
   emissions: number,
-  toolProbes: number,
+  probes: number,
   cwd?: { readonly value: string; readonly reads: number },
 ): Promise<LoadedExtension> {
   const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(
     emissions,
-    toolProbes,
+    probes,
     cwd,
   );
   const bridgeSessionStartListener =
@@ -960,7 +960,7 @@ test("MISS-01 / D-09-13: a reload event installs a missing dependency that a sta
 
   // act -- startup: the load-time check disables "plug", "helper" untouched.
   process.chdir(startupCwd);
-  const startup = await loadExtension(1, 3);
+  const startup = await loadExtension(1, 1);
   await startup.discover(discoverEvent(startupCwd, "startup"), startup.ctx);
 
   // assert
@@ -971,7 +971,7 @@ test("MISS-01 / D-09-13: a reload event installs a missing dependency that a sta
 
   // act -- reload: the missing dependency installs and "plug" stays up.
   process.chdir(reloadCwd);
-  const reload = await loadExtension(1, 3);
+  const reload = await loadExtension(1, 1);
   await reload.discover(discoverEvent(reloadCwd, "reload"), reload.ctx);
 
   // assert
@@ -991,7 +991,7 @@ test("keeps hook routing and command completion state inside each extension-load
   await seedBlockingHookPlugin(ownerCwd);
   const ownerMarketplace = await seedMarketplaceSource(ownerCwd, "owned-rows", "hello");
   process.chdir(ownerCwd);
-  const owner = await loadExtension(1, 3, { value: ownerCwd, reads: 1 });
+  const owner = await loadExtension(1, 1, { value: ownerCwd, reads: 1 });
   const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
   await owner.bridgeSessionStart({ type: "session_start", reason: "startup" }, ownerHookContext);
   const toolEvent: ToolCallEvent = {
@@ -1198,7 +1198,7 @@ test("reports the scope whose install state it cannot read once as a reconcile f
   // arrange
   const scope = await createHermeticScope(t, "path-warning");
   const statePath = await seedUnreadableState(scope.cwd);
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(2, 3);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(2, 1);
   const expectedNotifications: readonly Notification[] = [
     { message: RECONCILE_CASCADE_FOR_UNREADABLE_STATE, severity: "error" },
     {
@@ -1275,7 +1275,7 @@ test("still answers when the deferred project-scope hydrate fails (NFR-2)", asyn
   // reconcile that never runs is silent and a reconcile with nothing to report
   // is silent too.
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(1, 3);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(1, 1);
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
   const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_DEFERRED_HYDRATE);
@@ -1362,7 +1362,7 @@ test("reports an aborted reconcile as one raw error line and still answers (NFR-
   // arrange
   const scope = await createHermeticScope(t, "reconcile-aborted");
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 1);
   const recorded: Notification[] = [];
   let attempts = 0;
   const refusing = contextNotifyingThrough(ctx, (message, severity) => {
@@ -1390,7 +1390,7 @@ test("still answers when the last-ditch reconcile notification is also refused (
   // arrange
   const scope = await createHermeticScope(t, "last-ditch-refused");
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 1);
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [
@@ -1411,7 +1411,7 @@ test("still answers when the plugin PATH warning notification is refused (NFR-2)
   // arrange
   const scope = await createHermeticScope(t, "warning-refused");
   const statePath = await seedUnreadableState(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 1);
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [
@@ -1451,7 +1451,7 @@ test("attempts every skipped-scope PATH warning when every host notification thr
   const staleProjectBin = path.join(scope.cwd, "stale-project", "bin");
   process.env.PATH = ["/usr/bin", staleUserBin, staleProjectBin].join(path.delimiter);
   process.env.PI_CLAUDE_MARKETPLACE_PATH = [staleUserBin, staleProjectBin].join(path.delimiter);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 1);
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [

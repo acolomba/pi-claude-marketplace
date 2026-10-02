@@ -32,6 +32,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
@@ -70,8 +71,7 @@ interface FetchBoundary {
  * The fetch command's notification boundary. fetch is handed the whole
  * `ExtensionContext` / `ExtensionAPI` rather than the two narrow read contracts
  * `makeCtx` builds, so the members it may reach are stated as expectations and
- * verified after the call: one cascade emission and the soft-dependency probe,
- * which reads the tool list three times -- pi-subagents, mcp adapter, workflow engine.
+ * verified after the call: one cascade emission and one soft-dependency probe.
  */
 function makeFetchBoundary(): FetchBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "fetch context" });
@@ -81,9 +81,7 @@ function makeFetchBoundary(): FetchBoundary {
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
+  expectSoftDepProbes(pi, 1);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push(severity === undefined ? { message } : { message, severity });

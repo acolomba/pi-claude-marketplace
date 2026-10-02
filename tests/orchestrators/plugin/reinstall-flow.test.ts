@@ -5098,7 +5098,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
       });
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 1);
       const outcomes = await reinstallPlugins({
         ctx,
         pi,
@@ -5153,7 +5153,7 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
       // one-collision fixture leaves dark.
       await seedCollidingSkills(world.pluginRoot, "world", ["foo", "bar"]);
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 3);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 1);
       await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
       assert.deepStrictEqual(notifications, [

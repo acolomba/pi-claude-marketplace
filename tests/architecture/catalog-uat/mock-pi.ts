@@ -1,5 +1,7 @@
 import { mock, verify, when } from "strong-mock";
 
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
+
 import type {
   NotificationContext,
   ToolInventory,
@@ -55,9 +57,7 @@ export function makeCtx(): MockContextBoundary {
 
 function makePi(tools: readonly ToolInventoryItem[]): MockPi {
   const pi = mock<ToolInventory>({ exactParams: true, name: "catalog Pi API" });
-  when(() => pi.getAllTools())
-    .thenReturn(tools)
-    .times(3);
+  expectSoftDepProbes(pi, 1, tools);
   return pi;
 }
 
@@ -96,7 +96,7 @@ export function piWithNothingLoaded(): MockPi {
   return makePi([]);
 }
 
-/** Verifies the catalog renderer performed exactly three tool probes. */
+/** Verifies the catalog renderer took exactly one soft-dependency probe. */
 export function verifyPi(pi: MockPi): void {
   verify(pi);
 }

@@ -28,6 +28,7 @@ import {
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
@@ -243,9 +244,7 @@ function notificationBoundary(expectation?: NotificationExpectation): {
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
   if (expectation !== undefined) {
     when(() => ctx.ui).thenReturn(ui);
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
+    expectSoftDepProbes(pi, 1);
     when(() => {
       ui.notify(expectation.message, expectation.severity);
     }).thenReturn(undefined);

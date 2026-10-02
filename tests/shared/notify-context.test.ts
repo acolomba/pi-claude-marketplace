@@ -22,6 +22,7 @@ import {
   type Single,
   type WithPlugins,
 } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
+import { expectSoftDepProbes } from "../edge/notification-boundary.ts";
 
 import type {
   ExtensionAPI,
@@ -145,9 +146,7 @@ function createHarness(notification: NotificationRecord): Harness {
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
   when(() => ctx.ui).thenReturn(ui);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
+  expectSoftDepProbes(pi, 1);
   if (notification.severity === undefined) {
     when(() => {
       ui.notify(notification.message);

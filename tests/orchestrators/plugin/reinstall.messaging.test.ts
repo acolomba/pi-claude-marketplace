@@ -9,6 +9,7 @@ import {
   reinstalledRowFromOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { toolInfo } from "../../platform/pi-inventory-seed.ts";
 
 import type {
@@ -68,9 +69,7 @@ function createNotifyHarness(
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
-  when(() => pi.getAllTools())
-    .thenReturn(toolNames.map(toolInfo))
-    .times(3);
+  expectSoftDepProbes(pi, 1, toolNames.map(toolInfo));
   if (expected.severity === undefined) {
     when(() => {
       ui.notify(expected.message);

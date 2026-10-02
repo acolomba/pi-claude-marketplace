@@ -20,6 +20,7 @@ import {
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/browse.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { expectSoftDepProbes } from "../../notification-boundary.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { PickerResult } from "../../../../extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts";
@@ -173,9 +174,7 @@ test("TUI mode with no marketplaces emits structured (no marketplaces) notificat
   when(() => ctx.mode).thenReturn("tui");
   when(() => ctx.cwd).thenReturn(scope.cwd);
   when(() => ctx.ui).thenReturn(ui);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
+  expectSoftDepProbes(pi, 1);
   when(() => {
     ui.notify("(no marketplaces)");
   })
@@ -313,9 +312,7 @@ test("TUI mode when loadMarketplaceEntries throws emits structured failure notif
   when(() => ctx.mode).thenReturn("tui");
   when(() => ctx.cwd).thenReturn(scope.cwd);
   when(() => ctx.ui).thenReturn(ui);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
+  expectSoftDepProbes(pi, 1);
   const capturedNotify = It.willCapture<string>();
   when(() => {
     ui.notify(capturedNotify, "error");

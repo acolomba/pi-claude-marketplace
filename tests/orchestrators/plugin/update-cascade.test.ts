@@ -61,7 +61,7 @@ function heldOutcome(
 
 test("renders an empty bulk cascade as the exact no-op headline", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
 
   // act
   composeUpdateCascade(boundary.ctx, boundary.pi, [], "plural");
@@ -73,7 +73,7 @@ test("renders an empty bulk cascade as the exact no-op headline", () => {
 
 test("sorts changed marketplaces and renders the exact bulk tally and reload hint", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes = [updated("zeta", "user", "world"), updated("alpha", "project", "hello")];
   const expectedMessage = [
     "● alpha [project]",
@@ -97,7 +97,7 @@ test("sorts changed marketplaces and renders the exact bulk tally and reload hin
 
 test("keeps an unchanged targeted result exact without a tally or reload hint", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -126,7 +126,7 @@ test("keeps an unchanged targeted result exact without a tally or reload hint", 
 
 test("D-10-13: the ceiling version discloses its range and holders", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -162,7 +162,7 @@ test("D-10-13: the ceiling version discloses its range and holders", () => {
 
 test("an unconstrained unchanged outcome renders no cause line", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -191,7 +191,7 @@ test("an unconstrained unchanged outcome renders no cause line", () => {
 
 test("UPDT-02: projects a held constraint outcome as a warning row with its notes as the cause", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -229,7 +229,7 @@ test("UPDT-02: projects a held constraint outcome as a warning row with its note
 
 test("D-10-12: the held row is warning on the manual cascade", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes = [heldOutcome("mp", "project", "shared-lib")];
 
   // act
@@ -244,7 +244,7 @@ test("D-10-12: the held row is warning on the manual cascade", () => {
 
 test("keeps an ordinary skipped outcome cause-free", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -279,7 +279,7 @@ test("keeps an ordinary skipped outcome cause-free", () => {
 
 test("renders a partial bulk decline before the exact no-op headline", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -314,7 +314,7 @@ test("renders a partial bulk decline before the exact no-op headline", () => {
 
 test("renders an absent targeted result as an exact error without a version", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -346,7 +346,7 @@ test("renders an absent targeted result as an exact error without a version", ()
 
 test("renders a failed bulk result with exact severity and tally", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -378,7 +378,7 @@ test("renders a failed bulk result with exact severity and tally", () => {
 
 test("suppresses an unchanged cascade after a separately reported failure", () => {
   // arrange
-  const boundary = createNotificationBoundary(0, 3);
+  const boundary = createNotificationBoundary(0, 1);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -495,7 +495,7 @@ const skippedCases: readonly SkippedCase[] = [
 for (const row of skippedCases) {
   test(row.title, () => {
     // arrange
-    const boundary = createNotificationBoundary(1, 6);
+    const boundary = createNotificationBoundary(1, 2);
     const expectedNotification =
       row.expectedSeverity === undefined
         ? { message: row.expectedMessage }
@@ -512,7 +512,7 @@ for (const row of skippedCases) {
 
 test("preserves caller order for rows in one marketplace", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes = [updated("mp", "project", "beta"), updated("mp", "project", "alpha")];
   const expectedMessage = [
     "● mp [project]",
@@ -534,7 +534,7 @@ test("preserves caller order for rows in one marketplace", () => {
 
 test("UPDT-02: a bulk run holds one plugin and updates the rest", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const outcomes = [
     heldOutcome("mp", "project", "charlie"),
     updated("mp", "project", "alpha"),
@@ -599,7 +599,7 @@ test("SC3: an unconstrained plugin renders the same manual cascade rows as befor
       },
     },
   ];
-  const boundary = createNotificationBoundary(1, 6);
+  const boundary = createNotificationBoundary(1, 2);
   const expectedMessage = [
     "● mp [project]",
     "  ● alpha v1.0.0 → v1.1.0 (updated)",

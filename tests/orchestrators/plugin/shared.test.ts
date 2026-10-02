@@ -40,6 +40,7 @@ import {
   MarketplaceNotFoundError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { type PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { PluginEntry } from "../../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
@@ -2036,9 +2037,7 @@ describe("emitMarketplaceNotAdded", () => {
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
     const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
+    expectSoftDepProbes(pi, 1);
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -2077,9 +2076,7 @@ describe("emitMarketplaceNotAdded", () => {
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
     const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
+    expectSoftDepProbes(pi, 1);
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();

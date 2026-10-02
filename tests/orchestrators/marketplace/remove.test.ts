@@ -43,6 +43,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -107,9 +108,7 @@ function notificationBoundary(expectedCalls: 0 | 1): NotificationBoundary {
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
+    expectSoftDepProbes(pi, 1);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         calls.push(severity === undefined ? { message } : { message, severity });

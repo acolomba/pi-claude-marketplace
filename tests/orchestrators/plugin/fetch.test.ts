@@ -25,6 +25,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -121,9 +122,7 @@ function notificationBoundary(name: string, expectedCalls = 1): NotificationBoun
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(expectedCalls);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
+  expectSoftDepProbes(pi, 1);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
