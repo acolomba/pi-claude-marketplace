@@ -5,26 +5,10 @@
 // graph is its intended shape, not a defect.
 // fallow-ignore-file unused-file -- standalone operator-run UAT driver: an engineer invokes it from the command line and no module ever imports it, so being unreachable from the import graph is its intended shape, not a defect.
 //
-// One `duplicates.ignoredClones` entry in `.fallowrc.json` is retained
-// against this file and `stop-canary.mjs`. Fallow types `ignoredClones` as
-// `string[]`, so the per-clone justification the conventions require cannot
-// live in the JSON and lives here instead:
-//   - `dup:cc950b18:2` -- the `main().then(exit 0, exit 1)` process epilogue
-//     at the foot of both drivers.
-// It is retained because each driver must stay independently runnable as
-// `node tests/live-uat/<file>.mjs` with nothing imported from a sibling.
-// Extracting a shared helper module would create exactly the import edge
-// that the standalone-driver shape exists to avoid, and would make the two
-// canaries fail together on one bad edit. The duplicated text is 13 lines of
-// boilerplate -- a process-exit epilogue -- with no assertion logic in it, so
-// the copies cannot drift in a way that changes what either canary proves.
-// Line numbers are deliberately omitted; run `fallow dupes --trace
-// dup:<fingerprint>` with the entry temporarily cleared to locate it.
-//
-// Both drivers import `../pi-runtime.ts` on purpose, because every Pi launch
-// in the repository resolves the CLI through that one module. The
-// no-sibling-import rule above covers `tests/live-uat/` siblings and still
-// holds.
+// This driver imports `../pi-runtime.ts` on purpose, because every Pi launch
+// in the repository resolves the CLI through that one module. It imports
+// nothing from a `tests/live-uat/` sibling, so it stays runnable on its own as
+// `node tests/live-uat/<file>.mjs`, and one bad edit cannot fail two canaries.
 //
 // Live runtime UAT for the manifest-independent installed-plugin surface: a
 // scripted canary that drives the REAL extension against a REAL on-disk Pi

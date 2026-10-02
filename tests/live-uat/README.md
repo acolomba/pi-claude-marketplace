@@ -206,18 +206,36 @@ It has two halves:
 
 ### Prerequisites
 
-| Requirement                                | Notes                                                                                                                                                                                           |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The repository's Pi, >= 0.86.1             | `npm ci` installs it from the `@earendil-works/pi-coding-agent` devDependency. 0.86.1 is the package peer floor. `agent_settled` first appeared in 0.80.5. The earlier canary run used 0.80.10. |
-| A disposable `PI_CODING_AGENT_DIR` sandbox | Use `$(pwd)/tmp/pi-uat/agent`. The harness refuses to run against any dir outside `tmp/pi-uat` (T-88-08) so the always-block canary never churns a real Pi state dir.                           |
-| A working default provider in the sandbox  | The sandbox's `settings.json` selects the provider/model; a real turn must reach it. `--offline` disables only Pi's _startup_ network ops (marketplace autoupdate), not the model call.         |
+| Requirement                                | Notes                                                                                                                                                                                                                                   |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The repository's Pi, >= 1.0.0              | `npm ci` installs it from the `@earendil-works/pi-coding-agent` devDependency. 1.0.0 is the package peer floor. `agent_settled` first appeared in 0.80.5. The earlier canary run used 0.80.10.                                          |
+| A disposable `PI_CODING_AGENT_DIR` sandbox | Use `$(pwd)/tmp/pi-uat/agent`. The harness refuses to run against any dir outside `tmp/pi-uat` (T-88-08) so the always-block canary never churns a real Pi state dir.                                                                   |
+| A working default provider in the sandbox  | The sandbox's `settings.json` selects the provider/model; a real turn must reach it. `--offline` disables only Pi's _startup_ network ops (marketplace autoupdate), not the model call. The keyless stub route below needs no real key. |
+
+**Keyless stub route.** `tests/live-uat/openai-stub-server.mjs` is a local OpenAI-compatible stub. It answers every chat completion with the text `ready`, so no real provider key is involved. It listens on `127.0.0.1` only, on `STUB_PORT` (default 18787). If you set `STUB_HTTP_LOG`, it appends one line per request to that file: the time, the URL, the `stream` flag and the requested tool names. It never logs headers. Two sandbox files point Pi at it.
+
+`tmp/pi-uat/agent/models.json`:
+
+```json
+{"providers":{"stubllm":{"baseUrl":"http://127.0.0.1:18787/v1","api":"openai-completions","apiKey":"stub","models":[{"id":"stub"}]}}}
+```
+
+`tmp/pi-uat/agent/settings.json`:
+
+```json
+{"defaultProvider":"stubllm","defaultModel":"stub"}
+```
 
 ### The scripted canary
 
 #### Run
 
 ```bash
+mkdir -p tmp/pi-uat/agent   # then write the two sandbox files above
+STUB_HTTP_LOG=/var/tmp/stub-http.log node tests/live-uat/openai-stub-server.mjs &
 PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/agent node tests/live-uat/stop-canary.mjs
+kill %1
+rm -rf tmp/pi-uat/agent
 ```
 
 The harness:
@@ -225,20 +243,40 @@ The harness:
 1. Verifies the live-pi + sandbox preconditions (refuses non-sandbox dirs).
 2. Builds a disposable path-source marketplace carrying a Stop-only "ralph-loop" plugin whose Stop hook **always** returns `{"decision":"block","reason":"keep going"}` and appends one line to a marker file per invocation.
 3. Installs it into the sandbox (user scope) through the extension's own `/claude:plugin` machinery.
-4. Drives a real `pi -p --mode json --no-tools --offline` turn and reads the marker file + the JSON lifecycle event stream.
+4. Drives a real `pi -p --mode json --no-tools --offline` turn and reads the marker file, the JSON lifecycle event stream and the exit status of the `pi` process.
 5. **Always uninstalls the canary and removes the marketplace afterward** (the sandbox is left clean even on failure).
 
 #### What it asserts (exit 0 conditions for the scriptable half)
 
 - **STOP-01** -- `agent_settled` fires and dispatches the Stop bucket end-to-end (`agent_settled` event present AND the Stop hook fired at least once).
 - **STOP-03** -- block re-entry starts a new turn: two `turn_start` events for a single user prompt (the documented extra-turn-boundary divergence).
+- **STOP-07 bound** -- the run ends normally at exactly 8 blocks, with one `agent_settled` per block. A normal end means that `pi` exits with code 0, without a signal, before the 120-second harness timeout. The harness reads the exit status of the child process. It does not infer the status from the timeout.
+
+Exit 0 also needs the cap-trip warning, which a headless run cannot show. So a healthy headless run exits 1 (see below).
 
 #### What it routes to `human_needed` (exit non-zero)
 
-- **STOP-07 cap loop** -- a one-shot `pi -p` STARTS the first hook-driven re-entry turn, then tears down its non-interactive lifecycle before that turn settles again, so it never runs the settle→block→re-enter loop to the 8-consecutive-block cap. The harness prints the proven half, then exits non-zero with a `SCRIPTABLE HALF PROVEN, CAP LOOP -> human_needed` message. Drive the cap interactively per **item 4** below.
-- If a precondition is not met, the harness exits non-zero with a `LIVE RUNTIME REQUIRED` message. The preconditions are: the Pi package is installed (run `npm ci`), its version is 0.86.1 or later, and `PI_CODING_AGENT_DIR` is inside `tmp/pi-uat`.
+- **STOP-07 cap-trip warning (the expected headless result, exit 1)** -- since Pi 0.87 a one-shot `pi -p` drives the settle→block→re-enter loop itself: a run requested from an `agent_settled` handler is deferred until the settle handlers finish and is then awaited. The loop reaches the 8-consecutive-block cap headless, and the harness checks the bound above. The cap-trip warning goes through `ctx.ui.notify`, which does nothing in print/json mode, so the harness cannot see it. It prints the proven half, then exits 1 with a `SCRIPTABLE HALF PROVEN, cap-trip warning -> human_needed` message. Confirm the cap-trip warning interactively per **item 4** below.
 
-The harness **never fakes a live result**: it exits non-zero rather than reporting a cap it could not observe, so the verifier records `human_needed`.
+- **The cap check.** The harness compares the block count and the way the run ended against the cap, in this order:
+
+  | Observed                                                             | Result                                     | Exit |
+  | -------------------------------------------------------------------- | ------------------------------------------ | ---- |
+  | More than 8 blocks, whether or not the run ended                     | `STOP-07 REGRESSION -- failed:`            | 2    |
+  | Exactly 8 blocks, and the run did not end normally                   | `STOP-07 REGRESSION -- failed:`            | 2    |
+  | Fewer than 8 blocks, and the run did not end normally (inconclusive) | `LIVE RUNTIME REQUIRED`                    | 1    |
+  | Fewer than 8 blocks after a normal end                               | `STOP-07 REGRESSION -- failed:`            | 2    |
+  | Exactly 8 blocks after a normal end                                  | goes on to the `agent_settled` check below | --   |
+
+  "Did not end normally" means that the drive was still running at the timeout, or that `pi` exited with another code or a signal. The message states which one it saw. It does not name a cause: at exactly 8 blocks, the count cannot show whether the cap failed to end the run or re-entry went on past the cap.
+
+- **`agent_settled` count.** A run that passes the cap check must show one `agent_settled` per block. Any other count is a `STOP-07 REGRESSION`, exit 2.
+
+- If a precondition is not met, the harness exits 1 with a `LIVE RUNTIME REQUIRED` message. The preconditions are: the Pi package is installed (run `npm ci`), its version is 1.0.0 or later, and `PI_CODING_AGENT_DIR` is inside `tmp/pi-uat`.
+
+Exit 2 is kept apart from exit 1 on purpose. A script that reads only the exit code can then tell a broken bound from the expected headless result.
+
+The harness **never fakes a live result**: it exits non-zero rather than reporting a warning it could not observe, so the verifier records `human_needed`.
 
 #### Observed result (2026-07-31, pi 0.80.10)
 
@@ -253,6 +291,39 @@ exit 1
 ```
 
 STOP-01 and STOP-03 are proven on real Pi. STOP-07's cap loop is item 4 in the human checklist.
+
+#### Observed result (2026-10-02, pi 1.0.0)
+
+Provider: the keyless stub `tests/live-uat/openai-stub-server.mjs` on `127.0.0.1:18787`, selected by the two sandbox files from the Prerequisites section. No real provider key was used. Sandbox `tmp/pi-uat/agent`, `TMPDIR=/var/tmp/mcp4-uat`. The stub logged 8 chat-completion requests, one per turn. The canary's full output from this run, verbatim, with the exit status appended by the shell:
+
+```text
+[stop-canary] PASS: live pi 1.0.0 (/home/acolomba/src/pi-claude-marketplace-mcp-4/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js) >= 1.0.0, sandbox /home/acolomba/src/pi-claude-marketplace-mcp-4/tmp/pi-uat/agent
+[stop-canary] PASS: canary installed (ralph-loop@stop-canary-mkt, hooks: ralph-loop)
+[stop-canary] observed: Stop-hook blocks=8, agent_settled=8, turn_start=8, cap=8, capWarning=false.
+[stop-canary] drive: pi exited with code 0.
+[stop-canary] PASS: STOP-01: agent_settled fired and dispatched the Stop bucket end-to-end (stopReason "stop").
+[stop-canary] PASS: STOP-03: block re-entry proven -- the always-block Stop hook re-entered the agent loop (8 turns for one prompt; the expected extra-turn-boundary divergence).
+
+[stop-canary] SCRIPTABLE HALF PROVEN, cap-trip warning -> human_needed:
+  agent_settled dispatched the Stop bucket and block re-entry started a new turn (proven above).
+  Headless `pi` observed 8 block(s) against the 8-block override cap.
+  Since Pi 0.87 a headless run drives the settle->block->re-enter loop itself, because runs
+  requested from agent_settled handlers are deferred and then awaited.
+  The cap-trip warning goes through ctx.ui.notify, which does nothing in print/json mode, so
+  this harness cannot see it.
+
+Confirm the cap-trip warning interactively per tests/live-uat/README.md (Human verification, item 4).
+STOP_EXIT=1
+```
+
+The run exited 1 through the `cap-trip warning -> human_needed` routing. The loop stopped at exactly 8 blocks with one `agent_settled` and one `turn_start` per block, and `pi` exited with code 0, so the cap bounds the loop (T-88-02). `capWarning=false` because print/json mode replaces `ctx.ui.notify` with a no-op. The STOP-07 warning stays item 4 in the human checklist.
+
+The two negative controls ran on the same tree. Each exited 1 with `LIVE RUNTIME REQUIRED`:
+
+- `PI_CODING_AGENT_DIR` unset: `PI_CODING_AGENT_DIR is unset.`
+- `PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/../../.pi/agent`: refused, because it resolves to `.pi/agent`, which is outside `tmp/pi-uat`.
+
+A third control proved the regression exit. A temporary copy of the canary with the cap constant set to 7 saw the same 8 blocks, printed `STOP-07 REGRESSION -- failed:` and `the always-block canary spun to 8 blocks, past the 7 cap (pi exited with code 0).`, and exited 2. The copy was then deleted.
 
 ### Real-plugin run -- `ralph-loop@claude-plugins-official`
 
