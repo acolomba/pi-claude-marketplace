@@ -118,6 +118,31 @@ come from Pi and project constraints (per `skills/claude-code-compat-research`).
   from the text strategy's output. The corpus re-diff and the catalog diff are
   also empty at phase end.
 
+### Corpus exception (approved after research)
+
+- **D-17:** On 2026-10-02 the user approved a narrow corpus exception
+  ("Approve (Recommended)"). Deleting `makeRawNotifyFn` (D-09) deletes its unit
+  test in `tests/shared/notification-dispatch.test.ts`, which owns exactly two
+  synthetic baseline entries: `"plain"` (argc 1) and `"failed"` at `"error"`
+  (argc 2). Those two removals are allowed. Extra entries from the new helpers'
+  owner tests are allowed and listed. Record both in
+  `03-CORPUS-CHANGES.json` in the Phase 2 ledger format, with exact entries,
+  owner file, multiplicity, and the behavior each test preserves. Every
+  production byte, the catalog, and every other corpus entry stay fixed. No
+  full recapture and no blanket acceptance.
+
+### Research follow-ups resolved by the orchestrator
+
+- D-14's "own public entry point" means internal group entry functions behind
+  the exported helpers; the planner picks names, and no export lacks a
+  production reader.
+- `docs/output-catalog.md` prose (around lines 4088-4090) that says the domain
+  emits the device-flow prompt goes stale. The catalog diff must stay empty,
+  so the prose fix is carried by Phase 7's sanctioned catalog prose edit
+  (recorded in ROADMAP Phase 7, criterion 6).
+- The catalog diff base for this phase is the current tree
+  (`git diff --exit-code 4e6c568a -- docs/output-catalog.md`).
+
 ### Claude's Discretion
 
 - Exact kind spellings other than `usage-error`, `usage-info`, `diagnostic`,

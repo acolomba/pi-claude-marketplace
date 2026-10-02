@@ -177,6 +177,7 @@ Plans:
 3. Only the dispatch module calls `appendEntry`. A planted call in any other file fails lint, following the house planted-violation pattern.
 4. An `appendEntry` that throws before bind, or a stale `pi` or `ctx` after `/reload`, propagates nothing out of `resources_discover`, `session_start`, async-rewake, or the Stop-hook settle path.
 5. Every test fake of the notification or extension context carries an explicit `mode` that the type requires; no `as unknown as ExtensionContext` cast hides a missing one. An in-process capture helper records every `appendEntry` payload and fails the test on a schema-invalid payload.
+6. Carried from Phase 3 research: the JSON strategy keeps the text strategy's empty no-ops (empty diagnostic lines, empty rewake summary), and `bridges/hooks/settle.ts`'s Stop-cap notify gains the NFR-2 try/catch once the sink can throw.
 
 **Plans:** TBD
 
@@ -207,7 +208,7 @@ Plans:
 3. A schema reference documents every kind and field, with a `jq` example. It states the compatibility policy: additive changes (a new optional field, kind, or closed-set member) keep `schemaVersion`, and removals, renames, and type or meaning changes bump it. It also states the verdict rule: the maximum severity over command-origin entries.
 4. The documented limitations cover these points. Print mode is silent, so scripts use `--mode json`. Pi exits 0 regardless. Startup entries are not streamed in `json` or `rpc`, and RPC clients can use `get_entries`. RPC front-ends must render `claude-plugin` entries, the device-flow prompt at minimum. A slash-command-only run writes no session file.
 5. The IL-2 output-channel line in AGENTS.md matches PROJECT.md (D8). Backlog MRO-01 is closed, and its two wrong claims are corrected.
-6. Milestone close-out for the Phase 1 corpus tool. After the final corpus re-diff comes back empty, the three `scripts/notify-corpus*.mjs` files are deleted (Phase 1 D-01), and no file outside `.planning/` names them. The `docs/output-catalog.md` prose that says `composeReasons` appends the soft-dep markers is amended to name the resolve step. This is the milestone's one sanctioned catalog edit: prose only, no fenced block changes, and `EXPECTED_STATE_COUNT` / `EXPECTED_UTF8_BYTES` do not move.
+6. Milestone close-out for the Phase 1 corpus tool. After the final corpus re-diff comes back empty, the three `scripts/notify-corpus*.mjs` files are deleted (Phase 1 D-01), and no file outside `.planning/` names them. The `docs/output-catalog.md` prose that says `composeReasons` appends the soft-dep markers is amended to name the resolve step, and the device-flow prose (around lines 4088-4090) that says the domain emits the prompt is amended to name the dispatch module's text strategy (Phase 3 CONTEXT). This is the milestone's one sanctioned catalog edit: prose only, no fenced block changes, and `EXPECTED_STATE_COUNT` / `EXPECTED_UTF8_BYTES` do not move.
 
 **Plans:** TBD
 
