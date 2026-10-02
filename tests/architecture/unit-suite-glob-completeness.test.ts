@@ -120,3 +120,16 @@ test("COV-04 the test:coverage:unit script reaches every unit test file that exi
     'the "test:coverage:unit" script no longer matches exactly the unit test files under tests/',
   );
 });
+
+test("the focused suite commands partition the complete unit suite", () => {
+  // arrange
+  const expectedPaths = unitTestFilesOnDisk();
+
+  // act
+  const selectedPaths = ["test:modules", "test:architecture", "test:analyzers"]
+    .flatMap(pathsMatchedByScript)
+    .sort();
+
+  // assert
+  assert.deepStrictEqual(selectedPaths, expectedPaths);
+});

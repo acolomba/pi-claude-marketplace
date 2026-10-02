@@ -34,9 +34,6 @@
  *   - `orchestrators/plugin/update-flow.ts` and `update-preflight.ts`: PUP-2
  *     `syncClone` REQUIRES gitOps; they legitimately name the `GitOps` surface
  *     via the `orchestrators/marketplace/shared.ts` re-export (Pattern S-9).
- *   - `orchestrators/plugin/uninstall.ts` is implicitly clean (no git surface
- *     today) but is not gated -- gating install + list covers the NFR-5
- *     orchestrator-tier obligation.
  */
 export const NETWORK_FREE_TARGETS = [
   // The update flow owns refresh enumeration and its injected Git seam, so it
@@ -112,9 +109,25 @@ export const NETWORK_FREE_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
+  // LOAD-01 / NFR-5 / WR-06: the satisfaction walk composes dependency-index.ts
+  // -- already gated one group below -- and reads the memoized manifest cache
+  // and the warm clone cache only. It sits on the load path, where a stray
+  // fetch would make every session start wait on a remote, so the file that
+  // claims the walk is offline carries the gate that pins it. A future need to
+  // refresh a clone before deciding must route through
+  // orchestrators/plugin/clone-cache.ts.
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts",
   // ENBL-03: the enable/disable orchestrator re-materializes from cache
   // -- NO network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+  // NFR-5 / D-05-06 / PRUNE-05: uninstall composes an offline manifest read
+  // through the declaration-index leaf before it decides anything -- the
+  // dependents guard reads what every other record in the scope declares from
+  // the memoized manifest cache and the warm clone cache only. Neither owner
+  // names a git surface; a future need to refresh a clone before deciding must
+  // route through orchestrators/plugin/clone-cache.ts.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts",
   // FTCH-01: fetch reaches git ONLY through the clone-cache.ts seam (by
   // entrypoint name), install-style. It names zero gitOps surface, so it is
   // locked here permanently. It is NOT exempt: among the gated orchestrator
@@ -370,6 +383,10 @@ export const DISABLED_STATE_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
+  // LOAD-01: the load-time satisfaction verdict classifies a declared
+  // dependency as unsatisfied when its own record is disabled, so it consumes
+  // the predicate exactly as the planner beside it does.
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts",
 ] as const;
 
 /**
@@ -424,6 +441,16 @@ export const CREDENTIAL_LEAK_TARGETS = [
  */
 export const HOOKS_SCHEMA_TARGETS = [
   "extensions/pi-claude-marketplace/domain/components/hooks.ts",
+] as const;
+
+/**
+ * TAGS-01 / D-07-05: the local, network-free marketplace-tag probe and the
+ * shared release-tag selection module its offline gate pins the exact
+ * `platform/git.ts` (and `platform/`) import surface of.
+ */
+export const MARKETPLACE_TAG_PROBE_OFFLINE_TARGETS = [
+  "extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts",
+  "extensions/pi-claude-marketplace/domain/release-tag.ts",
 ] as const;
 
 /**
@@ -615,6 +642,7 @@ export const WORKFLOWS_SCRIPT_TARGETS = [
 /** WDEP-04 / SNM-06: the `Dependency[]` derivation sites the marker-coverage gate drives. */
 export const WORKFLOWS_MARKER_COVERAGE_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
   "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts",

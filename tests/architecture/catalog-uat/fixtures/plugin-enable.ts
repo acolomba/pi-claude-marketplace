@@ -33,6 +33,41 @@ export const PLUGIN_ENABLE_FIXTURES: FixtureMap = {
       },
     },
 
+    // EDEP-01 / EDEP-03: the enable cascade's own multi-row block. `helper`
+    // declares `formatter@tools`; both records are disabled, and the member
+    // is re-materialized through its own record and carries the new
+    // `{dependency enabled}` token (D-08-02) on an `installed` row.
+    "enable-cascade": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: true,
+                name: "formatter@tools",
+                version: "2.1.0",
+                dependencies: [],
+                reasons: ["dependency enabled"],
+              },
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: true,
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // ENBL-07 / FSTAT-07 / D-66-04: a re-enable admitted through the partial
     // gate drops component kinds, so the row follows the RESOLUTION (`◉
     // (partially-installed)` + the kinds) rather than the verb. SEV-03: the

@@ -24,8 +24,9 @@ import type {
   PluginInstallRecord,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-// The actual public state contract keeps exactly both accepted schema versions
-// and requires all six resource arrays. Persistence owner tests exercise these
+// The actual public state contract keeps exactly the three accepted schema
+// versions and requires all six resource arrays. Persistence owner tests exercise these
+
 // same fields through loadState/saveState, including invalid records and bytes.
 type IsExact<Actual, Expected> = [Actual] extends [Expected]
   ? [Expected] extends [Actual]
@@ -33,7 +34,7 @@ type IsExact<Actual, Expected> = [Actual] extends [Expected]
     : false
   : false;
 
-void (true satisfies IsExact<ExtensionState["schemaVersion"], 1 | 2>);
+void (true satisfies IsExact<ExtensionState["schemaVersion"], 1 | 2 | 3>);
 void (true satisfies IsExact<
   PluginInstallRecord["resources"],
   {

@@ -1,4 +1,5 @@
 import {
+  type ContentReason,
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
@@ -74,11 +75,30 @@ export type ReconcileAppliedMsg =
   | PluginPartiallyInstalledMessage;
 
 /**
+ * LOAD-01: the brace of the load-time dependency-disable row, owned here beside
+ * the row it rides. The token names the condition; the remedy naming the
+ * dependency and the dependent rides the row's cause line, which is the only
+ * channel in this grammar that interpolates an identifier.
+ */
+export const DEPENDENCY_UNSATISFIED_ROW_REASONS = [
+  "dependency unsatisfied",
+] as const satisfies readonly ContentReason[];
+
+/**
+ * LOAD-01: the brace of the same row on its version arm. A separate constant
+ * rather than a second member of the brace above: exactly one of the two tokens
+ * rides any given row, and which one is decided by the unsatisfied kind.
+ */
+export const DEPENDENCY_VERSION_UNSATISFIED_ROW_REASONS = [
+  "dependency version unsatisfied",
+] as const satisfies readonly ContentReason[];
+
+/**
  * D-04 / D-05: the applied cascade's `CommandContext`. `Messaging.label` is the
  * human operation name `"Reconcile"`. The `rowPolicies` map is total over
  * `ReconcileAppliedStatus` (D-10). Both reconcile contexts reuse the shared
- * closed reason set (`notify-reasons.ts`); reconcile declares no command-private
- * reasons.
+ * closed reason set (`notify-reasons.ts`); the one reason reconcile owns is the
+ * load-time `dependency unsatisfied` brace declared above.
  */
 export const RECONCILE_APPLIED_CONTEXT = {
   Messaging: { label: "Reconcile" },

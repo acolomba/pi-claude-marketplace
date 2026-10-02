@@ -38,7 +38,8 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * trailer from these facts.
  *
  * D-11: `resolveRows` serializes each failed row's cause chain, manual-recovery
- * leaks, and rollback phases here, once. No resolved row carries a live
+ * leaks, and rollback phases here, once, and the remedy cause a realized
+ * `disabled`, `uninstalled`, or update `skipped` row carries. No resolved row carries a live
  * `Error`, so the text strategy formats failure detail without walking one.
  *
  * D-10: each row's hint and the `marketplace-not-added` reason token are chosen
@@ -243,7 +244,8 @@ export interface ResolvedRollbackPhase {
 }
 
 /**
- * D-11 / PMOD-03: the failure detail of a failed or manual-recovery row.
+ * D-11 / PMOD-03: the failure detail of a failed or manual-recovery row, or the
+ * remedy cause of a realized `disabled`, `uninstalled`, or update `skipped` row.
  * `cause` is absent when the row carries no cause. `leaks` names the paths the
  * user must clean up by hand. `rollbackPartial` lists the phases whose undo
  * failed; it is empty on a manual-recovery row.
@@ -315,7 +317,7 @@ export const CENTRAL_ROW_POLICY = {
   skipped: { markers: false, contentReasons: true },
   "manual recovery": { markers: false, contentReasons: true },
   "will install": { markers: false, contentReasons: false },
-  "will uninstall": { markers: false, contentReasons: false },
+  "will uninstall": { markers: false, contentReasons: true },
   "will enable": { markers: false, contentReasons: false },
   "will disable": { markers: false, contentReasons: false },
 } as const satisfies Record<PluginNotificationMessage["status"], RowPolicy>;
@@ -440,8 +442,23 @@ function resolveRow(row: PluginNotificationMessage, compose: ReasonComposer): Re
   }
 
   if (row.status === "disabled") {
-    const { enableHint, reasons, ...rest } = row;
-    return { ...rest, reasons: compose(reasons, undefined), ...hintFor(enableHint, "enable") };
+    const { enableHint, reasons, cause, ...rest } = row;
+    return {
+      ...rest,
+      reasons: compose(reasons, undefined),
+      ...hintFor(enableHint, "enable"),
+      ...remedyFailure(cause),
+    };
+  }
+
+  if (row.status === "uninstalled") {
+    const { reasons, cause, ...rest } = row;
+    return { ...rest, reasons: compose(reasons, undefined), ...remedyFailure(cause) };
+  }
+
+  if (row.status === "skipped" && "cause" in row) {
+    const { reasons, cause, ...rest } = row;
+    return { ...rest, reasons: compose(reasons, undefined), ...remedyFailure(cause) };
   }
 
   if ("dependencies" in row) {
@@ -455,6 +472,16 @@ function resolveRow(row: PluginNotificationMessage, compose: ReasonComposer): Re
   }
 
   return { ...row, reasons: compose(undefined, undefined) };
+}
+
+/**
+ * LOAD-01 / LOAD-03 / UPDT-02: the `failure` member of a realized `disabled`,
+ * `uninstalled`, or update `skipped` row whose producer set a remedy `cause`,
+ * or no member. The cause names plugin identifiers, which only the cause line
+ * may interpolate. A row without one keeps its byte-frozen form.
+ */
+function remedyFailure(cause: Error | undefined): Pick<ResolvedRowFacts, "failure"> {
+  return cause === undefined ? {} : { failure: resolveFailure(cause, []) };
 }
 
 /** The `hint` member for a row whose producer set `flag`, or no member. */

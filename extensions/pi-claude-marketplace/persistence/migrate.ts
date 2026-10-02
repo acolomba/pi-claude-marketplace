@@ -22,7 +22,12 @@
 // mislabels it `enabled: true` at the state layer. It self-heals on the
 // next reconcile -- the config still carries `enabled: false`, so the diff
 // emits one redundant disable that re-empties resources and writes
-// `enabled: false`.
+// `enabled: false`. Per D-04-03: missing `provenance` is filled with
+// `"explicit"` by `ensurePluginProvenance`. Every record a released build
+// wrote is a plugin the user named, so the default is truthful; a
+// dependency record a development build wrote before the field existed is
+// mislabelled, and that mislabel does NOT self-heal -- only an uninstall
+// and reinstall re-derives it.
 //
 // Per ST-4 "persisted asynchronously (best-effort)": the persist call
 // does NOT re-throw on failure; the IL-3 warn surfaces the cause and
@@ -185,6 +190,45 @@ function ensurePluginEnabled(mp: Record<string, unknown>): boolean {
 }
 
 /**
+ * D-04-03: fill `provenance: "explicit"` on every plugin record that lacks the
+ * field. Mirrors `ensurePluginEnabled` -- same iteration pattern, same
+ * mutated-flag discipline.
+ *
+ * `"explicit"` is the truthful default for any record predating the field: no
+ * released build ran a dependency cascade, so every record one wrote is a
+ * plugin the user asked for by name. The one shape it over-fills is a
+ * dependency record a development build wrote before the field existed, which
+ * reads as `"explicit"` from here on. Unlike the ENBL-02 mislabel, this one
+ * does NOT self-heal: no config entry carries the missing fact, so only an
+ * uninstall and reinstall re-derives it. The fill MUST run before
+ * STATE_VALIDATOR.Check so the newly-required field is present.
+ */
+function ensurePluginProvenance(mp: Record<string, unknown>): boolean {
+  const plugins = mp.plugins;
+  if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) {
+    return false;
+  }
+
+  let mutated = false;
+  for (const plRaw of Object.values(plugins as Record<string, unknown>)) {
+    if (typeof plRaw !== "object" || plRaw === null || Array.isArray(plRaw)) {
+      continue;
+    }
+
+    const pl = plRaw as Record<string, unknown>;
+    // Only an ABSENT field is filled. A present-but-wrong value is
+    // intentionally left untouched for STATE_VALIDATOR.Check to reject with
+    // an actionable error rather than being silently coerced.
+    if (pl.provenance === undefined) {
+      pl.provenance = "explicit";
+      mutated = true;
+    }
+  }
+
+  return mutated;
+}
+
+/**
  * Normalize a parsed state.json's `marketplaces` map to the current shape.
  *
  * Pure function -- does NOT touch disk. Caller decides whether to persist
@@ -202,6 +246,8 @@ function ensurePluginEnabled(mp: Record<string, unknown>): boolean {
  *     STATE_VALIDATOR.Check)
  *   - per-plugin: fill `enabled: true` when the field is absent (ENBL-02
  *     additive default; same discipline as the hooks arm above)
+ *   - per-plugin: fill `provenance: "explicit"` when the field is absent
+ *     (D-04-03 truthful default; same discipline as the ENBL-02 fill)
  *   - `scrubAutoupdate === true` (D-13 gate OPEN): remove the legacy
  *     `autoupdate` field from every marketplace record. The CALLER owns
  *     the gate predicate (loadState probes the scope's
@@ -247,6 +293,7 @@ export function migrateLegacyMarketplaceRecords(
     mutated = ensureMarketplacePaths(mpName, mp, extensionRoot) || mutated;
     mutated = ensurePluginResources(mp) || mutated;
     mutated = ensurePluginEnabled(mp) || mutated;
+    mutated = ensurePluginProvenance(mp) || mutated;
     if (scrubAutoupdate) {
       mutated = ensureNoLegacyAutoupdate(mp) || mutated;
     }

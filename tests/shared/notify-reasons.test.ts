@@ -35,6 +35,9 @@ void ("source mismatch" satisfies FailureReason);
 void ("dangling reference" satisfies FailureReason);
 void ("concurrently uninstalled" satisfies FailureReason);
 void ("concurrently updated" satisfies FailureReason);
+void ("cross-marketplace" satisfies Reason);
+// @ts-expect-error cascade-specific reasons are not shared failure-class reasons
+void ("cross-marketplace" satisfies FailureReason);
 // @ts-expect-error idempotent reasons are not failure reasons
 void ("up-to-date" satisfies FailureReason);
 // @ts-expect-error unsupported reasons are not failure reasons
@@ -128,6 +131,11 @@ const skipSeverityCases = [
     expectedSeverity: "warning",
   },
   {
+    title: "classifies the cascade policy refusal as an actionable skip",
+    reasons: ["cross-marketplace"],
+    expectedSeverity: "warning",
+  },
+  {
     title: "classifies an unsupported reason as an actionable skip",
     reasons: ["unsupported source"],
     expectedSeverity: "warning",
@@ -155,6 +163,11 @@ const skipSeverityCases = [
   {
     title: "classifies an author-declared state reason as an actionable skip",
     reasons: ["installs disabled"],
+    expectedSeverity: "warning",
+  },
+  {
+    title: "D-10-12: classifies the held-update token as an actionable skip, never idempotent",
+    reasons: ["dependents constrain"],
     expectedSeverity: "warning",
   },
 ] as const;

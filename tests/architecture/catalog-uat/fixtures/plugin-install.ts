@@ -472,5 +472,575 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
         presentInOtherScope: true,
       } satisfies NotificationMessage,
     },
+
+    // RESV-01 / RESV-06: the dependency cascade's success block. One row per
+    // closure member beside the requesting plugin's own row, in the canonical
+    // name-then-scope order. A dependency renders by its full `<plugin>@<mp>`
+    // key because it may come from a marketplace other than the header's; the
+    // requesting plugin renders bare, since the header already names its
+    // marketplace. RESV-05: a dependency already present in the target scope is
+    // reported as a benign `(skipped) {already installed}` -- never reinstalled
+    // -- which is what distinguishes it from one this command materialized.
+    "dependency-cascade-success": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "formatter@tools",
+                version: "2.1.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "skipped",
+                name: "linter@tools",
+                version: "3.0.0",
+                reasons: ["already installed"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // TAGS-02 / D-07-03: a PATH-source dependency whose marketplace clone
+    // carries no release tag satisfying the declared constraint. Rather than
+    // failing the whole install (the git-backed arm below), the cascade
+    // installs the marketplace's CURRENT copy instead and names it on the
+    // dependency's own row with a quiet `info`-level note -- the install
+    // succeeded, so the row is not a failure row and the token is not a
+    // failure-class reason. Severity stays whatever the companion probe
+    // computes; the fallback never raises or lowers it on its own.
+    "dependency-cascade-fallback-current-copy": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "formatter@tools",
+                version: "2.1.0",
+                dependencies: [],
+                reasons: ["dependency current copy"],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // EDEP-03: `linter` was already installed but its record was DISABLED.
+    // Instead of leaving it exactly as it was, this command re-materializes it
+    // through that record -- the config file gains no key for it (D-04-02),
+    // and its `provenance` stays `"dependency"` (A2). The row is `installed`,
+    // not `skipped`, and carries both facts this command is responsible for.
+    "install-cascade-dependency-enabled": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "installed",
+                name: "linter@tools",
+                version: "3.0.0",
+                dependencies: [],
+                reasons: ["already installed", "dependency enabled"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-03: the constraint is satisfiable but the dependency's source
+    // advertises no release tag inside it. The failing DEPENDENCY is the row's
+    // subject and carries the constraint in its cause; the requesting plugin
+    // gets its own row saying its install did not complete.
+    "dependency-no-matching-version": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                reasons: ["no matching version"],
+                cause: new Error(
+                  'Dependency "formatter@tools" has no release tag satisfying "^2.0.0".',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-03: two declarations of one dependency ask for version sets that do
+    // not overlap. The cause names the joined declared ranges and the
+    // intersection's own measurement, never a declaration's prose.
+    "dependency-version-conflict": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                reasons: ["version conflict"],
+                cause: new Error(
+                  'Dependency "formatter@tools" has contradictory version constraints "^1.0.0 ^2.0.0" (inputs 1 and 2 do not overlap).',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-05: the dependency is already installed at a version the effective
+    // constraint rejects. The SAME `version conflict` token as the declaration
+    // contradiction above, distinguished by the `already installed` token beside
+    // it and by the recorded version on the row.
+    "dependency-installed-version-conflict": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                version: "1.0.0",
+                reasons: ["already installed", "version conflict"],
+                cause: new Error(
+                  'Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy "^2.0.0".',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-03: the declarations pass one of the two combination size caps. The
+    // cause carries the measurement that tripped, so the operator can see which
+    // cap and by how much.
+    "dependency-constraint-too-complex": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                reasons: ["constraint too complex"],
+                cause: new Error(
+                  'Dependency "formatter@tools" declares version constraints too complex to combine (total input 5400 characters exceeds the 4096 character cap).',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-03: a declared constraint is not a version range the evaluator can
+    // read. The rendered range is bounded by the same helper every other
+    // constraint row uses, so a very long declaration cannot flood the block.
+    "dependency-invalid-version-constraint": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                reasons: ["invalid version constraint"],
+                cause: new Error(
+                  'Dependency "formatter@tools" declares an unparseable version constraint "nope" (input 1 of 1 is not a valid version range).',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-03: the tag listing itself could not be read. The transport
+    // classification is already a member of the inherited vocabulary, so the row
+    // carries `{authentication required}` (or `{network unreachable}`) rather
+    // than a cascade-private token -- truthful attribution keeps "could not be
+    // read" apart from "held nothing usable".
+    "dependency-tag-listing-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                reasons: ["authentication required"],
+                cause: new Error(
+                  'Dependency "formatter@tools" could not be checked against "^2.0.0" (authentication required).',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-02 / D-03-08: the dependency names a marketplace the target scope has
+    // not added. Nothing adds or clones a marketplace to satisfy a dependency,
+    // so a plugin cannot introduce a new source of code by declaring one. The
+    // row names the marketplace through the dependency key that is its subject
+    // and points at the command that would add it.
+    "dependency-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                reasons: ["dependency marketplace not added"],
+                cause: new Error(
+                  'Dependency "formatter@tools" requires marketplace "tools", which is not added. Run marketplace add <source> to add it.',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-11-06: an added marketplace still needs the root marketplace's
+    // permission before a new dependency may install from it. The cause names
+    // the declaration and both remedies while the cascade stays fail-clean.
+    "dependency-cross-marketplace": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                reasons: ["cross-marketplace"],
+                cause: new Error(
+                  'Dependency "formatter@tools", declared by "helper@official", is from marketplace "tools", which root marketplace "official" does not allow. Install "formatter@tools" manually first, or add "tools" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "official".',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-01: the dependency's marketplace IS added but declares no entry under
+    // that name. The inherited `not in manifest` token already states exactly
+    // this, so the cascade mints nothing for it.
+    "dependency-not-in-manifest": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                reasons: ["not in manifest"],
+                cause: new Error(
+                  'Dependency "formatter@tools" is not declared by its marketplace.',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-04: the graph closes on itself. The subject is the key the walk met
+    // twice, and the cause renders the whole chain in walk order with that key
+    // shown where it recurs -- a cycle is a property of the path, so a row alone
+    // cannot state it.
+    "dependency-cycle": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                reasons: ["dependency cycle"],
+                cause: new Error(
+                  "Dependency cycle: helper@official -> formatter@tools -> linter@tools -> formatter@tools.",
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-01: the requesting plugin's OWN `dependencies` array is unusable, so
+    // the subject is the requesting plugin and there is no second row to add.
+    // The inherited `invalid manifest` token carries it: the declaration lives
+    // in a manifest, and no dependency of it was ever reached.
+    "dependency-unusable-declaration": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["invalid manifest"],
+                cause: new Error(
+                  'Plugin "helper@official" declares an unusable dependency (dependencies.0: Invalid input).',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-06 / D-03-07: the dependency resolved cleanly and its own
+    // materialization then threw. The row carries no cascade reason at all --
+    // the ledger's own error is the fact -- and the requesting plugin's row
+    // still says why it is there.
+    "dependency-install-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                reasons: [],
+                cause: new Error("failed to stage skill a-fmt: EACCES"),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-04-07: the plugin was recorded as another plugin's dependency and the
+    // user then installed it by name. One field of one record changes and
+    // nothing is materialized, so the row is `installed` at info with no
+    // reload, and the brace carries both facts: the record was here before,
+    // and this command promoted it. `{already installed}` alone is the
+    // refusal's brace.
+    "dependency-promoted": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "linter",
+                version: "3.0.0",
+                scope: "user",
+                dependencies: [],
+                reasons: ["already installed", "dependency promoted"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

@@ -76,7 +76,7 @@ Confirmed before editing with `grep -roh 'createNotificationBoundary([^)]*)' tes
 | `createNotificationBoundary(2)` | 5 | `(2, 4)` | substituted |
 | `createNotificationBoundary(3)` | 1 | `(3, 6)` | substituted |
 | `createNotificationBoundary(1, 0)` | 2 | unchanged | already explicit |
-| `createNotificationBoundary(2, 2)` | 3 | unchanged | already explicit |
+| `createNotificationBoundary(2, 3)` | 3 | unchanged | already explicit |
 
 97 sites total, 92 substituted, 5 left alone — matching the plan's stated counts exactly. No site
 needed a corrected count: the full suite passed at the same 4832 with the mechanical substitution
@@ -91,7 +91,7 @@ same four suites plus the helper. No fifth consumer had appeared since the plan 
 
 ### Plant 1 — non-degenerate over-emission (the plant the plan owed)
 
-`tests/orchestrators/reconcile/pending.test.ts:252`, `createNotificationBoundary(2, 4)` lowered to
+`tests/orchestrators/reconcile/pending.test.ts:252`, `createNotificationBoundary(2, 6)` lowered to
 `(1, 4)` on a case whose path emits twice. **RED**, verbatim:
 
 ```
@@ -108,7 +108,7 @@ Reverted with `git checkout --`; the suite returned to 18/18.
 
 ### Plant 2 — degenerate over-emission, which stayed GREEN (a finding)
 
-`tests/orchestrators/reconcile/pending.test.ts:162`, `createNotificationBoundary(1, 2)` lowered to
+`tests/orchestrators/reconcile/pending.test.ts:162`, `createNotificationBoundary(1, 3)` lowered to
 `(0, 2)` on a case that emits once and asserts the emission. Expected RED. **Observed: 18 passed,
 0 failed** — and the assertion `assert.deepStrictEqual(notifications, [...])` still saw the
 notification, so the emission both happened and was recorded while the boundary claimed none was

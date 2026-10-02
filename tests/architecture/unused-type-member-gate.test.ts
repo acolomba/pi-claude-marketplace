@@ -37,10 +37,8 @@ import {
   TYPE_MEMBER_NEGATIVE_REL,
   UNUSED_TYPE_MEMBER_GATE_TARGETS,
 } from "./gate-targets.ts";
-import { readLocalHooks } from "./pre-commit-hooks.ts";
 import { REPO_ROOT } from "./source-scan.ts";
 
-import type { PreCommitHook } from "./pre-commit-hooks.ts";
 import type { TestContext } from "node:test";
 
 /** The key the live sensitivity control plants, which no real member may spell. */
@@ -325,19 +323,15 @@ test("every capability the gate claims has a discriminating control", async () =
 // MEMBER-01 / MEMBER-02: a gate nothing invokes is a gate nobody runs, and a
 // gate whose residual list can be widened quietly is worse than no gate at all
 // -- it buys confidence it has not earned. The cases below read the real
-// `package.json`, the real hook configuration and the real decision list, and
+// `package.json`, the CI workflow and the real decision list, and
 // the last one runs the real gate over the real tree with a new unread member
 // planted into it.
 // ---------------------------------------------------------------------------
 
-const PRE_COMMIT_REL = ".pre-commit-config.yaml";
 const CI_WORKFLOW_REL = ".github/workflows/ci.yml";
 
 const GATE_SCRIPT = "lint:type-members";
 const NEGATIVE_SCRIPT = "lint:type-members:negative";
-
-const GATE_HOOK_ID = "npm-type-members";
-const NEGATIVE_HOOK_ID = "npm-type-members-negative";
 
 /** The fields one recorded decision may carry, and no others. */
 const EXCEPTION_FIELDS = ["id", "owner", "key", "decision", "mechanism"];
@@ -351,16 +345,6 @@ interface RecordedDecision {
   readonly key: string;
   readonly decision: string;
   readonly mechanism: string;
-}
-
-async function readHook(id: string): Promise<PreCommitHook> {
-  const hook = readLocalHooks(await readRepoFile(PRE_COMMIT_REL)).get(id);
-
-  if (hook === undefined) {
-    throw new Error(`${PRE_COMMIT_REL} declares no local hook with id ${id}`);
-  }
-
-  return hook;
 }
 
 async function readRecordedDecisions(): Promise<readonly RecordedDecision[]> {
@@ -412,93 +396,6 @@ test("continuous integration runs the same chain the local path runs", async () 
     invokesCheck,
     true,
     `${CI_WORKFLOW_REL} must invoke npm run check, so CI's member-gate invocation can never be weaker than the local one.`,
-  );
-});
-
-test("both member hooks analyse the whole project rather than the changed files", async () => {
-  // arrange
-  const gate = await readHook(GATE_HOOK_ID);
-  const negative = await readHook(NEGATIVE_HOOK_ID);
-
-  // act & assert
-  assert.deepStrictEqual(
-    [
-      { entry: gate.entry, passFilenames: gate.passFilenames },
-      { entry: negative.entry, passFilenames: negative.passFilenames },
-    ],
-    [
-      { entry: `npm run ${GATE_SCRIPT}`, passFilenames: "false" },
-      { entry: `npm run ${NEGATIVE_SCRIPT}`, passFilenames: "false" },
-    ],
-    "A per-file invocation cannot see the removal of the sole reader of a member declared somewhere else, which is the change these hooks exist to catch.",
-  );
-});
-
-test("the gate hook triggers on every input that can change what the gate reports", async () => {
-  // arrange
-  const trigger = new RegExp((await readHook(GATE_HOOK_ID)).files);
-  const inputs = [
-    // The reader removal this gate exists to catch, in a file that declares
-    // nothing itself.
-    "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
-    // A test file: a member only tests read changes status when they change.
-    "tests/edge/completions/data.test.ts",
-    // The analyzer, its evidence record and its decision record.
-    "scripts/check-unused-type-members.flow.mjs",
-    "scripts/check-unused-type-members.contracts.json",
-    "scripts/check-unused-type-members.exceptions.json",
-    // The compiler input, the dependency set and the hook configuration itself.
-    "tsconfig.json",
-    "package.json",
-    "package-lock.json",
-    ".pre-commit-config.yaml",
-  ];
-  const nonInputs = ["README.md", "docs/unused-type-member-gate.md", ".github/workflows/ci.yml"];
-
-  // act
-  const missed = inputs.filter((one) => !trigger.test(one));
-  const overreach = nonInputs.filter((one) => trigger.test(one));
-
-  // assert
-  assert.deepStrictEqual(
-    { missed, overreach },
-    { missed: [], overreach: [] },
-    "An input the hook does not name is a change that reaches a commit without the gate ever running.",
-  );
-});
-
-test("the negative hook triggers on the gate's own machinery and not on ordinary source", async () => {
-  // arrange
-  const trigger = new RegExp((await readHook(NEGATIVE_HOOK_ID)).files);
-  const inputs = [
-    "scripts/check-unused-type-members.negative.mjs",
-    "scripts/check-unused-type-members.flow.mjs",
-    "scripts/check-unused-type-members.exceptions.json",
-    // The declaration the offender is planted into, and the test that reads it.
-    EDGE_DEPS_REL,
-    EDGE_DEPS_OWNER_TEST_REL,
-    "tsconfig.json",
-    "package-lock.json",
-    ".pre-commit-config.yaml",
-  ];
-  // Deliberate, and stated so it cannot be widened by accident: these controls
-  // measure whether the GATE can see an offender, and no ordinary edit under
-  // extensions/ can change that answer. They still run in full on every
-  // npm run check, local and CI alike.
-  const outsideTheTrigger = [
-    "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
-    "tests/edge/completions/data.test.ts",
-  ];
-
-  // act
-  const missed = inputs.filter((one) => !trigger.test(one));
-  const overreach = outsideTheTrigger.filter((one) => trigger.test(one));
-
-  // assert
-  assert.deepStrictEqual(
-    { missed, overreach },
-    { missed: [], overreach: [] },
-    "Five whole-program analyses on every source commit is a cost this trigger is narrowed to avoid; narrowing it further, or widening it, is a decision and must be made here.",
   );
 });
 

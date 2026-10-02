@@ -51,6 +51,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts";
 import { FETCH_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts";
 import { PLUGIN_INFO_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts";
+import { CASCADE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
 import { INSTALL_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import { LIST_CONTEXT as PLUGIN_LIST_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
 import { REINSTALL_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
@@ -76,6 +77,7 @@ const CENTRAL_POLICY_NAME = "CENTRAL_ROW_POLICY (legacy notify)";
 /** The marker policy each named table row states, read from its module. */
 const DECLARED_MARKERS = {
   "INSTALL_CONTEXT (plugin/install.messaging.ts)": INSTALL_CONTEXT.rowPolicies,
+  "CASCADE_CONTEXT (plugin/install-cascade.messaging.ts)": CASCADE_CONTEXT.rowPolicies,
   "LIST_CONTEXT (plugin/list.messaging.ts)": PLUGIN_LIST_CONTEXT.rowPolicies,
   "FETCH_CONTEXT (plugin/fetch.messaging.ts)": FETCH_CONTEXT.rowPolicies,
   "UPDATE_CONTEXT (plugin/update.messaging.ts)": PLUGIN_UPDATE_CONTEXT.rowPolicies,
@@ -108,6 +110,18 @@ const MARKER_POLICY_TABLE = [
       unavailable: { markers: false, contentReasons: true },
       "partially-available": { markers: false, contentReasons: true },
       disabled: { markers: false, contentReasons: true },
+    },
+  },
+  {
+    name: "CASCADE_CONTEXT (plugin/install-cascade.messaging.ts)",
+    markers: {
+      installed: { markers: true, contentReasons: true },
+      "partially-installed": { markers: true, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
+      unavailable: { markers: false, contentReasons: true },
+      "partially-available": { markers: false, contentReasons: true },
+      disabled: { markers: false, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
     },
   },
   {
@@ -263,7 +277,7 @@ const MARKER_POLICY_TABLE = [
       skipped: { markers: false, contentReasons: true },
       "manual recovery": { markers: false, contentReasons: true },
       "will install": { markers: false, contentReasons: false },
-      "will uninstall": { markers: false, contentReasons: false },
+      "will uninstall": { markers: false, contentReasons: true },
       "will enable": { markers: false, contentReasons: false },
       "will disable": { markers: false, contentReasons: false },
     },

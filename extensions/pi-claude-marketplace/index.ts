@@ -117,6 +117,9 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       //
       // D-05 / D-07: the load pass opens one notification run, inside this try,
       // so its tool-inventory probe is covered by the same NFR-2 boundary.
+      // D-09-13: `event.reason` is threaded straight through -- only an
+      // explicit `/reload` runs the dependency-install step; a session
+      // start stays offline even with a missing dependency.
       try {
         await applyReconcile({
           ctx,
@@ -124,6 +127,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
           cwd: event.cwd,
           hooksRouting,
           completionCache,
+          reason: event.reason,
         });
       } catch (err) {
         try {
@@ -209,7 +213,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     {
       completionCache,
       gitOps: DEFAULT_GIT_OPS,
-      pluginUpdate: pluginUpdateOperations.pluginUpdate,
+      beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
     },
     hooksRouting,
     pluginUpdateOperations.updatePlugins,

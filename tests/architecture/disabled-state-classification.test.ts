@@ -35,6 +35,7 @@ const DECLARED_MODULE_ORDER: readonly string[] = [
   "plugin-state-classifier.ts",
   "update-preflight.ts",
   "plan.ts",
+  "dependency-verdict.ts",
 ];
 
 const TWO_AXIS_CONJUNCTION = /compatibility\.installable\s*&&\s*![\w.]+\.enabled/;

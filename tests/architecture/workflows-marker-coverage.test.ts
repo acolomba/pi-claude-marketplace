@@ -57,6 +57,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { importClaudeSettings } from "../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
+import { composeCascadeMemberRows } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
 import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { reinstalledRowFromOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
@@ -318,6 +319,48 @@ const SITE_CASES = [
       ),
   },
   {
+    // Tier B: `stagedDependencies` is module-private behind the exported
+    // cascade row composer. The ROOT row is supplied already composed, so the
+    // member row below is the only one this case's marker can come from.
+    site: "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts",
+    drive: (engineLoaded) =>
+      Promise.resolve(
+        renderThroughNotify(engineLoaded, {
+          marketplaces: [
+            {
+              name: "mp",
+              scope: "project",
+              plugins: composeCascadeMemberRows({
+                scope: "project",
+                rootKey: "hello@mp",
+                rootRow: {
+                  status: "installed",
+                  name: "hello",
+                  version: "1.0.0",
+                  dependencies: [],
+                  severity: "info",
+                  needsReload: true,
+                },
+                installed: [
+                  {
+                    key: "dep@mp",
+                    version: "1.0.0",
+                    declaresAgents: false,
+                    declaresMcp: false,
+                    declaresWorkflows: true,
+                    fellBackToCurrentCopy: false,
+                    reEnabledFromRecord: false,
+                  },
+                ],
+                alreadyInstalled: [],
+                probe: runFor(engineLoaded).softDeps,
+              }),
+            },
+          ],
+        }),
+      ),
+  },
+  {
     // Tier B: `dependenciesFromOutcome` is module-private behind the exported
     // row composer.
     site: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
@@ -365,6 +408,7 @@ const SITE_CASES = [
               plugins: [
                 updatedRowFromOutcome(
                   {
+                    constraint: undefined,
                     partition: "updated",
                     name: "hello",
                     fromVersion: "1.0.0",

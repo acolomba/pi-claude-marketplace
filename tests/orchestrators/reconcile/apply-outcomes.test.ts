@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
   classifyOrchestratorThrow,
   classifyReadPassThrow,
   dependenciesFromInstall,
+  dependencyDisabledOutcome,
   MigrateConfigSaveError,
   sourceMismatchOutcomeSubject,
   type InvalidBlockOutcome,
@@ -16,6 +18,7 @@ import {
   type OutcomeBase,
   type PerEntryOutcome,
   type PluginBackfilledOutcome,
+  type PluginDependencyDisabledOutcome,
   type PluginDisabledOutcome,
   type PluginDisableFailedOutcome,
   type PluginEnabledOutcome,
@@ -28,6 +31,7 @@ import {
   type SourceMismatchOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import {
+  DependencyCascadeError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
   StateLockHeldError,
@@ -85,6 +89,17 @@ void ({
   reason: "not in manifest",
 } satisfies PluginInstallFailedOutcome);
 void ({
+  kind: "plugin-install-failed",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "dependency failed",
+  cause: new DependencyCascadeError(
+    'Dependency "linter@official" is not declared by its marketplace.',
+    "linter@official",
+  ),
+} satisfies PluginInstallFailedOutcome);
+void ({
   kind: "plugin-uninstalled",
   scope: "user",
   marketplace: "official",
@@ -97,6 +112,17 @@ void ({
   marketplace: "official",
   plugin: "formatter",
   reason: "permission denied",
+} satisfies PluginUninstallFailedOutcome);
+void ({
+  kind: "plugin-uninstall-failed",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "unreadable",
+  cause: new UninstallRefusedError(
+    "unreadable",
+    "cannot read the dependencies of linter@official: not declared by its marketplace",
+  ),
 } satisfies PluginUninstallFailedOutcome);
 void ({
   kind: "plugin-enabled",
@@ -127,6 +153,23 @@ void ({
   enableHint: true,
   postCommitWarnings: ["data directory deferred"],
 } satisfies PluginDisabledOutcome);
+void ({
+  kind: "plugin-dependency-disabled",
+  scope: "project",
+  marketplace: "official",
+  plugin: "deploy-kit",
+  version: "1.2.3",
+  reasons: ["dependency unsatisfied"],
+  cause: new Error('Install "secrets-vault@official" or uninstall "deploy-kit@official"'),
+} satisfies PluginDependencyDisabledOutcome);
+void ({
+  kind: "plugin-dependency-disabled",
+  scope: "user",
+  marketplace: "official",
+  plugin: "deploy-kit",
+  reasons: ["dependency unsatisfied"],
+  cause: new Error('Install "secrets-vault@official" or uninstall "deploy-kit@official"'),
+} satisfies PluginDependencyDisabledOutcome);
 void ({
   kind: "plugin-disable-failed",
   scope: "project",
@@ -247,6 +290,15 @@ void ({
   // @ts-expect-error plugin install failure outcomes require a reason
 } satisfies PluginInstallFailedOutcome);
 void ({
+  kind: "plugin-install-failed",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "unreadable",
+  // @ts-expect-error install failure causes are DependencyCascadeError, not a bare Error
+  cause: new Error("boom"),
+} satisfies PluginInstallFailedOutcome);
+void ({
   kind: "plugin-uninstalled",
   scope: "user",
   marketplace: "official",
@@ -260,6 +312,15 @@ void ({
   marketplace: "official",
   plugin: "formatter",
   // @ts-expect-error plugin uninstall failure outcomes require a reason
+} satisfies PluginUninstallFailedOutcome);
+void ({
+  kind: "plugin-uninstall-failed",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "unreadable",
+  // @ts-expect-error uninstall failure causes are UninstallRefusedError, not a bare Error
+  cause: new Error("boom"),
 } satisfies PluginUninstallFailedOutcome);
 void ({
   kind: "plugin-enabled",
@@ -292,6 +353,22 @@ void ({
   // @ts-expect-error disabled plugin reasons exclude the structural marketplace-only reason
   reasons: ["marketplace not added"],
 } satisfies PluginDisabledOutcome);
+void ({
+  kind: "plugin-dependency-disabled",
+  scope: "user",
+  marketplace: "official",
+  plugin: "deploy-kit",
+  reasons: ["dependency unsatisfied"],
+  // @ts-expect-error a held-down plugin always carries the remedy its row renders
+} satisfies PluginDependencyDisabledOutcome);
+void ({
+  kind: "plugin-dependency-disabled",
+  scope: "user",
+  marketplace: "official",
+  plugin: "deploy-kit",
+  cause: new Error("remedy"),
+  // @ts-expect-error the row's brace is stamped by the producer, never the renderer
+} satisfies PluginDependencyDisabledOutcome);
 void ({
   kind: "plugin-disable-failed",
   scope: "project",
@@ -411,6 +488,20 @@ describe("sourceMismatchOutcomeSubject", () => {
 });
 
 describe("classifyOrchestratorThrow", () => {
+  test("classifies a dependency-cascade failure", () => {
+    // arrange
+    const error = new DependencyCascadeError(
+      'Dependency "linter@official" is not declared by its marketplace.',
+      "linter@official",
+    );
+
+    // act
+    const reason = classifyOrchestratorThrow(error);
+
+    // assert
+    assert.strictEqual(reason, "dependency failed");
+  });
+
   test("classifies an already-installed plugin shape", () => {
     // arrange
     const error = new PluginShapeError({
@@ -731,5 +822,174 @@ describe("dependenciesFromInstall", () => {
 
     // assert
     assert.deepStrictEqual(dependencies, ["agents", "mcp", "workflows"]);
+  });
+});
+
+describe("dependencyDisabledOutcome", () => {
+  test("names the install remedy and the recorded version for a missing dependency", () => {
+    // arrange
+    const held = {
+      scope: "project",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      dependency: "secrets-vault@official",
+      kind: "missing",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, "1.2.3");
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        ...outcome,
+        cause: { message: outcome.cause.message, cause: outcome.cause.cause },
+      },
+      {
+        kind: "plugin-dependency-disabled",
+        scope: "project",
+        marketplace: "official",
+        plugin: "deploy-kit",
+        version: "1.2.3",
+        reasons: ["dependency unsatisfied"],
+        cause: {
+          message: 'Install "secrets-vault@official" or uninstall "deploy-kit@official"',
+          cause: undefined,
+        },
+      },
+    );
+  });
+
+  test("names the enable remedy and omits the version a disabled dependency has none of", () => {
+    // arrange
+    const held = {
+      scope: "user",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      dependency: "secrets-vault@official",
+      kind: "disabled",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, undefined);
+
+    // assert
+    assert.deepStrictEqual(
+      { ...outcome, cause: outcome.cause.message },
+      {
+        kind: "plugin-dependency-disabled",
+        scope: "user",
+        marketplace: "official",
+        plugin: "deploy-kit",
+        reasons: ["dependency unsatisfied"],
+        cause: 'Enable "secrets-vault@official" or uninstall "deploy-kit@official"',
+      },
+    );
+  });
+
+  test("names the declared range in the update remedy of an out-of-range dependency", () => {
+    // arrange
+    const held = {
+      scope: "user",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      dependency: "secrets-vault@official",
+      kind: "out-of-range",
+      range: "^2.0.0",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, "1.0.0");
+
+    // assert
+    assert.deepStrictEqual(
+      { cause: outcome.cause.message, reasons: outcome.reasons },
+      {
+        cause:
+          'Update "secrets-vault@official" to satisfy ^2.0.0, or uninstall "deploy-kit@official"',
+        reasons: ["dependency version unsatisfied"],
+      },
+    );
+  });
+
+  test("bounds a declared range too long to render", () => {
+    // arrange
+    const held = {
+      scope: "user",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      dependency: "secrets-vault@official",
+      kind: "out-of-range",
+      range: `>=${"1".repeat(210)}`,
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, "1.0.0");
+
+    // assert
+    assert.strictEqual(
+      outcome.cause.message,
+      `Update "secrets-vault@official" to satisfy >=${"1".repeat(198)}... (+12 chars), or uninstall "deploy-kit@official"`,
+    );
+  });
+
+  test("T-06-02: drops a dependent key whose plugin name could close the remedy's quote", () => {
+    // arrange
+    const held = {
+      scope: "project",
+      marketplace: "official",
+      plugin: 'x" or uninstall "victim@official',
+      dependency: "secrets-vault@official",
+      kind: "missing",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, "1.2.3");
+
+    // assert
+    assert.strictEqual(
+      outcome.cause.message,
+      'Install "secrets-vault@official" or uninstall this plugin',
+    );
+  });
+
+  test("T-06-02: drops both keys when the marketplace name they share is unrenderable", () => {
+    // arrange
+    const held = {
+      scope: "user",
+      marketplace: 'official" or enable "victim@official',
+      plugin: "deploy-kit",
+      dependency: 'secrets-vault@official" or enable "victim@official',
+      kind: "disabled",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, undefined);
+
+    // assert
+    assert.strictEqual(
+      outcome.cause.message,
+      "Enable the declared dependency or uninstall this plugin",
+    );
+  });
+
+  test("names both parties without a constraint when an out-of-range entry carries no range", () => {
+    // arrange
+    const held = {
+      scope: "user",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      dependency: "secrets-vault@official",
+      kind: "out-of-range",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, undefined);
+
+    // assert
+    assert.strictEqual(
+      outcome.cause.message,
+      'Update "secrets-vault@official" or uninstall "deploy-kit@official"',
+    );
   });
 });

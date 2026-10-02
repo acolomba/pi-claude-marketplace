@@ -42,6 +42,12 @@ export interface SeededRecordInput {
   readonly unsupported?: readonly string[];
   readonly resolvedSource?: string;
   readonly hookEntries?: readonly Record<string, unknown>[];
+  /**
+   * D-04-01: how the plugin got here. Defaults to `"explicit"` -- a plugin the
+   * user named -- because that is what every seeded record here describes; a
+   * case about a cascade-installed dependency asks for `"dependency"`.
+   */
+  readonly provenance?: "explicit" | "dependency";
 }
 
 /**
@@ -67,6 +73,7 @@ export function buildInstalledPluginRecord(
     },
     resources,
     enabled: info.disabled !== true,
+    provenance: info.provenance ?? "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };

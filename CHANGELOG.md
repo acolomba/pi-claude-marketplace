@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Internal: local checks now select changed modules and their consumers. GSD uses focused checks during tasks and full checks before PR handoff. CI reuses unit coverage for SonarCloud, removes duplicate checks, and runs isolated coverage pairs concurrently.
+
 - A private marketplace or plugin source on any git host now clones with a credential that is already in your git credential helper. Before, only `github.com` and `gitlab.com` authenticated. Thanks to @jstillwa, who found this defect and the next two in #153. (#221)
 
   - If no credential is stored for the host, the error tells you to store one with `git credential approve`.
@@ -28,6 +30,18 @@
   - Installed plugin Markdown that names a sibling workflow as `plugin:workflow` gets the workflow's installed command name, the same way it does for sibling skills and commands.
   - The extension now depends on `acorn` to read the metadata that a workflow script declares.
   - Release waits for `pi-dynamic-workflows` fixes [#232](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/232), [#233](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/233), and [#234](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/234).
+
+- A plugin can declare the other plugins it needs, and `install` now installs them with it. See [Dependency resolution](docs/dependency-resolution.md). (#198)
+
+  - A dependency resolves from the marketplace it names, or from the declaring plugin's marketplace. Version constraints follow the semver range syntax. A cycle stops. An already-installed dependency is not reinstalled. When one dependency fails, the whole install rolls back and the message names the dependency and the reason.
+  - Each install record now says whether you asked for the plugin by name or another plugin pulled it in. A direct install stays direct when a later install declares it. Records from older versions are upgraded silently.
+  - `uninstall --prune` also removes the dependencies that no remaining plugin needs. It never removes a plugin you installed by name. `uninstall` now proceeds while another installed plugin still needs it. It names the dependents, and the next `/reload` disables them with the install remedy. It refuses only when it cannot read what an installed plugin declares, including a marketplace entry whose `dependencies` are malformed.
+  - `uninstall --keep-data` keeps the plugin's data directory. Without the flag, `uninstall` deletes the directory and does not prompt.
+  - A bare `<pluginRoot>/plugin.json` is now read, and a plugin that declares `"./skills/"` next to a `skills/` directory no longer warns about duplicate skills.
+  - `info` lists every declared dependency, including object-shaped entries with a version constraint, and does so on a git-source plugin that is not yet fetched.
+  - `/reload` now installs a declared dependency an installed plugin lacks, and enables the plugin that needed it. A dependency that cannot be installed gets its own row naming the reason.
+  - New dependencies from another marketplace need permission in the install root's marketplace manifest. An installed dependency remains exempt. Reload checks the original declarers before it starts a missing dependency's own cascade and reports a refusal with both remedies.
+  - `update` and `autoupdate` now keep a plugin inside the version ranges its dependents declare. Each picks the highest version those ranges allow, and holds the update with a row naming the holders when none exists.
 
 - Internal: the GSD discuss phase now loads a Claude Code compatibility research skill before it generates questions, so phase decisions cite verified upstream behavior instead of assumption. `AGENTS.md` and `PROJECT.md` now state the upstream-parity rule and the two things that license a divergence, and both record the hook bridge that their component list had been omitting. (#210)
 

@@ -30,7 +30,8 @@
     "verifier": true,
     "auto_advance": false,
     "compact_content": false,
-    "skip_discuss": false
+    "skip_discuss": false,
+    "test_gate_timeout": 2400
   },
   "effort": {
     "agent_overrides": {
@@ -51,17 +52,20 @@
     "gsd-executor": [
       "skills/typescript-comments",
       "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review"
+      "skills/typescript-google-style-review",
+      "skills/local-verification"
     ],
     "gsd-debugger": [
       "skills/typescript-comments",
       "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review"
+      "skills/typescript-google-style-review",
+      "skills/local-verification"
     ],
     "gsd-code-fixer": [
       "skills/typescript-comments",
       "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review"
+      "skills/typescript-google-style-review",
+      "skills/local-verification"
     ],
     "gsd-nyquist-auditor": [
       "skills/typescript-comments",
@@ -73,7 +77,8 @@
       "skills/typescript-google-style-review",
       "skills/typescript-unit-testing-review"
     ],
-    "gsd-verifier": ["skills/typescript-unit-testing-review"]
+    "gsd-verifier": ["skills/typescript-unit-testing-review", "skills/local-verification"],
+    "gsd-planner": ["skills/local-verification"]
   },
   "mode": "yolo",
   "claude_md_assembly": {

@@ -10,7 +10,7 @@ import { REPO_ROOT } from "./source-scan.ts";
  * DIFF-01 architecture purity gate.
  *
  * `orchestrators/reconcile/plan.ts` is the foundation of the reconcile
- * surface. Its `planReconcile` function is a pure bidirectional 7-bucket diff
+ * surface. Its `planReconcile` function is a pure bidirectional 8-bucket diff
  * between `MergedConfig` and `ExtensionState` and MUST NOT import anything
  * effectful -- no `node:fs`, no `node:fs/promises`, no `platform/git`, no
  * `gitOps` bare identifier, no `notify` bare identifier, no `saveState` /

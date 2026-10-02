@@ -90,7 +90,9 @@ async function validateComponentPath(
     return { ok: false, reason: `component path for "${kind}" escapes plugin root: "${raw}"` };
   }
 
-  return { ok: true, relative: raw };
+  // Deduplicate equivalent spellings only after enforcing containment.
+  const relative = path.relative(pluginRoot, contained.absolutePath);
+  return { ok: true, relative: relative === "" ? "." : relative };
 }
 
 function addComponentPath(

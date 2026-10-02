@@ -20,8 +20,8 @@ import type {
  *
  * The guard name is kept as `isInfoKind` per the TYPE-03 wording even though
  * the set now includes a failure kind; "standalone-dispatched" is the precise
- * meaning -- these kinds are routed through `dispatchInfoMessage` and never
- * carry a cascade summary line or reload-hint trailer.
+ * meaning -- these kinds are routed through `dispatchInfoMessage`. The
+ * committed prune warning requests reload because its state save succeeded.
  */
 export type StandaloneKind =
   | "marketplace-info"
@@ -30,6 +30,8 @@ export type StandaloneKind =
   | "plugin-info-cascade"
   | "marketplace-not-added"
   | "reconcile-pending-empty"
+  | "prune-empty"
+  | "prune-committed-warning"
   | "reconcile-applied-cascade";
 
 /**
@@ -49,6 +51,8 @@ export function isInfoKind(
     m.kind === "plugin-info-cascade" ||
     m.kind === "marketplace-not-added" ||
     m.kind === "reconcile-pending-empty" ||
+    m.kind === "prune-empty" ||
+    m.kind === "prune-committed-warning" ||
     m.kind === "reconcile-applied-cascade"
   );
 }
@@ -157,10 +161,13 @@ export function computeSeverity(message: NotificationMessage): "warning" | "erro
         return message.plugin.status === "failed" ? "error" : undefined;
       case "reconcile-applied-cascade":
         return cascadeSeverity(message);
+      case "prune-committed-warning":
+        return "warning";
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
       case "reconcile-pending-empty":
+      case "prune-empty":
         // DIFF-01 SC #2: the empty-steady-state advisory is read-only / info.
         return undefined;
     }
@@ -354,10 +361,13 @@ export function buildSummaryLine(
         // severity `resolveEnvelope` does not call buildSummaryLine, so the
         // empty arm below is unreachable in practice.
         return buildSummaryLineForCascade(message.marketplaces, severity);
+      case "prune-committed-warning":
+        return "Prune committed; finalization needs attention.";
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
       case "reconcile-pending-empty":
+      case "prune-empty":
         // DIFF-01 SC #2: info-severity / read-only -- no summary semantics.
         return "";
     }
@@ -451,7 +461,7 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
   // RLD-02: the reload hint is the OR-reduce of the caller-stamped
   // `needsReload` over the cascade rows (see the flattened loop below) -- NOT
   // status-token / cascade-kind inference.
-  // INFO-03 / INFO-02: info-surface kinds NEVER trigger the reload-hint
+  // INFO-03 / INFO-02: read-only info-surface kinds never trigger the reload-hint
   // trailer. The info commands (`marketplace info`,
   // `plugin info`) are read-only surfaces that do not change a Pi-visible
   // resource; the trailer would mislead the user into running `/reload`
@@ -475,8 +485,11 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
       case "plugin-info-cascade":
       case "marketplace-not-added":
       case "reconcile-pending-empty":
+      case "prune-empty":
       case "reconcile-applied-cascade":
         return false;
+      case "prune-committed-warning":
+        return true;
     }
   }
 

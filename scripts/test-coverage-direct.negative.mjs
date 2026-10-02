@@ -13,6 +13,7 @@ import {
   enforcePairs,
   pairForPath,
   pairsForChangedPaths,
+  runPairs,
   selectBase,
 } from "./test-coverage-direct.mjs";
 import { assertPinnedReadings, loadCoveragePin } from "./test-coverage-direct.pin.mjs";
@@ -899,6 +900,128 @@ try {
         throw new Error(`Focused test failed: ${pinnedPair.testPath}`);
       }),
     { message: `Focused test failed: ${pinnedPair.testPath}` },
+  );
+
+  // Explicit gates prove overlap and the worker bound without timing assumptions.
+  const poolPairs = [pinnedPair, unpinnedPair, { sourcePath: "third", testPath: "third" }];
+  const releases = poolPairs.map(() => Promise.withResolvers());
+  const secondRecorded = Promise.withResolvers();
+  const started = [];
+  const recorded = [];
+  const parallel = runPairs(
+    poolPairs,
+    async (pair) => {
+      const index = poolPairs.indexOf(pair);
+      started.push(index);
+      await releases[index].promise;
+      return completeRecordFor(pair);
+    },
+    {
+      concurrency: 2,
+      onRecord: (record) => {
+        recorded.push(record.sourcePath);
+        if (record.sourcePath === unpinnedPair.sourcePath) {
+          secondRecorded.resolve();
+        }
+      },
+    },
+  );
+
+  assert.deepEqual(started, [0, 1]);
+  releases[1].resolve();
+  await secondRecorded.promise;
+  assert.deepEqual(started, [0, 1, 2]);
+  assert.deepEqual(recorded, [unpinnedPair.sourcePath]);
+  releases[0].resolve();
+  releases[2].resolve();
+  assert.deepEqual(
+    await parallel,
+    poolPairs.map((pair) => completeRecordFor(pair)),
+  );
+
+  const firstSerial = Promise.withResolvers();
+  const serialStarted = [];
+  const serial = runPairs(
+    poolPairs,
+    async (pair) => {
+      serialStarted.push(pair.sourcePath);
+      await firstSerial.promise;
+      return completeRecordFor(pair);
+    },
+    { concurrency: 1 },
+  );
+
+  assert.deepEqual(serialStarted, [pinnedPair.sourcePath]);
+  firstSerial.resolve();
+  assert.deepEqual(
+    await serial,
+    poolPairs.map((pair) => completeRecordFor(pair)),
+  );
+  assert.deepEqual(
+    serialStarted,
+    poolPairs.map((pair) => pair.sourcePath),
+  );
+
+  for (const concurrency of [0, -1, 1.5, "", "abc", "1e2", Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    await assert.rejects(() => runPairs([], completeRecordFor, { concurrency }), {
+      message: "TEST_CONCURRENCY must be a positive safe integer",
+    });
+  }
+
+  assert.deepEqual(await runPairs([], () => assert.fail("No pair was selected")), []);
+
+  // A refusal cannot finish the gate while another started pair still owns resources.
+  const failure = new Error("Focused worker refused");
+  const failedPair = Promise.withResolvers();
+  const drainingPair = Promise.withResolvers();
+  const failureStarted = [];
+  let settled = false;
+  let compared = false;
+  const draining = enforcePairs(
+    poolPairs,
+    [],
+    [],
+    async (pair) => {
+      failureStarted.push(pair.sourcePath);
+      await (pair === pinnedPair ? failedPair.promise : drainingPair.promise);
+      return completeRecordFor(pair);
+    },
+    {
+      concurrency: 2,
+      beforeCompare: () => {
+        compared = true;
+      },
+    },
+  ).then(
+    () => assert.fail("A worker failure must reject the gate"),
+    (error) => {
+      settled = true;
+      return error;
+    },
+  );
+
+  failedPair.reject(failure);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(settled, false);
+  drainingPair.resolve();
+  assert.equal(await draining, failure);
+  assert.deepEqual(failureStarted, [pinnedPair.sourcePath, unpinnedPair.sourcePath]);
+  assert.equal(compared, false);
+
+  const reportFailure = new Error("Cannot retain a report row");
+  await assert.rejects(
+    () =>
+      runPairs([pinnedPair], completeRecordFor, {
+        onRecord: () => {
+          throw reportFailure;
+        },
+      }),
+    (error) => error === reportFailure,
+  );
+
+  process.stdout.write(
+    "Parallel pair controls passed: bound, overlap, ordering, serial override, invalid limits, empty selection, drain on failure, and report failure.\n",
   );
 
   // The loader's half, planted against the injected root. This is what proves the root is genuinely

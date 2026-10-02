@@ -646,6 +646,112 @@ describe("resolveRows", () => {
     ]);
   });
 
+  for (const { title, row, expectedRow } of [
+    {
+      title: "serializes the remedy cause of a load-time dependency disable row",
+      row: {
+        status: "disabled",
+        severity: "warning",
+        needsReload: false,
+        name: "alpha",
+        reasons: ["dependency unsatisfied"],
+        cause: new Error('Install "vault@mp" or uninstall "alpha@mp"'),
+      },
+      expectedRow: {
+        status: "disabled",
+        severity: "warning",
+        needsReload: false,
+        name: "alpha",
+        reasons: ["dependency unsatisfied"],
+        failure: {
+          cause: { causeChain: ['Install "vault@mp" or uninstall "alpha@mp"'], truncated: false },
+          leaks: [],
+          rollbackPartial: [],
+        },
+      },
+    },
+    {
+      title: "serializes the dependents cause of an uninstalled row",
+      row: {
+        status: "uninstalled",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        reasons: ["dependents unsatisfied"],
+        cause: new Error("required by beta@mp"),
+      },
+      expectedRow: {
+        status: "uninstalled",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        reasons: ["dependents unsatisfied"],
+        failure: {
+          cause: { causeChain: ["required by beta@mp"], truncated: false },
+          leaks: [],
+          rollbackPartial: [],
+        },
+      },
+    },
+    {
+      title: "serializes the held-update cause of a skipped row",
+      row: {
+        status: "skipped",
+        severity: "warning",
+        needsReload: false,
+        name: "alpha",
+        reasons: ["dependents constrain"],
+        cause: new Error('required by "beta@mp"'),
+      },
+      expectedRow: {
+        status: "skipped",
+        severity: "warning",
+        needsReload: false,
+        name: "alpha",
+        reasons: ["dependents constrain"],
+        failure: {
+          cause: { causeChain: ['required by "beta@mp"'], truncated: false },
+          leaks: [],
+          rollbackPartial: [],
+        },
+      },
+    },
+    {
+      title: "gives a disabled row without a cause no failure facts",
+      row: { status: "disabled", severity: "info", needsReload: true, name: "alpha" },
+      expectedRow: {
+        status: "disabled",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        reasons: [],
+      },
+    },
+    {
+      title: "gives an uninstalled row without a cause no failure facts",
+      row: { status: "uninstalled", severity: "info", needsReload: true, name: "alpha" },
+      expectedRow: {
+        status: "uninstalled",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        reasons: [],
+      },
+    },
+  ] as const satisfies readonly {
+    title: string;
+    row: PluginNotificationMessage;
+    expectedRow: ResolvedRow;
+  }[]) {
+    test(title, () => {
+      // act
+      const resolved = resolveRows(marketplaceWith([row]), allLoaded(), CENTRAL_ROW_POLICY);
+
+      // assert
+      assert.deepStrictEqual(resolved[0]!.plugins, [expectedRow]);
+    });
+  }
+
   test("reads the leaked paths of a ManualRecoveryError cause", () => {
     // arrange
     const marketplaces = marketplaceWith([

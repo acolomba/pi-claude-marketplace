@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -15,6 +15,11 @@ import type { TestContext } from "node:test";
 void ({ name: "marketplace", plugins: [] } satisfies MarketplaceManifest);
 void ({
   name: "marketplace",
+  plugins: [],
+  allowCrossMarketplaceDependenciesOn: ["tools"],
+} satisfies MarketplaceManifest);
+void ({
+  name: "marketplace",
   plugins: [{ name: "plugin", source: "./plugin" }],
   strict: false,
   owner: { name: "Owner" },
@@ -23,6 +28,12 @@ void ({
 void ({ name: "marketplace" } satisfies MarketplaceManifest);
 // @ts-expect-error The strict declaration is boolean when present.
 void ({ name: "marketplace", plugins: [], strict: "false" } satisfies MarketplaceManifest);
+void ({
+  name: "marketplace",
+  plugins: [],
+  // @ts-expect-error The dependency allowlist contains strings only.
+  allowCrossMarketplaceDependenciesOn: [42],
+} satisfies MarketplaceManifest);
 
 /**
  * MM-1: the compiled validator is module-private, so a schema case reaches it
@@ -43,6 +54,18 @@ async function manifestFileWith(t: TestContext, manifestBody: string): Promise<s
 describe("marketplace manifest schema", () => {
   for (const marketplaceManifest of [
     { name: "marketplace", plugins: [] },
+    { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: ["tools"] },
+    { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: [] },
+    {
+      name: "marketplace",
+      plugins: [],
+      allowCrossMarketplaceDependenciesOn: ["tools", "tools", "", "not a dependency name"],
+    },
+    {
+      name: "marketplace",
+      plugins: [],
+      allowCrossMarketplaceDependenciesOn: ["猫", "line\nfeed", "tab\t", "\u0000", "\u202e"],
+    },
     {
       name: "marketplace",
       plugins: [
@@ -90,6 +113,34 @@ describe("marketplace manifest schema", () => {
     [{ name: "marketplace", plugins: [], owner: null }, "/owner: must be object"],
     [{ name: "marketplace", plugins: [], owner: {} }, "/owner: must have required properties name"],
     [{ name: "marketplace", plugins: [], owner: { name: 42 } }, "/owner/name: must be string"],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: "tools" },
+      "/allowCrossMarketplaceDependenciesOn: must be array",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: null },
+      "/allowCrossMarketplaceDependenciesOn: must be array",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: false },
+      "/allowCrossMarketplaceDependenciesOn: must be array",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: 42 },
+      "/allowCrossMarketplaceDependenciesOn: must be array",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: {} },
+      "/allowCrossMarketplaceDependenciesOn: must be array",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: ["tools", 42] },
+      "/allowCrossMarketplaceDependenciesOn/1: must be string",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: ["tools", null] },
+      "/allowCrossMarketplaceDependenciesOn/1: must be string",
+    ],
   ] as const) {
     test(`rejects ${JSON.stringify(marketplaceManifest)}`, async (t) => {
       // arrange
@@ -166,6 +217,38 @@ describe("loadMarketplaceManifest", () => {
 
     // assert
     assert.deepStrictEqual(marketplaceManifest, { name: "marketplace", plugins: [] });
+  });
+
+  test("isolates invalid dependency entries and preserves healthy marketplace siblings", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(tmpdir(), "dependency-marketplace-"));
+    t.after(() => rm(directory, { force: true, recursive: true }));
+    const manifestPath = path.join(directory, "marketplace.json");
+    const raw =
+      '{"name":"marketplace","plugins":[{"name":"broken","source":"./broken","dependencies":["foo@~1.0.0"]},{"dependencies":[42]},{"name":"healthy","source":"./healthy","dependencies":[{"name":"foo","version":"~1.0.0"}]}]}';
+    await writeFile(manifestPath, raw);
+
+    // act
+    const manifest = await loadMarketplaceManifest(manifestPath);
+    const persisted = await readFile(manifestPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(manifest, {
+      name: "marketplace",
+      plugins: [
+        {
+          name: "broken",
+          source: { source: "unsupported" },
+          dependencies: ["foo@~1.0.0"],
+        },
+        {
+          name: "healthy",
+          source: "./healthy",
+          dependencies: [{ name: "foo", version: "~1.0.0" }],
+        },
+      ],
+    });
+    assert.strictEqual(persisted, raw);
   });
 
   test("preserves a SyntaxError cause for malformed JSON", async (t) => {

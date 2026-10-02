@@ -40,6 +40,7 @@ export interface SubcommandHandlers {
   bootstrap: SubcommandHandler;
   install: SubcommandHandler;
   uninstall: SubcommandHandler;
+  prune: SubcommandHandler;
   update: SubcommandHandler;
   // FTCH-01: pi-only `fetch` verb (upstream `/plugin` has no fetch). Warms a
   // git-source plugin's clone/mirror cache without installing.
@@ -76,6 +77,7 @@ export const TOP_LEVEL_SUBCOMMANDS = [
   "bootstrap",
   "install",
   "uninstall",
+  "prune",
   "update",
   "fetch",
   "reinstall",
@@ -109,10 +111,11 @@ export const MARKETPLACE_SUBCOMMANDS = [
 ] as const;
 
 export const TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
-  "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
+  "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
+  "  prune [--scope user|project] [--dry-run]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
@@ -177,6 +180,8 @@ export async function routeClaudePlugin(
       return handlers.install(rest, ctx, run);
     case "uninstall":
       return handlers.uninstall(rest, ctx, run);
+    case "prune":
+      return handlers.prune(rest, ctx, run);
     case "update":
       return handlers.update(rest, ctx, run);
     case "fetch":

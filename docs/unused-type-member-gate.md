@@ -4,7 +4,7 @@ Fails any TypeScript interface or object-type member that no run-time read ever 
 
 A declaration is not a read. A type-only reference is not a read. A member spelled the same way on an unrelated type is not a read. So a slot that every caller fills and nobody ever looks at fails this gate, even though the compiler, the linter and the dead-code analysis all accept it.
 
-The gate is part of `npm run check` and runs as a pre-commit hook. This document states what it measures, what it deliberately does not claim, how to answer a finding, and the one form a standing finding may take.
+The gate runs over the whole project in `npm run check` at completion and in CI. This document states what it measures, what it deliberately does not claim, how to answer a finding, and the one form a standing finding may take.
 
 ## Invocation
 
@@ -17,14 +17,7 @@ The gate is part of `npm run check` and runs as a pre-commit hook. This document
 
 `npm run check` runs the gate and the sensitivity controls, in that order, at the end of the chain. Continuous integration runs `npm run check`, so its invocation is the same one you run locally and can never be weaker.
 
-Two pre-commit hooks invoke the same two scripts. Both set `pass_filenames: false`, because the analysis is whole-program: the change the gate exists to catch is the removal of the sole reader of a member declared in a *different* file, and a per-file invocation would never see it.
-
-The two hooks have different triggers, deliberately.
-
-- `npm-type-members` runs on any change that can alter what the gate reports: production and test `.ts`, the analyzer scripts, the contract and decision records, `tsconfig.json`, the dependency manifests and the hook configuration itself.
-- `npm-type-members-negative` runs only on the gate's own machinery, plus the declaration the controls plant into. Whether the gate can still see an offender is settled by the analyzer and its records, never by an ordinary edit under `extensions/`, so the seven minutes do not ride on every source commit. The controls still run in full on every `npm run check`, local and CI alike.
-
-`tests/architecture/unused-type-member-gate.test.ts` asserts both triggers by exercising them against sample paths, so widening or narrowing either one is a change you have to make there on purpose.
+Local commits run `npm run check:changed`. Ordinary source/test edits get focused checks. Changes to analyzer scripts, shared test support, dependencies, or configuration broaden to the full check, including both member commands. The full member gate also runs at completion, where it can detect a removed reader in a different file.
 
 ## Exit status
 

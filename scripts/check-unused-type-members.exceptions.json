@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "exceptions": [
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:145:5",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:147:5",
       "owner": "enableRowDependencies.signals",
       "key": "partition",
       "decision": "Orchestrators repair: WR-01 refusal marker kept, with no source touched.",

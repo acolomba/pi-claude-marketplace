@@ -344,6 +344,8 @@ Install in the project scope instead of the user scope.
 /claude:plugin install context7-plugin@context7-marketplace --scope project
 ```
 
+A plugin can declare the other plugins it needs. The install adds them too, into the same scope. For more information, see [Dependency resolution](docs/dependency-resolution.md).
+
 Update one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 
 ```text
@@ -376,7 +378,37 @@ Uninstall a plugin.
 /claude:plugin uninstall context7-plugin@context7-marketplace
 ```
 
-Reload Pi after changes.
+Keep the plugin's data directory with `--keep-data`.
+
+```text
+/claude:plugin uninstall context7-plugin@context7-marketplace --keep-data
+```
+
+Also remove the dependencies that no remaining plugin needs with `--prune`.
+
+```text
+/claude:plugin uninstall context7-plugin@context7-marketplace --prune
+```
+
+You can uninstall a plugin that another installed plugin needs. Its row names the dependents as `{dependents unsatisfied}`. At the next reload, Pi disables those dependents. For more information, see [Dependency resolution](docs/dependency-resolution.md).
+
+To remove orphaned dependency installs without naming a plugin to uninstall, run `prune`. It selects the user scope by default. Use `--scope project` to select the project scope.
+
+```text
+/claude:plugin prune
+/claude:plugin prune --scope project
+```
+
+Preview the same scope with `--dry-run`. The preview reads the current state and writes nothing. A later `prune` checks the state again, so its result can change.
+
+```text
+/claude:plugin prune --dry-run
+/claude:plugin prune --scope project --dry-run
+```
+
+Only dependency-installed plugins that no installed plugin in the same scope declares qualify. Even disabled plugins still hold their dependencies. Plugins you installed by name stay installed. The sweep repeats until no more plugins qualify. Actual rows read `(uninstalled) {dependency pruned}`; preview rows read `(will uninstall) {dependency pruned}`. If none qualify, both commands report `Nothing to prune in user scope: no orphaned dependency installs were found.` for the default scope.
+
+Reload Pi after changes. A reload never prunes orphaned dependencies. Run `prune` or `uninstall <plugin> --prune` to remove them.
 
 ```text
 /reload

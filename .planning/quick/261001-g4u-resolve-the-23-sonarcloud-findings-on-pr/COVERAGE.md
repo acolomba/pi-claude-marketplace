@@ -1,0 +1,1 @@
+No external API integration: the plan edits local TypeScript sources, their tests, and a gate pin file; the SonarCloud issue-search URL it cites is an optional read-only cross-check for locating flagged lines, not code that integrates an API.

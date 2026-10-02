@@ -6,11 +6,15 @@ import {
   classifyEntityShapeError,
   classifyInstallFailure,
   composeInstallFailureMessage,
+  composePromotedRow,
   formatOrchestratedCause,
+  PROMOTED_ROW_REASONS,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type {
   EntityErrorRow,
@@ -545,6 +549,92 @@ describe("composeInstallFailureMessage", () => {
       severity: "error",
       needsReload: false,
     });
+  });
+});
+
+describe("composePromotedRow", () => {
+  test("D-04-07: composes an installed row carrying the promotion brace at info severity with no reload", () => {
+    // act
+    const row = composePromotedRow({
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(row, {
+      status: "installed",
+      name: "linter",
+      version: "3.0.0",
+      scope: "user",
+      dependencies: [],
+      reasons: ["already installed", "dependency promoted"],
+      severity: "info",
+      needsReload: false,
+    });
+  });
+
+  test("D-04-07: stamps the reload hint the caller reports for a re-materialized record", () => {
+    // act
+    const row = composePromotedRow({
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(row, {
+      status: "installed",
+      name: "linter",
+      version: "3.0.0",
+      scope: "user",
+      dependencies: [],
+      reasons: ["already installed", "dependency promoted"],
+      severity: "info",
+      needsReload: true,
+    });
+  });
+
+  test("D-04-07: carries the promotion brace both surfaces spell once", () => {
+    // act
+    const row = composePromotedRow({
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: false,
+    });
+
+    // assert: the very tuple import's promoted row reads, so the two surfaces
+    // cannot drift apart in token set or order.
+    assert.strictEqual(row.reasons, PROMOTED_ROW_REASONS);
+    assert.deepStrictEqual(PROMOTED_ROW_REASONS, ["already installed", "dependency promoted"]);
+  });
+
+  test("D-04-07: the promotion row renders through the installed arm with the brace in reason order", () => {
+    // arrange
+    const row = composePromotedRow({
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: false,
+    });
+
+    // act
+    const [resolved] = resolveRows(
+      [{ name: "official", scope: "user", plugins: [row] }],
+      runWithNothingLoaded().softDeps,
+      INSTALL_CONTEXT.rowPolicies,
+    );
+    const rendered = composePluginLines(resolved!.plugins[0]!, "user")[0]!.slice(2);
+
+    // assert: no soft-dep marker joins the brace whatever the host lacks --
+    // the row declares no companion because nothing was materialized.
+    assert.strictEqual(
+      rendered,
+      "● linter v3.0.0 (installed) {already installed, dependency promoted}",
+    );
   });
 });
 

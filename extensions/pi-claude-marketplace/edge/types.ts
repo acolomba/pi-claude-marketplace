@@ -24,7 +24,13 @@ import type { CompletionCache } from "../shared/completion-cache.ts";
 export interface EdgeDeps {
   readonly completionCache: CompletionCache;
   readonly gitOps: GitOps;
-  readonly pluginUpdate: PluginUpdateFn;
+  /**
+   * Autoupdate-cascade injection seam, allocated per command invocation:
+   * the marketplace update handler calls this once and passes the returned
+   * function to the orchestrator, so the cascade's D-10-18 tag memos are
+   * bounded by the run rather than by this binding's lifetime.
+   */
+  readonly beginPluginUpdateRun: () => PluginUpdateFn;
   readonly importClaudeSettings?: (
     opts: ImportClaudeSettingsOptions,
   ) => Promise<ClaudeImportExecutionResult>;

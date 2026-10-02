@@ -1,3 +1,4 @@
+import { causeChainTrailer } from "./errors.ts";
 import {
   composeMarketplaceBlock,
   composePluginLines,
@@ -18,6 +19,7 @@ import {
   resolveUpdateNoOpEnvelope,
 } from "./notification-resolve.ts";
 import { composeRetainedWorkflowsAdvisories, isInfoKind } from "./notification-summary.ts";
+import { redactCauseChain } from "./redact-absolute-paths.ts";
 
 import type {
   RowPolicyMap,
@@ -233,6 +235,14 @@ function dispatchInfoMessage(
         message.retainedWorkflows,
       );
       break;
+    case "prune-empty":
+      body = `Nothing to prune in ${message.scope} scope: no orphaned dependency installs were found.`;
+      break;
+    case "prune-committed-warning":
+      // The resolved envelope requests the reload trailer for this kind: the
+      // prune's state save succeeded, so Pi resources changed.
+      body = `Prune committed in ${message.scope} scope.\n  ${causeChainTrailer(redactCauseChain(message.cause))}`;
+      break;
     case "reconcile-applied-cascade":
       // RECON-04: compose the same cascade body the cascade arm renders
       // (per-mp header + per-plugin row via the existing helpers). The resolved
@@ -270,8 +280,8 @@ export function notify(
   // standalone set. The helper performs exactly ONE `ctx.ui.notify` call per
   // invocation (IL-2) and routes through the SAME `emitWithSummary` seam as the
   // cascade arm (GRAM-04): error/warning standalone kinds carry the summary
-  // line, info kinds do not. No reload-hint for any standalone kind. After this
-  // branch, TypeScript narrows `message` to `CascadeNotificationMessage` via
+  // line, info kinds do not. The committed prune warning carries a reload hint.
+  // After this branch, TypeScript narrows `message` to `CascadeNotificationMessage` via
   // the exhaustiveness switch below.
   if (isInfoKind(message)) {
     dispatchInfoMessage(ctx, message, run.softDeps);

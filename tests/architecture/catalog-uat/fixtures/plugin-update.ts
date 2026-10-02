@@ -542,6 +542,132 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
       },
     },
 
+    // UPDT-02 / D-10-09 / D-10-11: the update-preflight constraint gate held
+    // this plugin to versions its installed dependents jointly admit --
+    // disjoint declared ranges, so nothing satisfies both. The cause line
+    // names both declarers in key order and marks the disabled one.
+    "update-held-by-dependents": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "warning",
+                needsReload: false,
+                name: "shared-lib",
+                version: "1.0.0",
+                reasons: ["dependents constrain"],
+                cause: new Error(
+                  'the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp" (currently disabled)',
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // UPDT-01 / UPDT-02 / D-10-01 stage two: the fetched version (a no-tag
+    // repository's resolved candidate) landed outside the combined range.
+    // The cause line names ONLY the rejecting dependent -- a second,
+    // satisfied dependent is absent from the line, which is the point of
+    // this state: naming a dependent whose range the fetched version DOES
+    // satisfy would send the user to the wrong plugin.
+    "update-held-out-of-range": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "warning",
+                needsReload: false,
+                name: "shared-lib",
+                version: "1.0.0",
+                reasons: ["dependents constrain"],
+                cause: new Error(
+                  'version 2.0.0 falls outside what the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-10-14 / D-10-15: a constrained path source with no satisfying
+    // marketplace tag fell back to the marketplace's current copy, and it
+    // landed in range. Reuses the install cascade's existing `{dependency
+    // current copy}` token -- the same fact, the same phrase.
+    "update-current-copy": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                severity: "info",
+                needsReload: true,
+                name: "formatter",
+                from: "1.0.0",
+                to: "1.5.0",
+                dependencies: [],
+                reasons: ["dependency current copy"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-10-13: the plugin is already at the highest version its dependents
+    // jointly admit. The row keeps its existing `{up-to-date}` brace and
+    // discloses the range and its holders on the cause line -- no second
+    // token and no catalog churn.
+    "update-up-to-date-constrained": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "info",
+                needsReload: false,
+                name: "shared-lib",
+                reasons: ["up-to-date"],
+                cause: new Error(
+                  'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // ATTR-02 / SCOPE-01 / M10 / M11: marketplace not added in the requested
     // explicit scope (or present only in the other scope) -> standalone
     // `marketplace-not-added` variant carrying the requested-scope bracket,

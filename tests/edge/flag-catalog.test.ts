@@ -14,11 +14,14 @@
 // description, catalog order -- and a future `complete: false` entry is what
 // would make the drop arm discriminable again.
 //
-// Two cases name SCOPE_TARGET_FLAG in their expectation on purpose: the promise
-// there is the identity relation between two exports (the name
-// passThroughFlagNames drops is the one SCOPE_TARGET_FLAG holds). Writing the
-// literal instead would restate the drift guard's exact per-verb pin.
-// parseFlagNames never reads SCOPE_TARGET_FLAG, so the relation is not circular.
+// A case that names an exported flag constant in its expectation does so on
+// purpose: the promise there is the identity relation between two exports (the
+// name passThroughFlagNames drops is the one SCOPE_TARGET_FLAG holds; the names
+// it keeps for uninstall are the ones KEEP_DATA_FLAG and PRUNE_FLAG hold, which
+// the uninstall handler maps onto its `keepData` and `prune` options -- WR-01).
+// Writing the literal instead would restate the drift guard's exact per-verb
+// pin. parseFlagNames never reads those constants, so the relation is not
+// circular.
 //
 // No exhaustiveness claim: the module holds no switch and no closed-union
 // dispatch, so a missing-arm plant has no target here.
@@ -28,9 +31,12 @@ import test from "node:test";
 
 import {
   completionFlagEntries,
+  DRY_RUN_FLAG,
   isCatalogVerb,
+  KEEP_DATA_FLAG,
   parseFlagNames,
   passThroughFlagNames,
+  PRUNE_FLAG,
   SCOPE_TARGET_FLAG,
   type CatalogVerb,
 } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
@@ -52,6 +58,7 @@ const EXPECTED_CATALOG_VERBS = [
   "list",
   "info",
   "uninstall",
+  "prune",
   "reinstall",
   "fetch",
   "enable",
@@ -112,12 +119,36 @@ test("completionFlagEntries offers the scope-target flag of a verb that declares
   ];
 
   // act
+  const completionEntries = completionFlagEntries("reinstall");
+  const parseNames = parseFlagNames("reinstall");
+
+  // assert
+  assert.deepStrictEqual(completionEntries, expectedEntries);
+  assert.deepStrictEqual(parseNames, new Set([SCOPE_TARGET_FLAG]));
+});
+
+test("completionFlagEntries offers the uninstall preservation and prune flags ahead of the scope target", () => {
+  // arrange
+  const expectedEntries = [
+    { name: "--keep-data", description: "Preserve the plugin's persistent data directory" },
+    {
+      name: "--prune",
+      description: "Also remove dependency-installed plugins no remaining plugin needs",
+    },
+    {
+      name: SCOPE_TARGET_FLAG,
+      description:
+        "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+    },
+  ];
+
+  // act
   const completionEntries = completionFlagEntries("uninstall");
   const parseNames = parseFlagNames("uninstall");
 
   // assert
   assert.deepStrictEqual(completionEntries, expectedEntries);
-  assert.deepStrictEqual(parseNames, new Set([SCOPE_TARGET_FLAG]));
+  assert.deepStrictEqual(parseNames, new Set(["--keep-data", "--prune", SCOPE_TARGET_FLAG]));
 });
 
 test("a verb that declares no flags yields an empty result from every derivation", () => {
@@ -153,12 +184,49 @@ test("passThroughFlagNames leaves nothing for a verb whose only parse-accepted f
   const expectedPassThroughNames: string[] = [];
 
   // act
+  const passThroughNames = passThroughFlagNames("reinstall");
+  const parseNames = parseFlagNames("reinstall");
+
+  // assert
+  assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
+  assert.deepStrictEqual(parseNames, new Set([SCOPE_TARGET_FLAG]));
+});
+
+test("passThroughFlagNames drops the scope target and keeps the uninstall preservation and prune flags", () => {
+  // arrange
+  const expectedPassThroughNames = ["--keep-data", "--prune"];
+
+  // act
+  const passThroughNames = passThroughFlagNames("uninstall");
+
+  // assert
+  assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
+});
+
+test("the standalone prune preview flag is the sole consumed prune flag", () => {
+  // arrange
+  const expectedPassThroughNames = [DRY_RUN_FLAG];
+
+  // act
+  const passThroughNames = passThroughFlagNames("prune");
+  const parseNames = parseFlagNames("prune");
+
+  // assert
+  assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
+  assert.deepStrictEqual(parseNames, new Set([DRY_RUN_FLAG]));
+});
+
+test("WR-01 / D-05-10: KEEP_DATA_FLAG and PRUNE_FLAG are the very names uninstall passes through to its handler", () => {
+  // arrange
+  const expectedPassThroughNames = [KEEP_DATA_FLAG, PRUNE_FLAG];
+
+  // act
   const passThroughNames = passThroughFlagNames("uninstall");
   const parseNames = parseFlagNames("uninstall");
 
   // assert
   assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
-  assert.deepStrictEqual(parseNames, new Set([SCOPE_TARGET_FLAG]));
+  assert.deepStrictEqual(parseNames, new Set([KEEP_DATA_FLAG, PRUNE_FLAG, SCOPE_TARGET_FLAG]));
 });
 
 test("passThroughFlagNames keeps the remaining parse-accepted flags in catalog declaration order", () => {

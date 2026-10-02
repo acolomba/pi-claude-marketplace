@@ -59,6 +59,7 @@ import { makePluginInfoHandler } from "./handlers/plugin/info.ts";
 import { makeInstallHandler } from "./handlers/plugin/install.ts";
 import { makeListHandler } from "./handlers/plugin/list.ts";
 import { makePendingHandler } from "./handlers/plugin/pending.ts";
+import { makePruneHandler } from "./handlers/plugin/prune.ts";
 import { makeReinstallHandler } from "./handlers/plugin/reinstall.ts";
 import { makeUninstallHandler } from "./handlers/plugin/uninstall.ts";
 import { makeUpdateHandler } from "./handlers/plugin/update.ts";
@@ -73,7 +74,7 @@ import type { ExtensionAPI } from "../platform/pi-api.ts";
 
 const COMMAND_DESCRIPTION =
   "Manage Claude plugin marketplaces and plugins. Bootstrap, install, " +
-  "uninstall, list, import, update, and reinstall plugins from configured marketplaces.";
+  "uninstall, prune, list, import, update, and reinstall plugins from configured marketplaces.";
 
 /**
  * Wire the `/claude:plugin` slash command + the TC-7 autocomplete
@@ -81,7 +82,7 @@ const COMMAND_DESCRIPTION =
  * dedupe; callers MUST invoke this exactly once per session lifecycle
  * (`index.ts` is the single call site).
  *
- * `deps.gitOps` and `deps.pluginUpdate` are threaded into the marketplace
+ * `deps.gitOps` and `deps.beginPluginUpdateRun` are threaded into the marketplace
  * add/update/remove handlers per D-04 EdgeDeps.
  */
 export function registerClaudePluginCommand(
@@ -93,6 +94,7 @@ export function registerClaudePluginCommand(
   const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
   const install = makeInstallHandler(hooksRouting, deps.completionCache);
   const uninstall = makeUninstallHandler(hooksRouting, deps.completionCache);
+  const prune = makePruneHandler(hooksRouting, deps.completionCache);
   const pluginInfo = makePluginInfoHandler();
   const enable = makeEnableDisableHandler(true, hooksRouting);
   const disable = makeEnableDisableHandler(false, hooksRouting);
@@ -103,6 +105,7 @@ export function registerClaudePluginCommand(
     bootstrap: makeBootstrapHandler(deps),
     install,
     uninstall,
+    prune,
     update: makeUpdateHandler(updatePlugins),
     fetch: makeFetchHandler(),
     reinstall: makeReinstallHandler(reinstallPlugins),
@@ -119,7 +122,7 @@ export function registerClaudePluginCommand(
     marketplaceUpdate: makeMarketplaceUpdateHandler({
       completionCache: deps.completionCache,
       gitOps: deps.gitOps,
-      pluginUpdate: deps.pluginUpdate,
+      beginPluginUpdateRun: deps.beginPluginUpdateRun,
     }),
     marketplaceAutoupdate: makeAutoupdateHandler(true),
     marketplaceNoautoupdate: makeAutoupdateHandler(false),

@@ -24,6 +24,7 @@ function pluginRecord(resolvedSource: string, enabled: boolean): PluginInstallRe
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled,
+    provenance: "explicit",
     installedAt: "2026-08-31T00:00:00.000Z",
     updatedAt: "2026-08-31T00:00:00.000Z",
   };
@@ -68,7 +69,7 @@ async function seedUnsupportedState(extensionRoot: string): Promise<void> {
   await mkdir(extensionRoot, { recursive: true });
   await writeFile(
     path.join(extensionRoot, "state.json"),
-    JSON.stringify({ schemaVersion: 3, marketplaces: {} }),
+    JSON.stringify({ schemaVersion: 4, marketplaces: {} }),
     "utf8",
   );
 }

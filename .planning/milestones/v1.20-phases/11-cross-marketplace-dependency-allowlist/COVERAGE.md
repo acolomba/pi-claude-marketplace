@@ -1,0 +1,1 @@
+No external API integration: Phase 11 changes local marketplace manifest validation, dependency authorization, and command output in the existing Pi extension. It adds no external API, SDK, or service surface.

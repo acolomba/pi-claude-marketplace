@@ -35,11 +35,12 @@ jobs:
           node-version: "24"
           cache: "npm"
 
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-
       - name: Run pre-commit
         uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+        env:
+          # CI/check runs the full npm gate. CI/direct-coverage owns pair coverage.
+          # These hooks remain enabled for local commits.
+          SKIP: prettier,npm-check-changed
 
   fallow-audit:
     runs-on: ubuntu-latest
@@ -52,7 +53,7 @@ jobs:
           persist-credentials: false
 
       - name: Run fallow audit
-        uses: fallow-rs/fallow@adff2c9f20fe769e2e093b2e99ee09723f6310bd # v3.27.0
+        uses: fallow-rs/fallow@bd8fca5af5df4ccfd94c7a835d17bd93c31a7cef # v3.28.0
         with:
           command: audit
           format: github-annotations

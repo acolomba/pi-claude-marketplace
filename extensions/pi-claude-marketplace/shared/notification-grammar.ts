@@ -525,6 +525,14 @@ function composeMpInfoHeader(name: string, scope: Scope, details: MarketplaceDet
   return `${ICON_INSTALLED} ${name} [${scope}] ${marker}`;
 }
 
+/** Encode an info-only view; never alter the parsed policy used for matching. */
+function renderAllowedMarketplaces(names: readonly string[]): string {
+  return JSON.stringify(names).replace(
+    /[\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/g,
+    (character) => String.raw`\u${Number(character.codePointAt(0)).toString(16).padStart(4, "0")}`,
+  );
+}
+
 /**
  * INFO-01 / INFO-04: render a `MarketplaceInfoMessage` to its
  * single-string body. Composes:
@@ -534,7 +542,9 @@ function composeMpInfoHeader(name: string, scope: Scope, details: MarketplaceDet
  *   - optional `last_updated: <ISO8601>` (git-backed kinds github + url;
  *     never path per D-76-10),
  *   - optional `description: <text>` (single attribute line, NOT wrapped
- *     -- description wrapping is `plugin info`-only per INFO-02).
+ *     -- description wrapping is `plugin info`-only per INFO-02),
+ *   - `allowed_marketplaces:` for a nonempty parsed policy, escaped as one
+ *     compact JSON array without changing the parsed strings.
  *
  * Joins all lines with `\n`. Info messages do not emit soft-dep markers.
  * File-private; sole caller is `notify()` dispatcher.
@@ -573,6 +583,10 @@ export function renderMarketplaceInfo(message: MarketplaceInfoMessage): string {
 
   if (message.description !== undefined) {
     lines.push(`description: ${message.description}`);
+  }
+
+  if (message.allowedMarketplaces !== undefined && message.allowedMarketplaces.length > 0) {
+    lines.push(`allowed_marketplaces: ${renderAllowedMarketplaces(message.allowedMarketplaces)}`);
   }
 
   return lines.join("\n");
@@ -718,6 +732,19 @@ function appendResolvedComponentLines(
     }
   }
 
+  appendDependenciesLine(lines, dependencies);
+}
+
+/**
+ * Appends the optional `    dependencies: <list>` line. Both `renderPluginInfo`
+ * arms end with this line, so it is LAST: after every per-kind line on the
+ * resolved arm and after the `components: not resolved` marker on the
+ * unresolved arm (INFO-02 / D-01-32).
+ */
+function appendDependenciesLine(
+  lines: string[],
+  dependencies: readonly string[] | undefined,
+): void {
   if (dependencies !== undefined && dependencies.length > 0) {
     lines.push(`    dependencies: ${dependencies.join(", ")}`);
   }
@@ -761,8 +788,8 @@ export function renderMarketplaceNotAdded(
  * description block wrapped via `wrapDescription(text, 4, 66)`; then
  * either per-kind component lists at 4-space indent + optional
  * `dependencies:` line (componentsResolved: true), or the single
- * marker line `    components: not resolved` (componentsResolved:
- * false).
+ * marker line `    components: not resolved` followed by the same
+ * optional `dependencies:` line (componentsResolved: false, D-01-32).
  *
  * Reasons brace via `composeReasons`, which formats `plugin.reasons` as
  * given -- info messages NEVER emit soft-dep markers.
@@ -809,6 +836,8 @@ export function renderPluginInfo(message: PluginInfoMessage): string {
 
     case false:
       lines.push("    components: not resolved");
+      // D-01-32: the cold git-source `(remote)` row carries the entry-declared list.
+      appendDependenciesLine(lines, plugin.dependencies);
       break;
   }
 
@@ -921,8 +950,8 @@ export function composePluginLines(p: ResolvedRow, mpScope: Scope): string[] {
 }
 
 /**
- * D-11 / PMOD-03: the failure lines of a failed or manual-recovery row, in
- * order: the 4-space cause line, one `    leaked: <path>` line per AS-7 leak,
+ * D-11 / PMOD-03: the failure lines of a failed or manual-recovery row, or of a
+ * realized row carrying a remedy cause, in order: the 4-space cause line, one `    leaked: <path>` line per AS-7 leak,
  * then each rollback phase as a 4-space `[<phase>] (rollback failed)` row with
  * its optional 6-space cause line.
  */
