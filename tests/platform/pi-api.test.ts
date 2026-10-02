@@ -6,6 +6,7 @@ import {
   getAgentDir as peerGetAgentDir,
   parseFrontmatter as peerParseFrontmatter,
 } from "@earendil-works/pi-coding-agent";
+import { mock, verify, when } from "strong-mock";
 
 import {
   DynamicBorder,
@@ -14,7 +15,14 @@ import {
   softDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-import { adapterCommand, forkAdapterCommand } from "./pi-inventory-seed.ts";
+import {
+  adapterCommand,
+  adapterProxyTool,
+  builtinMcpCommand,
+  builtinMcpTool,
+  foreignMcpTool,
+  forkAdapterCommand,
+} from "./pi-inventory-seed.ts";
 
 import type * as PiBoundary from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type * as Peer from "@earendil-works/pi-coding-agent";
@@ -311,54 +319,246 @@ describe("softDepStatus", () => {
     });
   }
 
-  for (const { tools, commands, expectedLoaded, behavior } of [
+  for (const { behavior, tools, commands, expectedStatus } of [
     {
-      behavior: "ADET-02 recognizes the mcp-adapter command",
+      behavior: "ADET-02 counts the adapter's proxy tool and command from npm:pi-mcp-adapter",
+      tools: [adapterProxyTool()],
+      commands: [adapterCommand()],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 counts a disableProxyTool adapter by its mcp-adapter command alone",
       tools: [],
       commands: [adapterCommand()],
-      expectedLoaded: true,
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
     },
     {
-      behavior: "ADET-02 recognizes a fork's mcp-adapter command",
+      behavior: "ADET-02 counts a fork install by its mcp-adapter command from a foreign source",
       tools: [],
       commands: [forkAdapterCommand()],
-      expectedLoaded: true,
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
     },
     {
-      behavior: "recognizes the adapter source",
-      tools: [{ name: "other", sourceInfo: { source: "pi-mcp-adapter" } }],
+      behavior: "ADET-02 counts an adapter registered twice as mcp-adapter:1 and mcp-adapter:2",
+      tools: [],
+      commands: [adapterCommand("mcp-adapter:1", "cli"), adapterCommand("mcp-adapter:2", "cli")],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 counts the collision-suffixed command mcp-adapter:2",
+      tools: [],
+      commands: [adapterCommand("mcp-adapter:2", "cli")],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 counts the multi-digit collision suffix mcp-adapter:10",
+      tools: [],
+      commands: [adapterCommand("mcp-adapter:10", "cli")],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-01 does not count Pi's built-in MCP alone",
+      tools: [builtinMcpTool()],
+      commands: [builtinMcpCommand()],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-01 counts the adapter command beside Pi's built-in MCP",
+      tools: [builtinMcpTool()],
+      commands: [builtinMcpCommand(), adapterCommand()],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-01 reports the adapter not loaded with neither MCP client",
+      tools: [],
       commands: [],
-      expectedLoaded: true,
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
     },
     {
-      behavior: "recognizes the adapter within a source path",
+      behavior: "ADET-02 does not count another extension's tool named mcp",
+      tools: [foreignMcpTool()],
+      commands: [],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 does not count the command name MCP-Adapter",
+      tools: [],
+      commands: [adapterCommand("MCP-Adapter", "cli")],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 does not count the command name mcp-adapter-x",
+      tools: [],
+      commands: [adapterCommand("mcp-adapter-x", "cli")],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 does not count a collision suffix with no digits, mcp-adapter:",
+      tools: [],
+      commands: [adapterCommand("mcp-adapter:", "cli")],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 does not count a collision suffix with a letter, mcp-adapter:1a",
+      tools: [],
+      commands: [adapterCommand("mcp-adapter:1a", "cli")],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 does not count a prompt template named mcp-adapter",
+      tools: [],
+      commands: [{ ...adapterCommand("mcp-adapter", "cli"), source: "prompt" }],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 does not count a skill command named mcp-adapter",
+      tools: [],
+      commands: [{ ...adapterCommand("mcp-adapter", "cli"), source: "skill" }],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 does not count an extension command without a name",
+      tools: [],
+      commands: [{ source: "extension", sourceInfo: { source: "cli" } }],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 counts a command under another name whose source names pi-mcp-adapter",
+      tools: [],
+      commands: [adapterCommand("mcp-tools", "npm:pi-mcp-adapter")],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 counts a tool under another name whose source names pi-mcp-adapter",
+      tools: [{ name: "other", sourceInfo: { source: "npm:pi-mcp-adapter" } }],
+      commands: [],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 counts the adapter source within a source path",
       tools: [{ sourceInfo: { source: "wrapper/pi-mcp-adapter-clone" } }],
       commands: [],
-      expectedLoaded: true,
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
     },
     {
-      behavior: "rejects a partial adapter source name",
+      behavior: "ADET-02 does not count a partial adapter source name",
       tools: [{ sourceInfo: { source: "pi-mcp" } }],
       commands: [],
-      expectedLoaded: false,
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
     },
     {
-      behavior: "rejects an empty adapter source",
+      behavior: "ADET-02 does not count an empty adapter source",
       tools: [{ sourceInfo: { source: "" } }],
       commands: [],
-      expectedLoaded: false,
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
     },
     {
-      behavior: "accepts a tool without source metadata",
+      behavior: "ADET-02 does not count a tool without source metadata",
       tools: [{}],
       commands: [],
-      expectedLoaded: false,
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
     },
     {
-      behavior: "rejects a non-string adapter source",
+      behavior: "ADET-02 does not count a non-string adapter source",
       tools: [{ sourceInfo: { source: 42 } }],
-      commands: [],
-      expectedLoaded: false,
+      commands: [{ name: "other", sourceInfo: { source: 42 } }],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
     },
   ]) {
     test(behavior, () => {
@@ -369,11 +569,93 @@ describe("softDepStatus", () => {
       const status = softDepStatus(extensionApi);
 
       // assert
-      assert.deepStrictEqual(status, {
+      assert.deepStrictEqual(status, expectedStatus);
+    });
+  }
+
+  test("ADET-02 lets the tool-source arm decide when getCommands() throws", () => {
+    // arrange
+    const extensionApi: PiBoundary.PiInventory = {
+      getAllTools: () => [adapterProxyTool()],
+      getCommands: () => {
+        throw new Error("not ready");
+      },
+    };
+
+    // act
+    const status = softDepStatus(extensionApi);
+
+    // assert
+    assert.deepStrictEqual(status, {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: false,
+    });
+  });
+
+  test("ADET-02 lets the command arm decide when getAllTools() throws", () => {
+    // arrange
+    const extensionApi: PiBoundary.PiInventory = {
+      getAllTools: () => {
+        throw new Error("not ready");
+      },
+      getCommands: () => [forkAdapterCommand()],
+    };
+
+    // act
+    const status = softDepStatus(extensionApi);
+
+    // assert
+    assert.deepStrictEqual(status, {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: false,
+    });
+  });
+
+  for (const { behavior, tools, commands, expectedStatus } of [
+    {
+      behavior:
+        "ADET-02 reads getAllTools() three times and getCommands() once with the adapter loaded",
+      tools: [adapterProxyTool()],
+      commands: [adapterCommand()],
+      expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: expectedLoaded,
+        piMcpAdapterLoaded: true,
         workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior:
+        "ADET-01 reads getAllTools() three times and getCommands() once with only the built-in MCP",
+      tools: [builtinMcpTool()],
+      commands: [builtinMcpCommand()],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+  ]) {
+    test(behavior, () => {
+      // arrange
+      const extensionApi = mock<PiBoundary.PiInventory>({
+        exactParams: true,
+        name: "Pi inventory",
       });
+      when(() => extensionApi.getAllTools())
+        .thenReturn(tools)
+        .times(3);
+      when(() => extensionApi.getCommands())
+        .thenReturn(commands)
+        .times(1);
+
+      // act
+      const status = softDepStatus(extensionApi);
+
+      // assert
+      assert.deepStrictEqual(status, expectedStatus);
+      verify(extensionApi);
     });
   }
 
@@ -508,7 +790,7 @@ describe("softDepStatus", () => {
     });
   }
 
-  test("degrades every dependency to unloaded when discovery fails", () => {
+  test("ADET-02 degrades every dependency to unloaded when both Pi reads throw", () => {
     // arrange
     const extensionApi: PiBoundary.PiInventory = {
       getAllTools: () => {
