@@ -2,9 +2,9 @@
 phase: 02-row-policies
 fixed_at: 2026-10-02T09:42:43Z
 review_path: .planning/phases/02-row-policies/02-REVIEW.md
-iteration: 2
-findings_in_scope: 6
-fixed: 6
+iteration: 3
+findings_in_scope: 10
+fixed: 10
 skipped: 0
 status: all_fixed
 ---
@@ -13,12 +13,12 @@ status: all_fixed
 
 **Fixed at:** 2026-10-02T09:42:43Z
 **Source review:** `.planning/phases/02-row-policies/02-REVIEW.md`
-**Iteration:** 2 (iteration 1: CR-01, WR-01; iteration 2: WR-02, WR-03, WR-04, IN-01)
+**Iteration:** 3 (iteration 1: CR-01, WR-01; iteration 2: WR-02, WR-03, WR-04, IN-01; iteration 3: WR-05, WR-06, IN-02, IN-03)
 
 **Summary:**
 
-- Findings in scope: 6 (2 in iteration 1, 4 in iteration 2)
-- Fixed: 6
+- Findings in scope: 10 (2, 4, and 4 across iterations 1-3)
+- Fixed: 10
 - Skipped: 0
 
 ## Fixed Issues
@@ -129,8 +129,38 @@ type-member gate passes, and pre-commit passed with `npm changed checks`.
 
 _Iteration 2 fixed: 2026-10-02T11:29:14Z_
 
+## Iteration 3 Fixes
+
+The narrow iteration-3 review (source revision `1dc61877`, diff base `6e222b1f`)
+confirmed WR-02, WR-03, WR-04 and IN-01 resolved. Its probe showed the WR-02
+refusal rejects the single, union, and mixed-array cases while both production
+callers compile. It found no code defect. All four new findings were stale names
+for the deleted render code that the iteration-2 search missed.
+
+### WR-05, WR-06, IN-02, IN-03: Remaining stale render-switch and render-arm names
+
+**Commit:** b37f0a6d
+**Applied fix:** the `notification-grammar.ts` block that described the deleted
+central switch now describes `resolveRows`, row policies and `PLUGIN_ROW_LAYOUT`.
+The glyph comment names `PLUGIN_ROW_LAYOUT`. The `WithPlugins` comment drops its
+contrast framing. Test titles, locals and comments in eleven test files now name
+row policies and policy statuses. The pin for `isDescriptionBearingRow` moved from
+line 925 to 912. The wider search
+(`renderPluginRow|dispatchRow|render map|render arm|central switch|this switch|_RENDER`)
+now finds only unrelated code and the frozen `no render arm for` output bytes.
+
+**Evidence:** typecheck passes. 791 tests pass across the eleven touched test
+files. Lint is clean, the type-member gate passes with 3 recorded exceptions, and
+pre-commit passed with `npm changed checks`.
+
+**Disposition:** review iterations stop here. Iteration 3 found no code defect,
+and these comment-only findings are fixed. Another full re-review would only
+re-check wording.
+
+_Iteration 3 fixed: 2026-10-02T12:37:44Z_
+
 ---
 
 _Fixed: 2026-10-02T09:42:43Z_
 _Fixer: Claude (orchestrator, inline)_
-_Iteration: 2_
+_Iteration: 3_
