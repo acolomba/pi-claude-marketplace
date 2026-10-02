@@ -1487,10 +1487,64 @@ const RAW_SURFACE_ROWS: {
       "warning",
     ],
   },
+  "usage-error": {
+    surface: {
+      kind: "usage-error",
+      message: "Unknown plugin",
+      usage: "Usage: /claude:plugin install <name>",
+    },
+    expectedArguments: ["Unknown plugin\n\nUsage: /claude:plugin install <name>", "error"],
+  },
+  "usage-info": {
+    surface: { kind: "usage-info", usage: "Usage: /claude:plugin help [marketplace]" },
+    expectedArguments: ["Usage: /claude:plugin help [marketplace]", "info"],
+  },
 };
 
 for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_ROWS)) {
   test(`formatRawSurface renders ${kind} with its explicit severity`, () => {
+    // act
+    const notifyArguments = formatRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(notifyArguments, expectedArguments);
+  });
+}
+
+// RAWS-01 / D-06: the usage kinds join the producer's strings as-is with one
+// blank line, and have no no-op.
+for (const { title, surface, expectedArguments } of [
+  {
+    title: "keeps both blocks when the message equals the usage",
+    surface: { kind: "usage-error", message: "Usage: x", usage: "Usage: x" },
+    expectedArguments: ["Usage: x\n\nUsage: x", "error"],
+  },
+  {
+    title: "emits only the separator for an empty message and usage",
+    surface: { kind: "usage-error", message: "", usage: "" },
+    expectedArguments: ["\n\n", "error"],
+  },
+  {
+    title: "keeps a trailing newline on the message untrimmed",
+    surface: { kind: "usage-error", message: "Unknown plugin\n", usage: "Usage: x" },
+    expectedArguments: ["Unknown plugin\n\n\nUsage: x", "error"],
+  },
+  {
+    title: "emits an empty help usage at info severity",
+    surface: { kind: "usage-info", usage: "" },
+    expectedArguments: ["", "info"],
+  },
+  {
+    title: "passes a non-ASCII message through unchanged",
+    surface: { kind: "usage-error", message: "Plugin «café» introuvable ⊘", usage: "Usage: x" },
+    expectedArguments: ["Plugin «café» introuvable ⊘\n\nUsage: x", "error"],
+  },
+] satisfies readonly {
+  readonly title: string;
+  readonly surface: ResolvedRawSurface;
+  readonly expectedArguments: NotifyArguments;
+}[]) {
+  test(`formatRawSurface ${title}`, () => {
     // act
     const notifyArguments = formatRawSurface(surface);
 

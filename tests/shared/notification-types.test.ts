@@ -23,6 +23,8 @@ import {
   type RetainedWorkflowStaging,
   type Severity,
   type StatusToken,
+  type UsageErrorSurface,
+  type UsageInfoSurface,
   type WithPlugins,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
@@ -305,6 +307,16 @@ void ({
   scope: "local",
   reason: "schema unsupported",
 } satisfies PluginPathSkippedSurface);
+void ({
+  kind: "usage-error",
+  message: "Unknown plugin",
+  usage: "Usage: x",
+} satisfies UsageErrorSurface);
+void ({ kind: "usage-info", usage: "Usage: x" } satisfies UsageInfoSurface);
+// @ts-expect-error a usage error carries its usage block
+void ({ kind: "usage-error", message: "Unknown plugin" } satisfies UsageErrorSurface);
+// @ts-expect-error D-01: a usage surface is not a NotificationMessage
+void ({ kind: "usage-info", usage: "Usage: x" } satisfies NotificationMessage);
 void installedMessage;
 void skippedMessage;
 void contentReason;

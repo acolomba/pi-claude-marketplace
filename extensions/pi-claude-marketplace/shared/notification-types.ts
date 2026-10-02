@@ -1007,9 +1007,20 @@ export interface PluginPathSkippedSurface {
 /** D-14: the load-origin group of raw output surfaces. */
 export type LoadSurface = ReconcileAbortedSurface | PluginPathSkippedSurface;
 
+/** RAWS-01 / D-06: an argv-validation error with the verb's usage block. */
+export interface UsageErrorSurface extends UsageErrorMessage {
+  readonly kind: "usage-error";
+}
+
+/** RAWS-01 / D-06: usage documentation shown on an explicit help request. */
+export interface UsageInfoSurface {
+  readonly kind: "usage-info";
+  readonly usage: string;
+}
+
 /**
  * D-01 / D-04: every raw output surface. It is deliberately not a
  * `NotificationMessage` member, so `notify()`'s run never reaches a raw call
  * site.
  */
-export type RawSurface = ReconcileAbortedSurface | PluginPathSkippedSurface;
+export type RawSurface = UsageErrorSurface | UsageInfoSurface | LoadSurface;

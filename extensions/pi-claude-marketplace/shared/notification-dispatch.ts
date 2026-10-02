@@ -114,23 +114,27 @@ export function notifyPluginPathSkipped(
 }
 
 /**
- * Usage error notify (ES-3 primitive). Surfaces a usage-style error at
- * `error` severity with the relevant Usage block appended after a blank
- * line. The on-the-wire string is
- * `${message.message}\n\n${message.usage}` (SNM-13). The blank
- * line between message and Usage block is part of the user contract;
- * `tests/shared/notification-dispatch.test.ts` asserts it byte-for-byte
- * (the SNM-13 case).
+ * Usage error notify (ES-3 primitive). Builds the `usage-error` kind from the
+ * caller's message and usage block (RAWS-01, D-06). The text strategy joins
+ * them with one blank line at explicit `error` severity (SNM-13); that blank
+ * line is part of the user contract, and
+ * `tests/shared/notification-dispatch.test.ts` asserts it byte-for-byte (the
+ * SNM-13 case).
  */
 export function notifyUsageError(ctx: NotificationContext, message: UsageErrorMessage): void {
-  ctx.ui.notify(`${message.message}\n\n${message.usage}`, "error");
+  emitRawSurface(ctx, {
+    kind: "usage-error",
+    message: message.message,
+    usage: message.usage,
+  });
 }
 
 /**
- * Surfaces usage documentation at "info" severity (for explicit help requests).
+ * Builds the `usage-info` kind for an explicit help request (RAWS-01, D-06).
+ * The text strategy renders the usage verbatim at explicit `info` severity.
  */
 export function notifyUsageInfo(ctx: NotificationContext, usage: string): void {
-  ctx.ui.notify(usage, "info");
+  emitRawSurface(ctx, { kind: "usage-info", usage });
 }
 
 /**

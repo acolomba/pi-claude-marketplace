@@ -1099,10 +1099,16 @@ export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string
 
 /**
  * D-15: formats one resolved raw surface as its notify arguments. Every raw kind
- * passes its severity explicitly, so each arm yields two arguments.
+ * passes its severity explicitly, so each arm yields two arguments. Producer
+ * strings pass through verbatim.
  */
 export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments {
   switch (surface.kind) {
+    case "usage-error":
+      // SNM-13 / D-06: one blank line separates the message from the usage.
+      return [`${surface.message}\n\n${surface.usage}`, "error"];
+    case "usage-info":
+      return [surface.usage, "info"];
     case "reconcile-aborted":
       return [`reconcile aborted: ${surface.causeMessage}`, "error"];
     case "plugin-path-skipped":
