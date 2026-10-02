@@ -25,7 +25,7 @@
 // `PluginInstalledMessage` carries `dependencies: readonly Dependency[]`
 // derived from the plugin's installed resources (state-recorded).
 // `notify` owns the single softDepStatus(pi) probe per call
-// and emits the `{requires pi-subagents}` / `{requires pi-mcp}` markers
+// and emits the `{requires pi-subagents}` / `{requires pi-mcp-adapter}` markers
 // when (declares AND companion unloaded). RLD-04: the list orchestrator
 // stamps the steady-state inventory row `installed` with `needsReload: false`,
 // so the OR-reduce reload-hint (RLD-02) does NOT fire the `/reload to pick up
@@ -733,7 +733,7 @@ function narrowListFailReason(err: unknown): ListReason {
  * `notify(ctx, pi, message)` call per orchestration arm (success or
  * failure). `notify()` owns the single softDepStatus(pi) probe per
  * invocation and emits per-row `{requires pi-subagents}` /
- * `{requires pi-mcp}` markers when (declares AND companion unloaded).
+ * `{requires pi-mcp-adapter}` markers when (declares AND companion unloaded).
  */
 export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   const { ctx, pi } = opts;

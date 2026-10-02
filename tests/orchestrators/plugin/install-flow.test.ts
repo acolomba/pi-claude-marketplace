@@ -1647,7 +1647,7 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
       // ENBL-15 / D-100-06: BOTH companion extensions report UNLOADED. If the
       // `disabled` render arm ever threaded the real soft-dep flags instead of
       // hard-coding them false, this fixture is the one that would emit
-      // `{requires pi-subagents, requires pi-mcp}` and fail below.
+      // `{requires pi-subagents, requires pi-mcp-adapter}` and fail below.
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
@@ -2930,7 +2930,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
         "A plugin operation needs attention.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}\n" +
+          "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -3059,7 +3059,7 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> the succ
 // PI-12 / RH-4 -- mcp-adapter not loaded warning
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> the success row carries the {requires pi-mcp} marker", async () => {
+test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> the success row carries the {requires pi-mcp-adapter} marker", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi12-"));
     try {
@@ -3081,7 +3081,7 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> the success row 
         plugin: "hello",
       });
 
-      // CMC-13 / MSG-SD-2: per-row soft-dep marker `{requires pi-mcp}`
+      // CMC-13 / MSG-SD-2: per-row soft-dep marker `{requires pi-mcp-adapter}`
       // fires when (declaresMcp AND !piMcpAdapterLoaded) per D-13-07.
       // SEV-01: the declared `pi-mcp-adapter` companion is unloaded, so the
       // success row stamps warning (silent degradation of a clean install).
@@ -3089,8 +3089,8 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> the success row 
       assert.equal(notifications[0]?.severity, "warning");
       assert.match(
         notifications[0]?.message ?? "",
-        /\{requires pi-mcp\}/,
-        "must include per-row {requires pi-mcp} marker",
+        /\{requires pi-mcp-adapter\}/,
+        "must include per-row {requires pi-mcp-adapter} marker",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

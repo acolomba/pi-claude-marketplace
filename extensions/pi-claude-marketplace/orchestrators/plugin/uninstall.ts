@@ -56,7 +56,7 @@
 // message)` consumes it for the single softDepStatus(pi) probe per call.
 // The uninstalled variant has no `dependencies` field by
 // construction (D-15-02 / MSG-SD-3) so the renderer cannot emit
-// `{requires pi-subagents}` / `{requires pi-mcp}` markers on (uninstalled)
+// `{requires pi-subagents}` / `{requires pi-mcp-adapter}` markers on (uninstalled)
 // rows even though the probe is uniformly threaded.
 
 import { rm } from "node:fs/promises";
@@ -1311,7 +1311,7 @@ async function runUninstallOutcome(
   // CMC-24 / D-13-05 / D-13-06: emit via PluginUninstalledMessage.
   // The uninstalled variant has NO per-row soft-dep predicate fields by
   // construction -- MSG-SD-3 is structurally enforced: the renderer CANNOT
-  // emit `{requires pi-subagents}` / `{requires pi-mcp}` markers on
+  // emit `{requires pi-subagents}` / `{requires pi-mcp-adapter}` markers on
   // (uninstalled) rows. There are no aggregated PI_*_NOT_LOADED trailers on
   // uninstall success per D-13-07 + MSG-SD-3 (the soft-dep state
   // is no-op for the operator after uninstall -- the content is gone, so no

@@ -2472,7 +2472,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● rich (installed) {requires pi-subagents, requires pi-mcp}\n" +
+          "  ● rich (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
           "\n" +
           "Reconcile: 1 success",
       },
@@ -2786,7 +2786,7 @@ describe("applyReconcile", () => {
     {
       name: "declares both companions when the ledger stages an agent and a server",
       tree: { agents: ["with-tools"], mcpServer: true, skill: "clean" },
-      row: "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}",
+      row: "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}",
       severity: undefined,
       summary: "",
       tally: "Reconcile: 1 success",

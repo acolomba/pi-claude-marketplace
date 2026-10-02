@@ -613,7 +613,7 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
  * SEV-01 / WDEP-02 / WR-06: `dependencies` is DERIVED on both arms from the
  * ledger's staged-agent / staged-MCP / staged-workflow verdicts through the
  * same `enableRowDependencies` seam the standalone enable row uses, so the
- * `{requires pi-subagents}` / `{requires pi-mcp}` /
+ * `{requires pi-subagents}` / `{requires pi-mcp-adapter}` /
  * `{requires pi-dynamic-workflows}` markers fire on a projected re-enable
  * exactly as they do on the sibling install arm. A re-enable that staged none
  * of the three composes an empty array, which elides the brace entirely

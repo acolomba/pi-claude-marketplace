@@ -22,7 +22,7 @@ import type { SoftDepStatus } from "../../platform/pi-api.ts";
 /**
  * Closed set of dependency probe targets (SNM-06). 3 members, each driving the
  * renderer's per-dependency soft-dep probe path (`requires pi-subagents` /
- * `requires pi-mcp` / `requires pi-dynamic-workflows` reason emission).
+ * `requires pi-mcp-adapter` / `requires pi-dynamic-workflows` reason emission).
  *
  * Spelled out as a literal union rather than a runtime `DEPENDENCIES` tuple:
  * nothing iterates the members at runtime, so the union type alone is the
@@ -32,7 +32,7 @@ export type Dependency = "agents" | "mcp" | "workflows";
 
 /** Soft-dep marker literals -- all three are REASONS members (closed set). */
 const SOFT_DEP_MARKER_AGENTS: Reason = "requires pi-subagents";
-const SOFT_DEP_MARKER_MCP: Reason = "requires pi-mcp";
+const SOFT_DEP_MARKER_MCP: Reason = "requires pi-mcp-adapter";
 
 /**
  * WDEP-04: the host workflow engine `@quintinshaw/pi-dynamic-workflows`.

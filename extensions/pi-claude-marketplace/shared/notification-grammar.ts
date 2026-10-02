@@ -266,7 +266,7 @@ export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDe
       // reasons brace is composed via composeReasons reusing the helper that
       // backs plugin-level skipped rows. CRITICAL: pass (false, false, false)
       // for the three soft-dep declares flags -- mp-level skipped never emits
-      // {requires pi-subagents} / {requires pi-mcp} markers; those are
+      // {requires pi-subagents} / {requires pi-mcp-adapter} markers; those are
       // plugin-row-only. composeReasons returns "" when mp.reasons is undefined
       // or empty, so the conditional join collapses cleanly with no trailing
       // space.
@@ -561,7 +561,7 @@ export function pluginRow(
  * duplicate"). Uses the dedicated `ICON_PARTIALLY_INSTALLED` (`◉`) glyph; the
  * reasons brace carries the dropped-component detail. Unlike `pluginRow` it
  * threads the optional `dependencies` so the `{requires pi-subagents}` /
- * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` soft-dep markers
+ * `{requires pi-mcp-adapter}` / `{requires pi-dynamic-workflows}` soft-dep markers
  * compose into the SAME brace AFTER the
  * dropped-component reasons (MSG-GR-4) -- exactly like the `installed` arm. The
  * partially-available arm still stages the SUPPORTED components, so a
@@ -616,7 +616,7 @@ export function partiallyInstalledRow(
  * `versionToken` is the already-rendered version slot (the caller passes
  * `renderVersion(...)` or `composeVersionArrow(...)`); `reasons` is the optional
  * reason set; `dependencies` drives the `{requires pi-subagents}` /
- * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` markers via
+ * `{requires pi-mcp-adapter}` / `{requires pi-dynamic-workflows}` markers via
  * `composeReasons`.
  *
  * WR-13 / WR-12: which callers thread `reasons`, over the seven command arms

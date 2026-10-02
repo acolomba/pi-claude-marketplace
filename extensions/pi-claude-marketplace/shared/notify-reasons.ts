@@ -105,7 +105,7 @@ type UnsupportedReason =
   | "unsupported hooks"
   | "lsp"
   | "requires pi-subagents"
-  | "requires pi-mcp"
+  | "requires pi-mcp-adapter"
   // WDEP-04: the host workflow engine soft-dep marker.
   | "requires pi-dynamic-workflows"
   | "unsupported source"

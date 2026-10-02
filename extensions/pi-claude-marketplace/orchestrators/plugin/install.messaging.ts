@@ -131,7 +131,7 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
   // `disable` verb's own arm so an install that landed disabled and an install
   // followed by a disable render byte-identically. ENBL-15 / D-100-06: both
   // soft-dep flags stay hard-coded false, so the row cannot emit a
-  // `{requires pi-subagents}` / `{requires pi-mcp}` marker whatever inventory
+  // `{requires pi-subagents}` / `{requires pi-mcp-adapter}` marker whatever inventory
   // the record retained (ENBL-18). The enable-hint trailer is composed
   // centrally by the renderer, not here.
   disabled: (p, probe, mpScope) => pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe),

@@ -66,7 +66,7 @@ Structural `unavailable` rows derive reasons from resolver notes through `narrow
 
 Multi-reason emit order is contractual. `composeReasons` joins in ARRAY order, so the order the orchestrator writes into `reasons[]` is the order the brace shows, and the soft-dependency markers append AFTER every typed reason (MSG-GR-4). The orchestrators write the record's relationship to its marketplace first and the facts about the install itself after it, which is why an absent-and-degraded row reads `{not in manifest, lsp}` and never the reverse (INV-02). The DECLARED order of the `REASONS` tuple must also stay byte-stable: the fenced blocks below are byte contracts, so reordering the tuple would move the rendered bytes of every multi-reason row even though no member changed.
 
-The soft-dep markers `requires pi-subagents`, `requires pi-mcp` and `requires pi-dynamic-workflows` live INSIDE the same brace block as the variant's typed reasons (D-16-15 injection). They are emitted by the renderer at render time from the plugin's `dependencies` field and the Pi-host probe; callers do not place them in `reasons` directly. Marker order inside the brace is `agents`, `mcp`, `workflows` -- appended, never interleaved, so adding a companion leaves every existing brace byte-unchanged. The 4 dep-bearing variants (`installed | updated | reinstalled | partially-installed`) declare the `dependencies` field per D-15-02 and WR-03; the remaining 15 of the 19 plugin statuses cannot emit soft-dep markers structurally. `partially-installed` is the one variant whose `dependencies` field is OPTIONAL: the install / update / enable success rows thread the staged counts, while the list / info inventory rows omit it so they carry no marker.
+The soft-dep markers `requires pi-subagents`, `requires pi-mcp-adapter` and `requires pi-dynamic-workflows` live INSIDE the same brace block as the variant's typed reasons (D-16-15 injection). They are emitted by the renderer at render time from the plugin's `dependencies` field and the Pi-host probe; callers do not place them in `reasons` directly. Marker order inside the brace is `agents`, `mcp`, `workflows` -- appended, never interleaved, so adding a companion leaves every existing brace byte-unchanged. The 4 dep-bearing variants (`installed | updated | reinstalled | partially-installed`) declare the `dependencies` field per D-15-02 and WR-03; the remaining 15 of the 19 plugin statuses cannot emit soft-dep markers structurally. `partially-installed` is the one variant whose `dependencies` field is OPTIONAL: the install / update / enable success rows thread the staged counts, while the list / info inventory rows omit it so they carry no marker.
 
 ### Reload-hint trailer
 
@@ -245,9 +245,9 @@ Plugin list: 2 successes
 
 ```text
 ● official [user] <autoupdate>
-  ● dual v0.5.0 (installed) {requires pi-subagents, requires pi-mcp}
+  ● dual v0.5.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}
   ● helper v1.0.0 (installed) {requires pi-subagents}
-  ● mcp-tool v2.0.0 (installed) {requires pi-mcp}
+  ● mcp-tool v2.0.0 (installed) {requires pi-mcp-adapter}
 
 Plugin list: 3 successes
 ```
@@ -392,7 +392,7 @@ Two conditions cause this row. The state record carries the explicit `enabled: f
 
 `{not in manifest}` is the only reason a disabled row on THIS surface can carry. The governing rule: render durable facts that constrain what the user can do next; suppress facts about runtime behavior that is currently suspended. Manifest absence is such a durable fact. `/claude:plugin enable` re-runs the install ledger, and that ledger resolves the plugin from the marketplace manifest. Thus the user cannot re-enable a disabled plugin the manifest no longer declares. The bare row gave no warning before the attempt.
 
-Every other reason stays off this row. A disabled record whose install-time resolution dropped a component kind keeps its unsupported-kind tokens hidden. The soft-dependency markers `{requires pi-subagents}` and `{requires pi-mcp}` cannot appear either: the renderer passes both soft-dependency flags as `false` (ENBL-15 / D-100-06). Disable preserves the record's component inventory (ENBL-18), but that inventory cannot change these bytes.
+Every other reason stays off this row. A disabled record whose install-time resolution dropped a component kind keeps its unsupported-kind tokens hidden. The soft-dependency markers `{requires pi-subagents}`, `{requires pi-mcp-adapter}` and `{requires pi-dynamic-workflows}` cannot appear either: the renderer passes all three soft-dependency flags as `false` (ENBL-15 / D-100-06). Disable preserves the record's component inventory (ENBL-18), but that inventory cannot change these bytes.
 
 This surface builds the row from the installation record alone and reads no source, thus manifest absence is the only reason it ever HAS. The `info` surface applies the same rule to a larger set of facts, because it also reads disk: a disabled row there can additionally carry the failure class (`source missing`, `unreadable`, `permission denied`, `network unreachable`, `authentication required`). Those name a source the next `enable` cannot read, thus they limit the next action in the same way manifest absence does. See the `state-only-disabled-with-components` state under `## /claude:plugin info <plugin>@<marketplace>`.
 
@@ -562,7 +562,7 @@ Marketplace header is SUB-BRANCH A (bare label header, no details). Plugin row o
 A plugin operation needs attention.
 
 ● official [user]
-  ● helper v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}
+  ● helper v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}
 
 /reload to pick up changes
 ```
@@ -1513,7 +1513,7 @@ Bare marketplace header (no status, no details). Plugin status `reinstalled` tri
 
 ```text
 ● official [user]
-  ● alpha v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp}
+  ● alpha v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}
 
 Plugin reinstall: 1 success
 
@@ -2160,7 +2160,7 @@ Three project-scope marketplace blocks. OUT-03/D-04: three `added` marketplace r
 ```text
 ● claude-plugins-official [project] (added)
   ● agent-only-plugin (installed) {requires pi-subagents}
-  ● dual-plugin (installed) {requires pi-subagents, requires pi-mcp}
+  ● dual-plugin (installed) {requires pi-subagents, requires pi-mcp-adapter}
 
 Import: 3 successes
 
@@ -3730,7 +3730,7 @@ A plugin operation needs attention.
 /reload to pick up changes
 ```
 
-The re-enable's ledger staged at least one agent, so the row DECLARES the `pi-subagents` companion; `dependencies` is derived from the ledger's staged counts (agents -> `pi-subagents`, MCP servers -> `pi-mcp`), never from a hard-coded empty list. The soft-dep marker rides the same brace as any typed reasons, typed reasons first (MSG-GR-4): a re-enable that also degraded a skill renders `{malformed skill, requires pi-subagents}`. Severity `warning` per SEV-01 -- a declared companion that is not loaded silently degrades an otherwise clean re-enable, the same raise the install row takes for the same ledger run. The two raises COMPOSE: a malformed degrade is `warning` whatever the probe reports, and an unloaded companion is `warning` whatever degraded. A loaded companion -- or a plugin that stages neither agents nor MCP servers -- renders the `enable-fresh` row above unchanged.
+The re-enable's ledger staged at least one agent, so the row DECLARES the `pi-subagents` companion; `dependencies` is derived from the ledger's staged counts (agents -> `pi-subagents`, MCP servers -> `pi-mcp-adapter`), never from a hard-coded empty list. The soft-dep marker rides the same brace as any typed reasons, typed reasons first (MSG-GR-4): a re-enable that also degraded a skill renders `{malformed skill, requires pi-subagents}`. Severity `warning` per SEV-01 -- a declared companion that is not loaded silently degrades an otherwise clean re-enable, the same raise the install row takes for the same ledger run. The two raises COMPOSE: a malformed degrade is `warning` whatever the probe reports, and an unloaded companion is `warning` whatever degraded. A loaded companion -- or a plugin that stages neither agents nor MCP servers -- renders the `enable-fresh` row above unchanged.
 
 ### Idempotent enable
 

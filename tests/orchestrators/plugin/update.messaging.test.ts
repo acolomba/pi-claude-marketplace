@@ -126,7 +126,7 @@ test("renders updated reasons before both missing companion markers", () => {
   // assert
   assert.equal(
     row,
-    "● beta [project] v#2ea95f8 → v#1c3d9a0 (updated) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp}",
+    "● beta [project] v#2ea95f8 → v#1c3d9a0 (updated) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp-adapter}",
   );
   assert.deepStrictEqual(message, {
     status: "updated",
@@ -165,7 +165,7 @@ test("renders a partially-installed transition with ordered reasons and an MCP m
   // assert
   assert.equal(
     row,
-    "◉ gamma [project] v2.0.0 (partially-installed) {malformed command, unsupported component, requires pi-mcp}",
+    "◉ gamma [project] v2.0.0 (partially-installed) {malformed command, unsupported component, requires pi-mcp-adapter}",
   );
   assert.deepStrictEqual(message, {
     status: "partially-installed",

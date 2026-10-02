@@ -47,7 +47,7 @@ const EXPECTED_REASONS = [
   "unsupported hooks",
   "lsp",
   "requires pi-subagents",
-  "requires pi-mcp",
+  "requires pi-mcp-adapter",
   "rollback partial",
   "unreadable",
   "unparseable",

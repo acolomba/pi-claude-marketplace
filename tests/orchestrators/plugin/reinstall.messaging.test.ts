@@ -612,7 +612,7 @@ test("renderReinstallPartitionAndNotify sorts case-insensitive names and scopes 
       "A plugin operation has failed.",
       "",
       "● acme [project]",
-      "  ● p-first v2.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp}",
+      "  ● p-first v2.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}",
       "  ⊘ p-second (skipped) {already installed}",
       "",
       "● Acme [user]",

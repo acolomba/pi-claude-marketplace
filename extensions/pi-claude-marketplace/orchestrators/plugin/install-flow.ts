@@ -836,7 +836,7 @@ function composeInstalledRow(installCtx: InstallLedgerSummary, probe: SoftDepSta
   const declaresWorkflows = installCtx.stagedWorkflowNames.length > 0;
 
   // The renderer emits the per-row soft-dep markers (`{requires
-  // pi-subagents}`, `{requires pi-mcp}`, `{requires pi-dynamic-workflows}`)
+  // pi-subagents}`, `{requires pi-mcp-adapter}`, `{requires pi-dynamic-workflows}`)
   // from this list automatically.
   const dependencies: Dependency[] = [];
   if (declaresAgents) {

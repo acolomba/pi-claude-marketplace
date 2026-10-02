@@ -7,13 +7,12 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 
 import { installTargetWithMockPi, withE2EEnvironment } from "./_helpers.ts";
 
-// Per-row soft-dep marker contract strings (CMC-13 / MSG-SD-1..2). These
-// are NOT closed-set Reasons exported from `shared/grammar/reasons.ts`
-// (they are -- see `requires pi-subagents` / `requires pi-mcp`), but the
-// rendered form inside the `{}` block is what the user observes. The
-// per-row markers live inside the PluginInlineRow reasons block (D-13-07).
-const REQUIRES_PI_SUBAGENTS_MARKER = "{requires pi-subagents";
-const REQUIRES_PI_MCP_MARKER = "{requires pi-mcp";
+// Per-row soft-dep marker contract strings (CMC-13 / MSG-SD-1..2). Each
+// constant pins a whole rendered reasons block, closing brace included, so
+// only the exact token matches (ADET-01). Each matrix plugin declares one
+// companion, so its row's reasons block holds that marker alone (D-13-07).
+const REQUIRES_PI_SUBAGENTS_MARKER = "{requires pi-subagents}";
+const REQUIRES_PI_MCP_MARKER = "{requires pi-mcp-adapter}";
 
 const MATRIX = [
   { subagents: false, mcp: false },
@@ -40,7 +39,7 @@ for (const loaded of MATRIX) {
       // CMC-13 / MSG-SD-1..2 / D-13-07: per-row markers fire when (declares
       // AND !companion_loaded). With subagents not loaded -> agent-installing
       // plugin emits `{requires pi-subagents}`; with mcp not loaded ->
-      // mcp-installing plugin emits `{requires pi-mcp}`.
+      // mcp-installing plugin emits `{requires pi-mcp-adapter}`.
       assert.equal(messages.includes(REQUIRES_PI_SUBAGENTS_MARKER), !loaded.subagents);
       assert.equal(messages.includes(REQUIRES_PI_MCP_MARKER), !loaded.mcp);
 

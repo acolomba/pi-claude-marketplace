@@ -83,7 +83,7 @@ test("renders an updated row with ordered reasons and both missing companions", 
   // assert
   assert.equal(
     row,
-    "● alpha [project] v#2ea95f8 → v#1c3d9a0 (updated) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp}",
+    "● alpha [project] v#2ea95f8 → v#1c3d9a0 (updated) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp-adapter}",
   );
   assert.deepStrictEqual(message, {
     status: "updated",
@@ -122,7 +122,7 @@ test("renders a partially-installed row with a folded scope and MCP marker", () 
   // assert
   assert.equal(
     row,
-    "◉ beta v2.0.0 (partially-installed) {malformed command, lsp, requires pi-mcp}",
+    "◉ beta v2.0.0 (partially-installed) {malformed command, lsp, requires pi-mcp-adapter}",
   );
   assert.deepStrictEqual(message, {
     status: "partially-installed",

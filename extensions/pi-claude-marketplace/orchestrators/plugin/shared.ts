@@ -107,7 +107,7 @@ export interface LedgerDegradationSignals {
   /**
    * SEV-01 / D-98-02: the ledger staged at least one MCP server, so the row
    * DECLARES the `pi-mcp-adapter` companion. The MCP counterpart of
-   * `stagedAgents`, driving the `{requires pi-mcp}` marker and the same raise.
+   * `stagedAgents`, driving the `{requires pi-mcp-adapter}` marker and the same raise.
    */
   readonly stagedMcpServers?: boolean;
   /**

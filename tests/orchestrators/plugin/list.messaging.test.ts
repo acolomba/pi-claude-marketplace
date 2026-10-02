@@ -190,7 +190,7 @@ test("renders an installed row with durable and missing-companion reasons", () =
   });
   assert.strictEqual(
     renderedRow,
-    "● epsilon [project] v#1234567 (installed) {not in manifest, requires pi-subagents, requires pi-mcp}",
+    "● epsilon [project] v#1234567 (installed) {not in manifest, requires pi-subagents, requires pi-mcp-adapter}",
   );
 });
 

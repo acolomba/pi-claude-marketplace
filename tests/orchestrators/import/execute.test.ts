@@ -1669,7 +1669,7 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
     declaresAgents: false,
     declaresMcp: true,
     declaresWorkflows: false,
-    marker: " {requires pi-mcp}",
+    marker: " {requires pi-mcp-adapter}",
   },
   {
     declaresAgents: false,
@@ -1681,13 +1681,13 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
     declaresAgents: true,
     declaresMcp: true,
     declaresWorkflows: false,
-    marker: " {requires pi-subagents, requires pi-mcp}",
+    marker: " {requires pi-subagents, requires pi-mcp-adapter}",
   },
   {
     declaresAgents: true,
     declaresMcp: true,
     declaresWorkflows: true,
-    marker: " {requires pi-subagents, requires pi-mcp, requires pi-dynamic-workflows}",
+    marker: " {requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}",
   },
 ] satisfies readonly {
   readonly declaresAgents: boolean;

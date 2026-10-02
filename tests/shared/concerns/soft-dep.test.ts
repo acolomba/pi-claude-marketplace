@@ -48,7 +48,7 @@ const markerCases = [
       piMcpAdapterLoaded: false,
       workflowEngineLoaded: true,
     },
-    expectedMarkers: ["requires pi-mcp"],
+    expectedMarkers: ["requires pi-mcp-adapter"],
   },
   {
     title: "returns agents before MCP when both dependencies are declared and unavailable",
@@ -60,7 +60,7 @@ const markerCases = [
       piMcpAdapterLoaded: false,
       workflowEngineLoaded: true,
     },
-    expectedMarkers: ["requires pi-subagents", "requires pi-mcp"],
+    expectedMarkers: ["requires pi-subagents", "requires pi-mcp-adapter"],
   },
   {
     title: "returns no markers when neither dependency is declared and only MCP is loaded",
@@ -144,7 +144,7 @@ const markerCases = [
       piMcpAdapterLoaded: false,
       workflowEngineLoaded: true,
     },
-    expectedMarkers: ["requires pi-mcp"],
+    expectedMarkers: ["requires pi-mcp-adapter"],
   },
   {
     title: "returns the MCP marker when both dependencies are declared and only agents are loaded",
@@ -156,7 +156,7 @@ const markerCases = [
       piMcpAdapterLoaded: false,
       workflowEngineLoaded: true,
     },
-    expectedMarkers: ["requires pi-mcp"],
+    expectedMarkers: ["requires pi-mcp-adapter"],
   },
   {
     title: "returns no markers when neither dependency is declared and both companions are loaded",
@@ -257,7 +257,11 @@ const markerCases = [
       piMcpAdapterLoaded: false,
       workflowEngineLoaded: false,
     },
-    expectedMarkers: ["requires pi-subagents", "requires pi-mcp", "requires pi-dynamic-workflows"],
+    expectedMarkers: [
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+      "requires pi-dynamic-workflows",
+    ],
   },
 ] as const;
 

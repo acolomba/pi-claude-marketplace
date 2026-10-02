@@ -51,7 +51,7 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "unsupported hooks": true,
   lsp: true,
   "requires pi-subagents": true,
-  "requires pi-mcp": true,
+  "requires pi-mcp-adapter": true,
   "rollback partial": true,
   unreadable: true,
   unparseable: true,

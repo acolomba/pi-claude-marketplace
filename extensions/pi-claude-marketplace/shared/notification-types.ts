@@ -24,7 +24,7 @@ export type Reason =
   | "unsupported hooks"
   | "lsp"
   | "requires pi-subagents"
-  | "requires pi-mcp"
+  | "requires pi-mcp-adapter"
   | "rollback partial"
   | "unreadable"
   | "unparseable"
@@ -394,7 +394,7 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
    *
    * MSG-SD-3 is untouched -- the render arm still passes all three
    * soft-dependency arguments hard-coded `false`, so an `(uninstalled)` row
-   * cannot emit `{requires pi-subagents}` / `{requires pi-mcp}` /
+   * cannot emit `{requires pi-subagents}` / `{requires pi-mcp-adapter}` /
    * `{requires pi-dynamic-workflows}` whatever the removed record declared.
    */
   readonly reasons?: readonly ContentReason[];

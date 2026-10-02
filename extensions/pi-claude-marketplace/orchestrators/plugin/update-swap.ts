@@ -1415,7 +1415,7 @@ export async function swapPluginUpdate(
   // CMC-13: declaresAgents / declaresMcp predicate inputs
   // mirror reinstall's effective-state contract (declares iff actually
   // staged this update). The renderer probes companion-loaded state via
-  // SoftDepProbe and emits `{requires pi-subagents}` / `{requires pi-mcp}`
+  // SoftDepProbe and emits `{requires pi-subagents}` / `{requires pi-mcp-adapter}`
   // iff (declares AND unloaded).
   const stagedAgentNames = handles.agents.result.recorded.map((r) => r.generatedName);
   const stagedMcpServerNames = handles.mcp.result.recorded.map((r) => r.generatedName);

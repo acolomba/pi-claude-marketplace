@@ -1258,7 +1258,7 @@ test("MSG-SD-3: uninstall NEVER emits soft-dep markers (structural via V2 Plugin
 
       // ctx + pi without the "subagent" or "mcp" tools -> companion deps
       // both unloaded. In the install / reinstall / update path this would
-      // trigger per-row `{requires pi-subagents}` + `{requires pi-mcp}`
+      // trigger per-row `{requires pi-subagents}` + `{requires pi-mcp-adapter}`
       // markers; on the uninstall path the marker is structurally
       // impossible because PluginUninstalledMessage has no `dependencies`
       // field (D-15-02 / MSG-SD-3) so renderPluginRow's
@@ -1281,9 +1281,9 @@ test("MSG-SD-3: uninstall NEVER emits soft-dep markers (structural via V2 Plugin
         "MSG-SD-3: per-row {requires pi-subagents} marker must NOT appear on (uninstalled) rows",
       );
       assert.equal(
-        message.includes("{requires pi-mcp"),
+        message.includes("requires pi-mcp-adapter"),
         false,
-        "MSG-SD-3: per-row {requires pi-mcp} marker must NOT appear on (uninstalled) rows",
+        "MSG-SD-3: per-row {requires pi-mcp-adapter} marker must NOT appear on (uninstalled) rows",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

@@ -1062,7 +1062,7 @@ for (const { name, reasons, agents, mcp, workflows, probe, expected } of [
     mcp: true,
     workflows: false,
     probe: neitherLoadedProbe(),
-    expected: "{not found, requires pi-subagents, requires pi-mcp}",
+    expected: "{not found, requires pi-subagents, requires pi-mcp-adapter}",
   },
 ] as const) {
   test(name, () => {

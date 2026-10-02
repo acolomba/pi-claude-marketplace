@@ -261,7 +261,7 @@ test("applied installed composes reasons and independent missing soft-dependency
   // assert
   assert.equal(
     rendered,
-    "● alpha [project] v1.2.3 (installed) {orphan rewake, requires pi-subagents, requires pi-mcp}",
+    "● alpha [project] v1.2.3 (installed) {orphan rewake, requires pi-subagents, requires pi-mcp-adapter}",
   );
 });
 
@@ -359,6 +359,6 @@ test("applied partially-installed composes reasons and missing soft-dependency m
   // assert
   assert.equal(
     rendered,
-    "◉ alpha [project] v1.2.3 (partially-installed) {lsp, requires pi-subagents, requires pi-mcp}",
+    "◉ alpha [project] v1.2.3 (partially-installed) {lsp, requires pi-subagents, requires pi-mcp-adapter}",
   );
 });

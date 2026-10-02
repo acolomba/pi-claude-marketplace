@@ -110,7 +110,7 @@ export interface UpdatedRowSeverity {
  * before (NREG-01).
  *
  * CMC-13 / MSG-SD-3: `dependencies` carries the declared kinds that drive the
- * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` /
+ * renderer-time `{requires pi-subagents}` / `{requires pi-mcp-adapter}` /
  * `{requires pi-dynamic-workflows}` markers on BOTH forms (WR-03); the renderer
  * narrows on membership plus the notify-time probe.
  *

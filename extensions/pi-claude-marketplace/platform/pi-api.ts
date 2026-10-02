@@ -9,7 +9,7 @@
 // here because they inspect `pi.getAllTools()`, which belongs to the external
 // Pi API surface. `softDepStatus(pi)` returns a `SoftDepStatus` snapshot that
 // `shared/notification-dispatch.ts` reads once per render to decide whether to
-// append the `requires pi-subagents` / `requires pi-mcp` /
+// append the `requires pi-subagents` / `requires pi-mcp-adapter` /
 // `requires pi-dynamic-workflows` markers to a plugin row whose
 // `dependencies` declare the kind.
 

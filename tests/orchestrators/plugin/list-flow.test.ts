@@ -1815,7 +1815,7 @@ test("ENBL-06 / ENBL-16: a manifest-absent disabled PARTIAL renders `(disabled) 
 // `dependencies` field and the render arm hard-codes both soft-dep arguments
 // false. `makeCtx` probes BOTH companions as UNLOADED, which is exactly the
 // condition under which a leak would render `{requires pi-subagents, requires
-// pi-mcp}` -- so a bare row here is evidence, not an accident of the harness.
+// pi-mcp-adapter}` -- so a bare row here is evidence, not an accident of the harness.
 const DISABLED_BARE_ROW = ["● mp1 [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n");
 
 /**
@@ -4266,7 +4266,8 @@ test("listPlugins renders the installed MCP dependency marker after inventory re
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp1 [user]\n  ● mcpplug v1.0.0 (installed) {not in manifest, requires pi-mcp}",
+        message:
+          "● mp1 [user]\n  ● mcpplug v1.0.0 (installed) {not in manifest, requires pi-mcp-adapter}",
       },
     ]);
     verify(ctx);

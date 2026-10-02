@@ -56,7 +56,7 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  *  to a single string and routes through ctx.ui.notify with computed
  *  severity, a computed reload-hint trailer, and a single
  *  softDepStatus(pi) probe at entry threaded through the renderer so
- *  per-row {requires pi-subagents} / {requires pi-mcp} markers are
+ *  per-row {requires pi-subagents} / {requires pi-mcp-adapter} markers are
  *  injected at render time.
  *  - notifyUsageError(ctx, UsageErrorMessage)
  *  Argv-validation errors. On-the-wire string is

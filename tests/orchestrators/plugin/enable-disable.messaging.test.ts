@@ -243,7 +243,7 @@ test("the enable context renders installed reasons before both missing companion
   // assert
   assert.equal(
     actual,
-    "● eta [project] v6.0.0 (installed) {malformed skill, requires pi-subagents, requires pi-mcp}",
+    "● eta [project] v6.0.0 (installed) {malformed skill, requires pi-subagents, requires pi-mcp-adapter}",
   );
   assert.deepStrictEqual(row, {
     status: "installed",
@@ -279,7 +279,7 @@ test("the enable context renders a partially-installed row with one missing comp
   const actual = ENABLE_CONTEXT.render["partially-installed"](row, probe, "user");
 
   // assert
-  assert.equal(actual, "◉ theta v7.0.0 (partially-installed) {lsp, requires pi-mcp}");
+  assert.equal(actual, "◉ theta v7.0.0 (partially-installed) {lsp, requires pi-mcp-adapter}");
   assert.deepStrictEqual(row, {
     status: "partially-installed",
     severity: "info",

@@ -1365,7 +1365,7 @@ test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even wit
       // appear on the (reinstalled) row when companion extensions are
       // unloaded.
       assert.match(body, /\{[^}]*requires pi-subagents[^}]*\}/);
-      assert.match(body, /\{[^}]*requires pi-mcp[^}]*\}/);
+      assert.match(body, /\{[^}]*requires pi-mcp-adapter[,}]/);
       assert.match(body, /\/reload to pick up changes/);
       await rm(cwd2, { recursive: true, force: true });
     } finally {
@@ -1990,13 +1990,13 @@ test("PRL-15 batch soft dependency warnings aggregate successful restaged resour
       const body = notifications.at(-1)?.message ?? "";
       // D-19-02 / MSG-SD-1..2: per-row soft-dep markers via
       // the notify() probe. The `good` plugin (reinstalled with
-      // agent+mcp) carries `{requires pi-subagents, requires pi-mcp}`;
+      // agent+mcp) carries `{requires pi-subagents, requires pi-mcp-adapter}`;
       // the `bad` plugin (failed) does NOT (effective state = not
       // installed; MSG-SD-3 -- failed rows omit soft-dep markers).
       // Per-row scope orphan-folded (matches marketplace scope).
       assert.match(
         body,
-        /● good v1\.0\.0 \(reinstalled\) \{requires pi-subagents, requires pi-mcp\}/,
+        /● good v1\.0\.0 \(reinstalled\) \{requires pi-subagents, requires pi-mcp-adapter\}/,
       );
       assert.match(body, /⊘ bad \(failed\) \{not in manifest\}/);
       assert.equal(body.includes("Failed:"), false);

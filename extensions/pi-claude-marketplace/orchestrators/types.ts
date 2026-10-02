@@ -464,7 +464,7 @@ export type PluginUpdateFn = (
  *
  * `pi` is REQUIRED -- `notify(ctx, pi, message)` consumes it for the
  * single `softDepStatus(pi)` probe per call. The renderer
- * injects per-row `{requires pi-subagents}` / `{requires pi-mcp}`
+ * injects per-row `{requires pi-subagents}` / `{requires pi-mcp-adapter}`
  * markers from the per-row `dependencies: readonly Dependency[]`
  * declaration combined with the threaded probe. Making `pi`
  * optional would force a runtime branch the type checker cannot reason

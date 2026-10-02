@@ -69,7 +69,7 @@ describe("INSTALL_CONTEXT", () => {
     // assert
     assert.strictEqual(
       row,
-      "● helper v1.2.3 (installed) {orphan rewake, requires pi-subagents, requires pi-mcp}",
+      "● helper v1.2.3 (installed) {orphan rewake, requires pi-subagents, requires pi-mcp-adapter}",
     );
   });
 

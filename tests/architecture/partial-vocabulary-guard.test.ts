@@ -316,7 +316,7 @@ const TOKEN_WAIVERS: readonly TokenWaiver[] = [
     file: "docs/messaging-style-guide.md",
     token: "pi-mcp-adapter is not loaded",
     category: "mapping",
-    why: "the same table's second soft-dependency row, mapping to `{requires pi-mcp}` (MSG-SD-1).",
+    why: "the same table's second soft-dependency row, mapping to `{requires pi-mcp-adapter}` (MSG-SD-1).",
   },
 ];
 
@@ -394,7 +394,7 @@ const ABSENT_IDENTIFIERS = [
 ];
 
 // MSG-SD-1: the free-text soft-dependency warning sentences were replaced by
-// the per-row `{requires pi-subagents}` / `{requires pi-mcp}` reason markers.
+// the per-row `{requires pi-subagents}` / `{requires pi-mcp-adapter}` reason markers.
 // The retired sentences have no homonym; the only file that may still spell
 // them is the retired-to-live mapping table itself, which is waived by name.
 const ABSENT_SOFT_DEP_PROSE = ["pi-subagents is not loaded", "pi-mcp-adapter is not loaded"];

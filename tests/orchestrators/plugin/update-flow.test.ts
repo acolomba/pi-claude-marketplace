@@ -10636,7 +10636,7 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
           message:
             "A plugin operation needs attention.\n\n" +
             "● mp [project]\n" +
-            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-subagents, requires pi-mcp}\n\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-subagents, requires pi-mcp-adapter}\n\n" +
             "/reload to pick up changes",
           severity: "warning",
         },
