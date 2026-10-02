@@ -1,12 +1,48 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "mcp-4",
-  "phases": [],
+  "milestone": "mcp-4 — MCP 4",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Pi 1.0 floor and adapter-only detection",
+      "status": "pending"
+    },
+    {
+      "number": "2",
+      "name": "Adapter-file delivery",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "Claude Code tool names and tool search",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Variable expansion at Claude Code parity",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Automatic migration on /reload",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Live MCP status in info",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "Docs and live proof",
+      "status": "pending"
+    }
+  ],
   "next": {
-    "command": "/gsd:discuss-phase",
-    "label": "Discuss the first phase",
-    "reason": "Project initialized — plan your first phase"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 1 of 7 · 0% · executing"
   },
-  "updated_at": "2026-10-02T02:42:23.513Z"
+  "updated_at": "2026-10-02T15:28:07.345Z"
 }
