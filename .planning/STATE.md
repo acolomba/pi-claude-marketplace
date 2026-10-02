@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 03
 current_phase_name: Typed Raw Surfaces
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-10-02T21:23:13.439Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-10-02T23:09:57.157Z"
 last_activity: 2026-10-02
-last_activity_desc: Completed 03-01 typed load-time and usage surfaces
-state_head: d7009faa2a90dbe9781032f25e7bb7bcb08ce989
+last_activity_desc: Completed 03-02 typed diagnostic and hook surfaces
+state_head: 107b50a77622ada67581d36b2bbeba1bc838c812
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 22
-  completed_plans: 19
+  completed_plans: 20
   percent: 29
 milestone_name: Mode-Keyed Presentation Strategies
 ---
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03 (Typed Raw Surfaces) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Executing Phase 03
-Last activity: 2026-10-02 — Completed 03-01 (typed load-time and usage surfaces)
+Last activity: 2026-10-02 — Completed 03-02 (typed diagnostic and hook surfaces)
 
-Progress: [███░░░░░░░] 29% (2 of 7 phases fully verified; 19 plans complete)
+Progress: [███░░░░░░░] 29% (2 of 7 phases fully verified; 20 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -170,8 +170,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-02T21:23:13.255Z
-**Stopped at:** Completed 03-01-PLAN.md
+**Last session:** 2026-10-02T23:09:56.971Z
+**Stopped at:** Completed 03-02-PLAN.md
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -223,6 +223,7 @@ archived milestone artifacts.
 | Phase 01 P15 | 50 min | 2 tasks | 32 files |
 | Phase 01 P16 | 78 min | 2 tasks | 26 files |
 | Phase 03 P01 | 1h 17m | 2 tasks | 10 files |
+| Phase 03 P02 | 1h 15m | 2 tasks | 10 files |
 
 ## Decisions
 
@@ -261,3 +262,5 @@ archived milestone artifacts.
 - [Phase 01]: The notify family takes run: NotificationRun only; the dispatcher reads run.softDeps and imports no probe, and the catalog driver opens one run per fixture from the fixture's inventory (SC-2, D-05, D-06)
 - [Phase 03]: 03-01: RawSurface is spelled as an explicit union while LoadSurface is its only member (sonarjs/redundant-type-aliases); 03-01 Task 2 widened it to UsageErrorSurface | UsageInfoSurface | LoadSurface
 - [Phase 03]: 03-01: each TDD task lands as one feat commit with its owner tests, because the full-check pre-commit hook rejects a failing RED commit; RED is observed locally
+- [Phase 03]: 03-02: diagnostic, async-rewake-summary, and stop-override-cap are typed raw kinds; formatRawSurface returns undefined only for a zero-length line list or summary, and deliver skips it (D-05, D-08, D-15)
+- [Phase 03]: 03-02: HookSurface has its own private emitHookSurface entry; settle passes STOP_OVERRIDE_CAP exported from bridges/hooks/runtime.ts, so the shared layer holds no cap literal (D-07, D-14)

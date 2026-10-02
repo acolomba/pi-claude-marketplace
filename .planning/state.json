@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "Typed Raw Surfaces",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "4",
@@ -44,5 +44,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 03 of 7 · executing"
   },
-  "updated_at": "2026-10-02T21:22:55.120Z"
+  "updated_at": "2026-10-02T23:09:49.745Z"
 }
