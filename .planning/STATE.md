@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 1
+current_phase: 01
 current_phase_name: Pi 1.0 floor and adapter-only detection
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-10-02T15:28:07.249Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-10-02T16:35:12.487Z"
 last_activity: 2026-10-02
-last_activity_desc: Roadmap created (7 phases, 36/36 requirements mapped)
-state_head: f86c0fac91bcf3e91876663c550e7284b779b528
+last_activity_desc: Completed 01-01 (Pi 1.0 floor and toolchain refresh)
+state_head: 49e09af5b4124e8d2bc7afc7067a4dcb58212a78
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -27,17 +27,17 @@ See: `.planning/PROJECT.md` (updated 2026-10-01 at the mcp-4 start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** mcp-4 (MCP 4), Phase 1: Pi 1.0 floor and adapter-only
+**Current focus:** Phase 01 — Pi 1.0 floor and adapter-only detection
 detection. The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
 
 ## Current Position
 
-Phase: 1 (Pi 1.0 floor and adapter-only detection) — READY TO EXECUTE
-Plan: Not started
+Phase: 01 (Pi 1.0 floor and adapter-only detection) — EXECUTING
+Plan: 2 of 9
 Status: Ready to execute
-Last activity: 2026-10-02 — Roadmap created (7 phases, 36/36 requirements mapped)
+Last activity: 2026-10-02 — Completed 01-01 (Pi 1.0 floor and toolchain refresh)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -250,6 +250,7 @@ still open with a comment explaining what landed.
 | Phase 10 P02 | 1h53m | 3 tasks | 8 files |
 | Phase 10-constraint-aware-update P03 | 56 min | 3 tasks | 26 files |
 | Phase 10 P04 | 48min | 2 tasks | 8 files |
+| Phase 01 P01 | 30min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -553,6 +554,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 10]: Path-arm tag-listing-once behavior verified functionally (real local git marketplace fixture) rather than by call-count mocking, since isomorphic-git's package exports are non-configurable
 - [Phase 10]: Phase 10 plan 03 closed stage two (admitResolvedVersion), threaded the required-but-nullable UpdateConstraintDisclosure through PreparedPluginUpdate and both update outcome types (D-10-17a), and gave the autoupdate cascade the same held-row token/cause/warning severity the manual cascade renders (D-10-12). Catalog moved 223 -> 227 states.
 - [Phase 10]: Phase 10 closed with a green whole-tree gate apart from the pre-existing, out-of-scope .planning/config.json format:check drift; UPDT-01/UPDT-02 complete. — Four type-member contract anchors were remapped, one outside the plan's named three-file scope, because it was masking the others every run; all four validated by re-deriving positions from the tool's own reported identity rather than transcribing guesses.
+- [Phase 01]: Pi 1.0 floor: pi-coding-agent peer >=1.0.0 (dev ^1.0.0); pi-subagents >=0.74.0 and pi-mcp-adapter >=5.0.0 are optional peers only, never installed
+- [Phase 01]: dispatchRow reads the render map through a Readonly<Record<string, unknown>> view, so no-unsafe-enum-assignment is fixed in code with no rule override
+- [Phase 01]: One shared Pi ToolInfo seed (tests/platform/pi-inventory-seed.ts) replaces the three Pi-typed copies; ToolInventoryItem-typed helpers stay local
 
 ### Pending Todos
 
@@ -697,11 +701,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 1 context gathered
+**Stopped at:** Completed 01-01-PLAN.md
 
-**Resume file:** .planning/phases/01-pi-1-0-floor-and-adapter-only-detection/01-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-10-02T12:49:31.854Z
+Last session: 2026-10-02T16:35:12.414Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 

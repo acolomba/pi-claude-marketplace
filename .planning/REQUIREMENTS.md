@@ -15,21 +15,21 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 
 ### Dependency floor (PIFL)
 
-- [ ] **PIFL-01**: A user on Pi 1.0 can install the extension: the `@earendil-works/pi-coding-agent`
+- [x] **PIFL-01**: A user on Pi 1.0 can install the extension: the `@earendil-works/pi-coding-agent`
   peer floor is `>=1.0.0`, dev dependencies are `^1.0.0` for pi-coding-agent and pi-tui, and the
   FLOOR-01 gate pins the new literal.
 - [ ] **PIFL-02**: The optional `pi-subagents` peer floor is `>=0.74.0`, and both pi-subagents peer
   integration tests run (zero skips) against 0.74.0 through `PI_SUBAGENTS_ROOT`.
-- [ ] **PIFL-03**: `pi-mcp-adapter >=5.0.0` is declared as an optional peer dependency (never a
+- [x] **PIFL-03**: `pi-mcp-adapter >=5.0.0` is declared as an optional peer dependency (never a
   devDependency), and the README states the floor and the adapter's `pi-ai` peer gap at Pi 1.0 as
   an upstream issue.
 - [ ] **PIFL-04**: The Pi 0.99 typing fixes and peer-test fixes from features/mcp (`74162ca6`,
   `5b1d8ef6`, `dac3a245`, `69e0870a`) are re-implemented at the 1.0 floor, with the `types.d.ts`
   contract pins re-derived from the installed Pi 1.0 types.
-- [ ] **PIFL-05**: Every devDependency is at its latest release except TypeScript, held at
+- [x] **PIFL-05**: Every devDependency is at its latest release except TypeScript, held at
   `^6.0.3` because typescript-eslint does not admit 7.x; the new `no-unsafe-enum-assignment`
   finding is fixed in code, and the fallow `lint.yml` action SHA matches the bumped fallow.
-- [ ] **PIFL-06**: `engines.node` is raised to the floor Pi 1.0 and `write-file-atomic@8` actually
+- [x] **PIFL-06**: `engines.node` is raised to the floor Pi 1.0 and `write-file-atomic@8` actually
   require, and NFR-4 is amended to match in AGENTS.md and PROJECT.md.
 - [ ] **PIFL-07**: The Stop canary (features/mcp `4f82096f`, re-run, not cherry-picked) and the
   workflow-engine canary pass live on Pi 1.0 with `@quintinshaw/pi-dynamic-workflows` 3.13.1, and
@@ -157,12 +157,12 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PIFL-01 | Phase 1 | Pending |
+| PIFL-01 | Phase 1 | Complete |
 | PIFL-02 | Phase 1 | Pending |
-| PIFL-03 | Phase 1 | Pending |
+| PIFL-03 | Phase 1 | Complete |
 | PIFL-04 | Phase 1 | Pending |
-| PIFL-05 | Phase 1 | Pending |
-| PIFL-06 | Phase 1 | Pending |
+| PIFL-05 | Phase 1 | Complete |
+| PIFL-06 | Phase 1 | Complete |
 | PIFL-07 | Phase 1 | Pending |
 | ADET-01 | Phase 1 | Pending |
 | ADET-02 | Phase 1 | Pending |
