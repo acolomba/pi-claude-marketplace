@@ -6,7 +6,9 @@ import type { SoftDepStatus } from "../../platform/pi-api.ts";
  * shared/concerns/soft-dep.ts -- the soft-dep marker injection concern (D-01).
  * Owns the `Dependency` literal-union, the three soft-dep marker constants, and
  * the pure `softDepMarkers` helper that maps a per-row declares-flags triple + a
- * threaded `SoftDepStatus` probe to the soft-dep markers to append. The central
+ * threaded `SoftDepStatus` probe to the soft-dep markers to append. It also owns
+ * the companion package names and `companionRequirements`, the same mapping
+ * shaped for the info `requires:` line (ADET-01). The central
  * `composeReasons` (which stays in `notify.ts` as shared presentation
  * vocabulary) delegates its soft-dep branch here.
  *
@@ -30,9 +32,27 @@ import type { SoftDepStatus } from "../../platform/pi-api.ts";
  */
 export type Dependency = "agents" | "mcp" | "workflows";
 
-/** Soft-dep marker literals -- all three are REASONS members (closed set). */
-const SOFT_DEP_MARKER_AGENTS: Reason = "requires pi-subagents";
-const SOFT_DEP_MARKER_MCP: Reason = "requires pi-mcp-adapter";
+/**
+ * ADET-01: the companion extension a component kind needs at runtime -- agents
+ * need pi-subagents, mcp needs pi-mcp-adapter, workflows need the host
+ * workflow engine.
+ */
+export type Companion = "pi-dynamic-workflows" | "pi-mcp-adapter" | "pi-subagents";
+
+/**
+ * ADET-01: one companion a plugin needs. `missing` is true when the probe
+ * snapshot reports the companion not loaded.
+ */
+export interface CompanionRequirement {
+  readonly companion: Companion;
+  readonly missing: boolean;
+}
+
+// ADET-01: each companion name is declared once, and both the soft-dep marker
+// and the info `requires:` entry derive from it, so the two surfaces cannot
+// name a companion differently.
+const COMPANION_AGENTS = "pi-subagents" satisfies Companion;
+const COMPANION_MCP = "pi-mcp-adapter" satisfies Companion;
 
 /**
  * WDEP-04: the host workflow engine `@quintinshaw/pi-dynamic-workflows`.
@@ -40,7 +60,12 @@ const SOFT_DEP_MARKER_MCP: Reason = "requires pi-mcp-adapter";
  * `@nicknisi/pi-workflows`, a different engine, so the short form would point
  * the operator at the wrong package to install.
  */
-const SOFT_DEP_MARKER_WORKFLOWS: Reason = "requires pi-dynamic-workflows";
+const COMPANION_WORKFLOWS = "pi-dynamic-workflows" satisfies Companion;
+
+/** Soft-dep marker literals -- all three are REASONS members (closed set). */
+const SOFT_DEP_MARKER_AGENTS: Reason = `requires ${COMPANION_AGENTS}`;
+const SOFT_DEP_MARKER_MCP: Reason = `requires ${COMPANION_MCP}`;
+const SOFT_DEP_MARKER_WORKFLOWS: Reason = `requires ${COMPANION_WORKFLOWS}`;
 
 /**
  * Pure given the probe result. Returns the soft-dep markers to append, in
@@ -74,4 +99,35 @@ export function softDepMarkers(
   }
 
   return markers;
+}
+
+/**
+ * ADET-01: returns the companions a plugin's declared component kinds need,
+ * one entry per declared kind, sorted by companion name ascending. Each entry
+ * is tagged `missing` from the probe, so the caller stamps the result as is.
+ * Pure given the probe result.
+ */
+export function companionRequirements(
+  declaresAgents: boolean,
+  declaresMcp: boolean,
+  declaresWorkflows: boolean,
+  probe: SoftDepStatus,
+): readonly CompanionRequirement[] {
+  const requirements: CompanionRequirement[] = [];
+
+  // Pushed in companion-name order: pi-dynamic-workflows, pi-mcp-adapter,
+  // pi-subagents. Each kind maps to a distinct companion, so no tie exists.
+  if (declaresWorkflows) {
+    requirements.push({ companion: COMPANION_WORKFLOWS, missing: !probe.workflowEngineLoaded });
+  }
+
+  if (declaresMcp) {
+    requirements.push({ companion: COMPANION_MCP, missing: !probe.piMcpAdapterLoaded });
+  }
+
+  if (declaresAgents) {
+    requirements.push({ companion: COMPANION_AGENTS, missing: !probe.piSubagentsLoaded });
+  }
+
+  return requirements;
 }

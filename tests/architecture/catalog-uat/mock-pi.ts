@@ -91,6 +91,11 @@ export function piWithoutWorkflowEngine(): MockPi {
   return piWithBothLoaded();
 }
 
+/** Reports only pi-subagents loaded, through its `subagent` tool. */
+export function piWithSubagentsLoaded(): MockPi {
+  return makePi([{ name: "subagent" }]);
+}
+
 /** Reports only the MCP companion extension loaded. */
 export function piWithMcpLoaded(): MockPi {
   return makePi([], [adapterCommand()]);

@@ -450,12 +450,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts:62:52"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1691:49",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1693:49",
       "owner": "composeStateOnlyComponents.components",
       "key": "componentsResolved",
       "category": "type-selection",
       "purpose": "Selects within PluginInfoRow by componentsResolved, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1691:24"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1693:24"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:59:3",
@@ -706,12 +706,12 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:218:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1596:46",
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1621:46",
       "owner": "isDescriptionBearingRow",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1596:9"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1621:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:842:7",

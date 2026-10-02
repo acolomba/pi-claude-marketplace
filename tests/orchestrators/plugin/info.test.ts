@@ -67,9 +67,18 @@ import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import {
+  adapterCommand,
+  builtinMcpCommand,
+  builtinMcpTool,
+} from "../../platform/pi-inventory-seed.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
+import type {
+  CommandInventoryItem,
+  ToolInventoryItem,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type FaultableFsPromiseMethod = "readFile" | "readdir" | "stat";
@@ -289,7 +298,19 @@ type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
 
 const pendingInteractionVerifications: Array<() => void> = [];
 
-function makeCtx(expectedNotifications = 1): {
+/**
+ * `orchestratorProbes` counts the snapshots the info command takes before it
+ * notifies: one per invocation that builds info blocks, which stamps the
+ * `requires:` line (ADET-01), and none on the marketplace-not-added path.
+ */
+function makeCtx(
+  expectedNotifications = 1,
+  orchestratorProbes = 1,
+  inventory: {
+    readonly tools?: readonly ToolInventoryItem[];
+    readonly commands?: readonly CommandInventoryItem[];
+  } = {},
+): {
   ctx: ExtensionContext;
   pi: ExtensionAPI;
   notifications: NotifyRecord[];
@@ -301,7 +322,13 @@ function makeCtx(expectedNotifications = 1): {
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(expectedNotifications);
-  expectSoftDepProbes(pi, expectedNotifications);
+  // +1: the info command takes its own snapshot to stamp `requires:` (ADET-01).
+  expectSoftDepProbes(
+    pi,
+    expectedNotifications + orchestratorProbes,
+    inventory.tools,
+    inventory.commands,
+  );
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push(severity === undefined ? { message } : { message, severity });
@@ -554,7 +581,26 @@ const EXPECTED_FOO_INSTALLED_INFO = [
   "    agents: a1",
   "    commands: c1",
   "    skills: s1",
+  "    requires: pi-subagents (missing)",
 ].join("\n");
+
+/**
+ * The same `foo` row up to its last component line, for the cases whose
+ * admitted workflows add a `workflows:` line and, with it, a second companion
+ * on the `requires:` line that follows (ADET-01).
+ */
+const EXPECTED_FOO_COMPONENT_LINES = [
+  "● mp [user] <no autoupdate>",
+  "  ● foo v1.2.3 (installed)",
+  "    Foo plugin",
+  "    agents: a1",
+  "    commands: c1",
+  "    skills: s1",
+].join("\n");
+
+/** The `requires:` line of a `foo` row that lists admitted workflows (ADET-01). */
+const FOO_WORKFLOWS_REQUIRES_LINE =
+  "    requires: pi-dynamic-workflows (missing), pi-subagents (missing)";
 
 /** The `foo` entry both cases seed; `over` is the only intended difference. */
 function fooInstalledEntry(over: Record<string, unknown> = {}): Record<string, unknown> {
@@ -888,6 +934,7 @@ test("INFO-03: both-scopes fan-out emits ONE notify call; project block FIRST, u
         "● mp [user] <no autoupdate>",
         "  ● foo v2.0.0 (installed)",
         "    agents: a1",
+        "    requires: pi-subagents (missing)",
       ].join("\n"),
     );
   });
@@ -909,7 +956,7 @@ test("INFO-04: --scope user mismatch (mp only in project) emits `⊘ <mp> [user]
       manifest: { name: "p-only", plugins: [] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx(1, 0);
     // act
     await getPluginInfo({
       ctx,
@@ -936,7 +983,7 @@ test("INFO-04: --scope user mismatch (mp only in project) emits `⊘ <mp> [user]
 test("D-03: absent from BOTH scopes with no --scope renders `(failed) {marketplace not added}` WITHOUT any [scope] bracket", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx(1, 0);
     // act
     await getPluginInfo({ ctx, pi, marketplace: "ghost-mp", plugin: "ghost", cwd });
     // assert
@@ -2067,6 +2114,7 @@ test("plugin info manifest absent: INFO-11: the four name-list kinds render from
         "    commands: alpha:build",
         "    mcp: alpha-srv, zeta-srv",
         "    skills: Alpha-other, alpha-skill",
+        "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
       ].join("\n"),
     );
   });
@@ -2564,6 +2612,7 @@ test("plugin info manifest absent: NFR-10: a traversal hooks slug is refused bef
         "    commands: alpha:build",
         "    mcp: alpha-srv",
         "    skills: alpha-skill",
+        "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
       ].join("\n"),
     );
   });
@@ -2964,6 +3013,7 @@ test("plugin info manifest absent: ENBL-16 / ENBL-17: a disabled, manifest-absen
         "      PostToolUse(Read)",
         "    mcp: alpha-mcp",
         "    skills: alpha-skill",
+        "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
       ].join("\n"),
     );
 
@@ -4143,6 +4193,7 @@ test("SURF-01 / D-63-04: installed plugin with hooks/hooks.json renders multi-li
         "      PostToolUse(Edit)",
         "      SessionStart",
         "    mcp: my-mcp",
+        "    requires: pi-mcp-adapter (missing)",
       ].join("\n"),
     );
   });
@@ -6613,7 +6664,128 @@ test("resolved MCP inventory sorts two server names exactly", async () => {
           "● mp [user] <no autoupdate>",
           "  ○ alpha v1.0.0 (available)",
           "    mcp: alpha, zeta",
+          "    requires: pi-mcp-adapter (missing)",
         ].join("\n"),
+      },
+    ]);
+  });
+});
+
+/**
+ * Seeds a user-scope path-source `alpha` plugin whose `plugin.json` is the
+ * given manifest, so a case states its component kinds in one literal.
+ */
+async function seedAlphaWithPluginJson(
+  home: string,
+  cwd: string,
+  pluginJson: Record<string, unknown>,
+): Promise<void> {
+  const mpRoot = await seedPathMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp",
+    manifest: {
+      name: "mp",
+      plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+    },
+    installablePluginDirs: ["alpha"],
+  });
+  await mkdir(path.join(mpRoot, "alpha", ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(mpRoot, "alpha", ".claude-plugin", "plugin.json"),
+    JSON.stringify(pluginJson),
+    "utf8",
+  );
+}
+
+for (const { inventory, label, requiresLine } of [
+  {
+    label: "Pi's built-in MCP alone tags pi-mcp-adapter missing",
+    inventory: { tools: [builtinMcpTool()], commands: [builtinMcpCommand()] },
+    requiresLine: "    requires: pi-mcp-adapter (missing)",
+  },
+  {
+    label: "the adapter's mcp-adapter command names pi-mcp-adapter untagged",
+    inventory: { commands: [adapterCommand()] },
+    requiresLine: "    requires: pi-mcp-adapter",
+  },
+]) {
+  test(`ADET-01: ${label} on the requires line of an MCP plugin`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedAlphaWithPluginJson(home, cwd, {
+        name: "alpha",
+        mcpServers: { srv: { command: "srv" } },
+      });
+      const { ctx, pi, notifications } = makeCtx(1, 1, inventory);
+
+      // act
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message: [
+            "● mp [user] <no autoupdate>",
+            "  ○ alpha v1.0.0 (available)",
+            "    mcp: srv",
+            requiresLine,
+          ].join("\n"),
+        },
+      ]);
+    });
+  });
+}
+
+test("ADET-01: a plugin whose components need no companion gets no requires line, with no companion loaded", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaWithPluginJson(home, cwd, { name: "alpha" });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      { message: "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)" },
+    ]);
+  });
+});
+
+test("ADET-01: a components-not-resolved row gets no requires line although its entry declares companion kinds", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "remote",
+            source: { source: "npm", package: "@scope/remote-plugin", version: "1.0.0" },
+            version: "1.0.0",
+            agents: "agents",
+            mcpServers: { srv: { command: "srv" } },
+          },
+        ],
+      },
+      installed: { remote: { version: "1.0.0" } },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n  ● remote v1.0.0 (installed)\n    components: not resolved",
       },
     ]);
   });
@@ -8116,6 +8288,7 @@ test("WFLW-04: an installed plugin lists its admitted workflows, sorted, after i
           "    commands: c1\n" +
           "    skills: s1\n" +
           "    workflows: foo:alpha, foo:zeta\n" +
+          "    requires: pi-dynamic-workflows (missing), pi-subagents (missing)\n" +
           '    note: workflow script "quiet.js" in "workflows" will not be installed: ' +
           "quiet.js declares no string-literal `meta.name`, so there is no command to install",
       },
@@ -8217,6 +8390,7 @@ test("WFLW-04: a manifest-absent record renders its persisted workflow inventory
           "  ● alpha v1.0.0 (installed) {not in manifest}",
           "    skills: alpha-skill",
           "    workflows: alpha:changelog, alpha:release",
+          "    requires: pi-dynamic-workflows (missing)",
         ].join("\n"),
       },
     ]);
@@ -8293,6 +8467,7 @@ test("WFLW-04: the lenient component map carries the conventional workflows dire
           "● mp [user] <no autoupdate>",
           "  ⊘ alpha v1.0.0 (unavailable) {unsupported hooks}",
           "    workflows: alpha:extra, alpha:zeta",
+          "    requires: pi-dynamic-workflows (missing)",
         ].join("\n"),
       },
     ]);
@@ -8335,6 +8510,7 @@ test("WR-09: a refused workflow script renders one preview-tense advisory line l
           "    commands: c1",
           "    skills: s1",
           "    workflows: foo:zeta",
+          FOO_WORKFLOWS_REQUIRES_LINE,
           "    dependencies: helper@utils-mp",
           '    note: workflow script "roll.js" in "workflows" will be refused: roll.js calls ' +
             "`Math.random`, which the workflow engine refuses as nondeterministic",
@@ -8357,7 +8533,9 @@ test("WR-09: a plugin whose workflow scripts are all admitted renders no advisor
     // assert -- byte-identical to the same row before the channel existed,
     // plus the `workflows:` line the admitted script earns.
     assert.deepEqual(notifications, [
-      { message: EXPECTED_FOO_INSTALLED_INFO + "\n    workflows: foo:zeta" },
+      {
+        message: `${EXPECTED_FOO_COMPONENT_LINES}\n    workflows: foo:zeta\n${FOO_WORKFLOWS_REQUIRES_LINE}`,
+      },
     ]);
   });
 });
@@ -8464,6 +8642,7 @@ test("WFLW-04: the state-only arm carries no advisory line, because it runs no d
           "  ● alpha v1.0.0 (installed) {not in manifest}",
           "    skills: alpha-skill",
           "    workflows: alpha:greet",
+          "    requires: pi-dynamic-workflows (missing)",
         ].join("\n"),
       },
     ]);
@@ -8534,8 +8713,9 @@ test("WGATE-01: info names the engine check that will refuse an admitted script,
     assert.deepEqual(notifications, [
       {
         message:
-          EXPECTED_FOO_INSTALLED_INFO +
+          EXPECTED_FOO_COMPONENT_LINES +
           "\n    workflows: foo:greet, foo:zeta" +
+          `\n${FOO_WORKFLOWS_REQUIRES_LINE}` +
           `\n    note: ${EXPECTED_GATE_NOTE_CHECK_9}`,
       },
     ]);
@@ -8553,7 +8733,9 @@ test("WGATE-03: the gate note is the only byte an info row gains, at the same se
   // assert -- the gate-free row first, so the comparison below is against a
   // stated baseline rather than against whatever the other run produced.
   assert.deepEqual(ungated, [
-    { message: `${EXPECTED_FOO_INSTALLED_INFO}\n    workflows: foo:greet` },
+    {
+      message: `${EXPECTED_FOO_COMPONENT_LINES}\n    workflows: foo:greet\n${FOO_WORKFLOWS_REQUIRES_LINE}`,
+    },
   ]);
   // One record with no `severity` key is how this harness records an `info`
   // notification: `ctx.ui.notify` was called with no second argument.
@@ -8617,8 +8799,9 @@ test("WGATE-01: a gate note takes its place among the other advisories, in direc
     assert.deepEqual(notifications, [
       {
         message: [
-          EXPECTED_FOO_INSTALLED_INFO,
+          EXPECTED_FOO_COMPONENT_LINES,
           "    workflows: foo:greet, foo:zeta",
+          FOO_WORKFLOWS_REQUIRES_LINE,
           `    note: ${EXPECTED_GATE_NOTE_CHECK_9}`,
           '    note: workflow script "helper.js" in "workflows" will not be installed: ' +
             "helper.js declares no `meta`, so there is nothing to install",

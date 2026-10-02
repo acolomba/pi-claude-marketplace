@@ -34,8 +34,9 @@
 // written, because the two emission paths disagree:
 //   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and takes no
 //     soft-dependency probe -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and takes ONE
-//     soft-dependency probe -- the cascade runs it.
+//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and takes TWO
+//     soft-dependency probes -- the info command takes one to stamp its
+//     `requires:` line (ADET-01), and the cascade runs the other.
 //
 // NFR-5, scoped: the fetch flag exists to warm a clone cache, so this surface
 // is offline only while the flag is ABSENT, and the claim is stated that way.
@@ -193,7 +194,8 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    // +1 probe: the info command's own snapshot for its `requires:` line (ADET-01).
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -212,7 +214,7 @@ test("reads a git-source plugin from disk alone while the fetch flag is absent, 
   // arrange
   const workspace = await createHermeticWorkspace(t, "offline");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -240,7 +242,7 @@ for (const { args, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
       value: workspace.cwd,
       reads: 1,
     });

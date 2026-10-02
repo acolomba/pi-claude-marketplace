@@ -666,6 +666,107 @@ test("renders no dependencies line for an unresolved row whose list is empty", (
   );
 });
 
+test("ADET-01: renders the stamped requires line after the components and before dependencies and notes", () => {
+  // arrange
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      componentsResolved: true,
+      components: { agents: ["a"], mcp: ["m"] },
+      requires: [
+        { companion: "pi-mcp-adapter", missing: true },
+        { companion: "pi-subagents", missing: false },
+      ],
+      dependencies: ["dep@mp"],
+      notes: ["a note"],
+    },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message, bothLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    [
+      "● official [user] <no autoupdate>",
+      "  ● alpha (installed)",
+      "    agents: a",
+      "    mcp: m",
+      "    requires: pi-mcp-adapter (missing), pi-subagents",
+      "    dependencies: dep@mp",
+      "    note: a note",
+    ].join("\n"),
+  );
+});
+
+test("ADET-01: formats the requires entries as stamped, whatever the probe it is handed reports", () => {
+  // arrange
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      componentsResolved: true,
+      components: { workflows: ["alpha:w"] },
+      requires: [{ companion: "pi-dynamic-workflows", missing: false }],
+    },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message, neitherLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    [
+      "● official [user] <no autoupdate>",
+      "  ● alpha (installed)",
+      "    workflows: alpha:w",
+      "    requires: pi-dynamic-workflows",
+    ].join("\n"),
+  );
+});
+
+for (const { label, stamp } of [
+  { label: "absent", stamp: {} },
+  { label: "empty", stamp: { requires: [] } },
+]) {
+  test(`ADET-01: renders no requires line when the stamped list is ${label}`, () => {
+    // arrange
+    const message: PluginInfoMessage = {
+      kind: "plugin-info",
+      marketplaceName: "official",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "installed",
+        name: "alpha",
+        componentsResolved: true,
+        components: { skills: ["s"] },
+        ...stamp,
+      },
+    };
+
+    // act
+    const rendered = renderPluginInfo(message, neitherLoadedProbe());
+
+    // assert
+    assert.equal(
+      rendered,
+      "● official [user] <no autoupdate>\n  ● alpha (installed)\n    skills: s",
+    );
+  });
+}
+
 test("renders resolved plugin components and wraps descriptions without ellipsis", () => {
   // arrange
   const description = `${"word ".repeat(20)}supercalifragilisticexpialidocious`.trim();

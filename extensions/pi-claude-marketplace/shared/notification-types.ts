@@ -1,5 +1,5 @@
 import type { HookSummaryEntry } from "./concerns/hooks.ts";
-import type { Dependency } from "./concerns/soft-dep.ts";
+import type { CompanionRequirement, Dependency } from "./concerns/soft-dep.ts";
 import type { Scope } from "./types.ts";
 
 /**
@@ -877,6 +877,12 @@ export interface PluginInfoComponentsResolved {
      */
     readonly workflows?: readonly string[];
   };
+  /**
+   * ADET-01: the companions the resolved components need, pre-sorted by the
+   * composer on the companion name. Each entry is tagged missing per the probe
+   * snapshot the orchestrator took. Absent when no companion is needed.
+   */
+  readonly requires?: readonly CompanionRequirement[];
   readonly dependencies?: readonly string[];
 }
 

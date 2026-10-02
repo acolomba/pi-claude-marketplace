@@ -55,6 +55,8 @@ import {
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, type ExtensionState } from "../../persistence/state-io.ts";
+import { softDepStatus } from "../../platform/pi-api.ts";
+import { companionRequirements } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
@@ -99,7 +101,7 @@ import type {
   ResolvedPluginUnavailable,
   ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver-types.ts";
-import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
@@ -113,9 +115,9 @@ const BUCKET_A_EVENTS_SET: ReadonlySet<string> = new Set<string>(BUCKET_A_EVENTS
 export interface GetPluginInfoOptions {
   readonly ctx: NotificationContext;
   /**
-   * Required by `notify(ctx, pi, message)` for the soft-dep probe (info
-   * surfaces do not emit soft-dep markers, but the probe argument is
-   * threaded for signature parity with the cascade arm).
+   * ADET-01: info reads one `softDepStatus` snapshot to stamp the `requires:`
+   * entries on every resolved row. `notify(ctx, pi, message)` still takes its
+   * own snapshot, which emits no soft-dep marker on the info surfaces.
    */
   readonly pi: PiInventory;
   readonly marketplace: string;
@@ -2822,6 +2824,31 @@ function emitFetchSkip(
   notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows, undefined, "single");
 }
 
+/**
+ * ADET-01: stamps the companions a resolved row's components need onto the
+ * block's plugin row, each tagged missing per the invocation's one probe
+ * snapshot. An unresolved row and a row that needs no companion keep their
+ * shape. A disabled row keeps its component inventory (ENBL-18), so it carries
+ * the line too: the line states what the plugin needs, not what is running.
+ */
+function withCompanionRequirements(built: InfoBlock, probe: SoftDepStatus): InfoBlock {
+  const plugin = built.block.plugin;
+  if (!plugin.componentsResolved) {
+    return built;
+  }
+
+  const requires = companionRequirements(
+    (plugin.components.agents?.length ?? 0) > 0,
+    (plugin.components.mcp?.length ?? 0) > 0,
+    (plugin.components.workflows?.length ?? 0) > 0,
+    probe,
+  );
+  return {
+    ...built,
+    block: { ...built.block, plugin: { ...plugin, ...(requires.length > 0 && { requires }) } },
+  };
+}
+
 async function getPluginInfoWithReader(
   reader: PluginInfoReader,
   opts: GetPluginInfoOptions,
@@ -2875,6 +2902,9 @@ async function getPluginInfoWithReader(
     return;
   }
 
+  // ADET-01: one probe snapshot stamps the `requires:` entries on every block.
+  const probe = softDepStatus(opts.pi);
+
   // D-100-08 / ENBL-17: every found scope goes to `buildBlock`, including a
   // recorded-but-disabled one. A disabled record its manifest still declares
   // resolves exactly as an uninstalled one does, and a disabled record the
@@ -2888,7 +2918,7 @@ async function getPluginInfoWithReader(
   // undefined)` has under `noUncheckedIndexedAccess`.
   const [sole, ...rest] = found;
   if (sole !== undefined && rest.length === 0) {
-    const built = await buildBlock({
+    const soleBlock = await buildBlock({
       reader,
       marketplace: opts.marketplace,
       pluginName: opts.plugin,
@@ -2899,6 +2929,7 @@ async function getPluginInfoWithReader(
       cwd: opts.cwd,
       ...(fetchCtx !== undefined && { fetchCtx }),
     });
+    const built = withCompanionRequirements(soleBlock, probe);
     notify(opts.ctx, opts.pi, built.block);
     emitFetchSkip(opts, scopes, [built]);
     return;
@@ -2919,7 +2950,7 @@ async function getPluginInfoWithReader(
   // rule on the partial-failure path so a failure in one scope cannot hide
   // behind a healthy other-scope render; callers wanting strict IL-2 must pass
   // `--scope`. Block order follows the project-first scope iteration (MSG-GR-3).
-  const built = await Promise.all(
+  const scopeBlocks = await Promise.all(
     found.map((f) =>
       buildBlock({
         reader,
@@ -2934,6 +2965,7 @@ async function getPluginInfoWithReader(
       }),
     ),
   );
+  const built = scopeBlocks.map((b) => withCompanionRequirements(b, probe));
   const blocks = built.map((b) => b.block);
   const infoBlocks = blocks.filter((b) => b.plugin.status !== "failed");
   const failedBlocks = blocks.filter((b) => b.plugin.status === "failed");

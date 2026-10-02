@@ -2556,9 +2556,11 @@ ______________________________________________________________________
 
 ## `/claude:plugin info <plugin>@<marketplace>`
 
-Read-only detail surface. Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`, `workflows`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05), itself followed by the same optional `dependencies:` line on the cold git-source row (D-01-32). INFO-02 + INFO-05 + INFO-07 lock the full state set below.
+Read-only detail surface. Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`, `workflows`) followed by an optional `requires:` line (ADET-01) and an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05), itself followed by the same optional `dependencies:` line on the cold git-source row (D-01-32). INFO-02 + INFO-05 + INFO-07 lock the full state set below.
 
-Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed / state-only-disabled-with-components) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{marketplace not added}` missing-marketplace, `{marketplace not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed / state-only-disabled-with-components / installed-with-missing-companion / installed-with-every-companion) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{marketplace not added}` missing-marketplace, `{marketplace not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+
+Companion line (ADET-01, closed-catalog amendment): a resolved row whose components need a companion extension shows a `requires: <list>` line at 4-space indent. Agents need `pi-subagents`, MCP servers need `pi-mcp-adapter`, and workflows need `pi-dynamic-workflows`. These names are the same names that the `{requires <name>}` markers on `install` and `list` use. The line sits after the per-kind component lines and before the `dependencies:` line, so `dependencies:` stays the last data line and every `note:` line still follows it. The companions are sorted by package name, and each one shows at most once. A companion that the soft-dependency probe does not find loaded carries a `(missing)` tag after its name. The line does not show when no component needs a companion, and it never shows on a `components: not resolved` row. It still shows on a `(disabled)` row, because a disabled record keeps its component inventory (ENBL-18): the line states what the plugin needs, and not whether its runtime is running. The plugin row carries no `{requires ...}` brace, and the `(missing)` tag does not change the severity of any state. The info command takes the probe and stamps the entries on the row; the renderer only formats them.
 
 ### Success -- installed single scope
 
@@ -2573,6 +2575,7 @@ Triggered by `plugin info <plugin>@<marketplace> --scope user` against an instal
     agents: review-bot
     commands: c1, c2
     skills: commit-summary
+    requires: pi-subagents
 ```
 
 ### Success -- installed single scope with dependencies
@@ -2588,6 +2591,7 @@ Same as above but with a `dependencies: <plugin>@<marketplace>, ...` line emitte
     agents: review-bot
     commands: c1, c2
     skills: commit-summary
+    requires: pi-subagents
     dependencies: helper@utils-mp
 ```
 
@@ -2605,6 +2609,7 @@ The plugin ships workflow scripts. The `workflows:` line shows them LAST among t
     commands: c1, c2
     skills: commit-summary
     workflows: commit-commands:changelog, commit-commands:release
+    requires: pi-dynamic-workflows, pi-subagents
 ```
 
 ### Success -- a workflow script that will not install (WR-09)
@@ -2619,6 +2624,7 @@ The plugin ships a workflow script that the command will not admit. The row show
     Helpful git commit commands for everyday use.
     skills: commit-summary
     workflows: commit-commands:changelog
+    requires: pi-dynamic-workflows
     note: workflow script "roll.js" in "workflows" will be refused: roll.js calls `Math.random`, which the workflow engine refuses as nondeterministic
 ```
 
@@ -2634,6 +2640,7 @@ The plugin ships a workflow script that the command installs and that the host w
     Helpful git commit commands for everyday use.
     skills: commit-summary
     workflows: commit-commands:changelog, commit-commands:greet
+    requires: pi-dynamic-workflows
     note: workflow script "greet.js" in "workflows" would be installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared
 ```
 
@@ -2650,7 +2657,39 @@ Same as above, but each dependency carries the constraint its manifest declared,
     agents: review-bot
     commands: c1, c2
     skills: commit-summary
+    requires: pi-subagents
     dependencies: both@utils-mp (^2.0.0, sha def5678), helper@utils-mp (^1.0.0), pinned@utils-mp (sha abc1234)
+```
+
+### Success -- a companion the plugin needs is missing (ADET-01)
+
+The plugin has agents and MCP servers, so it needs two companion extensions: pi-subagents runs its agents, and pi-mcp-adapter runs its MCP servers. The `requires:` line names both, sorted by package name. The probe finds pi-subagents loaded but does not find pi-mcp-adapter, so only pi-mcp-adapter carries the `(missing)` tag. Pi's built-in MCP client does not count as pi-mcp-adapter. The tag does not change the severity. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-missing-companion -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    agents: review-bot
+    mcp: github
+    requires: pi-mcp-adapter (missing), pi-subagents
+```
+
+### Success -- every companion, one of them missing (ADET-01)
+
+The plugin has agents, MCP servers and workflow scripts, so it needs all three companion extensions. The `requires:` line lists them in package-name order: pi-dynamic-workflows, pi-mcp-adapter, pi-subagents. The probe finds pi-subagents and pi-mcp-adapter loaded but does not find the host workflow engine, so only pi-dynamic-workflows carries the `(missing)` tag. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-every-companion -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    agents: review-bot
+    mcp: github
+    workflows: commit-commands:changelog
+    requires: pi-dynamic-workflows (missing), pi-mcp-adapter, pi-subagents
 ```
 
 ### Success -- installed from the installation record (INFO-09)
@@ -2676,6 +2715,7 @@ The marketplace manifest no longer declares the plugin, so the row reads its who
   ● alpha v1.0.0 (installed) {not in manifest}
     skills: alpha-skill
     workflows: alpha:changelog, alpha:release
+    requires: pi-dynamic-workflows
 ```
 
 ### Success -- partially installed from the installation record (INFO-10)
@@ -2890,6 +2930,7 @@ Triggered by `plugin info <plugin>@<marketplace>` with NO `--scope` filter when 
 ● mp [user] <no autoupdate>
   ● foo v2.0.0 (installed)
     agents: a1
+    requires: pi-subagents
 ```
 
 ### Multi-scope fan-out -- the record is in both scopes and in no manifest (INFO-09)

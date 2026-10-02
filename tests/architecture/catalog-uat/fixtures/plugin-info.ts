@@ -1,4 +1,4 @@
-import { piWithAllLoaded, piWithBothLoaded } from "../mock-pi.ts";
+import { piWithAllLoaded, piWithBothLoaded, piWithSubagentsLoaded } from "../mock-pi.ts";
 
 import type { FixtureMap } from "../fixture-types.ts";
 
@@ -23,6 +23,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             commands: ["c1", "c2"],
             skills: ["commit-summary"],
           },
+          requires: [{ companion: "pi-subagents", missing: false }],
         },
       },
     },
@@ -45,6 +46,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             commands: ["c1", "c2"],
             skills: ["commit-summary"],
           },
+          requires: [{ companion: "pi-subagents", missing: false }],
           dependencies: ["helper@utils-mp"],
         },
       },
@@ -68,12 +70,70 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             commands: ["c1", "c2"],
             skills: ["commit-summary"],
           },
+          requires: [{ companion: "pi-subagents", missing: false }],
           // Pre-rendered and pre-sorted on the dependency NAME (D-01-04):
           // `both`, `helper`, `pinned`. The renderer does not sort.
           dependencies: [
             "both@utils-mp (^2.0.0, sha def5678)",
             "helper@utils-mp (^1.0.0)",
             "pinned@utils-mp (sha abc1234)",
+          ],
+        },
+      },
+    },
+
+    // ADET-01: the `requires:` line names every companion the components need,
+    // sorted by name, and tags the one the probe reports not loaded. The info
+    // command stamps the entries; the renderer only formats them.
+    "installed-with-missing-companion": {
+      pi: piWithSubagentsLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            mcp: ["github"],
+          },
+          requires: [
+            { companion: "pi-mcp-adapter", missing: true },
+            { companion: "pi-subagents", missing: false },
+          ],
+        },
+      },
+    },
+
+    // ADET-01: all three companions in package-name order. The probe finds
+    // pi-subagents and pi-mcp-adapter but not the host workflow engine.
+    "installed-with-every-companion": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            mcp: ["github"],
+            workflows: ["commit-commands:changelog"],
+          },
+          requires: [
+            { companion: "pi-dynamic-workflows", missing: true },
+            { companion: "pi-mcp-adapter", missing: false },
+            { companion: "pi-subagents", missing: false },
           ],
         },
       },
@@ -102,6 +162,10 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             skills: ["commit-summary"],
             workflows: ["commit-commands:changelog", "commit-commands:release"],
           },
+          requires: [
+            { companion: "pi-dynamic-workflows", missing: false },
+            { companion: "pi-subagents", missing: false },
+          ],
         },
       },
     },
@@ -132,6 +196,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             skills: ["commit-summary"],
             workflows: ["commit-commands:changelog"],
           },
+          requires: [{ companion: "pi-dynamic-workflows", missing: false }],
         },
       },
     },
@@ -165,6 +230,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             skills: ["commit-summary"],
             workflows: ["commit-commands:changelog", "commit-commands:greet"],
           },
+          requires: [{ companion: "pi-dynamic-workflows", missing: false }],
         },
       },
     },
@@ -209,6 +275,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             skills: ["alpha-skill"],
             workflows: ["alpha:changelog", "alpha:release"],
           },
+          requires: [{ companion: "pi-dynamic-workflows", missing: false }],
         },
       },
     },
@@ -490,6 +557,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
               version: "2.0.0",
               componentsResolved: true,
               components: { agents: ["a1"] },
+              requires: [{ companion: "pi-subagents", missing: false }],
             },
           },
         ],

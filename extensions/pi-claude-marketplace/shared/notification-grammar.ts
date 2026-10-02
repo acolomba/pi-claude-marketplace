@@ -1337,8 +1337,9 @@ const COMPONENT_KINDS = COMPONENT_KIND_NAMES satisfies readonly Exclude<
 >[];
 
 /**
- * Append the per-kind component lines + optional dependencies line
- * for a resolved `PluginInfoRow`. Per-kind order is alphabetical
+ * Append the per-kind component lines, the optional `requires:` line and the
+ * optional dependencies line for a resolved `PluginInfoRow`, in that order.
+ * Per-kind order is alphabetical
  * (`agents`, `commands`, `hooks`, `mcp`, `skills`, `workflows`); within each
  * kind, names render in the caller-supplied order. The orchestrator pre-sorts;
  * the renderer does not.
@@ -1351,6 +1352,7 @@ const COMPONENT_KINDS = COMPONENT_KIND_NAMES satisfies readonly Exclude<
 function appendResolvedComponentLines(
   lines: string[],
   components: PluginInfoComponentsResolved["components"],
+  requires: PluginInfoComponentsResolved["requires"],
   dependencies: readonly string[] | undefined,
 ): void {
   for (const kind of COMPONENT_KINDS) {
@@ -1365,14 +1367,33 @@ function appendResolvedComponentLines(
     }
   }
 
+  appendRequiresLine(lines, requires);
   appendDependenciesLine(lines, dependencies);
 }
 
 /**
+ * ADET-01: appends the optional `    requires: <list>` line. Each entry is the
+ * companion name, followed by ` (missing)` when the orchestrator tagged it
+ * missing. The orchestrator stamps and sorts the entries; the renderer only
+ * formats them and takes no probe of its own.
+ */
+function appendRequiresLine(
+  lines: string[],
+  requires: PluginInfoComponentsResolved["requires"],
+): void {
+  if (requires !== undefined && requires.length > 0) {
+    const entries = requires.map(({ companion, missing }) =>
+      missing ? `${companion} (missing)` : companion,
+    );
+    lines.push(`    requires: ${entries.join(", ")}`);
+  }
+}
+
+/**
  * Appends the optional `    dependencies: <list>` line. Both `renderPluginInfo`
- * arms end with this line, so it is LAST: after every per-kind line on the
- * resolved arm and after the `components: not resolved` marker on the
- * unresolved arm (INFO-02 / D-01-32).
+ * arms end with this line, so it is LAST: after every per-kind line and the
+ * optional `requires:` line on the resolved arm, and after the
+ * `components: not resolved` marker on the unresolved arm (INFO-02 / D-01-32).
  */
 function appendDependenciesLine(
   lines: string[],
@@ -1446,18 +1467,22 @@ function notAddedReasonFor(message: MarketplaceNotAddedMessage): Reason {
  * bracket + version + (status) + optional reasons brace); optional
  * description block wrapped via `wrapDescription(text, 4, 66)`; then
  * either per-kind component lists at 4-space indent + optional
- * `dependencies:` line (componentsResolved: true), or the single
- * marker line `    components: not resolved` followed by the same
- * optional `dependencies:` line (componentsResolved: false, D-01-32).
+ * `requires:` line + optional `dependencies:` line
+ * (componentsResolved: true), or the single marker line
+ * `    components: not resolved` followed by the same optional
+ * `dependencies:` line (componentsResolved: false, D-01-32). The resolved
+ * line order is components, `requires:`, `dependencies:`, then `note:`.
  *
  * Reasons brace via `composeReasons` with all declares-flags FALSE
- * -- info messages NEVER emit soft-dep markers.
+ * -- info messages NEVER emit soft-dep markers. ADET-01: the companions a
+ * resolved row needs render once, on the `requires:` line the orchestrator
+ * stamped.
  *
  * WR-09: `notes` renders LAST -- after the component block and after any
  * `dependencies:` line -- as one `    note: <text>` line per entry. A row that
  * carries none is byte-unchanged.
  *
- * SORT PRECONDITION: per-kind arrays and `dependencies` MUST be
+ * SORT PRECONDITION: per-kind arrays, `requires` and `dependencies` MUST be
  * pre-sorted at message construction. The renderer does not sort.
  *
  * `probe` is accepted for signature parity with
@@ -1493,7 +1518,7 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
   // INFO-02 / INFO-05: per-kind components OR the unresolved marker.
   switch (plugin.componentsResolved) {
     case true:
-      appendResolvedComponentLines(lines, plugin.components, plugin.dependencies);
+      appendResolvedComponentLines(lines, plugin.components, plugin.requires, plugin.dependencies);
       break;
 
     case false:
