@@ -227,3 +227,9 @@ None. No external service configuration is required.
 
 - Plan 03-02 can add the diagnostic and hook kinds. It needs a `formatRawSurface` arm per kind, a D-15 row per kind (the mapped type forces this), and the `undefined` no-op return together with the diagnostic kind.
 - `makeRawNotifyFn` and its two corpus entries are still in place. `auth-host.ts` still uses it until 03-03.
+
+## Self-Check: PASSED
+
+- Files: `03-01-SUMMARY.md` and every modified source file exist.
+- Commits: `27ed6c29`, `d0d3e5e9`, and `d7009faa` are in `git log --all`.
+- Measured commits: `git rev-list --count 46c96bf9..d0d3e5e9` = 2 code commits.
