@@ -1256,8 +1256,8 @@ test("MSG-SD-3: uninstall NEVER emits soft-dep markers (structural via V2 Plugin
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
 
-      // ctx + pi without the "subagent" or "mcp" tools -> companion deps
-      // both unloaded. In the install / reinstall / update path this would
+      // ctx + pi without the "subagent" tool or the `mcp-adapter` command ->
+      // companion deps both unloaded. In the install / reinstall / update path this would
       // trigger per-row `{requires pi-subagents}` + `{requires pi-mcp-adapter}`
       // markers; on the uninstall path the marker is structurally
       // impossible because PluginUninstalledMessage has no `dependencies`

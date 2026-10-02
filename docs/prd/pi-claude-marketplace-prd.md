@@ -119,7 +119,7 @@ ______________________________________________________________________
 - **Strict marketplace** -- `marketplace.json` `strict: true` (default) → resolver takes the union of four declaration sources: the marketplace-entry component fields, the plugin-manifest component fields, implicit-by-convention directories (`skills/`, `commands/`, `agents/`), and standalone files at the plugin root (`hooks/hooks.json`, `.mcp.json`). `strict: false` → resolver uses the marketplace-entry declarations only and treats any of the other three sources declaring unsupported components (or declaring `mcpServers` without a matching entry-level declaration) as conflicts.
 - **Generated name** -- the deterministic name produced for a Pi-side artifact: `<plugin>-<skill>` for skills, `<plugin>:<command>` for commands, `pi-claude-marketplace-<plugin>-<agent>` for agents.
 - **Reload hint** -- the trailing `Run /reload to <verb> ...` line appended to messages whenever generated resources changed.
-- **Soft dependency** -- a runtime dependency probed via tool registration, not via a manifest field. `pi-subagents` (probed by the `subagent` tool) and `pi-mcp-adapter` (probed by tool name `mcp` or `sourceInfo.source` containing `pi-mcp-adapter`).
+- **Soft dependency** -- a runtime dependency probed via Pi's tool and command registration, not via a manifest field. `pi-subagents` (probed by the `subagent` tool) and `pi-mcp-adapter` (probed by its `mcp-adapter` command, or by a command or tool whose `sourceInfo.source` contains `pi-mcp-adapter`).
 - **State guard** -- a transactional helper that re-reads state on entry, applies a closure, and atomically saves; throws and skips save on closure throw.
 - **Installable** -- the resolver returned `installable: true` for the plugin: source kind is `path`, source dir exists, manifest is well-formed, no unsupported components are declared, no path-containment violation. An installable plugin can be installed; it is not yet installed unless a state record exists.
 - **Installed** -- a state record for `(target scope, marketplace, plugin)` exists in `state.json`; the plugin's resources are presumed staged on disk per the record's `resources.*` fields.
@@ -621,13 +621,13 @@ These rules clarify how marketplace records and plugin install records interact 
 
 ### 6.8 Reload Hint & Soft-Dependency Probing
 
-| ID       | Requirement                                                                                                                                                                                                                        |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **RH-1** | A reload hint MUST be emitted ONLY when generated resources changed. Operations that change nothing (e.g., `marketplace add` to a brand-new marketplace, `update` with everything `unchanged`) MUST NOT emit one.                  |
-| **RH-2** | The hint format. For a single name: `Run /reload to <verb> it.` For N names: `Run /reload to <verb> "n1", "n2", ...".` Verbs: `load` (install), `refresh` (update / cascade), `drop` (uninstall, remove).                          |
-| **RH-3** | `pi-subagents` detection MUST probe for a tool named `subagent` in `pi.getAllTools()`.                                                                                                                                             |
-| **RH-4** | `pi-mcp-adapter` detection MUST match any of: tool name `mcp` (proxy mode), or any tool whose `sourceInfo.source` substring-matches `pi-mcp-adapter` (covers `npm:pi-mcp-adapter`, `github:.../pi-mcp-adapter`, local-path forms). |
-| **RH-5** | When the soft dep is unloaded AND staged resources of that kind exist, the success message MUST include the canonical `<name> is not loaded; install/load it … and run /reload` warning line BEFORE the trailing reload hint.      |
+| ID       | Requirement                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **RH-1** | A reload hint MUST be emitted ONLY when generated resources changed. Operations that change nothing (e.g., `marketplace add` to a brand-new marketplace, `update` with everything `unchanged`) MUST NOT emit one.                                                                                                                                                                                                                                     |
+| **RH-2** | The hint format. For a single name: `Run /reload to <verb> it.` For N names: `Run /reload to <verb> "n1", "n2", ...".` Verbs: `load` (install), `refresh` (update / cascade), `drop` (uninstall, remove).                                                                                                                                                                                                                                             |
+| **RH-3** | `pi-subagents` detection MUST probe for a tool named `subagent` in `pi.getAllTools()`.                                                                                                                                                                                                                                                                                                                                                                |
+| **RH-4** | `pi-mcp-adapter` detection MUST match any of: an extension command named `mcp-adapter` in `pi.getCommands()`, or `mcp-adapter:<n>` when Pi suffixes a name that two extensions registered; or any command or tool whose `sourceInfo.source` substring-matches `pi-mcp-adapter` (covers `npm:pi-mcp-adapter`, `github:.../pi-mcp-adapter`, local-path forms). A tool named `mcp` alone MUST NOT count, and Pi's built-in MCP MUST NOT count (ADET-02). |
+| **RH-5** | When the soft dep is unloaded AND staged resources of that kind exist, the success message MUST include the canonical `<name> is not loaded; install/load it … and run /reload` warning line BEFORE the trailing reload hint.                                                                                                                                                                                                                         |
 
 ### 6.9 State Persistence, Migration & Concurrency
 
@@ -1021,9 +1021,12 @@ flowchart TB
 flowchart LR
   ext[pi-claude-marketplace] --> probe[hasLoadedPiSubagents / hasLoadedPiMcpAdapter]
   probe --> tools["pi.getAllTools()"]
+  probe --> commands["pi.getCommands()"]
   tools -- "name == 'subagent'" --> sa[pi-subagents loaded]
-  tools -- "name == 'mcp' or sourceInfo.source contains 'pi-mcp-adapter'" --> mc[pi-mcp-adapter loaded]
-  tools -- "neither" --> none[Soft dep unloaded → emit warning]
+  commands -- "extension command 'mcp-adapter' (or 'mcp-adapter:n')" --> mc[pi-mcp-adapter loaded]
+  commands -- "sourceInfo.source contains 'pi-mcp-adapter'" --> mc
+  tools -- "sourceInfo.source contains 'pi-mcp-adapter'" --> mc
+  probe -- "no arm matches" --> none[Soft dep unloaded → emit warning]
 ```
 
 ______________________________________________________________________

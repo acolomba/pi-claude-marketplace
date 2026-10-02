@@ -3062,10 +3062,10 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> the succ
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// PI-12 / RH-4 -- mcp-adapter not loaded warning
+// PI-12 / ADET-02 -- mcp-adapter not loaded warning
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> the success row carries the {requires pi-mcp-adapter} marker", async () => {
+test("PI-12 / ADET-02: staged MCP servers with no mcp-adapter command or adapter source -> the success row carries the {requires pi-mcp-adapter} marker", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi12-"));
     try {
