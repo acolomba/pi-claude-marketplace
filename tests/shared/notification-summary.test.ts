@@ -616,3 +616,48 @@ test("WR-05: composeRetainedWorkflowsAdvisories states the count when known and 
     "    retained workflow staging: gamma under the workflows staging directory",
   ]);
 });
+
+test("empty retained workflow observations produce no advisory lines", () => {
+  // arrange
+  const retained: [] = [];
+
+  // act
+  const lines = composeRetainedWorkflowsAdvisories(retained);
+
+  // assert
+  assert.deepStrictEqual(lines, []);
+});
+
+test("a retained workflow with zero envelopes keeps its observed count", () => {
+  // arrange
+  const retained = [{ name: "empty-tree", envelopeCount: 0 }];
+
+  // act
+  const lines = composeRetainedWorkflowsAdvisories(retained);
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "    retained workflow staging: empty-tree (0 envelopes) under the workflows staging directory",
+  ]);
+});
+
+test("retained workflow names preserve Unicode, spaces, and supplied order", () => {
+  // arrange
+  const retained = [
+    { name: "z é", envelopeCount: 3 },
+    { name: "é", envelopeCount: 1 },
+    { name: "  spaced tree  " },
+    { name: "é", envelopeCount: 0 },
+  ];
+
+  // act
+  const lines = composeRetainedWorkflowsAdvisories(retained);
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "    retained workflow staging: z é (3 envelopes) under the workflows staging directory",
+    "    retained workflow staging: é (1 envelope) under the workflows staging directory",
+    "    retained workflow staging:   spaced tree   under the workflows staging directory",
+    "    retained workflow staging: é (0 envelopes) under the workflows staging directory",
+  ]);
+});

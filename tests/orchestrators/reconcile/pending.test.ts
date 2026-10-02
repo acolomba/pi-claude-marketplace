@@ -18,7 +18,8 @@
 // no-mutation assertions from racing a fire-and-forget write.
 
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
+import fs, { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -678,6 +679,12 @@ test("WR-06: renders the advisory once for an invocation that walks both scopes"
   );
   await seedRetainedStagingTree(user, "staging-aaa", 2);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const readdirSpy = t.mock.method(fs, "readdir");
+  syncBuiltinESMExports();
+  t.after(() => {
+    readdirSpy.mock.restore();
+    syncBuiltinESMExports();
+  });
 
   // act
   await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
@@ -688,6 +695,12 @@ test("WR-06: renders the advisory once for an invocation that walks both scopes"
       message: `● mp [project]\n  ● p-proj (will install)\n\n● mp [user]\n  ● p-user (will install)\n\n${RETAINED_LINE}\n\nReconcile pending: 2 successes`,
     },
   ]);
+  assert.deepStrictEqual(
+    readdirSpy.mock.calls
+      .filter((call) => call.arguments[0] === user.workflowsStagingDir)
+      .map((call) => call.arguments),
+    [[user.workflowsStagingDir]],
+  );
   verifyBoundary();
 });
 
