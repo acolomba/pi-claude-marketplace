@@ -9,6 +9,8 @@
  *
  * - Userinfo runs first, so a token inside userinfo collapses with it into
  *   one `***@`.
+ * - Userinfo ends at the last `@` before the host, as WHATWG URL parsing and
+ *   git read it, so a password with an unencoded `@` is replaced whole.
  * - The `scheme://`, `x-access-token:`, and `Bearer` prefixes stay, so the
  *   reader still sees which credential form the message carried.
  * - A prefixed token needs a body of 16 or more characters, so a short
@@ -19,7 +21,7 @@
  * Only the secret span changes; the text around it stays byte for byte.
  */
 export function redactCredentials(text: string): string {
-  const userinfo = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi;
+  const userinfo = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]+@/gi;
   const accessToken = /\b(x-access-token:)[^\s@/]+/gi;
   const bearer = /\b(Bearer\s+)[\w.~+/=-]+/gi;
   const githubToken = /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_\w{16,})\b/g;

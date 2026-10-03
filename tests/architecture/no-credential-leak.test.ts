@@ -838,6 +838,21 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
       ),
   },
   {
+    site: "a failed row's cause whose password carries an @",
+    planted: ["alice:p@ss@", "@ss@"],
+    probe: () =>
+      probePresentation(
+        rowCascade({
+          name: "alpha",
+          status: "failed",
+          severity: "error",
+          reasons: [],
+          cause: new Error("clone https://alice:p@ss@github.com/o/r.git failed"),
+        }),
+        cascadeText,
+      ),
+  },
+  {
     site: "a rollback entry's cause",
     planted: [GITHUB_TOKEN],
     probe: () =>

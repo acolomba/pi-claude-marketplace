@@ -15,6 +15,11 @@ for (const { name, input, expected } of [
     expected: "clone https://***@host/x failed",
   },
   {
+    name: "PMOD-04 / D-06 replaces userinfo up to the last @ when the password carries an @",
+    input: "clone https://user:p@ss@host/x failed",
+    expected: "clone https://***@host/x failed",
+  },
+  {
     name: "PMOD-04 / D-05 replaces the git userinfo of an ssh URL",
     input: "fetch ssh://git@host/x failed",
     expected: "fetch ssh://***@host/x failed",
