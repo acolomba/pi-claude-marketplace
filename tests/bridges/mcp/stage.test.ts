@@ -776,6 +776,29 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
+  test("AFILE-05: a foreign full definition under the loaded key refuses when the plugin's entry sits under the shadowed key", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-shadowed-self-");
+    const previousBytes =
+      '{"mcpServers":{"server":{"command":"user-own-server","env":{"TOKEN":"secret"}}},' +
+      '"mcp-servers":{"server":{"command":"plugin-old","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}';
+    await writeSource(locations.mcpAdapterJsonPath, previousBytes);
+
+    // act
+    const collision = await rejectionOf(prepareAcme(locations, cwd));
+
+    // assert
+    assert.ok(collision instanceof McpServerCollisionError);
+    assert.deepStrictEqual(collisionFields(collision), {
+      name: "McpServerCollisionError",
+      message: `Refusing to stage MCP server "server": ${locations.mcpAdapterJsonPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
+      serverName: "server",
+      owningPath: locations.mcpAdapterJsonPath,
+      winningPath: locations.mcpAdapterJsonPath,
+    });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), previousBytes);
+  });
+
   test("AFILE-05: another plugin's marked partial entry in the target file refuses", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-foreign-partial-");
@@ -1376,6 +1399,36 @@ describe("rollbackMcpReplacement", () => {
     assert.deepStrictEqual(leaks, []);
     assert.strictEqual(Object.isFrozen(leaks), true);
     assert.strictEqual(restoredBytes, previousBytes);
+  });
+
+  test("restores exact previous bytes that are not valid UTF-8", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-rollback-raw-bytes-");
+    const previousBytes = Buffer.concat([
+      Buffer.from("{\n  // note: "),
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from('\n  "mcpServers": {"foreign": {"command": "foreign"}}\n}\n'),
+    ]);
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(locations.mcpAdapterJsonPath, previousBytes);
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { owned: { command: "node" } },
+    });
+    const replacement = await replacePreparedMcp(prepared);
+
+    // act
+    const leaks = await rollbackMcpReplacement(replacement);
+    const restoredBytes = await readFile(locations.mcpAdapterJsonPath);
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+    assert.deepStrictEqual(restoredBytes, previousBytes);
   });
 
   test("records a complete leak when the previous bytes cannot be restored", async (t) => {

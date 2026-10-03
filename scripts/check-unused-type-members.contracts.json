@@ -98,28 +98,28 @@
       "filter": "extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts:141:17"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:304:48",
+      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:307:48",
       "owner": "replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:304:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:307:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:351:42",
+      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:352:42",
       "owner": "requireMcpReplacementInternals.replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:351:16"
+      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:352:16"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:60:29",
+      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:61:29",
       "owner": "mcpReplacementInternals",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:60:3"
+      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:61:3"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:101:52",

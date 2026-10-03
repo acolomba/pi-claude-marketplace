@@ -53,7 +53,8 @@ import type {
 import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 
 interface McpReplacementInternals {
-  readonly oldText: string | undefined;
+  /** The raw prior bytes, so a restore is byte-exact even for invalid UTF-8. */
+  readonly oldBytes: Buffer | undefined;
 }
 
 const mcpReplacementInternals = new WeakMap<
@@ -100,7 +101,9 @@ function precedenceOf(walk: McpSourceWalk, sourcePath: string): number {
  * AFILE-05 / MC-4: refuses a new name that another source already defines in
  * full. The refusal names the highest-precedence other declarer and the
  * source pi-mcp-adapter would load, which is the target when it ranks higher.
- * An owned entry in the target is a self-replace and stays exempt.
+ * An owned entry in the target is a self-replace and stays exempt, unless a
+ * foreign entry under the loaded key holds the same name: the plugin's entry
+ * then sits under the shadowed key, and staging would replace the foreign one.
  */
 async function assertNoMcpCollisions(check: McpCollisionCheck): Promise<void> {
   if (check.names.length === 0) {
@@ -109,7 +112,7 @@ async function assertNoMcpCollisions(check: McpCollisionCheck): Promise<void> {
 
   const walk = await walkMcpSources(check.cwd);
   for (const name of check.names) {
-    if (Object.hasOwn(check.ours, name)) {
+    if (Object.hasOwn(check.ours, name) && !Object.hasOwn(check.theirs, name)) {
       continue;
     }
 
@@ -298,14 +301,14 @@ export async function replacePreparedMcp(prepared: PreparedMcpStaging): Promise<
     return { kind: "noop", prepared };
   }
 
-  const oldText = await readOptionalText(prepared.locations.mcpAdapterJsonPath);
+  const oldBytes = await readOptionalBytes(prepared.locations.mcpAdapterJsonPath);
   await commitPreparedMcp(prepared);
 
   const replacement: Extract<McpReplacement, { kind: "replaced" }> = {
     kind: "replaced",
     prepared,
   };
-  mcpReplacementInternals.set(replacement, { oldText });
+  mcpReplacementInternals.set(replacement, { oldBytes });
   return replacement;
 }
 
@@ -319,15 +322,13 @@ export async function rollbackMcpReplacement(
   const internals = requireMcpReplacementInternals(replacement);
   const leaks: string[] = [];
   try {
-    if (internals.oldText === undefined) {
+    if (internals.oldBytes === undefined) {
       await rm(replacement.prepared.locations.mcpAdapterJsonPath, { force: true });
     } else {
       await mkdir(path.dirname(replacement.prepared.locations.mcpAdapterJsonPath), {
         recursive: true,
       });
-      await writeFileAtomic(replacement.prepared.locations.mcpAdapterJsonPath, internals.oldText, {
-        encoding: "utf8",
-      });
+      await writeFileAtomic(replacement.prepared.locations.mcpAdapterJsonPath, internals.oldBytes);
     }
   } catch (err) {
     leaks.push(
@@ -358,9 +359,9 @@ function requireMcpReplacementInternals(
   return internals;
 }
 
-async function readOptionalText(filePath: string): Promise<string | undefined> {
+async function readOptionalBytes(filePath: string): Promise<Buffer | undefined> {
   try {
-    return await readFile(filePath, "utf8");
+    return await readFile(filePath);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       return undefined;
