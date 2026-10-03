@@ -44,7 +44,7 @@ The first time you run the script, it installs the three companion extensions in
 
 The script refuses a prefix inside the checkout, and it never writes the `package.json` or `package-lock.json` of the repository. The first run needs access to the npm registry.
 
-`--home PATH` keeps the Pi settings and sessions in a disposable directory, for example `tmp/pi-home`. For the full list of options, run `scripts/pi.sh --help`.
+`--home PATH` keeps the Pi settings and sessions in a disposable directory, for example `tmp/pi-home`. Without `--home` or `PI_CODING_AGENT_DIR`, the script uses `<prefix>/home`, never `~/.pi/agent`. pi-mcp-adapter 5 adds `"-builtin:mcp"` to the `settings.json` of the Pi home it runs in, which turns off Pi's built-in MCP there. For the full list of options, run `scripts/pi.sh --help`.
 
 ## Checks
 

@@ -17,11 +17,18 @@ ${XDG_CACHE_HOME:-$HOME/.cache}/pi-claude-marketplace/pi-runtime.
 PI_CM_RUNTIME_PREFIX overrides the prefix, which must be outside the
 checkout.
 
+pi-mcp-adapter writes to <agent dir>/settings.json when it starts (adapter
+5 adds "-builtin:mcp", which turns off Pi's built-in MCP). To keep that
+write out of ~/.pi/agent, the Pi home defaults to <prefix>/home when
+neither --home nor PI_CODING_AGENT_DIR is set. Set PI_CODING_AGENT_DIR to
+run against another agent directory, ~/.pi/agent included.
+
 Options:
   --cd PATH    Run Pi from PATH instead of the current directory.
   --clear      Clear the terminal before preparing and launching Pi.
   -h, --help   Show this help.
-  --home PATH  Use PATH as the Pi home for this run.
+  --home PATH  Use PATH as the Pi home for this run (PATH/agent and
+               PATH/sessions). The default is <prefix>/home.
 
 All remaining arguments are forwarded to pi.
 USAGE
@@ -191,6 +198,14 @@ for extension_path in "$project_extension" "$mcp_adapter_extension" "$subagents_
     exit 1
   fi
 done
+
+# pi-mcp-adapter 5 writes "-builtin:mcp" into <agent dir>/settings.json on
+# its first start. Without --home or an explicit PI_CODING_AGENT_DIR, Pi
+# would use ~/.pi/agent, so the edit would turn off the built-in MCP in the
+# operator's normal Pi sessions. Default to a Pi home inside the prefix.
+if [[ -z "$pi_home" && -z "${PI_CODING_AGENT_DIR:-}" ]]; then
+  pi_home="$prefix/home"
+fi
 
 if [[ -n "$pi_home" ]]; then
   export PI_CODING_AGENT_DIR="$pi_home/agent"
