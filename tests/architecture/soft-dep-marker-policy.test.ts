@@ -42,7 +42,7 @@ import {
   AUTOUPDATE_CONTEXT,
   NOAUTOUPDATE_CONTEXT,
 } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.messaging.ts";
-import { LIST_CONTEXT as MARKETPLACE_LIST_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.messaging.ts";
+import { MARKETPLACE_LIST_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.messaging.ts";
 import { REMOVE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.messaging.ts";
 import { UPDATE_CONTEXT as MARKETPLACE_UPDATE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts";
 import {
@@ -92,7 +92,7 @@ const DECLARED_MARKERS = {
   "AUTOUPDATE_CONTEXT (marketplace/autoupdate.messaging.ts)": AUTOUPDATE_CONTEXT.rowPolicies,
   "NOAUTOUPDATE_CONTEXT (marketplace/autoupdate.messaging.ts)": NOAUTOUPDATE_CONTEXT.rowPolicies,
   "ADD_CONTEXT (marketplace/add.messaging.ts)": ADD_CONTEXT.rowPolicies,
-  "LIST_CONTEXT (marketplace/list.messaging.ts)": MARKETPLACE_LIST_CONTEXT.rowPolicies,
+  "MARKETPLACE_LIST_CONTEXT (marketplace/list.messaging.ts)": MARKETPLACE_LIST_CONTEXT.rowPolicies,
   "PENDING_CONTEXT (reconcile/reconcile.messaging.ts)": PENDING_CONTEXT.rowPolicies,
   "RECONCILE_APPLIED_CONTEXT (reconcile/reconcile.messaging.ts)":
     RECONCILE_APPLIED_CONTEXT.rowPolicies,
@@ -235,7 +235,7 @@ const MARKER_POLICY_TABLE = [
     markers: {},
   },
   {
-    name: "LIST_CONTEXT (marketplace/list.messaging.ts)",
+    name: "MARKETPLACE_LIST_CONTEXT (marketplace/list.messaging.ts)",
     markers: {},
   },
   {

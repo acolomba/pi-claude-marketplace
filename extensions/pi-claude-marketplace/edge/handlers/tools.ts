@@ -4,7 +4,8 @@
 //
 //   1. pi_claude_marketplace_list -- empty params; returns one line per
 //      marketplace in `[<scope>] <name> -- <N> plugin(s) -- <source.logical>`
-//      format, plus structured `details.marketplaces`.
+//      format, plus `details.marketplaces`, the wire marketplace blocks of the
+//      blocks `/claude:plugin marketplace list` emits (LLMT-01).
 //
 //   2. pi_claude_marketplace_plugin_list -- D-02 extended params: optional
 //      marketplace + scope + installed/available/unavailable filter booleans
@@ -19,9 +20,9 @@
 //
 // BLOCK A: the tools never notify. LLM tools return `AgentToolResult` -- the
 // agent surfaces results via its own UI channel, not the slash-command notify
-// channel. The plugin tool opens one notification run per invocation, so the
-// reasons in its details equal what `/claude:plugin list` composes for each
-// row (LLMT-01, D-09).
+// channel. Each tool opens one notification run per invocation on its
+// non-empty path, so the details equal what the matching slash command
+// composes for each block and row (LLMT-01, D-09).
 //
 // Status semantics (D-09): state.json has NO plugin.installed
 // boolean. Presence of `mp.plugins[name]` === installed. Per-marketplace
@@ -35,6 +36,8 @@
 import Type from "typebox";
 
 import { sourceLogical } from "../../domain/source.ts";
+import { MARKETPLACE_LIST_CONTEXT } from "../../orchestrators/marketplace/list.messaging.ts";
+import { loadMarketplaceListBlocks } from "../../orchestrators/marketplace/list.ts";
 import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../orchestrators/plugin/list-flow.ts";
 import { LIST_CONTEXT as PLUGIN_LIST_CONTEXT } from "../../orchestrators/plugin/list.messaging.ts";
@@ -89,7 +92,8 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
       // orchestrators/marketplace/shared.ts helper.
       // Returns {scope, record}[] across the requested scope set (both
       // here -- no scope filter on this tool).
-      const visible = await loadVisibleMarketplaces({ cwd: ctx.cwd });
+      const { cwd } = ctx;
+      const visible = await loadVisibleMarketplaces({ cwd });
 
       if (visible.length === 0) {
         return {
@@ -99,12 +103,6 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
       }
 
       const lines: string[] = [];
-      const marketplaces: {
-        name: string;
-        scope: "user" | "project";
-        pluginCount: number;
-        source: ParsedSource;
-      }[] = [];
       for (const { scope, record } of visible) {
         const source = record.source as ParsedSource;
         const pluginCount = Object.keys(record.plugins).length;
@@ -114,12 +112,21 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
         lines.push(
           `[${scope}] ${record.name} -- ${pluginCount.toString()} plugin(s) -- ${logical}`,
         );
-        marketplaces.push({ name: record.name, scope, pluginCount, source });
       }
 
+      // LLMT-01 / D-09: the details are the wire blocks of the blocks
+      // `/claude:plugin marketplace list` emits, under its row policies.
+      const run = openNotificationRun(pi);
+      const listMessage: CascadeNotificationMessage = {
+        marketplaces: await loadMarketplaceListBlocks({ cwd }),
+        label: MARKETPLACE_LIST_CONTEXT.Messaging.label,
+        cardinality: "plural",
+      };
+      const { rowPolicies } = MARKETPLACE_LIST_CONTEXT;
+      const payloadDetails = toWirePayload(presentCascade(run, listMessage, rowPolicies));
       return {
         content: [{ type: "text", text: lines.join("\n") }],
-        details: { marketplaces },
+        details: { marketplaces: payloadDetails.marketplaces },
       };
     },
   });

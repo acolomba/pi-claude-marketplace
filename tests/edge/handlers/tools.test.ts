@@ -18,7 +18,7 @@
 // declares a git source with no clone) but no parameter either tool exposes
 // turns materialization on, so no positive control exists. See
 // `installNetworkCounter`. The Pi boundary states no `ctx.ui` expectation,
-// which is what proves the tools never notify. The plugin tool's non-empty path
+// which is what proves the tools never notify. Each tool's non-empty path
 // promises exactly three `pi.getAllTools()` reads -- the one soft-dependency
 // probe of its notification run (LLMT-01) -- and every other path promises
 // none.
@@ -131,6 +131,8 @@ interface SeededPlugin {
 interface SeededMarketplace {
   readonly name: string;
   readonly plugins: readonly SeededPlugin[];
+  /** The recorded last-update time; absent means the record carries none. */
+  readonly lastUpdatedAt?: string;
 }
 
 /** The wire plugin row shape each `details.marketplaces` block carries. */
@@ -282,6 +284,9 @@ async function layoutMarketplace(
     manifestPath,
     marketplaceRoot,
     plugins: records,
+    ...(marketplace.lastUpdatedAt === undefined
+      ? {}
+      : { lastUpdatedAt: marketplace.lastUpdatedAt }),
   };
 }
 
@@ -313,8 +318,8 @@ async function seedScope(
  * case's path reads it: the marketplace existence check and the payload load
  * take one read each, and a path that short-circuits before the load takes one
  * in total. `pi.getAllTools()` is promised `inventoryReads` times, each
- * returning no tool: the plugin tool's notification run probes the inventory
- * three times on its non-empty path, and every other path never probes it.
+ * returning no tool: each tool's notification run probes the inventory three
+ * times on its non-empty path, and every other path never probes it.
  *
  * `ctx.ui` carries no expectation on purpose, so an attempt to notify fails
  * where it happens -- a tool returns its result and never reaches the
@@ -438,7 +443,7 @@ describe("registerListMarketplacesTool", () => {
     verifyBoundary();
   });
 
-  test("renders one line per marketplace with its scope, plugin count and source", async (t) => {
+  test("renders one line per marketplace and details of the list command's blocks", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "list-populated");
     await seedScope(scope.cwd, "project", [
@@ -456,6 +461,7 @@ describe("registerListMarketplacesTool", () => {
         value: scope.cwd,
         reads: 1,
       },
+      3,
     );
     const expectedResult = {
       content: [
@@ -466,17 +472,45 @@ describe("registerListMarketplacesTool", () => {
       ],
       details: {
         marketplaces: [
+          { name: "proj-mp", scope: "project", plugins: [] },
+          { name: "user-mp", scope: "user", plugins: [] },
+        ],
+      },
+    };
+
+    // act
+    const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.strictEqual(scope.networkCallCount(), 0);
+    verifyBoundary();
+  });
+
+  test("carries a recorded last-update time in the block details", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "list-dated");
+    await seedScope(scope.cwd, "user", [
+      { name: "dated-mp", plugins: [], lastUpdatedAt: "2026-05-25T00:00:00Z" },
+    ]);
+    const datedRoot = marketplaceRootIn(scope.cwd, "dated-mp");
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListMarketplacesTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      3,
+    );
+    const expectedResult = {
+      content: [{ type: "text", text: `[user] dated-mp -- 0 plugin(s) -- ${datedRoot}` }],
+      details: {
+        marketplaces: [
           {
-            name: "proj-mp",
-            scope: "project",
-            pluginCount: 1,
-            source: { kind: "path", raw: projectRoot, logical: projectRoot },
-          },
-          {
-            name: "user-mp",
+            name: "dated-mp",
             scope: "user",
-            pluginCount: 0,
-            source: { kind: "path", raw: userRoot, logical: userRoot },
+            details: { autoupdate: false, lastUpdatedAt: "2026-05-25T00:00:00Z" },
+            plugins: [],
           },
         ],
       },

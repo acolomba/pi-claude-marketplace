@@ -12,7 +12,7 @@
 //   const scopes: Scope[] = opts.scope !== undefined ? [opts.scope] : ["project", "user"];
 //   for each scope: loadState(locationsFor(scope, cwd).extensionRoot)
 //     -> accumulate one MarketplaceNotificationMessage per state.marketplaces[<name>]
-//   notifyWithContext(opts.ctx, opts.run, LIST_CONTEXT, <built array>, ...);
+//   notifyWithContext(opts.ctx, opts.run, MARKETPLACE_LIST_CONTEXT, <built array>, ...);
 // An empty top-level marketplaces array renders the `(no marketplaces)`
 //   sentinel through the cascade emitter. CMC-10.
 // Caller-supplied order is honored end-to-end (no internal sort); the outer
@@ -26,7 +26,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { notifyWithContext, type MarketplaceRows } from "../../shared/notify-context.ts";
 
-import { LIST_CONTEXT } from "./list.messaging.ts";
+import { MARKETPLACE_LIST_CONTEXT } from "./list.messaging.ts";
 
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -36,7 +36,7 @@ export interface ListMarketplacesOptions {
   readonly ctx: ExtensionContext;
   /**
    * D-05: the command's notification run, threaded for the shared emitter
-   * signature. `LIST_CONTEXT` declares no marker policy, so its snapshot
+   * signature. `MARKETPLACE_LIST_CONTEXT` declares no marker policy, so its snapshot
    * composes no markers here.
    */
   readonly run: NotificationRun;
@@ -46,7 +46,15 @@ export interface ListMarketplacesOptions {
   readonly cwd: string;
 }
 
-export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<void> {
+/**
+ * ML-1..4: the marketplace-list blocks, one per state record, for each scope in
+ * project-then-user order (or the one requested scope). NFR-5: reads state and
+ * the merged config only, never the network. LLMT-01: the marketplace LLM tool
+ * converts these same blocks, so its details match what the command emits.
+ */
+export async function loadMarketplaceListBlocks(
+  opts: Pick<ListMarketplacesOptions, "cwd" | "scope">,
+): Promise<readonly MarketplaceRows<never>[]> {
   // SC-6: bare form enumerates both scopes; explicit --scope narrows.
   // Iteration order is project-first per MSG-GR-3 so same-name cross-scope
   // pairs render project-before-user.
@@ -54,7 +62,7 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
 
   // WR-01: list rows carry no plugin child rows, so type the accumulator at the
   // narrow `MarketplaceRows<never>` (plugins: readonly never[]). Every push is
-  // then checked against the empty-plugins invariant LIST_CONTEXT requires, and
+  // then checked against the empty-plugins invariant MARKETPLACE_LIST_CONTEXT requires, and
   // the array widens to `notifyWithContext` with no cast.
   const marketplaces: MarketplaceRows<never>[] = [];
   for (const scope of scopes) {
@@ -67,7 +75,7 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
     for (const record of Object.values(state.marketplaces)) {
       // NotificationMessage construction recipe.
       // - One MarketplaceNotificationMessage per record, emitted via one
-      //   notifyWithContext(..., LIST_CONTEXT, ...) call; `plugins: []` is required.
+      //   notifyWithContext(..., MARKETPLACE_LIST_CONTEXT, ...) call; `plugins: []` is required.
       // - Discriminator here: `mp.status === undefined` (list-surface arm of
       //   renderMpHeader). Unique to this orchestrator in the marketplace family.
       // - `details: MarketplaceDetails` is OPTIONAL and INDEPENDENT of status
@@ -100,11 +108,24 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
     }
   }
 
+  return marketplaces;
+}
+
+export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<void> {
+  const marketplaces = await loadMarketplaceListBlocks(opts);
+
   // An empty top-level marketplaces array renders `(no marketplaces)`.
   // Caller-supplied order is honored end-to-end; the outer loop above already
   // enforces the SC-6 / MSG-GR-3 project-first ordering.
   // OUT-07 / D-12: the inventory is a bulk surface -> Plural cardinality. The
   // list-arm headers render via the central renderMpHeader seam the spine
-  // reuses; LIST_CONTEXT carries the localized list vocabulary.
-  notifyWithContext(opts.ctx, opts.run, LIST_CONTEXT, marketplaces, undefined, "plural");
+  // reuses; MARKETPLACE_LIST_CONTEXT carries the localized list vocabulary.
+  notifyWithContext(
+    opts.ctx,
+    opts.run,
+    MARKETPLACE_LIST_CONTEXT,
+    marketplaces,
+    undefined,
+    "plural",
+  );
 }

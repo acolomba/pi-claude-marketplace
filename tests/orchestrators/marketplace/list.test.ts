@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
@@ -10,7 +10,10 @@ import {
   parsePluginSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { listMarketplaces } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
+import {
+  listMarketplaces,
+  loadMarketplaceListBlocks,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -90,6 +93,24 @@ async function seedMarketplaces(
     schemaVersion: 2,
     marketplaces: Object.fromEntries(records.map((record) => [record.name, record])),
   });
+}
+
+function pathRecord(
+  cwd: string,
+  name: string,
+  scope: MarketplaceRecord["scope"],
+  lastUpdatedAt?: string,
+): MarketplaceRecord {
+  return {
+    addedFromCwd: cwd,
+    manifestPath: path.join(cwd, `${name}.json`),
+    marketplaceRoot: path.join(cwd, name),
+    name,
+    plugins: {},
+    scope,
+    source: pathSource(`./${name}`),
+    ...(lastUpdatedAt === undefined ? {} : { lastUpdatedAt }),
+  };
 }
 
 function compareNames(left: string, right: string): number {
@@ -520,5 +541,109 @@ test("unsupported state schema rejects exactly without notifying or mutating the
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.ui);
+  });
+});
+
+describe("loadMarketplaceListBlocks", () => {
+  test("returns one block per record in project-then-user insertion order", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seedMarketplaces(locationsFor("project", cwd), [
+        pathRecord(cwd, "proj-b", "project"),
+        pathRecord(cwd, "proj-a", "project"),
+      ]);
+      await seedMarketplaces(locationsFor("user", cwd), [pathRecord(cwd, "user-a", "user")]);
+
+      // act
+      const blocks = await loadMarketplaceListBlocks({ cwd });
+
+      // assert
+      assert.deepStrictEqual(blocks, [
+        { name: "proj-b", scope: "project", severity: "info", plugins: [] },
+        { name: "proj-a", scope: "project", severity: "info", plugins: [] },
+        { name: "user-a", scope: "user", severity: "info", plugins: [] },
+      ]);
+    });
+  });
+
+  test("returns only the requested scope's blocks", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seedMarketplaces(locationsFor("project", cwd), [pathRecord(cwd, "proj-a", "project")]);
+      await seedMarketplaces(locationsFor("user", cwd), [pathRecord(cwd, "user-a", "user")]);
+
+      // act
+      const blocks = await loadMarketplaceListBlocks({ cwd, scope: "user" });
+
+      // assert
+      assert.deepStrictEqual(blocks, [
+        { name: "user-a", scope: "user", severity: "info", plugins: [] },
+      ]);
+    });
+  });
+
+  test("carries autoupdate details when the merged config turns autoupdate on", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedMarketplaces(locations, [pathRecord(cwd, "auto", "project")]);
+      await seedAutoupdate(locations, locations.configJsonPath, "auto", "./auto", true);
+
+      // act
+      const blocks = await loadMarketplaceListBlocks({ cwd, scope: "project" });
+
+      // assert
+      assert.deepStrictEqual(blocks, [
+        {
+          name: "auto",
+          scope: "project",
+          severity: "info",
+          details: { autoupdate: true },
+          plugins: [],
+        },
+      ]);
+    });
+  });
+
+  test("carries the last-update time with autoupdate off", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedMarketplaces(locations, [
+        pathRecord(cwd, "dated", "project", "2026-05-25T00:00:00Z"),
+      ]);
+      await seedAutoupdate(locations, locations.configJsonPath, "dated", "./dated", false);
+
+      // act
+      const blocks = await loadMarketplaceListBlocks({ cwd, scope: "project" });
+
+      // assert
+      assert.deepStrictEqual(blocks, [
+        {
+          name: "dated",
+          scope: "project",
+          severity: "info",
+          details: { autoupdate: false, lastUpdatedAt: "2026-05-25T00:00:00Z" },
+          plugins: [],
+        },
+      ]);
+    });
+  });
+
+  test("omits details when autoupdate is off and no last-update time is recorded", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedMarketplaces(locations, [pathRecord(cwd, "plain", "project")]);
+      await seedAutoupdate(locations, locations.configJsonPath, "plain", "./plain", false);
+
+      // act
+      const blocks = await loadMarketplaceListBlocks({ cwd, scope: "project" });
+
+      // assert
+      assert.deepStrictEqual(blocks, [
+        { name: "plain", scope: "project", severity: "info", plugins: [] },
+      ]);
+    });
   });
 });
