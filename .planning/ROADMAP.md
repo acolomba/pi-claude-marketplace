@@ -174,10 +174,10 @@ Plans:
 5. Both LLM tools build their `details` from the wire schema's plugin-row and marketplace-block shapes, with verbatim status tokens: `upgradable` stays `upgradable`. Their line-format text content does not change.
 
 **Note:** fallow production dead-code rejects a module that nothing in production imports, so an unwired JSON strategy cannot end this phase. The LLM tool surface (LLMT-01) is the strategy's first production consumer. If the tools cannot use the strategy's entry point, the structured-path sink wiring from Phase 5 moves forward into this phase.
-**Plans:** 0/5 plans complete, sequential (waves 1-5)
+**Plans:** 1/5 plans executed, sequential (waves 1-5)
 
 **Wave 1**
-- [ ] 04-01-PLAN.md — Tracer: plugin LLM tool details through the presentation step, wire schema, and JSON strategy; generated schema file in the package with a drift test (LLMT-01, WIRE-09)
+- [x] 04-01-PLAN.md — Tracer: plugin LLM tool details through the presentation step, wire schema, and JSON strategy; generated schema file in the package with a drift test (LLMT-01, WIRE-09)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 04-02-PLAN.md — Marketplace LLM tool on the same path; no-op and reconcile-applied cascades presented (LLMT-01, WIRE-05)
@@ -246,7 +246,7 @@ Plans:
 | 1. Presentation Model | 16/16 | Complete    | 2026-10-01 |
 | 2. Row Policies | 2/2 | Complete    | 2026-10-02 |
 | 3. Typed Raw Surfaces | 4/4 | Complete    | 2026-10-03 |
-| 4. Wire Schema and JSON Strategy | 0/5 | Not started | - |
+| 4. Wire Schema and JSON Strategy | 1/5 | In Progress|  |
 | 5. Mode-Selected JSON Sink | 0/TBD | Not started | - |
 | 6. Command-Run Contract | 0/TBD | Not started | - |
 | 7. Mode Refusals, Real-Pi Verification, and Docs | 0/TBD | Not started | - |

@@ -73,7 +73,7 @@ model that already carries every presentation decision.
   same `invocationId`, minted by an injectable generator.
 - [ ] **WIRE-08**: No payload discloses a path the text form does not show
   (NFR-9), proven by a whole-payload walk test.
-- [ ] **WIRE-09**: A JSON Schema file generated from the typebox source is
+- [x] **WIRE-09**: A JSON Schema file generated from the typebox source is
   committed and shipped in the npm package, and a test fails when it drifts.
 
 ### JSON Strategy and Transport
@@ -204,7 +204,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WIRE-06 | Phase 4 | Pending |
 | WIRE-07 | Phase 6 | Pending |
 | WIRE-08 | Phase 4 | Pending |
-| WIRE-09 | Phase 4 | Pending |
+| WIRE-09 | Phase 4 | Complete |
 | JOUT-01 | Phase 5 | Pending |
 | JOUT-02 | Phase 4 | Pending |
 | JOUT-03 | Phase 6 | Pending |

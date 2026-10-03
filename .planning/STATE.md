@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 4
+current_phase: 04
 current_phase_name: Wire Schema and JSON Strategy
-status: planning
-stopped_at: Phase 3 complete, ready to plan Phase 4
-last_updated: "2026-10-03T05:21:51.425Z"
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-10-03T13:09:52.505Z"
 last_activity: 2026-10-03
-last_activity_desc: Phase 3 complete, transitioned to Phase 4
-state_head: 9014123467f3ba760820c558eb0cc11e4dc0a1ec
+last_activity_desc: Completed 04-01 (wire schema tracer and generated JSON Schema)
+state_head: 29a05bd50ab50f454635513e4e30436938ab7093
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 22
-  completed_plans: 22
+  total_plans: 27
+  completed_plans: 23
   percent: 43
 milestone_name: Mode-Keyed Presentation Strategies
 ---
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-10-01 after json-output Phase 1 verifi
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 4 — Wire Schema and JSON Strategy
+**Current focus:** Phase 04 — Wire Schema and JSON Strategy
 
 ## Current Position
 
-Phase: 4 — Wire Schema and JSON Strategy
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-10-03 — Phase 3 complete, transitioned to Phase 4
+Phase: 04 (Wire Schema and JSON Strategy) — EXECUTING
+Plan: 2 of 5
+Status: Executing Phase 04
+Last activity: 2026-10-03 — Completed 04-01 (wire schema tracer and generated JSON Schema)
 
-Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 22 plans complete)
+Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 23 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -170,8 +170,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-03T02:28:53.699Z
-**Stopped at:** Phase 3 complete, ready to plan Phase 4
+**Last session:** 2026-10-03T13:09:52.294Z
+**Stopped at:** Completed 04-01-PLAN.md
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -232,6 +232,7 @@ archived milestone artifacts.
 | Phase 03 P02 | 1h 15m | 2 tasks | 10 files |
 | Phase 03 P03 | 1h 13m | 2 tasks | 20 files |
 | Phase 03 P04 | 1h 3m | 2 tasks | 4 files |
+| Phase 04 P01 | 89min | 2 tasks | 15 files |
 
 ## Decisions
 
@@ -277,3 +278,5 @@ archived milestone artifacts.
 - [Phase 03]: 03-03: the D-17 corpus exception is a five-record ledger in its own commit; the baseline holds 3134 entries with 0 extras
 - [Phase 03]: 03-04: assertPlantedCopyRejects is the shared D-07-01 offender control; new architecture gates call it per data row instead of repeating the temp-root sequence
 - [Phase 03]: 03-04: the D-16 presentation-sink gate pairs two pattern clauses with a placement clause (exactly two notify spellings, both inside deliver); each clause is proven by its own planted offender
+- [Phase 04]: Wire closed-set fields use Type.Enum over Record<ClosedSet, true> enrollment keys; typebox 1.3.34 Static of a Union over a non-tuple array is never
+- [Phase 04]: Plugin LLM tool details are wire marketplace blocks with verbatim statuses (details.marketplaces replaces the flat plugins list)
