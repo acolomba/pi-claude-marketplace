@@ -9,7 +9,7 @@
 //   2. pi_claude_marketplace_plugin_list -- D-02 extended params: optional
 //      marketplace + scope + installed/available/unavailable filter booleans
 //      (PL-1 union semantics). Returns rendered text + structured
-//      `details.plugins`.
+//      `details.marketplaces`, the wire marketplace blocks of the JSON strategy.
 //
 // BLOCK C: this file imports only from domain/ (source.ts), orchestrators/,
 // shared/, and platform/ (types), plus the typebox runtime. The structured
@@ -17,31 +17,36 @@
 // to their respective orchestrators in this plan precisely to keep the tool
 // execute bodies on the right side of the import boundary.
 //
-// BLOCK A: tools do NOT call ctx.ui.notify. LLM tools return
-// `AgentToolResult` -- the agent surfaces results via its own UI channel,
-// not the slash-command notify channel.
+// BLOCK A: the tools never notify. LLM tools return `AgentToolResult` -- the
+// agent surfaces results via its own UI channel, not the slash-command notify
+// channel. The plugin tool opens one notification run per invocation, so the
+// reasons in its details equal what `/claude:plugin list` composes for each
+// row (LLMT-01, D-09).
 //
 // Status semantics (D-09): state.json has NO plugin.installed
 // boolean. Presence of `mp.plugins[name]` === installed. Per-marketplace
 // plugin count for the list tool is `Object.keys(mp.plugins).length`.
 //
-// The LLM tool translates the `MarketplaceNotificationMessage[]` payload
-// from `loadPluginListPayload` into a flat-line projection for the structured
-// tool surface. The slash-command surface uses `notify()` directly.
-// The `(upgradable)` plugin variant maps to `[installed]` on the tool surface
-// (the plugin IS installed; the upgrade status is for the slash-command
-// surface per MSG-PL-4).
+// The plugin tool's content lines keep the three-bucket projection: the
+// `(upgradable)` plugin variant shows as `[installed]` there (the plugin IS
+// installed; the upgrade status is for the slash-command surface per
+// MSG-PL-4). Its details carry each row's verbatim status (LLMT-01).
 
 import Type from "typebox";
 
 import { sourceLogical } from "../../domain/source.ts";
 import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../orchestrators/plugin/list-flow.ts";
+import { LIST_CONTEXT as PLUGIN_LIST_CONTEXT } from "../../orchestrators/plugin/list.messaging.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { pluginScopeOrFallback, pluginVersion } from "../../shared/notification-types.ts";
+import { toWirePayload } from "../../shared/notification-json.ts";
+import { presentCascade } from "../../shared/notification-present.ts";
+import { openNotificationRun } from "../../shared/notification-run.ts";
+import { pluginVersion } from "../../shared/notification-types.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { CascadeNotificationMessage } from "../../shared/notification-types.ts";
 
 // ─── LLM tool parameter schemas (TypeBox) ─────────────────────────────────
 
@@ -135,8 +140,6 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
 type ToolPluginStatus = "installed" | "available" | "unavailable";
 
 interface PluginRow {
-  marketplace: string;
-  scope: "user" | "project";
   name: string;
   status: ToolPluginStatus;
   version?: string;
@@ -266,9 +269,8 @@ async function marketplaceExists(params: {
 }
 
 /**
- * Builds the tool's list payload. BLOCK A: the tool never notifies, so it
- * builds no notification run, and the payload builder takes none; the
- * `{requires pi-*}` markers belong to the slash-command surface only.
+ * Builds the tool's list payload. The payload builder takes no notification
+ * run; the tool resolves the rows it keeps afterwards, under its own run.
  */
 async function loadToolPluginPayload(
   params: {
@@ -348,25 +350,33 @@ function pluginReasons(p: ToolPluginRow): readonly string[] | undefined {
  */
 type ToolPluginRow = Awaited<ReturnType<typeof loadPluginListPayload>>[number]["plugins"][number];
 
+/** One marketplace block of the payload `loadPluginListPayload` returns. */
+type ToolPluginBlock = Awaited<ReturnType<typeof loadPluginListPayload>>[number];
+
+/**
+ * Renders the content lines and keeps, per block, the rows the bucket filter
+ * admits. Each kept block is the payload block with only those rows, in
+ * order; a block whose rows the filter empties stays as a block with none.
+ */
 function renderPluginPayload(
   payload: Awaited<ReturnType<typeof loadPluginListPayload>>,
   buckets: { i: boolean; a: boolean; u: boolean },
-): { lines: string[]; rows: PluginRow[] } {
+): { lines: string[]; marketplaces: ToolPluginBlock[] } {
   const lines: string[] = [];
-  const rows: PluginRow[] = [];
+  const marketplaces: ToolPluginBlock[] = [];
   for (const mp of payload) {
-    const mpName = mp.name;
-    const mpScope = mp.scope;
-    lines.push(`Marketplace ${mpName} (${mpScope})`);
+    lines.push(`Marketplace ${mp.name} (${mp.scope})`);
 
     // Unparseable-manifest marketplace block (status: "failed", plugins: [])
     // and zero-plugin manifest blocks both render as the bare-header form
     // followed by the "(no plugins)" body line for shape stability.
     if (mp.plugins.length === 0) {
       lines.push("  (no plugins)");
+      marketplaces.push(mp);
       continue;
     }
 
+    const kept: ToolPluginRow[] = [];
     for (const p of mp.plugins) {
       const status = projectRowStatus(p.status);
       if (!buckets[statusKey(status)]) {
@@ -376,19 +386,19 @@ function renderPluginPayload(
       const reasons = pluginReasons(p);
       const version = pluginVersion(p);
       const row: PluginRow = {
-        marketplace: mpName,
-        scope: pluginScopeOrFallback(p, mpScope),
         name: p.name,
         status,
         ...(version !== undefined && { version }),
         ...(reasons !== undefined && { reasons }),
       };
       lines.push(renderPluginRow(row));
-      rows.push(row);
+      kept.push(p);
     }
+
+    marketplaces.push({ ...mp, plugins: kept });
   }
 
-  return { lines, rows };
+  return { lines, marketplaces };
 }
 
 export function registerListPluginsTool(pi: ExtensionAPI): void {
@@ -419,7 +429,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
         if (!exists) {
           return {
             content: [{ type: "text", text: `Marketplace "${params.marketplace}" not found.` }],
-            details: { plugins: [] },
+            details: { marketplaces: [] },
           };
         }
       }
@@ -427,7 +437,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
       // Delegate to the payload loader for the data layer; we render text
       // ourselves in the LLM-tool line format. The orchestrator's
       // PluginListPayload carries enough structure to support both this
-      // line format AND `details.plugins`.
+      // line format AND `details.marketplaces`.
       let payload;
       let rendered;
       try {
@@ -447,25 +457,36 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
             },
           ],
           isError: true,
-          details: { plugins: [] },
+          details: { marketplaces: [] },
         };
       }
 
-      const { lines, rows } = rendered;
+      const { lines, marketplaces } = rendered;
 
-      // `rows` is populated only from inside `renderPluginPayload`'s loop over
-      // `payload`, so an empty payload already implies no rows; testing both
-      // would be one condition asked twice.
+      // `marketplaces` is populated only from inside `renderPluginPayload`'s
+      // loop over `payload`, so an empty payload already implies no blocks;
+      // testing both would be one condition asked twice.
       if (payload.length === 0) {
         return {
           content: [{ type: "text", text: "No marketplaces configured." }],
-          details: { plugins: [] },
+          details: { marketplaces: [] },
         };
       }
 
+      // LLMT-01 / D-09: the details are the wire blocks of the kept rows,
+      // resolved under the list command's row policies and this invocation's
+      // soft-dependency snapshot, so each row keeps its verbatim status.
+      const run = openNotificationRun(pi);
+      const listMessage: CascadeNotificationMessage = {
+        marketplaces,
+        label: PLUGIN_LIST_CONTEXT.Messaging.label,
+        cardinality: "plural",
+      };
+      const { rowPolicies } = PLUGIN_LIST_CONTEXT;
+      const payloadDetails = toWirePayload(presentCascade(run, listMessage, rowPolicies));
       return {
         content: [{ type: "text", text: lines.join("\n") }],
-        details: { plugins: rows },
+        details: { marketplaces: payloadDetails.marketplaces },
       };
     },
   });

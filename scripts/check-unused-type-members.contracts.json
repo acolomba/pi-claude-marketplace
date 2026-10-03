@@ -587,12 +587,12 @@
       "necessity": "extensions/pi-claude-marketplace/index.ts:92:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:252:43",
+      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:254:43",
       "owner": "dispatchInfoMessage.message",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:252:12"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:254:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:941:32",
@@ -677,40 +677,40 @@
       "clause": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:98:9",
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:103:9",
       "owner": "marketplaces",
       "key": "name",
       "category": "external-output",
       "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:112:29",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:115:7"
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:29",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:120:7"
     },
     {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:99:9",
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:104:9",
       "owner": "marketplaces",
       "key": "scope",
       "category": "external-output",
       "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:112:48",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:115:7"
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:48",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:120:7"
     },
     {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:100:9",
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:105:9",
       "owner": "marketplaces",
       "key": "pluginCount",
       "category": "external-output",
       "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:112:55",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:115:7"
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:55",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:120:7"
     },
     {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:101:9",
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:106:9",
       "owner": "marketplaces",
       "key": "source",
       "category": "external-output",
       "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:112:68",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:115:7"
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:68",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:120:7"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:55:3",
@@ -754,24 +754,6 @@
       "purpose": "Keeps the local resources_discover result a faithful statement of the installed declaration the peer overload checks the handler against; upstream declares the slot optional, so widening it fails the build while nothing reads it here.",
       "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:414:5",
       "checked": "extensions/pi-claude-marketplace/index.ts:92:5"
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:138:3",
-      "owner": "PluginRow",
-      "key": "marketplace",
-      "category": "external-output",
-      "purpose": "Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:379:9",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:466:7"
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:139:3",
-      "owner": "PluginRow",
-      "key": "scope",
-      "category": "external-output",
-      "purpose": "Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:380:9",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:466:7"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:339:41",

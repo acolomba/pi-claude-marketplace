@@ -15,6 +15,7 @@ import {
   renderPruneEmpty,
   renderReconcilePendingEmpty,
 } from "./notification-grammar.ts";
+import { presentCascade } from "./notification-present.ts";
 import {
   CENTRAL_ROW_POLICY,
   resolveEnvelope,
@@ -27,6 +28,7 @@ import { composeRetainedWorkflowsAdvisories, isInfoKind } from "./notification-s
 import { redactCauseChain } from "./redact-absolute-paths.ts";
 
 import type { NotifyArguments } from "./notification-grammar.ts";
+import type { CascadePresentation } from "./notification-present.ts";
 import type {
   RowPolicyMap,
   ResolvedEnvelope,
@@ -403,27 +405,42 @@ function composeContextBlocks(marketplaces: readonly ResolvedMarketplace[]): str
   });
 }
 
+/**
+ * Composes a context cascade's body: the blocks, or the `(no marketplaces)`
+ * sentinel when there are none, then the advisory lines. WR-06: advisory body
+ * lines sit between the body and the tally, exactly as they do on the central
+ * dispatch, so a command that can emit either arm renders the identical
+ * trailer from either one.
+ */
+function composeCascadeBody(
+  marketplaces: readonly ResolvedMarketplace[],
+  advisories: readonly string[] | undefined,
+  retainedWorkflows: readonly RetainedWorkflowStaging[] | undefined,
+): string {
+  const blocks = composeContextBlocks(marketplaces);
+  const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+  return foldAdvisories(composed, advisories, retainedWorkflows);
+}
+
+/** JOUT-02: the text strategy's format of a cascade presentation. */
+function formatCascadePresentation(presentation: CascadePresentation): string {
+  return composeCascadeBody(
+    presentation.marketplaces,
+    presentation.advisories,
+    presentation.retainedWorkflows,
+  );
+}
+
 function emitCascadeWith(
   ctx: NotificationContext,
   run: NotificationRun,
-  message: CascadeNotificationMessage | ReconcileAppliedCascadeMessage,
+  message: ReconcileAppliedCascadeMessage,
   rowPolicies: RowPolicyMap,
-  // WR-06: caller-composed advisory body lines. Only the plain cascade carrier
-  // declares them; the reconcile-applied carrier passes `undefined`, so the
-  // member stays on the two shapes that can actually produce one.
-  advisories: readonly string[] | undefined,
-  retainedWorkflows: readonly RetainedWorkflowStaging[] | undefined,
 ): void {
   const marketplaces = resolveRows(message.marketplaces, run.softDeps, rowPolicies);
   const envelope = resolveEnvelope(message);
-  const blocks = composeContextBlocks(marketplaces);
-  const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
-  // WR-06: advisory body lines sit between the body and the tally, exactly as
-  // they do on the central dispatch, so a command that can emit either arm
-  // renders the identical trailer from either one.
-  const body = foldAdvisories(composed, advisories, retainedWorkflows);
-
-  emitWithSummary(ctx, envelope, body);
+  // WR-06: the reconcile-applied carrier declares no advisory lines.
+  emitWithSummary(ctx, envelope, composeCascadeBody(marketplaces, undefined, undefined));
 }
 
 /** Emits resolved command rows, advisories, and the stamped envelope. */
@@ -433,7 +450,8 @@ export function emitContextCascade(
   message: CascadeNotificationMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  emitCascadeWith(ctx, run, message, rowPolicies, message.advisories, message.retainedWorkflows);
+  const presentation = presentCascade(run, message, rowPolicies);
+  emitWithSummary(ctx, presentation.envelope, formatCascadePresentation(presentation));
 }
 
 /** Emits surviving rows followed by the fixed zero-update headline. */
@@ -460,5 +478,5 @@ export function emitReconcileAppliedContextCascade(
   message: ReconcileAppliedCascadeMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  emitCascadeWith(ctx, run, message, rowPolicies, undefined, undefined);
+  emitCascadeWith(ctx, run, message, rowPolicies);
 }

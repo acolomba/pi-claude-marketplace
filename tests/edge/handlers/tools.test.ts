@@ -17,9 +17,11 @@
 // discriminated proof: the fixture can reach the transport (`remote-mp`
 // declares a git source with no clone) but no parameter either tool exposes
 // turns materialization on, so no positive control exists. See
-// `installNetworkCounter`. The Pi boundary states no `ctx.ui` and no
-// `pi.getAllTools()` expectation at all, which is what proves the tools neither
-// notify nor probe for a companion extension.
+// `installNetworkCounter`. The Pi boundary states no `ctx.ui` expectation,
+// which is what proves the tools never notify. The plugin tool's non-empty path
+// promises exactly three `pi.getAllTools()` reads -- the one soft-dependency
+// probe of its notification run (LLMT-01) -- and every other path promises
+// none.
 
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -42,6 +44,10 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  PluginStatus,
+  Reason,
+} from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
@@ -94,6 +100,8 @@ interface SeededInstall {
   readonly disabled?: boolean;
   /** Persisted `compatibility.unsupported` kinds, which make `installable` false. */
   readonly unsupported?: readonly string[];
+  /** Persisted agent resources, which make the row depend on pi-subagents. */
+  readonly agents?: readonly string[];
 }
 
 interface SeededPlugin {
@@ -125,14 +133,21 @@ interface SeededMarketplace {
   readonly plugins: readonly SeededPlugin[];
 }
 
-/** The structured `details.plugins` row shape the tool payload carries. */
+/** The wire plugin row shape each `details.marketplaces` block carries. */
 interface ExpectedPluginRow {
-  readonly marketplace: string;
-  readonly scope: Scope;
+  readonly status: PluginStatus;
   readonly name: string;
-  readonly status: "installed" | "available" | "unavailable";
+  readonly id: string;
+  readonly reasons: readonly Reason[];
   readonly version?: string;
-  readonly reasons?: readonly string[];
+  readonly scope?: Scope;
+}
+
+/** The wire marketplace block shape `details.marketplaces` carries. */
+interface ExpectedMarketplaceBlock {
+  readonly name: string;
+  readonly scope: Scope;
+  readonly plugins: readonly ExpectedPluginRow[];
 }
 
 /**
@@ -199,7 +214,14 @@ function installedRecord(resolvedSource: string, installed: SeededInstall): Plug
       supported: [],
       unsupported: [...unsupported],
     },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    resources: {
+      skills: [],
+      prompts: [],
+      agents: [...(installed.agents ?? [])],
+      mcpServers: [],
+      hooks: [],
+      workflows: [],
+    },
     enabled: installed.disabled !== true,
     provenance: "explicit",
     installedAt: "2026-06-17T00:00:00.000Z",
@@ -286,21 +308,25 @@ async function seedScope(
 /**
  * The boundary one tool case needs, sized to that case exactly.
  *
- * Only two members carry an expectation. `registerTool` is promised once, so a
- * second registration or none at all fails at `verifyBoundary()`. `ctx.cwd` is
- * promised exactly as often as the case's path reads it: the marketplace
- * existence check and the payload load take one read each, and a path that
- * short-circuits before the load takes one in total.
+ * `registerTool` is promised once, so a second registration or none at all
+ * fails at `verifyBoundary()`. `ctx.cwd` is promised exactly as often as the
+ * case's path reads it: the marketplace existence check and the payload load
+ * take one read each, and a path that short-circuits before the load takes one
+ * in total. `pi.getAllTools()` is promised `inventoryReads` times, each
+ * returning no tool: the plugin tool's notification run probes the inventory
+ * three times on its non-empty path, and every other path never probes it.
  *
- * Everything else is left unstated on purpose. `ctx.ui` carries no expectation,
- * so an attempt to notify fails where it happens -- a tool returns its result
- * and never reaches the slash-command notification channel. `pi.getAllTools()`
- * carries none either, so a soft-dependency probe fails the same way.
+ * `ctx.ui` carries no expectation on purpose, so an attempt to notify fails
+ * where it happens -- a tool returns its result and never reaches the
+ * slash-command notification channel.
  */
-function createToolBoundary(cwd?: {
-  readonly value: string;
-  readonly reads: number;
-}): ToolBoundary {
+function createToolBoundary(
+  cwd?: {
+    readonly value: string;
+    readonly reads: number;
+  },
+  inventoryReads = 0,
+): ToolBoundary {
   const registrations: ToolRegistration[] = [];
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
   const pi = mock<ToolRegistrar>({ exactParams: true, name: "extension API" });
@@ -313,6 +339,12 @@ function createToolBoundary(cwd?: {
     when(() => ctx.cwd)
       .thenReturn(cwd.value)
       .times(cwd.reads);
+  }
+
+  if (inventoryReads > 0) {
+    when(() => pi.getAllTools())
+      .thenReturn([])
+      .times(inventoryReads);
   }
 
   return {
@@ -334,8 +366,9 @@ function createToolBoundary(cwd?: {
 function registerToolUnderTest(
   register: (pi: ExtensionAPI) => void,
   cwd?: { readonly value: string; readonly reads: number },
+  inventoryReads = 0,
 ): RegisteredToolBoundary {
-  const boundary = createToolBoundary(cwd);
+  const boundary = createToolBoundary(cwd, inventoryReads);
   register(boundary.pi);
   const [registration] = boundary.registrations;
   if (registration === undefined) {
@@ -475,11 +508,12 @@ const versionCases = [
     plugin: { name: "alpha", manifestVersion: "1.0.0", installed: { version: "1.0.0" } },
     line: "  [installed] alpha  1.0.0",
     row: {
-      marketplace: "installed-mp",
-      scope: "project",
-      name: "alpha",
       status: "installed",
+      name: "alpha",
+      id: "alpha@installed-mp",
+      reasons: [],
       version: "1.0.0",
+      scope: "project",
     },
   },
   {
@@ -488,11 +522,12 @@ const versionCases = [
     plugin: { name: "alpha", manifestVersion: "2.0.0", installed: { version: "1.0.0" } },
     line: "  [installed] alpha  1.0.0",
     row: {
-      marketplace: "upgradable-mp",
-      scope: "project",
+      status: "upgradable",
       name: "alpha",
-      status: "installed",
+      id: "alpha@upgradable-mp",
+      reasons: [],
       version: "1.0.0",
+      scope: "project",
     },
   },
   {
@@ -505,12 +540,12 @@ const versionCases = [
     },
     line: "  [installed] alpha  1.0.0  (lsp)",
     row: {
-      marketplace: "partially-installed-mp",
-      scope: "project",
+      status: "partially-installed",
       name: "alpha",
-      status: "installed",
-      version: "1.0.0",
+      id: "alpha@partially-installed-mp",
       reasons: ["lsp"],
+      version: "1.0.0",
+      scope: "project",
     },
   },
   {
@@ -524,12 +559,12 @@ const versionCases = [
     },
     line: "  [installed] alpha  1.0.0  (lsp)",
     row: {
-      marketplace: "partially-upgradable-mp",
-      scope: "project",
+      status: "partially-upgradable",
       name: "alpha",
-      status: "installed",
-      version: "1.0.0",
+      id: "alpha@partially-upgradable-mp",
       reasons: ["lsp"],
+      version: "1.0.0",
+      scope: "project",
     },
   },
   {
@@ -542,11 +577,12 @@ const versionCases = [
     },
     line: "  [unavailable] alpha  1.0.0",
     row: {
-      marketplace: "disabled-mp",
-      scope: "project",
+      status: "disabled",
       name: "alpha",
-      status: "unavailable",
+      id: "alpha@disabled-mp",
+      reasons: [],
       version: "1.0.0",
+      scope: "project",
     },
   },
   {
@@ -555,10 +591,10 @@ const versionCases = [
     plugin: { name: "alpha", manifestVersion: "3.0.0" },
     line: "  [available] alpha  3.0.0",
     row: {
-      marketplace: "available-mp",
-      scope: "project",
-      name: "alpha",
       status: "available",
+      name: "alpha",
+      id: "alpha@available-mp",
+      reasons: [],
       version: "3.0.0",
     },
   },
@@ -568,10 +604,10 @@ const versionCases = [
     plugin: { name: "alpha" },
     line: "  [available] alpha",
     row: {
-      marketplace: "unversioned-available-mp",
-      scope: "project",
-      name: "alpha",
       status: "available",
+      name: "alpha",
+      id: "alpha@unversioned-available-mp",
+      reasons: [],
     },
   },
   {
@@ -588,10 +624,10 @@ const versionCases = [
     },
     line: "  [available] alpha  4.0.0",
     row: {
-      marketplace: "remote-mp",
-      scope: "project",
+      status: "remote",
       name: "alpha",
-      status: "available",
+      id: "alpha@remote-mp",
+      reasons: [],
       version: "4.0.0",
     },
   },
@@ -603,12 +639,11 @@ const versionCases = [
     plugin: { name: "alpha", manifestVersion: "5.0.0", declaresUnsupported: true },
     line: "  [unavailable] alpha  5.0.0  (lsp)",
     row: {
-      marketplace: "partially-available-mp",
-      scope: "project",
+      status: "partially-available",
       name: "alpha",
-      status: "unavailable",
-      version: "5.0.0",
+      id: "alpha@partially-available-mp",
       reasons: ["lsp"],
+      version: "5.0.0",
     },
   },
   {
@@ -617,12 +652,11 @@ const versionCases = [
     plugin: { name: "alpha", manifestVersion: "3.0.0", pluginTree: false },
     line: "  [unavailable] alpha  3.0.0  (unsupported source)",
     row: {
-      marketplace: "unavailable-mp",
-      scope: "project",
-      name: "alpha",
       status: "unavailable",
-      version: "3.0.0",
+      name: "alpha",
+      id: "alpha@unavailable-mp",
       reasons: ["unsupported source"],
+      version: "3.0.0",
     },
   },
   {
@@ -631,10 +665,9 @@ const versionCases = [
     plugin: { name: "alpha", pluginTree: false },
     line: "  [unavailable] alpha  (unsupported source)",
     row: {
-      marketplace: "unversioned-unavailable-mp",
-      scope: "project",
-      name: "alpha",
       status: "unavailable",
+      name: "alpha",
+      id: "alpha@unversioned-unavailable-mp",
       reasons: ["unsupported source"],
     },
   },
@@ -667,45 +700,44 @@ const mixedMarketplace = {
 } as const satisfies SeededMarketplace;
 
 const installedRow = {
-  marketplace: "mixed-mp",
-  scope: "project",
-  name: "alpha",
   status: "installed",
+  name: "alpha",
+  id: "alpha@mixed-mp",
+  reasons: [],
   version: "1.0.0",
+  scope: "project",
 } as const satisfies ExpectedPluginRow;
 
 const availableRow = {
-  marketplace: "mixed-mp",
-  scope: "project",
-  name: "bravo",
   status: "available",
+  name: "bravo",
+  id: "bravo@mixed-mp",
+  reasons: [],
   version: "2.0.0",
 } as const satisfies ExpectedPluginRow;
 
 const unavailableRow = {
-  marketplace: "mixed-mp",
-  scope: "project",
-  name: "charlie",
   status: "unavailable",
-  version: "3.0.0",
+  name: "charlie",
+  id: "charlie@mixed-mp",
   reasons: ["unsupported source"],
+  version: "3.0.0",
 } as const satisfies ExpectedPluginRow;
 
 const remoteRow = {
-  marketplace: "mixed-mp",
-  scope: "project",
+  status: "remote",
   name: "delta",
-  status: "available",
+  id: "delta@mixed-mp",
+  reasons: [],
   version: "4.0.0",
 } as const satisfies ExpectedPluginRow;
 
 const partiallyAvailableRow = {
-  marketplace: "mixed-mp",
-  scope: "project",
+  status: "partially-available",
   name: "echo",
-  status: "unavailable",
-  version: "5.0.0",
+  id: "echo@mixed-mp",
   reasons: ["lsp"],
+  version: "5.0.0",
 } as const satisfies ExpectedPluginRow;
 
 const INSTALLED_LINE = "  [installed] alpha  1.0.0";
@@ -780,18 +812,21 @@ const installDisabledCases = [
     marketplace: "installs-disabled-mp",
     title: "forwards the install-time claim of an available row that declares it",
     source: undefined,
+    status: "available",
     line: "  [available] alpha  1.0.0  (installs disabled)",
   },
   {
     marketplace: "installs-disabled-remote-mp",
     title: "forwards the install-time claim of a cold git-source row that declares it",
     source: "https://127.0.0.1:9/alpha.git",
+    status: "remote",
     line: "  [available] alpha  1.0.0  (installs disabled)",
   },
 ] as const satisfies readonly {
   marketplace: string;
   title: string;
   source: string | undefined;
+  status: "available" | "remote";
   line: string;
 }[];
 
@@ -859,13 +894,19 @@ describe("registerListPluginsTool", () => {
       // arrange
       const scope = await createHermeticScope(t, marketplace);
       await seedScope(scope.cwd, "project", [{ name: marketplace, plugins: [plugin] }]);
-      const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-        value: scope.cwd,
-        reads: 1,
-      });
+      const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+        registerListPluginsTool,
+        { value: scope.cwd, reads: 1 },
+        3,
+      );
+      const expectedBlock: ExpectedMarketplaceBlock = {
+        name: marketplace,
+        scope: "project",
+        plugins: [row],
+      };
       const expectedResult = {
         content: [{ type: "text", text: `Marketplace ${marketplace} (project)\n${line}` }],
-        details: { plugins: [row] },
+        details: { marketplaces: [expectedBlock] },
       };
 
       // act
@@ -883,13 +924,19 @@ describe("registerListPluginsTool", () => {
       // arrange
       const scope = await createHermeticScope(t, "filters");
       await seedScope(scope.cwd, "project", [mixedMarketplace]);
-      const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-        value: scope.cwd,
-        reads: 1,
-      });
+      const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+        registerListPluginsTool,
+        { value: scope.cwd, reads: 1 },
+        3,
+      );
+      const expectedBlock: ExpectedMarketplaceBlock = {
+        name: "mixed-mp",
+        scope: "project",
+        plugins: rows,
+      };
       const expectedResult = {
         content: [{ type: "text", text: ["Marketplace mixed-mp (project)", ...lines].join("\n") }],
-        details: { plugins: rows },
+        details: { marketplaces: [expectedBlock] },
       };
 
       // act
@@ -918,22 +965,33 @@ describe("registerListPluginsTool", () => {
         ],
       },
     ]);
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      3,
+    );
     const expectedResult = {
       content: [
         { type: "text", text: "Marketplace skip-mp (project)\n  [installed] alpha  1.0.0" },
       ],
       details: {
-        plugins: [
+        marketplaces: [
           {
-            marketplace: "skip-mp",
+            name: "skip-mp",
             scope: "project",
-            name: "alpha",
-            status: "installed",
-            version: "1.0.0",
+            plugins: [
+              {
+                status: "installed",
+                name: "alpha",
+                id: "alpha@skip-mp",
+                reasons: [],
+                version: "1.0.0",
+                scope: "project",
+              },
+            ],
           },
         ],
       },
@@ -963,10 +1021,14 @@ describe("registerListPluginsTool", () => {
         plugins: [{ name: "alpha", inManifest: false, installed: { version: "1.0.0" } }],
       },
     ]);
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      3,
+    );
     const expectedResult = {
       content: [
         {
@@ -975,14 +1037,20 @@ describe("registerListPluginsTool", () => {
         },
       ],
       details: {
-        plugins: [
+        marketplaces: [
           {
-            marketplace: "absent-mp",
+            name: "absent-mp",
             scope: "project",
-            name: "alpha",
-            status: "installed",
-            version: "1.0.0",
-            reasons: ["not in manifest"],
+            plugins: [
+              {
+                status: "installed",
+                name: "alpha",
+                id: "alpha@absent-mp",
+                reasons: ["not in manifest"],
+                version: "1.0.0",
+                scope: "project",
+              },
+            ],
           },
         ],
       },
@@ -1012,10 +1080,14 @@ describe("registerListPluginsTool", () => {
         ],
       },
     ]);
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      3,
+    );
     const expectedResult = {
       content: [
         {
@@ -1024,14 +1096,20 @@ describe("registerListPluginsTool", () => {
         },
       ],
       details: {
-        plugins: [
+        marketplaces: [
           {
-            marketplace: "absent-disabled-mp",
+            name: "absent-disabled-mp",
             scope: "project",
-            name: "alpha",
-            status: "unavailable",
-            version: "1.0.0",
-            reasons: ["not in manifest"],
+            plugins: [
+              {
+                status: "disabled",
+                name: "alpha",
+                id: "alpha@absent-disabled-mp",
+                reasons: ["not in manifest"],
+                version: "1.0.0",
+                scope: "project",
+              },
+            ],
           },
         ],
       },
@@ -1046,7 +1124,64 @@ describe("registerListPluginsTool", () => {
     verifyBoundary();
   });
 
-  for (const { marketplace, title, source, line } of installDisabledCases) {
+  test("adds the requires marker of a missing companion to details but not to the line", async (t) => {
+    // arrange
+    // LLMT-01 / D-09: the list command composes `{requires pi-subagents}` on an
+    // installed row whose record carries agents when pi-subagents is not
+    // loaded. The details carry that marker; the content line keeps the
+    // three-bucket projection, which shows content reasons only.
+    const scope = await createHermeticScope(t, "requires-marker");
+    await seedScope(scope.cwd, "project", [
+      {
+        name: "agents-mp",
+        plugins: [
+          {
+            name: "alpha",
+            manifestVersion: "1.0.0",
+            installed: { version: "1.0.0", agents: ["helper.md"] },
+          },
+        ],
+      },
+    ]);
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      { value: scope.cwd, reads: 1 },
+      3,
+    );
+    const expectedResult = {
+      content: [
+        { type: "text", text: "Marketplace agents-mp (project)\n  [installed] alpha  1.0.0" },
+      ],
+      details: {
+        marketplaces: [
+          {
+            name: "agents-mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "installed",
+                name: "alpha",
+                id: "alpha@agents-mp",
+                reasons: ["requires pi-subagents"],
+                version: "1.0.0",
+                scope: "project",
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    // act
+    const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.strictEqual(scope.networkCallCount(), 0);
+    verifyBoundary();
+  });
+
+  for (const { marketplace, title, source, status, line } of installDisabledCases) {
     test(title, async (t) => {
       // arrange
       const scope = await createHermeticScope(t, marketplace);
@@ -1064,21 +1199,30 @@ describe("registerListPluginsTool", () => {
           ],
         },
       ]);
-      const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-        value: scope.cwd,
-        reads: 1,
-      });
+      const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+        registerListPluginsTool,
+        {
+          value: scope.cwd,
+          reads: 1,
+        },
+        3,
+      );
       const expectedResult = {
         content: [{ type: "text", text: `Marketplace ${marketplace} (project)\n${line}` }],
         details: {
-          plugins: [
+          marketplaces: [
             {
-              marketplace,
+              name: marketplace,
               scope: "project",
-              name: "alpha",
-              status: "available",
-              version: "1.0.0",
-              reasons: ["installs disabled"],
+              plugins: [
+                {
+                  status,
+                  name: "alpha",
+                  id: `alpha@${marketplace}`,
+                  reasons: ["installs disabled"],
+                  version: "1.0.0",
+                },
+              ],
             },
           ],
         },
@@ -1118,13 +1262,17 @@ describe("registerListPluginsTool", () => {
         ],
       },
     ]);
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      3,
+    );
     const expectedResult = {
       content: [{ type: "text", text: "Marketplace filtered-mp (project)" }],
-      details: { plugins: [] },
+      details: { marketplaces: [{ name: "filtered-mp", scope: "project", plugins: [] }] },
     };
 
     // act
@@ -1146,13 +1294,17 @@ describe("registerListPluginsTool", () => {
     // arrange
     const scope = await createHermeticScope(t, "no-plugins");
     await seedScope(scope.cwd, "project", [{ name: "bare-mp", plugins: [] }]);
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      3,
+    );
     const expectedResult = {
       content: [{ type: "text", text: "Marketplace bare-mp (project)\n  (no plugins)" }],
-      details: { plugins: [] },
+      details: { marketplaces: [{ name: "bare-mp", scope: "project", plugins: [] }] },
     };
 
     // act
@@ -1173,7 +1325,7 @@ describe("registerListPluginsTool", () => {
     });
     const expectedResult = {
       content: [{ type: "text", text: "No marketplaces configured." }],
-      details: { plugins: [] },
+      details: { marketplaces: [] },
     };
 
     // act
@@ -1198,22 +1350,33 @@ describe("registerListPluginsTool", () => {
         plugins: [{ name: "bravo", manifestVersion: "2.0.0", installed: { version: "2.0.0" } }],
       },
     ]);
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 2,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 2,
+      },
+      3,
+    );
     const expectedResult = {
       content: [
         { type: "text", text: "Marketplace second-mp (project)\n  [installed] bravo  2.0.0" },
       ],
       details: {
-        plugins: [
+        marketplaces: [
           {
-            marketplace: "second-mp",
+            name: "second-mp",
             scope: "project",
-            name: "bravo",
-            status: "installed",
-            version: "2.0.0",
+            plugins: [
+              {
+                status: "installed",
+                name: "bravo",
+                id: "bravo@second-mp",
+                reasons: [],
+                version: "2.0.0",
+                scope: "project",
+              },
+            ],
           },
         ],
       },
@@ -1249,20 +1412,31 @@ describe("registerListPluginsTool", () => {
         plugins: [{ name: "bravo", manifestVersion: "2.0.0", installed: { version: "2.0.0" } }],
       },
     ]);
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      3,
+    );
     const expectedResult = {
       content: [{ type: "text", text: "Marketplace user-mp (user)\n  [installed] bravo  2.0.0" }],
       details: {
-        plugins: [
+        marketplaces: [
           {
-            marketplace: "user-mp",
+            name: "user-mp",
             scope: "user",
-            name: "bravo",
-            status: "installed",
-            version: "2.0.0",
+            plugins: [
+              {
+                status: "installed",
+                name: "bravo",
+                id: "bravo@user-mp",
+                reasons: [],
+                version: "2.0.0",
+                scope: "user",
+              },
+            ],
           },
         ],
       },
@@ -1298,7 +1472,7 @@ describe("registerListPluginsTool", () => {
     });
     const expectedResult = {
       content: [{ type: "text", text: 'Marketplace "proj-mp" not found.' }],
-      details: { plugins: [] },
+      details: { marketplaces: [] },
     };
 
     // act
@@ -1325,7 +1499,7 @@ describe("registerListPluginsTool", () => {
     });
     const expectedResult = {
       content: [{ type: "text", text: 'Marketplace "ghost-mp" not found.' }],
-      details: { plugins: [] },
+      details: { marketplaces: [] },
     };
 
     // act
@@ -1355,20 +1529,31 @@ describe("registerListPluginsTool", () => {
         plugins: [{ name: "alpha", manifestVersion: "1.0.0", installed: { version: "1.0.0" } }],
       },
     ]);
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      3,
+    );
     const expectedResult = {
       content: [{ type: "text", text: "Marketplace shared-mp (user)\n  [installed] alpha  1.0.0" }],
       details: {
-        plugins: [
+        marketplaces: [
           {
-            marketplace: "shared-mp",
-            scope: "project",
-            name: "alpha",
-            status: "installed",
-            version: "1.0.0",
+            name: "shared-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "alpha",
+                id: "alpha@shared-mp",
+                reasons: [],
+                version: "1.0.0",
+                scope: "project",
+              },
+            ],
           },
         ],
       },
@@ -1401,7 +1586,7 @@ describe("registerListPluginsTool", () => {
         },
       ],
       isError: true,
-      details: { plugins: [] },
+      details: { marketplaces: [] },
     };
 
     // act
