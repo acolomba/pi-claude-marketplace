@@ -68,9 +68,9 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 1. **Phase 1 discuss:** which features/mcp review findings to port (IN-03, IN-04, IN-05 and the
    open Stop-canary findings), and where the features/mcp spike directory goes when `4f82096f` is
    re-run.
-2. **Phase 2 discuss:** the closed carry-forward field set (at least `disabled`); whether to keep
-   a sibling `.bak` before the first write to a file we did not create; whether NFR-10
-   containment checks the real path of a symlinked config file.
+2. **Phase 2 discuss (settled):** the closed carry-forward field set (D-02-06); no sibling
+   `.bak` (D-02-05); a symlinked config file keeps write-through, with no real-path
+   containment check (D-02-16).
 3. **Phase 3 discuss:** warn or refuse for a name past the measured length limit.
 4. **Phase 4 discuss:** how user-scope `${CLAUDE_PROJECT_DIR}` is handled, since the adapter
    expands a leftover literal to an empty string.
@@ -138,7 +138,31 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. A server name that another source defines in full (`command`, `url` or `socket`) is reported as a collision, naming the source that wins under adapter 5's nine-source, later-wins precedence. A partial entry, such as a `/mcp-adapter disable` stub, is an override and blocks neither install nor update. This closes MCPSRC-01. (AFILE-05)
 5. A user override written into our entry (for example `disabled: true` from `/mcp-adapter disable`) is still there after `update` and `reinstall`. The carried-forward field set is closed, recorded under a decision ID, and pinned against the adapter's `ServerEntry`. (AFILE-06)
 
-**Plans**: TBD
+**Plans**: 8 plans in 8 waves
+
+**Wave 1**
+- [ ] 02-01-PLAN.md — plugin MCP servers move to `mcp-adapter.json`, read as JSONC, refused when unparseable, `mcp-servers` honored (AFILE-01, AFILE-02, AFILE-03)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 02-02-PLAN.md — nine-source later-wins collision walk, same-plugin exemptions, legacy `mcp.json` sweep (AFILE-05)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 02-03-PLAN.md — user overrides carried through update and reinstall, stubs absorbed (AFILE-06)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 02-04-PLAN.md — comment and unreadable-file notices: seam, catalog, install routing, byte restore on failed install (AFILE-04)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 02-05-PLAN.md — notices on update and reinstall (AFILE-04)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 02-06-PLAN.md — notices on uninstall, prune and marketplace remove (AFILE-04)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 02-07-PLAN.md — notices on enable, disable and the cascade undos (AFILE-04)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 02-08-PLAN.md — notices through the reload, import and marketplace update cascades (AFILE-04)
 
 **Notes.** This is the highest-risk core, and it lands before entry content changes so a failure points at file handling, not at translation. Entries keep today's content shape here; Phases 3 and 4 change it. Extract the JSONC document reader and the entry translator into their own modules up front: `bridges/mcp/stage.ts` already sits near the fallow `maxUnitSize` and cognitive-complexity ceilings. Research flags: the carry-forward field list and the comment-handling details.
 

@@ -105,6 +105,14 @@ Raised by 02-RESEARCH.md open questions; each answered by the operator.
 - **D-02-15:** [informational] Overrides do not survive a plugin disable then enable (D-02-06
   stays update/reinstall only); recorded as a backlog item.
 
+- **D-02-16:** A symlinked `mcp-adapter.json` keeps today's write-through
+  behavior (`write-file-atomic` resolves the link); NFR-10 containment does not
+  check the link target. Accepted threat, as for `mcp.json` today.
+- **D-02-17:** The same plugin's own marked entries never count as a collision
+  in any of the nine sources (widens D-02-12/D-02-13 to the other scope's legacy
+  `mcp.json` and ancestor `.pi/mcp-adapter.json` files), on the same
+  one-effective-server reasoning.
+
 ### Claude's Discretion
 - Module split: extract the JSONC document reader and the entry handling out of
   `bridges/mcp/stage.ts` up front (it sits near fallow's `maxUnitSize` and
