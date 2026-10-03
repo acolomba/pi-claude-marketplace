@@ -303,6 +303,8 @@ async function updatePluginsWith(
         pluginName: t.marketplace,
         err,
       });
+      // AFILE-04: earlier targets already rewrote mcp-adapter.json.
+      surfaceUpdateMcpConfigNotices(ctx, outcomes);
       return;
     }
 
@@ -336,6 +338,8 @@ async function updatePluginsWith(
         pluginName: t.plugin,
         err,
       });
+      // AFILE-04: earlier targets already rewrote mcp-adapter.json.
+      surfaceUpdateMcpConfigNotices(ctx, outcomes);
       return;
     }
 
@@ -414,7 +418,7 @@ function surfaceUpdateDiscoveryWarnings(
  * plugin's own notices follow, because its MCP commit may have rewritten the
  * file before a later bridge or the finalize failed.
  *
- * Unlike `surfaceUpdateDiscoveryWarnings`, this also runs on the abort path,
+ * Unlike `surfaceUpdateDiscoveryWarnings`, this also runs on every abort path,
  * because the rewrite has already happened to the user's file.
  */
 function surfaceUpdateMcpConfigNotices(

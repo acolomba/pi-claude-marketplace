@@ -10912,3 +10912,124 @@ test("AFILE-02: updating a plugin with no MCP servers over an unparseable mcp-ad
     }
   });
 });
+
+/**
+ * AFILE-04: binds update operations whose next locked state load throws once a
+ * save has recorded `hello` at 1.0.1, so the target after `hello` fails before
+ * its swap.
+ */
+function failLoadsAfterHelloUpdate(): UpdatePluginsFn {
+  let helloUpdated = false;
+  return createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+    {
+      loadState: async (extensionRoot) => {
+        if (helloUpdated) {
+          throw new Error("state read failed");
+        }
+
+        return loadState(extensionRoot);
+      },
+      saveState: async (extensionRoot, state) => {
+        await saveState(extensionRoot, state);
+        helloUpdated ||= state.marketplaces["mp"]?.plugins["hello"]?.version === "1.0.1";
+      },
+    },
+  ).updatePlugins;
+}
+
+test("AFILE-04: a bulk update that aborts on a later plugin's failure still reports the comments an earlier update removed", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-afile04-later-throw-");
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: { version: "1.0.1", hasMcp: true },
+          zzz: { version: "1.0.1" },
+        },
+        installedVersions: { hello: "1.0.0", zzz: "1.0.0" },
+      });
+      const locations = locationsFor("project", cwd);
+      await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_TEXT);
+      const updateAll = failLoadsAfterHelloUpdate();
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updateAll({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ zzz (failed) {unreadable manifest}\n" +
+            "    cause: state read failed\n\n" +
+            "Plugin update: 1 failure",
+          severity: "error",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a bulk update that aborts on a later marketplace sync still reports the comments an earlier update removed", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-afile04-later-sync-");
+    try {
+      const { locations } = await seedMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
+      const cloneDir = await locations.sourceCloneDir("zzz");
+      await cp(fixtureMarketplaceDir("valid-marketplace"), cloneDir, { recursive: true });
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["zzz"] = {
+        name: "zzz",
+        scope: "project",
+        source: githubSource("https://github.com/test/repo#main"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: cloneDir,
+        plugins: { hello: makePluginRecord("1.0.0") },
+      };
+      await saveState(locations.extensionRoot, state);
+      const { gitOps } = createGitOps({
+        fetchThrows: new Error("network: connection refused"),
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({ ctx, pi, scope: "project", cwd, target: { kind: "all" }, gitOps });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● zzz [project]\n" +
+            "  ⊘ zzz (failed) {unreadable manifest}\n" +
+            "    cause: network: connection refused\n\n" +
+            "Plugin update: 1 failure",
+          severity: "error",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

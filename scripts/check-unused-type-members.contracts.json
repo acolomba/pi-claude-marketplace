@@ -618,20 +618,20 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:1421:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:892:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:896:42",
       "owner": "enumerateMarketplaceTarget.target",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:892:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:896:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:973:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:977:42",
       "owner": "resolveUpdateMarketplaceScope.target",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:973:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:977:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:185:56",
