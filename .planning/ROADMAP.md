@@ -138,7 +138,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. A server name that another source defines in full (`command`, `url` or `socket`) is reported as a collision, naming the source that wins under adapter 5's nine-source, later-wins precedence. A partial entry, such as a `/mcp-adapter disable` stub, is an override and blocks neither install nor update. This closes MCPSRC-01. (AFILE-05)
 5. A user override written into our entry (for example `disabled: true` from `/mcp-adapter disable`) is still there after `update` and `reinstall`. The carried-forward field set is closed, recorded under a decision ID, and pinned against the adapter's `ServerEntry`. (AFILE-06)
 
-**Plans**: 3/8 plans executed in 8 waves
+**Plans**: 4/8 plans executed in 8 waves
 
 **Wave 1**
 - [x] 02-01-PLAN.md — plugin MCP servers move to `mcp-adapter.json`, read as JSONC, refused when unparseable, `mcp-servers` honored (AFILE-01, AFILE-02, AFILE-03)
@@ -150,7 +150,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 - [x] 02-03-PLAN.md — user overrides carried through update and reinstall, stubs absorbed (AFILE-06)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 02-04-PLAN.md — comment and unreadable-file notices: seam, catalog, install routing, byte restore on failed install (AFILE-04)
+- [x] 02-04-PLAN.md — comment and unreadable-file notices: seam, catalog, install routing, byte restore on failed install (AFILE-04)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 02-05-PLAN.md — notices on update and reinstall (AFILE-04)
@@ -281,7 +281,7 @@ plan these phases with the UI gate skipped.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 9/9 | Complete    | 2026-10-02 |
-| 2. Adapter-file delivery | mcp-4 | 3/8 | In Progress|  |
+| 2. Adapter-file delivery | mcp-4 | 4/8 | In Progress|  |
 | 3. Claude Code tool names and tool search | mcp-4 | 0/TBD | Not started | - |
 | 4. Variable expansion at Claude Code parity | mcp-4 | 0/TBD | Not started | - |
 | 5. Automatic migration on /reload | mcp-4 | 0/TBD | Not started | - |

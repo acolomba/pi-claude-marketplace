@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 02
 current_phase_name: Adapter-file delivery
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-10-03T14:00:28.410Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-10-03T15:42:08.034Z"
 last_activity: 2026-10-03
-last_activity_desc: Plan 02-03 complete (user MCP overrides carried through update and reinstall)
-state_head: ffe9ad562ed76336f810a15d78584490c6a96f3c
+last_activity_desc: Plan 02-04 complete (MCP config notices and byte restore for install)
+state_head: 30591f7ee4a8cb6cfc5e46532f98d3b03db4b60d
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 12
+  completed_plans: 13
   percent: 14
 ---
 
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 02 (Adapter-file delivery) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
-Last activity: 2026-10-03 — Plan 02-03 complete (user MCP overrides carried through update and reinstall)
+Last activity: 2026-10-03 — Plan 02-04 complete (MCP config notices and byte restore for install)
 
 Progress: [█░░░░░░░░░] 14%
 
@@ -262,6 +262,7 @@ still open with a comment explaining what landed.
 | Phase 02 P01 | 45min | 3 tasks | 34 files |
 | Phase 02 P02 | 27min | 3 tasks | 18 files |
 | Phase 02 P03 | 67min | 2 tasks | 10 files |
+| Phase 02 P04 | about 100 min | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -585,6 +586,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: Unstage reads both mcp-adapter.json and the legacy mcp.json before writing either; adapter file written first
 - [Phase 02]: AFILE-06 carry-forward input is { ...ours, ...overlays }: a marker-less stub under the selected key wins over the plugin's previous marked entry
 - [Phase 02]: Entry content (substitution, carry-forward, marker) lives in bridges/mcp/adapter-entry.ts; the carried set is module-private and pinned by a vendored 34-key ServerEntry list tied to the >=5.0.0 floor
+- [Phase 02]: Install outcomes carry mcpConfigNotices in both modes (omitted when empty); only the standalone path sends them
+- [Phase 02]: A failed install restores the exact prior bytes of mcp-adapter.json through the replacement handle; a restore that cannot write is the mcp rollback partial
+- [Phase 02]: InstallMissingDependencyOutcome.mcpConfigNotices is excepted in the unused-type-member gate until reconcile reads it (plan 02-08 drops the row)
 
 ### Pending Todos
 
@@ -729,11 +733,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 02-03-PLAN.md
+**Stopped at:** Completed 02-04-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-03T14:00:28.303Z
+Last session: 2026-10-03T15:42:07.910Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
