@@ -10,6 +10,7 @@ import {
   readFile,
   readdir,
   readlink,
+  rename,
   rm,
 } from "node:fs/promises";
 import path from "node:path";
@@ -160,6 +161,35 @@ async function assertRestorableFileBackup(
   return entry;
 }
 
+/**
+ * Copies a file backup into the staging directory and links it to an absent
+ * target. `link` never replaces an entry, so a writer that creates the target
+ * first wins and the restore refuses as occupied.
+ */
+async function publishBackupCopy(
+  backup: string,
+  mode: number,
+  stagingRoot: string,
+  target: string,
+  ops: PruneRestoreOps,
+  occupied: string,
+): Promise<void> {
+  const staged = path.join(stagingRoot, "entry");
+  try {
+    await copyFile(backup, staged, constants.COPYFILE_EXCL);
+    await chmod(staged, mode & 0o7777);
+    await (ops.link ?? link)(staged, target);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new Error(`Prune rollback found an occupied ${occupied} at ${target}.`, {
+        cause: error,
+      });
+    }
+
+    throw error;
+  }
+}
+
 async function restoreArtifact(saved: SavedPath, ops: PruneRestoreOps): Promise<void> {
   if (saved.backup === undefined) {
     return;
@@ -179,28 +209,23 @@ async function restoreArtifact(saved: SavedPath, ops: PruneRestoreOps): Promise<
   const entry = await assertRestorableFileBackup(saved.backup, saved.target, ops);
   await mkdir(path.dirname(saved.target), { recursive: true });
   const stagingRoot = await mkdtemp(path.join(path.dirname(saved.target), ".prune-restore-"));
-  const staged = path.join(stagingRoot, "entry");
   try {
-    await copyFile(saved.backup, staged, constants.COPYFILE_EXCL);
-    await chmod(staged, entry.mode & 0o7777);
-    await (ops.link ?? link)(staged, saved.target);
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-      throw new Error(`Prune rollback found an occupied artifact at ${saved.target}.`, {
-        cause: error,
-      });
-    }
-
-    throw error;
+    await publishBackupCopy(saved.backup, entry.mode, stagingRoot, saved.target, ops, "artifact");
   } finally {
     await rm(stagingRoot, { recursive: true, force: true });
   }
 }
 
+/** The live metadata file holds exactly the bytes this prune wrote there. */
+interface OwnWriteVerdict {
+  readonly kind: "own-write";
+  readonly backup: string;
+  readonly mode: number;
+  readonly ownWrite: Buffer;
+}
+
 /** What the live metadata file holds relative to its backup. */
-type MetadataVerdict =
-  | { readonly kind: "matches-backup" | "occupied" }
-  | { readonly kind: "own-write"; readonly original: Buffer };
+type MetadataVerdict = { readonly kind: "matches-backup" | "occupied" } | OwnWriteVerdict;
 
 async function metadataVerdict(
   saved: SavedPath,
@@ -233,7 +258,56 @@ async function metadataVerdict(
   // D-02-19: live bytes equal to this prune's own last write mean no other
   // writer changed the file after the unstage rewrote it. Any other content
   // is another writer's change.
-  return ownWrite?.equals(live) === true ? { kind: "own-write", original } : { kind: "occupied" };
+  if (ownWrite?.equals(live) !== true) {
+    return { kind: "occupied" };
+  }
+
+  return { kind: "own-write", backup: saved.backup, mode: backupStat.mode, ownWrite };
+}
+
+async function holdsBytes(file: string, bytes: Buffer): Promise<boolean> {
+  return (await lstat(file)).isFile() && (await readFile(file)).equals(bytes);
+}
+
+/**
+ * D-02-19: restores the backup over the prune's own write. The live file is
+ * renamed aside first, so the comparison reads the bytes it removed and a
+ * write that lands after the verdict survives. Content that is not the
+ * prune's own write is linked back, and the restore refuses.
+ */
+async function restoreOverOwnWrite(
+  target: string,
+  verdict: OwnWriteVerdict,
+  ops: PruneRestoreOps,
+): Promise<void> {
+  const stagingRoot = await mkdtemp(path.join(path.dirname(target), ".prune-restore-"));
+  const aside = path.join(stagingRoot, "aside");
+  let keepStaging = false;
+  try {
+    await rename(target, aside);
+    // The staging directory holds the only copy of the moved file until it
+    // is linked back or the backup takes its place, so a failure keeps it.
+    keepStaging = true;
+    if (!(await holdsBytes(aside, verdict.ownWrite))) {
+      await (ops.link ?? link)(aside, target);
+      keepStaging = false;
+      throw new Error(`Prune rollback found an occupied metadata path at ${target}.`);
+    }
+
+    await publishBackupCopy(
+      verdict.backup,
+      verdict.mode,
+      stagingRoot,
+      target,
+      ops,
+      "metadata path",
+    );
+    keepStaging = false;
+  } finally {
+    if (!keepStaging) {
+      await rm(stagingRoot, { recursive: true, force: true });
+    }
+  }
 }
 
 async function restoreMetadata(
@@ -248,7 +322,7 @@ async function restoreMetadata(
   }
 
   if (verdict.kind === "own-write") {
-    await writeFileAtomic(saved.target, verdict.original);
+    await restoreOverOwnWrite(saved.target, verdict, ops);
     return;
   }
 

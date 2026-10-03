@@ -1228,6 +1228,112 @@ test("D-02-19: the last recorded write to a path is the one the rollback compare
   });
 });
 
+test("D-02-19: an adapter edit after the rollback reads the recorded unstage write stays current with its backup", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-read-race-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('// user note\n{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const independent = Buffer.from('{\n  "mcpServers": { "independent": 2 }\n}\n');
+    let injected = false;
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      afterMetadataRead: async (target: string): Promise<void> => {
+        if (target === locations.mcpAdapterJsonPath && !injected) {
+          injected = true;
+          await writeFile(target, independent);
+        }
+      },
+    });
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.equal(injected, true);
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [
+        {
+          phase: "mcp adapter",
+          message: `Prune rollback found an occupied metadata path at ${locations.mcpAdapterJsonPath}.`,
+        },
+      ],
+    );
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), independent);
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      original,
+    );
+    assert.deepStrictEqual(
+      (await readdir(path.dirname(locations.mcpAdapterJsonPath))).filter((name) =>
+        name.startsWith(".prune-restore-"),
+      ),
+      [],
+    );
+  });
+});
+
+test("D-02-19: an edit that cannot be linked back stays in the restore staging directory", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-put-back-race-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const independent = Buffer.from('{\n  "mcpServers": { "independent": 2 }\n}\n');
+    const later = Buffer.from('{\n  "mcpServers": { "later": 3 }\n}\n');
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      afterMetadataRead: async (target: string): Promise<void> => {
+        if (target === locations.mcpAdapterJsonPath) {
+          await writeFile(target, independent);
+        }
+      },
+      link: async (from, to) => {
+        if (to === locations.mcpAdapterJsonPath) {
+          await writeFile(to, later, { flag: "wx" });
+        }
+
+        await link(from, to);
+      },
+    });
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    const configDirectory = path.dirname(locations.mcpAdapterJsonPath);
+    const staging = (await readdir(configDirectory)).filter((name) =>
+      name.startsWith(".prune-restore-"),
+    );
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({
+        phase,
+        code: (cause as NodeJS.ErrnoException).code,
+      })),
+      [{ phase: "mcp adapter", code: "EEXIST" }],
+    );
+    assert.deepStrictEqual(
+      {
+        live: await readFile(locations.mcpAdapterJsonPath),
+        staged: await Promise.all(
+          staging.map((name) => readFile(path.join(configDirectory, name, "aside"))),
+        ),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      },
+      { live: later, staged: [independent], backup: original },
+    );
+  });
+});
+
 test("state restore refusal keeps the backup and reports state failure", async () => {
   await withHermeticEnvironment("prune-rollback-state-refusal-", async ({ cwd }) => {
     // arrange
