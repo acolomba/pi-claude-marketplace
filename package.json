@@ -39,7 +39,8 @@
     "CHANGELOG.md",
     "LICENSE",
     "README.md",
-    "extensions/pi-claude-marketplace/**"
+    "extensions/pi-claude-marketplace/**",
+    "schema/claude-plugin.schema.json"
   ],
   "homepage": "https://github.com/acolomba/pi-claude-marketplace#readme",
   "keywords": [
@@ -89,6 +90,7 @@
     "lint:type-members:negative": "node scripts/check-unused-type-members.negative.mjs",
     "lint:workflows": "node scripts/check-workflow-install-scripts.mjs",
     "lint:workflows:negative": "node scripts/check-workflow-install-scripts.negative.mjs",
+    "schema:generate": "node scripts/generate-wire-schema.mjs",
     "test": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,scripts,shared,transaction}/**/*.test.ts\" \"tests/index.test.ts\"",
     "test:analyzers": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/scripts/**/*.test.ts\"",
     "test:architecture": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/architecture/**/*.test.ts\"",

@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "claude-plugin session-entry notification payload",
+  "description": "One union of notification payloads, discriminated by kind and versioned by the integer schemaVersion.",
+  "anyOf": [
+    {
+      "type": "object",
+      "required": ["schemaVersion", "severity", "needsReload", "kind", "marketplaces"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "kind": { "type": "string", "const": "cascade" },
+        "tally": {
+          "type": "object",
+          "required": ["label", "failures", "warnings"],
+          "properties": {
+            "label": { "type": "string" },
+            "failures": { "type": "integer", "minimum": 0 },
+            "warnings": { "type": "integer", "minimum": 0 },
+            "success": {
+              "type": "object",
+              "required": ["count"],
+              "properties": {
+                "count": { "type": "integer", "minimum": 0 },
+                "verb": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "noOp": { "type": "boolean", "const": true },
+        "marketplaces": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "scope", "plugins"],
+            "properties": {
+              "name": { "type": "string" },
+              "scope": { "enum": ["user", "project"] },
+              "plugins": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["status", "name", "id", "reasons"],
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "installed",
+                        "updated",
+                        "reinstalled",
+                        "uninstalled",
+                        "available",
+                        "unavailable",
+                        "upgradable",
+                        "failed",
+                        "skipped",
+                        "manual recovery",
+                        "will install",
+                        "will uninstall",
+                        "will enable",
+                        "will disable",
+                        "disabled",
+                        "partially-installed",
+                        "partially-upgradable",
+                        "partially-available",
+                        "remote"
+                      ]
+                    },
+                    "name": { "type": "string" },
+                    "id": { "type": "string" },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "up-to-date",
+                          "not found",
+                          "already installed",
+                          "not installed",
+                          "not in manifest",
+                          "invalid manifest",
+                          "no longer installable",
+                          "unsupported source",
+                          "unsupported component",
+                          "unsupported hooks",
+                          "lsp",
+                          "requires pi-subagents",
+                          "requires pi-mcp",
+                          "rollback partial",
+                          "unreadable",
+                          "unparseable",
+                          "unreadable manifest",
+                          "source mismatch",
+                          "plugins remain",
+                          "concurrently uninstalled",
+                          "concurrently updated",
+                          "stale clone",
+                          "duplicate name",
+                          "lock held",
+                          "already autoupdate",
+                          "already no autoupdate",
+                          "already enabled",
+                          "already disabled",
+                          "permission denied",
+                          "source missing",
+                          "network unreachable",
+                          "marketplace not added",
+                          "marketplace not added to user scope",
+                          "marketplace not added to project scope",
+                          "orphan rewake",
+                          "authentication required",
+                          "dangling reference",
+                          "malformed mcp",
+                          "malformed skill",
+                          "malformed command",
+                          "installs disabled",
+                          "marketplace in user scope",
+                          "marketplace in project scope",
+                          "data kept",
+                          "no matching version",
+                          "version conflict",
+                          "constraint too complex",
+                          "invalid version constraint",
+                          "dependency marketplace not added",
+                          "dependency cycle",
+                          "dependency failed",
+                          "dependency promoted",
+                          "dependency pruned",
+                          "dependency unsatisfied",
+                          "dependency version unsatisfied",
+                          "dependents unsatisfied",
+                          "dependency current copy",
+                          "dependency enabled",
+                          "dependents remain",
+                          "dependency installed",
+                          "dependents constrain",
+                          "cross-marketplace",
+                          "stale workflow command",
+                          "requires pi-dynamic-workflows",
+                          "components now supported"
+                        ]
+                      }
+                    },
+                    "version": { "type": "string" },
+                    "from": { "type": "string" },
+                    "to": { "type": "string" },
+                    "scope": { "enum": ["user", "project"] },
+                    "description": { "type": "string" },
+                    "partial": { "type": "boolean" },
+                    "hint": {
+                      "enum": ["partial-install", "partial-update", "stale-gate-update", "enable"]
+                    },
+                    "cause": {
+                      "type": "object",
+                      "required": ["causeChain", "truncated"],
+                      "properties": {
+                        "causeChain": { "type": "array", "items": { "type": "string" } },
+                        "truncated": { "type": "boolean" }
+                      },
+                      "additionalProperties": false
+                    },
+                    "leaks": { "type": "array", "items": { "type": "string" } },
+                    "rollbackPartial": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["phase"],
+                        "properties": {
+                          "phase": { "type": "string" },
+                          "cause": {
+                            "type": "object",
+                            "required": ["causeChain", "truncated"],
+                            "properties": {
+                              "causeChain": { "type": "array", "items": { "type": "string" } },
+                              "truncated": { "type": "boolean" }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "status": {
+                "enum": [
+                  "added",
+                  "removed",
+                  "updated",
+                  "failed",
+                  "autoupdate enabled",
+                  "autoupdate disabled",
+                  "skipped"
+                ]
+              },
+              "details": {
+                "type": "object",
+                "required": ["autoupdate"],
+                "properties": {
+                  "autoupdate": { "type": "boolean" },
+                  "lastUpdatedAt": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "up-to-date",
+                    "not found",
+                    "already installed",
+                    "not installed",
+                    "not in manifest",
+                    "invalid manifest",
+                    "no longer installable",
+                    "unsupported source",
+                    "unsupported component",
+                    "unsupported hooks",
+                    "lsp",
+                    "requires pi-subagents",
+                    "requires pi-mcp",
+                    "rollback partial",
+                    "unreadable",
+                    "unparseable",
+                    "unreadable manifest",
+                    "source mismatch",
+                    "plugins remain",
+                    "concurrently uninstalled",
+                    "concurrently updated",
+                    "stale clone",
+                    "duplicate name",
+                    "lock held",
+                    "already autoupdate",
+                    "already no autoupdate",
+                    "already enabled",
+                    "already disabled",
+                    "permission denied",
+                    "source missing",
+                    "network unreachable",
+                    "marketplace not added",
+                    "marketplace not added to user scope",
+                    "marketplace not added to project scope",
+                    "orphan rewake",
+                    "authentication required",
+                    "dangling reference",
+                    "malformed mcp",
+                    "malformed skill",
+                    "malformed command",
+                    "installs disabled",
+                    "marketplace in user scope",
+                    "marketplace in project scope",
+                    "data kept",
+                    "no matching version",
+                    "version conflict",
+                    "constraint too complex",
+                    "invalid version constraint",
+                    "dependency marketplace not added",
+                    "dependency cycle",
+                    "dependency failed",
+                    "dependency promoted",
+                    "dependency pruned",
+                    "dependency unsatisfied",
+                    "dependency version unsatisfied",
+                    "dependents unsatisfied",
+                    "dependency current copy",
+                    "dependency enabled",
+                    "dependents remain",
+                    "dependency installed",
+                    "dependents constrain",
+                    "cross-marketplace",
+                    "stale workflow command",
+                    "requires pi-dynamic-workflows",
+                    "components now supported"
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "advisories": { "type": "array", "items": { "type": "string" } },
+        "retainedWorkflows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "envelopeCount": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}
