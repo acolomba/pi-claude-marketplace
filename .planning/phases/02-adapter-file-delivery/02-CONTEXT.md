@@ -113,6 +113,19 @@ Raised by 02-RESEARCH.md open questions; each answered by the operator.
   `mcp.json` and ancestor `.pi/mcp-adapter.json` files), on the same
   one-effective-server reasoning.
 
+### Post-review decisions (operator, 2026-10-03)
+Raised by 02-REVIEW.md findings WR-04 and WR-06.
+
+- **D-02-18:** D-02-11's byte restore covers a single-plugin install only. A
+  multi-member install or enable cascade that fails partway keeps the
+  marker-keyed unstage of its earlier members; the comments-dropped notice
+  already tells the user when that rewrite removed comments. (Resolves WR-06.)
+- **D-02-19:** A rolled-back prune restores `mcp-adapter.json` from its backup
+  only when the file still holds exactly the bytes the prune's own unstage
+  wrote: the unstage returns those bytes, they travel up through
+  `UnstageOutcome`, and rollback compares against them. Any other content
+  keeps today's "occupied metadata path" refusal and backup. (Resolves WR-04.)
+
 ### Claude's Discretion
 - Module split: extract the JSONC document reader and the entry handling out of
   `bridges/mcp/stage.ts` up front (it sits near fallow's `maxUnitSize` and
