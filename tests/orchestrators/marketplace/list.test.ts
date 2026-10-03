@@ -12,7 +12,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   listMarketplaces,
-  loadMarketplaceListBlocks,
+  loadMarketplaceListEntries,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -544,7 +544,7 @@ test("unsupported state schema rejects exactly without notifying or mutating the
   });
 });
 
-describe("loadMarketplaceListBlocks", () => {
+describe("loadMarketplaceListEntries", () => {
   test("returns one block per record in project-then-user insertion order", async () => {
     await withHermeticHome(async ({ cwd }) => {
       // arrange
@@ -555,7 +555,7 @@ describe("loadMarketplaceListBlocks", () => {
       await seedMarketplaces(locationsFor("user", cwd), [pathRecord(cwd, "user-a", "user")]);
 
       // act
-      const blocks = await loadMarketplaceListBlocks({ cwd });
+      const blocks = (await loadMarketplaceListEntries({ cwd })).map((entry) => entry.block);
 
       // assert
       assert.deepStrictEqual(blocks, [
@@ -566,6 +566,30 @@ describe("loadMarketplaceListBlocks", () => {
     });
   });
 
+  test("pairs each block with the scope and state record it was built from", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seedMarketplaces(locationsFor("project", cwd), [pathRecord(cwd, "proj-a", "project")]);
+      await seedMarketplaces(locationsFor("user", cwd), [pathRecord(cwd, "user-a", "user")]);
+
+      // act
+      const entries = await loadMarketplaceListEntries({ cwd });
+
+      // assert
+      assert.deepStrictEqual(
+        entries.map(({ scope, record, block }) => ({
+          scope,
+          record: record.name,
+          block: block.name,
+        })),
+        [
+          { scope: "project", record: "proj-a", block: "proj-a" },
+          { scope: "user", record: "user-a", block: "user-a" },
+        ],
+      );
+    });
+  });
+
   test("returns only the requested scope's blocks", async () => {
     await withHermeticHome(async ({ cwd }) => {
       // arrange
@@ -573,7 +597,9 @@ describe("loadMarketplaceListBlocks", () => {
       await seedMarketplaces(locationsFor("user", cwd), [pathRecord(cwd, "user-a", "user")]);
 
       // act
-      const blocks = await loadMarketplaceListBlocks({ cwd, scope: "user" });
+      const blocks = (await loadMarketplaceListEntries({ cwd, scope: "user" })).map(
+        (entry) => entry.block,
+      );
 
       // assert
       assert.deepStrictEqual(blocks, [
@@ -590,7 +616,9 @@ describe("loadMarketplaceListBlocks", () => {
       await seedAutoupdate(locations, locations.configJsonPath, "auto", "./auto", true);
 
       // act
-      const blocks = await loadMarketplaceListBlocks({ cwd, scope: "project" });
+      const blocks = (await loadMarketplaceListEntries({ cwd, scope: "project" })).map(
+        (entry) => entry.block,
+      );
 
       // assert
       assert.deepStrictEqual(blocks, [
@@ -615,7 +643,9 @@ describe("loadMarketplaceListBlocks", () => {
       await seedAutoupdate(locations, locations.configJsonPath, "dated", "./dated", false);
 
       // act
-      const blocks = await loadMarketplaceListBlocks({ cwd, scope: "project" });
+      const blocks = (await loadMarketplaceListEntries({ cwd, scope: "project" })).map(
+        (entry) => entry.block,
+      );
 
       // assert
       assert.deepStrictEqual(blocks, [
@@ -638,7 +668,9 @@ describe("loadMarketplaceListBlocks", () => {
       await seedAutoupdate(locations, locations.configJsonPath, "plain", "./plain", false);
 
       // act
-      const blocks = await loadMarketplaceListBlocks({ cwd, scope: "project" });
+      const blocks = (await loadMarketplaceListEntries({ cwd, scope: "project" })).map(
+        (entry) => entry.block,
+      );
 
       // assert
       assert.deepStrictEqual(blocks, [

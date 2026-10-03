@@ -28,6 +28,7 @@ import { notifyWithContext, type MarketplaceRows } from "../../shared/notify-con
 
 import { MARKETPLACE_LIST_CONTEXT } from "./list.messaging.ts";
 
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -47,24 +48,37 @@ export interface ListMarketplacesOptions {
 }
 
 /**
- * ML-1..4: the marketplace-list blocks, one per state record, for each scope in
- * project-then-user order (or the one requested scope). NFR-5: reads state and
- * the merged config only, never the network. LLMT-01: the marketplace LLM tool
- * converts these same blocks, so its details match what the command emits.
+ * One state record, the scope that holds it, and the marketplace-list block
+ * built from it. LLMT-01: the marketplace LLM tool derives its content lines
+ * and its details from the same entries, so the two always name the same
+ * marketplaces.
  */
-export async function loadMarketplaceListBlocks(
+export interface MarketplaceListEntry {
+  readonly scope: Scope;
+  readonly record: ExtensionState["marketplaces"][string];
+  readonly block: MarketplaceRows<never>;
+}
+
+/**
+ * ML-1..4: the marketplace-list entries, one per state record, for each scope
+ * in project-then-user order (or the one requested scope). NFR-5: reads state
+ * and the merged config only, never the network. LLMT-01: the marketplace LLM
+ * tool converts these same blocks, so its details match what the command
+ * emits.
+ */
+export async function loadMarketplaceListEntries(
   opts: Pick<ListMarketplacesOptions, "cwd" | "scope">,
-): Promise<readonly MarketplaceRows<never>[]> {
+): Promise<readonly MarketplaceListEntry[]> {
   // SC-6: bare form enumerates both scopes; explicit --scope narrows.
   // Iteration order is project-first per MSG-GR-3 so same-name cross-scope
   // pairs render project-before-user.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
-  // WR-01: list rows carry no plugin child rows, so type the accumulator at the
-  // narrow `MarketplaceRows<never>` (plugins: readonly never[]). Every push is
+  // WR-01: list rows carry no plugin child rows, so each block is typed at the
+  // narrow `MarketplaceRows<never>` (plugins: readonly never[]). Every block is
   // then checked against the empty-plugins invariant MARKETPLACE_LIST_CONTEXT requires, and
-  // the array widens to `notifyWithContext` with no cast.
-  const marketplaces: MarketplaceRows<never>[] = [];
+  // the blocks widen to `notifyWithContext` with no cast.
+  const entries: MarketplaceListEntry[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);
     const state = await loadState(locations.extensionRoot);
@@ -89,30 +103,34 @@ export async function loadMarketplaceListBlocks(
       // - Reference: catalog UAT `mixed-scopes` fixture (binding
       //   `<autoupdate>` + `<last-updated <iso>>` tokens).
       const autoupdate = merged.marketplaces[record.name]?.entry.autoupdate ?? false;
-      marketplaces.push({
-        name: record.name,
-        scope: record.scope,
-        severity: "info",
-        ...(autoupdate || record.lastUpdatedAt !== undefined
-          ? {
-              details: {
-                autoupdate,
-                ...(record.lastUpdatedAt !== undefined && {
-                  lastUpdatedAt: record.lastUpdatedAt,
-                }),
-              },
-            }
-          : {}),
-        plugins: [],
+      entries.push({
+        scope,
+        record,
+        block: {
+          name: record.name,
+          scope: record.scope,
+          severity: "info",
+          ...(autoupdate || record.lastUpdatedAt !== undefined
+            ? {
+                details: {
+                  autoupdate,
+                  ...(record.lastUpdatedAt !== undefined && {
+                    lastUpdatedAt: record.lastUpdatedAt,
+                  }),
+                },
+              }
+            : {}),
+          plugins: [],
+        },
       });
     }
   }
 
-  return marketplaces;
+  return entries;
 }
 
 export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<void> {
-  const marketplaces = await loadMarketplaceListBlocks(opts);
+  const marketplaces = (await loadMarketplaceListEntries(opts)).map((entry) => entry.block);
 
   // An empty top-level marketplaces array renders `(no marketplaces)`.
   // Caller-supplied order is honored end-to-end; the outer loop above already

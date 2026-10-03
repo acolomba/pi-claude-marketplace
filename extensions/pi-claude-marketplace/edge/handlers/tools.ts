@@ -37,7 +37,7 @@ import Type from "typebox";
 
 import { sourceLogical } from "../../domain/source.ts";
 import { MARKETPLACE_LIST_CONTEXT } from "../../orchestrators/marketplace/list.messaging.ts";
-import { loadMarketplaceListBlocks } from "../../orchestrators/marketplace/list.ts";
+import { loadMarketplaceListEntries } from "../../orchestrators/marketplace/list.ts";
 import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../orchestrators/plugin/list-flow.ts";
 import { LIST_CONTEXT as PLUGIN_LIST_CONTEXT } from "../../orchestrators/plugin/list.messaging.ts";
@@ -88,14 +88,15 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
       "Use pi_claude_marketplace_list to inspect configured Claude plugin marketplaces.",
     parameters: LIST_MARKETPLACES_PARAMS,
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-      // BLOCK C boundary: loadVisibleMarketplaces is the
-      // orchestrators/marketplace/shared.ts helper.
-      // Returns {scope, record}[] across the requested scope set (both
-      // here -- no scope filter on this tool).
+      // BLOCK C boundary: loadMarketplaceListEntries is the
+      // orchestrators/marketplace/list.ts loader. One read returns each
+      // record with its scope and its list block across both scopes (no
+      // scope filter on this tool), so the content lines and the details
+      // below come from the same state (LLMT-01).
       const { cwd } = ctx;
-      const visible = await loadVisibleMarketplaces({ cwd });
+      const entries = await loadMarketplaceListEntries({ cwd });
 
-      if (visible.length === 0) {
+      if (entries.length === 0) {
         return {
           content: [{ type: "text", text: "No marketplaces configured." }],
           details: { marketplaces: [] },
@@ -103,7 +104,7 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
       }
 
       const lines: string[] = [];
-      for (const { scope, record } of visible) {
+      for (const { scope, record } of entries) {
         const source = record.source as ParsedSource;
         const pluginCount = Object.keys(record.plugins).length;
         const logical = sourceLogical(source);
@@ -118,7 +119,7 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
       // `/claude:plugin marketplace list` emits, under its row policies.
       const run = openNotificationRun(pi);
       const listMessage: CascadeNotificationMessage = {
-        marketplaces: await loadMarketplaceListBlocks({ cwd }),
+        marketplaces: entries.map((entry) => entry.block),
         label: MARKETPLACE_LIST_CONTEXT.Messaging.label,
         cardinality: "plural",
       };
