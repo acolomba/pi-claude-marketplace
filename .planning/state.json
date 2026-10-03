@@ -6,7 +6,7 @@
     {
       "number": "1",
       "name": "Pi 1.0 floor and adapter-only detection",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "2",
@@ -41,8 +41,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 01 of 7 · 0% · ready to verify"
+    "label": "Advance to the next step (plan phase 2)",
+    "reason": "Phase 2 of 7 — needs a plan"
   },
-  "updated_at": "2026-10-02T23:05:41.916Z"
+  "updated_at": "2026-10-03T01:13:07.679Z"
 }

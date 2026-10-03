@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 01
-current_phase_name: Pi 1.0 floor and adapter-only detection
-status: verifying
-stopped_at: Completed 01-09-PLAN.md
-last_updated: "2026-10-02T23:05:44.003Z"
+current_phase: 2
+current_phase_name: Adapter-file delivery
+status: planning
+stopped_at: Phase 01 complete, ready to plan Phase 2
+last_updated: "2026-10-03T01:13:07.626Z"
 last_activity: 2026-10-02
-last_activity_desc: Completed 01-09 (live canaries on Pi 1.0)
-state_head: 374bf698681173784723065a2c530089c64ffa90
+last_activity_desc: Phase 01 complete, transitioned to Phase 2
+state_head: 3d519dbfeca3f82cc4b5b30d412c0dcb7da35a9b
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 9
   completed_plans: 9
-  percent: 0
+  percent: 14
 ---
 
 # Project State
@@ -34,12 +34,12 @@ sign-ins and approvals.
 
 ## Current Position
 
-Phase: 01 (Pi 1.0 floor and adapter-only detection) — EXECUTING
-Plan: 9 of 9
-Status: Phase complete — ready for verification
-Last activity: 2026-10-02 — Completed 01-09 (live canaries on Pi 1.0)
+Phase: 2 — Adapter-file delivery
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-02 — Phase 01 complete, transitioned to Phase 2
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 14%
 
 ### workflows-replay closeout (merged from main)
 
@@ -72,7 +72,7 @@ still open with a comment explaining what landed.
 
 **Velocity:**
 
-- Total plans completed: 206
+- Total plans completed: 211
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -86,7 +86,7 @@ still open with a comment explaining what landed.
 | 111. Non-Hook Component Bridges |    31 | -               | -                 |
 | 112. Hook Runtime               |    31 | 7h 58m          | 15.4 min          |
 | 113. Orchestrator Support       |    35 | 7h 46m recorded | 16.6 min recorded |
-| 1 | 4 | - | - |
+| 01 | 9 | - | - |
 | 02 | 2 | - | - |
 | 3 | 7 | - | - |
 | 04 | 6 | - | - |
@@ -719,7 +719,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-09-PLAN.md
+**Stopped at:** Phase 01 complete, ready to plan Phase 2
 
 **Resume file:** None
 
