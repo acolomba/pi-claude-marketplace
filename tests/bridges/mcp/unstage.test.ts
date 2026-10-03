@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
 import { unstageMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/unstage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import {
+  McpConfigFileError,
+  McpUnstagePartialError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
 async function createScope(
   t: TestContext,
@@ -16,6 +19,35 @@ async function createScope(
   t.after(() => rm(cwd, { recursive: true, force: true, maxRetries: 3 }));
 
   return { cwd, locations: locationsFor("project", cwd) };
+}
+
+/**
+ * Points `filePath` at a readable file inside a directory the test makes
+ * read-only, so the file reads normally and an atomic write to it fails.
+ * Returns the directory, which the case unlocks after acting.
+ */
+async function lockedLink(
+  t: TestContext,
+  cwd: string,
+  filePath: string,
+  bytes: string,
+): Promise<string> {
+  const lockedDirectory = path.join(cwd, "locked");
+  const target = path.join(lockedDirectory, path.basename(filePath));
+  await mkdir(lockedDirectory, { recursive: true });
+  await writeFile(target, bytes, "utf8");
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await symlink(target, filePath);
+  t.after(async () => {
+    await chmod(lockedDirectory, 0o700).catch(() => undefined);
+  });
+  await chmod(lockedDirectory, 0o555);
+  return lockedDirectory;
+}
+
+function errnoFields(error: unknown): Record<string, unknown> {
+  const filesystemError = error as NodeJS.ErrnoException;
+  return { code: filesystemError.code, syscall: filesystemError.syscall };
 }
 
 test("removes every exact owner and preserves the complete foreign document", async (t) => {
@@ -823,4 +855,78 @@ test("AFILE-04: reports nothing for a commented file with no owned entry", async
   // assert
   assert.deepStrictEqual(unstage, { removedNames: [], warnings: [], notices: [] });
   assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), storedBytes);
+});
+
+test("AFILE-04: a failed legacy write after the adapter rewrite reports the adapter file's names and notice", async (t) => {
+  // arrange
+  const { cwd, locations } = await createScope(t, "mcp-unstage-legacy-write-failure-");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '// adapter\n{"mcpServers":{"first":{"command":"first","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+    "utf8",
+  );
+  const lockedDirectory = await lockedLink(
+    t,
+    cwd,
+    locations.mcpJsonPath,
+    '{"mcpServers":{"legacy":{"command":"legacy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+  );
+
+  // act
+  const failure = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await chmod(lockedDirectory, 0o700);
+  const adapterBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+  // assert
+  assert.ok(failure instanceof McpUnstagePartialError);
+  assert.deepStrictEqual(
+    {
+      removedNames: failure.removedNames,
+      notices: failure.notices,
+      cause: errnoFields(failure.cause),
+    },
+    {
+      removedNames: ["first"],
+      notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+      cause: { code: "EACCES", syscall: "open" },
+    },
+  );
+  assert.strictEqual(adapterBytes, '{\n  "mcpServers": {}\n}\n');
+});
+
+test("rethrows a failed adapter write unchanged when no file was rewritten", async (t) => {
+  // arrange
+  const { cwd, locations } = await createScope(t, "mcp-unstage-adapter-write-failure-");
+  const lockedDirectory = await lockedLink(
+    t,
+    cwd,
+    locations.mcpAdapterJsonPath,
+    '{"mcpServers":{"first":{"command":"first","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+  );
+
+  // act
+  const failure = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await chmod(lockedDirectory, 0o700);
+
+  // assert
+  assert.ok(failure instanceof Error);
+  assert.deepStrictEqual(
+    { partial: failure instanceof McpUnstagePartialError, ...errnoFields(failure) },
+    { partial: false, code: "EACCES", syscall: "open" },
+  );
 });

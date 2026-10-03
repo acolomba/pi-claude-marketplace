@@ -39,6 +39,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
+import { McpUnstagePartialError } from "../../shared/errors-bridges.ts";
 import {
   errorMessage,
   InvalidMarketplaceManifestError,
@@ -473,6 +474,16 @@ export async function cascadeUnstagePlugin(
       ...mcpConfigNoticesMember(mcpConfigNotices),
     });
   } catch (err) {
+    // AFILE-04: an MCP unstage that rewrote the adapter file before its legacy
+    // write failed still reports the servers and comments it dropped there.
+    // The write failure is the plugin's cause.
+    let failure: unknown = err;
+    if (err instanceof McpUnstagePartialError) {
+      dropped.mcpServers = [...err.removedNames];
+      mcpConfigNotices = err.notices;
+      failure = err.cause;
+    }
+
     return Object.freeze({
       ok: false,
       dropped: Object.freeze({
@@ -483,7 +494,7 @@ export async function cascadeUnstagePlugin(
         mcpServers: Object.freeze([...dropped.mcpServers]),
         workflows: Object.freeze([...dropped.workflows]),
       }),
-      cause: err instanceof Error ? err : new Error(String(err)),
+      cause: failure instanceof Error ? failure : new Error(String(failure)),
       ...mcpConfigNoticesMember(mcpConfigNotices),
     });
   }

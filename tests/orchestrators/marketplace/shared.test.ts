@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
@@ -867,6 +867,52 @@ test("AFILE-04: cascadeUnstagePlugin keeps the notice when a later slot fails", 
   assert.deepStrictEqual(
     cause.failedWorkflows.map((failure) => failure.name),
     ["sample:blocked"],
+  );
+});
+
+test("AFILE-04: cascadeUnstagePlugin reports the adapter file's servers and notice when the legacy write fails", async (t) => {
+  // arrange
+  const { cwd, locations } = await createProjectScope(t, "cascade-mcp-legacy-write-failure");
+  const lockedDirectory = path.join(cwd, "locked");
+  const lockedLegacy = path.join(lockedDirectory, "mcp.json");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '// user note\n{"mcpServers":{"sample-server":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
+  );
+  await mkdir(lockedDirectory, { recursive: true });
+  await writeFile(
+    lockedLegacy,
+    '{"mcpServers":{"legacy-server":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
+  );
+  await symlink(lockedLegacy, locations.mcpJsonPath);
+  t.after(async () => {
+    await chmod(lockedDirectory, 0o700).catch(() => undefined);
+  });
+  await chmod(lockedDirectory, 0o555);
+  const record = pluginRecord({ mcpServers: ["sample-server", "legacy-server"] });
+
+  // act
+  const { cause, ...outcome } = await cascadeUnstagePlugin("sample", "official", locations, record);
+  await chmod(lockedDirectory, 0o700);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: false,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["sample-server"],
+      workflows: [],
+    },
+    mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+  });
+  const writeFailure = cause as NodeJS.ErrnoException | undefined;
+  assert.deepStrictEqual(
+    { code: writeFailure?.code, syscall: writeFailure?.syscall },
+    { code: "EACCES", syscall: "open" },
   );
 });
 

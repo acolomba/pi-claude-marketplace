@@ -5,6 +5,8 @@
 // refusal categories via instanceof and so user-visible error messages are
 // uniform.
 
+import type { McpConfigNotice } from "./notification-dispatch.ts";
+
 /**
  * The (marketplace, plugin) tuple an agent name belongs to. Declared once so
  * the conflict's owner, the error's public `stagingFor` field and the
@@ -94,6 +96,27 @@ export class McpConfigFileError extends Error {
     this.name = "McpConfigFileError";
     this.filePath = filePath;
     this.defect = defect;
+  }
+}
+
+/**
+ * AFILE-04: an MCP unstage that rewrote at least one config file and then
+ * failed to write a later one. `removedNames` and `notices` describe only the
+ * files already rewritten, so the caller can still report the removed servers
+ * and the dropped comments. The write failure rides `Error.cause`.
+ */
+export class McpUnstagePartialError extends Error {
+  readonly removedNames: readonly string[];
+  readonly notices: readonly McpConfigNotice[];
+  constructor(
+    removedNames: readonly string[],
+    notices: readonly McpConfigNotice[],
+    options: ErrorOptions,
+  ) {
+    super("MCP unstage stopped after rewriting part of its config files.", options);
+    this.name = "McpUnstagePartialError";
+    this.removedNames = Object.freeze([...removedNames]);
+    this.notices = Object.freeze([...notices]);
   }
 }
 

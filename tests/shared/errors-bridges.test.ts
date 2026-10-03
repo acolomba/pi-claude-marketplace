@@ -7,6 +7,7 @@ import {
   CommandNameError,
   McpConfigFileError,
   McpServerCollisionError,
+  McpUnstagePartialError,
   WorkflowTargetOccupiedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
@@ -351,6 +352,42 @@ describe("McpConfigFileError", () => {
       );
     });
   }
+});
+
+describe("McpUnstagePartialError", () => {
+  test("AFILE-04: carries frozen copies of the rewritten files' names and notices and the write failure", () => {
+    // arrange
+    const cause = new Error("EACCES: permission denied");
+    const removedNames = ["first"];
+    const notices = [
+      { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    ] as const;
+
+    // act
+    const error = new McpUnstagePartialError(removedNames, notices, { cause });
+    removedNames.push("later");
+
+    // assert
+    assert.ok(error instanceof McpUnstagePartialError);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        removedNames: error.removedNames,
+        notices: error.notices,
+        cause: error.cause,
+        frozen: Object.isFrozen(error.removedNames) && Object.isFrozen(error.notices),
+      },
+      {
+        name: "McpUnstagePartialError",
+        message: "MCP unstage stopped after rewriting part of its config files.",
+        removedNames: ["first"],
+        notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+        cause,
+        frozen: true,
+      },
+    );
+  });
 });
 
 describe("BridgeStagingError", () => {
