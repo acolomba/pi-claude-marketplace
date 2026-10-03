@@ -21,6 +21,11 @@
  * `tests/**` while ESLint's cognitive rule does not, so a green `npm run lint`
  * is no evidence for anything here.
  *
+ * `assertPlantedCopyRejects` is the one composite: the D-07-01 offender control
+ * as a single call. Two gates that each wrote the `withTempRoot` /
+ * `materializeTargets` / `plantOffender` / `assert.rejects` sequence inline
+ * would be the same reportable clone.
+ *
  * Every write path is resolved through `insideRoot`, so a caller-supplied
  * relative path that climbs out of the caller's `root` is refused rather than
  * written -- the same posture `shared/path-safety.ts::assertPathInside` takes
@@ -30,6 +35,7 @@
  * This file registers no case of its own.
  */
 
+import assert from "node:assert/strict";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -130,4 +136,26 @@ export async function plantBenignNearMiss(
   token: string,
 ): Promise<void> {
   await appendToCopy(root, target, `// ${token}`);
+}
+
+/**
+ * D-07-01: the offender control as one call. Copies `targets` into a fresh
+ * `prefix`-named temporary root, appends `line` (real code the gate forbids)
+ * to the copy of `target`, and requires `scan` run against that root to reject
+ * with a message matching `rejection`.
+ */
+export async function assertPlantedCopyRejects(control: {
+  readonly prefix: string;
+  readonly targets: ReadonlyArray<string>;
+  readonly target: string;
+  readonly line: string;
+  readonly scan: (root: string) => Promise<unknown>;
+  readonly rejection: RegExp;
+}): Promise<void> {
+  await withTempRoot(control.prefix, async (root) => {
+    await materializeTargets(root, control.targets);
+    await plantOffender(root, control.target, control.line);
+
+    await assert.rejects(() => control.scan(root), control.rejection);
+  });
 }

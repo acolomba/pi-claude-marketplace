@@ -5,6 +5,12 @@ import test from "node:test";
 
 import { CREDENTIAL_LEAK_TARGETS, EXTENSION_ROOT_REL } from "./gate-targets.ts";
 import { REPO_ROOT } from "./source-scan.ts";
+import {
+  assertPlantedCopyRejects,
+  materializeTargets,
+  plantBenignNearMiss,
+  withTempRoot,
+} from "./temp-root-control.ts";
 
 /**
  * AUTH-09 architecture gate.
@@ -231,6 +237,19 @@ async function scanPromptBindings(root: string): Promise<ReadonlyArray<string>> 
   );
   return visited;
 }
+
+/**
+ * Both device-code prompt scans under `root`, so every planted control below
+ * exercises the domain call and the provider binding through one dependency.
+ * Returns the provider files the binding scan opened.
+ */
+async function scanDeviceCodePrompt(root: string): Promise<ReadonlyArray<string>> {
+  await scanDeviceCodeCalls(root);
+  return scanPromptBindings(root);
+}
+
+/** The real files the device-code prompt controls copy into a temporary root. */
+const DEVICE_CODE_PROMPT_TARGETS: ReadonlyArray<string> = [GITHUB_AUTH_FILE, ...PROVIDER_FILES];
 
 test("AUTH-09: no credential field name appears in any state-write code path", async () => {
   assert.ok(
@@ -519,4 +538,71 @@ test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a cre
     [...CREDENTIAL_CAPTURING_ORCHESTRATORS],
     "D-07-03: the scan must have opened both credential-capturing orchestrators; one that stopped resolving drops out of this list.",
   );
+});
+
+const DEVICE_CODE_PROMPT_OFFENDERS: ReadonlyArray<{
+  readonly name: string;
+  readonly target: string;
+  readonly line: string;
+}> = [
+  {
+    name: "a token-valued userCode in the domain call",
+    target: GITHUB_AUTH_FILE,
+    line: "opts.onDeviceCode({ verificationUri: deviceCode.verification_uri, userCode: r.accessToken });",
+  },
+  {
+    name: "a non-literal onDeviceCode argument",
+    target: GITHUB_AUTH_FILE,
+    line: "opts.onDeviceCode(prompt);",
+  },
+  {
+    name: "a credential-carrying prompt in the provider binding",
+    target: AUTH_HOST_FILE,
+    line: "notifyDeviceFlowPrompt(ctx, { verificationUri: host, userCode: cred.password });",
+  },
+];
+
+for (const { name, target, line } of DEVICE_CODE_PROMPT_OFFENDERS) {
+  test(`AUTH-09 / D-11: the device-code prompt gate rejects ${name}`, async () => {
+    // act & assert
+    await assertPlantedCopyRejects({
+      prefix: "device-code-prompt-offender-",
+      targets: DEVICE_CODE_PROMPT_TARGETS,
+      target,
+      line,
+      scan: scanDeviceCodePrompt,
+      rejection: /AUTH-09/,
+    });
+  });
+}
+
+test("AUTH-09 / D-11: unmutated copies pass the device-code prompt gate and report every provider file opened", async () => {
+  await withTempRoot("device-code-prompt-benign-", async (root) => {
+    // arrange
+    await materializeTargets(root, DEVICE_CODE_PROMPT_TARGETS);
+
+    // act
+    const visited = await scanDeviceCodePrompt(root);
+
+    // assert
+    assert.deepStrictEqual(visited, [...PROVIDER_FILES]);
+  });
+});
+
+test("AUTH-09 / D-11: a token-valued onDeviceCode call inside a line comment passes, so the gate strips comments", async () => {
+  await withTempRoot("device-code-prompt-near-miss-", async (root) => {
+    // arrange
+    await materializeTargets(root, DEVICE_CODE_PROMPT_TARGETS);
+    await plantBenignNearMiss(
+      root,
+      GITHUB_AUTH_FILE,
+      "opts.onDeviceCode({ verificationUri: deviceCode.verification_uri, userCode: r.accessToken });",
+    );
+
+    // act
+    const visited = await scanDeviceCodePrompt(root);
+
+    // assert
+    assert.deepStrictEqual(visited, [...PROVIDER_FILES]);
+  });
 });
