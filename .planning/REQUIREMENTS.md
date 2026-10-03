@@ -60,15 +60,15 @@ model that already carries every presentation decision.
 - [ ] **WIRE-02**: Every payload carries required `severity` (the info /
   warning / error tri-state), `needsReload`, and `origin` (`command` with a
   machine command id, `load`, or `hook`).
-- [ ] **WIRE-03**: Status, reason, scope, and severity tokens are emitted
+- [x] **WIRE-03**: Status, reason, scope, and severity tokens are emitted
   verbatim from the existing closed sets; no second code vocabulary exists.
-- [ ] **WIRE-04**: Values are raw -- full version strings, ISO timestamps, real
+- [x] **WIRE-04**: Values are raw -- full version strings, ISO timestamps, real
   booleans; install-scoped rows always carry an explicit `scope`; optional
   fields are absent, never `null`; empty collections are `[]`; arrays keep model
   order.
 - [x] **WIRE-05**: Payloads carry the model's `summary` line on warning and
   error, a numeric `tally`, and a `noOp` flag on the update no-op cascade.
-- [ ] **WIRE-06**: Plugin rows carry `id: "<name>@<marketplace>"`.
+- [x] **WIRE-06**: Plugin rows carry `id: "<name>@<marketplace>"`.
 - [ ] **WIRE-07**: Every command-origin payload of one command run carries the
   same `invocationId`, minted by an injectable generator.
 - [ ] **WIRE-08**: No payload discloses a path the text form does not show
@@ -198,10 +198,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEXT-01 | Phase 3 | Complete |
 | WIRE-01 | Phase 4 | Pending |
 | WIRE-02 | Phase 6 | Pending |
-| WIRE-03 | Phase 4 | Pending |
-| WIRE-04 | Phase 4 | Pending |
+| WIRE-03 | Phase 4 | Complete |
+| WIRE-04 | Phase 4 | Complete |
 | WIRE-05 | Phase 4 | Complete |
-| WIRE-06 | Phase 4 | Pending |
+| WIRE-06 | Phase 4 | Complete |
 | WIRE-07 | Phase 6 | Pending |
 | WIRE-08 | Phase 4 | Pending |
 | WIRE-09 | Phase 4 | Complete |
