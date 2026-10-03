@@ -1048,10 +1048,10 @@ test("an mcp phase that cannot even prepare unwinds the hooks config the phase b
     mcpServers: { server1: { command: "node", args: ["s.js"] } },
   });
   const locations = locationsFor("project", environment.cwd);
-  // Occupying `<scopeRoot>/mcp.json` with a DIRECTORY fails the mcp phase
+  // Occupying `<scopeRoot>/mcp-adapter.json` with a DIRECTORY fails the mcp phase
   // before it prepares anything, which is what makes the hooks phase's undo --
   // a real removal, not a staging discard -- run.
-  await mkdir(locations.mcpJsonPath, { recursive: true });
+  await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
   const capture = { rollbackPartials: [], version: undefined };
 
   // act

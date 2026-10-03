@@ -1439,7 +1439,7 @@ A plugin operation has failed.
 
 ### Prune rollback needs manual recovery
 
-If rollback finds a changed path, prune keeps the current file and the original in a recovery backup. A missing directory artifact also stays absent and requires manual restoration from that backup. The backup's `manifest.json` maps each numbered entry to a permitted root and a relative target. Inspect that manifest before retrying. This also applies to shared metadata: the scope state lock does not cover independent writers of `mcp.json` or the agents index, so prune does not replace a changed whole document during rollback. A backup can require a manual merge even when the change came from prune. The command reports each restore failure with a redacted cause and gives the backup directory name. It does not suggest `/reload` because the removal did not commit.
+If rollback finds a changed path, prune keeps the current file and the original in a recovery backup. A missing directory artifact also stays absent and requires manual restoration from that backup. The backup's `manifest.json` maps each numbered entry to a permitted root and a relative target. Inspect that manifest before retrying. This also applies to shared metadata: the scope state lock does not cover independent writers of `mcp-adapter.json`, `mcp.json` or the agents index, so prune does not replace a changed whole document during rollback. A backup can require a manual merge even when the change came from prune. The command reports each restore failure with a redacted cause and gives the backup directory name. It does not suggest `/reload` because the removal did not commit.
 
 <!-- catalog-state: rollback-partial -->
 
@@ -1455,7 +1455,7 @@ A plugin operation has failed.
 
 ### Shared metadata changed during rollback
 
-The current `mcp.json` remains available, and the original bytes remain in the numbered recovery backup. An independent writer can edit this file between any two prune operations, including while rollback checks it.
+The current `mcp-adapter.json` remains available, and the original bytes remain in the numbered recovery backup. An independent writer can edit this file between any two prune operations, including while rollback checks it. pi-mcp-adapter itself writes this file, for example on `/mcp-adapter disable`.
 
 <!-- catalog-state: rollback-mcp-changed -->
 
@@ -1465,8 +1465,8 @@ A plugin operation has failed.
 ● (prune) [project]
   ⊘ (prune) (failed) {rollback partial}
     cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed
-    [mcp] (rollback failed)
-      cause: Prune rollback found an occupied metadata path at mcp.json.
+    [mcp adapter] (rollback failed)
+      cause: Prune rollback found an occupied metadata path at mcp-adapter.json.
 ```
 
 ### Rollback and lock release both fail
@@ -1481,8 +1481,8 @@ A plugin operation has failed.
 ● (prune) [project]
   ⊘ (prune) (failed) {rollback partial}
     cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. (lock release also failed: lock release failed) -> Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed
-    [mcp] (rollback failed)
-      cause: Prune rollback found an occupied metadata path at mcp.json.
+    [mcp adapter] (rollback failed)
+      cause: Prune rollback found an occupied metadata path at mcp-adapter.json.
 ```
 
 ______________________________________________________________________

@@ -298,6 +298,7 @@ export async function preparePruneRollback(
   const artifacts: SavedPath[] = [];
   let agentsIndex: SavedPath;
   let mcp: SavedPath;
+  let mcpAdapter: SavedPath;
   let state: SavedPath;
   try {
     for (const [index, { root, target, phase }] of targets.entries()) {
@@ -319,14 +320,23 @@ export async function preparePruneRollback(
       backupRoot,
       targets.length + 1,
     );
+    // AFILE-01: prune's unstage rewrites the adapter file; the legacy
+    // `mcp.json` snapshot stays because the file stays in the write set.
+    mcpAdapter = await snapshotPath(
+      locations.scopeRoot,
+      locations.mcpAdapterJsonPath,
+      "mcp adapter",
+      backupRoot,
+      targets.length + 2,
+    );
     state = await snapshotPath(
       locations.extensionRoot,
       locations.stateJsonPath,
       "state",
       backupRoot,
-      targets.length + 2,
+      targets.length + 3,
     );
-    const entries = [...artifacts, agentsIndex, mcp, state].map((saved) =>
+    const entries = [...artifacts, agentsIndex, mcp, mcpAdapter, state].map((saved) =>
       recoveryEntry(locations, saved),
     );
     await writeFileAtomic(
@@ -351,7 +361,7 @@ export async function preparePruneRollback(
         }
       }
 
-      for (const saved of [agentsIndex, mcp]) {
+      for (const saved of [agentsIndex, mcp, mcpAdapter]) {
         try {
           // eslint-disable-next-line no-await-in-loop -- restores run in order; each failure kept
           await restoreMetadata(saved, ops);

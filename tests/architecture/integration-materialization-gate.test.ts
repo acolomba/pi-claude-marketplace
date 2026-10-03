@@ -110,7 +110,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
     servers: resolution.mcpServers,
   });
   const commit = await commitPreparedMcp(prepared);
-  const storedBytes = await readFile(locations.mcpJsonPath, "utf8");
+  const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
   const dormantSources = {
     agent: await pathExists(path.join(pluginRoot, "agents", "dormant.md")),
     command: await pathExists(path.join(pluginRoot, "commands", "dormant.md")),
@@ -132,7 +132,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
       {
         generatedName: "local",
         sourcePath: path.join(pluginRoot, ".mcp.json"),
-        targetPath: locations.mcpJsonPath,
+        targetPath: locations.mcpAdapterJsonPath,
       },
     ],
     warnings: [],

@@ -1,16 +1,16 @@
 // bridges/mcp/types.ts
 //
 // Type-only module: shapes shared across the MCP bridge surface
-// (collision-slots / stage / unstage). Kept in a single file so
+// (collision-slots / adapter-doc / stage / unstage). Kept in a single file so
 // the discriminated `PreparedMcpStaging` union and `StageMcpInput` /
 // `UnstageMcpInput` records cannot drift apart across modules.
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /**
- * Top-level shape of the scoped `mcp.json` document read from and
- * written to `<scopeRoot>/mcp.json`. Other top-level fields are
- * preserved verbatim; only `mcpServers` is read or mutated.
+ * Top-level shape of an MCP config document: `<scopeRoot>/mcp-adapter.json`,
+ * or the legacy `<scopeRoot>/mcp.json`. Other top-level fields are
+ * preserved verbatim; only the server maps are read or mutated.
  */
 export interface RawMcpDoc {
   readonly mcpServers?: unknown;
@@ -41,11 +41,11 @@ export interface StageMcpInput {
  * generated server name is already stable.
  */
 export interface StagedMcpRecord {
-  /** Server name as it appears in mcp.json (== input key; no rename today). */
+  /** Server name as it appears in mcp-adapter.json (== input key; no rename today). */
   readonly generatedName: string;
   /** Canonical source: "<pluginRoot>/.mcp.json" or "<pluginRoot>/<plugin>.json#mcpServers". */
   readonly sourcePath: string;
-  /** Absolute path to the scoped mcp.json the server landed in. */
+  /** Absolute path to the scoped mcp-adapter.json the server landed in. */
   readonly targetPath: string;
 }
 

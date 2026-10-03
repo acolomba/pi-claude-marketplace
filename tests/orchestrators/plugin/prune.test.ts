@@ -952,7 +952,7 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
     });
     const originalMcp = Buffer.from('{ "mcpServers": { "original": 1 } }\n');
     const currentMcp = Buffer.from('{ "mcpServers": { "original": 1, "independent": 2 } }\n');
-    await writeFile(locations.mcpJsonPath, originalMcp);
+    await writeFile(locations.mcpAdapterJsonPath, originalMcp);
     const stateBefore = await readFile(locations.stateJsonPath);
     const skillBefore = await readFile(fixture.skills["orphan@mp"] ?? "");
     const transaction: UninstallTransaction = {
@@ -960,7 +960,7 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
       withLockedStateTransaction: (target, run) =>
         withLockedStateTransaction(target, run, {
           saveState: async () => {
-            await writeFile(locations.mcpJsonPath, currentMcp);
+            await writeFile(locations.mcpAdapterJsonPath, currentMcp);
             throw new Error("state save failed");
           },
         }),
@@ -971,7 +971,7 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
     await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
-    assert.deepStrictEqual(await readFile(locations.mcpJsonPath), currentMcp);
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), currentMcp);
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
     await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
       code: "ENOENT",
@@ -985,11 +985,11 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
       await readFile(path.join(locations.extensionRoot, backupName ?? "", "manifest.json"), "utf8"),
     ) as { entries: Array<{ phase: string; root: string; target: string; backup: string | null }> };
     assert.deepStrictEqual(
-      manifest.entries.filter((entry) => entry.phase === "mcp"),
-      [{ phase: "mcp", root: ".", target: "mcp.json", backup: "3" }],
+      manifest.entries.filter((entry) => entry.phase === "mcp adapter"),
+      [{ phase: "mcp adapter", root: ".", target: "mcp-adapter.json", backup: "4" }],
     );
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "3")),
+      await readFile(path.join(locations.extensionRoot, backupName ?? "", "4")),
       originalMcp,
     );
     assert.deepStrictEqual(
@@ -1004,8 +1004,8 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
           `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.\n" +
-          "    [mcp] (rollback failed)\n" +
-          "      cause: Prune rollback found an occupied metadata path at mcp.json.",
+          "    [mcp adapter] (rollback failed)\n" +
+          "      cause: Prune rollback found an occupied metadata path at mcp-adapter.json.",
         severity: "error",
       },
     ]);
@@ -1018,12 +1018,12 @@ test("an MCP edit after a cascade with no MCP resources survives failed persiste
     await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
     const original = Buffer.from('{ "mcpServers": { "original": 1 } }\n');
     const independent = Buffer.from('{ "mcpServers": { "original": 1, "independent": 2 } }\n');
-    await writeFile(locations.mcpJsonPath, original);
+    await writeFile(locations.mcpAdapterJsonPath, original);
     const transaction: UninstallTransaction = {
       ...REAL_UNINSTALL_TRANSACTION,
       cascadeUnstagePlugin: async (...args) => {
         const outcome = await REAL_UNINSTALL_TRANSACTION.cascadeUnstagePlugin(...args);
-        await writeFile(locations.mcpJsonPath, independent);
+        await writeFile(locations.mcpAdapterJsonPath, independent);
         return outcome;
       },
       withLockedStateTransaction: (target, run) =>
@@ -1035,9 +1035,9 @@ test("an MCP edit after a cascade with no MCP resources survives failed persiste
 
     await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
-    assert.deepStrictEqual(await readFile(locations.mcpJsonPath), independent);
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), independent);
     assert.match(notifications[0]?.message ?? "", /\{rollback partial\}/);
-    assert.match(notifications[0]?.message ?? "", /\[mcp\] \(rollback failed\)/);
+    assert.match(notifications[0]?.message ?? "", /\[mcp adapter\] \(rollback failed\)/);
     const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
       name.startsWith("prune-backup-"),
     );
@@ -1045,7 +1045,7 @@ test("an MCP edit after a cascade with no MCP resources survives failed persiste
     const manifest = JSON.parse(
       await readFile(path.join(locations.extensionRoot, backupName, "manifest.json"), "utf8"),
     ) as { entries: Array<{ phase: string; backup: string | null }> };
-    const entry = manifest.entries.find(({ phase }) => phase === "mcp");
+    const entry = manifest.entries.find(({ phase }) => phase === "mcp adapter");
     assert.ok(entry?.backup);
     assert.deepStrictEqual(
       await readFile(path.join(locations.extensionRoot, backupName, entry.backup)),
@@ -1058,7 +1058,7 @@ test("rollback details survive a simultaneous lock-release failure", async (t) =
   await withHermeticEnvironment("prune-owner-rollback-release-", async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
-    await writeFile(locations.mcpJsonPath, '{ "mcpServers": { "original": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, '{ "mcpServers": { "original": 1 } }\n');
     const originalLock = lockfile.lock;
     t.mock.method(lockfile, "lock", async (...args: Parameters<typeof lockfile.lock>) => {
       const release = await originalLock(...args);
@@ -1073,7 +1073,7 @@ test("rollback details survive a simultaneous lock-release failure", async (t) =
         withLockedStateTransaction(target, run, {
           saveState: async () => {
             await writeFile(
-              locations.mcpJsonPath,
+              locations.mcpAdapterJsonPath,
               '{ "mcpServers": { "original": 1, "independent": 2 } }\n',
             );
             throw new Error("state save failed");
@@ -1087,13 +1087,13 @@ test("rollback details survive a simultaneous lock-release failure", async (t) =
     const message = notifications[0]?.message ?? "";
     assert.equal(notifications[0]?.severity, "error");
     assert.match(message, /\{rollback partial\}/);
-    assert.match(message, /\[mcp\] \(rollback failed\)/);
+    assert.match(message, /\[mcp adapter\] \(rollback failed\)/);
     assert.match(message, /prune-backup-[\w-]+\/manifest\.json/);
     assert.match(message, /state save failed/);
     assert.match(message, /lock release also failed: lock release failed/);
     assert.doesNotMatch(message, /\/tmp\//);
     assert.equal(
-      await readFile(locations.mcpJsonPath, "utf8"),
+      await readFile(locations.mcpAdapterJsonPath, "utf8"),
       '{ "mcpServers": { "original": 1, "independent": 2 } }\n',
     );
   });

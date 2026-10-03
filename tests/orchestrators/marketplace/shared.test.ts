@@ -23,6 +23,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import * as defaultGit from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
+import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
@@ -343,9 +344,9 @@ async function seedFullCascade(
   await mkdir(path.dirname(hookFile), { recursive: true });
   await writeFile(hookFile, '{"hooks":{}}');
 
-  await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
   await writeFile(
-    locations.mcpJsonPath,
+    locations.mcpAdapterJsonPath,
     JSON.stringify({
       mcpServers: {
         "sample-server": {
@@ -979,8 +980,8 @@ test("cascadeUnstagePlugin preserves earlier partials when hook name validation 
 test("cascadeUnstagePlugin reports hook partial when malformed MCP JSON fails last", async (t) => {
   // arrange
   const { locations } = await createProjectScope(t, "cascade-mcp-failure");
-  await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-  await writeFile(locations.mcpJsonPath, "{");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, "{");
   const record = pluginRecord({ mcpServers: ["sample-server"] });
 
   // act
@@ -996,8 +997,11 @@ test("cascadeUnstagePlugin reports hook partial when malformed MCP JSON fails la
     mcpServers: [],
     workflows: [],
   });
-  assert.ok(outcome.cause instanceof Error);
-  assert.match(outcome.cause.message, /malformed JSON/);
+  assert.ok(outcome.cause instanceof McpConfigFileError);
+  assert.deepStrictEqual(
+    { filePath: outcome.cause.filePath, defect: outcome.cause.defect },
+    { filePath: locations.mcpAdapterJsonPath, defect: "invalid-jsonc" },
+  );
 });
 
 for (const { title, state, name, enable, expected } of [

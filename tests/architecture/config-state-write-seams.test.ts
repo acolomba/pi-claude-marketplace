@@ -49,7 +49,7 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
  *
  * Why path-name-specific patterns and not a coarse `atomicWriteJson(` walk:
  * the codebase has SEVEN legitimate `atomicWriteJson` callsites that write
- * other JSON files entirely (mcp.json, agents-index.json, completion
+ * other JSON files entirely (mcp-adapter.json, agents-index.json, completion
  * caches): `bridges/mcp/{stage,unstage}.ts`, `persistence/agents-index-io.ts`,
  * `shared/completion-cache.ts` (3 sites). A coarse walk forbidding any
  * `atomicWriteJson(` callsite outside the SPLIT-02 allow-list would
@@ -230,7 +230,7 @@ test("SPLIT-02 walker: forbidden patterns catch a synthetic offender", () => {
   );
 
   // Negative: legitimate callsites that write OTHER JSON files must NOT match.
-  const mcpJson = "await atomicWriteJson(locations.mcpJsonPath, doc);";
+  const mcpJson = "await atomicWriteJson(locations.mcpAdapterJsonPath, doc);";
   const agentsIndex = "await atomicWriteJson(agentsIndexPathFor(loc), index);";
   const completionCache = "await atomicWriteJson(marketplaceNamesCachePath, payload);";
   for (const benign of [mcpJson, agentsIndex, completionCache]) {

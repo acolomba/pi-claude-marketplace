@@ -142,7 +142,7 @@ for (const { requirement, name, tools, commands, reasons } of MCP_STATES) {
       const record = state.marketplaces["claude-plugins-official"]?.plugins.context7;
       assert.ok(record);
       const mcpJson = JSON.parse(
-        await readFile(locationsFor("project", env.cwd).mcpJsonPath, "utf8"),
+        await readFile(locationsFor("project", env.cwd).mcpAdapterJsonPath, "utf8"),
       ) as { readonly mcpServers?: Record<string, unknown> };
       for (const serverName of record.resources.mcpServers) {
         assert.ok(mcpJson.mcpServers?.[serverName]);

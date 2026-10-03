@@ -4117,7 +4117,7 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
       }),
     );
     await writeFile(
-      locations.mcpJsonPath,
+      locations.mcpAdapterJsonPath,
       JSON.stringify({ mcpServers: { server: { command: "node" } } }),
     );
     const runtime = createHooksRuntime();
@@ -4215,7 +4215,7 @@ test("a partial disable preserves its committed fold when route publication fail
       }),
     );
     await writeFile(
-      locations.mcpJsonPath,
+      locations.mcpAdapterJsonPath,
       JSON.stringify({ mcpServers: { server: { command: "node" } } }),
     );
     const runtime = createHooksRuntime();

@@ -309,9 +309,9 @@ async function seedFullPlugin(
   await mkdir(path.dirname(hooksFile), { recursive: true });
   await writeFile(hooksFile, JSON.stringify({ hooks: {} }));
 
-  // mcp: <scopeRoot>/mcp.json with one owned server
+  // mcp: <scopeRoot>/mcp-adapter.json with one owned server
   const mcpServerName = "uni-server";
-  const mcpJson = locations.mcpJsonPath;
+  const mcpJson = locations.mcpAdapterJsonPath;
   await mkdir(path.dirname(mcpJson), { recursive: true });
   await writeFile(
     mcpJson,
@@ -404,6 +404,75 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
         "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
       );
       assert.doesNotMatch(notifications[0]?.message ?? "", /Plugin uninstall:/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-01: uninstall removes only the plugin's marked entries from mcp-adapter.json", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-afile01-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await writeFile(
+        adapterPath,
+        JSON.stringify({
+          settings: { toolPrefix: "short" },
+          "mcp-servers": {
+            "uni-server": {
+              command: "node",
+              _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            },
+          },
+          mcpServers: {
+            mine: { command: "my-server" },
+            "uni-server": { disabled: true },
+            "other-server": {
+              command: "other",
+              _piClaudeMarketplace: { plugin: "other", marketplace: "mp" },
+            },
+          },
+        }),
+      );
+      const { ctx, pi } = makeCtx();
+
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        `{
+  "settings": {
+    "toolPrefix": "short"
+  },
+  "mcp-servers": {},
+  "mcpServers": {
+    "mine": {
+      "command": "my-server"
+    },
+    "uni-server": {
+      "disabled": true
+    },
+    "other-server": {
+      "command": "other",
+      "_piClaudeMarketplace": {
+        "plugin": "other",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3411,7 +3480,7 @@ test("LIFE-04: manifest-absent uninstall of a record with no resources still con
 // Schedule observation: uninstall's cascade and cleanup removals are
 // `node:fs/promises` primitives with unambiguous target paths, so the forward
 // ledger below is read straight off them. The state, config, agents-index, and
-// mcp.json commits all route through `write-file-atomic`, which uses the
+// mcp-adapter.json commits all route through `write-file-atomic`, which uses the
 // callback `node:fs` surface and therefore leaves NO `node:fs/promises`
 // signature; those commits are proved by authoritative bytes and complete tree
 // inventory rather than by a schedule entry.
@@ -3722,7 +3791,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
       assert.deepStrictEqual(firstTree, [
         "agents/",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/data/",
@@ -3741,7 +3810,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/data/",
@@ -3753,7 +3822,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         "pi-claude-marketplace/state.json",
       ]);
       assert.equal(await readFile(locations.configJsonPath, "utf8"), configBytes);
-      assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpJsonPath, "utf8")), {
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
         mcpServers: {},
       });
       assert.deepStrictEqual((await loadAgentsIndex(locations)).agents, []);
@@ -3871,7 +3940,7 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
         "agents/",
         "agents/pi-claude-marketplace-hello-uni-agent.md",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -3885,7 +3954,7 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -3915,7 +3984,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const mcpBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const mcpBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
       const rejectNonError = Promise.reject.bind(Promise);
       const cascadeReject = { enabled: true };
       const cascade: typeof cascadeUnstagePlugin = (
@@ -3950,7 +4019,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       });
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const firstMcpBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const firstMcpBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
       cascadeReject.enabled = false;
       activeSchedule.current = secondSchedule;
       const second = await uninstallWithFreshOwner({
@@ -3991,7 +4060,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       assert.deepStrictEqual(firstTree, [
         "agents/",
         "agents/pi-claude-marketplace-hello-uni-agent.md",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -4007,7 +4076,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -4016,7 +4085,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
       ]);
-      assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpJsonPath, "utf8")), {
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
         mcpServers: {},
       });
     } finally {
@@ -4107,7 +4176,7 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
         "agents/",
         "agents/pi-claude-marketplace-hello-uni-agent.md",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -4123,7 +4192,7 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -4530,7 +4599,7 @@ test("retry proof: uninstall: a refused cache drop leaves the cache file and the
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/cache/",
@@ -4612,7 +4681,7 @@ test("retry proof: uninstall: a refused data-dir removal keeps the directory and
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/data/",
@@ -5022,7 +5091,7 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/data/",
@@ -5036,7 +5105,7 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/data/",
@@ -5119,7 +5188,7 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/cache/",
@@ -5134,7 +5203,7 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/cache/",

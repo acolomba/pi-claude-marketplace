@@ -2,14 +2,16 @@
 //
 // MC-6 prepare/commit/abort for the MCP bridge, plus replacement
 // exports: replacePreparedMcp, rollbackMcpReplacement, finalizeMcpReplacement.
-// The prepare phase reads
-// the scoped `mcp.json`, partitions existing entries into ours-vs-theirs
-// by `_piClaudeMarketplace` marker, runs the four-slot cross-slot collision
+// The prepare phase reads the scope's `mcp-adapter.json` with
+// pi-mcp-adapter's grammar and refuses a file it cannot read (AFILE-02). It
+// partitions existing entries into ours-vs-theirs by `_piClaudeMarketplace`
+// marker across both server keys, runs the four-slot cross-slot collision
 // check (MC-4 / RN-5), short-circuits AS-8 noops, stamps the new entries
-// with the marker (MC-5), and builds the merged doc IN MEMORY only.
-// Commit is a single `atomicWriteJson` -- no per-file rename loop, no
-// EXDEV risk, no partial-state recovery surface. Abort is a synchronous
-// no-op because prepare wrote nothing to disk.
+// with the marker (MC-5), and builds the next doc IN MEMORY only, writing
+// under the key the adapter loads (AFILE-03). Commit is a single
+// `atomicWriteJson` -- no per-file rename loop, no EXDEV risk, no
+// partial-state recovery surface. Abort is a synchronous no-op because
+// prepare wrote nothing to disk.
 //
 // The collision throw is a typed `McpServerCollisionError` so callers can
 // `instanceof`-discriminate the refusal category.
@@ -24,18 +26,24 @@ import path from "node:path";
 import writeFileAtomic from "write-file-atomic";
 
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
-import { McpServerCollisionError } from "../../shared/errors-bridges.ts";
+import { McpConfigFileError, McpServerCollisionError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
+import {
+  ADAPTER_SERVER_KEYS,
+  partitionServers,
+  readMcpConfigDoc,
+  withPluginServers,
+  type McpConfigDoc,
+} from "./adapter-doc.ts";
 import { loadEffectiveServerNames } from "./collision-slots.ts";
-import { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker, isOwnedBy } from "./marker.ts";
+import { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 import { substituteAndInject, type McpSubstitutionContext } from "./substitute.ts";
 
 import type {
   McpReplacement,
   PreparedMcpStaging,
-  RawMcpDoc,
   StageMcpCommitResult,
   StageMcpInput,
   StagedMcpRecord,
@@ -50,112 +58,12 @@ const mcpReplacementInternals = new WeakMap<
   McpReplacementInternals
 >();
 
-/**
- * Read the scoped `mcp.json` document. ENOENT/ENOTDIR -> empty doc.
- * Top-level non-object (array / primitive) or unparseable JSON is treated as
- * empty so a malformed scoped doc cannot poison the ours/theirs partition;
- * the subsequent commit will overwrite it with a well-formed document.
- * `malformed` reports that tolerance so the staged branch can surface a
- * warning naming the file before its foreign content is dropped.
- * Other I/O errors propagate.
- */
-async function readScopedDoc(filePath: string): Promise<{ doc: RawMcpDoc; malformed: boolean }> {
-  let text: string;
-  try {
-    text = await readFile(filePath, "utf8");
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return { doc: {}, malformed: false };
-    }
-
-    throw err;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    // Tolerate malformed scoped doc -- treat as empty. The user's existing
-    // foreign entries (if any) are lost on commit; the staged branch surfaces
-    // that as a warning rather than silently.
-    return { doc: {}, malformed: true };
-  }
-
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return { doc: {}, malformed: true };
-  }
-
-  return { doc: parsed as RawMcpDoc, malformed: false };
-}
-
-/** Refusal for a present scoped `mcpServers` field that is not an object map. */
-class MalformedMcpServersError extends Error {
-  readonly mcpJsonPath: string;
-  readonly valueKind: string;
-
-  constructor(mcpJsonPath: string, valueKind: string) {
-    super(`mcpServers at ${mcpJsonPath} must be an object; received ${valueKind}.`);
-    this.name = "MalformedMcpServersError";
-    this.mcpJsonPath = mcpJsonPath;
-    this.valueKind = valueKind;
-  }
-}
-
-function isMcpServersRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function mcpServersValueKind(value: unknown): string {
-  return Object.prototype.toString.call(value).slice(8, -1).toLowerCase();
-}
-
-/** Classifies the raw scoped field before either MCP bridge enumerates it. */
-export function classifyMcpServers(
-  doc: RawMcpDoc,
-  mcpJsonPath: string,
-):
-  | { readonly kind: "missing" }
-  | { readonly kind: "present"; readonly servers: Record<string, unknown> } {
-  if (!Object.hasOwn(doc, "mcpServers")) {
-    return { kind: "missing" };
-  }
-
-  const value = doc.mcpServers;
-  if (isMcpServersRecord(value)) {
-    return { kind: "present", servers: value };
-  }
-
-  throw new MalformedMcpServersError(mcpJsonPath, mcpServersValueKind(value));
-}
-
-function partitionExistingServers(
-  existing: Record<string, unknown>,
-  pluginName: string,
-  marketplaceName: string,
-): { ours: Set<string>; theirs: Record<string, unknown> } {
-  const ours = new Set<string>();
-  const theirs: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(existing)) {
-    if (isOwnedBy(value, pluginName, marketplaceName)) {
-      ours.add(name);
-    } else {
-      // safeSet copies a server literally named `__proto__` verbatim as an own
-      // key rather than routing it through the inherited setter (which would
-      // drop it, silently losing the user's foreign entry) -- WR-01.
-      safeSet(theirs, name, value);
-    }
-  }
-
-  return { ours, theirs };
-}
-
 async function assertNoMcpCollisions(input: {
   cwd: string;
   names: readonly string[];
-  ours: ReadonlySet<string>;
-  theirs: Record<string, unknown>;
-  mcpJsonPath: string;
+  ours: Readonly<Record<string, unknown>>;
+  theirs: Readonly<Record<string, unknown>>;
+  targetPath: string;
 }): Promise<void> {
   if (input.names.length === 0) {
     return;
@@ -163,17 +71,17 @@ async function assertNoMcpCollisions(input: {
 
   const effective = await loadEffectiveServerNames(input.cwd);
   for (const name of input.names) {
-    if (input.ours.has(name)) {
+    if (Object.hasOwn(input.ours, name)) {
       continue;
     }
 
     const owningPath = effective.get(name);
-    if (owningPath !== undefined && owningPath !== input.mcpJsonPath) {
+    if (owningPath !== undefined && owningPath !== input.targetPath) {
       throw new McpServerCollisionError(name, owningPath);
     }
 
     if (Object.hasOwn(input.theirs, name)) {
-      throw new McpServerCollisionError(name, input.mcpJsonPath);
+      throw new McpServerCollisionError(name, input.targetPath);
     }
   }
 }
@@ -201,7 +109,7 @@ function stampServers(
     if (isPlainObject(entry)) {
       // A malformed declared env on a stdio entry is discarded by the
       // injection step (injected defaults only); say so instead of leaving
-      // the plugin author to diff mcp.json against their source.
+      // the plugin author to diff mcp-adapter.json against their source.
       if (
         typeof entry.command === "string" &&
         entry.env !== undefined &&
@@ -227,52 +135,77 @@ function stampServers(
   return { stamped, warnings };
 }
 
+function noopStaging(warnings: readonly string[]): PreparedMcpStaging {
+  const result: StageMcpCommitResult = {
+    stagedNames: Object.freeze<string[]>([]),
+    recorded: Object.freeze<StagedMcpRecord[]>([]),
+    warnings: Object.freeze([...warnings]),
+  };
+  return { kind: "noop", result };
+}
+
 /**
- * MC-6 prepare: in-memory only. Reads the scope's `mcp.json`, partitions
- * existing entries by marker, runs the MC-4 cross-slot collision check
- * (self-replace within own scope is allowed; ours.has(name) is the
- * exemption), stamps every new entry with the marker (MC-5), and builds
- * the merged doc. AS-8 noop short-circuits when there is nothing new
- * AND nothing previously-ours -- in that case `commitPreparedMcp` writes
- * no file (PRD success criterion: AS-8 noop produces no `mcp.json`).
+ * Reads the target config. With nothing to stage, an unreadable file comes
+ * back as its refusal so prepare can leave the file alone and report it; a
+ * plugin with servers refuses (AFILE-02).
+ */
+async function readTargetConfig(
+  filePath: string,
+  hasServers: boolean,
+): Promise<McpConfigDoc | McpConfigFileError> {
+  try {
+    return await readMcpConfigDoc(filePath, ADAPTER_SERVER_KEYS);
+  } catch (err) {
+    if (err instanceof McpConfigFileError && !hasServers) {
+      return err;
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * MC-6 prepare: in-memory only. Reads the scope's `mcp-adapter.json`,
+ * partitions existing entries by marker across both server keys, runs the
+ * MC-4 cross-slot collision check (self-replace within own scope is
+ * allowed; an owned entry is the exemption), stamps every new entry with
+ * the marker (MC-5), and builds the next doc. AS-8 noop short-circuits when
+ * there is nothing new AND nothing previously-ours -- in that case
+ * `commitPreparedMcp` writes no file (PRD success criterion: AS-8 noop
+ * produces no `mcp-adapter.json`).
  *
- * Throws `McpServerCollisionError` on cross-slot conflict.
+ * Throws `McpConfigFileError` when the target cannot be read and there are
+ * servers to stage (AFILE-02), and `McpServerCollisionError` on cross-slot
+ * conflict.
  */
 export async function prepareStageMcpServers(input: StageMcpInput): Promise<PreparedMcpStaging> {
   const { locations, cwd, marketplaceName, pluginName, servers, pluginRoot, pluginData } = input;
-
-  const { doc, malformed } = await readScopedDoc(locations.mcpJsonPath);
-  const classification = classifyMcpServers(doc, locations.mcpJsonPath);
-  const existing = classification.kind === "missing" ? {} : classification.servers;
-
-  // Partition existing into ours-vs-theirs by marker (MC-5).
-  const { ours, theirs } = partitionExistingServers(existing, pluginName, marketplaceName);
-
   const newNames = Object.keys(servers);
 
+  const config = await readTargetConfig(locations.mcpAdapterJsonPath, newNames.length > 0);
+  if (config instanceof McpConfigFileError) {
+    // AS-8: nothing is written, so the unreadable file keeps its bytes and
+    // the refusal text becomes a warning naming the file.
+    return noopStaging([config.message]);
+  }
+
+  // Partition existing into ours-vs-theirs by marker (MC-5).
+  const { ours, theirs } = partitionServers(config, pluginName, marketplaceName);
+
   // MC-4 / RN-5 cross-slot collision check. Self-replace inside own scope
-  // is allowed (`ours.has(name)`); otherwise any existing declarer wins.
+  // is allowed (an owned entry); otherwise any existing declarer wins.
   await assertNoMcpCollisions({
     cwd,
     names: newNames,
     ours,
     theirs,
-    mcpJsonPath: locations.mcpJsonPath,
+    targetPath: locations.mcpAdapterJsonPath,
   });
 
   // AS-8 noop: nothing new AND nothing previously-ours. Don't materialize
-  // the file; commit returns the noop result without touching disk. A
-  // malformed doc is still reported here even though nothing is rewritten.
-  if (newNames.length === 0 && ours.size === 0) {
-    const noopWarnings = malformed
-      ? [`existing mcp.json at ${locations.mcpJsonPath} is malformed; it was left untouched`]
-      : [];
-    const noopResult: StageMcpCommitResult = {
-      stagedNames: Object.freeze<string[]>([]),
-      recorded: Object.freeze<StagedMcpRecord[]>([]),
-      warnings: Object.freeze(noopWarnings),
-    };
-    return { kind: "noop", result: noopResult };
+  // the file; commit returns the noop result without touching disk.
+  if (newNames.length === 0 && Object.keys(ours).length === 0) {
+    return noopStaging([]);
   }
 
   // MC-5 marker stamp -- every new entry carries `_piClaudeMarketplace`.
@@ -291,19 +224,9 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     subCtx,
   );
 
-  // The commit overwrite is what actually destroys a malformed doc's foreign
-  // entries, so this staged-branch wording says "will be replaced" -- the
-  // AS-8 noop branch above reports the same malformed doc but says "left
-  // untouched" since its commit is a zero-op.
-  const docWarnings = malformed
-    ? [
-        `existing mcp.json at ${locations.mcpJsonPath} is malformed; it will be replaced (non-plugin entries in it are lost)`,
-      ]
-    : [];
-
-  // Merge: keep theirs verbatim; replace ours with stamped (or drop if
-  // no new servers but ours.size > 0).
-  const next: RawMcpDoc = { ...doc, mcpServers: { ...theirs, ...stamped } };
+  // Keep theirs verbatim; replace ours with stamped (or drop ours when
+  // there are no new servers).
+  const next = withPluginServers(config, pluginName, marketplaceName, stamped);
 
   // W-05: callers read `recorded` to populate state.json. `sourcePath`
   // is the canonical provenance the install path passes in (e.g.
@@ -314,14 +237,14 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     newNames.map((generatedName) => ({
       generatedName,
       sourcePath,
-      targetPath: locations.mcpJsonPath,
+      targetPath: locations.mcpAdapterJsonPath,
     })),
   );
 
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...newNames]),
     recorded,
-    warnings: Object.freeze([...docWarnings, ...stampWarnings]),
+    warnings: Object.freeze(stampWarnings),
   };
 
   return {
@@ -346,7 +269,7 @@ export async function commitPreparedMcp(
     return prepared.result;
   }
 
-  await atomicWriteJson(prepared.locations.mcpJsonPath, prepared._nextDoc);
+  await atomicWriteJson(prepared.locations.mcpAdapterJsonPath, prepared._nextDoc);
   return prepared.result;
 }
 
@@ -365,7 +288,7 @@ export async function replacePreparedMcp(prepared: PreparedMcpStaging): Promise<
     return { kind: "noop", prepared };
   }
 
-  const oldText = await readOptionalText(prepared.locations.mcpJsonPath);
+  const oldText = await readOptionalText(prepared.locations.mcpAdapterJsonPath);
   await commitPreparedMcp(prepared);
 
   const replacement: Extract<McpReplacement, { kind: "replaced" }> = {
@@ -387,16 +310,18 @@ export async function rollbackMcpReplacement(
   const leaks: string[] = [];
   try {
     if (internals.oldText === undefined) {
-      await rm(replacement.prepared.locations.mcpJsonPath, { force: true });
+      await rm(replacement.prepared.locations.mcpAdapterJsonPath, { force: true });
     } else {
-      await mkdir(path.dirname(replacement.prepared.locations.mcpJsonPath), { recursive: true });
-      await writeFileAtomic(replacement.prepared.locations.mcpJsonPath, internals.oldText, {
+      await mkdir(path.dirname(replacement.prepared.locations.mcpAdapterJsonPath), {
+        recursive: true,
+      });
+      await writeFileAtomic(replacement.prepared.locations.mcpAdapterJsonPath, internals.oldText, {
         encoding: "utf8",
       });
     }
   } catch (err) {
     leaks.push(
-      `failed to restore mcp.json at ${replacement.prepared.locations.mcpJsonPath}: ${errorMessage(err)}`,
+      `failed to restore mcp-adapter.json at ${replacement.prepared.locations.mcpAdapterJsonPath}: ${errorMessage(err)}`,
     );
   }
 

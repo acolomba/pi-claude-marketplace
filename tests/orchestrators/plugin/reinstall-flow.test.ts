@@ -2159,15 +2159,15 @@ test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and 
         install: true,
       });
       // Install "other" that also declares "server1" in a separate marketplace.
-      // We write its mcp.json entry directly into the project mcp.json so that
+      // We write its mcp-adapter.json entry directly into the project mcp-adapter.json so that
       // prepareStageMcpServers sees a cross-slot collision when reinstalling hello.
       const locations = locationsFor("project", cwd);
-      const mcpPath = locations.mcpJsonPath;
+      const mcpPath = locations.mcpAdapterJsonPath;
       let mcpDoc: Record<string, unknown> = {};
       try {
         mcpDoc = JSON.parse(await readFile(mcpPath, "utf8")) as Record<string, unknown>;
       } catch {
-        // mcp.json may not exist yet
+        // mcp-adapter.json may not exist yet
       }
 
       const mcpServers = (mcpDoc.mcpServers ?? {}) as Record<string, unknown>;
@@ -7052,23 +7052,25 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       });
       const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const mcpBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const mcpBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
       const oldAgent = await readFile(agentPath, "utf8");
-      await rm(locations.mcpJsonPath, { force: true });
-      await mkdir(locations.mcpJsonPath, { recursive: true });
+      await rm(locations.mcpAdapterJsonPath, { force: true });
+      await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
       // Read back the runtime's own errno wording: later majors append the offending path to it.
       // The failure's IDENTITY is not runtime-owned, so it is pinned here rather than left to the
       // composition: the probe is the same read production makes, so it moves with whatever is on
       // disk. A fixture that drifted to a missing file would report ENOENT on both sides and leave
       // this case green against a different failure entirely.
-      const readFailure = await readFile(locations.mcpJsonPath, "utf8").catch((error: unknown) => {
-        const errno = error as NodeJS.ErrnoException;
-        assert.deepStrictEqual(
-          { code: errno.code, syscall: errno.syscall },
-          { code: "EISDIR", syscall: "read" },
-        );
-        return errno.message;
-      });
+      const readFailure = await readFile(locations.mcpAdapterJsonPath, "utf8").catch(
+        (error: unknown) => {
+          const errno = error as NodeJS.ErrnoException;
+          assert.deepStrictEqual(
+            { code: errno.code, syscall: errno.syscall },
+            { code: "EISDIR", syscall: "read" },
+          );
+          return errno.message;
+        },
+      );
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -7094,7 +7096,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstAgent = await readFile(agentPath, "utf8");
-      await rm(locations.mcpJsonPath, { force: true, recursive: true });
+      await rm(locations.mcpAdapterJsonPath, { force: true, recursive: true });
       activeSchedule.current = secondSchedule;
       const second = await reinstall({
         ctx,
@@ -7129,7 +7131,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
         "agents/",
         "agents/pi-claude-marketplace-hello-bot.md",
         "claude-plugins.json",
-        "mcp.json/",
+        "mcp-adapter.json/",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/agents-staging/",
@@ -7150,7 +7152,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
         "agents/",
         "agents/pi-claude-marketplace-hello-bot.md",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/agents-staging/",
@@ -7166,7 +7168,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
-      assert.equal(await readFile(locations.mcpJsonPath, "utf8"), mcpBytes);
+      assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), mcpBytes);
       assert.match(await readFile(agentPath, "utf8"), /new agent/);
       assert.match(await readSkill(cwd), /new skill/);
     } finally {
@@ -7637,7 +7639,7 @@ test("retry proof: reinstall: a persistence failure after four committed replace
       });
       const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const mcpBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const mcpBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
       const oldAgent = await readFile(agentPath, "utf8");
       const oldSkill = await readSkill(cwd);
       const oldCommand = await readCommand(cwd);
@@ -7670,7 +7672,7 @@ test("retry proof: reinstall: a persistence failure after four committed replace
       });
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const firstMcpBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const firstMcpBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
       const firstAgent = await readFile(agentPath, "utf8");
       const firstSkill = await readSkill(cwd);
       const firstCommand = await readCommand(cwd);
@@ -7745,7 +7747,7 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         "agents/",
         "agents/pi-claude-marketplace-hello-bot.md",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/agents-staging/",
@@ -7766,7 +7768,7 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         "agents/",
         "agents/pi-claude-marketplace-hello-bot.md",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/agents-staging/",

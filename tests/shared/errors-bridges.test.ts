@@ -5,6 +5,7 @@ import {
   AgentOwnershipConflictError,
   BridgeStagingError,
   CommandNameError,
+  McpConfigFileError,
   McpServerCollisionError,
   WorkflowTargetOccupiedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
@@ -287,6 +288,51 @@ describe("McpServerCollisionError", () => {
       ],
     );
   });
+});
+
+describe("McpConfigFileError", () => {
+  for (const { defect, message } of [
+    {
+      defect: "invalid-jsonc",
+      message: "MCP config /scope/mcp-adapter.json is not valid JSONC; it was left unchanged.",
+    },
+    {
+      defect: "top-level-not-object",
+      message:
+        "MCP config /scope/mcp-adapter.json does not hold a JSON object; it was left unchanged.",
+    },
+    {
+      defect: "mcpServers-not-object",
+      message:
+        'MCP config /scope/mcp-adapter.json has an "mcpServers" value that is not an object; it was left unchanged.',
+    },
+    {
+      defect: "mcp-servers-not-object",
+      message:
+        'MCP config /scope/mcp-adapter.json has an "mcp-servers" value that is not an object; it was left unchanged.',
+    },
+  ] as const) {
+    test(`AFILE-02: names the file and the ${defect} defect without a cause`, () => {
+      // arrange
+      const filePath = "/scope/mcp-adapter.json";
+
+      // act
+      const error = new McpConfigFileError(filePath, defect);
+
+      // assert
+      assert.ok(error instanceof McpConfigFileError);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          filePath: error.filePath,
+          defect: error.defect,
+          cause: error.cause,
+        },
+        { name: "McpConfigFileError", message, filePath, defect, cause: undefined },
+      );
+    });
+  }
 });
 
 describe("BridgeStagingError", () => {

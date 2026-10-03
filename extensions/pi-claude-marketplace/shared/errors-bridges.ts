@@ -64,6 +64,34 @@ export class McpServerCollisionError extends Error {
   }
 }
 
+const MCP_CONFIG_DEFECT_TEXT: Readonly<Record<McpConfigFileError["defect"], string>> = {
+  "invalid-jsonc": "is not valid JSONC",
+  "top-level-not-object": "does not hold a JSON object",
+  "mcpServers-not-object": 'has an "mcpServers" value that is not an object',
+  "mcp-servers-not-object": 'has an "mcp-servers" value that is not an object',
+};
+
+/**
+ * AFILE-02 refusal: an MCP config file the bridge cannot read safely. The
+ * operation stops before any write, so the file keeps its exact bytes.
+ *
+ * The message names the file and the defect only, and the error carries no
+ * `cause`: Node's `JSON.parse` message can quote file content, and MCP
+ * configs hold tokens.
+ */
+export class McpConfigFileError extends Error {
+  readonly filePath: string;
+  readonly defect:
+    "invalid-jsonc" | "top-level-not-object" | "mcpServers-not-object" | "mcp-servers-not-object";
+
+  constructor(filePath: string, defect: McpConfigFileError["defect"]) {
+    super(`MCP config ${filePath} ${MCP_CONFIG_DEFECT_TEXT[defect]}; it was left unchanged.`);
+    this.name = "McpConfigFileError";
+    this.filePath = filePath;
+    this.defect = defect;
+  }
+}
+
 /**
  * Generic wrapper for prepare-time staging tmp failures (mkdtemp, partial
  * writes). Carries the underlying cause via Error.cause; downstream

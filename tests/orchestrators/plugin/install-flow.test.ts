@@ -2825,7 +2825,7 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
         stat(path.join(locations.promptsTargetDir, "hello:deploy.md")),
         "the commands bridge ran, so its artifact must be gone",
       );
-      const mcp = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
+      const mcp = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
         mcpServers?: Record<string, unknown>;
       };
       assert.ok(
@@ -2906,10 +2906,10 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       const agentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       assert.ok((await readFile(agentTarget, "utf8")).length > 0, "agent .md must exist");
 
-      const mcp = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
+      const mcp = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
         mcpServers?: Record<string, unknown>;
       };
-      assert.ok(mcp.mcpServers !== undefined, "mcp.json must have mcpServers");
+      assert.ok(mcp.mcpServers !== undefined, "mcp-adapter.json must have mcpServers");
       assert.ok("server1" in (mcp.mcpServers ?? {}), "server1 must be present");
 
       // State commit: plugin record has all four resource arrays populated.
@@ -2940,6 +2940,102 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
           "\n" +
           "/reload to pick up changes",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-01: install writes the plugin's marked entries into project mcp-adapter.json and keeps foreign keys", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile01-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await mkdir(path.dirname(adapterPath), { recursive: true });
+      await writeFile(
+        adapterPath,
+        '﻿{\n  // user settings\n  "settings": { "toolPrefix": "short" },\n  "mcpServers": {\n    "mine": { "command": "my-server" },\n  },\n}\n',
+      );
+      const dataDir = path.join(locations.dataRoot, "mp", "hello");
+      const { ctx, pi } = makeCtx();
+
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        `{
+  "settings": {
+    "toolPrefix": "short"
+  },
+  "mcpServers": {
+    "mine": {
+      "command": "my-server"
+    },
+    "server1": {
+      "command": "node",
+      "args": [
+        "server.js"
+      ],
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
+        "CLAUDE_PLUGIN_DATA": "${dataDir}",
+        "CLAUDE_PROJECT_DIR": "${cwd}"
+      },
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+      );
+      assert.equal(await pathExists(path.join(cwd, ".pi", "mcp.json")), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-02: an MCP install over an unparseable mcp-adapter.json fails and keeps its bytes", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile02-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const storedBytes = '{"a": sk-secret-abc}\n';
+      await mkdir(path.dirname(adapterPath), { recursive: true });
+      await writeFile(adapterPath, storedBytes);
+      const { ctx, pi, notifications } = makeCtx();
+
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      assert.equal(await readFile(adapterPath, "utf8"), storedBytes);
+      assert.deepEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed)\n" +
+            `    cause: MCP config ${adapterPath} is not valid JSONC; it was left unchanged.`,
+        },
+      ]);
+      assert.equal(notifications[0]?.message.includes("sk-secret-abc"), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4621,7 +4717,7 @@ test("Rollback-commands-undo: commands committed then agents phase fails -> comm
 
 test("Rollback-agents-undo: agents committed then mcp phase fails -> agent target removed", async () => {
   // Gap: agentsPhase.undo body -- unstagePluginAgents called when agents
-  // committed but the mcp phase fails (mcp.json is a directory, so
+  // committed but the mcp phase fails (mcp-adapter.json is a directory, so
   // readFile on it gets EISDIR -- a non-PathContainmentError that causes
   // the mcp phase to throw and triggers rollback of agents).
   await withHermeticHome(async ({ installPlugin }) => {
@@ -4637,11 +4733,11 @@ test("Rollback-agents-undo: agents committed then mcp phase fails -> agent targe
         mcpServers: { server1: { command: "node" } },
       });
 
-      // Pre-create a DIRECTORY at mcpJsonPath so readScopedDoc gets
+      // Pre-create a DIRECTORY at mcpAdapterJsonPath so readMcpConfigDoc gets
       // EISDIR (which is not silenced) -- making prepareStageMcpServers
       // throw a non-PathContainmentError.
-      await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-      await mkdir(locations.mcpJsonPath, { recursive: true });
+      await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+      await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
 
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
@@ -9054,7 +9150,7 @@ test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no
   // The hooks bridge writes its config atomically -- there is no staging dir,
   // so its undo is a real removal rather than the discard the other bridges
   // do. Failing the mcp phase (the slot after hooks) is what makes that
-  // removal run; occupying <scopeRoot>/mcp.json with a directory fails the
+  // removal run; occupying <scopeRoot>/mcp-adapter.json with a directory fails the
   // phase without touching any earlier one.
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-unwind-"));
@@ -9070,7 +9166,7 @@ test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no
         mcpServers: { server1: { command: "node", args: ["s.js"] } },
       });
 
-      await mkdir(locations.mcpJsonPath, { recursive: true });
+      await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
 
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
@@ -10191,9 +10287,9 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
         // firing on whichever `runPhases` call returns first.
         if (result.ok && mcpFault && phases.some((phase) => phase.name === "mcp")) {
           activeSchedule.push("commit:mcp", "disable:mcp:armed");
-          await chmod(locations.mcpJsonPath, 0o000);
+          await chmod(locations.mcpAdapterJsonPath, 0o000);
           try {
-            await readFile(locations.mcpJsonPath, "utf8");
+            await readFile(locations.mcpAdapterJsonPath, "utf8");
             assert.fail("expected the permission fixture to refuse the MCP read");
           } catch (error) {
             mcpError = error as Error;
@@ -10222,7 +10318,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
       const firstTree = await retryTree(locations.scopeRoot);
       mcpFault = false;
-      await chmod(locations.mcpJsonPath, 0o600);
+      await chmod(locations.mcpAdapterJsonPath, 0o600);
       activeSchedule = secondSchedule;
       const second = await installPlugin({
         applyDefaultEnabled: true,
@@ -10254,7 +10350,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/state.json",
@@ -10266,7 +10362,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       await assert.rejects(stat(path.join(locations.hooksDir, "hooky", "hooks.json")), /ENOENT/);
     } finally {
       const locations = locationsFor("project", cwd);
-      await chmod(locations.mcpJsonPath, 0o600).catch(() => undefined);
+      await chmod(locations.mcpAdapterJsonPath, 0o600).catch(() => undefined);
       await rm(cwd, { force: true, recursive: true });
     }
   });
@@ -11143,20 +11239,22 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       );
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const manifestBytes = await readFile(manifestPath, "utf8");
-      await mkdir(locations.mcpJsonPath, { recursive: true });
+      await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
       // Read back the runtime's own errno wording: later majors append the offending path to it.
       // The failure's IDENTITY is not runtime-owned, so it is pinned here rather than left to the
       // composition: the probe is the same read production makes, so it moves with whatever is on
       // disk. A fixture that drifted to a missing file would report ENOENT on both sides and leave
       // this case green against a different failure entirely.
-      const readFailure = await readFile(locations.mcpJsonPath, "utf8").catch((error: unknown) => {
-        const errno = error as NodeJS.ErrnoException;
-        assert.deepStrictEqual(
-          { code: errno.code, syscall: errno.syscall },
-          { code: "EISDIR", syscall: "read" },
-        );
-        return errno.message;
-      });
+      const readFailure = await readFile(locations.mcpAdapterJsonPath, "utf8").catch(
+        (error: unknown) => {
+          const errno = error as NodeJS.ErrnoException;
+          assert.deepStrictEqual(
+            { code: errno.code, syscall: errno.syscall },
+            { code: "EISDIR", syscall: "read" },
+          );
+          return errno.message;
+        },
+      );
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -11192,7 +11290,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       });
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
-      await rm(locations.mcpJsonPath, { recursive: true });
+      await rm(locations.mcpAdapterJsonPath, { recursive: true });
       activeSchedule.current = secondSchedule;
       const second = await installPlugin({
         ctx,
@@ -11236,7 +11334,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         "prepare:agents",
         "commit:agents",
       ]);
-      assert.strictEqual(firstTree.includes("mcp.json/"), true);
+      assert.strictEqual(firstTree.includes("mcp-adapter.json/"), true);
       assert.strictEqual(
         firstTree.some((entry) => entry.endsWith("hooks.json")),
         false,
@@ -11257,7 +11355,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         },
       );
       const finalTree = await retryTree(locations.scopeRoot);
-      assert.strictEqual(finalTree.filter((entry) => entry === "mcp.json").length, 1);
+      assert.strictEqual(finalTree.filter((entry) => entry === "mcp-adapter.json").length, 1);
       assert.strictEqual(
         finalTree.some((entry) => /[0-9a-f-]{36}/.test(entry)),
         false,

@@ -1,106 +1,79 @@
 // bridges/mcp/unstage.ts
 //
-// MC-7 unstage for the MCP bridge. Reads the scope's `mcp.json`, drops
-// every entry whose `_piClaudeMarketplace` marker matches the supplied
-// `(plugin, marketplace)` tuple, atomic-writes the reduced doc, and
-// returns the names that were removed.
+// MC-7 unstage for the MCP bridge. Reads the scope's `mcp-adapter.json`
+// with pi-mcp-adapter's grammar, drops every entry whose
+// `_piClaudeMarketplace` marker matches the supplied `(plugin, marketplace)`
+// tuple under either server key, atomic-writes the reduced doc, and returns
+// the names that were removed (AFILE-01). A marker-less entry under one of
+// the plugin's names stays: it is user-authored.
 //
-// MC-7 tolerances:
-//   - Missing `mcp.json` (ENOENT/ENOTDIR) -> noop. Must NOT materialize
+// MC-7 tolerances (no write):
+//   - Missing `mcp-adapter.json` (ENOENT/ENOTDIR). Must NOT materialize
 //     the file just to write an empty one back.
-//   - Missing `mcpServers` field on an otherwise-valid scoped doc ->
-//     noop. The doc keeps its other top-level fields.
-//   - Nothing to remove (no entries match the tuple) -> noop. We do NOT
-//     re-write the file in that case (PRD §5.7 quiet-on-noop).
+//   - No server key on an otherwise-valid doc.
+//   - Nothing to remove (no entries match the tuple). We do NOT re-write
+//     the file in that case (PRD §5.7 quiet-on-noop).
+//   - A non-object top level: no server in it can be ours, and the user's
+//     structure is none of the unstage path's business.
 //
-// A present non-object `mcpServers` field is refused through stage.ts's
-// shared classifier before enumeration or mutation.
-//
-// Malformed scoped JSON propagates as a parse error rather than being
-// silently overwritten, mirroring the conservative behavior we want for
-// destructive-shaped operations: when the user-visible file is broken,
-// surface the breakage rather than mask it.
-
-import { readFile } from "node:fs/promises";
+// Refusals (typed `McpConfigFileError`, no write): invalid JSONC, and a
+// present server key whose value is not an object. When the user-visible
+// file is broken, unstage surfaces the breakage rather than mask it
+// (AFILE-02).
 
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { McpConfigFileError } from "../../shared/errors-bridges.ts";
 
-import { isOwnedBy } from "./marker.ts";
-import { safeSet } from "./safe-set.ts";
-import { classifyMcpServers } from "./stage.ts";
+import {
+  ADAPTER_SERVER_KEYS,
+  partitionServers,
+  readMcpConfigDoc,
+  withPluginServers,
+  type McpConfigDoc,
+} from "./adapter-doc.ts";
 
-import type { RawMcpDoc, UnstageMcpInput, UnstageMcpResult } from "./types.ts";
+import type { UnstageMcpInput, UnstageMcpResult } from "./types.ts";
 
 const EMPTY_RESULT: UnstageMcpResult = {
   removedNames: Object.freeze<string[]>([]),
   warnings: Object.freeze<string[]>([]),
 };
 
-export async function unstageMcpServers(input: UnstageMcpInput): Promise<UnstageMcpResult> {
-  const { locations, marketplaceName, pluginName } = input;
-
-  let text: string;
+async function readUnstageConfig(filePath: string): Promise<McpConfigDoc | undefined> {
   try {
-    text = await readFile(locations.mcpJsonPath, "utf8");
+    return await readMcpConfigDoc(filePath, ADAPTER_SERVER_KEYS);
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      // MC-7: missing file is a clean noop -- nothing to remove, nothing
-      // to materialize.
-      return EMPTY_RESULT;
+    if (err instanceof McpConfigFileError && err.defect === "top-level-not-object") {
+      return undefined;
     }
 
     throw err;
   }
+}
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (err) {
-    throw new Error(`malformed JSON at ${locations.mcpJsonPath}: ${errorMessage(err)}`, {
-      cause: err,
-    });
-  }
+export async function unstageMcpServers(input: UnstageMcpInput): Promise<UnstageMcpResult> {
+  const { locations, marketplaceName, pluginName } = input;
 
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    // Top-level non-object: treat as having no servers to unstage. We do
-    // NOT rewrite the file here because the user's existing structure --
-    // even if non-conforming -- is none of the unstage path's business.
+  const config = await readUnstageConfig(locations.mcpAdapterJsonPath);
+  if (config === undefined) {
     return EMPTY_RESULT;
   }
 
-  const doc = parsed as RawMcpDoc;
-  const classification = classifyMcpServers(doc, locations.mcpJsonPath);
-  if (classification.kind === "missing") {
-    return EMPTY_RESULT;
-  }
-
-  const existing = classification.servers;
-
-  const removed: string[] = [];
-  const kept: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(existing)) {
-    if (isOwnedBy(value, pluginName, marketplaceName)) {
-      removed.push(name);
-    } else {
-      // safeSet copies a foreign server literally named `__proto__` as an own
-      // data property rather than routing it through the inherited setter (which
-      // would silently drop the user's entry) -- WR-01.
-      safeSet(kept, name, value);
-    }
-  }
-
+  // `ours` lists the selected key's entries first, each map in file order.
+  const removed = Object.keys(partitionServers(config, pluginName, marketplaceName).ours);
   if (removed.length === 0) {
     // PRD §5.7 / D-04: don't rewrite the file when there's nothing to
     // remove. The mtime-stable invariant is what tests rely on.
     return EMPTY_RESULT;
   }
 
-  await atomicWriteJson(locations.mcpJsonPath, { ...doc, mcpServers: kept });
+  await atomicWriteJson(
+    locations.mcpAdapterJsonPath,
+    withPluginServers(config, pluginName, marketplaceName, {}),
+  );
 
   return {
-    removedNames: Object.freeze([...removed]),
+    removedNames: Object.freeze(removed),
     warnings: Object.freeze<string[]>([]),
   };
 }

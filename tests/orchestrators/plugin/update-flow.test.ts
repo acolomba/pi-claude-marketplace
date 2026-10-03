@@ -2310,7 +2310,7 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
             "update-in-progress",
           ) === true,
         () => {
-          chmodSync(path.dirname(locations.mcpJsonPath), 0o500);
+          chmodSync(path.dirname(locations.mcpAdapterJsonPath), 0o500);
         },
       );
       const first = makeCtx();
@@ -2330,7 +2330,7 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
       assert.equal(first.notifications[0]?.severity, "error");
       assert.match(first.notifications[0]?.message ?? "", /\[mcp\] \(rollback failed\)/);
       assert.match(first.notifications[0]?.message ?? "", /EACCES|EPERM/);
-      await chmod(path.dirname(locations.mcpJsonPath), 0o700);
+      await chmod(path.dirname(locations.mcpAdapterJsonPath), 0o700);
       const retry = makeCtx();
       await updatePlugins({
         ctx: retry.ctx,
@@ -2347,7 +2347,7 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
       );
     } finally {
       const locations = locationsFor("project", cwd);
-      await chmod(path.dirname(locations.mcpJsonPath), 0o700).catch(() => undefined);
+      await chmod(path.dirname(locations.mcpAdapterJsonPath), 0o700).catch(() => undefined);
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -3462,11 +3462,11 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
   // The throw propagates to runThreePhaseUpdate -> updateSinglePlugin cascade
   // catch -> partition='failed'.
   //
-  // Setup: seed <cwd>/.pi/mcp.json with "rollback-server" owned by a DIFFERENT
+  // Setup: seed <cwd>/.pi/mcp-adapter.json with "rollback-server" owned by a DIFFERENT
   // plugin. Then seed hello@mp with version 1.0.1 declaring the same server.
   // discoverGeneratedNames does NOT check MCP collisions (it only discovers
   // skills/commands/agents), so it succeeds. prepareStageMcpServers then reads
-  // the scoped mcp.json, finds "rollback-server" in `theirs`,
+  // the scoped mcp-adapter.json, finds "rollback-server" in `theirs`,
   // and throws McpServerCollisionError.
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-prepare-mcp-fail-");
@@ -3488,13 +3488,13 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
         }),
       );
 
-      // Pre-populate the project-scope mcp.json with "rollback-server" owned by
+      // Pre-populate the project-scope mcp-adapter.json with "rollback-server" owned by
       // another plugin. This puts the server into `theirs` when
-      // prepareStageMcpServers calls partitionExistingServers for the update.
+      // prepareStageMcpServers calls partitionServers for the update.
       const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+      await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
       await writeFile(
-        locations.mcpJsonPath,
+        locations.mcpAdapterJsonPath,
         JSON.stringify({
           mcpServers: {
             "rollback-server": {
@@ -4428,7 +4428,7 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
 //
 // A dedicated "mcp commit fails, others succeed" test is OMITTED
 // because the mcp bridge's prepare step (`prepareStageMcpServers`) reads
-// `locations.mcpJsonPath` via `readScopedDoc` BEFORE the bridge commit
+// `locations.mcpAdapterJsonPath` via `readMcpConfigDoc` BEFORE the bridge commit
 // runs (stage.ts:178). The only file-system obstacle that reliably forces
 // a commit-time failure for atomicWriteJson (a DIRECTORY at the target
 // path) ALSO trips the prepare-step `readFile` with EISDIR, surfacing as
@@ -8468,7 +8468,7 @@ test("MENV-04: project-scope update re-derives ${CLAUDE_PLUGIN_ROOT} in mcp.json
       });
       const firstErrs = first.notifications.filter((n) => n.severity === "error");
       assert.equal(firstErrs.length, 0, `unexpected errors: ${JSON.stringify(firstErrs)}`);
-      const afterFirst = await readFile(locations.mcpJsonPath, "utf8");
+      const afterFirst = await readFile(locations.mcpAdapterJsonPath, "utf8");
       assert.ok(afterFirst.includes(oldRoot), "first update materializes the old root");
 
       // Swap the source dir: copy the tree to a new root, bump its version,
@@ -8495,9 +8495,9 @@ test("MENV-04: project-scope update re-derives ${CLAUDE_PLUGIN_ROOT} in mcp.json
       assert.equal(secondErrs.length, 0, `unexpected errors: ${JSON.stringify(secondErrs)}`);
 
       // Substitution re-derives from the resolver's source, never from a
-      // read-back of the prior mcp.json: the new root lands and no substring
+      // read-back of the prior mcp-adapter.json: the new root lands and no substring
       // of the old root survives anywhere in the raw file bytes.
-      const onDisk = await readFile(locations.mcpJsonPath, "utf8");
+      const onDisk = await readFile(locations.mcpAdapterJsonPath, "utf8");
       assert.ok(onDisk.includes(newRoot), "new root must be present");
       assert.equal(onDisk.includes("OLDROOT"), false, "no substring of the old root may survive");
     } finally {

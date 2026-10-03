@@ -54,8 +54,16 @@ export interface ScopedLocations {
   readonly agentsStagingDir: string;
   /** `<extensionRoot>/agents-index.json` -- on-disk agent ownership index (D-07). */
   readonly agentsIndexPath: string;
-  /** `<scopeRoot>/mcp.json` -- MCP server registry (SC-2). */
+  /**
+   * `<scopeRoot>/mcp.json` -- the legacy MCP server registry (SC-2). Nothing
+   * is staged into it; it stays in the NFR-10 write set for legacy entries.
+   */
   readonly mcpJsonPath: string;
+  /**
+   * `<scopeRoot>/mcp-adapter.json` -- pi-mcp-adapter's own config file, where
+   * plugin MCP servers are staged (AFILE-01, NFR-10).
+   */
+  readonly mcpAdapterJsonPath: string;
   /** `<scopeRoot>/claude-plugins.json` -- declarative config base (CFG-01). */
   readonly configJsonPath: string;
   /** `<scopeRoot>/claude-plugins.local.json` -- per-machine override layer (CFG-02). */
@@ -201,8 +209,10 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   const agentsStagingDir = path.join(extensionRoot, "agents-staging");
   const agentsIndexPath = path.join(extensionRoot, "agents-index.json");
   const mcpJsonPath = path.join(scopeRoot, "mcp.json");
+  const mcpAdapterJsonPath = path.join(scopeRoot, "mcp-adapter.json");
   // CFG-01 / CFG-02: declarative config base + per-machine override sit under
-  // scopeRoot at the same tier as agentsDir and mcpJsonPath. NFR-10 containment
+  // scopeRoot at the same tier as agentsDir, mcpJsonPath and mcpAdapterJsonPath
+  // (AFILE-01). NFR-10 containment
   // is enforced at the WRITE site (saveConfig) rather than here; both paths are
   // composed from hard-coded suffixes on scopeRoot so the locations.ts comment
   // block below (lines 134-143) covering the suffix-only construction applies.
@@ -280,6 +290,7 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     agentsStagingDir,
     agentsIndexPath,
     mcpJsonPath,
+    mcpAdapterJsonPath,
     configJsonPath,
     configLocalJsonPath,
     skillsStagingDir,

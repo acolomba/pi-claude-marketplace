@@ -1053,6 +1053,77 @@ test("a damaged metadata backup is reported without replacing the live document"
   });
 });
 
+test("AFILE-01: a missing adapter file stays absent after rollback", async () => {
+  await withHermeticEnvironment("prune-rollback-adapter-absent-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(failures, []);
+    await assert.rejects(stat(locations.mcpAdapterJsonPath), { code: "ENOENT" });
+  });
+});
+
+test("AFILE-01: an adapter edit during rollback stays current with its original in the backup", async () => {
+  await withHermeticEnvironment("prune-rollback-adapter-edit-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+    const independent = Buffer.from('{ "mcpServers": { "orphan": { "disabled": true } } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, independent);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase }) => phase),
+      ["mcp adapter"],
+    );
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), independent);
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      original,
+    );
+  });
+});
+
+test("AFILE-01: a byte-identical adapter file restores cleanly", async () => {
+  await withHermeticEnvironment("prune-rollback-adapter-same-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(failures, []);
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), original);
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
+  });
+});
+
 test("state restore refusal keeps the backup and reports state failure", async () => {
   await withHermeticEnvironment("prune-rollback-state-refusal-", async ({ cwd }) => {
     // arrange
