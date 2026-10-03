@@ -472,6 +472,90 @@ const PRUNE_COMMITTED_WARNING_PAYLOAD = Type.Object(
 );
 
 /**
+ * D-01: the envelope fields of a raw kind. A raw kind has no `summary`: the
+ * model composes a summary line only for structured envelopes, and the typed
+ * body fields carry the raw kind's text.
+ */
+const RAW_ENVELOPE_FIELDS = {
+  schemaVersion: Type.Literal(1),
+  severity: SEVERITY,
+  needsReload: Type.Boolean(),
+};
+
+const USAGE_ERROR_PAYLOAD = Type.Object(
+  {
+    ...RAW_ENVELOPE_FIELDS,
+    kind: Type.Literal("usage-error"),
+    message: Type.String(),
+    usage: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+const USAGE_INFO_PAYLOAD = Type.Object(
+  { ...RAW_ENVELOPE_FIELDS, kind: Type.Literal("usage-info"), usage: Type.String() },
+  { additionalProperties: false },
+);
+
+const DIAGNOSTIC_PAYLOAD = Type.Object(
+  {
+    ...RAW_ENVELOPE_FIELDS,
+    kind: Type.Literal("diagnostic"),
+    header: Type.String(),
+    lines: STRINGS,
+  },
+  { additionalProperties: false },
+);
+
+const DEVICE_FLOW_PROMPT_PAYLOAD = Type.Object(
+  {
+    ...RAW_ENVELOPE_FIELDS,
+    kind: Type.Literal("device-flow-prompt"),
+    verificationUri: Type.String(),
+    userCode: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * RAWS-05 / D-08: the plugin author's summary, verbatim, as `text`: D-01
+ * reserves `summary` for the warning and error summary line.
+ */
+const ASYNC_REWAKE_SUMMARY_PAYLOAD = Type.Object(
+  { ...RAW_ENVELOPE_FIELDS, kind: Type.Literal("async-rewake-summary"), text: Type.String() },
+  { additionalProperties: false },
+);
+
+const STOP_OVERRIDE_CAP_PAYLOAD = Type.Object(
+  {
+    ...RAW_ENVELOPE_FIELDS,
+    kind: Type.Literal("stop-override-cap"),
+    pluginId: Type.String(),
+    cap: COUNT,
+  },
+  { additionalProperties: false },
+);
+
+const RECONCILE_ABORTED_PAYLOAD = Type.Object(
+  {
+    ...RAW_ENVELOPE_FIELDS,
+    kind: Type.Literal("reconcile-aborted"),
+    causeMessage: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+const PLUGIN_PATH_SKIPPED_PAYLOAD = Type.Object(
+  {
+    ...RAW_ENVELOPE_FIELDS,
+    kind: Type.Literal("plugin-path-skipped"),
+    scope: SCOPE,
+    reason: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+/**
  * WIRE-01 / D-01..D-03: the one payload union, keyed by `kind`. Kinds appear
  * in their declared order. D-12: production reads only its static type.
  */
@@ -486,4 +570,12 @@ export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([
   RECONCILE_PENDING_EMPTY_PAYLOAD,
   PRUNE_EMPTY_PAYLOAD,
   PRUNE_COMMITTED_WARNING_PAYLOAD,
+  USAGE_ERROR_PAYLOAD,
+  USAGE_INFO_PAYLOAD,
+  DIAGNOSTIC_PAYLOAD,
+  DEVICE_FLOW_PROMPT_PAYLOAD,
+  ASYNC_REWAKE_SUMMARY_PAYLOAD,
+  STOP_OVERRIDE_CAP_PAYLOAD,
+  RECONCILE_ABORTED_PAYLOAD,
+  PLUGIN_PATH_SKIPPED_PAYLOAD,
 ]);

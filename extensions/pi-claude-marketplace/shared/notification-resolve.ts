@@ -20,6 +20,7 @@ import type {
   RawSurface,
   Reason,
   ReconcileAbortedSurface,
+  Severity,
   WithPlugins,
 } from "./notification-types.ts";
 import type { SoftDepStatus } from "../platform/pi-api.ts";
@@ -532,6 +533,21 @@ export function resolveNotAddedReason(message: MarketplaceNotAddedMessage): Reas
     ? "marketplace not added to user scope"
     : "marketplace not added to project scope";
 }
+
+/**
+ * PMOD-01: the one place a raw kind's severity is decided. The text strategy
+ * and the JSON strategy both read it, so the two cannot disagree.
+ */
+export const RAW_SURFACE_SEVERITY = {
+  "usage-error": "error",
+  "usage-info": "info",
+  diagnostic: "warning",
+  "device-flow-prompt": "info",
+  "async-rewake-summary": "info",
+  "stop-override-cap": "warning",
+  "reconcile-aborted": "error",
+  "plugin-path-skipped": "warning",
+} as const satisfies Record<RawSurface["kind"], Severity>;
 
 /** D-13: a reconcile abort whose live cause has been serialized to text. */
 export interface ResolvedReconcileAborted {

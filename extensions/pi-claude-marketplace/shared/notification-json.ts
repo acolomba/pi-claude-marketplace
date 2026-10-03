@@ -1,3 +1,5 @@
+import { RAW_SURFACE_SEVERITY } from "./notification-resolve.ts";
+
 import type { HookSummaryEntry } from "./concerns/hooks.ts";
 import type { SerializedCauseChain } from "./errors.ts";
 import type { CascadePresentation, NotificationPresentation } from "./notification-present.ts";
@@ -5,6 +7,7 @@ import type {
   ResolvedEnvelope,
   ResolvedFailure,
   ResolvedMarketplace,
+  ResolvedRawSurface,
   ResolvedRow,
   ResolvedTally,
 } from "./notification-resolve.ts";
@@ -23,8 +26,9 @@ import type Type from "typebox";
 
 /**
  * shared/notification-json.ts -- the JSON strategy, a format-only peer of the
- * text strategy (JOUT-02). It converts one presentation into a plain payload
- * whose type is the static type of the wire union.
+ * text strategy (JOUT-02). It converts one presentation, or one resolved raw
+ * surface, into a plain payload whose type is the static type of the wire
+ * union.
  *
  * D-03: the payload is built field by field. No model object is spread into
  * it, so a model field the wire does not declare never reaches it.
@@ -35,17 +39,24 @@ import type Type from "typebox";
  */
 
 /**
- * Converts a presentation into its wire payload (JOUT-02, D-01..D-04). A
- * cascade presentation yields the cascade payload, so a caller reads its
- * `marketplaces` without a branch.
+ * Converts a presentation or a resolved raw surface into its wire payload
+ * (JOUT-02, D-01..D-04). A cascade presentation yields the cascade payload, so
+ * a caller reads its `marketplaces` without a branch.
  */
 export function toWirePayload(
   presentation: CascadePresentation,
 ): Type.Static<typeof CASCADE_PAYLOAD_SCHEMA>;
 export function toWirePayload(
-  presentation: NotificationPresentation,
+  source: NotificationPresentation | ResolvedRawSurface,
 ): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA>;
 export function toWirePayload(
+  source: NotificationPresentation | ResolvedRawSurface,
+): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA> {
+  return "envelope" in source ? wirePresentation(source) : wireRawSurface(source);
+}
+
+/** JOUT-02: the payload of one structured presentation, one arm per kind. */
+function wirePresentation(
   presentation: NotificationPresentation,
 ): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA> {
   switch (presentation.kind) {
@@ -118,6 +129,46 @@ export function toWirePayload(
         scope: presentation.scope,
         ...(presentation.cause === undefined ? {} : { cause: wireCause(presentation.cause) }),
       };
+  }
+}
+
+/**
+ * D-01 / D-02: the payload of one resolved raw surface. Its severity comes from
+ * `RAW_SURFACE_SEVERITY`, the table the text strategy reads (PMOD-01). A raw
+ * kind never needs a reload and carries no `summary`; the rewake summary is
+ * copied verbatim into `text` (D-08).
+ */
+function wireRawSurface(
+  surface: ResolvedRawSurface,
+): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA> {
+  const envelope = {
+    schemaVersion: 1,
+    severity: RAW_SURFACE_SEVERITY[surface.kind],
+    needsReload: false,
+  } as const;
+
+  switch (surface.kind) {
+    case "usage-error":
+      return { ...envelope, kind: surface.kind, message: surface.message, usage: surface.usage };
+    case "usage-info":
+      return { ...envelope, kind: surface.kind, usage: surface.usage };
+    case "diagnostic":
+      return { ...envelope, kind: surface.kind, header: surface.header, lines: [...surface.lines] };
+    case "device-flow-prompt":
+      return {
+        ...envelope,
+        kind: surface.kind,
+        verificationUri: surface.verificationUri,
+        userCode: surface.userCode,
+      };
+    case "async-rewake-summary":
+      return { ...envelope, kind: surface.kind, text: surface.summary };
+    case "stop-override-cap":
+      return { ...envelope, kind: surface.kind, pluginId: surface.pluginId, cap: surface.cap };
+    case "reconcile-aborted":
+      return { ...envelope, kind: surface.kind, causeMessage: surface.causeMessage };
+    case "plugin-path-skipped":
+      return { ...envelope, kind: surface.kind, scope: surface.scope, reason: surface.reason };
   }
 }
 

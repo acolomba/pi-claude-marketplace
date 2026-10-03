@@ -65,7 +65,7 @@ const [CASCADE_MEMBER, RECONCILE_APPLIED_MEMBER] = NOTIFICATION_PAYLOAD_SCHEMA.a
  * reports every member's errors, so each case reads the member its kind names.
  */
 function leafErrors(
-  member: typeof CASCADE_MEMBER | typeof RECONCILE_APPLIED_MEMBER,
+  member: (typeof NOTIFICATION_PAYLOAD_SCHEMA.anyOf)[number],
   payload: unknown,
 ): { keyword: string; instancePath: string }[] {
   const validator = Compile(member);
@@ -201,6 +201,68 @@ test("rejects noOp on a reconcile-applied payload", () => {
   // assert
   assert.deepStrictEqual(errors, [
     { keyword: "boolean", instancePath: "/noOp" },
+    { keyword: "additionalProperties", instancePath: "" },
+  ]);
+  assert.strictEqual(valid, false);
+});
+
+const DEVICE_FLOW_PROMPT_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[13];
+const ASYNC_REWAKE_SUMMARY_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[14];
+
+function deviceFlowPromptPayload(): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    kind: "device-flow-prompt",
+    severity: "info",
+    needsReload: false,
+    verificationUri: "https://github.com/login/device",
+    userCode: "ABCD-1234",
+  };
+}
+
+test("accepts a raw device-flow-prompt payload", () => {
+  // arrange
+  const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+  const payload = deviceFlowPromptPayload();
+
+  // act
+  const valid = validator.Check(payload);
+
+  // assert
+  assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
+});
+
+test("rejects a device-flow-prompt payload without its user code", () => {
+  // arrange
+  const { userCode: _userCode, ...payload } = deviceFlowPromptPayload();
+
+  // act
+  const errors = leafErrors(DEVICE_FLOW_PROMPT_MEMBER, payload);
+  const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+  // assert
+  assert.deepStrictEqual(errors, [{ keyword: "required", instancePath: "" }]);
+  assert.strictEqual(valid, false);
+});
+
+test("rejects an async-rewake-summary payload that carries summary", () => {
+  // arrange
+  const payload = {
+    schemaVersion: 1,
+    kind: "async-rewake-summary",
+    severity: "info",
+    needsReload: false,
+    text: "rewoke",
+    summary: "rewoke",
+  };
+
+  // act
+  const errors = leafErrors(ASYNC_REWAKE_SUMMARY_MEMBER, payload);
+  const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+  // assert
+  assert.deepStrictEqual(errors, [
+    { keyword: "boolean", instancePath: "/summary" },
     { keyword: "additionalProperties", instancePath: "" },
   ]);
   assert.strictEqual(valid, false);

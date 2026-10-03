@@ -17,6 +17,7 @@ import type {
 import type {
   ResolvedEnvelope,
   ResolvedMarketplace,
+  ResolvedRawSurface,
   ResolvedRow,
   RowHint,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -1500,3 +1501,215 @@ for (const { title, cause, expectedCause } of [
     });
   });
 }
+
+/** One row per raw kind; a kind missing from the table fails typecheck. */
+const RAW_CASES: {
+  readonly [K in ResolvedRawSurface["kind"]]: {
+    readonly surface: Extract<ResolvedRawSurface, { kind: K }>;
+    readonly expected: Record<string, unknown>;
+  };
+} = {
+  "usage-error": {
+    surface: { kind: "usage-error", message: "unknown flag", usage: "usage: install" },
+    expected: {
+      schemaVersion: 1,
+      kind: "usage-error",
+      severity: "error",
+      needsReload: false,
+      message: "unknown flag",
+      usage: "usage: install",
+    },
+  },
+  "usage-info": {
+    surface: { kind: "usage-info", usage: "usage: install" },
+    expected: {
+      schemaVersion: 1,
+      kind: "usage-info",
+      severity: "info",
+      needsReload: false,
+      usage: "usage: install",
+    },
+  },
+  diagnostic: {
+    surface: { kind: "diagnostic", header: "2 warnings", lines: ["one", "two"] },
+    expected: {
+      schemaVersion: 1,
+      kind: "diagnostic",
+      severity: "warning",
+      needsReload: false,
+      header: "2 warnings",
+      lines: ["one", "two"],
+    },
+  },
+  "device-flow-prompt": {
+    surface: {
+      kind: "device-flow-prompt",
+      verificationUri: "https://github.com/login/device",
+      userCode: "ABCD-1234",
+    },
+    expected: {
+      schemaVersion: 1,
+      kind: "device-flow-prompt",
+      severity: "info",
+      needsReload: false,
+      verificationUri: "https://github.com/login/device",
+      userCode: "ABCD-1234",
+    },
+  },
+  "async-rewake-summary": {
+    surface: { kind: "async-rewake-summary", summary: "rewoke" },
+    expected: {
+      schemaVersion: 1,
+      kind: "async-rewake-summary",
+      severity: "info",
+      needsReload: false,
+      text: "rewoke",
+    },
+  },
+  "stop-override-cap": {
+    surface: { kind: "stop-override-cap", pluginId: "alpha@mp", cap: 8 },
+    expected: {
+      schemaVersion: 1,
+      kind: "stop-override-cap",
+      severity: "warning",
+      needsReload: false,
+      pluginId: "alpha@mp",
+      cap: 8,
+    },
+  },
+  "reconcile-aborted": {
+    surface: { kind: "reconcile-aborted", causeMessage: "state unreadable" },
+    expected: {
+      schemaVersion: 1,
+      kind: "reconcile-aborted",
+      severity: "error",
+      needsReload: false,
+      causeMessage: "state unreadable",
+    },
+  },
+  "plugin-path-skipped": {
+    surface: { kind: "plugin-path-skipped", scope: "project", reason: "EACCES" },
+    expected: {
+      schemaVersion: 1,
+      kind: "plugin-path-skipped",
+      severity: "warning",
+      needsReload: false,
+      scope: "project",
+      reason: "EACCES",
+    },
+  },
+};
+
+for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
+  test(`converts a ${kind} raw surface with its severity, no reload, and no summary`, () => {
+    // arrange
+    const expectedPayload = expected;
+
+    // act
+    const payload = toWirePayload(surface);
+
+    // assert
+    assert.deepStrictEqual(payload, expectedPayload);
+  });
+}
+
+test("converts a diagnostic with no lines to an empty line list", () => {
+  // arrange
+  const surface = {
+    kind: "diagnostic",
+    header: "0 warnings",
+    lines: [],
+  } satisfies ResolvedRawSurface;
+
+  // act
+  const payload = toWirePayload(surface);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "diagnostic",
+    severity: "warning",
+    needsReload: false,
+    header: "0 warnings",
+    lines: [],
+  });
+});
+
+test("converts an empty rewake summary to empty text", () => {
+  // arrange
+  const surface = { kind: "async-rewake-summary", summary: "" } satisfies ResolvedRawSurface;
+
+  // act
+  const payload = toWirePayload(surface);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "async-rewake-summary",
+    severity: "info",
+    needsReload: false,
+    text: "",
+  });
+});
+
+test("copies the diagnostic lines so the payload shares no array with the surface", () => {
+  // arrange
+  const surface = {
+    kind: "diagnostic",
+    header: "1 warning",
+    lines: ["one"],
+  } satisfies ResolvedRawSurface;
+
+  // act
+  const payload = toWirePayload(surface);
+
+  // assert
+  assert.ok("lines" in payload);
+  assert.notStrictEqual(payload.lines, surface.lines);
+  assert.deepStrictEqual(payload.lines, ["one"]);
+});
+
+function adjacentCascade(): CascadePresentation {
+  return {
+    kind: "cascade",
+    envelope: { severity: "info", needsReload: true, noOp: false },
+    marketplaces: [],
+  };
+}
+
+function expectedAdjacentPayloads(): Record<string, unknown>[] {
+  return [
+    {
+      schemaVersion: 1,
+      kind: "usage-info",
+      severity: "info",
+      needsReload: false,
+      usage: "usage: list",
+    },
+    { schemaVersion: 1, kind: "cascade", severity: "info", needsReload: true, marketplaces: [] },
+  ];
+}
+
+test("a raw surface converted before a cascade stays independent of it", () => {
+  // arrange
+  const surface = { kind: "usage-info", usage: "usage: list" } satisfies ResolvedRawSurface;
+
+  // act
+  const raw = toWirePayload(surface);
+  const cascade = toWirePayload(adjacentCascade());
+
+  // assert
+  assert.deepStrictEqual([raw, cascade], expectedAdjacentPayloads());
+});
+
+test("a cascade converted before a raw surface stays independent of it", () => {
+  // arrange
+  const surface = { kind: "usage-info", usage: "usage: list" } satisfies ResolvedRawSurface;
+
+  // act
+  const cascade = toWirePayload(adjacentCascade());
+  const raw = toWirePayload(surface);
+
+  // assert
+  assert.deepStrictEqual([raw, cascade], expectedAdjacentPayloads());
+});

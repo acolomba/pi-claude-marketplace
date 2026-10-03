@@ -1,5 +1,6 @@
 import { appendHooksBlock } from "./concerns/hooks.ts";
 import { formatCauseChain } from "./errors.ts";
+import { RAW_SURFACE_SEVERITY } from "./notification-resolve.ts";
 import { tallyCategory } from "./notification-summary.ts";
 
 import type { SerializedCauseChain } from "./errors.ts";
@@ -1128,7 +1129,8 @@ export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string
 
 /**
  * D-15: formats one resolved raw surface as its notify arguments. Every raw kind
- * passes its severity explicitly, so each emitting arm yields two arguments.
+ * passes its severity explicitly, read from `RAW_SURFACE_SEVERITY` (PMOD-01),
+ * so each emitting arm yields two arguments.
  * `undefined` means nothing is emitted. The diagnostic arm reads the line count
  * and the async-rewake arm reads the summary length, so only a zero-length line
  * list or summary is a no-op (D-05, D-08). Producer strings pass through
@@ -1138,30 +1140,35 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
   switch (surface.kind) {
     case "usage-error":
       // SNM-13 / D-06: one blank line separates the message from the usage.
-      return [`${surface.message}\n\n${surface.usage}`, "error"];
+      return [`${surface.message}\n\n${surface.usage}`, RAW_SURFACE_SEVERITY[surface.kind]];
     case "usage-info":
-      return [surface.usage, "info"];
+      return [surface.usage, RAW_SURFACE_SEVERITY[surface.kind]];
     case "diagnostic":
       return surface.lines.length === 0
         ? undefined
-        : [`${surface.header}\n\n${surface.lines.join("\n")}`, "warning"];
+        : [`${surface.header}\n\n${surface.lines.join("\n")}`, RAW_SURFACE_SEVERITY[surface.kind]];
     case "device-flow-prompt":
       // D-09: the provider's values pass through verbatim.
-      return [`Open ${surface.verificationUri} and enter: ${surface.userCode}`, "info"];
+      return [
+        `Open ${surface.verificationUri} and enter: ${surface.userCode}`,
+        RAW_SURFACE_SEVERITY[surface.kind],
+      ];
     case "async-rewake-summary":
-      return surface.summary.length === 0 ? undefined : [surface.summary, "info"];
+      return surface.summary.length === 0
+        ? undefined
+        : [surface.summary, RAW_SURFACE_SEVERITY[surface.kind]];
     case "stop-override-cap":
       // D-07: the cap arrives as data from the settle bridge.
       return [
         `Stop hook override cap reached.\n\n\`${surface.pluginId}\`'s Stop hook blocked ${surface.cap} times in a row; the turn ended despite its active block.`,
-        "warning",
+        RAW_SURFACE_SEVERITY[surface.kind],
       ];
     case "reconcile-aborted":
-      return [`reconcile aborted: ${surface.causeMessage}`, "error"];
+      return [`reconcile aborted: ${surface.causeMessage}`, RAW_SURFACE_SEVERITY[surface.kind]];
     case "plugin-path-skipped":
       return [
         `plugin PATH not refreshed for ${surface.scope} scope (install state unreadable): ${surface.reason}`,
-        "warning",
+        RAW_SURFACE_SEVERITY[surface.kind],
       ];
   }
 }

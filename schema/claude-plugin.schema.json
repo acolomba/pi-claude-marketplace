@@ -1415,6 +1415,114 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "severity", "needsReload", "kind", "message", "usage"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "usage-error" },
+        "message": { "type": "string" },
+        "usage": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "severity", "needsReload", "kind", "usage"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "usage-info" },
+        "usage": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "severity", "needsReload", "kind", "header", "lines"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "diagnostic" },
+        "header": { "type": "string" },
+        "lines": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "severity",
+        "needsReload",
+        "kind",
+        "verificationUri",
+        "userCode"
+      ],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "device-flow-prompt" },
+        "verificationUri": { "type": "string" },
+        "userCode": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "severity", "needsReload", "kind", "text"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "async-rewake-summary" },
+        "text": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "severity", "needsReload", "kind", "pluginId", "cap"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "stop-override-cap" },
+        "pluginId": { "type": "string" },
+        "cap": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "severity", "needsReload", "kind", "causeMessage"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "reconcile-aborted" },
+        "causeMessage": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "severity", "needsReload", "kind", "scope", "reason"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "plugin-path-skipped" },
+        "scope": { "enum": ["user", "project"] },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": false
     }
   ]
 }
