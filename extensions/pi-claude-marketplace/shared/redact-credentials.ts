@@ -15,6 +15,11 @@
  *   reader still sees which credential form the message carried.
  * - A prefixed token needs a body of 16 or more characters, so a short
  *   identifier that happens to start with a prefix stays intact.
+ * - A prefixed token has no boundary anchor on either side. The userinfo
+ *   pattern starts at the first character of a run of scheme characters
+ *   (letters, digits, `+.-`), which keeps its scan linear. Either way, a
+ *   secret glued to a word character (`xghp_...`, `ghp_..._suffix`,
+ *   `remote_https://u:tok@host`) is still replaced.
  * - A `Bearer` secret sits on the same line, ends on a word character or
  *   `=` padding, and is token-shaped (see `isTokenShaped`). Prose such as
  *   `Bearer token required`, `a Bearer token.`, or `Bearer realm="GitHub"`
@@ -25,10 +30,10 @@
  * Only the secret span changes; the text around it stays byte for byte.
  */
 export function redactCredentials(text: string): string {
-  const userinfo = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]+@/gi;
+  const userinfo = /(?<![a-z0-9+.-])([a-z0-9+.-]+:\/\/)[^\s/?#]+@/gi;
   const accessToken = /\b(x-access-token:)[^\s@/]+/gi;
   const bearer = /\b(Bearer[ \t]+)([\w.~+/-]*\w=*)/gi;
-  const githubToken = /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_\w{16,})\b/g;
+  const githubToken = /gh[pousr]_[A-Za-z0-9]{16,}|github_pat_\w{16,}/g;
   return text
     .replace(userinfo, "$1***@")
     .replace(accessToken, "$1***")

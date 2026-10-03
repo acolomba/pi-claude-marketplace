@@ -940,6 +940,16 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
       }),
   },
   {
+    site: "a diagnostic line whose secrets are glued to word characters",
+    planted: [...USERINFO, GITHUB_TOKEN],
+    probe: () =>
+      probeRawSurface({
+        kind: "diagnostic",
+        header: "import skipped:",
+        lines: [`  remote_${USERINFO_URL} and x${GITHUB_TOKEN}_suffix rejected`],
+      }),
+  },
+  {
     site: "a diagnostic line",
     planted: ["tok123secret"],
     probe: () =>

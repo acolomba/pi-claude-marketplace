@@ -100,6 +100,26 @@ for (const { name, input, expected } of [
     expected: "token *** bad",
   },
   {
+    name: "PMOD-04 / D-05 replaces a token glued to a leading word character",
+    input: `token xghp_${BODY_36} bad`,
+    expected: "token x*** bad",
+  },
+  {
+    name: "PMOD-04 / D-05 replaces a token followed by an underscore suffix",
+    input: `token ghp_${BODY_36}_suffix bad`,
+    expected: "token ***_suffix bad",
+  },
+  {
+    name: "PMOD-04 / D-06 replaces userinfo whose scheme is glued to a word character",
+    input: "remote_https://u:tok@host/x failed",
+    expected: "remote_https://***@host/x failed",
+  },
+  {
+    name: "PMOD-04 / D-06 replaces userinfo whose scheme follows a digit",
+    input: "remote 1https://u:tok@host/x failed",
+    expected: "remote 1https://***@host/x failed",
+  },
+  {
     name: "PMOD-04 leaves the scp-style subject git@host:owner/repo unchanged",
     input: "marketplace git@github.com:foo/bar.git failed",
     expected: "marketplace git@github.com:foo/bar.git failed",
