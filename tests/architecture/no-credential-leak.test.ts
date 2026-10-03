@@ -3,8 +3,12 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { CREDENTIAL_LEAK_TARGETS, EXTENSION_ROOT_REL } from "./gate-targets.ts";
-import { REPO_ROOT } from "./source-scan.ts";
+import {
+  CREDENTIAL_LEAK_TARGETS,
+  EXTENSION_ROOT_REL,
+  PRESENTATION_SINK_TARGETS,
+} from "./gate-targets.ts";
+import { filesMatching, REPO_ROOT } from "./source-scan.ts";
 import {
   assertPlantedCopyRejects,
   materializeTargets,
@@ -179,6 +183,10 @@ const ERROR_OR_UI_NOTIFY_LITERAL_CALL_SITE =
 const ALLOWED_DEVICE_CODE_CALL =
   /\.onDeviceCode\(\s*\{\s*verificationUri:\s*deviceCode\.verification_uri,\s*userCode:\s*deviceCode\.user_code,?\s*\}\s*\)/g;
 
+/** The device-code callback's member declaration on the Device Flow options. */
+const ALLOWED_DEVICE_CODE_DECLARATION =
+  /\bonDeviceCode:\s*\(\s*prompt:\s*DeviceFlowPrompt\s*\)\s*=>\s*void;/g;
+
 /**
  * AUTH-09 / D-11: the only form in which a provider file may bind the
  * device-code callback to the dispatch module's prompt helper. The bound
@@ -187,16 +195,50 @@ const ALLOWED_DEVICE_CODE_CALL =
 const ALLOWED_PROMPT_BINDING =
   /onDeviceCode:\s*\(\s*prompt\s*\)\s*=>\s*\{\s*notifyDeviceFlowPrompt\(\s*ctx\s*,\s*prompt\s*\);?\s*\}/g;
 
+/** The prompt helper's import under its own name. An `as` rename does not match. */
+const ALLOWED_PROMPT_HELPER_IMPORT =
+  /\bimport\s*\{[^}]*\bnotifyDeviceFlowPrompt\b(?!\s+as\b)[^}]*\}\s*from\s*"[^"]*\/notification-dispatch\.ts"/g;
+
+/** The prompt helper's declaration in the dispatch module. */
+const ALLOWED_PROMPT_HELPER_DECLARATION =
+  /\bexport function notifyDeviceFlowPrompt\(ctx: NotificationContext, prompt: DeviceFlowPrompt\): void \{/g;
+
+/** Any mention of either identifier, used to discover the files that name one. */
+const DEVICE_PROMPT_REFERENCE = /\b(?:onDeviceCode|notifyDeviceFlowPrompt)\b/;
+
+const [SINK_FILE] = PRESENTATION_SINK_TARGETS;
+
+/**
+ * The only extension files that may name the device-code callback or the
+ * prompt helper, sorted: the binding, the Device Flow module, and the
+ * dispatch module that declares the helper.
+ */
+const DEVICE_PROMPT_REFERENCE_FILES: ReadonlyArray<string> = [
+  AUTH_HOST_FILE,
+  GITHUB_AUTH_FILE,
+  SINK_FILE,
+].sort();
+
+function countMatches(src: string, pattern: RegExp): number {
+  return [...src.matchAll(pattern)].length;
+}
+
 /**
  * Counts every device-code callback call in the Device Flow module under
  * `root` and requires each one to be in the allowed form. At least one call
  * must exist, so a renamed or removed callback fails the gate instead of
  * leaving the allow-list satisfied by zero calls (D-07-03).
+ *
+ * Every other mention of the identifier must be its member declaration. That
+ * clause rejects the call forms the call count cannot see: `.call(`, bracket
+ * access, and a renamed destructure.
  */
 async function scanDeviceCodeCalls(root: string): Promise<void> {
   const stripped = stripComments(await readFile(path.join(root, GITHUB_AUTH_FILE), "utf8"));
-  const calls = [...stripped.matchAll(/\bonDeviceCode\s*\(/g)].length;
-  const allowedCalls = [...stripped.matchAll(ALLOWED_DEVICE_CODE_CALL)].length;
+  const calls = countMatches(stripped, /\bonDeviceCode\s*\(/g);
+  const allowedCalls = countMatches(stripped, ALLOWED_DEVICE_CODE_CALL);
+  const mentions = countMatches(stripped, /\bonDeviceCode\b/g);
+  const declarations = countMatches(stripped, ALLOWED_DEVICE_CODE_DECLARATION);
 
   assert.ok(
     calls > 0,
@@ -207,49 +249,96 @@ async function scanDeviceCodeCalls(root: string): Promise<void> {
     calls,
     `AUTH-09 violation: ${GITHUB_AUTH_FILE} calls onDeviceCode ${calls} time(s), but only ${allowedCalls} call(s) pass exactly verificationUri and userCode from the device-code response.`,
   );
+  assert.strictEqual(
+    mentions,
+    declarations + allowedCalls,
+    `AUTH-09 violation: ${GITHUB_AUTH_FILE} names onDeviceCode ${mentions} time(s), but only ${declarations + allowedCalls} are its declaration or the allowed call. Any other reference can pass the callback a value the call form cannot inspect.`,
+  );
 }
 
 /**
- * Counts every prompt-helper call across the provider files under `root` and
- * requires each one to sit inside the allowed device-code binding. At least
- * one call must exist across the set (D-07-03). Returns the files it opened,
- * in order.
+ * The references in one comment-stripped file that are not in an allowed
+ * form, or an empty list. The Device Flow module's `onDeviceCode` mentions
+ * belong to `scanDeviceCodeCalls`.
  */
-async function scanPromptBindings(root: string): Promise<ReadonlyArray<string>> {
-  const visited: string[] = [];
-  let helperCalls = 0;
-  let bindings = 0;
-  for (const rel of PROVIDER_FILES) {
-    const stripped = stripComments(await readFile(path.join(root, rel), "utf8"));
-    visited.push(rel);
-    helperCalls += [...stripped.matchAll(/\bnotifyDeviceFlowPrompt\s*\(/g)].length;
-    bindings += [...stripped.matchAll(ALLOWED_PROMPT_BINDING)].length;
+function strayPromptReferences(rel: string, stripped: string): string[] {
+  const bindings = countMatches(stripped, ALLOWED_PROMPT_BINDING);
+  const stray: string[] = [];
+
+  if (rel !== GITHUB_AUTH_FILE) {
+    const mentions = countMatches(stripped, /\bonDeviceCode\b/g);
+    if (mentions !== bindings) {
+      stray.push(
+        `${rel} names onDeviceCode ${mentions} time(s), ${bindings} in the allowed binding`,
+      );
+    }
   }
 
+  const helperMentions = countMatches(stripped, /\bnotifyDeviceFlowPrompt\b/g);
+  const helperAllowed =
+    bindings +
+    countMatches(stripped, ALLOWED_PROMPT_HELPER_IMPORT) +
+    countMatches(stripped, ALLOWED_PROMPT_HELPER_DECLARATION);
+  if (helperMentions !== helperAllowed) {
+    stray.push(
+      `${rel} names notifyDeviceFlowPrompt ${helperMentions} time(s), ${helperAllowed} in its import, its declaration, or the allowed binding`,
+    );
+  }
+
+  return stray;
+}
+
+/**
+ * Walks the whole extension tree under `root` for every file that names the
+ * device-code callback or the prompt helper. Only the three files in
+ * `DEVICE_PROMPT_REFERENCE_FILES` may name either one, and every mention must
+ * be an allowed form. At least one allowed binding must exist (D-07-03).
+ * Returns the files that name either identifier, sorted.
+ */
+async function scanPromptReferences(root: string): Promise<ReadonlyArray<string>> {
+  const named = await filesMatching(EXTENSION_ROOT_REL, DEVICE_PROMPT_REFERENCE, { root });
+  const outside = named.filter((rel) => !DEVICE_PROMPT_REFERENCE_FILES.includes(rel));
+  let bindings = 0;
+  const stray: string[] = [];
+  for (const rel of named) {
+    const stripped = stripComments(await readFile(path.join(root, rel), "utf8"));
+    bindings += countMatches(stripped, ALLOWED_PROMPT_BINDING);
+    stray.push(...strayPromptReferences(rel, stripped));
+  }
+
+  assert.deepStrictEqual(
+    outside,
+    [],
+    `AUTH-09 violation: only ${DEVICE_PROMPT_REFERENCE_FILES.join(", ")} may name onDeviceCode or notifyDeviceFlowPrompt, but these files do too: ${outside.join(", ")}`,
+  );
   assert.ok(
-    helperCalls > 0,
-    `D-07-03: no notifyDeviceFlowPrompt call exists in ${PROVIDER_FILES.join(" or ")}, so the AUTH-09 binding allow-list below passes over nothing. Re-aim the gate at the module that now binds the device-code prompt.`,
+    bindings > 0,
+    `D-07-03: no onDeviceCode: (prompt) => { notifyDeviceFlowPrompt(ctx, prompt); } binding exists under ${EXTENSION_ROOT_REL}, so the AUTH-09 reference allow-list passes over nothing. Re-aim the gate at the module that now binds the device-code prompt.`,
   );
-  assert.strictEqual(
-    bindings,
-    helperCalls,
-    `AUTH-09 violation: the provider files call notifyDeviceFlowPrompt ${helperCalls} time(s), but only ${bindings} call(s) sit in the exact onDeviceCode: (prompt) => { notifyDeviceFlowPrompt(ctx, prompt); } binding.`,
+  assert.deepStrictEqual(
+    stray,
+    [],
+    `AUTH-09 violation: a device-code prompt reference is not in an allowed form:\n  ${stray.join("\n  ")}`,
   );
-  return visited;
+  return named;
 }
 
 /**
  * Both device-code prompt scans under `root`, so every planted control below
- * exercises the domain call and the provider binding through one dependency.
- * Returns the provider files the binding scan opened.
+ * exercises the domain call and the tree-wide references through one
+ * dependency. Returns the files that name either identifier.
  */
 async function scanDeviceCodePrompt(root: string): Promise<ReadonlyArray<string>> {
   await scanDeviceCodeCalls(root);
-  return scanPromptBindings(root);
+  return scanPromptReferences(root);
 }
 
 /** The real files the device-code prompt controls copy into a temporary root. */
-const DEVICE_CODE_PROMPT_TARGETS: ReadonlyArray<string> = [GITHUB_AUTH_FILE, ...PROVIDER_FILES];
+const DEVICE_CODE_PROMPT_TARGETS: ReadonlyArray<string> = [
+  GITHUB_AUTH_FILE,
+  ...PROVIDER_FILES,
+  SINK_FILE,
+];
 
 test("AUTH-09: no credential field name appears in any state-write code path", async () => {
   assert.ok(
@@ -491,9 +580,9 @@ test("PROV-05: every provider file is scanned for token interpolation in an Erro
     "D-07-03: the scan must have opened every declared provider file; one that stopped resolving drops out of this list.",
   );
   assert.deepStrictEqual(
-    await scanPromptBindings(REPO_ROOT),
-    [...PROVIDER_FILES],
-    "D-07-03: the binding scan must have opened every declared provider file; one that stopped resolving drops out of this list.",
+    await scanPromptReferences(REPO_ROOT),
+    DEVICE_PROMPT_REFERENCE_FILES,
+    "D-07-03: the reference scan must have found every file allowed to name the device-code callback or the prompt helper; one that stopped resolving drops out of this list.",
   );
 });
 
@@ -556,9 +645,34 @@ const DEVICE_CODE_PROMPT_OFFENDERS: ReadonlyArray<{
     line: "opts.onDeviceCode(prompt);",
   },
   {
+    name: "a token-valued userCode passed through .call",
+    target: GITHUB_AUTH_FILE,
+    line: "opts.onDeviceCode.call(undefined, { verificationUri: deviceCode.verification_uri, userCode: r.accessToken });",
+  },
+  {
+    name: "a token-valued userCode passed through bracket access",
+    target: GITHUB_AUTH_FILE,
+    line: 'opts["onDeviceCode"]({ verificationUri: deviceCode.verification_uri, userCode: r.accessToken });',
+  },
+  {
+    name: "a token-valued userCode passed through a renamed destructure",
+    target: GITHUB_AUTH_FILE,
+    line: "const { onDeviceCode: show } = opts; show({ verificationUri: deviceCode.verification_uri, userCode: r.accessToken });",
+  },
+  {
     name: "a credential-carrying prompt in the provider binding",
     target: AUTH_HOST_FILE,
     line: "notifyDeviceFlowPrompt(ctx, { verificationUri: host, userCode: cred.password });",
+  },
+  {
+    name: "the prompt helper aliased in the provider file",
+    target: AUTH_HOST_FILE,
+    line: "const show = notifyDeviceFlowPrompt; show(ctx, { verificationUri: host, userCode: cred.password });",
+  },
+  {
+    name: "a helper call from a non-provider orchestrator",
+    target: MARKETPLACE_ADD_FILE,
+    line: "notifyDeviceFlowPrompt(ctx, { verificationUri: url, userCode: cred.password });",
   },
 ];
 
@@ -576,16 +690,16 @@ for (const { name, target, line } of DEVICE_CODE_PROMPT_OFFENDERS) {
   });
 }
 
-test("AUTH-09 / D-11: unmutated copies pass the device-code prompt gate and report every provider file opened", async () => {
+test("AUTH-09 / D-11: unmutated copies pass the device-code prompt gate and report every file allowed to name the prompt", async () => {
   await withTempRoot("device-code-prompt-benign-", async (root) => {
     // arrange
     await materializeTargets(root, DEVICE_CODE_PROMPT_TARGETS);
 
     // act
-    const visited = await scanDeviceCodePrompt(root);
+    const named = await scanDeviceCodePrompt(root);
 
     // assert
-    assert.deepStrictEqual(visited, [...PROVIDER_FILES]);
+    assert.deepStrictEqual(named, DEVICE_PROMPT_REFERENCE_FILES);
   });
 });
 
@@ -600,9 +714,9 @@ test("AUTH-09 / D-11: a token-valued onDeviceCode call inside a line comment pas
     );
 
     // act
-    const visited = await scanDeviceCodePrompt(root);
+    const named = await scanDeviceCodePrompt(root);
 
     // assert
-    assert.deepStrictEqual(visited, [...PROVIDER_FILES]);
+    assert.deepStrictEqual(named, DEVICE_PROMPT_REFERENCE_FILES);
   });
 });
