@@ -4,6 +4,21 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  formatCauseChain,
+  ManualRecoveryError,
+} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  composeReconcileAppliedBody,
+  formatRawSurface,
+  renderMarketplaceInfo,
+  renderPluginInfo,
+} from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { toWirePayload } from "../../extensions/pi-claude-marketplace/shared/notification-json.ts";
+import { presentNotification } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
+import { resolveRawSurface } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import { runWithAllLoaded } from "../shared/notification-run-seeds.ts";
+
+import {
   CREDENTIAL_LEAK_TARGETS,
   EXTENSION_ROOT_REL,
   PRESENTATION_SINK_TARGETS,
@@ -15,6 +30,13 @@ import {
   plantBenignNearMiss,
   withTempRoot,
 } from "./temp-root-control.ts";
+
+import type { NotificationPresentation } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
+import type {
+  NotificationMessage,
+  PluginNotificationMessage,
+  RawSurface,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /**
  * AUTH-09 architecture gate.
@@ -719,4 +741,298 @@ test("AUTH-09 / D-11: a token-valued onDeviceCode call inside a line comment pas
     // assert
     assert.deepStrictEqual(named, DEVICE_PROMPT_REFERENCE_FILES);
   });
+});
+
+/**
+ * AUTH-09 / PMOD-04 (D-07): the JSON path. Each row plants one credential at
+ * one site that can carry a thrown message and reads three strings back: the
+ * presentation (or the resolved raw surface), the JSON strategy's payload, and
+ * the text the text strategy builds from the same value. Calling these pure
+ * functions sends no notify emission, so the corpus gains no entry.
+ */
+interface LeakProbe {
+  readonly presentation: string;
+  readonly payload: string;
+  readonly text: string;
+}
+
+const GITHUB_TOKEN = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
+const USERINFO_URL = "https://alice:s3cret@github.com/o/r.git";
+const USERINFO = ["alice:s3cret@", "s3cret"];
+
+function probePresentation(
+  message: NotificationMessage,
+  text: (presentation: NotificationPresentation) => string,
+): LeakProbe {
+  const presentation = presentNotification(runWithAllLoaded(), message);
+  return {
+    presentation: JSON.stringify(presentation),
+    payload: JSON.stringify(toWirePayload(presentation)),
+    text: text(presentation),
+  };
+}
+
+function probeRawSurface(surface: RawSurface): LeakProbe {
+  const resolved = resolveRawSurface(surface);
+  return {
+    presentation: JSON.stringify(resolved),
+    payload: JSON.stringify(toWirePayload(resolved)),
+    text: formatRawSurface(resolved)?.[0] ?? "",
+  };
+}
+
+function cascadeText(presentation: NotificationPresentation): string {
+  assert.ok(presentation.kind === "cascade");
+  return [
+    composeReconcileAppliedBody(presentation.marketplaces),
+    ...(presentation.advisories ?? []),
+  ].join("\n");
+}
+
+function rowCascade(row: PluginNotificationMessage): NotificationMessage {
+  return { marketplaces: [{ name: "mp", scope: "user", plugins: [row] }] };
+}
+
+/**
+ * Fails with an `AUTH-09 / PMOD-04` message when any of the three strings
+ * carries a planted credential, or when the payload or the text lacks the
+ * `***` marker that shows the redaction ran.
+ */
+function assertNoPlantedCredential(probe: LeakProbe, planted: readonly string[]): void {
+  const fields = [
+    ["presentation", probe.presentation],
+    ["payload", probe.payload],
+    ["text", probe.text],
+  ] as const;
+  for (const [field, text] of fields) {
+    for (const secret of planted) {
+      assert.ok(
+        !text.includes(secret),
+        `AUTH-09 / PMOD-04: the ${field} shows a planted credential`,
+      );
+    }
+  }
+
+  assert.ok(probe.payload.includes("***"), "AUTH-09 / PMOD-04: the payload lacks the *** marker");
+  assert.ok(probe.text.includes("***"), "AUTH-09 / PMOD-04: the text lacks the *** marker");
+}
+
+const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
+  readonly site: string;
+  readonly planted: readonly string[];
+  readonly probe: () => LeakProbe;
+}> = [
+  {
+    site: "a failed row's cause",
+    planted: USERINFO,
+    probe: () =>
+      probePresentation(
+        rowCascade({
+          name: "alpha",
+          status: "failed",
+          severity: "error",
+          reasons: [],
+          cause: new Error(`clone ${USERINFO_URL} failed`),
+        }),
+        cascadeText,
+      ),
+  },
+  {
+    site: "a rollback entry's cause",
+    planted: [GITHUB_TOKEN],
+    probe: () =>
+      probePresentation(
+        rowCascade({
+          name: "alpha",
+          status: "failed",
+          severity: "error",
+          reasons: ["rollback partial"],
+          cause: new Error("install failed"),
+          rollbackPartial: [
+            { phase: "skills", cause: new Error(`restore with ${GITHUB_TOKEN} failed`) },
+          ],
+        }),
+        cascadeText,
+      ),
+  },
+  {
+    site: "a manual-recovery leak",
+    planted: [GITHUB_TOKEN],
+    probe: () =>
+      probePresentation(
+        rowCascade({
+          name: "alpha",
+          status: "manual recovery",
+          severity: "error",
+          reasons: ["rollback partial"],
+          cause: new ManualRecoveryError("stuck", [`/tmp/clone-${GITHUB_TOKEN}`]),
+        }),
+        cascadeText,
+      ),
+  },
+  {
+    site: "a disabled row's remedy cause",
+    planted: ["tok123secret"],
+    probe: () =>
+      probePresentation(
+        rowCascade({
+          name: "alpha",
+          status: "disabled",
+          severity: "warning",
+          needsReload: true,
+          cause: new Error("dependency fetch sent x-access-token:tok123secret"),
+        }),
+        cascadeText,
+      ),
+  },
+  {
+    site: "the reconcile-aborted cause",
+    planted: ["abc.def.secret"],
+    probe: () =>
+      probeRawSurface({
+        kind: "reconcile-aborted",
+        cause: new Error("fetch with Bearer abc.def.secret failed"),
+      }),
+  },
+  {
+    site: "the plugin-path-skipped reason",
+    planted: USERINFO,
+    probe: () =>
+      probeRawSurface({
+        kind: "plugin-path-skipped",
+        scope: "user",
+        reason: `clone ${USERINFO_URL} failed`,
+      }),
+  },
+  {
+    site: "the usage-error message",
+    planted: [GITHUB_TOKEN],
+    probe: () =>
+      probeRawSurface({
+        kind: "usage-error",
+        message: `invalid token ${GITHUB_TOKEN}`,
+        usage: "usage: marketplace add <source>",
+      }),
+  },
+  {
+    site: "a diagnostic header",
+    planted: USERINFO,
+    probe: () =>
+      probeRawSurface({
+        kind: "diagnostic",
+        header: `import of ${USERINFO_URL} skipped:`,
+        lines: ["  plain line"],
+      }),
+  },
+  {
+    site: "a diagnostic line",
+    planted: ["tok123secret"],
+    probe: () =>
+      probeRawSurface({
+        kind: "diagnostic",
+        header: "import skipped:",
+        lines: ["  x-access-token:tok123secret rejected"],
+      }),
+  },
+  {
+    site: "a url-source marketplace-info",
+    planted: USERINFO,
+    probe: () =>
+      probePresentation(
+        {
+          kind: "marketplace-info",
+          name: "mp",
+          scope: "user",
+          details: { autoupdate: false },
+          source: { sourceKind: "url", url: USERINFO_URL },
+        },
+        (presentation) => {
+          assert.ok(presentation.kind === "marketplace-info");
+          return renderMarketplaceInfo(presentation.message);
+        },
+      ),
+  },
+  {
+    site: "the prune-committed-warning cause",
+    planted: [GITHUB_TOKEN],
+    probe: () =>
+      probePresentation(
+        {
+          kind: "prune-committed-warning",
+          scope: "user",
+          cause: new Error(`state save with ${GITHUB_TOKEN} failed`),
+        },
+        (presentation) => {
+          assert.ok(presentation.kind === "prune-committed-warning");
+          assert.ok(presentation.cause !== undefined);
+          return formatCauseChain(presentation.cause);
+        },
+      ),
+  },
+  {
+    site: "a cascade advisory",
+    planted: ["abc.def.secret"],
+    probe: () =>
+      probePresentation(
+        { marketplaces: [], advisories: ["retained staging: Bearer abc.def.secret"] },
+        cascadeText,
+      ),
+  },
+  {
+    site: "a plugin-info note",
+    planted: ["tok123secret"],
+    probe: () =>
+      probePresentation(
+        {
+          kind: "plugin-info",
+          marketplaceName: "mp",
+          marketplaceScope: "user",
+          marketplaceDetails: { autoupdate: false },
+          plugin: {
+            status: "available",
+            name: "alpha",
+            componentsResolved: false,
+            notes: ["workflow wf: x-access-token:tok123secret rejected"],
+          },
+        },
+        (presentation) => {
+          assert.ok(presentation.kind === "plugin-info");
+          return renderPluginInfo(presentation.message);
+        },
+      ),
+  },
+];
+
+for (const { site, planted, probe } of PLANTED_CREDENTIAL_SITES) {
+  test(`AUTH-09 / PMOD-04: neither strategy shows a credential planted in ${site}`, () => {
+    // arrange
+    const plantedCredentials = planted;
+
+    // act
+    const strings = probe();
+
+    // assert
+    assertNoPlantedCredential(strings, plantedCredentials);
+  });
+}
+
+test("AUTH-09 / PMOD-04: the planted-credential assertion reports an unredacted string", () => {
+  // arrange
+  const unredacted = `clone ${USERINFO_URL} failed`;
+  const strings = { presentation: unredacted, payload: unredacted, text: unredacted };
+
+  // act & assert
+  assert.throws(
+    () => {
+      assertNoPlantedCredential(strings, USERINFO);
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof assert.AssertionError);
+      assert.match(
+        error.message,
+        /^AUTH-09 \/ PMOD-04: the presentation shows a planted credential/,
+      );
+      return true;
+    },
+  );
 });
