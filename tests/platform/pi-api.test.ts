@@ -481,6 +481,26 @@ describe("softDepStatus", () => {
       },
     },
     {
+      behavior: "ADET-02 does not count a prompt template whose source names pi-mcp-adapter",
+      tools: [],
+      commands: [{ ...adapterCommand("adapter-recipe"), source: "prompt" }],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
+      behavior: "ADET-02 does not count a skill command whose source names pi-mcp-adapter",
+      tools: [],
+      commands: [{ ...adapterCommand("skill:adapter-recipe"), source: "skill" }],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    },
+    {
       behavior: "ADET-02 does not count an extension command without a name",
       tools: [],
       commands: [{ source: "extension", sourceInfo: { source: "cli" } }],

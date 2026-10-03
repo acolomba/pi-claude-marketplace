@@ -198,15 +198,17 @@ function isAdapterSource(source: unknown): boolean {
   return typeof source === "string" && source.includes("pi-mcp-adapter");
 }
 
+// ADET-02: `getCommands()` also lists prompt templates and skills, each with
+// its package's `sourceInfo`. Only extension commands count, so a skill or
+// prompt shipped beside a filtered-off adapter does not read as the adapter.
 function isAdapterCommand(command: CommandInventoryItem): boolean {
-  if (isAdapterSource(command.sourceInfo?.source)) {
-    return true;
+  if (command.source !== "extension") {
+    return false;
   }
 
   return (
-    command.source === "extension" &&
-    typeof command.name === "string" &&
-    ADAPTER_COMMAND_NAME.test(command.name)
+    isAdapterSource(command.sourceInfo?.source) ||
+    (typeof command.name === "string" && ADAPTER_COMMAND_NAME.test(command.name))
   );
 }
 
@@ -224,9 +226,9 @@ function probeArm(arm: () => boolean): boolean {
 
 /**
  * ADET-02: pi-mcp-adapter is loaded iff `pi.getCommands()` lists an extension
- * command named `mcp-adapter`, or a command or tool `sourceInfo.source`
- * contains "pi-mcp-adapter". The command is present with `disableProxyTool` and
- * in a fork. A bare tool named `mcp` does not count, and neither does Pi's
+ * command named `mcp-adapter`, or an extension command or a tool
+ * `sourceInfo.source` contains "pi-mcp-adapter". The command is present with
+ * `disableProxyTool` and in a fork. A bare tool named `mcp` does not count, and neither does Pi's
  * built-in MCP (`mcp__*` tools and an `mcp` command from `builtin:mcp`). Each
  * arm is guarded on its own and both always run, so one snapshot makes the
  * same reads in every state and a throwing arm leaves the other one deciding.
