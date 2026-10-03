@@ -23,7 +23,6 @@ import type {
   PluginInfoRow,
   PluginNotificationMessage,
   PluginUpdatedMessage,
-  PruneCommittedWarningMessage,
   PruneEmptyMessage,
   Reason,
   Severity,
@@ -618,7 +617,7 @@ export function renderMarketplaceInfoCascade(message: MarketplaceInfoCascadeMess
  * fan-out for the user-facing path, but the renderer keeps the edge
  * case deterministic).
  *
- * File-private; sole caller is the `dispatchInfoMessage` helper.
+ * Its sole production caller is the text strategy's presentation formatter.
  */
 export function renderPluginInfoCascade(message: PluginInfoCascadeMessage): string {
   return message.blocks.map((b) => renderPluginInfo(b)).join("\n\n");
@@ -782,14 +781,17 @@ export function renderPruneEmpty(message: PruneEmptyMessage): string {
 }
 
 /**
- * The `prune-committed-warning` body: the scope line, then `causeTrailer`
- * indented two spaces. The caller serializes and redacts the cause chain.
+ * The `prune-committed-warning` body: the scope line, then the cause line
+ * indented two spaces, or nothing after the indent when there is no cause. It
+ * takes the scope and the serialized chain, not the message, whose `cause` is
+ * a live `Error`: the presentation step serializes and redacts the chain.
  */
 export function renderPruneCommittedWarning(
-  message: PruneCommittedWarningMessage,
-  causeTrailer: string,
+  scope: Scope,
+  cause: SerializedCauseChain | undefined,
 ): string {
-  return `Prune committed in ${message.scope} scope.\n  ${causeTrailer}`;
+  const causeTrailer = cause === undefined ? "" : formatCauseChain(cause);
+  return `Prune committed in ${scope} scope.\n  ${causeTrailer}`;
 }
 
 /**

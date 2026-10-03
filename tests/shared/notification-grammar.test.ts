@@ -32,7 +32,6 @@ import type {
   PluginInstalledMessage,
   PluginNotificationMessage,
   PluginPartiallyInstalledMessage,
-  PruneCommittedWarningMessage,
   PruneEmptyMessage,
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
@@ -898,17 +897,24 @@ for (const { scope, expected } of [
 
 test("renders prune-committed-warning as the scope line and the indented cause trailer", () => {
   // arrange
-  const message = {
-    kind: "prune-committed-warning",
-    scope: "project",
-    cause: new Error("disk full"),
-  } as const satisfies PruneCommittedWarningMessage;
+  const cause = { causeChain: ["save failed", "disk full"], truncated: false };
 
   // act
-  const rendered = renderPruneCommittedWarning(message, "caused by: disk full");
+  const rendered = renderPruneCommittedWarning("project", cause);
 
   // assert
-  assert.equal(rendered, "Prune committed in project scope.\n  caused by: disk full");
+  assert.equal(rendered, "Prune committed in project scope.\n  cause: save failed -> disk full");
+});
+
+test("renders prune-committed-warning with an empty trailer when there is no cause", () => {
+  // arrange
+  const cause = undefined;
+
+  // act
+  const rendered = renderPruneCommittedWarning("user", cause);
+
+  // assert
+  assert.equal(rendered, "Prune committed in user scope.\n  ");
 });
 
 test("reconcile applied body preserves empty and caller-ordered blocks", () => {

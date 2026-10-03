@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   presentCascade,
+  presentNotification,
   presentReconcileApplied,
   presentUpdateNoOp,
 } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
@@ -16,8 +17,16 @@ import type {
 import type { RowPolicyMap } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
   CascadeNotificationMessage,
+  MarketplaceInfoCascadeMessage,
+  MarketplaceInfoMessage,
+  MarketplaceNotAddedMessage,
+  PluginInfoCascadeMessage,
+  PluginInfoMessage,
   PluginInstalledMessage,
+  PruneCommittedWarningMessage,
+  PruneEmptyMessage,
   ReconcileAppliedCascadeMessage,
+  ReconcilePendingEmptyMessage,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 function installedRow(): PluginInstalledMessage {
@@ -358,5 +367,332 @@ describe("presentReconcileApplied", () => {
 
     // assert
     assert.deepStrictEqual(presentation, expectedPresentation);
+  });
+});
+
+function marketplaceInfo(): MarketplaceInfoMessage {
+  return {
+    kind: "marketplace-info",
+    name: "mp",
+    scope: "user",
+    details: { autoupdate: false },
+    source: { sourceKind: "github", owner: "acme", repo: "mp" },
+  };
+}
+
+function pluginInfo(): PluginInfoMessage {
+  return {
+    kind: "plugin-info",
+    marketplaceName: "mp",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: { status: "available", name: "alpha", componentsResolved: false },
+  };
+}
+
+describe("presentNotification", () => {
+  test("presents a cascade with no kind under the central row policy", () => {
+    // arrange
+    const message = {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            {
+              status: "installed",
+              name: "alpha",
+              dependencies: [],
+              severity: "info",
+              needsReload: true,
+              reasons: ["lsp"],
+            },
+          ],
+        },
+      ],
+    } satisfies CascadeNotificationMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "cascade",
+      envelope: { severity: "info", needsReload: true, noOp: false },
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            {
+              status: "installed",
+              name: "alpha",
+              severity: "info",
+              needsReload: true,
+              reasons: ["lsp"],
+            },
+          ],
+        },
+      ],
+    } satisfies CascadePresentation);
+  });
+
+  test("presents an explicit cascade kind like a cascade with no kind", () => {
+    // arrange
+    const message = { kind: "cascade", marketplaces: [] } satisfies CascadeNotificationMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "cascade",
+      envelope: { severity: "info", needsReload: false, noOp: false },
+      marketplaces: [],
+    } satisfies CascadePresentation);
+  });
+
+  test("presents an applied reconcile without a reload", () => {
+    // arrange
+    const message = {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            {
+              status: "installed",
+              name: "alpha",
+              dependencies: [],
+              severity: "info",
+              needsReload: true,
+              reasons: [],
+            },
+          ],
+        },
+      ],
+    } satisfies ReconcileAppliedCascadeMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "reconcile-applied-cascade",
+      envelope: { severity: "info", needsReload: false, noOp: false },
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            {
+              status: "installed",
+              name: "alpha",
+              severity: "info",
+              needsReload: true,
+              reasons: [],
+            },
+          ],
+        },
+      ],
+    } satisfies ReconcileAppliedPresentation);
+  });
+
+  test("carries a marketplace-info message by identity with an info envelope", () => {
+    // arrange
+    const message = marketplaceInfo();
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "marketplace-info",
+      envelope: { severity: "info", needsReload: false, noOp: false },
+      message,
+    });
+    assert.ok("message" in presentation);
+    assert.strictEqual(presentation.message, message);
+  });
+
+  test("presents a failed plugin-info row with an error envelope", () => {
+    // arrange
+    const message = {
+      ...pluginInfo(),
+      plugin: { status: "failed", name: "alpha", componentsResolved: false },
+    } satisfies PluginInfoMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "plugin-info",
+      envelope: {
+        severity: "error",
+        summary: "A plugin operation has failed.",
+        needsReload: false,
+        noOp: false,
+      },
+      message,
+    });
+    assert.ok("message" in presentation);
+    assert.strictEqual(presentation.message, message);
+  });
+
+  test("carries both info fan-outs by identity with info envelopes", () => {
+    // arrange
+    const marketplaces = {
+      kind: "marketplace-info-cascade",
+      blocks: [marketplaceInfo()],
+    } satisfies MarketplaceInfoCascadeMessage;
+    const plugins = {
+      kind: "plugin-info-cascade",
+      blocks: [pluginInfo()],
+    } satisfies PluginInfoCascadeMessage;
+
+    // act
+    const presentations = [
+      presentNotification(runWithAllLoaded(), marketplaces),
+      presentNotification(runWithAllLoaded(), plugins),
+    ];
+
+    // assert
+    assert.deepStrictEqual(presentations, [
+      {
+        kind: "marketplace-info-cascade",
+        envelope: { severity: "info", needsReload: false, noOp: false },
+        message: marketplaces,
+      },
+      {
+        kind: "plugin-info-cascade",
+        envelope: { severity: "info", needsReload: false, noOp: false },
+        message: plugins,
+      },
+    ]);
+  });
+
+  test("carries the pending-empty and prune-empty messages with info envelopes", () => {
+    // arrange
+    const pending = {
+      kind: "reconcile-pending-empty",
+      advisories: ["note"],
+    } satisfies ReconcilePendingEmptyMessage;
+    const prune = { kind: "prune-empty", scope: "project" } satisfies PruneEmptyMessage;
+
+    // act
+    const presentations = [
+      presentNotification(runWithAllLoaded(), pending),
+      presentNotification(runWithAllLoaded(), prune),
+    ];
+
+    // assert
+    assert.deepStrictEqual(presentations, [
+      {
+        kind: "reconcile-pending-empty",
+        envelope: { severity: "info", needsReload: false, noOp: false },
+        message: pending,
+      },
+      {
+        kind: "prune-empty",
+        envelope: { severity: "info", needsReload: false, noOp: false },
+        message: prune,
+      },
+    ]);
+  });
+
+  for (const { message, reason } of [
+    {
+      message: { kind: "marketplace-not-added", name: "mp" },
+      reason: "marketplace not added",
+    },
+    {
+      message: {
+        kind: "marketplace-not-added",
+        name: "mp",
+        scope: "user",
+        presentInOtherScope: true,
+      },
+      reason: "marketplace not added to user scope",
+    },
+    {
+      message: {
+        kind: "marketplace-not-added",
+        name: "mp",
+        scope: "project",
+        presentInOtherScope: true,
+      },
+      reason: "marketplace not added to project scope",
+    },
+  ] satisfies readonly { message: MarketplaceNotAddedMessage; reason: string }[]) {
+    test(`resolves the not-added reason as ${reason}`, () => {
+      // arrange
+      const expectedPresentation = {
+        kind: "marketplace-not-added",
+        envelope: {
+          severity: "error",
+          summary: "A marketplace operation has failed.",
+          needsReload: false,
+          noOp: false,
+        },
+        message,
+        reason,
+      };
+
+      // act
+      const presentation = presentNotification(runWithAllLoaded(), message);
+
+      // assert
+      assert.deepStrictEqual(presentation, expectedPresentation);
+    });
+  }
+
+  test("serializes the prune cause over its redacted chain with no live error", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("save failed at /home/user/.pi/state.json", {
+        cause: new Error("disk full"),
+      }),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ["save failed at state.json", "disk full"], truncated: false },
+    });
+    assert.ok(!Object.values(presentation).some((field) => field instanceof Error));
+  });
+
+  test("presents a prune warning whose cause is absent with no cause member", () => {
+    // arrange
+    const message = { kind: "prune-committed-warning", scope: "user" };
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message as never);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        noOp: false,
+      },
+      scope: "user",
+    });
   });
 });

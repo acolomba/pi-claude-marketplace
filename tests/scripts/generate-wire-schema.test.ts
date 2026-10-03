@@ -87,6 +87,14 @@ test("the committed schema lists each payload kind in declared order with schema
   assert.deepStrictEqual(members, [
     { kind: "cascade", schemaVersion: 1 },
     { kind: "reconcile-applied-cascade", schemaVersion: 1 },
+    { kind: "marketplace-info", schemaVersion: 1 },
+    { kind: "plugin-info", schemaVersion: 1 },
+    { kind: "marketplace-info-cascade", schemaVersion: 1 },
+    { kind: "plugin-info-cascade", schemaVersion: 1 },
+    { kind: "marketplace-not-added", schemaVersion: 1 },
+    { kind: "reconcile-pending-empty", schemaVersion: 1 },
+    { kind: "prune-empty", schemaVersion: 1 },
+    { kind: "prune-committed-warning", schemaVersion: 1 },
   ]);
 });
 

@@ -1,7 +1,13 @@
 import Type from "typebox";
 
 import type { RowHint } from "./notification-resolve.ts";
-import type { MarketplaceStatus, PluginStatus, Reason, Severity } from "./notification-types.ts";
+import type {
+  MarketplaceStatus,
+  PluginInfoRow,
+  PluginStatus,
+  Reason,
+  Severity,
+} from "./notification-types.ts";
 import type { Scope } from "./types.ts";
 
 /**
@@ -43,6 +49,18 @@ const PLUGIN_STATUSES = {
   "partially-available": true,
   remote: true,
 } as const satisfies Record<PluginStatus, true>;
+
+/** The statuses a plugin-info row can hold. */
+const PLUGIN_INFO_STATUSES = {
+  installed: true,
+  available: true,
+  remote: true,
+  unavailable: true,
+  "partially-available": true,
+  failed: true,
+  "partially-installed": true,
+  disabled: true,
+} as const satisfies Record<PluginInfoRow["status"], true>;
 
 const MARKETPLACE_STATUSES = {
   added: true,
@@ -155,6 +173,7 @@ function literalEnum<K extends string>(map: Record<K, true>): Type.TEnum<K[]> {
 }
 
 const PLUGIN_STATUS = literalEnum(PLUGIN_STATUSES);
+const PLUGIN_INFO_STATUS = literalEnum(PLUGIN_INFO_STATUSES);
 const MARKETPLACE_STATUS = literalEnum(MARKETPLACE_STATUSES);
 const REASON = literalEnum(REASONS);
 const SEVERITY = literalEnum(SEVERITIES);
@@ -249,8 +268,11 @@ const ENVELOPE_FIELDS = {
   summary: Type.Optional(Type.String()),
 };
 
-/** D-04: a cascade. `marketplaces: []` is the empty cascade. */
-const CASCADE_PAYLOAD = Type.Object(
+/**
+ * D-04: a cascade. `marketplaces: []` is the empty cascade. Exported for the
+ * JSON strategy's cascade overload, which reads its static type.
+ */
+export const CASCADE_PAYLOAD_SCHEMA = Type.Object(
   {
     ...ENVELOPE_FIELDS,
     kind: Type.Literal("cascade"),
@@ -277,8 +299,191 @@ const RECONCILE_APPLIED_PAYLOAD = Type.Object(
   { additionalProperties: false },
 );
 
+const STRINGS = Type.Array(Type.String());
+
+/**
+ * D-04: the marketplace-info body. `source` follows `sourceKind`; a path
+ * source carries the absolute path the text form shows (NFR-9).
+ */
+const MARKETPLACE_INFO_FIELDS = {
+  name: Type.String(),
+  scope: SCOPE,
+  details: MARKETPLACE_DETAILS,
+  source: Type.Union([
+    Type.Object(
+      {
+        sourceKind: Type.Literal("github"),
+        owner: Type.String(),
+        repo: Type.String(),
+        ref: Type.Optional(Type.String()),
+      },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { sourceKind: Type.Literal("url"), url: Type.String(), ref: Type.Optional(Type.String()) },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { sourceKind: Type.Literal("path"), absPath: Type.String() },
+      { additionalProperties: false },
+    ),
+  ]),
+  description: Type.Optional(Type.String()),
+  allowedMarketplaces: Type.Optional(STRINGS),
+};
+
+/** One `hooks:` entry: a plain event with an optional matcher, or a lenient one. */
+const HOOK_ENTRY = Type.Union([
+  Type.Object(
+    { event: Type.String(), matcher: Type.Optional(Type.String()) },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("lenient"),
+      event: Type.String(),
+      supported: Type.Boolean(),
+      matcher: Type.Optional(Type.String()),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+/**
+ * WIRE-04 / WIRE-06: the fields both plugin-info row arms carry. `id` is
+ * `<name>@<marketplaceName>`, `reasons` is always present, and `dependencies`
+ * holds the pre-rendered plugin addresses the info text prints.
+ */
+const PLUGIN_INFO_ROW_FIELDS = {
+  status: PLUGIN_INFO_STATUS,
+  name: Type.String(),
+  id: Type.String(),
+  reasons: Type.Array(REASON),
+  version: Type.Optional(Type.String()),
+  scope: Type.Optional(SCOPE),
+  description: Type.Optional(Type.String()),
+  notes: Type.Optional(STRINGS),
+  dependencies: Type.Optional(STRINGS),
+};
+
+/** D-04: a plugin-info row, discriminated by `componentsResolved`. */
+const PLUGIN_INFO_ROW = Type.Union([
+  Type.Object(
+    {
+      ...PLUGIN_INFO_ROW_FIELDS,
+      componentsResolved: Type.Literal(true),
+      components: Type.Object(
+        {
+          agents: Type.Optional(STRINGS),
+          commands: Type.Optional(STRINGS),
+          hooks: Type.Optional(Type.Array(HOOK_ENTRY)),
+          mcp: Type.Optional(STRINGS),
+          skills: Type.Optional(STRINGS),
+          workflows: Type.Optional(STRINGS),
+        },
+        { additionalProperties: false },
+      ),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { ...PLUGIN_INFO_ROW_FIELDS, componentsResolved: Type.Literal(false) },
+    { additionalProperties: false },
+  ),
+]);
+
+/** D-04: the plugin-info body: the marketplace it was read from, and the row. */
+const PLUGIN_INFO_FIELDS = {
+  marketplaceName: Type.String(),
+  marketplaceScope: SCOPE,
+  marketplaceDetails: MARKETPLACE_DETAILS,
+  plugin: PLUGIN_INFO_ROW,
+};
+
+const MARKETPLACE_INFO_PAYLOAD = Type.Object(
+  { ...ENVELOPE_FIELDS, kind: Type.Literal("marketplace-info"), ...MARKETPLACE_INFO_FIELDS },
+  { additionalProperties: false },
+);
+
+const PLUGIN_INFO_PAYLOAD = Type.Object(
+  { ...ENVELOPE_FIELDS, kind: Type.Literal("plugin-info"), ...PLUGIN_INFO_FIELDS },
+  { additionalProperties: false },
+);
+
+/** D-04: an info fan-out. Its blocks carry no envelope fields of their own. */
+const MARKETPLACE_INFO_CASCADE_PAYLOAD = Type.Object(
+  {
+    ...ENVELOPE_FIELDS,
+    kind: Type.Literal("marketplace-info-cascade"),
+    blocks: Type.Array(Type.Object(MARKETPLACE_INFO_FIELDS, { additionalProperties: false }), {
+      minItems: 1,
+    }),
+  },
+  { additionalProperties: false },
+);
+
+const PLUGIN_INFO_CASCADE_PAYLOAD = Type.Object(
+  {
+    ...ENVELOPE_FIELDS,
+    kind: Type.Literal("plugin-info-cascade"),
+    blocks: Type.Array(Type.Object(PLUGIN_INFO_FIELDS, { additionalProperties: false }), {
+      minItems: 1,
+    }),
+  },
+  { additionalProperties: false },
+);
+
+/** `reasons` holds the one resolved not-added token. */
+const MARKETPLACE_NOT_ADDED_PAYLOAD = Type.Object(
+  {
+    ...ENVELOPE_FIELDS,
+    kind: Type.Literal("marketplace-not-added"),
+    name: Type.String(),
+    scope: Type.Optional(SCOPE),
+    reasons: Type.Array(REASON),
+  },
+  { additionalProperties: false },
+);
+
+const RECONCILE_PENDING_EMPTY_PAYLOAD = Type.Object(
+  {
+    ...ENVELOPE_FIELDS,
+    kind: Type.Literal("reconcile-pending-empty"),
+    advisories: Type.Optional(STRINGS),
+    retainedWorkflows: Type.Optional(Type.Array(RETAINED_WORKFLOW)),
+  },
+  { additionalProperties: false },
+);
+
+const PRUNE_EMPTY_PAYLOAD = Type.Object(
+  { ...ENVELOPE_FIELDS, kind: Type.Literal("prune-empty"), scope: SCOPE },
+  { additionalProperties: false },
+);
+
+/** D-11: the prune's cause is its serialized, redacted chain. */
+const PRUNE_COMMITTED_WARNING_PAYLOAD = Type.Object(
+  {
+    ...ENVELOPE_FIELDS,
+    kind: Type.Literal("prune-committed-warning"),
+    scope: SCOPE,
+    cause: Type.Optional(CAUSE),
+  },
+  { additionalProperties: false },
+);
+
 /**
  * WIRE-01 / D-01..D-03: the one payload union, keyed by `kind`. Kinds appear
  * in their declared order. D-12: production reads only its static type.
  */
-export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([CASCADE_PAYLOAD, RECONCILE_APPLIED_PAYLOAD]);
+export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([
+  CASCADE_PAYLOAD_SCHEMA,
+  RECONCILE_APPLIED_PAYLOAD,
+  MARKETPLACE_INFO_PAYLOAD,
+  PLUGIN_INFO_PAYLOAD,
+  MARKETPLACE_INFO_CASCADE_PAYLOAD,
+  PLUGIN_INFO_CASCADE_PAYLOAD,
+  MARKETPLACE_NOT_ADDED_PAYLOAD,
+  RECONCILE_PENDING_EMPTY_PAYLOAD,
+  PRUNE_EMPTY_PAYLOAD,
+  PRUNE_COMMITTED_WARNING_PAYLOAD,
+]);

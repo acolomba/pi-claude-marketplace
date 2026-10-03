@@ -1,4 +1,3 @@
-import { causeChainTrailer } from "./errors.ts";
 import {
   composePluginLines,
   composeReconcileAppliedBody,
@@ -16,27 +15,21 @@ import {
 } from "./notification-grammar.ts";
 import {
   presentCascade,
+  presentNotification,
   presentReconcileApplied,
   presentUpdateNoOp,
 } from "./notification-present.ts";
-import {
-  CENTRAL_ROW_POLICY,
-  resolveEnvelope,
-  resolveNotAddedReason,
-  resolveRawSurface,
-} from "./notification-resolve.ts";
-import { composeRetainedWorkflowsAdvisories, isInfoKind } from "./notification-summary.ts";
-import { redactCauseChain } from "./redact-absolute-paths.ts";
+import { resolveRawSurface } from "./notification-resolve.ts";
+import { composeRetainedWorkflowsAdvisories } from "./notification-summary.ts";
 
 import type { NotifyArguments } from "./notification-grammar.ts";
-import type { CascadePresentation, ReconcileAppliedPresentation } from "./notification-present.ts";
+import type { CascadePresentation, NotificationPresentation } from "./notification-present.ts";
 import type {
   RowPolicyMap,
   ResolvedEnvelope,
   ResolvedMarketplace,
 } from "./notification-resolve.ts";
 import type { NotificationRun } from "./notification-run.ts";
-import type { StandaloneKind } from "./notification-summary.ts";
 import type {
   CascadeNotificationMessage,
   DeviceFlowPrompt,
@@ -60,16 +53,13 @@ import type { NotificationContext } from "../platform/pi-api.ts";
  *
  * Two paths reach the sink:
  *
- *  - The structured path. Every cascade-family emission (the central cascade
- *    arm, the context cascade, the update no-op, and both reconcile-applied
- *    paths) is first presented once (notification-present.ts, JOUT-02): rows,
- *    then envelope. The text strategy composes the body from that presentation
- *    and hands it with the envelope to `formatEnvelopeArguments`; the JSON
- *    strategy (notification-json.ts) reads the same value. The other
- *    `notify(ctx, run, NotificationMessage)` kinds compose their body and
- *    resolve their envelope (notification-resolve.ts) here. Severity is a
- *    caller-stamped per-row field, reduced to the envelope's severity at resolve
- *    time (SEV-02). The command's run supplies the soft-dep snapshot (D-05).
+ *  - The structured path. Every structured emission (`notify` and the context
+ *    emitters) is first presented once (notification-present.ts, JOUT-02). The
+ *    text strategy composes the body from that presentation and hands it with
+ *    the envelope to `formatEnvelopeArguments`; the JSON strategy
+ *    (notification-json.ts) reads the same value. Severity is a caller-stamped
+ *    per-row field, reduced to the envelope's severity at resolve time
+ *    (SEV-02). The command's run supplies the soft-dep snapshot (D-05).
  *  - The raw-surface path. Each helper builds one `RawSurface` kind, which
  *    `resolveRawSurface` serializes and `formatRawSurface` turns into text
  *    (D-13). Raw kinds carry no run, so no raw call site needs one (D-01, D-04).
@@ -249,124 +239,18 @@ export function notifyStopHookOverrideCap(
 }
 
 /**
- * Dispatcher for the standalone-dispatched arms of `notify()`. Centralizes the
- * per-variant body composition, then routes through the shared
- * `emitWithSummary` seam (GRAM-04) so error/warning standalone emissions carry
- * the summary line exactly like the cascade arm does. IL-2: one
- * `ctx.ui.notify` call per invocation (the seam performs it).
- */
-function dispatchInfoMessage(
-  ctx: NotificationContext,
-  message: Extract<NotificationMessage, { kind: StandaloneKind }>,
-  run: NotificationRun,
-): void {
-  // Body composition per variant. The renderers take the message and no
-  // snapshot; the run feeds only the reconcile-applied presentation. Every
-  // other arm renders its body before the envelope resolves. Severity is
-  // computed off the discriminator via the shared `computeSeverity` ladder.
-  let body: string;
-  switch (message.kind) {
-    case "marketplace-info":
-      body = renderMarketplaceInfo(message);
-      break;
-    case "plugin-info":
-      body = renderPluginInfo(message);
-      break;
-    case "marketplace-info-cascade":
-      body = renderMarketplaceInfoCascade(message);
-      break;
-    case "plugin-info-cascade":
-      body = renderPluginInfoCascade(message);
-      break;
-    case "marketplace-not-added":
-      body = renderMarketplaceNotAdded(message, resolveNotAddedReason(message));
-      break;
-    case "reconcile-pending-empty":
-      body = foldAdvisories(
-        renderReconcilePendingEmpty(),
-        message.advisories,
-        message.retainedWorkflows,
-      );
-      break;
-    case "prune-empty":
-      body = renderPruneEmpty(message);
-      break;
-    case "prune-committed-warning":
-      // The resolved envelope requests the reload trailer for this kind: the
-      // prune's state save succeeded, so Pi resources changed.
-      body = renderPruneCommittedWarning(
-        message,
-        causeChainTrailer(redactCauseChain(message.cause)),
-      );
-      break;
-    case "reconcile-applied-cascade":
-      // RECON-04: the same presentation and formatter as
-      // `emitReconcileAppliedContextCascade`, under the central row policy. The
-      // resolved envelope never requests the reload trailer for this kind (the
-      // reconcile already ran ON /reload). OUT-03/OUT-06/D-03/D-04: a reconcile
-      // apply is a plural mixed-subject operation, so a labeled one carries the
-      // tally.
-      emitReconcileAppliedPresentation(
-        ctx,
-        presentReconcileApplied(run, message, CENTRAL_ROW_POLICY),
-      );
-      return;
-  }
-
-  emitWithSummary(ctx, resolveEnvelope(message), body);
-}
-
-/**
  * Structured-notification entry point. Sole public surface for state-change
- * notifications (SNM-12). Severity and the reload hint are computed from
- * contents at notify time (SNM-14, SNM-15); the soft-dep snapshot is the
- * command run's (SNM-16, D-05).
+ * notifications (SNM-12). The presentation step resolves severity, the summary
+ * line, and the reload decision once (SNM-14, SNM-15, GRAM-04); the soft-dep
+ * snapshot is the command run's (SNM-16, D-05). The text strategy then formats
+ * that presentation.
  */
 export function notify(
   ctx: NotificationContext,
   run: NotificationRun,
   message: NotificationMessage,
 ): void {
-  // `resolveRows` composes the row markers from the run's snapshot (cascade
-  // and reconcile-applied arms); no renderer reads it. Info messages never
-  // emit soft-dep markers.
-  //
-  // Dispatch standalone-dispatched kinds through `dispatchInfoMessage` so the
-  // cascade arm below stays under the cognitive-complexity budget. The single
-  // `isInfoKind` guard (TYPE-03) is the one place that enumerates the
-  // standalone set. The helper performs exactly ONE `ctx.ui.notify` call per
-  // invocation (IL-2) and routes through the SAME `emitWithSummary` seam as the
-  // cascade arm (GRAM-04): error/warning standalone kinds carry the summary
-  // line, info kinds do not. The committed prune warning carries a reload hint.
-  // After this branch, TypeScript narrows `message` to `CascadeNotificationMessage` via
-  // the exhaustiveness switch below.
-  if (isInfoKind(message)) {
-    dispatchInfoMessage(ctx, message, run);
-    return;
-  }
-
-  // Exhaustiveness gate. After the standalone-arm return above, the only
-  // legal residual `message.kind` values are `undefined` (back-compat)
-  // or the explicit `"cascade"`. The switch has no default arm, so a
-  // future standalone `kind` literal added without extending `isInfoKind`
-  // becomes a type and lint error here.
-  switch (message.kind) {
-    case undefined:
-    case "cascade":
-      // Cascade body falls through below. RLD-05 / D-07: the disable
-      // command's realized (disabled) rows stamp `needsReload: true`, so the
-      // reload-hint is driven by the per-row stamp, not by a distinguishing
-      // kind.
-      break;
-  }
-
-  // D-11: the presentation resolves the rows first, then the envelope; the text
-  // strategy then formats the body. Emit through the shared summary seam
-  // (GRAM-04). The resolved envelope carries the summary line (error/warning
-  // only), the OUT-03 tally, and the reload decision, and the text strategy
-  // folds them as `{summary}\n\n{cascade body}\n\n{tally}\n\n{reload-hint}`
-  // (UXG-07 / GRAM-01 / OUT-03).
-  emitCascadePresentation(ctx, presentCascade(run, message, CENTRAL_ROW_POLICY));
+  emitPresentation(ctx, presentNotification(run, message));
 }
 
 /**
@@ -421,23 +305,46 @@ function formatCascadePresentation(presentation: CascadePresentation): string {
   return foldAdvisories(composed, presentation.advisories, presentation.retainedWorkflows);
 }
 
-function emitCascadePresentation(
-  ctx: NotificationContext,
-  presentation: CascadePresentation,
-): void {
-  emitWithSummary(ctx, presentation.envelope, formatCascadePresentation(presentation));
+/**
+ * JOUT-02: the text strategy's body of one presentation. Each body is composed
+ * by the grammar renderers; the committed prune warning's renderer formats its
+ * serialized cause.
+ */
+function formatPresentationBody(presentation: NotificationPresentation): string {
+  switch (presentation.kind) {
+    case "cascade":
+      return formatCascadePresentation(presentation);
+    case "reconcile-applied-cascade":
+      return composeReconcileAppliedBody(presentation.marketplaces);
+    case "marketplace-info":
+      return renderMarketplaceInfo(presentation.message);
+    case "plugin-info":
+      return renderPluginInfo(presentation.message);
+    case "marketplace-info-cascade":
+      return renderMarketplaceInfoCascade(presentation.message);
+    case "plugin-info-cascade":
+      return renderPluginInfoCascade(presentation.message);
+    case "marketplace-not-added":
+      return renderMarketplaceNotAdded(presentation.message, presentation.reason);
+    case "reconcile-pending-empty":
+      return foldAdvisories(
+        renderReconcilePendingEmpty(),
+        presentation.message.advisories,
+        presentation.message.retainedWorkflows,
+      );
+    case "prune-empty":
+      return renderPruneEmpty(presentation.message);
+    case "prune-committed-warning":
+      return renderPruneCommittedWarning(presentation.scope, presentation.cause);
+  }
 }
 
-/** RECON-04: the text strategy's format of a reconcile-applied presentation. */
-function emitReconcileAppliedPresentation(
-  ctx: NotificationContext,
-  presentation: ReconcileAppliedPresentation,
-): void {
-  emitWithSummary(
-    ctx,
-    presentation.envelope,
-    composeReconcileAppliedBody(presentation.marketplaces),
-  );
+/**
+ * GRAM-04: formats one presentation and delivers it through the shared
+ * summary seam, so every structured emission makes one notify call (IL-2).
+ */
+function emitPresentation(ctx: NotificationContext, presentation: NotificationPresentation): void {
+  emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
 }
 
 /** Emits resolved command rows, advisories, and the stamped envelope. */
@@ -447,7 +354,7 @@ export function emitContextCascade(
   message: CascadeNotificationMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  emitCascadePresentation(ctx, presentCascade(run, message, rowPolicies));
+  emitPresentation(ctx, presentCascade(run, message, rowPolicies));
 }
 
 /** Emits surviving rows followed by the fixed zero-update headline. */
@@ -457,7 +364,7 @@ export function emitUpdateNoOpCascade(
   message: CascadeNotificationMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  emitCascadePresentation(ctx, presentUpdateNoOp(run, message, rowPolicies));
+  emitPresentation(ctx, presentUpdateNoOp(run, message, rowPolicies));
 }
 
 /** Emits an applied reconcile cascade without a reload trailer. */
@@ -467,5 +374,5 @@ export function emitReconcileAppliedContextCascade(
   message: ReconcileAppliedCascadeMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  emitReconcileAppliedPresentation(ctx, presentReconcileApplied(run, message, rowPolicies));
+  emitPresentation(ctx, presentReconcileApplied(run, message, rowPolicies));
 }

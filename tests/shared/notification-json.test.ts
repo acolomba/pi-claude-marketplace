@@ -11,6 +11,7 @@ import { runWithNothingLoaded } from "./notification-run-seeds.ts";
 
 import type {
   CascadePresentation,
+  NotificationPresentation,
   ReconcileAppliedPresentation,
 } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import type {
@@ -20,7 +21,9 @@ import type {
   RowHint,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
+  MarketplaceInfoMessage,
   MarketplaceStatus,
+  PluginInfoMessage,
   PluginNotificationMessage,
   PluginStatus,
   Reason,
@@ -997,3 +1000,503 @@ test("interleaved conversions of two presentations match each converted alone", 
     expectedReconcilePayload(),
   ]);
 });
+
+function infoEnvelope(): ResolvedEnvelope {
+  return { severity: "info", needsReload: false, noOp: false };
+}
+
+function githubMarketplaceInfo(): MarketplaceInfoMessage {
+  return {
+    kind: "marketplace-info",
+    name: "mp",
+    scope: "user",
+    details: { autoupdate: false },
+    source: { sourceKind: "github", owner: "acme", repo: "mp" },
+  };
+}
+
+function unresolvedPluginInfo(): PluginInfoMessage {
+  return {
+    kind: "plugin-info",
+    marketplaceName: "mp",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: { status: "available", name: "alpha", componentsResolved: false },
+  };
+}
+
+for (const { title, source, expectedSource } of [
+  {
+    title: "a github source without a ref",
+    source: { sourceKind: "github", owner: "acme", repo: "mp" },
+    expectedSource: { sourceKind: "github", owner: "acme", repo: "mp" },
+  },
+  {
+    title: "a github source with a ref",
+    source: { sourceKind: "github", owner: "acme", repo: "mp", ref: "v1" },
+    expectedSource: { sourceKind: "github", owner: "acme", repo: "mp", ref: "v1" },
+  },
+  {
+    title: "a url source without a ref",
+    source: { sourceKind: "url", url: "https://git.example/mp.git" },
+    expectedSource: { sourceKind: "url", url: "https://git.example/mp.git" },
+  },
+  {
+    title: "a url source with a ref",
+    source: { sourceKind: "url", url: "https://git.example/mp.git", ref: "main" },
+    expectedSource: { sourceKind: "url", url: "https://git.example/mp.git", ref: "main" },
+  },
+  {
+    title: "a path source",
+    source: { sourceKind: "path", absPath: "/srv/mp" },
+    expectedSource: { sourceKind: "path", absPath: "/srv/mp" },
+  },
+] satisfies readonly {
+  title: string;
+  source: MarketplaceInfoMessage["source"];
+  expectedSource: Record<string, unknown>;
+}[]) {
+  test(`converts a marketplace-info presentation with ${title}`, () => {
+    // arrange
+    const presentation = {
+      kind: "marketplace-info",
+      envelope: infoEnvelope(),
+      message: { ...githubMarketplaceInfo(), source },
+    } satisfies NotificationPresentation;
+
+    // act
+    const payload = toWirePayload(presentation);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      schemaVersion: 1,
+      kind: "marketplace-info",
+      severity: "info",
+      needsReload: false,
+      name: "mp",
+      scope: "user",
+      details: { autoupdate: false },
+      source: expectedSource,
+    });
+  });
+}
+
+test("converts a marketplace-info presentation with every optional field", () => {
+  // arrange
+  const presentation = {
+    kind: "marketplace-info",
+    envelope: infoEnvelope(),
+    message: {
+      ...githubMarketplaceInfo(),
+      scope: "project",
+      details: { autoupdate: true, lastUpdatedAt: "2026-01-02T03:04:05.000Z" },
+      source: { sourceKind: "path", absPath: "/srv/mp" },
+      description: "Tools",
+      allowedMarketplaces: ["other", "third"],
+    },
+  } satisfies NotificationPresentation;
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "marketplace-info",
+    severity: "info",
+    needsReload: false,
+    name: "mp",
+    scope: "project",
+    details: { autoupdate: true, lastUpdatedAt: "2026-01-02T03:04:05.000Z" },
+    source: { sourceKind: "path", absPath: "/srv/mp" },
+    description: "Tools",
+    allowedMarketplaces: ["other", "third"],
+  });
+});
+
+test("converts an unresolved catalogue plugin-info row with no scope and empty reasons", () => {
+  // arrange
+  const presentation = {
+    kind: "plugin-info",
+    envelope: infoEnvelope(),
+    message: unresolvedPluginInfo(),
+  } satisfies NotificationPresentation;
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "plugin-info",
+    severity: "info",
+    needsReload: false,
+    marketplaceName: "mp",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "available",
+      name: "alpha",
+      id: "alpha@mp",
+      reasons: [],
+      componentsResolved: false,
+    },
+  });
+});
+
+test("converts a remote plugin-info row with its dependencies and version", () => {
+  // arrange
+  const presentation = {
+    kind: "plugin-info",
+    envelope: infoEnvelope(),
+    message: {
+      ...unresolvedPluginInfo(),
+      plugin: {
+        status: "remote",
+        name: "alpha",
+        version: "1.0.0",
+        componentsResolved: false,
+        dependencies: ["beta@mp"],
+      },
+    },
+  } satisfies NotificationPresentation;
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "plugin-info",
+    severity: "info",
+    needsReload: false,
+    marketplaceName: "mp",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "remote",
+      name: "alpha",
+      id: "alpha@mp",
+      reasons: [],
+      version: "1.0.0",
+      dependencies: ["beta@mp"],
+      componentsResolved: false,
+    },
+  });
+});
+
+test("converts a resolved installed plugin-info row with every component and optional field", () => {
+  // arrange
+  const presentation = {
+    kind: "plugin-info",
+    envelope: infoEnvelope(),
+    message: {
+      ...unresolvedPluginInfo(),
+      marketplaceScope: "project",
+      plugin: {
+        status: "installed",
+        name: "alpha",
+        version: "2.0.0",
+        scope: "user",
+        description: "Alpha tools",
+        reasons: ["lsp"],
+        notes: ["note one"],
+        componentsResolved: true,
+        components: {
+          agents: ["alpha:reviewer"],
+          commands: ["alpha:run"],
+          hooks: [
+            { event: "PreToolUse", matcher: "Bash" },
+            { event: "SessionStart" },
+            { kind: "lenient", event: "Custom", supported: false },
+            { kind: "lenient", event: "PostToolUse", supported: true, matcher: "Edit" },
+          ],
+          mcp: ["alpha-server"],
+          skills: ["alpha:skill"],
+          workflows: ["alpha:flow"],
+        },
+        dependencies: ["beta@mp"],
+      },
+    },
+  } satisfies NotificationPresentation;
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "plugin-info",
+    severity: "info",
+    needsReload: false,
+    marketplaceName: "mp",
+    marketplaceScope: "project",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      id: "alpha@mp",
+      reasons: ["lsp"],
+      version: "2.0.0",
+      scope: "user",
+      description: "Alpha tools",
+      notes: ["note one"],
+      dependencies: ["beta@mp"],
+      componentsResolved: true,
+      components: {
+        agents: ["alpha:reviewer"],
+        commands: ["alpha:run"],
+        hooks: [
+          { event: "PreToolUse", matcher: "Bash" },
+          { event: "SessionStart" },
+          { kind: "lenient", event: "Custom", supported: false },
+          { kind: "lenient", event: "PostToolUse", supported: true, matcher: "Edit" },
+        ],
+        mcp: ["alpha-server"],
+        skills: ["alpha:skill"],
+        workflows: ["alpha:flow"],
+      },
+    },
+  });
+});
+
+test("gives an installed plugin-info row with no scope of its own the marketplace scope", () => {
+  // arrange
+  const presentation = {
+    kind: "plugin-info",
+    envelope: {
+      severity: "error",
+      summary: "A plugin operation has failed.",
+      needsReload: false,
+      noOp: false,
+    },
+    message: {
+      ...unresolvedPluginInfo(),
+      marketplaceScope: "project",
+      plugin: { status: "failed", name: "alpha", componentsResolved: true, components: {} },
+    },
+  } satisfies NotificationPresentation;
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "plugin-info",
+    severity: "error",
+    summary: "A plugin operation has failed.",
+    needsReload: false,
+    marketplaceName: "mp",
+    marketplaceScope: "project",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "failed",
+      name: "alpha",
+      id: "alpha@mp",
+      reasons: [],
+      scope: "project",
+      componentsResolved: true,
+      components: {},
+    },
+  });
+});
+
+test("converts both info fan-outs into blocks with no envelope fields of their own", () => {
+  // arrange
+  const marketplaces = {
+    kind: "marketplace-info-cascade",
+    envelope: infoEnvelope(),
+    message: { kind: "marketplace-info-cascade", blocks: [githubMarketplaceInfo()] },
+  } satisfies NotificationPresentation;
+  const plugins = {
+    kind: "plugin-info-cascade",
+    envelope: infoEnvelope(),
+    message: { kind: "plugin-info-cascade", blocks: [unresolvedPluginInfo()] },
+  } satisfies NotificationPresentation;
+
+  // act
+  const payloads = [toWirePayload(marketplaces), toWirePayload(plugins)];
+
+  // assert
+  assert.deepStrictEqual(payloads, [
+    {
+      schemaVersion: 1,
+      kind: "marketplace-info-cascade",
+      severity: "info",
+      needsReload: false,
+      blocks: [
+        {
+          name: "mp",
+          scope: "user",
+          details: { autoupdate: false },
+          source: { sourceKind: "github", owner: "acme", repo: "mp" },
+        },
+      ],
+    },
+    {
+      schemaVersion: 1,
+      kind: "plugin-info-cascade",
+      severity: "info",
+      needsReload: false,
+      blocks: [
+        {
+          marketplaceName: "mp",
+          marketplaceScope: "user",
+          marketplaceDetails: { autoupdate: false },
+          plugin: {
+            status: "available",
+            name: "alpha",
+            id: "alpha@mp",
+            reasons: [],
+            componentsResolved: false,
+          },
+        },
+      ],
+    },
+  ]);
+});
+
+for (const { title, scope, expectedScope } of [
+  { title: "without a scope", scope: {}, expectedScope: {} },
+  { title: "with a scope", scope: { scope: "user" }, expectedScope: { scope: "user" } },
+] satisfies readonly { title: string; scope: { scope?: Scope }; expectedScope: object }[]) {
+  test(`converts a marketplace-not-added presentation ${title}`, () => {
+    // arrange
+    const presentation = {
+      kind: "marketplace-not-added",
+      envelope: {
+        severity: "error",
+        summary: "A marketplace operation has failed.",
+        needsReload: false,
+        noOp: false,
+      },
+      message: { kind: "marketplace-not-added", name: "mp", ...scope },
+      reason: "marketplace not added",
+    } satisfies NotificationPresentation;
+
+    // act
+    const payload = toWirePayload(presentation);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      schemaVersion: 1,
+      kind: "marketplace-not-added",
+      severity: "error",
+      summary: "A marketplace operation has failed.",
+      needsReload: false,
+      name: "mp",
+      ...expectedScope,
+      reasons: ["marketplace not added"],
+    });
+  });
+}
+
+test("converts a pending-empty presentation with its advisories and retained workflows", () => {
+  // arrange
+  const presentation = {
+    kind: "reconcile-pending-empty",
+    envelope: infoEnvelope(),
+    message: {
+      kind: "reconcile-pending-empty",
+      advisories: ["note"],
+      retainedWorkflows: [{ name: "flow", envelopeCount: 2 }],
+    },
+  } satisfies NotificationPresentation;
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "reconcile-pending-empty",
+    severity: "info",
+    needsReload: false,
+    advisories: ["note"],
+    retainedWorkflows: [{ name: "flow", envelopeCount: 2 }],
+  });
+});
+
+test("converts a pending-empty presentation with no advisories to the bare envelope", () => {
+  // arrange
+  const presentation = {
+    kind: "reconcile-pending-empty",
+    envelope: infoEnvelope(),
+    message: { kind: "reconcile-pending-empty" },
+  } satisfies NotificationPresentation;
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "reconcile-pending-empty",
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("converts a prune-empty presentation with its scope", () => {
+  // arrange
+  const presentation = {
+    kind: "prune-empty",
+    envelope: infoEnvelope(),
+    message: { kind: "prune-empty", scope: "project" },
+  } satisfies NotificationPresentation;
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "prune-empty",
+    severity: "info",
+    needsReload: false,
+    scope: "project",
+  });
+});
+
+for (const { title, cause, expectedCause } of [
+  { title: "without a cause", cause: {}, expectedCause: {} },
+  {
+    title: "with a cause",
+    cause: { cause: { causeChain: ["save failed", "disk full"], truncated: true } },
+    expectedCause: { cause: { causeChain: ["save failed", "disk full"], truncated: true } },
+  },
+] satisfies readonly {
+  title: string;
+  cause: { cause?: ExpectedCause };
+  expectedCause: object;
+}[]) {
+  test(`converts a prune-committed-warning presentation ${title}`, () => {
+    // arrange
+    const presentation = {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        noOp: false,
+      },
+      scope: "user",
+      ...cause,
+    } satisfies NotificationPresentation;
+
+    // act
+    const payload = toWirePayload(presentation);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      schemaVersion: 1,
+      kind: "prune-committed-warning",
+      severity: "warning",
+      summary: "Prune committed; finalization needs attention.",
+      needsReload: true,
+      scope: "user",
+      ...expectedCause,
+    });
+  });
+}

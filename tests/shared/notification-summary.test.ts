@@ -13,7 +13,6 @@ import {
   composeRetainedWorkflowsAdvisories,
   computeSeverity,
   countRowsBySeverity,
-  isInfoKind,
   shouldEmitReloadHint,
 } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
 
@@ -279,17 +278,33 @@ for (const message of [
 ] satisfies readonly NotificationMessage[]) {
   test(`${message.kind} is standalone and suppresses reload`, () => {
     // act & assert
-    assert.equal(isInfoKind(message), true);
     assert.equal(shouldEmitReloadHint(message), false);
   });
 }
 
-test("cascade messages are not standalone", () => {
+test("a cascade is not standalone, so its row stamps drive the reload", () => {
   // arrange
-  const message = { kind: "cascade", marketplaces: [] } satisfies NotificationMessage;
+  const message = {
+    kind: "cascade",
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+  } satisfies NotificationMessage;
 
   // act & assert
-  assert.equal(isInfoKind(message), false);
+  assert.equal(shouldEmitReloadHint(message), true);
 });
 
 test("a committed prune warning remains standalone and requests reload", () => {
@@ -301,7 +316,6 @@ test("a committed prune warning remains standalone and requests reload", () => {
   } satisfies NotificationMessage;
 
   // act & assert
-  assert.equal(isInfoKind(message), true);
   assert.equal(shouldEmitReloadHint(message), true);
   assert.equal(computeSeverity(message), "warning");
   assert.equal(

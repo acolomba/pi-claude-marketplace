@@ -10,9 +10,9 @@ import type { CommandContext } from "../../shared/notify-context.ts";
  *
  *  1. The STANDALONE `plugin-info` / `plugin-info-cascade` envelopes
  *     (`PluginInfoMessage`, carrying a `PluginInfoRow`) are a SIBLING concept to
- *     cascades -- a different multi-line component-listing surface rendered by
- *     the central `dispatchInfoMessage` path (`isInfoKind`). That standalone
- *     envelope routing STAYS central this phase; it is not a
+ *     cascades -- a different multi-line component-listing surface presented by
+ *     the central presentation step and formatted by its text formatter. That
+ *     standalone envelope routing STAYS central; it is not a
  *     `PluginNotificationMessage` cascade and cannot route through
  *     `notifyWithContext`. The `marketplace-not-added` standalone likewise stays
  *     central.

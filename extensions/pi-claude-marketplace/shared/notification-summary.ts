@@ -20,10 +20,11 @@ import type {
  *
  * The guard name is kept as `isInfoKind` per the TYPE-03 wording even though
  * the set now includes a failure kind; "standalone-dispatched" is the precise
- * meaning -- these kinds are routed through `dispatchInfoMessage`. The
- * committed prune warning requests reload because its state save succeeded.
+ * meaning -- these kinds take their own arm in the presentation step and in its
+ * text formatter. The committed prune warning requests reload because its
+ * state save succeeded.
  */
-export type StandaloneKind =
+type StandaloneKind =
   | "marketplace-info"
   | "plugin-info"
   | "marketplace-info-cascade"
@@ -41,7 +42,7 @@ export type StandaloneKind =
  * route through this one guard; each then narrows the residual to
  * `CascadeNotificationMessage` and switches over every kind with no default.
  */
-export function isInfoKind(
+function isInfoKind(
   m: NotificationMessage,
 ): m is Extract<NotificationMessage, { kind: StandaloneKind }> {
   return (

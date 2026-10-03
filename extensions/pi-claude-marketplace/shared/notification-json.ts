@@ -1,5 +1,6 @@
+import type { HookSummaryEntry } from "./concerns/hooks.ts";
 import type { SerializedCauseChain } from "./errors.ts";
-import type { NotificationPresentation } from "./notification-present.ts";
+import type { CascadePresentation, NotificationPresentation } from "./notification-present.ts";
 import type {
   ResolvedEnvelope,
   ResolvedFailure,
@@ -7,8 +8,16 @@ import type {
   ResolvedRow,
   ResolvedTally,
 } from "./notification-resolve.ts";
-import type { RetainedWorkflowStaging } from "./notification-types.ts";
-import type { NOTIFICATION_PAYLOAD_SCHEMA } from "./notification-wire.ts";
+import type {
+  MarketplaceDetails,
+  MarketplaceInfoMessage,
+  PluginInfoComponentsResolved,
+  PluginInfoMessage,
+  PluginInfoRow,
+  PluginStatus,
+  RetainedWorkflowStaging,
+} from "./notification-types.ts";
+import type { CASCADE_PAYLOAD_SCHEMA, NOTIFICATION_PAYLOAD_SCHEMA } from "./notification-wire.ts";
 import type { Scope } from "./types.ts";
 import type Type from "typebox";
 
@@ -25,37 +34,106 @@ import type Type from "typebox";
  * copied in model order. D-12: nothing here validates a payload.
  */
 
-/** Converts a presentation into its wire payload (JOUT-02, D-01..D-04). */
+/**
+ * Converts a presentation into its wire payload (JOUT-02, D-01..D-04). A
+ * cascade presentation yields the cascade payload, so a caller reads its
+ * `marketplaces` without a branch.
+ */
+export function toWirePayload(
+  presentation: CascadePresentation,
+): Type.Static<typeof CASCADE_PAYLOAD_SCHEMA>;
+export function toWirePayload(
+  presentation: NotificationPresentation,
+): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA>;
 export function toWirePayload(
   presentation: NotificationPresentation,
 ): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA> {
   switch (presentation.kind) {
     case "cascade":
-      return {
-        schemaVersion: 1,
-        kind: "cascade",
-        ...wireEnvelope(presentation.envelope),
-        ...noOpField(presentation.envelope.noOp),
-        marketplaces: presentation.marketplaces.map((mp) => wireBlock(mp)),
-        ...(presentation.advisories === undefined
-          ? {}
-          : { advisories: [...presentation.advisories] }),
-        ...(presentation.retainedWorkflows === undefined
-          ? {}
-          : {
-              retainedWorkflows: presentation.retainedWorkflows.map((workflow) =>
-                wireRetainedWorkflow(workflow),
-              ),
-            }),
-      };
+      return wireCascade(presentation);
     case "reconcile-applied-cascade":
       return {
         schemaVersion: 1,
         kind: "reconcile-applied-cascade",
         ...wireEnvelope(presentation.envelope),
+        ...wireTallyField(presentation.envelope),
         marketplaces: presentation.marketplaces.map((mp) => wireBlock(mp)),
       };
+    case "marketplace-info":
+      return {
+        schemaVersion: 1,
+        kind: "marketplace-info",
+        ...wireEnvelope(presentation.envelope),
+        ...wireMarketplaceInfo(presentation.message),
+      };
+    case "plugin-info":
+      return {
+        schemaVersion: 1,
+        kind: "plugin-info",
+        ...wireEnvelope(presentation.envelope),
+        ...wirePluginInfo(presentation.message),
+      };
+    case "marketplace-info-cascade":
+      return {
+        schemaVersion: 1,
+        kind: "marketplace-info-cascade",
+        ...wireEnvelope(presentation.envelope),
+        blocks: presentation.message.blocks.map((block) => wireMarketplaceInfo(block)),
+      };
+    case "plugin-info-cascade":
+      return {
+        schemaVersion: 1,
+        kind: "plugin-info-cascade",
+        ...wireEnvelope(presentation.envelope),
+        blocks: presentation.message.blocks.map((block) => wirePluginInfo(block)),
+      };
+    case "marketplace-not-added":
+      return {
+        schemaVersion: 1,
+        kind: "marketplace-not-added",
+        ...wireEnvelope(presentation.envelope),
+        name: presentation.message.name,
+        ...(presentation.message.scope === undefined ? {} : { scope: presentation.message.scope }),
+        reasons: [presentation.reason],
+      };
+    case "reconcile-pending-empty":
+      return {
+        schemaVersion: 1,
+        kind: "reconcile-pending-empty",
+        ...wireEnvelope(presentation.envelope),
+        ...wireAdvisories(presentation.message),
+      };
+    case "prune-empty":
+      return {
+        schemaVersion: 1,
+        kind: "prune-empty",
+        ...wireEnvelope(presentation.envelope),
+        scope: presentation.message.scope,
+      };
+    case "prune-committed-warning":
+      return {
+        schemaVersion: 1,
+        kind: "prune-committed-warning",
+        ...wireEnvelope(presentation.envelope),
+        scope: presentation.scope,
+        ...(presentation.cause === undefined ? {} : { cause: wireCause(presentation.cause) }),
+      };
   }
+}
+
+/** D-04: the cascade payload, with its advisory lines and retained workflows. */
+function wireCascade(
+  presentation: CascadePresentation,
+): Type.Static<typeof CASCADE_PAYLOAD_SCHEMA> {
+  return {
+    schemaVersion: 1,
+    kind: "cascade",
+    ...wireEnvelope(presentation.envelope),
+    ...wireTallyField(presentation.envelope),
+    ...noOpField(presentation.envelope.noOp),
+    marketplaces: presentation.marketplaces.map((mp) => wireBlock(mp)),
+    ...wireAdvisories(presentation),
+  };
 }
 
 /**
@@ -67,7 +145,28 @@ function wireEnvelope(envelope: ResolvedEnvelope) {
     severity: envelope.severity,
     needsReload: envelope.needsReload,
     ...(envelope.severity === "info" ? {} : { summary: envelope.summary }),
-    ...(envelope.tally === undefined ? {} : { tally: wireTally(envelope.tally) }),
+  };
+}
+
+/** OUT-03: the tally of a cascade-family envelope, when it carries one. */
+function wireTallyField(envelope: ResolvedEnvelope) {
+  return envelope.tally === undefined ? {} : { tally: wireTally(envelope.tally) };
+}
+
+/** WR-06: the advisory lines and retained workflows, each when present. */
+function wireAdvisories(carrier: {
+  readonly advisories?: readonly string[];
+  readonly retainedWorkflows?: readonly RetainedWorkflowStaging[];
+}) {
+  return {
+    ...(carrier.advisories === undefined ? {} : { advisories: [...carrier.advisories] }),
+    ...(carrier.retainedWorkflows === undefined
+      ? {}
+      : {
+          retainedWorkflows: carrier.retainedWorkflows.map((workflow) =>
+            wireRetainedWorkflow(workflow),
+          ),
+        }),
   };
 }
 
@@ -105,16 +204,7 @@ function wireBlock(mp: ResolvedMarketplace) {
     name: mp.name,
     scope: mp.scope,
     ...(mp.status === undefined ? {} : { status: mp.status }),
-    ...("details" in mp
-      ? {
-          details: {
-            autoupdate: mp.details.autoupdate,
-            ...(mp.details.lastUpdatedAt === undefined
-              ? {}
-              : { lastUpdatedAt: mp.details.lastUpdatedAt }),
-          },
-        }
-      : {}),
+    ...("details" in mp ? { details: wireDetails(mp.details) } : {}),
     ...("reasons" in mp ? { reasons: [...mp.reasons] } : {}),
     plugins: mp.plugins.map((row) => wireRow(row, mp)),
   };
@@ -140,11 +230,122 @@ function wireRow(row: ResolvedRow, mp: ResolvedMarketplace) {
   };
 }
 
+/** WIRE-04: a marketplace's details; `lastUpdatedAt` whenever the model has it. */
+function wireDetails(details: MarketplaceDetails) {
+  return {
+    autoupdate: details.autoupdate,
+    ...(details.lastUpdatedAt === undefined ? {} : { lastUpdatedAt: details.lastUpdatedAt }),
+  };
+}
+
+/**
+ * D-04: the marketplace-info body. The source arm follows `sourceKind`; a path
+ * source keeps the absolute path its text line shows.
+ */
+function wireMarketplaceInfo(message: MarketplaceInfoMessage) {
+  return {
+    name: message.name,
+    scope: message.scope,
+    details: wireDetails(message.details),
+    source: wireSource(message.source),
+    ...(message.description === undefined ? {} : { description: message.description }),
+    ...(message.allowedMarketplaces === undefined
+      ? {}
+      : { allowedMarketplaces: [...message.allowedMarketplaces] }),
+  };
+}
+
+function wireSource(source: MarketplaceInfoMessage["source"]) {
+  switch (source.sourceKind) {
+    case "github":
+      return {
+        sourceKind: source.sourceKind,
+        owner: source.owner,
+        repo: source.repo,
+        ...refField(source.ref),
+      };
+    case "url":
+      return { sourceKind: source.sourceKind, url: source.url, ...refField(source.ref) };
+    case "path":
+      return { sourceKind: source.sourceKind, absPath: source.absPath };
+  }
+}
+
+function refField(ref: string | undefined): { readonly ref?: string } {
+  return ref === undefined ? {} : { ref };
+}
+
+/** D-04: the plugin-info body: the marketplace header facts and the row. */
+function wirePluginInfo(message: PluginInfoMessage) {
+  return {
+    marketplaceName: message.marketplaceName,
+    marketplaceScope: message.marketplaceScope,
+    marketplaceDetails: wireDetails(message.marketplaceDetails),
+    plugin: wirePluginInfoRow(message.plugin, message),
+  };
+}
+
+/**
+ * WIRE-04 / WIRE-06: one plugin-info row. `id` is the plugin name, `@`, and the
+ * marketplace name. `componentsResolved` selects the arm; only a resolved row
+ * carries `components`.
+ */
+function wirePluginInfoRow(plugin: PluginInfoRow, message: PluginInfoMessage) {
+  const fields = {
+    status: plugin.status,
+    name: plugin.name,
+    id: `${plugin.name}@${message.marketplaceName}`,
+    reasons: plugin.reasons === undefined ? [] : [...plugin.reasons],
+    ...wireScope(plugin, message.marketplaceScope),
+    ...versionField(plugin.version),
+    ...(plugin.description === undefined ? {} : { description: plugin.description }),
+    ...(plugin.notes === undefined ? {} : { notes: [...plugin.notes] }),
+    ...(plugin.dependencies === undefined ? {} : { dependencies: [...plugin.dependencies] }),
+  };
+  return plugin.componentsResolved
+    ? {
+        ...fields,
+        componentsResolved: plugin.componentsResolved,
+        components: wireComponents(plugin.components),
+      }
+    : { ...fields, componentsResolved: plugin.componentsResolved };
+}
+
+function wireComponents(components: PluginInfoComponentsResolved["components"]) {
+  return {
+    ...(components.agents === undefined ? {} : { agents: [...components.agents] }),
+    ...(components.commands === undefined ? {} : { commands: [...components.commands] }),
+    ...(components.hooks === undefined
+      ? {}
+      : { hooks: components.hooks.map((entry) => wireHookEntry(entry)) }),
+    ...(components.mcp === undefined ? {} : { mcp: [...components.mcp] }),
+    ...(components.skills === undefined ? {} : { skills: [...components.skills] }),
+    ...(components.workflows === undefined ? {} : { workflows: [...components.workflows] }),
+  };
+}
+
+/** One `hooks:` entry: a lenient entry keeps its marker and support flag. */
+function wireHookEntry(entry: HookSummaryEntry) {
+  if ("kind" in entry) {
+    return {
+      kind: entry.kind,
+      event: entry.event,
+      supported: entry.supported,
+      ...(entry.matcher === undefined ? {} : { matcher: entry.matcher }),
+    };
+  }
+
+  return { event: entry.event, ...("matcher" in entry ? { matcher: entry.matcher } : {}) };
+}
+
 /**
  * D-04: an install-scoped row carries its own scope, or the block's when it
  * has none. A catalogue row carries no scope; its block names it.
  */
-function wireScope(row: ResolvedRow, blockScope: Scope): { readonly scope?: Scope } {
+function wireScope(
+  row: { readonly status: PluginStatus; readonly scope?: Scope },
+  blockScope: Scope,
+): { readonly scope?: Scope } {
   switch (row.status) {
     case "installed":
     case "updated":

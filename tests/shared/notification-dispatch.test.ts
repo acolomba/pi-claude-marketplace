@@ -5333,7 +5333,8 @@ test("a non-failed plugin fallback preserves the empty standalone summary", (t) 
   const ctx = createContext(t);
   const run = runWithAllLoaded();
   let statusIndex = 0;
-  const statuses = ["available", "available", "failed", "available"] as const;
+  // The envelope reads the status before the body does (presentation read order).
+  const statuses = ["failed", "available", "available", "available"] as const;
   const plugin = Object.defineProperty({ name: "alpha", componentsResolved: false }, "status", {
     enumerable: true,
     get() {
