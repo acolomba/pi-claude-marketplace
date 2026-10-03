@@ -785,6 +785,40 @@ describe("resolveRows", () => {
     ]);
   });
 
+  test("PMOD-04 / D-07 redacts the credentials of manual-recovery leaks", () => {
+    // arrange
+    const marketplaces = marketplaceWith([
+      {
+        status: "manual recovery",
+        severity: "error",
+        name: "alpha",
+        reasons: ["rollback partial"],
+        cause: new ManualRecoveryError("stuck", [
+          "clone-ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+          "/tmp/leak",
+        ]),
+      },
+    ]);
+
+    // act
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
+
+    // assert
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      {
+        status: "manual recovery",
+        severity: "error",
+        name: "alpha",
+        reasons: ["rollback partial"],
+        failure: {
+          cause: { causeChain: ["stuck"], truncated: false },
+          leaks: ["clone-***", "/tmp/leak"],
+          rollbackPartial: [],
+        },
+      },
+    ]);
+  });
+
   test("resolves a manual-recovery row with its leaks and no rollback phases", () => {
     // arrange
     const marketplaces = marketplaceWith([
@@ -1318,7 +1352,24 @@ describe("resolveRawSurface", () => {
     });
   }
 
-  test("returns a plugin-path-skipped surface as the same object", () => {
+  test("PMOD-04 / D-07 redacts a credential in a reconcile-aborted cause", () => {
+    // arrange
+    const surface = {
+      kind: "reconcile-aborted",
+      cause: new Error("clone https://user:tok@host/o/r failed"),
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "reconcile-aborted",
+      causeMessage: "clone https://***@host/o/r failed",
+    });
+  });
+
+  test("keeps a plugin-path-skipped surface without a credential equal", () => {
     // arrange
     const surface = {
       kind: "plugin-path-skipped",
@@ -1330,8 +1381,91 @@ describe("resolveRawSurface", () => {
     const resolved = resolveRawSurface(surface);
 
     // assert
-    assert.strictEqual(resolved, surface);
+    assert.deepStrictEqual(resolved, {
+      kind: "plugin-path-skipped",
+      scope: "user",
+      reason: "state.json is unreadable",
+    });
   });
+
+  test("PMOD-04 / D-07 redacts a credential in a plugin-path-skipped reason", () => {
+    // arrange
+    const surface = {
+      kind: "plugin-path-skipped",
+      scope: "project",
+      reason: "fetch with Bearer abc.def failed",
+    } satisfies PluginPathSkippedSurface;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "plugin-path-skipped",
+      scope: "project",
+      reason: "fetch with Bearer *** failed",
+    });
+  });
+
+  test("PMOD-04 / D-07 redacts a usage-error message and keeps its usage text", () => {
+    // arrange
+    const surface = {
+      kind: "usage-error",
+      message: "invalid source https://user:tok@host/o/r",
+      usage: "usage: add <https://user@host/o/r>",
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "usage-error",
+      message: "invalid source https://***@host/o/r",
+      usage: "usage: add <https://user@host/o/r>",
+    });
+  });
+
+  test("PMOD-04 / D-07 redacts a diagnostic header and every line", () => {
+    // arrange
+    const surface = {
+      kind: "diagnostic",
+      header: "import of https://user:tok@host/o/r skipped:",
+      lines: ["  x-access-token:abc123 rejected", "  plain line"],
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "diagnostic",
+      header: "import of https://***@host/o/r skipped:",
+      lines: ["  x-access-token:*** rejected", "  plain line"],
+    });
+  });
+
+  for (const surface of [
+    { kind: "usage-info", usage: "usage: add <https://user:tok@host/o/r>" },
+    {
+      kind: "device-flow-prompt",
+      verificationUri: "https://github.com/login/device",
+      userCode: "ABCD-1234",
+    },
+    { kind: "async-rewake-summary", summary: "rewake with Bearer abc" },
+    { kind: "stop-override-cap", pluginId: "alpha@official", cap: 8 },
+  ] as const) {
+    test(`returns a ${surface.kind} surface as the same object`, () => {
+      // arrange
+      const expectedSurface = surface;
+
+      // act
+      const resolved = resolveRawSurface(surface);
+
+      // assert
+      assert.strictEqual(resolved, expectedSurface);
+    });
+  }
 });
 
 test("an inherited prototype-name policy cannot authorize a malformed row", () => {

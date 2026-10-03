@@ -1,3 +1,5 @@
+import { redactCredentials } from "./redact-credentials.ts";
+
 /** Normalize a thrown `unknown` to its message text, since `instanceof Error`
  *  narrowing must be repeated everywhere a caught value is interpolated. */
 export function errorMessage(err: unknown): string {
@@ -150,7 +152,9 @@ export interface SerializedCauseChain {
  * NFR-9: surfaces only `Error.message` (or the `String` /
  * `Object.prototype.toString` fallback for non-Error). No `.stack`, no
  * absolute cleanup paths. This is the single serialization site for cause
- * chains, and PMOD-04 credential redaction lands here.
+ * chains, and it redacts the credentials of every link (PMOD-04, D-07).
+ * `linkMessage` stays unredacted, because `redactCauseChain` rebuilds links
+ * from it before they are serialized here.
  */
 export function serializeCauseChain(err: unknown): SerializedCauseChain | undefined {
   if (err === undefined || err === null) {
@@ -161,7 +165,10 @@ export function serializeCauseChain(err: unknown): SerializedCauseChain | undefi
   // bound. Only the second case leaves the LAST yielded link still carrying an
   // onward cause, which is exactly the truncation condition.
   const links = [...causeChain(err)];
-  return { causeChain: links.map(linkMessage), truncated: hasOnwardCause(links.at(-1)) };
+  return {
+    causeChain: links.map((link) => redactCredentials(linkMessage(link))),
+    truncated: hasOnwardCause(links.at(-1)),
+  };
 }
 
 /**

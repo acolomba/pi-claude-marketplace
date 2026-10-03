@@ -172,6 +172,26 @@ describe("presentCascade", () => {
     assert.deepStrictEqual(presentation, expectedPresentation);
   });
 
+  test("PMOD-04 / D-07 redacts the credentials of advisory lines", () => {
+    // arrange
+    const message: CascadeNotificationMessage = {
+      marketplaces: [],
+      advisories: ["clone https://user:tok@host/o/r failed", "plain advice"],
+    };
+    const expectedPresentation: CascadePresentation = {
+      kind: "cascade",
+      envelope: { severity: "info", needsReload: false, noOp: false },
+      marketplaces: [],
+      advisories: ["clone https://***@host/o/r failed", "plain advice"],
+    };
+
+    // act
+    const presentation = presentCascade(runWithNothingLoaded(), message, {});
+
+    // assert
+    assert.deepStrictEqual(presentation, expectedPresentation);
+  });
+
   test("leaves advisories and retained workflows absent when the message has none", () => {
     // arrange
     const expectedPresentation: CascadePresentation = {
@@ -541,7 +561,188 @@ describe("presentNotification", () => {
     assert.strictEqual(presentation.message, message);
   });
 
-  test("carries both info fan-outs by identity with info envelopes", () => {
+  test("PMOD-04 / D-07 redacts the userinfo of a url-source marketplace-info", () => {
+    // arrange
+    const message = {
+      ...marketplaceInfo(),
+      source: { sourceKind: "url", url: "https://user:tok@host/mp.git", ref: "main" },
+    } satisfies MarketplaceInfoMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "marketplace-info",
+      envelope: { severity: "info", needsReload: false, noOp: false },
+      message: {
+        kind: "marketplace-info",
+        name: "mp",
+        scope: "user",
+        details: { autoupdate: false },
+        source: { sourceKind: "url", url: "https://***@host/mp.git", ref: "main" },
+      },
+    });
+  });
+
+  test("carries a path-source marketplace-info message by identity", () => {
+    // arrange
+    const message = {
+      ...marketplaceInfo(),
+      source: { sourceKind: "path", absPath: "/srv/mp" },
+    } satisfies MarketplaceInfoMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.ok("message" in presentation);
+    assert.strictEqual(presentation.message, message);
+  });
+
+  test("PMOD-04 / D-07 redacts the url block of a marketplace-info cascade", () => {
+    // arrange
+    const githubBlock = marketplaceInfo();
+    const message = {
+      kind: "marketplace-info-cascade",
+      blocks: [
+        { ...marketplaceInfo(), source: { sourceKind: "url", url: "ssh://git@host/mp.git" } },
+        githubBlock,
+      ],
+    } satisfies MarketplaceInfoCascadeMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "marketplace-info-cascade",
+      envelope: { severity: "info", needsReload: false, noOp: false },
+      message: {
+        kind: "marketplace-info-cascade",
+        blocks: [
+          {
+            kind: "marketplace-info",
+            name: "mp",
+            scope: "user",
+            details: { autoupdate: false },
+            source: { sourceKind: "url", url: "ssh://***@host/mp.git" },
+          },
+          githubBlock,
+        ],
+      },
+    });
+    assert.ok(presentation.kind === "marketplace-info-cascade");
+    assert.strictEqual(presentation.message.blocks[1], githubBlock);
+  });
+
+  test("PMOD-04 / D-07 redacts the credentials of plugin-info notes", () => {
+    // arrange
+    const message = {
+      ...pluginInfo(),
+      plugin: {
+        status: "available",
+        name: "alpha",
+        componentsResolved: false,
+        notes: ["workflow wf: fetch with Bearer abc.def failed", "plain note"],
+      },
+    } satisfies PluginInfoMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "plugin-info",
+      envelope: { severity: "info", needsReload: false, noOp: false },
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "available",
+          name: "alpha",
+          componentsResolved: false,
+          notes: ["workflow wf: fetch with Bearer *** failed", "plain note"],
+        },
+      },
+    });
+  });
+
+  test("PMOD-04 / D-07 redacts the plugin-info notes of a plugin-info cascade", () => {
+    // arrange
+    const notesFreeBlock = pluginInfo();
+    const message = {
+      kind: "plugin-info-cascade",
+      blocks: [
+        notesFreeBlock,
+        {
+          ...pluginInfo(),
+          plugin: {
+            status: "available",
+            name: "beta",
+            componentsResolved: false,
+            notes: ["token ghp_0123456789abcdefghijklmnopqrstuvwxyz rejected"],
+          },
+        },
+      ],
+    } satisfies PluginInfoCascadeMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "plugin-info-cascade",
+      envelope: { severity: "info", needsReload: false, noOp: false },
+      message: {
+        kind: "plugin-info-cascade",
+        blocks: [
+          notesFreeBlock,
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "user",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "available",
+              name: "beta",
+              componentsResolved: false,
+              notes: ["token *** rejected"],
+            },
+          },
+        ],
+      },
+    });
+    assert.ok(presentation.kind === "plugin-info-cascade");
+    assert.strictEqual(presentation.message.blocks[0], notesFreeBlock);
+  });
+
+  test("PMOD-04 / D-07 redacts the credentials of pending-empty advisories", () => {
+    // arrange
+    const message = {
+      kind: "reconcile-pending-empty",
+      advisories: ["retained https://user:tok@host/o/r staging"],
+      retainedWorkflows: [{ name: "wf" }],
+    } satisfies ReconcilePendingEmptyMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "reconcile-pending-empty",
+      envelope: { severity: "info", needsReload: false, noOp: false },
+      message: {
+        kind: "reconcile-pending-empty",
+        advisories: ["retained https://***@host/o/r staging"],
+        retainedWorkflows: [{ name: "wf" }],
+      },
+    });
+  });
+
+  test("carries both info fan-outs with info envelopes", () => {
     // arrange
     const marketplaces = {
       kind: "marketplace-info-cascade",
@@ -571,6 +772,18 @@ describe("presentNotification", () => {
         message: plugins,
       },
     ]);
+  });
+
+  test("carries a pending-empty message without advisories by identity", () => {
+    // arrange
+    const message = { kind: "reconcile-pending-empty" } satisfies ReconcilePendingEmptyMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.ok("message" in presentation);
+    assert.strictEqual(presentation.message, message);
   });
 
   test("carries the pending-empty and prune-empty messages with info envelopes", () => {

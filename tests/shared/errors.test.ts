@@ -281,6 +281,19 @@ describe("causeChainTrailer", () => {
     // assert
     assert.strictEqual(trailer, "cause: first -> second -> first -> second -> first (truncated)");
   });
+
+  test("PMOD-04 shows *** in place of a token carried by a nested link", () => {
+    // arrange
+    const error = new Error("update failed", {
+      cause: new Error("auth with ghp_0123456789abcdefghijklmnopqrstuvwxyz rejected"),
+    });
+
+    // act
+    const trailer = causeChainTrailer(error);
+
+    // assert
+    assert.strictEqual(trailer, "cause: update failed -> auth with *** rejected");
+  });
 });
 
 describe("serializeCauseChain", () => {
@@ -387,6 +400,22 @@ describe("serializeCauseChain", () => {
         "state save failed (cleanup: abort commands uuid: EACCES: uuid)",
         "state save failed",
       ],
+      truncated: false,
+    });
+  });
+
+  test("PMOD-04 / D-07 redacts the credentials of every serialized link", () => {
+    // arrange
+    const error = new Error("clone https://user:tok@github.com/o/r failed", {
+      cause: new Error("auth with ghp_0123456789abcdefghijklmnopqrstuvwxyz rejected"),
+    });
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: ["clone https://***@github.com/o/r failed", "auth with *** rejected"],
       truncated: false,
     });
   });

@@ -7,6 +7,7 @@ import {
   resolveUpdateNoOpEnvelope,
 } from "./notification-resolve.ts";
 import { redactCauseChain } from "./redact-absolute-paths.ts";
+import { redactCredentials } from "./redact-credentials.ts";
 
 import type { SerializedCauseChain } from "./errors.ts";
 import type {
@@ -37,6 +38,10 @@ import type { Scope } from "./types.ts";
  * one value that both strategies format: the text strategy in
  * notification-dispatch.ts and the JSON strategy in notification-json.ts. No
  * live `Error` crosses it; resolve has already serialized every cause.
+ *
+ * PMOD-04 / D-07: the free-text fields resolve does not reach are redacted
+ * here, so neither strategy reads a credential: a url-source marketplace
+ * `url`, advisory lines, and plugin-info `notes`.
  */
 
 /** A resolved cascade: its envelope, its blocks, and its advisory lines. */
@@ -124,15 +129,38 @@ export function presentNotification(
     case "reconcile-applied-cascade":
       return presentReconcileApplied(run, message, CENTRAL_ROW_POLICY);
     case "marketplace-info":
-      return { kind: "marketplace-info", envelope: resolveEnvelope(message), message };
+      return {
+        kind: "marketplace-info",
+        envelope: resolveEnvelope(message),
+        message: redactMarketplaceInfo(message),
+      };
     case "plugin-info":
-      return { kind: "plugin-info", envelope: resolveEnvelope(message), message };
+      return {
+        kind: "plugin-info",
+        envelope: resolveEnvelope(message),
+        message: redactPluginInfo(message),
+      };
     case "marketplace-info-cascade":
-      return { kind: "marketplace-info-cascade", envelope: resolveEnvelope(message), message };
+      return {
+        kind: "marketplace-info-cascade",
+        envelope: resolveEnvelope(message),
+        message: { ...message, blocks: redactBlocks(message.blocks, redactMarketplaceInfo) },
+      };
     case "plugin-info-cascade":
-      return { kind: "plugin-info-cascade", envelope: resolveEnvelope(message), message };
+      return {
+        kind: "plugin-info-cascade",
+        envelope: resolveEnvelope(message),
+        message: { ...message, blocks: redactBlocks(message.blocks, redactPluginInfo) },
+      };
     case "reconcile-pending-empty":
-      return { kind: "reconcile-pending-empty", envelope: resolveEnvelope(message), message };
+      return {
+        kind: "reconcile-pending-empty",
+        envelope: resolveEnvelope(message),
+        message:
+          message.advisories === undefined
+            ? message
+            : { ...message, advisories: redactLines(message.advisories) },
+      };
     case "prune-empty":
       return { kind: "prune-empty", envelope: resolveEnvelope(message), message };
     case "marketplace-not-added": {
@@ -168,6 +196,47 @@ export function presentNotification(
 }
 
 /**
+ * PMOD-04: a url source can hold the userinfo the user typed, so its `url` is
+ * redacted. A github or path source carries no credential, and the message
+ * comes back as the same object.
+ */
+function redactMarketplaceInfo(message: MarketplaceInfoMessage): MarketplaceInfoMessage {
+  if (message.source.sourceKind !== "url") {
+    return message;
+  }
+
+  return { ...message, source: { ...message.source, url: redactCredentials(message.source.url) } };
+}
+
+/**
+ * PMOD-04: a plugin row's `notes` can quote a thrown message, so a row that
+ * carries them is copied with each note redacted. A row without notes comes
+ * back as the same object, and its fields are not read again.
+ */
+function redactPluginInfo(message: PluginInfoMessage): PluginInfoMessage {
+  const { plugin } = message;
+  if (plugin.notes === undefined) {
+    return message;
+  }
+
+  return { ...message, plugin: { ...plugin, notes: redactLines(plugin.notes) } };
+}
+
+/** Redacts each block of a non-empty info fan-out and keeps the order. */
+function redactBlocks<Block>(
+  blocks: readonly [Block, ...Block[]],
+  redact: (block: Block) => Block,
+): readonly [Block, ...Block[]] {
+  const [first, ...rest] = blocks;
+  return [redact(first), ...rest.map((block) => redact(block))];
+}
+
+/** PMOD-04: redacts each free-text line and keeps the order. */
+function redactLines(lines: readonly string[]): readonly string[] {
+  return lines.map((line) => redactCredentials(line));
+}
+
+/**
  * Presents a cascade under `rowPolicies` and the run's soft-dependency
  * snapshot. The rows resolve before the envelope: `resolveRows` floors the
  * severity of a row with no policy, and the envelope reads that severity.
@@ -183,7 +252,7 @@ export function presentCascade(
     kind: "cascade",
     envelope,
     marketplaces,
-    ...(message.advisories === undefined ? {} : { advisories: message.advisories }),
+    ...(message.advisories === undefined ? {} : { advisories: redactLines(message.advisories) }),
     ...(message.retainedWorkflows === undefined
       ? {}
       : { retainedWorkflows: message.retainedWorkflows }),

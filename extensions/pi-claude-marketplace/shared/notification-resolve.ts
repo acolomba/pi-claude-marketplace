@@ -7,6 +7,7 @@ import {
   countRowsBySeverity,
   shouldEmitReloadHint,
 } from "./notification-summary.ts";
+import { redactCredentials } from "./redact-credentials.ts";
 
 import type { Dependency } from "./concerns/soft-dep.ts";
 import type { SerializedCauseChain } from "./errors.ts";
@@ -499,7 +500,7 @@ function resolveFailure(
   const chain = serializeCauseChain(cause);
   return {
     ...(chain === undefined ? {} : { cause: chain }),
-    leaks: manualRecoveryLeaks(cause),
+    leaks: manualRecoveryLeaks(cause).map((leak) => redactCredentials(leak)),
     rollbackPartial: rollbackPartial.map((entry) => {
       const phaseChain = serializeCauseChain(entry.cause);
       return phaseChain === undefined
@@ -560,15 +561,44 @@ export type ResolvedRawSurface =
   Exclude<RawSurface, ReconcileAbortedSurface> | ResolvedReconcileAborted;
 
 /**
- * D-13: the one place a raw surface's live value becomes text, and the site
- * where PMOD-04 redaction lands. A `reconcile-aborted` cause becomes
- * `errorMessage(cause)`: an Error's message, or the string form of any other
- * thrown value. Every other kind comes back as the same object.
+ * D-13 / PMOD-04: the one place a raw surface's live value becomes text, and
+ * the place its thrown-message strings are redacted (D-07). A
+ * `reconcile-aborted` cause becomes `errorMessage(cause)`: an Error's message,
+ * or the string form of any other thrown value. That message, a
+ * `plugin-path-skipped` reason, a `usage-error` message, and a `diagnostic`
+ * header and lines can carry a thrown message, so each passes through
+ * `redactCredentials`. The usage text is static help and stays as written.
+ * Every other kind comes back as the same object.
  */
 export function resolveRawSurface(surface: RawSurface): ResolvedRawSurface {
-  if (surface.kind === "reconcile-aborted") {
-    return { kind: "reconcile-aborted", causeMessage: errorMessage(surface.cause) };
+  switch (surface.kind) {
+    case "reconcile-aborted":
+      return {
+        kind: "reconcile-aborted",
+        causeMessage: redactCredentials(errorMessage(surface.cause)),
+      };
+    case "plugin-path-skipped":
+      return {
+        kind: "plugin-path-skipped",
+        scope: surface.scope,
+        reason: redactCredentials(surface.reason),
+      };
+    case "usage-error":
+      return {
+        kind: "usage-error",
+        message: redactCredentials(surface.message),
+        usage: surface.usage,
+      };
+    case "diagnostic":
+      return {
+        kind: "diagnostic",
+        header: redactCredentials(surface.header),
+        lines: surface.lines.map((line) => redactCredentials(line)),
+      };
+    case "usage-info":
+    case "device-flow-prompt":
+    case "async-rewake-summary":
+    case "stop-override-cap":
+      return surface;
   }
-
-  return surface;
 }
