@@ -1030,28 +1030,28 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:551:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:692:36",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:695:36",
       "owner": "unwrapCascade",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallCascadeResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:692:4"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:695:4"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1156:61",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1162:61",
       "owner": "InstalledLedgerResult",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1156:30"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1162:30"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2259:56",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2271:56",
       "owner": "assertOrchestratedFailedOutcome",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within InstallPluginOutcome by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2259:24"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2271:24"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1072:61",

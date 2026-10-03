@@ -3484,6 +3484,220 @@ test("AFILE-04: an install that lands disabled reports the notices of both its s
   });
 });
 
+/**
+ * AFILE-04: an install transaction whose state save is refused. Every MCP
+ * config rewrite before the save still runs for real.
+ */
+function refusingSaveTransaction(owner: InstallTestOwner): InstallTransaction {
+  return {
+    runPhases: owner.transaction.runPhases,
+    withLockedStateTransaction: (locations, run, deps) =>
+      withLockedStateTransaction(
+        locations,
+        (tx) =>
+          run({
+            state: tx.state,
+            save: () => Promise.reject(new Error("state save refused")),
+          }),
+        deps,
+      ),
+  };
+}
+
+/** AFILE-04: the standalone install entry point over `refusingSaveTransaction`. */
+function refusingSaveInstall(owner: InstallTestOwner): InstallOperation {
+  return createInstallPlugin(
+    refusingSaveTransaction(owner),
+    owner.hooksRouting,
+    owner.completionCache,
+  );
+}
+
+test("AFILE-04: an install whose state save fails still reports the removed comments after its failed row", async () => {
+  await withHermeticHome(async (owner) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-save-failed-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      await writeCommentedProjectAdapterFile(cwd);
+      const installPlugin = refusingSaveInstall(owner);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello (failed)\n" +
+            "    cause: state save refused",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: an install that lands disabled and whose state save fails reports both rewrites' notices", async () => {
+  await withHermeticHome(async (owner) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-disabled-save-failed-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+        entryDefaultEnabled: false,
+      });
+      await writeCommentedProjectAdapterFile(cwd);
+      await writeFile(
+        path.join(cwd, ".pi", "mcp.json"),
+        '// legacy note\n{"mcpServers":{"server1":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n',
+      );
+      const installPlugin = refusingSaveInstall(owner);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello (failed)\n" +
+            "    cause: state save refused",
+        },
+        {
+          severity: "warning",
+          message:
+            "MCP config comments removed.\n\n" +
+            "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.\n" +
+            "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a promotion whose state save fails still reports the removed comments after its failed row", async () => {
+  await withHermeticHome(async (owner) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-promotion-save-failed-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      await owner.installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await disableSeededDependency(cwd, owner.hooksRouting, { ctx, pi });
+      await writeCommentedProjectAdapterFile(cwd);
+      notifications.length = 0;
+      const installPlugin = refusingSaveInstall(owner);
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ some-other-plugin (failed)\n" +
+            "    cause: state save refused",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a missing-dependency install whose state save fails returns the removed comments on its failed outcome", async () => {
+  await withHermeticHome(async (owner) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-missing-dep-save-failed-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      const installMissingDependency = createInstallMissingDependency(
+        refusingSaveTransaction(owner),
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.deepStrictEqual(
+        { message: outcome.error.message, mcpConfigNotices: outcome.mcpConfigNotices },
+        {
+          message: "state save refused",
+          mcpConfigNotices: [
+            { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+          ],
+        },
+      );
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and names the file the adapter would load", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-afile05-"));

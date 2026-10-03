@@ -635,8 +635,11 @@ async function lookupCascadeDependencies(
 interface CascadeFailureSink {
   subject?: CascadeFailureSubject;
   /**
-   * AFILE-04: the notices of the members that committed before a member
-   * failed, written before the rethrow for the same reason as `subject`.
+   * AFILE-04: the notices of every MCP config rewrite that has already
+   * happened, written before the next step that can throw for the same reason
+   * as `subject`: the members that committed before a member failed, or the
+   * whole cascade, disable cascade or promotion when a later config write or
+   * the state save throws.
    */
   mcpConfigNotices: readonly McpConfigNotice[];
 }
@@ -1013,6 +1016,8 @@ interface PromotionArgs {
   };
   readonly capture: InstallFailureCapture;
   readonly transaction: InstallTransaction;
+  /** AFILE-04: receives the re-materialization's notices before the config write. */
+  readonly sink: CascadeFailureSink;
 }
 
 /**
@@ -1060,6 +1065,7 @@ async function promoteDependencyRecord(args: PromotionArgs): Promise<PromotionOu
   }
 
   const summary = await materializePromotedRecord(args, record);
+  args.sink.mcpConfigNotices = summary.mcpConfigNotices;
   await declarePromotedPlugin(args, { enabled: true });
   return {
     version: summary.version,
@@ -1585,6 +1591,7 @@ async function installPluginWithTransaction(
           config: { current, sibling, targetConfigPath },
           capture,
           transaction,
+          sink: cascadeFailure,
         });
         if (promotion !== undefined) {
           await tx.save();
@@ -1705,6 +1712,10 @@ async function installPluginWithTransaction(
           return { kind: "marketplace-absent" };
         }
 
+        // AFILE-04: the cascade has rewritten the MCP config files, and the
+        // config write-back and the state save below can still throw.
+        cascadeFailure.mcpConfigNotices = installed.mcpConfigNotices;
+
         // Success: the install context this closure just produced.
         const installCtx = installed.root;
 
@@ -1749,6 +1760,7 @@ async function installPluginWithTransaction(
           });
           removeDisabledRoutesAfterSave = disableResult.removeRoutes;
           mcpConfigNotices = [...mcpConfigNotices, ...disableResult.mcpConfigNotices];
+          cascadeFailure.mcpConfigNotices = mcpConfigNotices;
           if (!disableResult.ok) {
             // D-102-02: record the cause and fall through. The fold already
             // subtracted what DID drop, so the `tx.save()` below persists the
@@ -2417,6 +2429,8 @@ async function installMissingDependencyWithTransaction(
           throw cascadeFailureCause(cascadeFailure.subject, rootKey);
         }
 
+        // AFILE-04: the cascade has rewritten the MCP config files.
+        cascadeFailure.mcpConfigNotices = installed.mcpConfigNotices;
         await tx.save();
         // No `landedDisabled` filter -- nothing lands disabled here.
         await hydrateInstalledHooks({ hooksRouting, scope, cwd, members: installed.members });
