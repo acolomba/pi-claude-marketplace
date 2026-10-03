@@ -94,6 +94,21 @@ import type { Scope } from "../../shared/types.ts";
 type RecordedSourceKind = "github" | "url" | "path" | "unknown";
 
 /**
+ * AFILE-04: an orchestrated removal whose state transaction threw after its
+ * plugin cascades rewrote MCP config files. It carries those cascades' notices
+ * so the caller can still show them. The original throw rides `Error.cause`,
+ * and the caller classifies that.
+ */
+export class MarketplaceRemoveFailureError extends Error {
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
+  constructor(mcpConfigNotices: readonly McpConfigNotice[], options: ErrorOptions) {
+    super("Marketplace remove failed after its plugin cascades rewrote MCP config files.", options);
+    this.name = "MarketplaceRemoveFailureError";
+    this.mcpConfigNotices = Object.freeze([...mcpConfigNotices]);
+  }
+}
+
+/**
  * RECON-03: controls how `removeMarketplace` surfaces
  * notifications. Mirrors `AddMarketplaceNotifications`.
  *
@@ -818,7 +833,7 @@ async function runRemoveOutcome(
     );
   } catch (err) {
     if (err !== cfgInvalidSentinel) {
-      throw err;
+      rethrowWithMcpConfigNotices(err, opts.ctx, orchestrated, mcpConfigNotices);
     }
 
     return surfaceCfgInvalid({
@@ -872,6 +887,30 @@ async function runRemoveOutcome(
     unstaged: successfullyUnstaged,
     ...mcpConfigNoticesMember(mcpConfigNotices),
   };
+}
+
+/**
+ * AFILE-04: rethrows a state-transaction failure without losing the notices of
+ * the plugin cascades that already rewrote MCP config files. Standalone mode
+ * shows them before the throw leaves; orchestrated mode carries them on a
+ * `MarketplaceRemoveFailureError`.
+ */
+function rethrowWithMcpConfigNotices(
+  err: unknown,
+  ctx: NotificationContext,
+  orchestrated: boolean,
+  notices: readonly McpConfigNotice[],
+): never {
+  if (notices.length === 0) {
+    throw err;
+  }
+
+  if (orchestrated) {
+    throw new MarketplaceRemoveFailureError(notices, { cause: err });
+  }
+
+  notifyMcpConfigNotices(ctx, notices);
+  throw err;
 }
 
 /**

@@ -75,7 +75,7 @@ import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.t
 import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
-import { removeMarketplace } from "../marketplace/remove.ts";
+import { MarketplaceRemoveFailureError, removeMarketplace } from "../marketplace/remove.ts";
 import {
   createDependencyInstallOperation,
   createEnableOperation,
@@ -275,18 +275,23 @@ async function applyMarketplaceRemoves(
       });
       foldRemoveOutcome(result, op.scope, op.marketplace, outcomes);
     } catch (err) {
+      // AFILE-04: a removal that threw after its plugin cascades rewrote MCP
+      // config files carries their notices; its cause is the original throw.
+      const carrier = err instanceof MarketplaceRemoveFailureError ? err : undefined;
+      const failure = carrier === undefined ? err : carrier.cause;
       // The row carries only the closed-set `reason` (T-55-02-02); trace the
       // original error so an unrecognized throw isn't discarded with zero
       // record anywhere.
       hookDebugLog(
-        `applyMarketplaceRemoves: unexpected throw for ${op.marketplace}: ${errorMessage(err)}`,
+        `applyMarketplaceRemoves: unexpected throw for ${op.marketplace}: ${errorMessage(failure)}`,
         "reconcile",
       );
       outcomes.push({
         kind: "mp-remove-failed",
         scope: op.scope,
         marketplace: op.marketplace,
-        reason: classifyOrchestratorThrow(err),
+        reason: classifyOrchestratorThrow(failure),
+        ...carriedMcpConfigNotices(carrier ?? {}),
       });
     }
   }

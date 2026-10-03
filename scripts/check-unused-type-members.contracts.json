@@ -266,20 +266,20 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:608:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:732:38",
+      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:747:38",
       "owner": "removeMarketplace.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:732:9"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:747:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:732:55",
+      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:747:55",
       "owner": "removeMarketplace.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:732:9"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:747:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:108:78",
@@ -658,12 +658,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:54"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:860:49",
+      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:865:49",
       "owner": "degradationFromEnable.result",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within EnableDisablePluginOutcome by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:860:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:865:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:761:7",

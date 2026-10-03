@@ -54,7 +54,7 @@
 //   plugin-backfilled        a promotion riding the same cascade as an install
 
 import assert from "node:assert/strict";
-import { chmod, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -649,8 +649,8 @@ async function seedCommentedAdapterScope(
   t: TestContext,
   label: string,
   seed: CommentedAdapterSeed,
-): Promise<{ readonly cwd: string; readonly project: ScopedLocations; readonly adapter: string }> {
-  const { cwd, project } = await createHermeticScopes(t, label);
+): Promise<Pick<HermeticScopes, "cwd" | "project" | "denyWrites"> & { readonly adapter: string }> {
+  const { cwd, project, denyWrites } = await createHermeticScopes(t, label);
   const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(
     cwd,
     "mp-src",
@@ -694,7 +694,7 @@ async function seedCommentedAdapterScope(
   );
   const adapter = `// user note\n${JSON.stringify({ mcpServers: servers })}\n`;
   await writeUnder(project.mcpAdapterJsonPath, adapter);
-  return { cwd, project, adapter };
+  return { cwd, project, adapter, denyWrites };
 }
 
 test("D-05-02: the source and owner-test census contains exactly the two approved behavioral-composition exceptions", async () => {
@@ -6300,6 +6300,48 @@ describe("applyReconcile", () => {
       COMMENTS_REMOVED_NOTICE,
     ]);
     assert.equal(await readFile(project.mcpAdapterJsonPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a reload marketplace removal whose state save fails reports the failed row and still shows the notice", async (t) => {
+    // arrange
+    const { cwd, project, denyWrites } = await seedCommentedAdapterScope(
+      t,
+      "afile-marketplace-remove-save",
+      {
+        trees: { hello: { mcpServer: true } },
+        declared: undefined,
+        recorded: { hello: { mcpServers: ["hello-echo"] } },
+        owners: ["hello"],
+      },
+    );
+    // The state file reads through a link into a read-only directory, so every
+    // load and the scope lock succeed and the removal's own save is refused.
+    const lockedDirectory = path.join(cwd, "locked-state");
+    const lockedState = path.join(lockedDirectory, "state.json");
+    await writeUnder(lockedState, await readFile(project.stateJsonPath, "utf8"));
+    await rm(project.stateJsonPath);
+    await symlink(lockedState, project.stateJsonPath);
+    await denyWrites(lockedDirectory);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n" +
+          "\n" +
+          "⊘ mp [project] (failed) {permission denied}\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
     verifyBoundary();
   });
 

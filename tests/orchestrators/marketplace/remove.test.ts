@@ -21,6 +21,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  MarketplaceRemoveFailureError,
   removeMarketplace,
   type RemoveMarketplaceOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
@@ -1868,6 +1869,134 @@ test("AFILE-04: an orchestrated partial marketplace remove returns every cascade
       { kind: "comments-dropped", scope: "project", file: "mcp.json" },
     ],
   });
+  assert.deepStrictEqual(notification.calls, []);
+  notification.verifyInteractions();
+});
+
+/** AFILE-04: a state transaction whose save fails after the plugin cascades ran. */
+function failingSave(saveFailure: Error): { saveState: () => Promise<void> } {
+  return {
+    saveState: async () => {
+      await Promise.resolve();
+      throw saveFailure;
+    },
+  };
+}
+
+test("AFILE-04: a standalone marketplace remove whose state save fails still shows the notice", async (testContext) => {
+  // arrange
+  const { cwd } = await seedCommentedMarketplace(testContext, {
+    alpha: pluginRecord({ mcpServers: ["alpha-server"] }),
+  });
+  const saveFailure = new Error("state save failed");
+  const calls: NotificationCall[] = [];
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
+  when(() => ctx.ui).thenReturn(ui);
+  when(() => ui.notify).thenReturn((message, severity) => {
+    calls.push(severity === undefined ? { message } : { message, severity });
+  });
+
+  // act
+  const failure = await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx,
+    pi,
+    name: "commented",
+    scope: "project",
+    cwd,
+    stateTransaction: failingSave(saveFailure),
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+
+  // assert
+  assert.strictEqual(failure, saveFailure);
+  assert.deepStrictEqual(calls, [
+    {
+      message: `MCP config comments removed.\n\n${ADAPTER_COMMENTS_REMOVED_LINE}`,
+      severity: "warning",
+    },
+  ]);
+  verify(ctx);
+  verify(pi);
+  verify(ui);
+});
+
+test("AFILE-04: an orchestrated marketplace remove whose state save fails carries the notice on a typed error", async (testContext) => {
+  // arrange
+  const { cwd } = await seedCommentedMarketplace(testContext, {
+    alpha: pluginRecord({ mcpServers: ["alpha-server"] }),
+  });
+  const saveFailure = new Error("state save failed");
+  const notification = notificationBoundary(0);
+
+  // act
+  const failure = await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: "commented",
+    scope: "project",
+    cwd,
+    notifications: { mode: "orchestrated" },
+    stateTransaction: failingSave(saveFailure),
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+
+  // assert
+  assert.ok(failure instanceof MarketplaceRemoveFailureError);
+  assert.deepStrictEqual(
+    {
+      name: failure.name,
+      message: failure.message,
+      mcpConfigNotices: failure.mcpConfigNotices,
+      cause: failure.cause,
+    },
+    {
+      name: "MarketplaceRemoveFailureError",
+      message: "Marketplace remove failed after its plugin cascades rewrote MCP config files.",
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+      cause: saveFailure,
+    },
+  );
+  assert.deepStrictEqual(notification.calls, []);
+  notification.verifyInteractions();
+});
+
+test("rethrows a state save failure unchanged when no cascade rewrote an MCP config file", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await projectCase(testContext);
+  await seedMarketplace(locations, {
+    cwd,
+    name: "plain",
+    source: pathSource("./plain"),
+    plugins: { alpha: pluginRecord() },
+  });
+  const saveFailure = new Error("state save failed");
+  const notification = notificationBoundary(0);
+
+  // act
+  const failure = await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: "plain",
+    scope: "project",
+    cwd,
+    notifications: { mode: "orchestrated" },
+    stateTransaction: failingSave(saveFailure),
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+
+  // assert
+  assert.strictEqual(failure, saveFailure);
   assert.deepStrictEqual(notification.calls, []);
   notification.verifyInteractions();
 });
