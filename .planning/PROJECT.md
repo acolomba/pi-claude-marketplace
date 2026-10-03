@@ -577,6 +577,17 @@ v1.20 requirements are in [the archive](milestones/v1.20-REQUIREMENTS.md).
 
 ### Validated
 
+- ✓ Pi 1.0 is the baseline: peer `>=1.0.0`, Node `^22.22.2 || ^24.15.0 ||
+  >=26.0.0`, every devDependency current except TypeScript, pi-subagents
+  `>=0.74.0` proven with zero skips, pi-mcp-adapter `>=5.0.0` as an optional
+  peer, and the Stop and engine canaries passing live on Pi 1.0 with engine
+  3.13.1 (PIFL-01..07) — mcp-4 Phase 1, verified 2026-10-02.
+- ✓ Only pi-mcp-adapter satisfies the MCP soft dependency: detected by its
+  extension `mcp-adapter[:n]` command or an adapter source; Pi's built-in
+  MCP and a foreign `mcp` tool never count. Rows say
+  `{requires pi-mcp-adapter}` and `info` gains a `requires:` line that tags
+  a missing companion (ADET-01, ADET-02) — mcp-4 Phase 1, verified
+  2026-10-02.
 - ✓ Bare and wrapped plugin manifests follow consistent precedence, malformed
   manifests keep their failure behavior, and missing manifests remain valid —
   v1.20 Phase 1, verified 2026-09-14.
@@ -1036,6 +1047,10 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-02 after mcp-4 Phase 1 (Pi 1.0 floor and adapter-only
+detection) verified 5/5; Phase 2 (adapter-file delivery) is next. Prior updates
+follow._
 
 _Last updated: 2026-09-24 after v1.20 closeout. All 12 phases and 45
 requirements are complete; the Phase 3 private-repository credential check is

@@ -27,8 +27,8 @@ See: `.planning/PROJECT.md` (updated 2026-10-01 at the mcp-4 start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 01 — Pi 1.0 floor and adapter-only detection
-detection. The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
+**Current focus:** Phase 2 — Adapter-file delivery (Phase 1 verified 2026-10-02)
+The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
 
