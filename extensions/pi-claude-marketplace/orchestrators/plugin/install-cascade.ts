@@ -132,6 +132,7 @@ import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 
 /** Materialization operations the cascade drives, injectable for fault tests. */
@@ -499,6 +500,8 @@ export type InstallCascadeResult =
        * to make.
        */
       readonly alreadyInstalled: readonly CascadeSkippedMember[];
+      /** AFILE-04: every member's MCP config file notices, in member order. */
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
     }
   | { readonly kind: "marketplace-absent" }
   | {
@@ -511,6 +514,12 @@ export type InstallCascadeResult =
       readonly key: string;
       readonly error: Error;
       readonly rollbackPartials: readonly RollbackPartial[];
+      /**
+       * AFILE-04: the notices of the members that committed before the
+       * failure. Their undo unstages from the rewritten file rather than
+       * restoring its bytes, so removed comments stay removed.
+       */
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
     };
 
 /** Mutable ledger context: what the phases record as they run. */
@@ -521,6 +530,8 @@ interface CascadeRun {
   readonly members: CascadeMemberOutcome[];
   /** Keys THIS run materialized, and the only keys an `undo` may touch. */
   readonly materialized: Set<string>;
+  /** AFILE-04: each materialized member's MCP config file notices. */
+  readonly mcpConfigNotices: McpConfigNotice[];
 }
 
 /**
@@ -918,6 +929,34 @@ async function resolveMemberConstraints(
 }
 
 /**
+ * Records a member whose ledger just materialized it: the key an `undo` may
+ * touch, its MCP config notices (AFILE-04), and its outcome as its own ledger
+ * summary reports it. `origin` holds the two facts the summary cannot know.
+ */
+function recordMaterializedMember(
+  run: CascadeRun,
+  member: ClosureMember,
+  summary: InstallLedgerSummary,
+  origin: Pick<CascadeMemberOutcome, "fellBackToCurrentCopy" | "reEnabledFromRecord">,
+): void {
+  run.materialized.add(member.key);
+  run.mcpConfigNotices.push(...summary.mcpConfigNotices);
+  run.members.push({
+    key: member.key,
+    name: member.name,
+    marketplace: member.marketplace,
+    requiredBy: member.requiredBy,
+    version: summary.version,
+    declaresAgents: summary.stagedAgentNames.length > 0,
+    declaresMcp: summary.stagedMcpServerNames.length > 0,
+    declaresWorkflows: summary.stagedWorkflowNames.length > 0,
+    pluginRoot: summary.resolved.pluginRoot,
+    hooksConfigPath: summary.resolved.hooksConfigPath,
+    ...origin,
+  });
+}
+
+/**
  * One member's phase.
  *
  * `undo` is gated on `run.materialized` so it can only reach an install THIS
@@ -956,18 +995,7 @@ function buildMemberPhase(
         throw new Error(`Marketplace "${member.marketplace}" is not added.`);
       }
 
-      run.materialized.add(member.key);
-      run.members.push({
-        key: member.key,
-        name: member.name,
-        marketplace: member.marketplace,
-        requiredBy: member.requiredBy,
-        version: result.summary.version,
-        declaresAgents: result.summary.stagedAgentNames.length > 0,
-        declaresMcp: result.summary.stagedMcpServerNames.length > 0,
-        declaresWorkflows: result.summary.stagedWorkflowNames.length > 0,
-        pluginRoot: result.summary.resolved.pluginRoot,
-        hooksConfigPath: result.summary.resolved.hooksConfigPath,
+      recordMaterializedMember(run, member, result.summary, {
         fellBackToCurrentCopy: member.fellBackToCurrentCopy ?? false,
         reEnabledFromRecord: false,
       });
@@ -1082,18 +1110,7 @@ function buildReEnableMemberPhase(
       );
       assertReEnableLedgerInstalled(result);
 
-      run.materialized.add(member.key);
-      run.members.push({
-        key: member.key,
-        name: member.name,
-        marketplace: member.marketplace,
-        requiredBy: member.requiredBy,
-        version: result.summary.version,
-        declaresAgents: result.summary.stagedAgentNames.length > 0,
-        declaresMcp: result.summary.stagedMcpServerNames.length > 0,
-        declaresWorkflows: result.summary.stagedWorkflowNames.length > 0,
-        pluginRoot: result.summary.resolved.pluginRoot,
-        hooksConfigPath: result.summary.resolved.hooksConfigPath,
+      recordMaterializedMember(run, member, result.summary, {
         fellBackToCurrentCopy: false,
         reEnabledFromRecord: true,
       });
@@ -1144,7 +1161,13 @@ function toCascadeResult(
       throw new Error("Install cascade reported success without materializing the root plugin.");
     }
 
-    return { kind: "installed", root, members: run.members, alreadyInstalled };
+    return {
+      kind: "installed",
+      root,
+      members: run.members,
+      alreadyInstalled,
+      mcpConfigNotices: run.mcpConfigNotices,
+    };
   }
 
   if (run.marketplaceAbsent) {
@@ -1156,6 +1179,7 @@ function toCascadeResult(
     key: run.attempting ?? options.rootKey,
     error: result.error ?? new Error("Install cascade failed."),
     rollbackPartials: result.rollbackPartials,
+    mcpConfigNotices: run.mcpConfigNotices,
   };
 }
 
@@ -1227,6 +1251,7 @@ export async function runInstallCascade(
     attempting: undefined,
     members: [],
     materialized: new Set<string>(),
+    mcpConfigNotices: [],
   };
   // One phase per closure member, in the walk's post order: a dependency is
   // live -- installed or re-enabled -- before the member that needs it runs.

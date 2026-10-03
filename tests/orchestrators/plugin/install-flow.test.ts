@@ -49,6 +49,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   DependencyCascadeError,
   InvalidMarketplaceManifestError,
@@ -634,6 +635,8 @@ async function seedSiblingPlugins(
       hooksJson?: object;
       /** D-64-06: unsupported kinds on a DEPENDENCY, so its record is partially installed. */
       experimental?: object;
+      /** AFILE-04: MCP servers on a DEPENDENCY, written to its `.mcp.json`. */
+      mcpServers?: Record<string, unknown>;
     }[];
   },
 ): Promise<Record<string, unknown>[]> {
@@ -656,6 +659,13 @@ async function seedSiblingPlugins(
       const siblingHooksDir = path.join(siblingRoot, "hooks");
       await mkdir(siblingHooksDir, { recursive: true });
       await writeFile(path.join(siblingHooksDir, "hooks.json"), JSON.stringify(sibling.hooksJson));
+    }
+
+    if (sibling.mcpServers !== undefined) {
+      await writeFile(
+        path.join(siblingRoot, ".mcp.json"),
+        JSON.stringify({ mcpServers: sibling.mcpServers }),
+      );
     }
 
     entries.push({
@@ -774,6 +784,8 @@ async function seedPathMarketplaceWithPlugin(opts: {
     hooksJson?: object;
     /** D-64-06: unsupported kinds on a DEPENDENCY, so its record is partially installed. */
     experimental?: object;
+    /** AFILE-04: MCP servers on a DEPENDENCY, written to its `.mcp.json`. */
+    mcpServers?: Record<string, unknown>;
   }[];
 }): Promise<SeededPlugin> {
   const { cwd, marketplaceRoot, marketplaceName, pluginName } = opts;
@@ -3036,6 +3048,379 @@ test("AFILE-02: an MCP install over an unparseable mcp-adapter.json fails and ke
         },
       ]);
       assert.equal(notifications[0]?.message.includes("sk-secret-abc"), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** AFILE-04: the exact comments-dropped notice for the project-scope adapter file. */
+const PROJECT_COMMENTS_DROPPED_NOTICE: NotifyRecord = {
+  severity: "warning",
+  message:
+    "MCP config comments removed.\n\nThe project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+};
+
+/** AFILE-04: write a project-scope mcp-adapter.json that holds a `//` comment. */
+async function writeCommentedProjectAdapterFile(cwd: string): Promise<void> {
+  const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+  await mkdir(path.dirname(adapterPath), { recursive: true });
+  await writeFile(
+    adapterPath,
+    '{\n  // mine\n  "mcpServers": { "mine": { "command": "my-server" } }\n}\n',
+  );
+}
+
+test("AFILE-04: install over a commented mcp-adapter.json shows the comments-removed notice once", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+        siblingPlugins: [{ name: "other", mcpServers: { server2: { command: "node" } } }],
+      });
+      await writeCommentedProjectAdapterFile(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      const firstInstall = notifications.splice(0);
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "other" });
+
+      // assert
+      assert.deepStrictEqual(firstInstall, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● other v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** AFILE-04: a plugin with one MCP server that declares a dependency carrying another. */
+async function seedMcpDependencyCascade(cwd: string): Promise<void> {
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    pluginName: "hello",
+    mcpServers: { server1: { command: "node", args: ["server.js"] } },
+    declareDependencies: true,
+    siblingPlugins: [{ name: "some-other-plugin", mcpServers: { server2: { command: "node" } } }],
+  });
+}
+
+/** AFILE-04: `~/.agents/mcp.json` already defines `server1`, so hello's own mcp phase refuses. */
+async function seedForeignServer1(): Promise<string> {
+  const agentsPath = path.join(homedir(), ".agents", "mcp.json");
+  await mkdir(path.dirname(agentsPath), { recursive: true });
+  await writeFile(agentsPath, '{"mcpServers":{"server1":{"command":"user-server"}}}');
+  return agentsPath;
+}
+
+test("AFILE-04: a dependency cascade over a commented mcp-adapter.json shows the notice once", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-cascade-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ● hello v0.0.1 (installed)",
+            "  ● some-other-plugin@mp v0.0.1 (installed)",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a failed dependency cascade still reports the removed comments after its failed row", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-cascade-failed-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      const agentsPath = await seedForeignServer1();
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed)\n" +
+            `    cause: Refusing to stage MCP server "server1": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        '{\n  "mcpServers": {\n    "mine": {\n      "command": "my-server"\n    }\n  }\n}\n',
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: promoting a disabled dependency that re-materializes MCP servers shows the notice", async () => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-promotion-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await disableSeededDependency(cwd, hooksRouting, { ctx, pi });
+      await writeCommentedProjectAdapterFile(cwd);
+      notifications.length = 0;
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ● some-other-plugin v0.0.1 (installed) {already installed, dependency promoted}\n\n" +
+            "/reload to pick up changes",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: true,
+        declaresWorkflows: false,
+        promoted: true,
+        mcpConfigNotices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: an orchestrated install returns its MCP config notices and sends nothing", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-orchestrated-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: true,
+        declaresWorkflows: false,
+        mcpConfigNotices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ],
+      });
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: an orchestrated install over a comment-free mcp-adapter.json carries no notices", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-orchestrated-clean-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: true,
+        declaresWorkflows: false,
+      });
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: an orchestrated failed cascade returns the removed comments on its failed outcome", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-orchestrated-failed-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      await seedForeignServer1();
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.ok(outcome.error instanceof McpServerCollisionError);
+      assert.deepStrictEqual(outcome.mcpConfigNotices, [
+        { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      ]);
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: the reload missing-dependency install returns its MCP config notices and sends nothing", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-missing-dep-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.ok(outcome.status === "installed");
+      assert.deepStrictEqual(outcome.mcpConfigNotices, [
+        { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      ]);
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-02: installing a plugin with no MCP servers over an unparseable mcp-adapter.json leaves it unchanged and says so", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile02-left-unchanged-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await mkdir(path.dirname(adapterPath), { recursive: true });
+      await writeFile(adapterPath, "{");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.equal(await readFile(adapterPath, "utf8"), "{");
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+        {
+          severity: "warning",
+          message:
+            "MCP config left unchanged.\n\nThe project-scope mcp-adapter.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

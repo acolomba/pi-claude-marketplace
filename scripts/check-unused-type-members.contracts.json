@@ -98,36 +98,36 @@
       "filter": "extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts:141:17"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:291:48",
+      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:304:48",
       "owner": "replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:291:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:304:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:338:42",
+      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:351:42",
       "owner": "requireMcpReplacementInternals.replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:338:16"
+      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:351:16"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:59:29",
+      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:60:29",
       "owner": "mcpReplacementInternals",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:59:3"
+      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:60:3"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:94:52",
+      "id": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:101:52",
       "owner": "McpReplacementNoop.prepared",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PreparedMcpStaging by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:94:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:101:22"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:566:51",
@@ -466,12 +466,12 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:58:29"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1219:3",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1237:3",
       "owner": "FailedRunPhasesResult",
       "key": "ok",
       "category": "type-refinement",
       "purpose": "Narrows ok at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1218:30"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1236:30"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:78",
@@ -698,12 +698,12 @@
       "filter": "extensions/pi-claude-marketplace/platform/pi-api.ts:124:32"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:218:43",
+      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:273:43",
       "owner": "dispatchInfoMessage.message",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:218:12"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:273:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1621:46",
@@ -1014,52 +1014,52 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:436:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:506:60",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:509:60",
       "owner": "InstallCascadeResult.failure",
       "key": "ok",
       "category": "type-selection",
       "purpose": "Selects within DependencyClosureResult by ok, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:506:25"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:509:25"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:539:50",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:550:50",
       "owner": "toIntersectionFailure.failed",
       "key": "ok",
       "category": "type-selection",
       "purpose": "Selects within DependencyRangeIntersection by ok, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:539:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:550:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:658:36",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:692:36",
       "owner": "unwrapCascade",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallCascadeResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:658:4"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:692:4"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1117:61",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1156:61",
       "owner": "InstalledLedgerResult",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1117:30"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1156:30"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2177:56",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2255:56",
       "owner": "assertOrchestratedFailedOutcome",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within InstallPluginOutcome by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2177:24"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2255:24"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1013:61",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1041:61",
       "owner": "InstalledLedgerResult",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1013:30"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1041:30"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts:74:42",

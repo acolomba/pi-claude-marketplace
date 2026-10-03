@@ -83,9 +83,9 @@ import {
 import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
 import { removeHookConfig, writeHookConfig } from "../../bridges/hooks/index.ts";
 import {
-  commitPreparedMcp,
   prepareStageMcpServers,
-  unstageMcpServers,
+  replacePreparedMcp,
+  rollbackMcpReplacement,
 } from "../../bridges/mcp/index.ts";
 import {
   commitPreparedSkills,
@@ -138,7 +138,7 @@ import {
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
-import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
+import type { McpReplacement } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
@@ -148,6 +148,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 
@@ -272,6 +273,11 @@ export interface InstallLedgerSummary {
   readonly bridgeWarnings: readonly string[];
   readonly discoveryWarnings: readonly string[];
   readonly agentForeignFailures: readonly AgentForeignFailureRow[];
+  /**
+   * AFILE-04 / AFILE-02: the MCP config file facts the mcp phase reported,
+   * for the caller to route to `notifyMcpConfigNotices` after its own row.
+   */
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
 }
 
 /** Caller-facing result of the guard-free install ledger. */
@@ -314,7 +320,9 @@ interface InstallLedgerContext {
   skillsPrep?: PreparedSkillsStaging;
   commandsPrep?: PreparedCommandsStaging;
   agentsPrep?: PreparedAgentsStaging;
-  mcpPrep?: PreparedMcpStaging;
+  // AFILE-04 / NFR-3: the mcp phase holds a replacement handle rather than a
+  // prep handle, so its undo restores the file's prior bytes.
+  mcpReplacement?: McpReplacement;
   workflowsPrep?: PreparedWorkflowsStaging;
   // LIFE-01 / D-63-02: hooks bridge has no staging dir (writeHookConfig is
   // the atomic write). Track whether the file was written so the phase undo
@@ -350,6 +358,8 @@ interface InstallLedgerContext {
   discoveryWarnings: string[];
   // Bridge-side per-record AG-5 foreign-content rows -- routed to notifyWarning post-success.
   agentForeignFailures: AgentForeignFailureRow[];
+  // AFILE-04 / AFILE-02: MCP config file facts from the mcp phase.
+  mcpConfigNotices: McpConfigNotice[];
   // SKILL-01 / CMD-01 / WARN-01: per-component frontmatter-parse degrade records
   // collected from the skills + commands bridges. Feed the one-per-plugin
   // `{malformed skill}` / `{malformed command}` reason token (standalone row),
@@ -648,6 +658,7 @@ function toInstallLedgerSummary(context: InstallLedgerContext): InstallLedgerSum
     bridgeWarnings: context.bridgeWarnings,
     discoveryWarnings: context.discoveryWarnings,
     agentForeignFailures: context.agentForeignFailures,
+    mcpConfigNotices: context.mcpConfigNotices,
   };
 }
 
@@ -741,6 +752,7 @@ async function runInstallLedgerBody(
     bridgeWarnings: [],
     discoveryWarnings: [],
     agentForeignFailures: [],
+    mcpConfigNotices: [],
     frontmatterDegradations: [],
     stateSnapshot: state,
   };
@@ -957,24 +969,30 @@ async function runInstallLedgerBody(
         pluginData: c.pluginDataDir,
         sourcePath: `${c.resolved.pluginRoot}#mcpServers`,
       });
-      c.mcpPrep = prep;
-      const result = await commitPreparedMcp(prep);
+      c.mcpReplacement = await replacePreparedMcp(prep);
+      const result = prep.result;
       c.stagedMcpServerNames = result.recorded.map((r) => r.generatedName);
-      // MCP staging soft warnings (malformed declared env, non-object entry,
-      // malformed pre-existing mcp.json) ride the same bridgeWarnings channel
-      // as the other bridges' leak strings instead of being dropped.
+      // MCP staging soft warnings (malformed declared env, non-object entry)
+      // ride the same bridgeWarnings channel as the other bridges' leak
+      // strings instead of being dropped.
       c.bridgeWarnings.push(...result.warnings);
+      c.mcpConfigNotices.push(...result.notices);
     },
+    // AFILE-04 / NFR-3: a failed install restores the file's prior bytes,
+    // comments included, instead of unstaging from the rewritten file. A
+    // restore that cannot write throws, so the ledger records the mcp
+    // rollback partial rather than reporting a clean unwind over a changed
+    // file. The handle needs no finalize on success; it is dropped with the
+    // context.
     undo: async (c) => {
-      if (c.mcpPrep === undefined) {
+      if (c.mcpReplacement === undefined) {
         return;
       }
 
-      await unstageMcpServers({
-        locations: c.locations,
-        marketplaceName: c.marketplace,
-        pluginName: c.plugin,
-      });
+      const leaks = await rollbackMcpReplacement(c.mcpReplacement);
+      if (leaks.length > 0) {
+        throw new Error(leaks.join("; "));
+      }
     },
   };
 

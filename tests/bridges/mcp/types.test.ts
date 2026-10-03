@@ -57,6 +57,7 @@ const stageMcpCommitResult: StageMcpCommitResult = {
   stagedNames: ["search"],
   recorded: [stagedMcpRecord],
   warnings: ["preserved foreign server foreign-search"],
+  notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
 } satisfies StageMcpCommitResult;
 void stageMcpCommitResult;
 
@@ -66,6 +67,7 @@ const preparedMcpNoop: PreparedMcpNoop = {
     stagedNames: [],
     recorded: [],
     warnings: [],
+    notices: [],
   },
 } satisfies PreparedMcpNoop;
 void preparedMcpNoop;

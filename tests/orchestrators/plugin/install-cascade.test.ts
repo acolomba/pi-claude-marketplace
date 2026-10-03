@@ -278,6 +278,7 @@ function unmaterializedSummary(
     bridgeWarnings: [],
     discoveryWarnings: [],
     agentForeignFailures: [],
+    mcpConfigNotices: [],
   };
 }
 
@@ -601,6 +602,81 @@ test("RESV-06 / D-03-07 three members whose LAST fails leave no trace of the fir
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
 });
 
+/**
+ * AFILE-04: give each named fixture plugin one MCP server and put a commented
+ * project-scope mcp-adapter.json in place, so the first member to stage
+ * rewrites a file whose comments the writer drops.
+ */
+async function seedCommentedAdapterTarget(
+  cwd: string,
+  locations: ScopedLocations,
+  pluginNames: readonly string[],
+): Promise<void> {
+  for (const name of pluginNames) {
+    await writeFile(
+      path.join(cwd, MARKETPLACE, "plugins", name, ".mcp.json"),
+      JSON.stringify({ mcpServers: { [`${name}-server`]: { command: "node" } } }),
+    );
+  }
+
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+}
+
+test("AFILE-04 a two-member cascade over a commented mcp-adapter.json reports one comments-dropped notice", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-mcp-notice-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  const locations = locationsFor("project", environment.cwd);
+  await seedCommentedAdapterTarget(environment.cwd, locations, ["bar", "foo"]);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(cascade.mcpConfigNotices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+  ]);
+});
+
+test("AFILE-04 a later member's failure still reports the comments an earlier member removed", async (t) => {
+  // arrange: the requesting plugin is ALREADY recorded, so its own ledger
+  // throws after its dependency rewrote the commented file.
+  const environment = await createHermeticEnvironment(t, "install-cascade-mcp-notice-failed-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { preinstalled: ["foo"] });
+  const locations = locationsFor("project", environment.cwd);
+  await seedCommentedAdapterTarget(environment.cwd, locations, ["bar"]);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "member-failed");
+  assert.strictEqual(cascade.key, `foo@${MARKETPLACE}`);
+  assert.deepStrictEqual(cascade.mcpConfigNotices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+  ]);
+});
+
 test("D-03-07 a member installed BEFORE the run survives a later member's failure", async (t) => {
   // arrange: `bar` predates the run and `baz` is declared but absent from the
   // manifest, so its ledger throws while `bar` is only ever skipped.
@@ -879,6 +955,7 @@ test("a scheduler reporting failure with no error names the root and a generic c
     key: `foo@${MARKETPLACE}`,
     error: new Error("Install cascade failed."),
     rollbackPartials: [],
+    mcpConfigNotices: [],
   });
 });
 

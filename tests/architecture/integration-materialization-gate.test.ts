@@ -136,6 +136,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
       },
     ],
     warnings: [],
+    notices: [],
   });
   assert.strictEqual(storedBytes, expectedBytes);
   // D-07-03: the sibling-absence claim below is vacuous unless the source tree

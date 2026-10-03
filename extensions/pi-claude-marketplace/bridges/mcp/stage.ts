@@ -50,6 +50,7 @@ import type {
   StageMcpInput,
   StagedMcpRecord,
 } from "./types.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 
 interface McpReplacementInternals {
   readonly oldText: string | undefined;
@@ -125,11 +126,12 @@ async function assertNoMcpCollisions(check: McpCollisionCheck): Promise<void> {
   }
 }
 
-function noopStaging(warnings: readonly string[]): PreparedMcpStaging {
+function noopStaging(notices: readonly McpConfigNotice[]): PreparedMcpStaging {
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze<string[]>([]),
     recorded: Object.freeze<StagedMcpRecord[]>([]),
-    warnings: Object.freeze([...warnings]),
+    warnings: Object.freeze<string[]>([]),
+    notices: Object.freeze([...notices]),
   };
   return { kind: "noop", result };
 }
@@ -176,9 +178,11 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
 
   const config = await readTargetConfig(locations.mcpAdapterJsonPath, newNames.length > 0);
   if (config instanceof McpConfigFileError) {
-    // AS-8: nothing is written, so the unreadable file keeps its bytes and
-    // the refusal text becomes a warning naming the file.
-    return noopStaging([config.message]);
+    // AS-8 / AFILE-02: nothing is written, so the unreadable file keeps its
+    // bytes, and the orchestrator tells the user it was left unchanged.
+    return noopStaging([
+      { kind: "left-unchanged", scope: locations.scope, file: "mcp-adapter.json" },
+    ]);
   }
 
   // Partition existing into ours-vs-theirs by marker (MC-5).
@@ -238,10 +242,19 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     })),
   );
 
+  // AFILE-04: the staged branch always rewrites the file, and the writer drops
+  // JSONC comments, so a commented file is reported. The noop branches write
+  // nothing and keep the comments.
+  const notices = Object.freeze<McpConfigNotice[]>(
+    config.hadComments
+      ? [{ kind: "comments-dropped", scope: locations.scope, file: "mcp-adapter.json" }]
+      : [],
+  );
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...newNames]),
     recorded,
     warnings: Object.freeze(stampWarnings),
+    notices,
   };
 
   return {

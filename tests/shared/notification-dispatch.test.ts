@@ -10,6 +10,7 @@ import {
   notify,
   notifyAsyncRewakeSummary,
   notifyDiagnostic,
+  notifyMcpConfigNotices,
   notifyStopHookOverrideCap,
   notifyUsageError,
   notifyUsageInfo,
@@ -5786,6 +5787,110 @@ test("stop override dispatch preserves exact warning bytes", (t) => {
     "Stop hook override cap reached.\n\n`official:guard`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.",
     "warning",
   ]);
+});
+
+test("AFILE-04: an empty MCP config notice list sends nothing", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, []);
+
+  // assert
+  assert.equal(ctx.ui.notify.mock.callCount(), 0);
+});
+
+test("AFILE-04: one comments-dropped notice sends its exact warning bytes", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    { kind: "comments-dropped", scope: "user", file: "mcp-adapter.json" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP config comments removed.\n\nThe user-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AFILE-04: comments-dropped notices for two scopes share one warning with a line each", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    { kind: "comments-dropped", scope: "user", file: "mcp-adapter.json" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP config comments removed.\n\n" +
+          "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.\n" +
+          "The user-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AFILE-04: a repeated MCP config notice renders once", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    { kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" },
+    { kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP config left unchanged.\n\nThe project-scope mcp-adapter.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.",
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AFILE-04: mixed MCP config notices send comments-dropped first, then left-unchanged", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    { kind: "left-unchanged", scope: "user", file: "mcp-adapter.json" },
+    { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP config comments removed.\n\nThe project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        "warning",
+      ],
+      [
+        "MCP config left unchanged.\n\nThe user-scope mcp-adapter.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.",
+        "warning",
+      ],
+    ],
+  );
 });
 
 test("usage info dispatch preserves usage message at info severity", (t) => {

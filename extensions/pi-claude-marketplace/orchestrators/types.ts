@@ -10,6 +10,7 @@
 import { type ContentReason } from "../shared/notification-types.ts";
 
 import type { CleanupFailure } from "../shared/errors.ts";
+import type { McpConfigNotice } from "../shared/notification-dispatch.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
 import type { Scope } from "../shared/types.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
@@ -550,6 +551,14 @@ export type InstallPluginOutcome =
        * the COMPAT-01 key-set pin is undisturbed.
        */
       readonly promoted?: true;
+      /**
+       * AFILE-04 / AFILE-02: the MCP config file notices this install raised.
+       * A standalone install has already shown them; an orchestrated caller
+       * routes them through `notifyMcpConfigNotices`. Omitted when there are
+       * none (NREG-01). Not a `LedgerDegradationSignals` member, so the
+       * COMPAT-01 key-set pin is undisturbed.
+       */
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers" | "stagedWorkflows">)
   | {
       /**
@@ -563,4 +572,10 @@ export type InstallPluginOutcome =
       readonly status: "failed";
       readonly error: Error;
       readonly cause: string;
+      /**
+       * AFILE-04: the MCP config file notices of the dependencies that
+       * committed before a later cascade member failed. Omitted when there
+       * are none (NREG-01).
+       */
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     };

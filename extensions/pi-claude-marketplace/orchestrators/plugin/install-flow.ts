@@ -18,7 +18,7 @@ import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { createRemovalOps } from "../../shared/fs-utils.ts";
-import { notify } from "../../shared/notification-dispatch.ts";
+import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -84,6 +84,7 @@ import type { ExtensionState, PluginInstallRecord } from "../../persistence/stat
 import type { NotificationContext, SoftDepStatus, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { runPhases } from "../../transaction/phase-ledger.ts";
@@ -633,6 +634,39 @@ async function lookupCascadeDependencies(
  */
 interface CascadeFailureSink {
   subject?: CascadeFailureSubject;
+  /**
+   * AFILE-04: the notices of the members that committed before a member
+   * failed, written before the rethrow for the same reason as `subject`.
+   */
+  mcpConfigNotices: readonly McpConfigNotice[];
+}
+
+/**
+ * AFILE-04: the notices member an outcome carries, present only when there is
+ * a notice to carry (NREG-01).
+ */
+function mcpConfigNoticesMember(notices: readonly McpConfigNotice[]): {
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
+} {
+  return notices.length > 0 ? { mcpConfigNotices: notices } : {};
+}
+
+/**
+ * AFILE-04: a standalone install shows its MCP config notices after its own
+ * row; an orchestrated one sends nothing and leaves them to its caller. Both
+ * modes carry them on the outcome.
+ */
+function withMcpConfigNotices(
+  ctx: NotificationContext,
+  orchestrated: boolean,
+  outcome: InstallPluginOutcome,
+  notices: readonly McpConfigNotice[],
+): InstallPluginOutcome {
+  if (!orchestrated) {
+    notifyMcpConfigNotices(ctx, notices);
+  }
+
+  return { ...outcome, ...mcpConfigNoticesMember(notices) };
 }
 
 /**
@@ -676,6 +710,7 @@ function unwrapCascade(
 
   if (cascade.kind === "member-failed") {
     capture.rollbackPartials = [...capture.rollbackPartials, ...cascade.rollbackPartials];
+    sink.mcpConfigNotices = cascade.mcpConfigNotices;
     if (cascade.key !== rootKey) {
       sink.subject = {
         kind: "member",
@@ -962,6 +997,8 @@ interface PromotionOutcome {
   readonly declaresMcp: boolean;
   readonly declaresWorkflows: boolean;
   readonly materialized: readonly HydratableMember[];
+  /** AFILE-04: the re-materialization's MCP config notices; empty otherwise. */
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
 }
 
 interface PromotionArgs {
@@ -1018,6 +1055,7 @@ async function promoteDependencyRecord(args: PromotionArgs): Promise<PromotionOu
       declaresMcp: record.resources.mcpServers.length > 0,
       declaresWorkflows: record.resources.workflows.length > 0,
       materialized: [],
+      mcpConfigNotices: [],
     };
   }
 
@@ -1037,6 +1075,7 @@ async function promoteDependencyRecord(args: PromotionArgs): Promise<PromotionOu
         hooksConfigPath: summary.resolved.hooksConfigPath,
       },
     ],
+    mcpConfigNotices: summary.mcpConfigNotices,
   };
 }
 
@@ -1349,7 +1388,7 @@ function handleCascadeThrow(args: {
  *   PRESENT manifest), which stays `{not in manifest}` on the plugin row.
  * - `"promoted"` -- D-04-07: a recorded dependency the user has now named was
  *   promoted instead of cascaded. State was saved and any hooks hydrated
- *   inside the lock; the row is the whole report.
+ *   inside the lock; the row, then any MCP config notice, is the whole report.
  * - `"disable-cascade-failed"` -- D-102-02: the ledger succeeded and landed
  *   disabled (DFEN-04), then the disable cascade itself failed. The shrunken
  *   record is already saved inside the lock; `cause` is the cascade's own
@@ -1366,13 +1405,18 @@ type InstallTransactionOutcome =
   | { kind: "invalid-config" }
   | { kind: "marketplace-absent" }
   | { kind: "promoted"; promotion: PromotionOutcome }
-  | { kind: "disable-cascade-failed"; cause: Error }
+  | {
+      kind: "disable-cascade-failed";
+      cause: Error;
+      mcpConfigNotices: readonly McpConfigNotice[];
+    }
   | {
       kind: "installed";
       installCtx: InstallLedgerSummary;
       landedDisabled: boolean;
       members: readonly CascadeMemberOutcome[];
       alreadyInstalled: readonly CascadeSkippedMember[];
+      mcpConfigNotices: readonly McpConfigNotice[];
     };
 
 /**
@@ -1433,7 +1477,7 @@ async function installPluginWithTransaction(
   const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
   // RESV-06: where the cascade leaves the failing dependency for the catch
   // block, so the failure block names it rather than the plugin the user typed.
-  const cascadeFailure: CascadeFailureSink = {};
+  const cascadeFailure: CascadeFailureSink = { mcpConfigNotices: [] };
 
   // WB-01: target-path selection happens ONCE, and both write arms below read
   // that one decision, so they cannot drift onto different files. The
@@ -1857,7 +1901,11 @@ async function installPluginWithTransaction(
         // "installed" arm's fields never carry a value the caller should
         // instead read off "disable-cascade-failed".
         if (cascadeError !== undefined) {
-          return { kind: "disable-cascade-failed", cause: cascadeError };
+          return {
+            kind: "disable-cascade-failed",
+            cause: cascadeError,
+            mcpConfigNotices: installed.mcpConfigNotices,
+          };
         }
 
         return {
@@ -1866,6 +1914,7 @@ async function installPluginWithTransaction(
           landedDisabled,
           members: installed.members,
           alreadyInstalled: installed.alreadyInstalled,
+          mcpConfigNotices: installed.mcpConfigNotices,
         };
       },
     );
@@ -1873,34 +1922,38 @@ async function installPluginWithTransaction(
     // RESV-06: a dependency is what failed, so the block names it. Routed here
     // rather than through the single-row path below, which would report the
     // plugin the user typed for something one of its dependencies did.
-    const subject = cascadeFailure.subject;
-    if (subject !== undefined) {
-      return handleCascadeThrow({
-        ctx,
-        pi,
-        marketplace,
-        scope,
-        plugin,
-        rootKey,
-        subject,
-        orchestrated,
-      });
-    }
-
-    // Pattern S-1 single chokepoint for user-visible errors: one
+    //
+    // Otherwise, Pattern S-1 single chokepoint for user-visible errors: one
     // notify(ctx, pi, ...) call carrying a per-variant
     // PluginFailedMessage / PluginUnavailableMessage. Severity derives to
     // "error" structurally and neither variant triggers the reload hint.
-    return handleInstallThrow({
-      err,
-      ctx,
-      pi,
-      marketplace,
-      scope,
-      plugin,
-      capture,
-      orchestrated,
-    });
+    //
+    // AFILE-04: either way, the notices of the dependencies that committed
+    // before the failure follow the failed row.
+    const subject = cascadeFailure.subject;
+    const failed =
+      subject !== undefined
+        ? handleCascadeThrow({
+            ctx,
+            pi,
+            marketplace,
+            scope,
+            plugin,
+            rootKey,
+            subject,
+            orchestrated,
+          })
+        : handleInstallThrow({
+            err,
+            ctx,
+            pi,
+            marketplace,
+            scope,
+            plugin,
+            capture,
+            orchestrated,
+          });
+    return withMcpConfigNotices(ctx, orchestrated, failed, cascadeFailure.mcpConfigNotices);
   }
 
   // ATTR-01 / ATTR-08 / M1: marketplace-absent precondition (set inside the
@@ -1957,17 +2010,23 @@ async function installPluginWithTransaction(
 
     // D-04-07: the promotion arm. State was saved and any hooks hydrated inside
     // the lock, and the cascade never ran, so there are no post-commit warnings
-    // to collect; the row is the whole report.
+    // to collect. The row is the whole report, followed by the MCP config
+    // notices of a re-materialization (AFILE-04).
     case "promoted":
-      return promotedRowOutcome({
+      return withMcpConfigNotices(
         ctx,
-        pi,
-        marketplace,
-        scope,
-        plugin,
-        promotion: outcome.promotion,
         orchestrated,
-      });
+        promotedRowOutcome({
+          ctx,
+          pi,
+          marketplace,
+          scope,
+          plugin,
+          promotion: outcome.promotion,
+          orchestrated,
+        }),
+        outcome.promotion.mcpConfigNotices,
+      );
 
     // D-102-02: the ledger succeeded and the disable cascade then failed. The
     // shrunken record was already saved inside the lock, so state.json describes
@@ -1980,33 +2039,38 @@ async function installPluginWithTransaction(
     // planning the disable this one could not finish.
     case "disable-cascade-failed": {
       const cause = errorMessage(outcome.cause);
-      if (orchestrated) {
-        return { status: "failed", error: outcome.cause, cause };
+      if (!orchestrated) {
+        notifyWithContext(
+          ctx,
+          pi,
+          INSTALL_CONTEXT,
+          [
+            {
+              name: marketplace,
+              scope,
+              plugins: [
+                {
+                  status: "failed",
+                  severity: "error" as const,
+                  name: plugin,
+                  reasons: [] as const,
+                  cause: outcome.cause,
+                },
+              ],
+            },
+          ],
+          undefined,
+          "single",
+        );
       }
 
-      notifyWithContext(
+      // AFILE-04: the ledger rewrote the file before the disable failed.
+      return withMcpConfigNotices(
         ctx,
-        pi,
-        INSTALL_CONTEXT,
-        [
-          {
-            name: marketplace,
-            scope,
-            plugins: [
-              {
-                status: "failed",
-                severity: "error" as const,
-                name: plugin,
-                reasons: [] as const,
-                cause: outcome.cause,
-              },
-            ],
-          },
-        ],
-        undefined,
-        "single",
+        orchestrated,
+        { status: "failed", error: outcome.cause, cause },
+        outcome.mcpConfigNotices,
       );
-      return { status: "failed", error: outcome.cause, cause };
     }
 
     case "installed": {
@@ -2081,7 +2145,13 @@ async function installPluginWithTransaction(
         });
       }
 
-      return installedPluginOutcome(installCtx, postCommitWarnings, landedDisabled);
+      // AFILE-04: every cascade member's notices, after the block's own rows.
+      return withMcpConfigNotices(
+        ctx,
+        orchestrated,
+        installedPluginOutcome(installCtx, postCommitWarnings, landedDisabled),
+        outcome.mcpConfigNotices,
+      );
     }
   }
 }
@@ -2147,6 +2217,8 @@ export type InstallMissingDependencyOutcome =
       readonly status: "installed";
       readonly members: readonly CascadeMemberOutcome[];
       readonly postCommitWarnings?: readonly string[];
+      /** AFILE-04: the cascade's MCP config notices; omitted when none (NREG-01). */
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     } & Pick<LedgerDegradationSignals, "orphanRewake" | "degradedKinds">)
   | { readonly status: "skipped" }
   | {
@@ -2154,6 +2226,11 @@ export type InstallMissingDependencyOutcome =
       readonly error: Error;
       readonly cause: string;
       readonly reason?: "cross-marketplace";
+      /**
+       * AFILE-04: the notices of the members that committed before a later
+       * member failed; omitted when none (NREG-01).
+       */
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     };
 
 /** Outcome of the locked closure inside `installMissingDependencyWithTransaction`. */
@@ -2163,6 +2240,7 @@ type InstallMissingDependencyTransactionOutcome =
       readonly kind: "installed";
       readonly root: InstallLedgerSummary;
       readonly members: readonly CascadeMemberOutcome[];
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
     };
 
 /**
@@ -2205,7 +2283,7 @@ async function installMissingDependencyWithTransaction(
   // RESV-06 precedent: where the cascade leaves a failing dependency for the
   // catch block, so a nested closure/constraint failure names it rather than
   // the root this entry point was asked to install.
-  const cascadeFailure: CascadeFailureSink = {};
+  const cascadeFailure: CascadeFailureSink = { mcpConfigNotices: [] };
   const rootKey = `${plugin}@${marketplace}`;
 
   let outcome: InstallMissingDependencyTransactionOutcome;
@@ -2338,7 +2416,12 @@ async function installMissingDependencyWithTransaction(
         await tx.save();
         // No `landedDisabled` filter -- nothing lands disabled here.
         await hydrateInstalledHooks({ hooksRouting, scope, cwd, members: installed.members });
-        return { kind: "installed", root: installed.root, members: installed.members };
+        return {
+          kind: "installed",
+          root: installed.root,
+          members: installed.members,
+          mcpConfigNotices: installed.mcpConfigNotices,
+        };
       },
     );
   } catch (err) {
@@ -2366,9 +2449,13 @@ async function installMissingDependencyWithTransaction(
             orchestrated: true,
           });
     assertOrchestratedFailedOutcome(failed);
+    const failedWithNotices = {
+      ...failed,
+      ...mcpConfigNoticesMember(cascadeFailure.mcpConfigNotices),
+    };
     return subject?.kind === "closure" && subject.failure.reason === "cross-marketplace"
-      ? { ...failed, reason: "cross-marketplace" }
-      : failed;
+      ? { ...failedWithNotices, reason: "cross-marketplace" }
+      : failedWithNotices;
   }
 
   if (outcome.kind === "already-recorded") {
@@ -2381,6 +2468,7 @@ async function installMissingDependencyWithTransaction(
     status: "installed",
     members: outcome.members,
     ...(warnings.length > 0 && { postCommitWarnings: warnings }),
+    ...mcpConfigNoticesMember(outcome.mcpConfigNotices),
     ...ledgerDegradationSignals(outcome.root),
   };
 }

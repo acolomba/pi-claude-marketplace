@@ -4144,6 +4144,30 @@ Stop hook override cap reached.
 
 Emitted exactly once by the settle dispatcher (`extensions/pi-claude-marketplace/bridges/hooks/settle.ts`) via `notifyStopHookOverrideCap` when Stop hooks drive 8 consecutive bridge re-entries -- block decisions and `additionalContext` continuations share one consecutive-re-entry counter (D-88-08). The loop protection (STOP-07) suppresses the 8th re-entry so a livelocking hook cannot spin the agent forever, and this warning surfaces the override so the suppression is never silent (D-88-01 transparency). Severity: `warning` (the second arg to `ctx.ui.notify` is the magic string `"warning"`) -- the turn ended (the protection worked) but the plugin's block was overridden. The one-shot latch is per-session: a plain-allow outcome with no re-entry resets the counter and re-arms it (D-88-08), so a fresh 8-re-entry run is required before the warning fires again. The literal example names a mock `ralph-wiggum` plugin; the production string interpolates the blocking plugin's id. The byte form is locked by `tests/architecture/hooks-cap-notify.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`, whose driver only knows the structured `notify()` entrypoint -- this seam is a bridge diagnostic, not a `NotificationMessage`).
 
+### MCP config comments removed (AFILE-04)
+
+<!-- catalog-state: mcp-comments-dropped -->
+
+```text
+MCP config comments removed.
+
+The user-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.
+```
+
+Emitted via `notifyMcpConfigNotices` by every command that rewrites an MCP config file whose read bytes held JSONC comments: install, update, reinstall, enable, uninstall, disable, marketplace remove, prune, and the reconcile, import and marketplace update cascades. The command's own row comes first. The notice fires at most once per file per command, because the rewrite removes the comments and the next read finds none. A trailing comma alone is not a comment. Severity: `warning`. One line per file; the line names the scope and the file name (`mcp-adapter.json` or `mcp.json`), never an absolute path. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`, whose driver only knows the structured `notify()` entrypoint).
+
+### MCP config left unchanged (AFILE-02)
+
+<!-- catalog-state: mcp-config-left-unchanged -->
+
+```text
+MCP config left unchanged.
+
+The project-scope mcp-adapter.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.
+```
+
+Emitted via `notifyMcpConfigNotices` when a command with no MCP servers to write (install, update, reinstall or enable of such a plugin, directly or inside a cascade) meets an `mcp-adapter.json` that is not a valid MCP config. The file is not rewritten and keeps its exact bytes. A plugin that does have MCP servers refuses instead, and its failed row names the file. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts`.
+
 ______________________________________________________________________
 
 ## Cross-references

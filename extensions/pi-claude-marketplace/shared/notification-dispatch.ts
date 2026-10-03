@@ -86,8 +86,8 @@ import type { NotificationContext, SoftDepStatus, PiInventory } from "../platfor
  * bytes and one-call-per-invocation discipline are this seam's contract. The
  * remaining public functions (`notifyUsageError`, `notifyUsageInfo`,
  * `notifyDiagnostic`, `notifyAsyncRewakeSummary`, `notifyStopHookOverrideCap`,
- * `makeRawNotifyFn`) carry no summary/tally/reload-hint to compose, so they
- * call `ctx.ui.notify` directly instead.
+ * `notifyMcpConfigNotices`, `makeRawNotifyFn`) carry no summary/tally/reload-hint
+ * to compose, so they call `ctx.ui.notify` directly instead.
  */
 function emitWithSummary(
   ctx: NotificationContext,
@@ -204,6 +204,61 @@ export function notifyStopHookOverrideCap(ctx: NotificationContext, pluginId: st
     `Stop hook override cap reached.\n\n\`${pluginId}\`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.`,
     "warning",
   );
+}
+
+/**
+ * AFILE-04 / AFILE-02: one fact about an MCP config file that a command
+ * rewrote or left alone. The MCP bridge reports it and the orchestrator
+ * routes it to `notifyMcpConfigNotices` after its own row.
+ */
+export interface McpConfigNotice {
+  readonly kind: "comments-dropped" | "left-unchanged";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json" | "mcp.json";
+}
+
+const MCP_CONFIG_NOTICE_KINDS: readonly McpConfigNotice["kind"][] = [
+  "comments-dropped",
+  "left-unchanged",
+];
+
+function mcpConfigNoticeSummary(kind: McpConfigNotice["kind"]): string {
+  return kind === "comments-dropped"
+    ? "MCP config comments removed."
+    : "MCP config left unchanged.";
+}
+
+function mcpConfigNoticeLine(notice: McpConfigNotice): string {
+  return notice.kind === "comments-dropped"
+    ? `The ${notice.scope}-scope ${notice.file} was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.`
+    : `The ${notice.scope}-scope ${notice.file} is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.`;
+}
+
+/**
+ * AFILE-04 / AFILE-02 IL-2 seam: the one surface for MCP config file notices.
+ * Bridges report the fact and orchestrators call this after their own row.
+ * It sends one `"warning"` notification per kind present, comments-dropped
+ * first: a summary line, a blank line, then one line per distinct
+ * `(kind, scope, file)` notice in first-seen order. An empty list sends
+ * nothing. A line names the scope and the file basename only, so it carries
+ * no absolute path to redact. The host UI prepends the `Warning:` label to
+ * the summary line. The byte form is locked by
+ * `tests/architecture/mcp-config-notices.test.ts` against the
+ * `mcp-comments-dropped` and `mcp-config-left-unchanged` blocks in
+ * `docs/output-catalog.md`.
+ */
+export function notifyMcpConfigNotices(
+  ctx: NotificationContext,
+  notices: readonly McpConfigNotice[],
+): void {
+  for (const kind of MCP_CONFIG_NOTICE_KINDS) {
+    const lines = new Set(
+      notices.filter((notice) => notice.kind === kind).map((notice) => mcpConfigNoticeLine(notice)),
+    );
+    if (lines.size > 0) {
+      ctx.ui.notify(`${mcpConfigNoticeSummary(kind)}\n\n${[...lines].join("\n")}`, "warning");
+    }
+  }
 }
 
 /**

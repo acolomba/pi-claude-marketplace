@@ -111,7 +111,7 @@ describe("prepareStageMcpServers", () => {
     // assert
     assert.deepStrictEqual(prepared, {
       kind: "noop",
-      result: { stagedNames: [], recorded: [], warnings: [] },
+      result: { stagedNames: [], recorded: [], warnings: [], notices: [] },
     });
     assert.strictEqual(Object.isFrozen(prepared.result.stagedNames), true);
     assert.strictEqual(Object.isFrozen(prepared.result.recorded), true);
@@ -186,6 +186,7 @@ describe("prepareStageMcpServers", () => {
         },
       ],
       warnings: [],
+      notices: [],
     });
   });
 
@@ -216,7 +217,12 @@ describe("prepareStageMcpServers", () => {
     }
 
     assert.deepStrictEqual(prepared._nextDoc, { mcpServers: {} });
-    assert.deepStrictEqual(prepared.result, { stagedNames: [], recorded: [], warnings: [] });
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: [],
+      recorded: [],
+      warnings: [],
+      notices: [],
+    });
   });
 
   for (const { description, storedBytes, defect } of [
@@ -310,7 +316,7 @@ describe("prepareStageMcpServers", () => {
     });
   }
 
-  test("AFILE-02: an empty staged set over an unparseable file is a noop naming the file", async (t) => {
+  test("AFILE-02: an empty staged set over an unparseable file is a noop that reports it left unchanged", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-unparseable-noop-");
     await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
@@ -334,12 +340,11 @@ describe("prepareStageMcpServers", () => {
       result: {
         stagedNames: [],
         recorded: [],
-        warnings: [
-          `MCP config ${locations.mcpAdapterJsonPath} is not valid JSONC; it was left unchanged.`,
-        ],
+        warnings: [],
+        notices: [{ kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" }],
       },
     });
-    assert.strictEqual(Object.isFrozen(prepared.result.warnings), true);
+    assert.strictEqual(Object.isFrozen(prepared.result.notices), true);
     assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
   });
 
@@ -407,6 +412,104 @@ describe("prepareStageMcpServers", () => {
         "",
       ].join("\n"),
     );
+  });
+
+  test("AFILE-04: staging over a commented file reports that its comments are dropped", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-comments-notice-");
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(
+      locations.mcpAdapterJsonPath,
+      '{\n  // mine\n  "mcpServers": { "mine": { "command": "my-server" } }\n}\n',
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { server: { url: "https://mcp.example.test" } },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: ["server"],
+      recorded: [
+        {
+          generatedName: "server",
+          sourcePath: "acme#mcpServers",
+          targetPath: locations.mcpAdapterJsonPath,
+        },
+      ],
+      warnings: [],
+      notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    });
+    assert.strictEqual(Object.isFrozen(prepared.result.notices), true);
+  });
+
+  test("AFILE-04: a trailing comma alone is not a comment and reports no notice", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-trailing-comma-");
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"mine":{"command":"my-server"},},}',
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { server: { url: "https://mcp.example.test" } },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: ["server"],
+      recorded: [
+        {
+          generatedName: "server",
+          sourcePath: "acme#mcpServers",
+          targetPath: locations.mcpAdapterJsonPath,
+        },
+      ],
+      warnings: [],
+      notices: [],
+    });
+  });
+
+  test("AFILE-04: a noop over a commented file keeps its bytes and reports no notice", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-comments-noop-");
+    const storedBytes = '{\n  // mine\n  "mcpServers": { "mine": { "command": "my-server" } }\n}\n';
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(locations.mcpAdapterJsonPath, storedBytes);
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: {},
+    });
+    await commitPreparedMcp(prepared);
+
+    // assert
+    assert.deepStrictEqual(prepared, {
+      kind: "noop",
+      result: { stagedNames: [], recorded: [], warnings: [], notices: [] },
+    });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), storedBytes);
   });
 
   test("AFILE-03: an mcp-servers-only file gets the entry under mcp-servers", async (t) => {
@@ -545,6 +648,7 @@ describe("prepareStageMcpServers", () => {
         },
       ],
       warnings: ['mcp server "scalar": entry is not an object; staged as an empty entry'],
+      notices: [],
     });
   });
 
@@ -567,7 +671,7 @@ describe("prepareStageMcpServers", () => {
     // assert
     assert.deepStrictEqual(prepared, {
       kind: "noop",
-      result: { stagedNames: [], recorded: [], warnings: [] },
+      result: { stagedNames: [], recorded: [], warnings: [], notices: [] },
     });
   });
 
@@ -1018,6 +1122,7 @@ describe("commitPreparedMcp", () => {
       stagedNames: ["local"],
       recorded: [{ generatedName: "local", sourcePath, targetPath: locations.mcpAdapterJsonPath }],
       warnings: [],
+      notices: [],
     });
     assert.strictEqual(storedBytes, expectedBytes);
   });
@@ -1039,7 +1144,7 @@ describe("commitPreparedMcp", () => {
     const commit = await commitPreparedMcp(prepared);
 
     // assert
-    assert.deepStrictEqual(commit, { stagedNames: [], recorded: [], warnings: [] });
+    assert.deepStrictEqual(commit, { stagedNames: [], recorded: [], warnings: [], notices: [] });
     assert.strictEqual(await pathExists(locations.mcpAdapterJsonPath), false);
   });
 });

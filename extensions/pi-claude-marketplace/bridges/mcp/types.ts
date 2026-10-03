@@ -6,6 +6,7 @@
 // `UnstageMcpInput` records cannot drift apart across modules.
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 
 /**
  * Top-level shape of an MCP config document: `<scopeRoot>/mcp-adapter.json`,
@@ -56,6 +57,12 @@ export interface StageMcpCommitResult {
   // stagedNames.
   readonly recorded: readonly StagedMcpRecord[];
   readonly warnings: readonly string[];
+  /**
+   * AFILE-04 / AFILE-02: facts about the config file this stage rewrites or
+   * leaves alone, for the orchestrator to route to the user. Distinct from
+   * `warnings`, which are hygiene notes standalone commands do not show.
+   */
+  readonly notices: readonly McpConfigNotice[];
 }
 
 /** Discriminated union for prepare → commit → abort. */

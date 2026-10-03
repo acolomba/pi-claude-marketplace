@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -19,9 +19,11 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
@@ -34,6 +36,7 @@ import type {
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { Phase } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import type { TestContext } from "node:test";
 
 function notificationContext(): NotificationContext {
@@ -268,6 +271,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
       frontmatterDegradations: [],
       locations,
       marketplace: "marketplace",
+      mcpConfigNotices: [],
       plugin: "empty",
       pluginDataDir: path.join(locations.dataRoot, "marketplace", "empty"),
       resolved: {
@@ -1248,10 +1252,218 @@ test("stages the declared mcp servers and records their generated names", async 
   // assert
   assert.ok(ledgerOutcome.kind === "installed");
   assert.deepStrictEqual(ledgerOutcome.summary.stagedMcpServerNames, ["server1"]);
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, []);
   assert.deepStrictEqual(
     seeded.state.marketplaces.marketplace?.plugins.empty?.resources.mcpServers,
     ["server1"],
   );
+});
+
+test("AFILE-04: staging over a commented mcp-adapter.json reports the comments-dropped notice", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-comments-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+  ]);
+});
+
+/** AFILE-04: a commented adapter file whose exact bytes a failed install must restore. */
+const COMMENTED_ADAPTER_BYTES =
+  '\uFEFF{\n  // mine\n  "mcpServers": { "mine": { "command": "my-server" } },\n}\n';
+
+test("AFILE-04: a later-phase failure restores the commented mcp-adapter.json byte for byte", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-restore-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { workflows: ["delta"] },
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_BYTES);
+  const storedBytes = await readFile(locations.mcpAdapterJsonPath);
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await symlink("/nonexistent-decoy", path.join(locations.workflowsSavedDir, "empty:delta.json"));
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PathContainmentError);
+    return true;
+  });
+  assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), storedBytes);
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
+});
+
+test("AFILE-04 / NFR-3: an mcp restore that cannot write is reported as the mcp rollback partial", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-restore-fails-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const adapterDir = path.dirname(locations.mcpAdapterJsonPath);
+  await mkdir(adapterDir, { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_BYTES);
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  // After the mcp phase commits, the adapter file's directory turns read-only
+  // and the next phase throws, so the mcp undo cannot write the old bytes.
+  const transaction = {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> => {
+          if (phase.name === "mcp") {
+            return {
+              ...phase,
+              do: async (c) => {
+                await phase.do(c);
+                await chmod(adapterDir, 0o555);
+              },
+            };
+          }
+
+          return phase.name === "workflows"
+            ? {
+                ...phase,
+                do: () => Promise.reject(new Error("workflows phase failed")),
+              }
+            : phase;
+        }),
+        ctx,
+      ),
+  };
+
+  // act
+  try {
+    await assert.rejects(
+      runInstallLedger(
+        seeded.state,
+        locations,
+        {
+          ctx: notificationContext(),
+          cwd: environment.cwd,
+          marketplace: "marketplace",
+          plugin: "empty",
+          scope: "project",
+          removalOps: createRemovalOps(),
+        },
+        capture,
+        transaction,
+      ),
+    );
+  } finally {
+    await chmod(adapterDir, 0o755);
+  }
+
+  // assert
+  assert.deepStrictEqual(
+    capture.rollbackPartials.map((partial) => partial.phase),
+    ["mcp"],
+  );
+  const expectedPrefix = `failed to restore mcp-adapter.json at ${locations.mcpAdapterJsonPath}: EACCES: `;
+  assert.strictEqual(
+    capture.rollbackPartials[0]?.msg.slice(0, expectedPrefix.length),
+    expectedPrefix,
+  );
+});
+
+test("AFILE-02: a plugin with no MCP servers installs over an unparseable mcp-adapter.json and reports it", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-left-unchanged-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, "{");
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, [
+    { kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" },
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, []);
+  assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
+});
+
+test("AFILE-02: a plugin with MCP servers refuses an unparseable mcp-adapter.json and keeps its bytes", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-refuses-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, "{");
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act & assert
+  await assert.rejects(
+    runInstallLedger(
+      seeded.state,
+      locations,
+      {
+        ctx: notificationContext(),
+        cwd: environment.cwd,
+        marketplace: "marketplace",
+        plugin: "empty",
+        scope: "project",
+        removalOps: createRemovalOps(),
+      },
+      capture,
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof McpConfigFileError);
+      assert.equal(error.filePath, locations.mcpAdapterJsonPath);
+      assert.equal(error.defect, "invalid-jsonc");
+      return true;
+    },
+  );
+  assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
+  assert.deepStrictEqual(capture.rollbackPartials, []);
 });
 
 /** A full 40-hex commit id, so the `sha-<12hex>` derivation has real bytes to cut. */
