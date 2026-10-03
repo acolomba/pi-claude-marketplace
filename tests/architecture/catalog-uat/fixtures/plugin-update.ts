@@ -3,8 +3,15 @@ import { presentUpdateNoOp } from "../../../../extensions/pi-claude-marketplace/
 import { notifyUpdateNoOpWithContext } from "../../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import { piWithAllLoaded, piWithBothLoaded } from "../mock-pi.ts";
 
-import type { NotificationMessage } from "../../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type { NotificationPresentation } from "../../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
+import type { NotificationRun } from "../../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type {
+  NotificationMessage,
+  PluginNotificationMessage,
+} from "../../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type { MarketplaceRows } from "../../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import type { FixtureMap } from "../fixture-types.ts";
+import type { MockCtx } from "../mock-pi.ts";
 
 /**
  * The one `partially-upgradable` row a bulk update declines; the fixture's
@@ -27,6 +34,29 @@ const SKIP_PARTIALLY_UPGRADABLE_ROWS = [
     ],
   },
 ] as const;
+
+/**
+ * The update no-op seam pair for one set of surviving rows, stated once.
+ * `emit` calls `notifyUpdateNoOpWithContext`, the seam bulk update calls;
+ * `present` presents the message that seam builds from the same rows, label,
+ * cardinality, and row policies, so the JSON strategy converts the value the
+ * text bytes came from.
+ */
+function updateNoOpSeam<
+  Msg extends PluginNotificationMessage & { status: keyof typeof UPDATE_CONTEXT.rowPolicies },
+>(rows: readonly MarketplaceRows<Msg>[]) {
+  return {
+    emit: (ctx: MockCtx, run: NotificationRun): void => {
+      notifyUpdateNoOpWithContext(ctx, run, UPDATE_CONTEXT, rows, "plural");
+    },
+    present: (run: NotificationRun): NotificationPresentation =>
+      presentUpdateNoOp(
+        run,
+        { marketplaces: rows, label: UPDATE_CONTEXT.Messaging.label, cardinality: "plural" },
+        UPDATE_CONTEXT.rowPolicies,
+      ),
+  };
+}
 
 /** Catalog fixtures for the plugin update command surface. */
 export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
@@ -148,15 +178,7 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
         cardinality: "plural",
         marketplaces: [],
       },
-      emit: (ctx, run) => {
-        notifyUpdateNoOpWithContext(ctx, run, UPDATE_CONTEXT, [], "plural");
-      },
-      present: (run) =>
-        presentUpdateNoOp(
-          run,
-          { marketplaces: [], label: UPDATE_CONTEXT.Messaging.label, cardinality: "plural" },
-          UPDATE_CONTEXT.rowPolicies,
-        ),
+      ...updateNoOpSeam([]),
     },
 
     // UGRM-01: the up-to-date `beta` row is suppressed. UGRM-02: two realized
@@ -497,25 +519,7 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
         cardinality: "plural",
         marketplaces: SKIP_PARTIALLY_UPGRADABLE_ROWS,
       },
-      emit: (ctx, run) => {
-        notifyUpdateNoOpWithContext(
-          ctx,
-          run,
-          UPDATE_CONTEXT,
-          SKIP_PARTIALLY_UPGRADABLE_ROWS,
-          "plural",
-        );
-      },
-      present: (run) =>
-        presentUpdateNoOp(
-          run,
-          {
-            marketplaces: SKIP_PARTIALLY_UPGRADABLE_ROWS,
-            label: UPDATE_CONTEXT.Messaging.label,
-            cardinality: "plural",
-          },
-          UPDATE_CONTEXT.rowPolicies,
-        ),
+      ...updateNoOpSeam(SKIP_PARTIALLY_UPGRADABLE_ROWS),
     },
 
     // WR-04 / D-98-04: a targeted `update` against a DISABLED record that is

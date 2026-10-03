@@ -424,6 +424,23 @@ test("WIRE-05: noOp appears on exactly the two update no-op payloads", () => {
   assert.deepStrictEqual(noOps, expectedNoOps);
 });
 
+test("JOUT-02 control: an emit fixture without its present hook does not type-check", () => {
+  // arrange
+  const seamFixture = FIXTURES["/claude:plugin update"]?.["all-up-to-date-noop"];
+  assert.ok(seamFixture?.emit !== undefined);
+
+  // act
+  // @ts-expect-error -- an `emit` closure must state the presentation its bytes come from.
+  const planted: CatalogFixture = {
+    message: seamFixture.message,
+    pi: seamFixture.pi,
+    emit: seamFixture.emit,
+  };
+
+  // assert
+  assert.strictEqual(planted.present, undefined);
+});
+
 test("WIRE-05: the plugin-list emit payloads carry the content reasons of their rows", () => {
   // arrange
   const payloads = new Map(realPayloads().map(({ key, payload }) => [key, payload]));

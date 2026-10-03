@@ -8,7 +8,12 @@ import {
   piWithNothingLoaded,
 } from "../mock-pi.ts";
 
+import type { NotificationPresentation } from "../../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
+import type { NotificationRun } from "../../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { PluginNotificationMessage } from "../../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type { MarketplaceRows } from "../../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import type { FixtureMap } from "../fixture-types.ts";
+import type { MockCtx } from "../mock-pi.ts";
 
 const AVAILABLE_INSTALLS_DISABLED_ROWS = [
   {
@@ -45,6 +50,28 @@ const REMOTE_INSTALLS_DISABLED_ROWS = [
     ],
   },
 ] as const;
+
+/**
+ * The list surface's seam pair for one set of rows, stated once. `emit` calls
+ * `notifyWithContext`, the seam `listPlugins` calls; `present` presents the
+ * message that seam builds from the same rows, label, cardinality, and row
+ * policies, so the JSON strategy converts the value the text bytes came from.
+ */
+function listSurfaceSeam<
+  Msg extends PluginNotificationMessage & { status: keyof typeof LIST_CONTEXT.rowPolicies },
+>(rows: readonly MarketplaceRows<Msg>[]) {
+  return {
+    emit: (ctx: MockCtx, run: NotificationRun): void => {
+      notifyWithContext(ctx, run, LIST_CONTEXT, rows, undefined, "plural");
+    },
+    present: (run: NotificationRun): NotificationPresentation =>
+      presentCascade(
+        run,
+        { marketplaces: rows, label: LIST_CONTEXT.Messaging.label, cardinality: "plural" },
+        LIST_CONTEXT.rowPolicies,
+      ),
+  };
+}
 
 /** Catalog fixtures for the plugin list command surface. */
 export const PLUGIN_LIST_FIXTURES: FixtureMap = {
@@ -513,26 +540,7 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
     "available-installs-disabled": {
       pi: piWithBothLoaded(),
       message: { marketplaces: AVAILABLE_INSTALLS_DISABLED_ROWS },
-      emit: (ctx, run) => {
-        notifyWithContext(
-          ctx,
-          run,
-          LIST_CONTEXT,
-          AVAILABLE_INSTALLS_DISABLED_ROWS,
-          undefined,
-          "plural",
-        );
-      },
-      present: (run) =>
-        presentCascade(
-          run,
-          {
-            marketplaces: AVAILABLE_INSTALLS_DISABLED_ROWS,
-            label: LIST_CONTEXT.Messaging.label,
-            cardinality: "plural",
-          },
-          LIST_CONTEXT.rowPolicies,
-        ),
+      ...listSurfaceSeam(AVAILABLE_INSTALLS_DISABLED_ROWS),
     },
 
     // RSTA-01 / D-80-03: list-surface inventory row for a not-installed
@@ -598,26 +606,7 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
     "remote-installs-disabled": {
       pi: piWithBothLoaded(),
       message: { marketplaces: REMOTE_INSTALLS_DISABLED_ROWS },
-      emit: (ctx, run) => {
-        notifyWithContext(
-          ctx,
-          run,
-          LIST_CONTEXT,
-          REMOTE_INSTALLS_DISABLED_ROWS,
-          undefined,
-          "plural",
-        );
-      },
-      present: (run) =>
-        presentCascade(
-          run,
-          {
-            marketplaces: REMOTE_INSTALLS_DISABLED_ROWS,
-            label: LIST_CONTEXT.Messaging.label,
-            cardinality: "plural",
-          },
-          LIST_CONTEXT.rowPolicies,
-        ),
+      ...listSurfaceSeam(REMOTE_INSTALLS_DISABLED_ROWS),
     },
 
     // WINV-04: a workflow-bearing plugin renders as an ordinary not-installed
