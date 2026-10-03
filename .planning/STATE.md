@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 02
 current_phase_name: Adapter-file delivery
 status: executing
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-10-03T16:31:49.026Z"
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-10-03T17:22:05.527Z"
 last_activity: 2026-10-03
-last_activity_desc: Plan 02-05 complete (MCP config notices for update and reinstall)
-state_head: 43fc23b055c8f535b5387cf86cf6c22fa8588d6c
+last_activity_desc: Plan 02-06 complete (MCP config notices for uninstall, prune and marketplace remove)
+state_head: 4f87cf8472d4c64121f0077eaafae881e97b58a2
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 15
   percent: 14
 ---
 
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 02 (Adapter-file delivery) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
-Last activity: 2026-10-03 — Plan 02-05 complete (MCP config notices for update and reinstall)
+Last activity: 2026-10-03 — Plan 02-06 complete (MCP config notices for uninstall, prune and marketplace remove)
 
 Progress: [█░░░░░░░░░] 14%
 
@@ -264,6 +264,7 @@ still open with a comment explaining what landed.
 | Phase 02 P03 | 67min | 2 tasks | 10 files |
 | Phase 02 P04 | about 100 min | 3 tasks | 20 files |
 | Phase 02 P05 | 17min | 3 tasks | 10 files |
+| Phase 02 P06 | about 55 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -593,6 +594,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: Update takes MCP notices only after commitPreparedMcp returns; a later bridge or finalize failure still carries them on the failed outcome
 - [Phase 02]: Direct update shows MCP notices after the cascade, and after the failure row plus accumulated cascade on a phase-3a abort
 - [Phase 02]: Reinstall's render none arm spreads notes, discoveryWarnings and mcpConfigNotices each only when non-empty
+- [Phase 02]: cascadeUnstagePlugin carries the MCP slot's notices on both arms; a later slot can fail after the MCP slot rewrote the file
+- [Phase 02]: Uninstall, prune and marketplace remove show MCP notices once after their rows, failure rows included; orchestrated uninstall and remove return them on the outcome
+- [Phase 02]: A rolled-back prune sends no MCP notice: its rollback-partial row names the rewritten file and the recovery backup keeps the commented original
+- [Phase 02]: UninstallPluginOutcome.mcpConfigNotices is excepted in the unused-type-member gate until reconcile reads it (plan 02-08 drops both rows)
 
 ### Pending Todos
 
@@ -737,11 +742,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 02-05-PLAN.md
+**Stopped at:** Completed 02-06-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-03T16:31:48.920Z
+Last session: 2026-10-03T17:22:05.397Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
