@@ -23,6 +23,8 @@ import type {
   PluginInfoRow,
   PluginNotificationMessage,
   PluginUpdatedMessage,
+  PruneCommittedWarningMessage,
+  PruneEmptyMessage,
   Reason,
   Severity,
 } from "./notification-types.ts";
@@ -763,6 +765,31 @@ export function renderMarketplaceNotAdded(
     "(failed)",
     composeReasons([reason]),
   ]);
+}
+
+/**
+ * DIFF-01: the `reconcile-pending-empty` body line. The bytes are locked to the
+ * `empty-steady-state` state in `docs/output-catalog.md`. The caller folds the
+ * message's advisories after it.
+ */
+export function renderReconcilePendingEmpty(): string {
+  return "Pending: next reload will apply 0 actions.";
+}
+
+/** The `prune-empty` body: the scope held no orphaned dependency installs. */
+export function renderPruneEmpty(message: PruneEmptyMessage): string {
+  return `Nothing to prune in ${message.scope} scope: no orphaned dependency installs were found.`;
+}
+
+/**
+ * The `prune-committed-warning` body: the scope line, then `causeTrailer`
+ * indented two spaces. The caller serializes and redacts the cause chain.
+ */
+export function renderPruneCommittedWarning(
+  message: PruneCommittedWarningMessage,
+  causeTrailer: string,
+): string {
+  return `Prune committed in ${message.scope} scope.\n  ${causeTrailer}`;
 }
 
 /**

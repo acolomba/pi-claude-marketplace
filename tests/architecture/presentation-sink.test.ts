@@ -22,8 +22,15 @@ import type { ScanReport } from "./source-scan.ts";
  *   argument comes from the text strategy's output. A `ui.notify(` call may
  *   pass only `args[0]` or `args[0], args[1]`, and a `deliver` call may pass
  *   only a direct `formatEnvelopeArguments(` or `formatRawSurface(` call. A
- *   composed template, a pre-composed tuple, or a variable reaching the sink is
- *   a violation.
+ *   pre-composed tuple or a variable reaching the sink is a violation.
+ *
+ * Literals:
+ *   The formatters accept any string as the body, so the module may hold no
+ *   sentence of its own to hand them. Outside imports, `kind:` discriminants,
+ *   and `case` labels, its string and template literals must be exactly the
+ *   `ALLOWED_SINK_MODULE_LITERALS` set: the block and line separators, the
+ *   empty-cascade sentinel, and the advisory fold. A sentence composed in the
+ *   module fails here even when it reaches the sink through a variable.
  *
  * Placement:
  *   The patterns accept the sanctioned `args[0], args[1]` spelling anywhere, so
@@ -55,12 +62,59 @@ const SINK_PATTERNS: ReadonlyArray<{ readonly name: string; readonly pattern: Re
   },
   // The whitespace sits inside the lookahead. With `,\s*(?!...)` the engine
   // backtracks onto the space before the call and matches the real module.
+  // The context argument may be a member chain such as `this.ctx`; a colon
+  // stops it, so the `deliver` declaration does not match.
   {
     name: "sink handed a value that is not a text-strategy call",
     pattern:
-      /\bdeliver\(\s*[A-Za-z_$][\w$]*\s*,(?!\s*(?:formatEnvelopeArguments|formatRawSurface)\()/,
+      /\bdeliver\(\s*[A-Za-z_$][\w$.]*\s*,(?!\s*(?:formatEnvelopeArguments|formatRawSurface)\()/,
   },
 ];
+
+/**
+ * Every string or template literal, with group 1 set when an import
+ * specifier, a `kind:` discriminant, or a `case` label precedes it. A template
+ * literal is matched whole, so a quoted string inside one of its
+ * interpolations is part of it.
+ */
+const SINK_MODULE_LITERAL =
+  /(\bfrom\s+|\bkind:\s*|\bcase\s+)?(`(?:[^`\\]|\\.)*`|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')/g;
+
+/**
+ * D-16: the literals the dispatch module may hold, spelled as in source. This
+ * is the exact set, not a ceiling: a member that stops appearing fails too, so
+ * the list cannot outlive the code it describes.
+ */
+const ALLOWED_SINK_MODULE_LITERALS: ReadonlyArray<string> = [
+  '"(no marketplaces)"',
+  '"\\n"',
+  '"\\n\\n"',
+  '`${body}\\n\\n${lines.join("\\n")}`',
+];
+
+/**
+ * D-16: the literal half of the gate. Every unexempted literal in the
+ * comment-stripped module must be in `ALLOWED_SINK_MODULE_LITERALS`, and every
+ * member of that set must appear.
+ */
+async function assertSinkLiterals(root: string): Promise<void> {
+  const stripped = stripComments(await readFile(path.join(root, SINK_FILE), "utf8"));
+  const literals = [...stripped.matchAll(SINK_MODULE_LITERAL)]
+    .filter((match) => match[1] === undefined)
+    .map((match) => match[2] ?? "");
+  const composed = literals.filter((literal) => !ALLOWED_SINK_MODULE_LITERALS.includes(literal));
+
+  assert.deepStrictEqual(
+    composed,
+    [],
+    `D-16 / SC-5 violation: ${SINK_FILE} composes text outside the text strategy:\n  ${composed.join("\n  ")}`,
+  );
+  assert.deepStrictEqual(
+    [...new Set(literals)].sort(),
+    [...ALLOWED_SINK_MODULE_LITERALS].sort(),
+    `D-16: ${SINK_FILE} no longer holds every literal ALLOWED_SINK_MODULE_LITERALS names; remove the stale entry.`,
+  );
+}
 
 function describeSinkViolation(offenders: ReadonlyArray<string>): string {
   return `D-16 / SC-5 violation: the dispatch module hands the notify sink a value the text strategy did not produce:\n  ${offenders.join("\n  ")}`;
@@ -108,7 +162,7 @@ async function assertSinkPlacement(root: string): Promise<void> {
   );
 }
 
-/** Both halves of the gate under `root`: the pattern scan, then placement. */
+/** Every part of the gate under `root`: the pattern scan, placement, then literals. */
 async function scanPresentationSink(root: string): Promise<ScanReport> {
   const report = await assertNoForbiddenSurface(
     PRESENTATION_SINK_TARGETS,
@@ -117,6 +171,7 @@ async function scanPresentationSink(root: string): Promise<ScanReport> {
     { root },
   );
   await assertSinkPlacement(root);
+  await assertSinkLiterals(root);
   return report;
 }
 
@@ -148,6 +203,22 @@ const SINK_OFFENDERS: ReadonlyArray<{ readonly name: string; readonly line: stri
   {
     name: "a third sanctioned-spelling notify outside the sink",
     line: "function relay(ctx: NotificationContext, args: NotifyArguments): void { ctx.ui.notify(args[0], args[1]); }",
+  },
+  {
+    name: "a composed template handed to the structured formatter",
+    line: "deliver(ctx, formatEnvelopeArguments(envelope, `x`));",
+  },
+  {
+    name: "a composed sentence handed to the structured path through a variable",
+    line: 'const sentence = "Nothing to prune."; emitWithSummary(ctx, envelope, sentence);',
+  },
+  {
+    name: "a member-chain context handed a variable",
+    line: "deliver(this.ctx, composed);",
+  },
+  {
+    name: "a bracket-access notify",
+    line: 'ctx.ui["notify"](args[0]);',
   },
 ];
 

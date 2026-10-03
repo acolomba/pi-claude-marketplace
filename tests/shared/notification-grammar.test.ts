@@ -13,6 +13,9 @@ import {
   renderMpHeader,
   renderPluginInfo,
   renderPluginInfoCascade,
+  renderPruneCommittedWarning,
+  renderPruneEmpty,
+  renderReconcilePendingEmpty,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { shouldEmitReloadHint } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
 
@@ -30,6 +33,8 @@ import type {
   PluginInstalledMessage,
   PluginNotificationMessage,
   PluginPartiallyInstalledMessage,
+  PruneCommittedWarningMessage,
+  PruneEmptyMessage,
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
@@ -861,6 +866,51 @@ for (const { message, reason, expected } of [
     assert.equal(rendered, expected);
   });
 }
+
+test("renders the reconcile-pending-empty body line", () => {
+  // act
+  const rendered = renderReconcilePendingEmpty();
+
+  // assert
+  assert.equal(rendered, "Pending: next reload will apply 0 actions.");
+});
+
+for (const { scope, expected } of [
+  {
+    scope: "user",
+    expected: "Nothing to prune in user scope: no orphaned dependency installs were found.",
+  },
+  {
+    scope: "project",
+    expected: "Nothing to prune in project scope: no orphaned dependency installs were found.",
+  },
+] as const) {
+  test(`renders prune-empty for ${scope} scope`, () => {
+    // arrange
+    const message = { kind: "prune-empty", scope } as const satisfies PruneEmptyMessage;
+
+    // act
+    const rendered = renderPruneEmpty(message);
+
+    // assert
+    assert.equal(rendered, expected);
+  });
+}
+
+test("renders prune-committed-warning as the scope line and the indented cause trailer", () => {
+  // arrange
+  const message = {
+    kind: "prune-committed-warning",
+    scope: "project",
+    cause: new Error("disk full"),
+  } as const satisfies PruneCommittedWarningMessage;
+
+  // act
+  const rendered = renderPruneCommittedWarning(message, "caused by: disk full");
+
+  // assert
+  assert.equal(rendered, "Prune committed in project scope.\n  caused by: disk full");
+});
 
 test("reconcile applied body preserves empty and caller-ordered blocks", () => {
   // arrange

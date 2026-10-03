@@ -11,6 +11,9 @@ import {
   renderMpHeader,
   renderPluginInfo,
   renderPluginInfoCascade,
+  renderPruneCommittedWarning,
+  renderPruneEmpty,
+  renderReconcilePendingEmpty,
 } from "./notification-grammar.ts";
 import {
   CENTRAL_ROW_POLICY,
@@ -271,22 +274,22 @@ function dispatchInfoMessage(
       body = renderMarketplaceNotAdded(message, resolveNotAddedReason(message));
       break;
     case "reconcile-pending-empty":
-      // DIFF-01 SC #2: catalog-locked free-form advisory body line. Hard-coded
-      // here so the byte form cannot drift from `docs/output-catalog.md`'s
-      // `empty-steady-state` state.
       body = foldAdvisories(
-        "Pending: next reload will apply 0 actions.",
+        renderReconcilePendingEmpty(),
         message.advisories,
         message.retainedWorkflows,
       );
       break;
     case "prune-empty":
-      body = `Nothing to prune in ${message.scope} scope: no orphaned dependency installs were found.`;
+      body = renderPruneEmpty(message);
       break;
     case "prune-committed-warning":
       // The resolved envelope requests the reload trailer for this kind: the
       // prune's state save succeeded, so Pi resources changed.
-      body = `Prune committed in ${message.scope} scope.\n  ${causeChainTrailer(redactCauseChain(message.cause))}`;
+      body = renderPruneCommittedWarning(
+        message,
+        causeChainTrailer(redactCauseChain(message.cause)),
+      );
       break;
     case "reconcile-applied-cascade":
       // RECON-04: compose the same cascade body the cascade arm renders
