@@ -111,10 +111,10 @@ export interface McpWrittenFile {
 
 /**
  * AFILE-04: an MCP unstage that rewrote at least one config file and then
- * failed to write a later one. `removedNames`, `notices`, and `written`
- * describe only the files already rewritten, so the caller can still report
- * the removed servers and the dropped comments, and a rollback can still
- * recognize its own write (D-02-19). The write failure rides `Error.cause`.
+ * failed to write a later one. `notices` and `written` describe only the
+ * files already rewritten, so the caller can report the dropped comments and
+ * a rollback can recognize its own write (D-02-19). `removedNames` lists the
+ * names no file still holds (TR-03). The write failure rides `Error.cause`.
  */
 export class McpUnstagePartialError extends Error {
   readonly removedNames: readonly string[];

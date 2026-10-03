@@ -491,8 +491,9 @@ export async function cascadeUnstagePlugin(
     });
   } catch (err) {
     // AFILE-04: an MCP unstage that rewrote the adapter file before its legacy
-    // write failed still reports the servers and comments it dropped there,
-    // and the bytes it wrote (D-02-19). The write failure is the plugin's cause.
+    // write failed still reports the comments it dropped there, the servers no
+    // file still holds (TR-03), and the bytes it wrote (D-02-19). The write
+    // failure is the plugin's cause.
     let failure: unknown = err;
     if (err instanceof McpUnstagePartialError) {
       dropped.mcpServers = [...err.removedNames];

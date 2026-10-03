@@ -320,6 +320,35 @@ async function seedWorkflowEnvelope(
   return target;
 }
 
+/**
+ * Points the scope's legacy `mcp.json` at a file in a directory the test makes
+ * read-only, so the file reads normally and an atomic write to it fails.
+ * Returns the directory, which the case unlocks after acting.
+ */
+async function lockLegacyMcpJson(
+  t: TestContext,
+  cwd: string,
+  locations: ScopedLocations,
+  bytes: string,
+): Promise<string> {
+  // A 0o555 directory stays writable for uid 0, so the write this helper
+  // exists to refuse would succeed. Refuse up front and name the environment.
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    throw new Error("lockLegacyMcpJson cannot deny root; run this suite as a non-root user");
+  }
+
+  const lockedDirectory = path.join(cwd, "locked");
+  const lockedLegacy = path.join(lockedDirectory, "mcp.json");
+  await mkdir(lockedDirectory, { recursive: true });
+  await writeFile(lockedLegacy, bytes);
+  await symlink(lockedLegacy, locations.mcpJsonPath);
+  t.after(async () => {
+    await chmod(lockedDirectory, 0o700).catch(() => undefined);
+  });
+  await chmod(lockedDirectory, 0o555);
+  return lockedDirectory;
+}
+
 async function seedFullCascade(
   locations: ScopedLocations,
   marketplace: string,
@@ -882,23 +911,17 @@ test("AFILE-04: cascadeUnstagePlugin keeps the notice when a later slot fails", 
 test("AFILE-04: cascadeUnstagePlugin reports the adapter file's servers and notice when the legacy write fails", async (t) => {
   // arrange
   const { cwd, locations } = await createProjectScope(t, "cascade-mcp-legacy-write-failure");
-  const lockedDirectory = path.join(cwd, "locked");
-  const lockedLegacy = path.join(lockedDirectory, "mcp.json");
   await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
   await writeFile(
     locations.mcpAdapterJsonPath,
     '// user note\n{"mcpServers":{"sample-server":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
   );
-  await mkdir(lockedDirectory, { recursive: true });
-  await writeFile(
-    lockedLegacy,
+  const lockedDirectory = await lockLegacyMcpJson(
+    t,
+    cwd,
+    locations,
     '{"mcpServers":{"legacy-server":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
   );
-  await symlink(lockedLegacy, locations.mcpJsonPath);
-  t.after(async () => {
-    await chmod(lockedDirectory, 0o700).catch(() => undefined);
-  });
-  await chmod(lockedDirectory, 0o555);
   const record = pluginRecord({ mcpServers: ["sample-server", "legacy-server"] });
 
   // act
@@ -917,6 +940,47 @@ test("AFILE-04: cascadeUnstagePlugin reports the adapter file's servers and noti
       workflows: [],
     },
     mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  });
+  const writeFailure = cause as NodeJS.ErrnoException | undefined;
+  assert.deepStrictEqual(
+    { code: writeFailure?.code, syscall: writeFailure?.syscall },
+    { code: "EACCES", syscall: "open" },
+  );
+});
+
+test("TR-03: cascadeUnstagePlugin keeps a server the unwritten legacy mcp.json still holds", async (t) => {
+  // arrange
+  const { cwd, locations } = await createProjectScope(t, "cascade-mcp-legacy-shared-name");
+  const ownedServer =
+    '{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}';
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, `{"mcpServers":{"srv":${ownedServer}}}\n`);
+  const lockedDirectory = await lockLegacyMcpJson(
+    t,
+    cwd,
+    locations,
+    `{"mcpServers":{"srv":${ownedServer}}}\n`,
+  );
+  const record = pluginRecord({ mcpServers: ["srv"] });
+
+  // act
+  const { cause, ...outcome } = await cascadeUnstagePlugin("sample", "official", locations, record);
+  await chmod(lockedDirectory, 0o700);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: false,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: [],
+      workflows: [],
+    },
     writtenMcpFiles: [
       { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
     ],

@@ -32,6 +32,12 @@ async function lockedLink(
   filePath: string,
   bytes: string,
 ): Promise<string> {
+  // A 0o555 directory stays writable for uid 0, so the write this helper
+  // exists to refuse would succeed. Refuse up front and name the environment.
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    throw new Error("lockedLink cannot deny root; run this suite as a non-root user");
+  }
+
   const lockedDirectory = path.join(cwd, "locked");
   const target = path.join(lockedDirectory, path.basename(filePath));
   await mkdir(lockedDirectory, { recursive: true });
@@ -953,6 +959,52 @@ test("AFILE-04: a failed legacy write after the adapter rewrite reports the adap
     },
   );
   assert.strictEqual(adapterBytes, '{\n  "mcpServers": {}\n}\n');
+});
+
+test("TR-03: a failed legacy write does not report a name the legacy file still holds as removed", async (t) => {
+  // arrange
+  const { cwd, locations } = await createScope(t, "mcp-unstage-legacy-write-shared-name-");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '{"mcpServers":{"srv":{"command":"srv","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}},"first":{"command":"first","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+    "utf8",
+  );
+  const legacyBytes =
+    '{"mcpServers":{"srv":{"command":"srv","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n';
+  const lockedDirectory = await lockedLink(t, cwd, locations.mcpJsonPath, legacyBytes);
+
+  // act
+  const failure = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await chmod(lockedDirectory, 0o700);
+
+  // assert
+  assert.ok(failure instanceof McpUnstagePartialError);
+  assert.deepStrictEqual(
+    {
+      removedNames: failure.removedNames,
+      notices: failure.notices,
+      written: failure.written,
+      cause: errnoFields(failure.cause),
+      legacy: await readFile(locations.mcpJsonPath, "utf8"),
+    },
+    {
+      removedNames: ["first"],
+      notices: [],
+      written: [
+        { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+      ],
+      cause: { code: "EACCES", syscall: "open" },
+      legacy: legacyBytes,
+    },
+  );
 });
 
 test("rethrows a failed adapter write unchanged when no file was rewritten", async (t) => {

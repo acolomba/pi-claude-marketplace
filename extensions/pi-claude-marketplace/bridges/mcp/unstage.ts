@@ -18,8 +18,9 @@
 // rewritten file is returned with the exact bytes written to it, so a prune
 // rollback can tell its own rewrite from a later edit (D-02-19). When the
 // legacy write fails after the adapter file was rewritten, a typed
-// `McpUnstagePartialError` carries the adapter file's removed names, notice,
-// and written bytes, so the caller can still report and recognize them.
+// `McpUnstagePartialError` carries the adapter file's notice and written
+// bytes, so the caller can still report and recognize them. Its removed names
+// leave out any name the legacy file still holds (TR-03).
 //
 // MC-7 tolerances, per file (no write):
 //   - Missing file (ENOENT/ENOTDIR). Must NOT materialize the file just to
@@ -124,8 +125,13 @@ async function writeUnstageTargets(
         throw err;
       }
 
+      // TR-03: a name the plugin also owns in a file not rewritten is still
+      // live there, so it is not reported as removed.
+      const stillOwned = new Set(
+        targets.slice(writtenTargets.length).flatMap((unwritten) => unwritten.ownedNames),
+      );
       throw new McpUnstagePartialError(
-        removedNamesOf(writtenTargets),
+        removedNamesOf(writtenTargets).filter((name) => !stillOwned.has(name)),
         noticesOf(writtenTargets, scope),
         writtenFiles,
         { cause: err },
