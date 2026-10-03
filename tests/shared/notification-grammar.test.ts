@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  composeMarketplaceBlock,
   composePluginLines,
   composeReconcileAppliedBody,
   formatEnvelopeArguments,
@@ -340,7 +339,7 @@ for (const { plugin, expected } of ROW_CASES) {
     const marketplace = { ...MARKETPLACE_BASE, plugins: [plugin] };
 
     // act
-    const rendered = composeMarketplaceBlock(marketplace);
+    const rendered = composeReconcileAppliedBody([marketplace]);
 
     // assert
     assert.equal(rendered, `● official [user]\n  ${expected}`);
@@ -369,8 +368,8 @@ test("pending uninstall stays bare while prune preview adds its reason without a
   };
 
   // act
-  const bareBlock = composeMarketplaceBlock(resolvedBare);
-  const previewBlock = composeMarketplaceBlock(resolvedPreview);
+  const bareBlock = composeReconcileAppliedBody([resolvedBare]);
+  const previewBlock = composeReconcileAppliedBody([resolvedPreview]);
 
   // assert
   assert.equal(bareBlock, "● official [user]\n  ○ shared-lib (will uninstall)");
@@ -1715,7 +1714,7 @@ test("a missing-policy row retains its trailers before the adjacent valid row", 
   } as const satisfies ResolvedMarketplace;
 
   // act
-  const text = composeMarketplaceBlock(marketplace);
+  const text = composeReconcileAppliedBody([marketplace]);
 
   // assert
   assert.equal(
@@ -1755,8 +1754,8 @@ test("empty plugin collections keep their header and singletons keep complete gr
   } as const satisfies ResolvedMarketplace;
 
   // act
-  const emptyText = composeMarketplaceBlock(empty);
-  const singletonText = composeMarketplaceBlock(singleton);
+  const emptyText = composeReconcileAppliedBody([empty]);
+  const singletonText = composeReconcileAppliedBody([singleton]);
 
   // assert
   assert.equal(emptyText, "● official [project]");

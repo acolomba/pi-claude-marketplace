@@ -1,4 +1,4 @@
-import { resolveEnvelope, resolveRows } from "./notification-resolve.ts";
+import { resolveEnvelope, resolveRows, resolveUpdateNoOpEnvelope } from "./notification-resolve.ts";
 
 import type {
   ResolvedEnvelope,
@@ -6,7 +6,11 @@ import type {
   RowPolicyMap,
 } from "./notification-resolve.ts";
 import type { NotificationRun } from "./notification-run.ts";
-import type { CascadeNotificationMessage, RetainedWorkflowStaging } from "./notification-types.ts";
+import type {
+  CascadeNotificationMessage,
+  ReconcileAppliedCascadeMessage,
+  RetainedWorkflowStaging,
+} from "./notification-types.ts";
 
 /**
  * shared/notification-present.ts -- the presentation step (JOUT-02, PMOD-01,
@@ -25,11 +29,18 @@ export interface CascadePresentation {
   readonly retainedWorkflows?: readonly RetainedWorkflowStaging[];
 }
 
+/** RECON-04: a resolved reconcile-applied cascade. It carries no advisory lines. */
+export interface ReconcileAppliedPresentation {
+  readonly kind: "reconcile-applied-cascade";
+  readonly envelope: ResolvedEnvelope;
+  readonly marketplaces: readonly ResolvedMarketplace[];
+}
+
 /**
  * The union of every structured presentation. Each emission entry point that
  * gains a presentation widens it.
  */
-export type NotificationPresentation = CascadePresentation;
+export type NotificationPresentation = CascadePresentation | ReconcileAppliedPresentation;
 
 /**
  * Presents a cascade under `rowPolicies` and the run's soft-dependency
@@ -52,4 +63,34 @@ export function presentCascade(
       ? {}
       : { retainedWorkflows: message.retainedWorkflows }),
   };
+}
+
+/**
+ * UGRM-01: presents a bulk update that realized no transition. The rows resolve
+ * before the envelope. The no-op envelope carries `noOp`, no tally, and no
+ * reload trailer, and the presentation carries no advisory lines or retained
+ * workflows.
+ */
+export function presentUpdateNoOp(
+  run: NotificationRun,
+  message: CascadeNotificationMessage,
+  rowPolicies: RowPolicyMap,
+): CascadePresentation {
+  const marketplaces = resolveRows(message.marketplaces, run.softDeps, rowPolicies);
+  const envelope = resolveUpdateNoOpEnvelope(message);
+  return { kind: "cascade", envelope, marketplaces };
+}
+
+/**
+ * RECON-04: presents an applied load-time reconcile under `rowPolicies`. The
+ * rows resolve before the envelope, as in `presentCascade`.
+ */
+export function presentReconcileApplied(
+  run: NotificationRun,
+  message: ReconcileAppliedCascadeMessage,
+  rowPolicies: RowPolicyMap,
+): ReconcileAppliedPresentation {
+  const marketplaces = resolveRows(message.marketplaces, run.softDeps, rowPolicies);
+  const envelope = resolveEnvelope(message);
+  return { kind: "reconcile-applied-cascade", envelope, marketplaces };
 }

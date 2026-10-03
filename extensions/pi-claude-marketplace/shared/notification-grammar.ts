@@ -868,10 +868,10 @@ export function renderPluginInfo(message: PluginInfoMessage): string {
 /**
  * Compose the single-marketplace block: header line followed by one composed
  * plugin block per `mp.plugins[]` entry, in caller order. Joined
- * with `\n` to produce the block string that `notify` then joins with
- * `\n\n` between marketplaces.
+ * with `\n` to produce the block string that `composeReconcileAppliedBody`
+ * then joins with `\n\n` between marketplaces.
  */
-export function composeMarketplaceBlock(mp: ResolvedMarketplace): string {
+function composeMarketplaceBlock(mp: ResolvedMarketplace): string {
   // The header formats `mp.reasons` as given; resolve composes soft-dep
   // markers on plugin rows only, so none can leak onto an mp-level row.
   const lines: string[] = [renderMpHeader(mp)];

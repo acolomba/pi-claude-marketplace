@@ -29,34 +29,49 @@ import type Type from "typebox";
 export function toWirePayload(
   presentation: NotificationPresentation,
 ): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA> {
-  return {
-    schemaVersion: 1,
-    kind: presentation.kind,
-    ...wireEnvelope(presentation.envelope),
-    marketplaces: presentation.marketplaces.map((mp) => wireBlock(mp)),
-    ...(presentation.advisories === undefined ? {} : { advisories: [...presentation.advisories] }),
-    ...(presentation.retainedWorkflows === undefined
-      ? {}
-      : {
-          retainedWorkflows: presentation.retainedWorkflows.map((workflow) =>
-            wireRetainedWorkflow(workflow),
-          ),
-        }),
-  };
+  switch (presentation.kind) {
+    case "cascade":
+      return {
+        schemaVersion: 1,
+        kind: "cascade",
+        ...wireEnvelope(presentation.envelope),
+        ...noOpField(presentation.envelope.noOp),
+        marketplaces: presentation.marketplaces.map((mp) => wireBlock(mp)),
+        ...(presentation.advisories === undefined
+          ? {}
+          : { advisories: [...presentation.advisories] }),
+        ...(presentation.retainedWorkflows === undefined
+          ? {}
+          : {
+              retainedWorkflows: presentation.retainedWorkflows.map((workflow) =>
+                wireRetainedWorkflow(workflow),
+              ),
+            }),
+      };
+    case "reconcile-applied-cascade":
+      return {
+        schemaVersion: 1,
+        kind: "reconcile-applied-cascade",
+        ...wireEnvelope(presentation.envelope),
+        marketplaces: presentation.marketplaces.map((mp) => wireBlock(mp)),
+      };
+  }
 }
 
-/** WIRE-05: `summary` rides warning and error envelopes only. */
+/**
+ * WIRE-05: `summary` rides warning and error envelopes only. It is the
+ * envelope's resolved sentence, copied verbatim.
+ */
 function wireEnvelope(envelope: ResolvedEnvelope) {
   return {
     severity: envelope.severity,
     needsReload: envelope.needsReload,
     ...(envelope.severity === "info" ? {} : { summary: envelope.summary }),
     ...(envelope.tally === undefined ? {} : { tally: wireTally(envelope.tally) }),
-    ...noOpField(envelope.noOp),
   };
 }
 
-/** D-04: `noOp` is present only on a no-op envelope. */
+/** D-04: `noOp` is present only on a no-op cascade envelope. */
 function noOpField(noOp: boolean): { readonly noOp?: true } {
   return noOp ? { noOp: true } : {};
 }

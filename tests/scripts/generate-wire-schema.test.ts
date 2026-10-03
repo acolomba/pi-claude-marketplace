@@ -84,7 +84,10 @@ test("the committed schema lists each payload kind in declared order with schema
 
   // assert
   assert.strictEqual(committed.$schema, "https://json-schema.org/draft/2020-12/schema");
-  assert.deepStrictEqual(members, [{ kind: "cascade", schemaVersion: 1 }]);
+  assert.deepStrictEqual(members, [
+    { kind: "cascade", schemaVersion: 1 },
+    { kind: "reconcile-applied-cascade", schemaVersion: 1 },
+  ]);
 });
 
 test("a committed schema missing one payload kind fails the drift comparison", async () => {

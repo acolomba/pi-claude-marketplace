@@ -58,9 +58,17 @@ function cascadePayloadWith(row: Record<string, unknown>): Record<string, unknow
   };
 }
 
-/** The keyword and location of each leaf error, without the union wrapper. */
-function leafErrors(payload: unknown): { keyword: string; instancePath: string }[] {
-  const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+const [CASCADE_MEMBER, RECONCILE_APPLIED_MEMBER] = NOTIFICATION_PAYLOAD_SCHEMA.anyOf;
+
+/**
+ * The keyword and location of each leaf error of one union member. The union
+ * reports every member's errors, so each case reads the member its kind names.
+ */
+function leafErrors(
+  member: typeof CASCADE_MEMBER | typeof RECONCILE_APPLIED_MEMBER,
+  payload: unknown,
+): { keyword: string; instancePath: string }[] {
+  const validator = Compile(member);
   return [...validator.Errors(payload)]
     .filter((error) => error.keyword !== "anyOf")
     .map((error) => ({ keyword: error.keyword, instancePath: error.instancePath }));
@@ -148,9 +156,52 @@ for (const { title, mutate, expectedErrors } of [
     mutate(row, payload);
 
     // act
-    const errors = leafErrors(payload);
+    const errors = leafErrors(CASCADE_MEMBER, payload);
+    const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
 
     // assert
     assert.deepStrictEqual(errors, expectedErrors);
+    assert.strictEqual(valid, false);
   });
 }
+
+/** A valid reconcile-applied payload carrying every field its member declares. */
+function reconcileAppliedPayload(): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    kind: "reconcile-applied-cascade",
+    severity: "warning",
+    summary: "Heads up.",
+    needsReload: false,
+    tally: { label: "Reconcile", failures: 0, warnings: 1 },
+    marketplaces: [{ name: "mp", scope: "user", plugins: [failedRow()] }],
+  };
+}
+
+test("accepts a reconcile-applied payload that carries every field its member declares", () => {
+  // arrange
+  const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+  const payload = reconcileAppliedPayload();
+
+  // act
+  const valid = validator.Check(payload);
+
+  // assert
+  assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
+});
+
+test("rejects noOp on a reconcile-applied payload", () => {
+  // arrange
+  const payload = { ...reconcileAppliedPayload(), noOp: true };
+
+  // act
+  const errors = leafErrors(RECONCILE_APPLIED_MEMBER, payload);
+  const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+  // assert
+  assert.deepStrictEqual(errors, [
+    { keyword: "boolean", instancePath: "/noOp" },
+    { keyword: "additionalProperties", instancePath: "" },
+  ]);
+  assert.strictEqual(valid, false);
+});

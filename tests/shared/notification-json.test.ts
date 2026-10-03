@@ -2,11 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { toWirePayload } from "../../extensions/pi-claude-marketplace/shared/notification-json.ts";
-import { presentCascade } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
+import {
+  presentCascade,
+  presentUpdateNoOp,
+} from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 
 import { runWithNothingLoaded } from "./notification-run-seeds.ts";
 
-import type { CascadePresentation } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
+import type {
+  CascadePresentation,
+  ReconcileAppliedPresentation,
+} from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import type {
   ResolvedEnvelope,
   ResolvedMarketplace,
@@ -783,4 +789,211 @@ test("emits kind cascade for a presentation built from a message without a kind"
 
   // assert
   assert.deepStrictEqual(payload, expectedInfoPayload([]));
+});
+
+function reconcileBlock(): ResolvedMarketplace {
+  return {
+    name: "mp",
+    scope: "user",
+    plugins: [
+      { status: "installed", name: "alpha", severity: "info", needsReload: false, reasons: [] },
+    ],
+  };
+}
+
+function expectedReconcileBlock(): ExpectedBlock {
+  return {
+    name: "mp",
+    scope: "user",
+    plugins: [{ status: "installed", name: "alpha", id: "alpha@mp", reasons: [], scope: "user" }],
+  };
+}
+
+test("emits a reconcile-applied payload with its tally and no noOp", () => {
+  // arrange
+  const presentation: ReconcileAppliedPresentation = {
+    kind: "reconcile-applied-cascade",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      noOp: false,
+      tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
+    },
+    marketplaces: [reconcileBlock()],
+  };
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "reconcile-applied-cascade",
+    severity: "info",
+    needsReload: false,
+    tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
+    marketplaces: [expectedReconcileBlock()],
+  });
+});
+
+test("emits a reconcile-applied payload without a tally and with its summary", () => {
+  // arrange
+  const presentation: ReconcileAppliedPresentation = {
+    kind: "reconcile-applied-cascade",
+    envelope: { severity: "warning", summary: "Heads up.", needsReload: false, noOp: false },
+    marketplaces: [reconcileBlock()],
+  };
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "reconcile-applied-cascade",
+    severity: "warning",
+    summary: "Heads up.",
+    needsReload: false,
+    marketplaces: [expectedReconcileBlock()],
+  });
+});
+
+test("emits noOp true with no tally and no reload for an update no-op presentation", () => {
+  // arrange
+  const presentation = presentUpdateNoOp(
+    runWithNothingLoaded(),
+    {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            {
+              status: "installed",
+              name: "alpha",
+              dependencies: [],
+              severity: "info",
+              needsReload: true,
+              reasons: [],
+            },
+          ],
+        },
+      ],
+      label: "Plugin update",
+      cardinality: "plural",
+    },
+    { installed: { markers: false, contentReasons: true } },
+  );
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "cascade",
+    severity: "info",
+    needsReload: false,
+    noOp: true,
+    marketplaces: [expectedReconcileBlock()],
+  });
+});
+
+/** A warning cascade whose summary no composer would write, so a copy is provable. */
+function warningPresentation(): CascadePresentation {
+  return {
+    kind: "cascade",
+    envelope: { severity: "warning", summary: "Verbatim summary.", needsReload: true, noOp: false },
+    marketplaces: [reconcileBlock()],
+    advisories: ["advice"],
+  };
+}
+
+function expectedWarningPayload(): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    kind: "cascade",
+    severity: "warning",
+    summary: "Verbatim summary.",
+    needsReload: true,
+    marketplaces: [expectedReconcileBlock()],
+    advisories: ["advice"],
+  };
+}
+
+function expectedReconcilePayload(): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    kind: "reconcile-applied-cascade",
+    severity: "info",
+    needsReload: false,
+    marketplaces: [expectedReconcileBlock()],
+  };
+}
+
+function reconcilePresentation(): ReconcileAppliedPresentation {
+  return {
+    kind: "reconcile-applied-cascade",
+    envelope: { severity: "info", needsReload: false, noOp: false },
+    marketplaces: [reconcileBlock()],
+  };
+}
+
+test("converts one presentation twice into equal payloads that share no object", () => {
+  // arrange
+  const presentation = warningPresentation();
+
+  // act
+  const first = toWirePayload(presentation);
+  const second = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual([first, second], [expectedWarningPayload(), expectedWarningPayload()]);
+  assert.notStrictEqual(first, second);
+  assert.notStrictEqual(first.marketplaces, second.marketplaces);
+  assert.notStrictEqual(first.marketplaces[0], second.marketplaces[0]);
+});
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value === "object" && value !== null) {
+    for (const member of Object.values(value)) {
+      deepFreeze(member);
+    }
+
+    Object.freeze(value);
+  }
+
+  return value;
+}
+
+test("converts a deep-frozen presentation and leaves it unchanged", () => {
+  // arrange
+  const presentation = deepFreeze(warningPresentation());
+  const before = structuredClone(presentation);
+
+  // act
+  const payload = toWirePayload(presentation);
+
+  // assert
+  assert.deepStrictEqual(payload, expectedWarningPayload());
+  assert.deepStrictEqual(presentation, before);
+});
+
+test("interleaved conversions of two presentations match each converted alone", () => {
+  // arrange
+  const warning = warningPresentation();
+  const reconcile = reconcilePresentation();
+
+  // act
+  const payloads = [warning, reconcile, warning, reconcile].map((presentation) =>
+    toWirePayload(presentation),
+  );
+
+  // assert
+  assert.deepStrictEqual(payloads, [
+    expectedWarningPayload(),
+    expectedReconcilePayload(),
+    expectedWarningPayload(),
+    expectedReconcilePayload(),
+  ]);
 });

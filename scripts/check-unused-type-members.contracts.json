@@ -587,12 +587,12 @@
       "necessity": "extensions/pi-claude-marketplace/index.ts:92:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:254:43",
+      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:260:43",
       "owner": "dispatchInfoMessage.message",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:254:12"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:260:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:941:32",

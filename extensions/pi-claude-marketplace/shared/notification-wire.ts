@@ -264,7 +264,21 @@ const CASCADE_PAYLOAD = Type.Object(
 );
 
 /**
+ * RECON-04 / D-04: an applied load-time reconcile. It carries no `noOp`, no
+ * advisory lines, and no retained workflows.
+ */
+const RECONCILE_APPLIED_PAYLOAD = Type.Object(
+  {
+    ...ENVELOPE_FIELDS,
+    kind: Type.Literal("reconcile-applied-cascade"),
+    tally: Type.Optional(TALLY),
+    marketplaces: Type.Array(MARKETPLACE_BLOCK),
+  },
+  { additionalProperties: false },
+);
+
+/**
  * WIRE-01 / D-01..D-03: the one payload union, keyed by `kind`. Kinds appear
  * in their declared order. D-12: production reads only its static type.
  */
-export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([CASCADE_PAYLOAD]);
+export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([CASCADE_PAYLOAD, RECONCILE_APPLIED_PAYLOAD]);

@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 
 import { PENDING_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
 import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { composeMarketplaceBlock } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { composeReconcileAppliedBody } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import {
   CENTRAL_ROW_POLICY,
   resolveEnvelope,
@@ -1340,7 +1340,7 @@ test("an inherited prototype-name policy cannot authorize a malformed row", () =
 
   // act
   const resolved = resolveRows(marketplaceWith([row as never]), allLoaded(), {});
-  const text = composeMarketplaceBlock(resolved[0]!);
+  const text = composeReconcileAppliedBody([resolved[0]!]);
 
   // assert
   assert.deepStrictEqual(row, { status: "toString", name: "orphan", severity: "error" });
@@ -1381,7 +1381,7 @@ test("equal neighboring rows and same-name scopes retain order and duplicate rea
 
   // act
   const resolved = resolveRows(marketplaces, noneLoaded(), CENTRAL_ROW_POLICY);
-  const text = resolved.map(composeMarketplaceBlock);
+  const text = resolved.map((mp) => composeReconcileAppliedBody([mp]));
 
   // assert
   const reasons = [
@@ -1445,6 +1445,6 @@ test("pending policies produce identical complete rows under opposite snapshots"
   assert.deepStrictEqual(absent, expected);
   const expectedText =
     "● official [user]\n  ● alpha [project] (will partially install)\n  ○ beta (will uninstall)\n  ● gamma (will enable)\n  ◍ delta (will disable)";
-  assert.equal(composeMarketplaceBlock(loaded[0]!), expectedText);
-  assert.equal(composeMarketplaceBlock(absent[0]!), expectedText);
+  assert.equal(composeReconcileAppliedBody([loaded[0]!]), expectedText);
+  assert.equal(composeReconcileAppliedBody([absent[0]!]), expectedText);
 });

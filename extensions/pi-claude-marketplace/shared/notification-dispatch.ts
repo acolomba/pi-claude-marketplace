@@ -1,6 +1,5 @@
 import { causeChainTrailer } from "./errors.ts";
 import {
-  composeMarketplaceBlock,
   composePluginLines,
   composeReconcileAppliedBody,
   formatEnvelopeArguments,
@@ -15,20 +14,22 @@ import {
   renderPruneEmpty,
   renderReconcilePendingEmpty,
 } from "./notification-grammar.ts";
-import { presentCascade } from "./notification-present.ts";
+import {
+  presentCascade,
+  presentReconcileApplied,
+  presentUpdateNoOp,
+} from "./notification-present.ts";
 import {
   CENTRAL_ROW_POLICY,
   resolveEnvelope,
   resolveNotAddedReason,
   resolveRawSurface,
-  resolveRows,
-  resolveUpdateNoOpEnvelope,
 } from "./notification-resolve.ts";
 import { composeRetainedWorkflowsAdvisories, isInfoKind } from "./notification-summary.ts";
 import { redactCauseChain } from "./redact-absolute-paths.ts";
 
 import type { NotifyArguments } from "./notification-grammar.ts";
-import type { CascadePresentation } from "./notification-present.ts";
+import type { CascadePresentation, ReconcileAppliedPresentation } from "./notification-present.ts";
 import type {
   RowPolicyMap,
   ResolvedEnvelope,
@@ -48,7 +49,7 @@ import type {
   UsageErrorMessage,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
-import type { NotificationContext, SoftDepStatus } from "../platform/pi-api.ts";
+import type { NotificationContext } from "../platform/pi-api.ts";
 
 /**
  * shared/notification-dispatch.ts -- the sole site that calls the Pi notify
@@ -59,9 +60,14 @@ import type { NotificationContext, SoftDepStatus } from "../platform/pi-api.ts";
  *
  * Two paths reach the sink:
  *
- *  - The structured path. `notify(ctx, run, NotificationMessage)` and the
- *    cascade emitters resolve the rows and the envelope (notification-resolve.ts),
- *    compose the body, and hand both to `formatEnvelopeArguments`. Severity is a
+ *  - The structured path. Every cascade-family emission (the central cascade
+ *    arm, the context cascade, the update no-op, and both reconcile-applied
+ *    paths) is first presented once (notification-present.ts, JOUT-02): rows,
+ *    then envelope. The text strategy composes the body from that presentation
+ *    and hands it with the envelope to `formatEnvelopeArguments`; the JSON
+ *    strategy (notification-json.ts) reads the same value. The other
+ *    `notify(ctx, run, NotificationMessage)` kinds compose their body and
+ *    resolve their envelope (notification-resolve.ts) here. Severity is a
  *    caller-stamped per-row field, reduced to the envelope's severity at resolve
  *    time (SEV-02). The command's run supplies the soft-dep snapshot (D-05).
  *  - The raw-surface path. Each helper builds one `RawSurface` kind, which
@@ -252,12 +258,12 @@ export function notifyStopHookOverrideCap(
 function dispatchInfoMessage(
   ctx: NotificationContext,
   message: Extract<NotificationMessage, { kind: StandaloneKind }>,
-  softDeps: SoftDepStatus,
+  run: NotificationRun,
 ): void {
   // Body composition per variant. The renderers take the message and no
-  // snapshot; `softDeps` feeds only the reconcile-applied arm's `resolveRows`.
-  // Severity is computed off the discriminator via the shared
-  // `computeSeverity` ladder.
+  // snapshot; the run feeds only the reconcile-applied presentation. Every
+  // other arm renders its body before the envelope resolves. Severity is
+  // computed off the discriminator via the shared `computeSeverity` ladder.
   let body: string;
   switch (message.kind) {
     case "marketplace-info":
@@ -294,16 +300,17 @@ function dispatchInfoMessage(
       );
       break;
     case "reconcile-applied-cascade":
-      // RECON-04: compose the same cascade body the cascade arm renders
-      // (per-mp header + per-plugin row via the existing helpers). The resolved
-      // envelope never requests the reload trailer for this kind (the
+      // RECON-04: the same presentation and formatter as
+      // `emitReconcileAppliedContextCascade`, under the central row policy. The
+      // resolved envelope never requests the reload trailer for this kind (the
       // reconcile already ran ON /reload). OUT-03/OUT-06/D-03/D-04: a reconcile
-      // apply is a plural mixed-subject operation, so its envelope carries the
-      // tally, exactly as on the `emitReconcileAppliedContextCascade` path.
-      body = composeReconcileAppliedBody(
-        resolveRows(message.marketplaces, softDeps, CENTRAL_ROW_POLICY),
+      // apply is a plural mixed-subject operation, so a labeled one carries the
+      // tally.
+      emitReconcileAppliedPresentation(
+        ctx,
+        presentReconcileApplied(run, message, CENTRAL_ROW_POLICY),
       );
-      break;
+      return;
   }
 
   emitWithSummary(ctx, resolveEnvelope(message), body);
@@ -334,7 +341,7 @@ export function notify(
   // After this branch, TypeScript narrows `message` to `CascadeNotificationMessage` via
   // the exhaustiveness switch below.
   if (isInfoKind(message)) {
-    dispatchInfoMessage(ctx, message, run.softDeps);
+    dispatchInfoMessage(ctx, message, run);
     return;
   }
 
@@ -353,25 +360,13 @@ export function notify(
       break;
   }
 
-  // D-11: the rows resolve first, then the envelope, then the body text.
-  const marketplaces = resolveRows(message.marketplaces, run.softDeps, CENTRAL_ROW_POLICY);
-  const envelope = resolveEnvelope(message);
-
-  // Cascade body. Caller-supplied order honored end-to-end (no internal
-  // sort). An empty top-level marketplaces array renders the
-  // "(no marketplaces)" sentinel rather than the empty string; one blank
-  // line between marketplace blocks.
-  const blocks = marketplaces.map((mp) => composeMarketplaceBlock(mp));
-  const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
-  // WR-06: advisory body lines sit between the body and the tally.
-  const body = foldAdvisories(composed, message.advisories, message.retainedWorkflows);
-
-  // Emit through the shared summary seam (GRAM-04). The resolved envelope
-  // carries the summary line (error/warning only), the OUT-03 tally, and the
-  // reload decision, and the text strategy folds them as
-  // `{summary}\n\n{cascade body}\n\n{tally}\n\n{reload-hint}` (UXG-07 / GRAM-01 /
-  // OUT-03).
-  emitWithSummary(ctx, envelope, body);
+  // D-11: the presentation resolves the rows first, then the envelope; the text
+  // strategy then formats the body. Emit through the shared summary seam
+  // (GRAM-04). The resolved envelope carries the summary line (error/warning
+  // only), the OUT-03 tally, and the reload decision, and the text strategy
+  // folds them as `{summary}\n\n{cascade body}\n\n{tally}\n\n{reload-hint}`
+  // (UXG-07 / GRAM-01 / OUT-03).
+  emitCascadePresentation(ctx, presentCascade(run, message, CENTRAL_ROW_POLICY));
 }
 
 /**
@@ -394,6 +389,11 @@ function foldAdvisories(
   return lines.length === 0 ? body : `${body}\n\n${lines.join("\n")}`;
 }
 
+/**
+ * One text block per marketplace: its header, then its plugin lines. It writes
+ * the same lines as grammar's `composeMarketplaceBlock`; the dispatch and
+ * notify-context owner suites pin the bytes.
+ */
 function composeContextBlocks(marketplaces: readonly ResolvedMarketplace[]): string[] {
   return marketplaces.map((mp) => {
     const lines = [renderMpHeader(mp)];
@@ -406,41 +406,38 @@ function composeContextBlocks(marketplaces: readonly ResolvedMarketplace[]): str
 }
 
 /**
- * Composes a context cascade's body: the blocks, or the `(no marketplaces)`
- * sentinel when there are none, then the advisory lines. WR-06: advisory body
- * lines sit between the body and the tally, exactly as they do on the central
- * dispatch, so a command that can emit either arm renders the identical
- * trailer from either one.
+ * JOUT-02: the text strategy's format of a cascade presentation. Caller-supplied
+ * order is honored end-to-end (no internal sort), with one blank line between
+ * marketplace blocks. An empty cascade renders the `(no marketplaces)`
+ * sentinel; an empty no-op body is the empty string, so the no-op headline
+ * prints alone (UGRM-01). WR-06: advisory body lines sit between the body and
+ * the tally, so a command that can emit either cascade arm renders the
+ * identical trailer from either one.
  */
-function composeCascadeBody(
-  marketplaces: readonly ResolvedMarketplace[],
-  advisories: readonly string[] | undefined,
-  retainedWorkflows: readonly RetainedWorkflowStaging[] | undefined,
-): string {
-  const blocks = composeContextBlocks(marketplaces);
-  const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
-  return foldAdvisories(composed, advisories, retainedWorkflows);
-}
-
-/** JOUT-02: the text strategy's format of a cascade presentation. */
 function formatCascadePresentation(presentation: CascadePresentation): string {
-  return composeCascadeBody(
-    presentation.marketplaces,
-    presentation.advisories,
-    presentation.retainedWorkflows,
-  );
+  const blocks = composeContextBlocks(presentation.marketplaces);
+  const composed =
+    blocks.length === 0 && !presentation.envelope.noOp ? "(no marketplaces)" : blocks.join("\n\n");
+  return foldAdvisories(composed, presentation.advisories, presentation.retainedWorkflows);
 }
 
-function emitCascadeWith(
+function emitCascadePresentation(
   ctx: NotificationContext,
-  run: NotificationRun,
-  message: ReconcileAppliedCascadeMessage,
-  rowPolicies: RowPolicyMap,
+  presentation: CascadePresentation,
 ): void {
-  const marketplaces = resolveRows(message.marketplaces, run.softDeps, rowPolicies);
-  const envelope = resolveEnvelope(message);
-  // WR-06: the reconcile-applied carrier declares no advisory lines.
-  emitWithSummary(ctx, envelope, composeCascadeBody(marketplaces, undefined, undefined));
+  emitWithSummary(ctx, presentation.envelope, formatCascadePresentation(presentation));
+}
+
+/** RECON-04: the text strategy's format of a reconcile-applied presentation. */
+function emitReconcileAppliedPresentation(
+  ctx: NotificationContext,
+  presentation: ReconcileAppliedPresentation,
+): void {
+  emitWithSummary(
+    ctx,
+    presentation.envelope,
+    composeReconcileAppliedBody(presentation.marketplaces),
+  );
 }
 
 /** Emits resolved command rows, advisories, and the stamped envelope. */
@@ -450,8 +447,7 @@ export function emitContextCascade(
   message: CascadeNotificationMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  const presentation = presentCascade(run, message, rowPolicies);
-  emitWithSummary(ctx, presentation.envelope, formatCascadePresentation(presentation));
+  emitCascadePresentation(ctx, presentCascade(run, message, rowPolicies));
 }
 
 /** Emits surviving rows followed by the fixed zero-update headline. */
@@ -461,14 +457,7 @@ export function emitUpdateNoOpCascade(
   message: CascadeNotificationMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  const marketplaces = resolveRows(message.marketplaces, run.softDeps, rowPolicies);
-  const envelope = resolveUpdateNoOpEnvelope(message);
-  const blocks = composeContextBlocks(marketplaces);
-  // No `(no marketplaces)` sentinel here: an empty no-op renders the headline
-  // alone.
-  const body = blocks.join("\n\n");
-
-  emitWithSummary(ctx, envelope, body);
+  emitCascadePresentation(ctx, presentUpdateNoOp(run, message, rowPolicies));
 }
 
 /** Emits an applied reconcile cascade without a reload trailer. */
@@ -478,5 +467,5 @@ export function emitReconcileAppliedContextCascade(
   message: ReconcileAppliedCascadeMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  emitCascadeWith(ctx, run, message, rowPolicies);
+  emitReconcileAppliedPresentation(ctx, presentReconcileApplied(run, message, rowPolicies));
 }
