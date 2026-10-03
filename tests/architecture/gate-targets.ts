@@ -659,6 +659,15 @@ export const MARKER_POLICY_CONTROL_TARGETS = [
 ] as const;
 
 /**
+ * D-16 / SC-5 / IL-2: the one module whose notify arguments must all come from
+ * the text strategy's output. `NO_CONSOLE_EXEMPT_TARGETS` names the same file
+ * for a different obligation.
+ */
+export const PRESENTATION_SINK_TARGETS = [
+  "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
+] as const;
+
+/**
  * D-07-19 / GGAT-04: every export the repository publishes that no production
  * consumer reads, keyed by the file that publishes it.
  *
