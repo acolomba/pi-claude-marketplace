@@ -108,6 +108,7 @@ import {
   errorMessage,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import {
@@ -872,6 +873,16 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     },
   ];
   notifyWithContext(ctx, pi, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
+  // AFILE-04: the notices of the cascade's updates, shown after the rows they
+  // explain. A failed update can carry them too: its MCP commit succeeded
+  // before a later bridge or the finalize failed. The no-op paths above have
+  // only `unchanged` outcomes, which carry none.
+  notifyMcpConfigNotices(
+    ctx,
+    outcomes.flatMap((o) =>
+      o.partition === "updated" || o.partition === "failed" ? (o.mcpConfigNotices ?? []) : [],
+    ),
+  );
 }
 
 /**

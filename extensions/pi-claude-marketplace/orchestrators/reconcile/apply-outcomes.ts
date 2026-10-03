@@ -43,6 +43,7 @@ import {
 
 import type { UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallRefusedError } from "../plugin/uninstall.ts";
@@ -50,6 +51,13 @@ import type { UninstallRefusedError } from "../plugin/uninstall.ts";
 export interface OutcomeBase {
   readonly scope: Scope;
   readonly marketplace: string;
+  /**
+   * AFILE-04: the MCP config notices the orchestrated operation behind this
+   * row returned. `apply.ts` gathers them from every outcome into the one
+   * notice call after the applied cascade (RECON-04). Set only when non-empty
+   * (NREG-01).
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 export interface PluginOutcomeBase extends OutcomeBase {
@@ -670,4 +678,17 @@ export function dependenciesFromInstall(outcome: {
   }
 
   return deps;
+}
+
+/**
+ * AFILE-04: lift an orchestrated outcome's MCP config notices onto the reconcile
+ * outcome built from it. The orchestrated outcomes set the member only when
+ * non-empty, so an absent member stays absent (NREG-01).
+ */
+export function carriedMcpConfigNotices(carrier: {
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
+}): Pick<OutcomeBase, "mcpConfigNotices"> {
+  return carrier.mcpConfigNotices === undefined
+    ? {}
+    : { mcpConfigNotices: carrier.mcpConfigNotices };
 }

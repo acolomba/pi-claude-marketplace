@@ -23,7 +23,7 @@ import {
   errorMessage,
   PluginShapeError,
 } from "../../shared/errors.ts";
-import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
+import { notifyDiagnostic, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceStatus,
@@ -60,6 +60,7 @@ import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface MarketplaceAddedOutcome {
@@ -204,6 +205,12 @@ interface MutableImportResult {
   unexpectedPluginFailures: UnexpectedPluginFailureOutcome[];
   diagnostics: ImportDiagnostic[];
   changedResources: boolean;
+  /**
+   * AFILE-04: the MCP config notices the installs returned, in install order.
+   * `importClaudeSettings` shows them after the cascade and leaves them off
+   * the returned result.
+   */
+  mcpConfigNotices: McpConfigNotice[];
 }
 
 export interface ImportDeps {
@@ -241,6 +248,7 @@ function emptyResult(): MutableImportResult {
     unexpectedPluginFailures: [],
     diagnostics: [],
     changedResources: false,
+    mcpConfigNotices: [],
   };
 }
 
@@ -865,6 +873,10 @@ async function installOnePlannedPlugin(
     );
     return "unexpected-failure";
   }
+
+  // AFILE-04: both arms carry notices; a failed install can still have
+  // rewritten the MCP config through a dependency that committed first.
+  result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
 
   // CR-01: a third `InstallPluginOutcome` arm must become a compile error here,
   // not get counted as a successful install in the cascade totals. The
@@ -1491,6 +1503,8 @@ export async function importClaudeSettings(
   // per-operation tally under the `Import` label.
   notifyWithContext(opts.ctx, opts.pi, IMPORT_CONTEXT, marketplaces, undefined, "plural");
   surfaceImportDiagnostics(opts.ctx, result.diagnostics);
+  const { mcpConfigNotices, ...executionResult } = result;
+  notifyMcpConfigNotices(opts.ctx, mcpConfigNotices);
 
-  return result;
+  return executionResult;
 }

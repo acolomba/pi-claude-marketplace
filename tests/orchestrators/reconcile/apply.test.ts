@@ -100,6 +100,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { Notification } from "../../edge/notification-boundary.ts";
 import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -616,6 +617,84 @@ function applyAfterSelectedStateRace(
  */
 function withoutTempSuffix(message: string): string {
   return message.replaceAll(/claude-plugins\.json\.\d+/g, "claude-plugins.json.<tmp>");
+}
+
+/**
+ * AFILE-04: the warning `notifyMcpConfigNotices` sends after a rewrite drops the
+ * comments of the project-scope `mcp-adapter.json`.
+ */
+const COMMENTS_REMOVED_NOTICE = {
+  message:
+    "MCP config comments removed.\n" +
+    "\n" +
+    "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+  severity: "warning",
+} satisfies Notification;
+
+interface CommentedAdapterSeed {
+  readonly trees: Readonly<Record<string, PluginTree>>;
+  /** The config's plugin declarations; `undefined` drops `mp` from the config. */
+  readonly declared: Readonly<Record<string, { readonly enabled?: boolean }>> | undefined;
+  readonly recorded: Readonly<Record<string, Omit<RecordSeed, "pluginRoot">>>;
+  /** Recorded plugins that own one server entry in the adapter file. */
+  readonly owners: readonly string[];
+}
+
+/**
+ * AFILE-04: one project scope over the path marketplace `mp`, whose
+ * `mcp-adapter.json` opens with a comment and holds one owned server per
+ * `owners` entry. Returns the adapter bytes as written.
+ */
+async function seedCommentedAdapterScope(
+  t: TestContext,
+  label: string,
+  seed: CommentedAdapterSeed,
+): Promise<{ readonly cwd: string; readonly project: ScopedLocations; readonly adapter: string }> {
+  const { cwd, project } = await createHermeticScopes(t, label);
+  const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(
+    cwd,
+    "mp-src",
+    "mp",
+    seed.trees,
+  );
+  await writeUnder(
+    project.configJsonPath,
+    configBytes(
+      seed.declared === undefined
+        ? { marketplaces: {} }
+        : { marketplaces: { mp: { source: marketplaceRoot } }, plugins: seed.declared },
+    ),
+  );
+  const plugins = Object.fromEntries(
+    Object.entries(seed.recorded).map(([plugin, record]) => [
+      plugin,
+      pluginRecord({ ...record, pluginRoot: path.join(marketplaceRoot, "plugins", plugin) }),
+    ]),
+  );
+  await seedState(project, {
+    schemaVersion: 3,
+    lastReconciledExtensionVersion: EXTENSION_VERSION,
+    marketplaces: {
+      mp: marketplaceRecord({
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        rawSource: marketplaceRoot,
+        manifestPath,
+        marketplaceRoot,
+        plugins,
+      }),
+    },
+  });
+  const servers = Object.fromEntries(
+    seed.owners.map((plugin) => [
+      `${plugin}-echo`,
+      { command: "echo", _piClaudeMarketplace: { plugin, marketplace: "mp" } },
+    ]),
+  );
+  const adapter = `// user note\n${JSON.stringify({ mcpServers: servers })}\n`;
+  await writeUnder(project.mcpAdapterJsonPath, adapter);
+  return { cwd, project, adapter };
 }
 
 test("D-05-02: the source and owner-test census contains exactly the two approved behavioral-composition exceptions", async () => {
@@ -6036,5 +6115,251 @@ describe("applyReconcile", () => {
     assert.equal((await stat(project.stateJsonPath)).mtimeMs, settledModifiedAt);
     startup.verifyBoundary();
     reload.verifyBoundary();
+  });
+
+  test("AFILE-04: a reload install over a commented mcp-adapter.json shows the comments-removed notice after the cascade", async (t) => {
+    // arrange
+    const { cwd } = await seedCommentedAdapterScope(t, "afile-install", {
+      trees: { hello: { mcpServer: true } },
+      declared: { "hello@mp": {} },
+      recorded: {},
+      owners: [],
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● hello (installed) {requires pi-mcp-adapter}\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a reload with nothing to apply stays silent and leaves the commented mcp-adapter.json unchanged", async (t) => {
+    // arrange
+    const { cwd, project, adapter } = await seedCommentedAdapterScope(t, "afile-silent", {
+      trees: { hello: { mcpServer: true } },
+      declared: { "hello@mp": {} },
+      recorded: { hello: { mcpServers: ["hello-echo"] } },
+      owners: ["hello"],
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, []);
+    assert.equal(await readFile(project.mcpAdapterJsonPath, "utf8"), adapter);
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a reload uninstall that rewrites a commented mcp-adapter.json shows the notice after the cascade", async (t) => {
+    // arrange
+    const { cwd, project } = await seedCommentedAdapterScope(t, "afile-uninstall", {
+      trees: { hello: { mcpServer: true } },
+      declared: {},
+      recorded: { hello: { mcpServers: ["hello-echo"] } },
+      owners: ["hello"],
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    assert.equal(await readFile(project.mcpAdapterJsonPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a reload enable that re-materializes over a commented mcp-adapter.json shows the notice after the cascade", async (t) => {
+    // arrange
+    const { cwd } = await seedCommentedAdapterScope(t, "afile-enable", {
+      trees: { hello: { mcpServer: true } },
+      declared: { "hello@mp": {} },
+      recorded: { hello: { enabled: false } },
+      owners: [],
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a reload disable that unstages from a commented mcp-adapter.json shows the notice after the cascade", async (t) => {
+    // arrange
+    const { cwd, project } = await seedCommentedAdapterScope(t, "afile-disable", {
+      trees: { hello: { mcpServer: true } },
+      declared: { "hello@mp": { enabled: false } },
+      recorded: { hello: { mcpServers: ["hello-echo"] } },
+      owners: ["hello"],
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [project]\n  ◍ hello v1.0.0 (disabled)\n\nReconcile: 1 success" },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    assert.equal(await readFile(project.mcpAdapterJsonPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a load-time dependency disable that unstages from a commented mcp-adapter.json shows the notice after the cascade", async (t) => {
+    // arrange
+    const { cwd, project } = await seedCommentedAdapterScope(t, "afile-dependency-disable", {
+      trees: { "deploy-kit": { dependencies: ["secrets-vault"], mcpServer: true } },
+      declared: { "deploy-kit@mp": {} },
+      recorded: { "deploy-kit": { mcpServers: ["deploy-kit-echo"] } },
+      owners: ["deploy-kit"],
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
+          "\n" +
+          "Reconcile: 1 warning",
+        severity: "warning",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    assert.equal(await readFile(project.mcpAdapterJsonPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a reload marketplace removal that unstages from a commented mcp-adapter.json shows the notice after the cascade", async (t) => {
+    // arrange
+    const { cwd, project } = await seedCommentedAdapterScope(t, "afile-marketplace-remove", {
+      trees: { hello: { mcpServer: true } },
+      declared: undefined,
+      recorded: { hello: { mcpServers: ["hello-echo"] } },
+      owners: ["hello"],
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project] (removed)\n" +
+          "  ○ hello (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 2 successes",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    assert.equal(await readFile(project.mcpAdapterJsonPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a reload dependency install over a commented mcp-adapter.json shows the notice after the cascade", async (t) => {
+    // arrange
+    const { cwd } = await seedCommentedAdapterScope(t, "afile-dependency-install", {
+      trees: {
+        "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+        "secrets-vault": { mcpServer: true },
+      },
+      declared: { "deploy-kit@mp": {} },
+      recorded: { "deploy-kit": {} },
+      owners: [],
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● secrets-vault v1.0.0 (installed) {dependency installed, requires pi-mcp-adapter}\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a reload whose uninstall and install both rewrite one commented mcp-adapter.json shows one notice", async (t) => {
+    // arrange
+    const { cwd } = await seedCommentedAdapterScope(t, "afile-shared-file", {
+      trees: { alfa: { mcpServer: true }, bravo: { mcpServer: true } },
+      declared: { "bravo@mp": {} },
+      recorded: { alfa: { mcpServers: ["alfa-echo"] } },
+      owners: ["alfa"],
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ○ alfa v1.0.0 (uninstalled)\n" +
+          "  ● bravo (installed) {requires pi-mcp-adapter}\n" +
+          "\n" +
+          "Reconcile: 2 successes",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    verifyBoundary();
   });
 });

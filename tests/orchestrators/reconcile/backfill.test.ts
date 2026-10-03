@@ -126,6 +126,8 @@ interface PluginTree {
   readonly orphanRewakeHooks?: boolean;
   /** A runnable workflow script, so a re-materialize would place an envelope. */
   readonly workflow?: boolean;
+  /** One `.mcp.json` server, so a re-materialize rewrites `mcp-adapter.json`. */
+  readonly mcpServer?: boolean;
 }
 
 async function writePluginTree(
@@ -165,6 +167,13 @@ async function writePluginTree(
     await writeFile(
       path.join(workflowsDir, "greet.js"),
       'export const meta = { name: "greet", description: "greets" };\n',
+    );
+  }
+
+  if (tree.mcpServer === true) {
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: { echo: { command: "echo", args: ["hi"] } } }),
     );
   }
 
@@ -2158,6 +2167,60 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     // NFR-5: the whole promotion ran off the cached manifest and the local
     // clone, so the counting fake saw no remote at all.
     assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a promotion that rewrites a commented mcp-adapter.json carries the comments-removed notice", async (t) => {
+    // arrange -- the workflow grows the supported set; the re-materialize then
+    // restages the plugin's MCP server too.
+    const { cwd, locations } = await createHermeticProjectScope(t, "commented-adapter");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", mcpServer: true, workflow: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    await writeFile(locations.mcpAdapterJsonPath, '// user note\n{"mcpServers":{}}\n');
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-backfilled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        version: "1.0.0",
+        dependencies: ["mcp", "workflows"],
+        installable: true,
+        unsupported: [],
+        mcpConfigNotices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ],
+      },
+    ]);
     verifyBoundary();
   });
 

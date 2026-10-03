@@ -658,12 +658,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:54"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:840:49",
+      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:860:49",
       "owner": "degradationFromEnable.result",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within EnableDisablePluginOutcome by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:840:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:860:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:761:7",

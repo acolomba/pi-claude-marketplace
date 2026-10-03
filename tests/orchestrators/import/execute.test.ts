@@ -1828,6 +1828,98 @@ test("records each post-commit warning the installed outcome carried as its own 
   verifyBoundary();
 });
 
+test("AFILE-04: import over a commented mcp-adapter.json shows the comments-removed notice after its cascade", async (t) => {
+  // arrange -- the installed plugin and the failed one each report a rewrite of
+  // the same user-scope adapter file, and the failed one also of mcp.json.
+  const { cwd } = await createHermeticScopes(t, "mcp-config-notices");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 1);
+  const adapterNotice = {
+    kind: "comments-dropped",
+    scope: "user",
+    file: "mcp-adapter.json",
+  } as const;
+  const expectedResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "user")],
+    changedResources: true,
+    diagnostics: [
+      {
+        code: "post-install-warning",
+        message: "hook registration deferred: EACCES",
+        ref: "alpha@mp",
+        scope: "user",
+        severity: "warning",
+      },
+    ],
+    installedPlugins: [installed("alpha", "mp", "user")],
+    unexpectedPluginFailures: [failedUnexpectedly("target", "mp", "user", "disk full")],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: (options) =>
+        Promise.resolve(
+          options.plugin === "alpha"
+            ? {
+                ...installedOutcome(),
+                postCommitWarnings: ["hook registration deferred: EACCES"],
+                mcpConfigNotices: [adapterNotice],
+              }
+            : {
+                ...failedInstallOutcome(new Error("disk full"), "disk full"),
+                mcpConfigNotices: [
+                  adapterNotice,
+                  { kind: "comments-dropped", scope: "user", file: "mcp.json" },
+                ],
+              },
+        ),
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "alpha@mp": true, "target@mp": true },
+            extraKnownMarketplaces: { mp: { directory: "./mp" } },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, expectedResult);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ● alpha (installed)\n" +
+        "  ⊘ target (failed) {not in manifest}\n" +
+        "    cause: disk full\n\n" +
+        "Import: 1 failure, 2 successes\n\n" +
+        "/reload to pick up changes",
+      severity: "error",
+    },
+    {
+      message: "1 import diagnostic surfaced.\n\nhook registration deferred: EACCES",
+      severity: "warning",
+    },
+    {
+      message:
+        "MCP config comments removed.\n\n" +
+        "The user-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.\n" +
+        "The user-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+      severity: "warning",
+    },
+  ]);
+  verifyBoundary();
+});
+
 test("reports no changed resources when every install left the Pi resource set alone", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "no-resource-change");
