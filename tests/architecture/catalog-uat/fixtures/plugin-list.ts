@@ -1,4 +1,5 @@
 import { LIST_CONTEXT } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
+import { presentCascade } from "../../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import { notifyWithContext } from "../../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import {
   piWithAllLoaded,
@@ -522,6 +523,16 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
           "plural",
         );
       },
+      present: (run) =>
+        presentCascade(
+          run,
+          {
+            marketplaces: AVAILABLE_INSTALLS_DISABLED_ROWS,
+            label: LIST_CONTEXT.Messaging.label,
+            cardinality: "plural",
+          },
+          LIST_CONTEXT.rowPolicies,
+        ),
     },
 
     // RSTA-01 / D-80-03: list-surface inventory row for a not-installed
@@ -597,6 +608,16 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
           "plural",
         );
       },
+      present: (run) =>
+        presentCascade(
+          run,
+          {
+            marketplaces: REMOTE_INSTALLS_DISABLED_ROWS,
+            label: LIST_CONTEXT.Messaging.label,
+            cardinality: "plural",
+          },
+          LIST_CONTEXT.rowPolicies,
+        ),
     },
 
     // WINV-04: a workflow-bearing plugin renders as an ordinary not-installed

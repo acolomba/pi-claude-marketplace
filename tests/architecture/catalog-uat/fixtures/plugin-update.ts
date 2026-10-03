@@ -1,9 +1,32 @@
 import { UPDATE_CONTEXT } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
+import { presentUpdateNoOp } from "../../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import { notifyUpdateNoOpWithContext } from "../../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import { piWithAllLoaded, piWithBothLoaded } from "../mock-pi.ts";
 
 import type { NotificationMessage } from "../../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { FixtureMap } from "../fixture-types.ts";
+
+/**
+ * The one `partially-upgradable` row a bulk update declines; the fixture's
+ * message, its no-op emission, and its presentation all read it.
+ */
+const SKIP_PARTIALLY_UPGRADABLE_ROWS = [
+  {
+    name: "mp",
+    scope: "project",
+    plugins: [
+      {
+        status: "partially-upgradable",
+        severity: "info",
+        needsReload: false,
+        partialHint: true,
+        name: "hello",
+        version: "1.0.0",
+        reasons: ["lsp"],
+      },
+    ],
+  },
+] as const;
 
 /** Catalog fixtures for the plugin update command surface. */
 export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
@@ -128,6 +151,12 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
       emit: (ctx, run) => {
         notifyUpdateNoOpWithContext(ctx, run, UPDATE_CONTEXT, [], "plural");
       },
+      present: (run) =>
+        presentUpdateNoOp(
+          run,
+          { marketplaces: [], label: UPDATE_CONTEXT.Messaging.label, cardinality: "plural" },
+          UPDATE_CONTEXT.rowPolicies,
+        ),
     },
 
     // UGRM-01: the up-to-date `beta` row is suppressed. UGRM-02: two realized
@@ -466,49 +495,27 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
       message: {
         label: "Plugin update",
         cardinality: "plural",
-        marketplaces: [
-          {
-            name: "mp",
-            scope: "project",
-            plugins: [
-              {
-                status: "partially-upgradable",
-                severity: "info",
-                needsReload: false,
-                partialHint: true,
-                name: "hello",
-                version: "1.0.0",
-                reasons: ["lsp"],
-              },
-            ],
-          },
-        ],
+        marketplaces: SKIP_PARTIALLY_UPGRADABLE_ROWS,
       },
       emit: (ctx, run) => {
         notifyUpdateNoOpWithContext(
           ctx,
           run,
           UPDATE_CONTEXT,
-          [
-            {
-              name: "mp",
-              scope: "project",
-              plugins: [
-                {
-                  status: "partially-upgradable",
-                  severity: "info",
-                  needsReload: false,
-                  partialHint: true,
-                  name: "hello",
-                  version: "1.0.0",
-                  reasons: ["lsp"],
-                },
-              ],
-            },
-          ],
+          SKIP_PARTIALLY_UPGRADABLE_ROWS,
           "plural",
         );
       },
+      present: (run) =>
+        presentUpdateNoOp(
+          run,
+          {
+            marketplaces: SKIP_PARTIALLY_UPGRADABLE_ROWS,
+            label: UPDATE_CONTEXT.Messaging.label,
+            cardinality: "plural",
+          },
+          UPDATE_CONTEXT.rowPolicies,
+        ),
     },
 
     // WR-04 / D-98-04: a targeted `update` against a DISABLED record that is

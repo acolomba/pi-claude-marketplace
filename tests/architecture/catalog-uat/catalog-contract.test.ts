@@ -8,27 +8,8 @@ import { notify } from "../../../extensions/pi-claude-marketplace/shared/notific
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 import { loadCatalogExamples, type CatalogExample } from "./catalog-parser.ts";
-import { MARKETPLACE_ADD_FIXTURES } from "./fixtures/marketplace-add.ts";
-import { MARKETPLACE_AUTOUPDATE_FIXTURES } from "./fixtures/marketplace-autoupdate.ts";
-import { MARKETPLACE_INFO_FIXTURES } from "./fixtures/marketplace-info.ts";
-import { MARKETPLACE_LIST_FIXTURES } from "./fixtures/marketplace-list.ts";
-import { MARKETPLACE_NOAUTOUPDATE_FIXTURES } from "./fixtures/marketplace-noautoupdate.ts";
-import { MARKETPLACE_REMOVE_FIXTURES } from "./fixtures/marketplace-remove.ts";
-import { MARKETPLACE_UPDATE_FIXTURES } from "./fixtures/marketplace-update.ts";
-import { PLUGIN_BOOTSTRAP_FIXTURES } from "./fixtures/plugin-bootstrap.ts";
-import { PLUGIN_DISABLE_FIXTURES } from "./fixtures/plugin-disable.ts";
-import { PLUGIN_ENABLE_FIXTURES } from "./fixtures/plugin-enable.ts";
+import { FIXTURE_MAPS, mergeFixtureMaps, tupleKey } from "./fixture-maps.ts";
 import { PLUGIN_FETCH_FIXTURES } from "./fixtures/plugin-fetch.ts";
-import { PLUGIN_IMPORT_FIXTURES } from "./fixtures/plugin-import.ts";
-import { PLUGIN_INFO_FIXTURES } from "./fixtures/plugin-info.ts";
-import { PLUGIN_INSTALL_FIXTURES } from "./fixtures/plugin-install.ts";
-import { PLUGIN_LIST_FIXTURES } from "./fixtures/plugin-list.ts";
-import { PLUGIN_PENDING_FIXTURES } from "./fixtures/plugin-pending.ts";
-import { PLUGIN_PRUNE_FIXTURES } from "./fixtures/plugin-prune.ts";
-import { PLUGIN_REINSTALL_FIXTURES } from "./fixtures/plugin-reinstall.ts";
-import { PLUGIN_UNINSTALL_FIXTURES } from "./fixtures/plugin-uninstall.ts";
-import { PLUGIN_UPDATE_FIXTURES } from "./fixtures/plugin-update.ts";
-import { RECONCILE_APPLIED_FIXTURES } from "./fixtures/reconcile-applied.ts";
 import { makeCtx, verifyPi, type CapturedNotification } from "./mock-pi.ts";
 
 import type { CatalogFixture, FixtureMap } from "./fixture-types.ts";
@@ -39,30 +20,6 @@ const EXPECTED_MODULE_COUNT = 21;
 const EXPECTED_SECTION_COUNT = 21;
 const EXPECTED_STATE_COUNT = 260;
 const EXPECTED_UTF8_BYTES = 39_143;
-
-const FIXTURE_MAPS: readonly FixtureMap[] = [
-  PLUGIN_LIST_FIXTURES,
-  PLUGIN_INSTALL_FIXTURES,
-  PLUGIN_UNINSTALL_FIXTURES,
-  PLUGIN_PRUNE_FIXTURES,
-  PLUGIN_REINSTALL_FIXTURES,
-  PLUGIN_UPDATE_FIXTURES,
-  PLUGIN_FETCH_FIXTURES,
-  PLUGIN_IMPORT_FIXTURES,
-  PLUGIN_BOOTSTRAP_FIXTURES,
-  MARKETPLACE_LIST_FIXTURES,
-  MARKETPLACE_ADD_FIXTURES,
-  MARKETPLACE_INFO_FIXTURES,
-  PLUGIN_INFO_FIXTURES,
-  PLUGIN_PENDING_FIXTURES,
-  RECONCILE_APPLIED_FIXTURES,
-  MARKETPLACE_REMOVE_FIXTURES,
-  MARKETPLACE_UPDATE_FIXTURES,
-  PLUGIN_ENABLE_FIXTURES,
-  PLUGIN_DISABLE_FIXTURES,
-  MARKETPLACE_AUTOUPDATE_FIXTURES,
-  MARKETPLACE_NOAUTOUPDATE_FIXTURES,
-];
 
 const FIXTURE_SECTION_ORDER = [
   "/claude:plugin list",
@@ -106,34 +63,6 @@ interface ContractFailure {
   readonly kind: "missing-fixture" | "extra-fixture" | "byte-mismatch" | "severity-mismatch";
   readonly expected?: string;
   readonly actual?: string;
-}
-
-function tupleKey(section: string, state: string): string {
-  return `${section}::${state}`;
-}
-
-function mergeFixtureMaps(fixtureMaps: readonly FixtureMap[]): FixtureMap {
-  const merged: Record<string, Record<string, CatalogFixture>> = {};
-  for (const fixtureMap of fixtureMaps) {
-    for (const [section, states] of Object.entries(fixtureMap)) {
-      if (Object.keys(states).length === 0) {
-        throw new Error(`Catalog fixture section must not be empty: ${section}`);
-      }
-
-      const mergedStates = merged[section] ?? {};
-      for (const [state, fixture] of Object.entries(states)) {
-        if (Object.hasOwn(mergedStates, state)) {
-          throw new Error(`Duplicate catalog fixture tuple: ${tupleKey(section, state)}`);
-        }
-
-        mergedStates[state] = fixture;
-      }
-
-      merged[section] = mergedStates;
-    }
-  }
-
-  return merged;
 }
 
 function catalogTupleKeys(examples: readonly CatalogExample[]): string[] {
