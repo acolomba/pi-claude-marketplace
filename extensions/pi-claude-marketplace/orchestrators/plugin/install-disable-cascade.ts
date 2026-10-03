@@ -10,6 +10,7 @@ import type { InstallMsg } from "./install.messaging.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
@@ -28,10 +29,23 @@ export interface FreshInstallDisableOptions {
   readonly plugin: string;
 }
 
-/** Result of the materialize-then-disable cascade. */
+/**
+ * Result of the materialize-then-disable cascade. AFILE-04: both arms carry
+ * the unstage's MCP config notices, because a later cascade slot can fail
+ * after the MCP slot rewrote a commented file.
+ */
 export type FreshInstallDisableResult =
-  | { readonly ok: true; readonly removeRoutes: true }
-  | { readonly ok: false; readonly cause: Error; readonly removeRoutes: boolean };
+  | {
+      readonly ok: true;
+      readonly removeRoutes: true;
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
+    }
+  | {
+      readonly ok: false;
+      readonly cause: Error;
+      readonly removeRoutes: boolean;
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
+    };
 
 /** Facts used to compose the exact install-disabled notification row. */
 export interface InstallDisabledRowOptions {
@@ -94,6 +108,7 @@ function foldFailedDisableCascade(
     ok: false,
     cause: cascade.cause,
     removeRoutes: cascade.dropped.hooks.length > 0,
+    mcpConfigNotices: cascade.mcpConfigNotices ?? [],
   };
 }
 
@@ -147,6 +162,7 @@ export function composeInstallDisableCascade(dependencies: {
             `installPlugin: internal error -- the state phase left no record for plugin "${options.plugin}" to disable.`,
           ),
           removeRoutes: false,
+          mcpConfigNotices: [],
         };
       }
 
@@ -164,7 +180,11 @@ export function composeInstallDisableCascade(dependencies: {
         target.installed,
         dependencies.now(),
       );
-      return { ok: true, removeRoutes: true };
+      return {
+        ok: true,
+        removeRoutes: true,
+        mcpConfigNotices: cascade.mcpConfigNotices ?? [],
+      };
     },
 
     dropRoutesAfterSave(scope, marketplace, plugin): void {

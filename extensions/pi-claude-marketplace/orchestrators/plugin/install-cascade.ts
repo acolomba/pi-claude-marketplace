@@ -516,8 +516,9 @@ export type InstallCascadeResult =
       readonly rollbackPartials: readonly RollbackPartial[];
       /**
        * AFILE-04: the notices of the members that committed before the
-       * failure. Their undo unstages from the rewritten file rather than
-       * restoring its bytes, so removed comments stay removed.
+       * failure, then those of their undo. The undo unstages from the
+       * rewritten file rather than restoring its bytes, so removed comments
+       * stay removed.
        */
       readonly mcpConfigNotices: readonly McpConfigNotice[];
     };
@@ -1004,38 +1005,68 @@ function buildMemberPhase(
       }
     },
     undo: async (run) => {
-      if (!run.materialized.has(member.key)) {
+      const unstaged = await unstageMaterializedMember(options, seam, run, member);
+      if (unstaged === undefined) {
         return;
-      }
-
-      const marketplaceRecord = options.state.marketplaces[member.marketplace];
-      const installed = marketplaceRecord?.plugins[member.name];
-      if (marketplaceRecord === undefined || installed === undefined) {
-        return;
-      }
-
-      const outcome = await seam.cascadeUnstagePlugin(
-        member.name,
-        member.marketplace,
-        options.locations,
-        installed,
-      );
-      if (!outcome.ok) {
-        // The primitive REPORTS rather than throws -- its whole body is a
-        // try/catch returning `{ok: false, dropped, cause}` -- and the ledger's
-        // only partial-rollback channel is a throw. Discarding this outcome
-        // reports a cascade that unwound cleanly while the member's artifacts
-        // are still on disk, so convert it. Subtracting what DID drop first
-        // keeps the record honest about what remains (NFR-3), and the record is
-        // deliberately NOT deleted: it is what still owns those artifacts.
-        applyPartialCascadeFold(installed, outcome.dropped);
-        throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
       }
 
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- `plugins` is a Record<string, ...> keyed by the member's own token-checked plugin name.
-      delete marketplaceRecord.plugins[member.name];
+      delete unstaged.marketplaceRecord.plugins[member.name];
     },
   };
+}
+
+/**
+ * The unstage both member undos share. Returns the member's marketplace slot
+ * and record once its artifacts are off disk, or `undefined` when this run
+ * did not materialize the member or the snapshot no longer records it.
+ *
+ * AFILE-04: the unstage rewrites the MCP config files again, and its notices
+ * join the run's even when a later slot then fails.
+ *
+ * The primitive REPORTS rather than throws -- its whole body is a try/catch
+ * returning `{ok: false, dropped, cause}` -- and the ledger's only
+ * partial-rollback channel is a throw. Discarding a failed outcome reports a
+ * cascade that unwound cleanly while the member's artifacts are still on
+ * disk, so convert it. Subtracting what DID drop first keeps the record honest
+ * about what remains (NFR-3), and the record is deliberately NOT deleted or
+ * disabled: it is what still owns those artifacts.
+ */
+async function unstageMaterializedMember(
+  options: InstallCascadeOptions,
+  seam: InstallCascadeLedgerSeam,
+  run: CascadeRun,
+  member: Pick<ClosureMember, "key" | "name" | "marketplace">,
+): Promise<
+  | {
+      readonly marketplaceRecord: ExtensionState["marketplaces"][string];
+      readonly installed: PluginInstallRecord;
+    }
+  | undefined
+> {
+  if (!run.materialized.has(member.key)) {
+    return undefined;
+  }
+
+  const marketplaceRecord = options.state.marketplaces[member.marketplace];
+  const installed = marketplaceRecord?.plugins[member.name];
+  if (marketplaceRecord === undefined || installed === undefined) {
+    return undefined;
+  }
+
+  const outcome = await seam.cascadeUnstagePlugin(
+    member.name,
+    member.marketplace,
+    options.locations,
+    installed,
+  );
+  run.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
+  if (!outcome.ok) {
+    applyPartialCascadeFold(installed, outcome.dropped);
+    throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
+  }
+
+  return { marketplaceRecord, installed };
 }
 
 type InstalledLedgerResult = Extract<InstallLedgerResult, { readonly kind: "installed" }>;
@@ -1116,29 +1147,13 @@ function buildReEnableMemberPhase(
       });
     },
     undo: async (run) => {
-      if (!run.materialized.has(member.key)) {
+      const unstaged = await unstageMaterializedMember(options, seam, run, member);
+      if (unstaged === undefined) {
         return;
       }
 
-      const marketplaceRecord = options.state.marketplaces[member.marketplace];
-      const installed = marketplaceRecord?.plugins[member.name];
-      if (marketplaceRecord === undefined || installed === undefined) {
-        return;
-      }
-
-      const outcome = await seam.cascadeUnstagePlugin(
-        member.name,
-        member.marketplace,
-        options.locations,
-        installed,
-      );
-      if (!outcome.ok) {
-        applyPartialCascadeFold(installed, outcome.dropped);
-        throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
-      }
-
-      marketplaceRecord.plugins[member.name] = toDisabledRecord(
-        installed,
+      unstaged.marketplaceRecord.plugins[member.name] = toDisabledRecord(
+        unstaged.installed,
         new Date().toISOString(),
       );
     },

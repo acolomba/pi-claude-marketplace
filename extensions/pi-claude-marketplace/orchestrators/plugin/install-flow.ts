@@ -1733,6 +1733,9 @@ async function installPluginWithTransaction(
         // the lock and reported to the post-guard path as its own outcome arm.
         let cascadeError: Error | undefined;
         let removeDisabledRoutesAfterSave = false;
+        // AFILE-04: the stage's notices, then the disable cascade's, which
+        // rewrites the MCP config files again when the install lands disabled.
+        let mcpConfigNotices = installed.mcpConfigNotices;
         if (landedDisabled) {
           // D-102-01: the six-phase ledger already ran and the state phase wrote
           // `enabled: true`; the disable half runs here, after `runPhases` and
@@ -1745,6 +1748,7 @@ async function installPluginWithTransaction(
             plugin,
           });
           removeDisabledRoutesAfterSave = disableResult.removeRoutes;
+          mcpConfigNotices = [...mcpConfigNotices, ...disableResult.mcpConfigNotices];
           if (!disableResult.ok) {
             // D-102-02: record the cause and fall through. The fold already
             // subtracted what DID drop, so the `tx.save()` below persists the
@@ -1904,7 +1908,7 @@ async function installPluginWithTransaction(
           return {
             kind: "disable-cascade-failed",
             cause: cascadeError,
-            mcpConfigNotices: installed.mcpConfigNotices,
+            mcpConfigNotices,
           };
         }
 
@@ -1914,7 +1918,7 @@ async function installPluginWithTransaction(
           landedDisabled,
           members: installed.members,
           alreadyInstalled: installed.alreadyInstalled,
-          mcpConfigNotices: installed.mcpConfigNotices,
+          mcpConfigNotices,
         };
       },
     );

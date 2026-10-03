@@ -677,6 +677,56 @@ test("AFILE-04 a later member's failure still reports the comments an earlier me
   ]);
 });
 
+test("AFILE-04 a member undo that unstages from a commented mcp-adapter.json reports the notice on member-failed", async (t) => {
+  // arrange: bar stages over a comment-free file, then the user's comment
+  // lands before the requesting plugin's ledger throws, so only bar's undo
+  // rewrites a commented file.
+  const environment = await createHermeticEnvironment(t, "install-cascade-mcp-notice-undo-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { preinstalled: ["foo"] });
+  const locations = locationsFor("project", environment.cwd);
+  await seedCommentedAdapterTarget(environment.cwd, locations, ["bar"]);
+  await writeFile(locations.mcpAdapterJsonPath, '{"mcpServers":{}}\n');
+  const seam: InstallCascadeLedgerSeam = {
+    runInstallLedger: async (memberState, memberLocations, options, capture, transaction) => {
+      const ledgerResult = await runInstallLedger(
+        memberState,
+        memberLocations,
+        options,
+        capture,
+        transaction,
+      );
+      const staged = await readFile(memberLocations.mcpAdapterJsonPath, "utf8");
+      await writeFile(memberLocations.mcpAdapterJsonPath, `// mine\n${staged}`);
+      return ledgerResult;
+    },
+    cascadeUnstagePlugin,
+  };
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam,
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "member-failed");
+  assert.strictEqual(cascade.key, `foo@${MARKETPLACE}`);
+  assert.deepStrictEqual(cascade.mcpConfigNotices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+  ]);
+  assert.strictEqual(
+    await readFile(locations.mcpAdapterJsonPath, "utf8"),
+    '{\n  "mcpServers": {}\n}\n',
+  );
+});
+
 test("D-03-07 a member installed BEFORE the run survives a later member's failure", async (t) => {
   // arrange: `bar` predates the run and `baz` is declared but absent from the
   // manifest, so its ledger throws while `bar` is only ever skipped.

@@ -69,6 +69,7 @@ import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
 import { createRemovalOps } from "../../shared/fs-utils.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage, type Reason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
@@ -76,6 +77,7 @@ import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
+import { mcpConfigNoticesMember } from "../marketplace/shared.ts";
 
 import { buildScopeDeclarationIndex, readRecordDeclarations } from "./dependency-index.ts";
 import {
@@ -120,6 +122,7 @@ import type {
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus, PiInventory } from "../../platform/pi-api.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -176,21 +179,41 @@ export type EnableDegradationSignals = LedgerDegradationSignals;
  * - `"failed"` -- enable / disable / invalid-config / marketplace-not-added
  *   paths. `reason` typed `Reason` so the structural `"marketplace not
  *   added"` sentinel can flow through the same field.
+ *
+ * AFILE-04: `"enabled"`, `"disabled"` and `"failed"` carry the MCP config
+ * file notices of the rewrites the call made, omitted when there are none.
+ * A failed call reports them too, because the file is already rewritten.
  */
 export type EnableDisablePluginOutcome =
   | ({ readonly status: "enabled"; readonly version?: string } & EnableDisableSubject &
-      EnableDegradationSignals)
-  | ({ readonly status: "disabled"; readonly version?: string } & EnableDisableSubject)
+      EnableDegradationSignals &
+      McpConfigNoticesCarrier)
+  | ({ readonly status: "disabled"; readonly version?: string } & EnableDisableSubject &
+      McpConfigNoticesCarrier)
   | ({
       readonly status: "skipped";
       readonly reason: "already enabled" | "already disabled" | "not installed";
     } & EnableDisableSubject)
-  | {
+  | ({
       readonly status: "failed";
       readonly reason: Reason;
       readonly error: Error;
       readonly cause: string;
-    };
+    } & McpConfigNoticesCarrier);
+
+/** AFILE-04: the MCP config file notices an outcome carries, when any. */
+export interface McpConfigNoticesCarrier {
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
+}
+
+/**
+ * AFILE-04: the MCP config file notices of every rewrite made inside the
+ * lock. Each branch sets it as soon as its rewrite returns, before the config
+ * write and the save, so a later throw still reports a file it rewrote.
+ */
+interface McpConfigNoticeSink {
+  mcpConfigNotices: readonly McpConfigNotice[];
+}
 
 /**
  * The plugin every non-failed arm names. Declared once so a reader of any arm
@@ -333,7 +356,7 @@ async function materializeEnableRoot(
   state: ExtensionState,
   installed: InstalledPluginRecord,
   capture: InstallFailureCapture,
-): Promise<Extract<SetEnabledOutcome, { kind: "fresh" }>> {
+): Promise<MaterializedEnableRoot> {
   const recordedVersion = installed.version;
   // ENBL-07 / NFR-7: derive the ledger's gate from the record's OWN
   // availability discriminant. A record disabled while soft-degraded
@@ -396,7 +419,7 @@ async function materializeEnableRoot(
   const summary = result.summary;
   const resolved = summary.resolved;
   const degradedKinds = Array.from(new Set(summary.frontmatterDegradations.map((d) => d.kind)));
-  return {
+  const outcome: MaterializedEnableRoot["outcome"] = {
     kind: "fresh",
     ...(resolved.hooksConfigPath !== undefined && {
       addRoutesAfterSave: {
@@ -429,6 +452,17 @@ async function materializeEnableRoot(
       staleWorkflowCommand: true,
     }),
   };
+  return { outcome, mcpConfigNotices: summary.mcpConfigNotices };
+}
+
+/**
+ * The root's fresh enable and its ledger's MCP config file notices (AFILE-04).
+ * A ledger that throws restores the file's bytes, so only a completed
+ * materialization has notices to report.
+ */
+interface MaterializedEnableRoot {
+  readonly outcome: Extract<SetEnabledOutcome, { kind: "fresh" }>;
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
 }
 
 /**
@@ -445,6 +479,7 @@ async function runEnableBranch(
   locations: ScopedLocations,
   state: ExtensionState,
   installed: InstalledPluginRecord,
+  sink: McpConfigNoticeSink,
 ): Promise<SetEnabledOutcome> {
   const recordedVersion = installed.version;
   // I4: thread an InstallFailureCapture so a rollback-partial enable failure
@@ -453,7 +488,7 @@ async function runEnableBranch(
   // it rethrows (D-02 PI-14 bypass preserves the raw error).
   const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
   try {
-    return await materializeEnableRoot(
+    const materialized = await materializeEnableRoot(
       transaction,
       opts,
       scope,
@@ -462,6 +497,8 @@ async function runEnableBranch(
       installed,
       capture,
     );
+    sink.mcpConfigNotices = materialized.mcpConfigNotices;
+    return materialized.outcome;
   } catch (err) {
     return {
       kind: "enable-failed",
@@ -758,6 +795,12 @@ interface EnableCascadeRun {
    * assume its `do` ran to completion).
    */
   root: Extract<SetEnabledOutcome, { kind: "fresh" }> | undefined;
+  /**
+   * AFILE-04: the MCP config file notices of every completed ledger, in phase
+   * order, then those of each undo. An undo unstages from the rewritten file
+   * rather than restoring its bytes, so removed comments stay removed.
+   */
+  readonly mcpConfigNotices: McpConfigNotice[];
 }
 
 /**
@@ -790,6 +833,7 @@ async function unstageBackToDisabled(
   marketplace: string,
   plugin: string,
   key: string,
+  mcpConfigNotices: McpConfigNotice[],
 ): Promise<void> {
   const marketplaceRecord = state.marketplaces[marketplace];
   const installedNow = marketplaceRecord?.plugins[plugin];
@@ -803,6 +847,9 @@ async function unstageBackToDisabled(
     locations,
     installedNow,
   );
+  // AFILE-04: kept even when a later slot fails, because the MCP slot already
+  // rewrote the file.
+  mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
   if (!outcome.ok) {
     applyPartialCascadeFold(installedNow, outcome.dropped);
     throw outcome.cause ?? new Error(`Rollback of "${key}" did not complete.`);
@@ -870,6 +917,7 @@ function buildEnableCascadeMemberPhase(
       assertRecordedStateLedgerInstalled(result);
       run.materialized.add(member.key);
       const summary = result.summary;
+      run.mcpConfigNotices.push(...summary.mcpConfigNotices);
       run.hydratable.push({
         key: member.key,
         name: member.name,
@@ -902,6 +950,7 @@ function buildEnableCascadeMemberPhase(
         member.marketplace,
         member.name,
         member.key,
+        run.mcpConfigNotices,
       );
     },
   };
@@ -942,7 +991,7 @@ function buildEnableRootPhase(
     do: async (run) => {
       const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
       try {
-        run.root = await materializeEnableRoot(
+        const materialized = await materializeEnableRoot(
           transaction,
           opts,
           scope,
@@ -951,6 +1000,8 @@ function buildEnableRootPhase(
           installed,
           capture,
         );
+        run.root = materialized.outcome;
+        run.mcpConfigNotices.push(...materialized.mcpConfigNotices);
       } catch (err) {
         run.rollbackPartials.push(...capture.rollbackPartials);
         throw err;
@@ -968,6 +1019,7 @@ function buildEnableRootPhase(
         opts.marketplace,
         opts.plugin,
         rootKey,
+        run.mcpConfigNotices,
       );
     },
   };
@@ -1022,6 +1074,7 @@ function buildEnableCascadeMemberPhases(
     hydratable: [],
     rollbackPartials: [],
     root: undefined,
+    mcpConfigNotices: [],
   };
   const phases: Phase<EnableCascadeRun>[] = [];
   for (const member of members) {
@@ -1120,11 +1173,13 @@ async function runEnableCascadeMembers(
       readonly rows: readonly EnableCascadeMemberRow[];
       readonly wrote: boolean;
       readonly hydratable: readonly EnableCascadeHydratableMember[];
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
     }
   | {
       readonly ok: false;
       readonly error: Error;
       readonly rollbackPartials: readonly RollbackPartial[];
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
     }
 > {
   const { run, phases } = buildEnableCascadeMemberPhases(
@@ -1147,10 +1202,17 @@ async function runEnableCascadeMembers(
       ok: false,
       error: result.error,
       rollbackPartials: enableCascadeRollbackPartials(run, result),
+      mcpConfigNotices: run.mcpConfigNotices,
     };
   }
 
-  return { ok: true, rows: run.rows, wrote, hydratable: run.hydratable };
+  return {
+    ok: true,
+    rows: run.rows,
+    wrote,
+    hydratable: run.hydratable,
+    mcpConfigNotices: run.mcpConfigNotices,
+  };
 }
 
 /**
@@ -1177,11 +1239,13 @@ async function runEnableCascadeWithRoot(args: {
       readonly rows: readonly EnableCascadeMemberRow[];
       readonly hydratable: readonly EnableCascadeHydratableMember[];
       readonly root: Extract<SetEnabledOutcome, { kind: "fresh" }>;
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
     }
   | {
       readonly ok: false;
       readonly error: Error;
       readonly rollbackPartials: readonly RollbackPartial[];
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
     }
 > {
   const {
@@ -1215,11 +1279,18 @@ async function runEnableCascadeWithRoot(args: {
       ok: false,
       error: result.error,
       rollbackPartials: enableCascadeRollbackPartials(run, result),
+      mcpConfigNotices: run.mcpConfigNotices,
     };
   }
 
   assertRootMaterialized(run);
-  return { ok: true, rows: run.rows, hydratable: run.hydratable, root: run.root };
+  return {
+    ok: true,
+    rows: run.rows,
+    hydratable: run.hydratable,
+    root: run.root,
+    mcpConfigNotices: run.mcpConfigNotices,
+  };
 }
 
 /**
@@ -1343,6 +1414,7 @@ async function dispatchBranch(args: {
   readonly installed: InstalledPluginRecord;
   readonly enable: boolean;
   readonly tx: { readonly save: () => Promise<void> };
+  readonly sink: McpConfigNoticeSink;
 }): Promise<BranchDispatchResult> {
   const {
     transaction,
@@ -1356,6 +1428,7 @@ async function dispatchBranch(args: {
     installed,
     enable,
     tx,
+    sink,
   } = args;
   if (enable) {
     const branchOutcome = await runEnableBranch(
@@ -1365,11 +1438,13 @@ async function dispatchBranch(args: {
       locations,
       state,
       installed,
+      sink,
     );
     return { kind: "continue", branchOutcome, removeRoutesAfterSave: false };
   }
 
   const disableResult = await runDisableBranch(transaction, opts, locations, installed);
+  sink.mcpConfigNotices = disableResult.mcpConfigNotices;
   // ENBL-02: on a clean disable, replace the map slot with the branded
   // `DisabledPluginRecord` the branch built via `toDisabledRecord` (rather
   // than mutating `installed` in place). The terminal `tx.save()` -- here on
@@ -1487,6 +1562,7 @@ async function runDisableBranch(
   saveShrunken: boolean;
   removeRoutesAfterSave: boolean;
   disabled?: DisabledPluginRecord;
+  mcpConfigNotices: readonly McpConfigNotice[];
 }> {
   const recordedVersion = installed.version;
   const cascade = await transaction.cascadeUnstagePlugin(
@@ -1495,6 +1571,9 @@ async function runDisableBranch(
     locations,
     installed,
   );
+  // AFILE-04: both arms keep the cascade's notices, because a later slot can
+  // fail after the MCP slot rewrote the file.
+  const mcpConfigNotices = cascade.mcpConfigNotices ?? [];
   if (isFailedUnstageOutcome(cascade)) {
     // I3: cascade.dropped lists artifacts already unstaged before the throw.
     // Fold them into the record so state.json never claims artifacts gone
@@ -1522,6 +1601,7 @@ async function runDisableBranch(
       },
       saveShrunken: true,
       removeRoutesAfterSave: cascade.dropped.hooks.length > 0,
+      mcpConfigNotices,
     };
   }
 
@@ -1560,6 +1640,7 @@ async function runDisableBranch(
     saveShrunken: false,
     removeRoutesAfterSave: true,
     disabled,
+    mcpConfigNotices,
   };
 }
 
@@ -1902,6 +1983,7 @@ async function settleIdempotentEnableCascade(args: {
   readonly selection: SelectedConfigWriteTarget;
   readonly cascadeMembers: readonly EnableCascadeMember[];
   readonly tx: { readonly save: () => Promise<void> };
+  readonly sink: McpConfigNoticeSink;
 }): Promise<IdempotentEnableCascadeResult> {
   const {
     transaction,
@@ -1915,6 +1997,7 @@ async function settleIdempotentEnableCascade(args: {
     selection,
     cascadeMembers,
     tx,
+    sink,
   } = args;
   const idempotentOutcome = await resolveIdempotentOutcome(
     transaction,
@@ -1931,6 +2014,7 @@ async function settleIdempotentEnableCascade(args: {
     state,
     cascadeMembers,
   );
+  sink.mcpConfigNotices = materialized.mcpConfigNotices;
   if (!materialized.ok) {
     return {
       rows: [],
@@ -1984,6 +2068,7 @@ async function runFreshEnableCascadeWithRoot(args: {
   readonly cascadeMembers: readonly EnableCascadeMember[];
   readonly rootKey: string;
   readonly tx: { readonly save: () => Promise<void> };
+  readonly sink: McpConfigNoticeSink;
 }): Promise<IdempotentEnableCascadeResult> {
   const {
     transaction,
@@ -1998,6 +2083,7 @@ async function runFreshEnableCascadeWithRoot(args: {
     cascadeMembers,
     rootKey,
     tx,
+    sink,
   } = args;
   const merged = await runEnableCascadeWithRoot({
     transaction,
@@ -2011,6 +2097,7 @@ async function runFreshEnableCascadeWithRoot(args: {
     write,
     selection,
   });
+  sink.mcpConfigNotices = merged.mcpConfigNotices;
   if (!merged.ok) {
     return {
       rows: [],
@@ -2148,6 +2235,7 @@ async function runSetEnabledOutcome(
   // declares no dependencies -- so `dispatchOutcome`'s row array is exactly
   // the single root row (EDEP-01 empty edge).
   let enableCascadeRows: readonly EnableCascadeMemberRow[] = [];
+  const sink: McpConfigNoticeSink = { mcpConfigNotices: [] };
 
   let outcome: SetEnabledOutcome;
   const write: EnabledFlagWriteTarget = {
@@ -2249,6 +2337,7 @@ async function runSetEnabledOutcome(
             selection,
             cascadeMembers,
             tx,
+            sink,
           });
           enableCascadeRows = idempotent.rows;
           return idempotent.outcome;
@@ -2275,6 +2364,7 @@ async function runSetEnabledOutcome(
             cascadeMembers,
             rootKey: `${plugin}@${marketplace}`,
             tx,
+            sink,
           });
           enableCascadeRows = fresh.rows;
           return fresh.outcome;
@@ -2292,6 +2382,7 @@ async function runSetEnabledOutcome(
           installed,
           enable,
           tx,
+          sink,
         });
         if (dispatch.kind === "terminal") {
           return dispatch.outcome;
@@ -2349,6 +2440,9 @@ async function runSetEnabledOutcome(
           needsReload: false,
         },
       });
+      // AFILE-04: a throw after a rewrite (a config write or the save) still
+      // reports the comments that rewrite removed.
+      notifyMcpConfigNotices(ctx, sink.mcpConfigNotices);
     }
 
     return {
@@ -2356,6 +2450,7 @@ async function runSetEnabledOutcome(
       reason: classifyTransactionThrow(cause),
       error: cause,
       cause: errorMessage(cause),
+      ...mcpConfigNoticesMember(sink.mcpConfigNotices),
     };
   }
 
@@ -2371,9 +2466,17 @@ async function runSetEnabledOutcome(
       outcome,
       cascadeRows: enableCascadeRows,
     });
+    // AFILE-04: the notices follow the rows, on success and on failure.
+    notifyMcpConfigNotices(ctx, sink.mcpConfigNotices);
   }
 
-  return outcomeToTypedResult({ plugin, enable, outcome, configBasename });
+  return outcomeToTypedResult({
+    plugin,
+    enable,
+    outcome,
+    configBasename,
+    mcpConfigNotices: sink.mcpConfigNotices,
+  });
 }
 
 /** Bind enable/disable orchestration to one required semantic transaction owner. */
@@ -2586,8 +2689,11 @@ function outcomeToTypedResult(args: {
   enable: boolean;
   configBasename: string;
   outcome: SetEnabledOutcome;
+  /** AFILE-04: carried on the realized and the failed arms, omitted when empty. */
+  mcpConfigNotices: readonly McpConfigNotice[];
 }): EnableDisablePluginOutcome {
   const { plugin, enable, configBasename, outcome } = args;
+  const notices = mcpConfigNoticesMember(args.mcpConfigNotices);
   switch (outcome.kind) {
     case "invalid-config": {
       const err = new Error(`Config file "${configBasename}" failed schema validation.`);
@@ -2622,6 +2728,7 @@ function outcomeToTypedResult(args: {
         reason,
         error: outcome.cause,
         cause: errorMessage(outcome.cause),
+        ...notices,
       };
     }
 
@@ -2631,11 +2738,12 @@ function outcomeToTypedResult(args: {
         reason: primaryDisableFailureReason(outcome.cause),
         error: outcome.cause,
         cause: errorMessage(outcome.cause),
+        ...notices,
       };
     }
 
     case "fresh": {
-      return freshOutcomeToTypedResult(plugin, enable, outcome);
+      return { ...freshOutcomeToTypedResult(plugin, enable, outcome), ...notices };
     }
   }
 }

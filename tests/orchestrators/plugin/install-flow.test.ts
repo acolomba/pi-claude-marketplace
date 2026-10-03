@@ -3427,6 +3427,63 @@ test("AFILE-02: installing a plugin with no MCP servers over an unparseable mcp-
   });
 });
 
+test("AFILE-04: an install that lands disabled reports the notices of both its stage and its disable cascade", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-landed-disabled-"));
+    try {
+      // arrange -- the stage rewrites the commented mcp-adapter.json, and the
+      // disable cascade then removes the plugin's own entry from the commented
+      // legacy mcp.json, which the stage leaves alone.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+        entryDefaultEnabled: false,
+      });
+      await writeCommentedProjectAdapterFile(cwd);
+      const legacyPath = path.join(cwd, ".pi", "mcp.json");
+      await writeFile(
+        legacyPath,
+        '// legacy note\n{"mcpServers":{"server1":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n',
+      );
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ◍ hello v0.0.1 (disabled) {installs disabled}\n" +
+            "    Run enable on this plugin to use its components.",
+        },
+        {
+          severity: "warning",
+          message:
+            "MCP config comments removed.\n\n" +
+            "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.\n" +
+            "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        },
+      ]);
+      assert.equal(await readFile(legacyPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and names the file the adapter would load", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-afile05-"));

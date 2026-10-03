@@ -30,11 +30,18 @@
       "mechanism": "D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source."
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2233:7",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2237:7",
       "owner": "InstallMissingDependencyOutcome",
       "key": "mcpConfigNotices",
       "decision": "AFILE-04 / D-02-09: the reload missing-dependency install carries its MCP config notices for the reconcile apply pass to route; the reconcile routing (plan 02-08) adds the read and must drop this row.",
       "mechanism": "D-02-09 makes every orchestrated install return its MCP config notices instead of sending them, and leaves the routing to the caller that owns the single cascade notification. installMissingDependencyWithTransaction sets the member on its installed arm, and its only production caller, reconcile/apply.ts applyDependencyInstalls, does not read it yet, so the analyzer finds no read. The failed arm is spread at its producer, which the analyzer counts as a read. Once apply.ts routes the notices this row matches no finding and the gate refuses the run, so the row cannot outlive the gap."
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:206:3",
+      "owner": "McpConfigNoticesCarrier",
+      "key": "mcpConfigNotices",
+      "decision": "AFILE-04 / D-02-09: the orchestrated enable and disable carry their MCP config notices for the reconcile apply pass to route; the reconcile routing (plan 02-08) adds the read and must drop this row.",
+      "mechanism": "D-02-09 makes every orchestrated enable and disable return its MCP config notices instead of sending them, and leaves the routing to the caller that owns the single cascade notification. runSetEnabledOutcome sets the member on the enabled, disabled and failed arms of EnableDisablePluginOutcome through this one carrier, and its orchestrated production callers in reconcile/apply.ts (applyPluginToggles and applyDependencyDisables) do not read it yet, so the analyzer finds no read. Once apply.ts routes the notices this row matches no finding and the gate refuses the run, so the row cannot outlive the gap."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:156:7",
