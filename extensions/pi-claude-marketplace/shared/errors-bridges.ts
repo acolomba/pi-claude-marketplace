@@ -48,19 +48,24 @@ export class AgentOwnershipConflictError extends Error {
 }
 
 /**
- * MC-4 / RN-5 refusal: a server name being staged collides with an
- * entry owned by a different scope or different plugin in the current
- * scope. Carries the colliding server name and the file path of the
- * owning entry so the user-visible message can surface both.
+ * AFILE-05 / MC-4 refusal: a server name being staged is already defined in
+ * full by another of pi-mcp-adapter's config sources. `owningPath` is the
+ * highest-precedence other source that defines it. `winningPath` is the source
+ * the adapter loads under its later-wins precedence: the owner when it ranks
+ * above the target file, else the target file itself.
  */
 export class McpServerCollisionError extends Error {
   readonly serverName: string;
   readonly owningPath: string;
-  constructor(serverName: string, owningPath: string) {
-    super(`Refusing to stage MCP server "${serverName}": already exists in ${owningPath}.`);
+  readonly winningPath: string;
+  constructor(serverName: string, owningPath: string, winningPath: string) {
+    super(
+      `Refusing to stage MCP server "${serverName}": ${owningPath} already defines it, and pi-mcp-adapter would load the definition in ${winningPath}.`,
+    );
     this.name = "McpServerCollisionError";
     this.serverName = serverName;
     this.owningPath = owningPath;
+    this.winningPath = winningPath;
   }
 }
 

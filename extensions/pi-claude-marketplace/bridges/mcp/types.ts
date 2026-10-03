@@ -20,7 +20,7 @@ export interface RawMcpDoc {
 /** Input record for `prepareStageMcpServers`. */
 export interface StageMcpInput {
   readonly locations: ScopedLocations;
-  /** Used by MC-4 collision check to construct the four-slot list. */
+  /** The project root whose config sources the AFILE-05 collision walk reads. */
   readonly cwd: string;
   readonly marketplaceName: string;
   readonly pluginName: string;

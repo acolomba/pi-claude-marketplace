@@ -1514,7 +1514,11 @@ the per-scope partition), `orchestrators/reconcile/apply.ts`
 `edge/handlers/plugin/uninstall.ts` (new `--keep-data` flag parsing),
 `edge/args.ts` / `edge/flag-catalog.ts` (flag registration, drift-gated).
 
-## MCPSRC-01: MCP collision slot list has drifted behind pi-mcp-adapter
+## ~~MCPSRC-01: MCP collision slot list has drifted behind pi-mcp-adapter~~ -- CLOSED
+
+Closed 2026-10-03 by AFILE-05: a nine-source, later-wins walk of
+pi-mcp-adapter 5's config sources, where only full definitions declare
+and the refusal names the winning source.
 
 Surfaced 2026-08-13 from the upstream release review covering
 2026-08-05..2026-08-12 (pi 0.84.0-0.84.1, pi-subagents 0.41.0-0.47.1,

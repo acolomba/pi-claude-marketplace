@@ -6,7 +6,8 @@
 // after the same leading-BOM strip (AFILE-02). The server key is the key the
 // adapter's disable-writer picks, so entries land where the adapter loads
 // them and a user's `mcp-servers` map is never shadowed by a new `mcpServers`
-// key (AFILE-03).
+// key (AFILE-03). `isFullDefinition` is the adapter's own transport test, which
+// decides whether an entry declares a server or only overrides one (AFILE-05).
 
 import { readFile } from "node:fs/promises";
 
@@ -14,7 +15,7 @@ import stripJsonComments from "strip-json-comments";
 
 import { McpConfigFileError } from "../../shared/errors-bridges.ts";
 
-import { isOwnedBy } from "./marker.ts";
+import { CLAUDE_MARKETPLACE_MARKER_KEY, isOwnedBy } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
 import type { RawMcpDoc } from "./types.ts";
@@ -29,6 +30,14 @@ export type McpServerKey = "mcpServers" | "mcp-servers";
 export const ADAPTER_SERVER_KEYS: readonly [McpServerKey, ...McpServerKey[]] = Object.freeze([
   "mcpServers",
   "mcp-servers",
+] as const);
+
+/**
+ * The server key Pi's own `mcp.json` files hold. pi-mcp-adapter reads those
+ * files with `mcpServers` only (AFILE-05).
+ */
+export const PI_MCP_SERVER_KEYS: readonly [McpServerKey, ...McpServerKey[]] = Object.freeze([
+  "mcpServers",
 ] as const);
 
 /** One MCP config file as the bridge read it. */
@@ -47,12 +56,43 @@ export interface McpConfigDoc {
 export interface McpServerPartition {
   /** The plugin's marked entries across every server map; the selected key wins a name clash. */
   readonly ours: Readonly<Record<string, unknown>>;
-  /** Every other entry under the selected key, the one the adapter loads. */
+  /**
+   * Marker-less entries under the selected key that define no transport: user
+   * overrides such as a `/mcp-adapter disable` stub. A staged entry replaces one.
+   */
+  readonly overlays: Readonly<Record<string, unknown>>;
+  /**
+   * Every other entry under the selected key, the one the adapter loads:
+   * marker-less full definitions and entries marked for another plugin.
+   */
   readonly theirs: Readonly<Record<string, unknown>>;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Reports whether an entry is a full server definition: a plain object whose
+ * `command`, `url` or `socket` is a string. This is the transport test
+ * pi-mcp-adapter's `mergeServerMaps` applies; any other entry only overrides
+ * fields of a lower definition, so it declares no server (AFILE-05).
+ */
+export function isFullDefinition(entry: unknown): boolean {
+  return (
+    isPlainObject(entry) &&
+    (typeof entry.command === "string" ||
+      typeof entry.url === "string" ||
+      typeof entry.socket === "string")
+  );
+}
+
+function isOverlay(entry: unknown): boolean {
+  return (
+    isPlainObject(entry) &&
+    !Object.hasOwn(entry, CLAUDE_MARKETPLACE_MARKER_KEY) &&
+    !isFullDefinition(entry)
+  );
 }
 
 function emptyConfig(serverKey: McpServerKey, hadComments: boolean): McpConfigDoc {
@@ -136,12 +176,30 @@ export async function readMcpConfigDoc(
   return { doc: parsed, serverKey, serverMaps, hadComments };
 }
 
-function selectedKeyFirst(
-  config: McpConfigDoc,
-): Array<[McpServerKey, Readonly<Record<string, unknown>>]> {
-  const others = [...config.serverMaps].filter(([key]) => key !== config.serverKey);
+function selectedKeyFirst(config: McpConfigDoc): Array<Readonly<Record<string, unknown>>> {
+  const others = [...config.serverMaps]
+    .filter(([key]) => key !== config.serverKey)
+    .map(([, servers]) => servers);
   const selected = config.serverMaps.get(config.serverKey);
-  return selected === undefined ? others : [[config.serverKey, selected], ...others];
+  return selected === undefined ? others : [selected, ...others];
+}
+
+/** The plugin's marked entries across every server map; the selected key wins a name clash. */
+function ownedServers(
+  config: McpConfigDoc,
+  pluginName: string,
+  marketplaceName: string,
+): Record<string, unknown> {
+  const ours: Record<string, unknown> = {};
+  for (const servers of selectedKeyFirst(config)) {
+    for (const [name, entry] of Object.entries(servers)) {
+      if (isOwnedBy(entry, pluginName, marketplaceName) && !Object.hasOwn(ours, name)) {
+        safeSet(ours, name, entry);
+      }
+    }
+  }
+
+  return ours;
 }
 
 /**
@@ -154,31 +212,34 @@ export function partitionServers(
   pluginName: string,
   marketplaceName: string,
 ): McpServerPartition {
-  const ours: Record<string, unknown> = {};
+  const overlays: Record<string, unknown> = {};
   const theirs: Record<string, unknown> = {};
-  for (const [key, servers] of selectedKeyFirst(config)) {
-    for (const [name, entry] of Object.entries(servers)) {
-      if (!isOwnedBy(entry, pluginName, marketplaceName)) {
-        if (key === config.serverKey) {
-          safeSet(theirs, name, entry);
-        }
-      } else if (!Object.hasOwn(ours, name)) {
-        safeSet(ours, name, entry);
-      }
+  const selected = config.serverMaps.get(config.serverKey) ?? {};
+  for (const [name, entry] of Object.entries(selected)) {
+    if (!isOwnedBy(entry, pluginName, marketplaceName)) {
+      safeSet(isOverlay(entry) ? overlays : theirs, name, entry);
     }
   }
 
-  return { ours, theirs };
+  return { ours: ownedServers(config, pluginName, marketplaceName), overlays, theirs };
 }
 
-function withoutOwned(
+/**
+ * Keeps the entries the plugin does not own. An overlay under a name in
+ * `replaced` is dropped too, so the staged entry takes its place.
+ */
+function keptServers(
   servers: Readonly<Record<string, unknown>>,
   pluginName: string,
   marketplaceName: string,
+  replaced: Readonly<Record<string, unknown>>,
 ): Record<string, unknown> {
   const kept: Record<string, unknown> = {};
   for (const [name, entry] of Object.entries(servers)) {
-    if (!isOwnedBy(entry, pluginName, marketplaceName)) {
+    const dropped =
+      isOwnedBy(entry, pluginName, marketplaceName) ||
+      (Object.hasOwn(replaced, name) && isOverlay(entry));
+    if (!dropped) {
       safeSet(kept, name, entry);
     }
   }
@@ -189,9 +250,11 @@ function withoutOwned(
 /**
  * Composes the next document: the plugin's marked entries leave every server
  * map, and `entries` follow the kept entries of the selected key, in their
- * own order. Every existing top-level key keeps its position. The selected
- * key is added only when it is absent and `entries` is non-empty, so no empty
- * server map is introduced (AFILE-01, AFILE-03).
+ * own order. An overlay under the selected key that shares a name with an
+ * entry is dropped, so the entry replaces it (AFILE-05). Every existing
+ * top-level key keeps its position. The selected key is added only when it is
+ * absent and `entries` is non-empty, so no empty server map is introduced
+ * (AFILE-01, AFILE-03).
  */
 export function withPluginServers(
   config: McpConfigDoc,
@@ -202,9 +265,10 @@ export function withPluginServers(
   const next: Record<string, unknown> = { ...config.doc };
   let selected: Record<string, unknown> | undefined;
   for (const [key, servers] of config.serverMaps) {
-    const kept = withoutOwned(servers, pluginName, marketplaceName);
+    const isSelected = key === config.serverKey;
+    const kept = keptServers(servers, pluginName, marketplaceName, isSelected ? entries : {});
     next[key] = kept;
-    if (key === config.serverKey) {
+    if (isSelected) {
       selected = kept;
     }
   }

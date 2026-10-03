@@ -14,7 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -3036,6 +3036,42 @@ test("AFILE-02: an MCP install over an unparseable mcp-adapter.json fails and ke
         },
       ]);
       assert.equal(notifications[0]?.message.includes("sk-secret-abc"), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and names the file the adapter would load", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile05-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      const agentsPath = path.join(homedir(), ".agents", "mcp.json");
+      await mkdir(path.dirname(agentsPath), { recursive: true });
+      await writeFile(agentsPath, '{"mcpServers":{"server1":{"command":"user-server"}}}');
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const { ctx, pi, notifications } = makeCtx();
+
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      assert.deepEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed)\n" +
+            `    cause: Refusing to stage MCP server "server1": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+        },
+      ]);
+      assert.equal(await pathExists(adapterPath), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

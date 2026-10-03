@@ -479,6 +479,59 @@ test("AFILE-01: uninstall removes only the plugin's marked entries from mcp-adap
   });
 });
 
+test("AFILE-01: uninstall also removes the plugin's legacy mcp.json entries", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-afile01-legacy-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      await writeFile(
+        locations.mcpJsonPath,
+        JSON.stringify({
+          mcpServers: {
+            "uni-server": {
+              command: "node",
+              _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            },
+            mine: { command: "my-server" },
+          },
+        }),
+      );
+      const { ctx, pi } = makeCtx();
+
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(
+        await readFile(locations.mcpJsonPath, "utf8"),
+        `{
+  "mcpServers": {
+    "mine": {
+      "command": "my-server"
+    }
+  }
+}
+`,
+      );
+      assert.equal(
+        await readFile(locations.mcpAdapterJsonPath, "utf8"),
+        `{
+  "mcpServers": {}
+}
+`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 /** A surviving plugin data tree: its inventory plus the seeded session bytes. */
 interface DataTree {
   readonly tree: readonly string[];

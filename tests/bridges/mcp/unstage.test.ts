@@ -549,3 +549,167 @@ test("leaves the first rewritten document unchanged on a second unstage", async 
     },
   );
 });
+
+test("AFILE-01: removes the plugin's legacy mcp.json entries and keeps foreign entries", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-legacy-");
+  const storedBytes =
+    '{"mcpServers":{"owned":{"command":"old","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}},"user":{"command":"user"}},"mcp-servers":{"unread":{"command":"unread","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n';
+  const expectedBytes = `{
+  "mcpServers": {
+    "user": {
+      "command": "user"
+    }
+  },
+  "mcp-servers": {
+    "unread": {
+      "command": "unread",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "official"
+      }
+    }
+  }
+}
+`;
+  await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+  await writeFile(locations.mcpJsonPath, storedBytes, "utf8");
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+  const legacyBytes = await readFile(locations.mcpJsonPath, "utf8");
+  const adapterMetadata = await stat(locations.mcpAdapterJsonPath).catch((error: unknown) => error);
+
+  // assert
+  assert.deepStrictEqual(unstage, { removedNames: ["owned"], warnings: [] });
+  assert.strictEqual(legacyBytes, expectedBytes);
+  assert.ok(adapterMetadata instanceof Error);
+  assert.strictEqual((adapterMetadata as NodeJS.ErrnoException).code, "ENOENT");
+});
+
+test("AFILE-01: lists adapter names first, then legacy names not already listed", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-legacy-order-");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '{"mcpServers":{"first":{"command":"first","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}},"shared":{"command":"shared","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+    "utf8",
+  );
+  await writeFile(
+    locations.mcpJsonPath,
+    '{"mcpServers":{"shared":{"command":"shared","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}},"legacy":{"command":"legacy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+    "utf8",
+  );
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+  const adapterBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+  const legacyBytes = await readFile(locations.mcpJsonPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(unstage, {
+    removedNames: ["first", "shared", "legacy"],
+    warnings: [],
+  });
+  assert.strictEqual(adapterBytes, '{\n  "mcpServers": {}\n}\n');
+  assert.strictEqual(legacyBytes, '{\n  "mcpServers": {}\n}\n');
+});
+
+test("AFILE-01: leaves a legacy mcp.json with no owned entry unwritten", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-legacy-foreign-");
+  const legacyStoredBytes = '{"mcpServers":{"user":{"command":"user"}}}\n';
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '{"mcpServers":{"owned":{"command":"owned","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+    "utf8",
+  );
+  await writeFile(locations.mcpJsonPath, legacyStoredBytes, "utf8");
+  const legacyStoredMetadata = await stat(locations.mcpJsonPath, { bigint: true });
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+  const legacyBytes = await readFile(locations.mcpJsonPath, "utf8");
+  const legacyMetadata = await stat(locations.mcpJsonPath, { bigint: true });
+
+  // assert
+  assert.deepStrictEqual(unstage, { removedNames: ["owned"], warnings: [] });
+  assert.strictEqual(legacyBytes, legacyStoredBytes);
+  assert.deepStrictEqual(
+    { ino: legacyMetadata.ino, mtimeNs: legacyMetadata.mtimeNs },
+    { ino: legacyStoredMetadata.ino, mtimeNs: legacyStoredMetadata.mtimeNs },
+  );
+});
+
+test("AFILE-01: an unparseable legacy mcp.json refuses before the adapter file is written", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-legacy-invalid-");
+  const adapterStoredBytes =
+    '{"mcpServers":{"owned":{"command":"owned","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n';
+  const legacyStoredBytes = '{"mcpServers":{"owned":}\n';
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, adapterStoredBytes, "utf8");
+  await writeFile(locations.mcpJsonPath, legacyStoredBytes, "utf8");
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      unstageMcpServers({
+        locations,
+        marketplaceName: "official",
+        pluginName: "acme",
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof McpConfigFileError);
+      assert.deepStrictEqual(
+        { filePath: error.filePath, defect: error.defect, cause: error.cause },
+        { filePath: locations.mcpJsonPath, defect: "invalid-jsonc", cause: undefined },
+      );
+      return true;
+    },
+  );
+  assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), adapterStoredBytes);
+  assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), legacyStoredBytes);
+});
+
+test("AFILE-01: creates no legacy mcp.json when none exists", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-legacy-absent-");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '{"mcpServers":{"owned":{"command":"owned","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+    "utf8",
+  );
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+  const legacyMetadata = await stat(locations.mcpJsonPath).catch((error: unknown) => error);
+
+  // assert
+  assert.deepStrictEqual(unstage, { removedNames: ["owned"], warnings: [] });
+  assert.strictEqual(
+    await readFile(locations.mcpAdapterJsonPath, "utf8"),
+    '{\n  "mcpServers": {}\n}\n',
+  );
+  assert.ok(legacyMetadata instanceof Error);
+  assert.strictEqual((legacyMetadata as NodeJS.ErrnoException).code, "ENOENT");
+});

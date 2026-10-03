@@ -5,8 +5,9 @@
 // The prepare phase reads the scope's `mcp-adapter.json` with
 // pi-mcp-adapter's grammar and refuses a file it cannot read (AFILE-02). It
 // partitions existing entries into ours-vs-theirs by `_piClaudeMarketplace`
-// marker across both server keys, runs the four-slot cross-slot collision
-// check (MC-4 / RN-5), short-circuits AS-8 noops, stamps the new entries
+// marker across both server keys, checks every new name against the full
+// definitions in pi-mcp-adapter's nine config sources (AFILE-05, MC-4, RN-5),
+// short-circuits AS-8 noops, stamps the new entries
 // with the marker (MC-5), and builds the next doc IN MEMORY only, writing
 // under the key the adapter loads (AFILE-03). Commit is a single
 // `atomicWriteJson` -- no per-file rename loop, no EXDEV risk, no
@@ -36,8 +37,8 @@ import {
   withPluginServers,
   type McpConfigDoc,
 } from "./adapter-doc.ts";
-import { loadEffectiveServerNames } from "./collision-slots.ts";
-import { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker } from "./marker.ts";
+import { walkMcpSources, type McpSourceWalk } from "./collision-slots.ts";
+import { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker, isOwnedBy } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 import { substituteAndInject, type McpSubstitutionContext } from "./substitute.ts";
 
@@ -58,30 +59,67 @@ const mcpReplacementInternals = new WeakMap<
   McpReplacementInternals
 >();
 
-async function assertNoMcpCollisions(input: {
-  cwd: string;
-  names: readonly string[];
-  ours: Readonly<Record<string, unknown>>;
-  theirs: Readonly<Record<string, unknown>>;
-  targetPath: string;
-}): Promise<void> {
-  if (input.names.length === 0) {
+interface McpCollisionCheck {
+  readonly cwd: string;
+  readonly names: readonly string[];
+  readonly ours: Readonly<Record<string, unknown>>;
+  readonly theirs: Readonly<Record<string, unknown>>;
+  readonly targetPath: string;
+  readonly pluginName: string;
+  readonly marketplaceName: string;
+}
+
+/**
+ * The sources other than the plugin's own entries that define `name` in full.
+ * An entry marked for the same plugin never counts, whichever source holds
+ * it, because the adapter still loads one effective server (AFILE-05). The
+ * target file counts when a foreign entry there holds the name.
+ */
+function otherDeclarers(
+  walk: McpSourceWalk,
+  check: McpCollisionCheck,
+  name: string,
+): readonly string[] {
+  const declarers = (walk.declarations.get(name) ?? [])
+    .filter(
+      (declaration) =>
+        declaration.sourcePath !== check.targetPath &&
+        !isOwnedBy(declaration.entry, check.pluginName, check.marketplaceName),
+    )
+    .map((declaration) => declaration.sourcePath);
+  return Object.hasOwn(check.theirs, name) ? [...declarers, check.targetPath] : declarers;
+}
+
+function precedenceOf(walk: McpSourceWalk, sourcePath: string): number {
+  return walk.sourcePaths.indexOf(sourcePath);
+}
+
+/**
+ * AFILE-05 / MC-4: refuses a new name that another source already defines in
+ * full. The refusal names the highest-precedence other declarer and the
+ * source pi-mcp-adapter would load, which is the target when it ranks higher.
+ * An owned entry in the target is a self-replace and stays exempt.
+ */
+async function assertNoMcpCollisions(check: McpCollisionCheck): Promise<void> {
+  if (check.names.length === 0) {
     return;
   }
 
-  const effective = await loadEffectiveServerNames(input.cwd);
-  for (const name of input.names) {
-    if (Object.hasOwn(input.ours, name)) {
+  const walk = await walkMcpSources(check.cwd);
+  for (const name of check.names) {
+    if (Object.hasOwn(check.ours, name)) {
       continue;
     }
 
-    const owningPath = effective.get(name);
-    if (owningPath !== undefined && owningPath !== input.targetPath) {
-      throw new McpServerCollisionError(name, owningPath);
-    }
-
-    if (Object.hasOwn(input.theirs, name)) {
-      throw new McpServerCollisionError(name, input.targetPath);
+    const owningPath = [...otherDeclarers(walk, check, name)]
+      .sort((left, right) => precedenceOf(walk, left) - precedenceOf(walk, right))
+      .at(-1);
+    if (owningPath !== undefined) {
+      const winningPath =
+        precedenceOf(walk, owningPath) > precedenceOf(walk, check.targetPath)
+          ? owningPath
+          : check.targetPath;
+      throw new McpServerCollisionError(name, owningPath, winningPath);
     }
   }
 }
@@ -166,17 +204,18 @@ async function readTargetConfig(
 
 /**
  * MC-6 prepare: in-memory only. Reads the scope's `mcp-adapter.json`,
- * partitions existing entries by marker across both server keys, runs the
- * MC-4 cross-slot collision check (self-replace within own scope is
- * allowed; an owned entry is the exemption), stamps every new entry with
- * the marker (MC-5), and builds the next doc. AS-8 noop short-circuits when
+ * partitions existing entries by marker across both server keys, checks each
+ * new name against the full definitions in pi-mcp-adapter's nine config
+ * sources (AFILE-05, MC-4; the plugin's own marked entries are exempt in every
+ * source), stamps every new entry with the marker (MC-5), and builds the next
+ * doc. A staged entry replaces a marker-less override under its name. AS-8 noop short-circuits when
  * there is nothing new AND nothing previously-ours -- in that case
  * `commitPreparedMcp` writes no file (PRD success criterion: AS-8 noop
  * produces no `mcp-adapter.json`).
  *
  * Throws `McpConfigFileError` when the target cannot be read and there are
- * servers to stage (AFILE-02), and `McpServerCollisionError` on cross-slot
- * conflict.
+ * servers to stage (AFILE-02), and `McpServerCollisionError` when another
+ * source defines a new name in full.
  */
 export async function prepareStageMcpServers(input: StageMcpInput): Promise<PreparedMcpStaging> {
   const { locations, cwd, marketplaceName, pluginName, servers, pluginRoot, pluginData } = input;
@@ -192,14 +231,15 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // Partition existing into ours-vs-theirs by marker (MC-5).
   const { ours, theirs } = partitionServers(config, pluginName, marketplaceName);
 
-  // MC-4 / RN-5 cross-slot collision check. Self-replace inside own scope
-  // is allowed (an owned entry); otherwise any existing declarer wins.
+  // AFILE-05 / MC-4: any other full definition of a new name refuses.
   await assertNoMcpCollisions({
     cwd,
     names: newNames,
     ours,
     theirs,
     targetPath: locations.mcpAdapterJsonPath,
+    pluginName,
+    marketplaceName,
   });
 
   // AS-8 noop: nothing new AND nothing previously-ours. Don't materialize

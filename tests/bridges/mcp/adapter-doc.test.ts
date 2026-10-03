@@ -8,6 +8,7 @@ import stripJsonComments from "strip-json-comments";
 
 import {
   ADAPTER_SERVER_KEYS,
+  isFullDefinition,
   partitionServers,
   readMcpConfigDoc,
   withPluginServers,
@@ -367,6 +368,7 @@ describe("partitionServers", () => {
         shared: { command: "selected", _piClaudeMarketplace: ACME_MARKER },
         old: { command: "old", _piClaudeMarketplace: ACME_MARKER },
       },
+      overlays: {},
       theirs: {
         mine: { command: "mine" },
         other: { command: "other", _piClaudeMarketplace: OTHER_MARKER },
@@ -403,6 +405,7 @@ describe("partitionServers", () => {
       ours: JSON.parse(
         '{"__proto__":{"command":"owned","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}',
       ) as unknown,
+      overlays: {},
       theirs: JSON.parse('{"__proto__":{"command":"foreign"}}') as unknown,
     });
   });
@@ -420,8 +423,70 @@ describe("partitionServers", () => {
     const partition = partitionServers(config, "acme", "catalog");
 
     // assert
-    assert.deepStrictEqual(partition, { ours: {}, theirs: {} });
+    assert.deepStrictEqual(partition, { ours: {}, overlays: {}, theirs: {} });
   });
+
+  test("AFILE-05: splits marker-less overrides from full definitions and foreign marked entries", () => {
+    // arrange
+    const config = {
+      doc: {},
+      serverKey: "mcpServers",
+      serverMaps: new Map([
+        [
+          "mcpServers",
+          {
+            stub: { disabled: true },
+            user: { url: "https://user.example" },
+            otherStub: { disabled: true, _piClaudeMarketplace: OTHER_MARKER },
+            scalar: 5,
+          },
+        ],
+      ]),
+      hadComments: false,
+    } satisfies McpConfigDoc;
+
+    // act
+    const partition = partitionServers(config, "acme", "catalog");
+
+    // assert
+    assert.deepStrictEqual(partition, {
+      ours: {},
+      overlays: { stub: { disabled: true } },
+      theirs: {
+        user: { url: "https://user.example" },
+        otherStub: { disabled: true, _piClaudeMarketplace: OTHER_MARKER },
+        scalar: 5,
+      },
+    });
+  });
+});
+
+describe("isFullDefinition", () => {
+  for (const { label, entry, isFull } of [
+    { label: "a string command", entry: { command: "node" }, isFull: true },
+    { label: "a string url", entry: { url: "https://mcp.example" }, isFull: true },
+    { label: "a string socket", entry: { socket: "/run/mcp.sock" }, isFull: true },
+    {
+      label: "a non-string transport",
+      entry: { command: ["node"], url: 1, socket: null },
+      isFull: false,
+    },
+    { label: "an override with no transport", entry: { disabled: true }, isFull: false },
+    { label: "an array", entry: [{ command: "node" }], isFull: false },
+    { label: "null", entry: null, isFull: false },
+    { label: "a primitive", entry: "node", isFull: false },
+  ]) {
+    test(`AFILE-05: reports ${label} as ${isFull ? "a full definition" : "no full definition"}`, () => {
+      // arrange
+      const expectedIsFull = isFull;
+
+      // act
+      const reportedIsFull = isFullDefinition(entry);
+
+      // assert
+      assert.strictEqual(reportedIsFull, expectedIsFull);
+    });
+  }
 });
 
 describe("withPluginServers", () => {
@@ -539,6 +604,52 @@ describe("withPluginServers", () => {
     assert.strictEqual(
       JSON.stringify(next),
       '{"settings":{},"mcpServers":{"server":{"command":"server"}}}',
+    );
+  });
+
+  test("AFILE-05: replaces an overlay under a staged name and appends the entry after the kept entries", () => {
+    // arrange
+    const servers = {
+      server: { disabled: true },
+      mine: { command: "mine" },
+    };
+    const config = {
+      doc: { mcpServers: servers },
+      serverKey: "mcpServers",
+      serverMaps: new Map([["mcpServers", servers]]),
+      hadComments: false,
+    } satisfies McpConfigDoc;
+
+    // act
+    const next = withPluginServers(config, "acme", "catalog", { server: { command: "server" } });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      '{"mcpServers":{"mine":{"command":"mine"},"server":{"command":"server"}}}',
+    );
+  });
+
+  test("keeps an overlay under a staged name in the key the adapter does not load", () => {
+    // arrange
+    const legacy = { server: { disabled: true } };
+    const config = {
+      doc: { mcpServers: {}, "mcp-servers": legacy },
+      serverKey: "mcpServers",
+      serverMaps: new Map<McpServerKey, Readonly<Record<string, unknown>>>([
+        ["mcpServers", {}],
+        ["mcp-servers", legacy],
+      ]),
+      hadComments: false,
+    } satisfies McpConfigDoc;
+
+    // act
+    const next = withPluginServers(config, "acme", "catalog", { server: { command: "server" } });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      '{"mcpServers":{"server":{"command":"server"}},"mcp-servers":{"server":{"disabled":true}}}',
     );
   });
 

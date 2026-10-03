@@ -18,6 +18,8 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
+import type { PreparedMcpStaging } from "../../../extensions/pi-claude-marketplace/bridges/mcp/types.ts";
+
 async function createProjectScope(
   t: TestContext,
   prefix: string,
@@ -38,6 +40,57 @@ async function pathExists(filePath: string): Promise<boolean> {
     throw error;
   }
 }
+
+async function writeSource(filePath: string, text: string): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, text);
+}
+
+/** Prepares the `acme` plugin's single `server` entry, a URL transport with no env injection. */
+function prepareAcme(
+  locations: ReturnType<typeof locationsFor>,
+  cwd: string,
+): Promise<PreparedMcpStaging> {
+  return prepareStageMcpServers({
+    locations,
+    cwd,
+    marketplaceName: "catalog",
+    pluginName: "acme",
+    pluginRoot: path.join(cwd, "plugins", "acme"),
+    pluginData: path.join(cwd, "data", "acme"),
+    servers: { server: { url: "https://acme.example/mcp" } },
+  });
+}
+
+async function rejectionOf(pending: Promise<unknown>): Promise<unknown> {
+  return pending.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+}
+
+function collisionFields(collision: McpServerCollisionError): Record<string, string> {
+  return {
+    name: collision.name,
+    message: collision.message,
+    serverName: collision.serverName,
+    owningPath: collision.owningPath,
+    winningPath: collision.winningPath,
+  };
+}
+
+const ACME_ONLY_BYTES = `{
+  "mcpServers": {
+    "server": {
+      "url": "https://acme.example/mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
 
 describe("prepareStageMcpServers", () => {
   test("returns a complete frozen no-op for an empty resolved server set", async (t) => {
@@ -64,50 +117,6 @@ describe("prepareStageMcpServers", () => {
     assert.strictEqual(Object.isFrozen(prepared.result.recorded), true);
     assert.strictEqual(Object.isFrozen(prepared.result.warnings), true);
     assert.strictEqual(await pathExists(locations.mcpAdapterJsonPath), false);
-  });
-
-  test("rejects a project server that collides with an ambient user-scope MCP server", async (t) => {
-    // arrange -- same hermetic environment for both the ambient user-scope
-    // file and the project scope, so the ambient file lands in the exact
-    // pi-user-scope collision slot the project stage checks (MC-4).
-    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-ambient-");
-    const ambientMcpPath = locationsFor("user", "/ambient-cwd").mcpJsonPath;
-    const ambientBytes = '{"mcpServers":{"ambient":{"command":"host-only"}}}\n';
-    await mkdir(path.dirname(ambientMcpPath), { recursive: true });
-    await writeFile(ambientMcpPath, ambientBytes);
-    const locations = locationsFor("project", cwd);
-
-    // act
-    const collision = await prepareStageMcpServers({
-      locations,
-      cwd,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot: path.join(cwd, "plugins", "acme"),
-      pluginData: path.join(cwd, "data", "acme"),
-      servers: { ambient: { command: "case-owned" } },
-    }).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-
-    // assert
-    assert.ok(collision instanceof McpServerCollisionError);
-    assert.deepStrictEqual(
-      {
-        name: collision.name,
-        message: collision.message,
-        serverName: collision.serverName,
-        owningPath: collision.owningPath,
-      },
-      {
-        name: "McpServerCollisionError",
-        message: `Refusing to stage MCP server "ambient": already exists in ${ambientMcpPath}.`,
-        serverName: "ambient",
-        owningPath: ambientMcpPath,
-      },
-    );
-    assert.strictEqual(await readFile(ambientMcpPath, "utf8"), ambientBytes);
   });
 
   test("replaces owned servers and preserves complete foreign content", async (t) => {
@@ -631,83 +640,234 @@ describe("prepareStageMcpServers", () => {
     );
   });
 
-  test("rejects a foreign server in the scoped document", async (t) => {
+  test("AFILE-05: a full definition in ~/.agents/mcp.json refuses a user-scope install", async (t) => {
     // arrange
-    const { cwd, locations } = await createProjectScope(t, "mcp-stage-scope-collision-");
-    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
-    await writeFile(
-      locations.mcpAdapterJsonPath,
-      '{"mcpServers":{"duplicate":{"command":"foreign","_piClaudeMarketplace":{"plugin":"other","marketplace":"catalog"}}}}',
-    );
+    const { cwd, home } = await createHermeticEnvironment(t, "mcp-stage-agents-collision-");
+    const locations = locationsFor("user", cwd);
+    const agentsPath = path.join(home, ".agents", "mcp.json");
+    await writeSource(agentsPath, '{"mcpServers":{"server":{"command":"user"}}}');
 
     // act
-    const collision = await prepareStageMcpServers({
-      locations,
-      cwd,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot: path.join(cwd, "plugins", "acme"),
-      pluginData: path.join(cwd, "data", "acme"),
-      servers: { duplicate: { command: "owned" } },
-    }).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const collision = await rejectionOf(prepareAcme(locations, cwd));
 
     // assert
     assert.ok(collision instanceof McpServerCollisionError);
-    assert.deepStrictEqual(
-      {
-        name: collision.name,
-        message: collision.message,
-        serverName: collision.serverName,
-        owningPath: collision.owningPath,
-      },
-      {
-        name: "McpServerCollisionError",
-        message: `Refusing to stage MCP server "duplicate": already exists in ${locations.mcpAdapterJsonPath}.`,
-        serverName: "duplicate",
-        owningPath: locations.mcpAdapterJsonPath,
-      },
-    );
+    assert.deepStrictEqual(collisionFields(collision), {
+      name: "McpServerCollisionError",
+      message: `Refusing to stage MCP server "server": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
+      serverName: "server",
+      owningPath: agentsPath,
+      winningPath: locations.mcpAdapterJsonPath,
+    });
+    assert.strictEqual(await pathExists(locations.mcpAdapterJsonPath), false);
   });
 
-  test("rejects a server declared in an earlier collision slot", async (t) => {
+  test("AFILE-05: a full definition in the project .mcp.json refuses a user-scope install", async (t) => {
     // arrange
-    const { cwd, locations } = await createProjectScope(t, "mcp-stage-slot-collision-");
-    const earlierSlot = path.join(cwd, ".mcp.json");
-    await writeFile(earlierSlot, '{"mcpServers":{"duplicate":{"command":"foreign"}}}');
+    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-project-collision-");
+    const locations = locationsFor("user", cwd);
+    const projectPath = path.join(cwd, ".mcp.json");
+    await writeSource(projectPath, '{"mcpServers":{"server":{"url":"https://project.example"}}}');
 
     // act
-    const collision = await prepareStageMcpServers({
-      locations,
-      cwd,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot: path.join(cwd, "plugins", "acme"),
-      pluginData: path.join(cwd, "data", "acme"),
-      servers: { duplicate: { command: "owned" } },
-    }).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const collision = await rejectionOf(prepareAcme(locations, cwd));
 
     // assert
     assert.ok(collision instanceof McpServerCollisionError);
-    assert.deepStrictEqual(
-      {
-        name: collision.name,
-        message: collision.message,
-        serverName: collision.serverName,
-        owningPath: collision.owningPath,
-      },
-      {
-        name: "McpServerCollisionError",
-        message: `Refusing to stage MCP server "duplicate": already exists in ${earlierSlot}.`,
-        serverName: "duplicate",
-        owningPath: earlierSlot,
-      },
+    assert.deepStrictEqual(collisionFields(collision), {
+      name: "McpServerCollisionError",
+      message: `Refusing to stage MCP server "server": ${projectPath} already defines it, and pi-mcp-adapter would load the definition in ${projectPath}.`,
+      serverName: "server",
+      owningPath: projectPath,
+      winningPath: projectPath,
+    });
+  });
+
+  test("AFILE-05: a marker-less full definition in the target file refuses", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-target-collision-");
+    await writeSource(locations.mcpAdapterJsonPath, '{"mcpServers":{"server":{"command":"user"}}}');
+
+    // act
+    const collision = await rejectionOf(prepareAcme(locations, cwd));
+
+    // assert
+    assert.ok(collision instanceof McpServerCollisionError);
+    assert.deepStrictEqual(collisionFields(collision), {
+      name: "McpServerCollisionError",
+      message: `Refusing to stage MCP server "server": ${locations.mcpAdapterJsonPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
+      serverName: "server",
+      owningPath: locations.mcpAdapterJsonPath,
+      winningPath: locations.mcpAdapterJsonPath,
+    });
+  });
+
+  test("AFILE-05: another plugin's marked partial entry in the target file refuses", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-foreign-partial-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"server":{"disabled":true,"_piClaudeMarketplace":{"plugin":"other","marketplace":"catalog"}}}}',
     );
+
+    // act
+    const collision = await rejectionOf(prepareAcme(locations, cwd));
+
+    // assert
+    assert.ok(collision instanceof McpServerCollisionError);
+    assert.deepStrictEqual(collisionFields(collision), {
+      name: "McpServerCollisionError",
+      message: `Refusing to stage MCP server "server": ${locations.mcpAdapterJsonPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
+      serverName: "server",
+      owningPath: locations.mcpAdapterJsonPath,
+      winningPath: locations.mcpAdapterJsonPath,
+    });
+  });
+
+  test("AFILE-05: names the highest-precedence declarer when several sources define the name", async (t) => {
+    // arrange
+    const { cwd, home } = await createHermeticEnvironment(t, "mcp-stage-many-collision-");
+    const locations = locationsFor("user", cwd);
+    const piProjectPath = path.join(cwd, ".pi", "mcp.json");
+    await writeSource(
+      path.join(home, ".config", "mcp", "mcp.json"),
+      '{"mcpServers":{"server":{"command":"shared"}}}',
+    );
+    await writeSource(piProjectPath, '{"mcpServers":{"server":{"command":"pi-project"}}}');
+    await writeSource(locations.mcpAdapterJsonPath, '{"mcpServers":{"server":{"command":"user"}}}');
+
+    // act
+    const collision = await rejectionOf(prepareAcme(locations, cwd));
+
+    // assert
+    assert.ok(collision instanceof McpServerCollisionError);
+    assert.deepStrictEqual(collisionFields(collision), {
+      name: "McpServerCollisionError",
+      message: `Refusing to stage MCP server "server": ${piProjectPath} already defines it, and pi-mcp-adapter would load the definition in ${piProjectPath}.`,
+      serverName: "server",
+      owningPath: piProjectPath,
+      winningPath: piProjectPath,
+    });
+  });
+
+  test("AFILE-05: a disable stub in the project mcp-adapter.json does not block a user-scope install", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-stub-");
+    const locations = locationsFor("user", cwd);
+    await writeSource(
+      path.join(cwd, ".pi", "mcp-adapter.json"),
+      '{"mcpServers":{"server":{"disabled":true}}}',
+    );
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, ACME_ONLY_BYTES);
+  });
+
+  test("AFILE-05: the plugin's own entry in the same scope's legacy mcp.json does not block its update", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-own-legacy-");
+    await writeSource(
+      locations.mcpJsonPath,
+      '{"mcpServers":{"server":{"command":"old","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+    );
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, ACME_ONLY_BYTES);
+  });
+
+  test("AFILE-05: the plugin's own entry in the other scope's mcp-adapter.json does not block its install", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-own-other-adapter-");
+    await writeSource(
+      locationsFor("user", cwd).mcpAdapterJsonPath,
+      '{"mcpServers":{"server":{"command":"user-copy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+    );
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, ACME_ONLY_BYTES);
+  });
+
+  test("AFILE-05: the plugin's own entry in the other scope's legacy mcp.json does not block its install", async (t) => {
+    // arrange
+    const { agentDir, cwd } = await createHermeticEnvironment(t, "mcp-stage-own-other-legacy-");
+    const locations = locationsFor("project", cwd);
+    await writeSource(
+      path.join(agentDir, "mcp.json"),
+      '{"mcpServers":{"server":{"command":"user-copy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+    );
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, ACME_ONLY_BYTES);
+  });
+
+  test("AFILE-05: the plugin's own entry in an ancestor mcp-adapter.json does not block its install", async (t) => {
+    // arrange
+    const { home } = await createHermeticEnvironment(t, "mcp-stage-own-ancestor-");
+    const cwd = path.join(home, "work", "repo");
+    await mkdir(cwd, { recursive: true });
+    const locations = locationsFor("project", cwd);
+    await writeSource(
+      path.join(home, ".agents", "mcp.json"),
+      '{"settings":{"ancestorConfigRoots":["~/work"]}}',
+    );
+    await writeSource(
+      path.join(home, "work", ".pi", "mcp-adapter.json"),
+      '{"mcpServers":{"server":{"command":"ancestor-copy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+    );
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, ACME_ONLY_BYTES);
+  });
+
+  test("AFILE-05: the staged entry replaces a marker-less overlay under its name in the target file", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-overlay-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"server":{"disabled":true},"mine":{"command":"mine"}}}',
+    );
+    const expectedBytes = `{
+  "mcpServers": {
+    "mine": {
+      "command": "mine"
+    },
+    "server": {
+      "url": "https://acme.example/mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, expectedBytes);
   });
 
   test("omits project substitution and injection in a user scope", async (t) => {

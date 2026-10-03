@@ -222,13 +222,14 @@ describe("AgentOwnershipConflictError", () => {
 });
 
 describe("McpServerCollisionError", () => {
-  test("exposes the complete MCP collision refusal", () => {
+  test("AFILE-05: exposes the owning and winning sources of an MCP collision refusal", () => {
     // arrange
     const serverName = "acme-server";
-    const owningPath = "/scope/mcp.json";
+    const owningPath = "/home/.agents/mcp.json";
+    const winningPath = "/home/.pi/agent/mcp-adapter.json";
 
     // act
-    const error = new McpServerCollisionError(serverName, owningPath);
+    const error = new McpServerCollisionError(serverName, owningPath, winningPath);
 
     // assert
     assert.ok(error instanceof McpServerCollisionError);
@@ -239,26 +240,37 @@ describe("McpServerCollisionError", () => {
         message: error.message,
         serverName: error.serverName,
         owningPath: error.owningPath,
+        winningPath: error.winningPath,
         cause: error.cause,
       },
       {
         name: "McpServerCollisionError",
-        message: 'Refusing to stage MCP server "acme-server": already exists in /scope/mcp.json.',
+        message:
+          'Refusing to stage MCP server "acme-server": /home/.agents/mcp.json already defines it, and pi-mcp-adapter would load the definition in /home/.pi/agent/mcp-adapter.json.',
         serverName: "acme-server",
-        owningPath: "/scope/mcp.json",
+        owningPath: "/home/.agents/mcp.json",
+        winningPath: "/home/.pi/agent/mcp-adapter.json",
         cause: undefined,
       },
     );
   });
 
-  test("keeps adjacent server names and owning paths distinct", () => {
+  test("keeps adjacent server names, owning paths and winning paths distinct", () => {
     // arrange
     const firstServerName = "server";
     const secondServerName = "server-1";
 
     // act
-    const firstError = new McpServerCollisionError(firstServerName, "/scope/mcp.json");
-    const secondError = new McpServerCollisionError(secondServerName, "/scope/mcp-1.json");
+    const firstError = new McpServerCollisionError(
+      firstServerName,
+      "/scope/mcp.json",
+      "/scope/mcp-adapter.json",
+    );
+    const secondError = new McpServerCollisionError(
+      secondServerName,
+      "/scope/mcp-1.json",
+      "/scope/mcp-1.json",
+    );
 
     // assert
     assert.deepStrictEqual(
@@ -267,23 +279,29 @@ describe("McpServerCollisionError", () => {
           message: firstError.message,
           serverName: firstError.serverName,
           owningPath: firstError.owningPath,
+          winningPath: firstError.winningPath,
         },
         {
           message: secondError.message,
           serverName: secondError.serverName,
           owningPath: secondError.owningPath,
+          winningPath: secondError.winningPath,
         },
       ],
       [
         {
-          message: 'Refusing to stage MCP server "server": already exists in /scope/mcp.json.',
+          message:
+            'Refusing to stage MCP server "server": /scope/mcp.json already defines it, and pi-mcp-adapter would load the definition in /scope/mcp-adapter.json.',
           serverName: "server",
           owningPath: "/scope/mcp.json",
+          winningPath: "/scope/mcp-adapter.json",
         },
         {
-          message: 'Refusing to stage MCP server "server-1": already exists in /scope/mcp-1.json.',
+          message:
+            'Refusing to stage MCP server "server-1": /scope/mcp-1.json already defines it, and pi-mcp-adapter would load the definition in /scope/mcp-1.json.',
           serverName: "server-1",
           owningPath: "/scope/mcp-1.json",
+          winningPath: "/scope/mcp-1.json",
         },
       ],
     );

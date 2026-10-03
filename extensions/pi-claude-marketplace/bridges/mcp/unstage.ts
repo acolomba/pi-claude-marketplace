@@ -7,41 +7,59 @@
 // the names that were removed (AFILE-01). A marker-less entry under one of
 // the plugin's names stays: it is user-authored.
 //
-// MC-7 tolerances (no write):
-//   - Missing `mcp-adapter.json` (ENOENT/ENOTDIR). Must NOT materialize
-//     the file just to write an empty one back.
+// The scope's legacy `mcp.json` holds entries written before the bridge moved
+// to `mcp-adapter.json`. Unstage removes the plugin's entries there too, by
+// marker and under `mcpServers` only, the key Pi's `mcp.json` holds. Both
+// files are read before either is written, so a refusal on either file
+// leaves both unchanged. The adapter file is written first. A crash between
+// the two writes leaves the legacy entries for the next unstage to remove
+// (NFR-3).
+//
+// MC-7 tolerances, per file (no write):
+//   - Missing file (ENOENT/ENOTDIR). Must NOT materialize the file just to
+//     write an empty one back.
 //   - No server key on an otherwise-valid doc.
 //   - Nothing to remove (no entries match the tuple). We do NOT re-write
 //     the file in that case (PRD §5.7 quiet-on-noop).
 //   - A non-object top level: no server in it can be ours, and the user's
 //     structure is none of the unstage path's business.
 //
-// Refusals (typed `McpConfigFileError`, no write): invalid JSONC, and a
-// present server key whose value is not an object. When the user-visible
-// file is broken, unstage surfaces the breakage rather than mask it
-// (AFILE-02).
+// Refusals (typed `McpConfigFileError`, no write to either file): invalid
+// JSONC, and a present server key whose value is not an object. When the
+// user-visible file is broken, unstage surfaces the breakage rather than mask
+// it (AFILE-02).
 
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { McpConfigFileError } from "../../shared/errors-bridges.ts";
 
 import {
   ADAPTER_SERVER_KEYS,
+  PI_MCP_SERVER_KEYS,
   partitionServers,
   readMcpConfigDoc,
   withPluginServers,
   type McpConfigDoc,
+  type McpServerKey,
 } from "./adapter-doc.ts";
 
 import type { UnstageMcpInput, UnstageMcpResult } from "./types.ts";
 
-const EMPTY_RESULT: UnstageMcpResult = {
-  removedNames: Object.freeze<string[]>([]),
-  warnings: Object.freeze<string[]>([]),
-};
+/** One config file and the plugin's entries in it. */
+interface UnstageTarget {
+  readonly filePath: string;
+  readonly config: McpConfigDoc;
+  readonly ownedNames: readonly string[];
+}
 
-async function readUnstageConfig(filePath: string): Promise<McpConfigDoc | undefined> {
+async function readUnstageTarget(
+  filePath: string,
+  serverKeys: readonly [McpServerKey, ...McpServerKey[]],
+  pluginName: string,
+  marketplaceName: string,
+): Promise<UnstageTarget | undefined> {
+  let config: McpConfigDoc;
   try {
-    return await readMcpConfigDoc(filePath, ADAPTER_SERVER_KEYS);
+    config = await readMcpConfigDoc(filePath, serverKeys);
   } catch (err) {
     if (err instanceof McpConfigFileError && err.defect === "top-level-not-object") {
       return undefined;
@@ -49,29 +67,36 @@ async function readUnstageConfig(filePath: string): Promise<McpConfigDoc | undef
 
     throw err;
   }
+
+  // `ours` lists the selected key's entries first, each map in file order.
+  const ownedNames = Object.keys(partitionServers(config, pluginName, marketplaceName).ours);
+  return ownedNames.length === 0 ? undefined : { filePath, config, ownedNames };
 }
 
 export async function unstageMcpServers(input: UnstageMcpInput): Promise<UnstageMcpResult> {
   const { locations, marketplaceName, pluginName } = input;
 
-  const config = await readUnstageConfig(locations.mcpAdapterJsonPath);
-  if (config === undefined) {
-    return EMPTY_RESULT;
-  }
-
-  // `ours` lists the selected key's entries first, each map in file order.
-  const removed = Object.keys(partitionServers(config, pluginName, marketplaceName).ours);
-  if (removed.length === 0) {
-    // PRD §5.7 / D-04: don't rewrite the file when there's nothing to
-    // remove. The mtime-stable invariant is what tests rely on.
-    return EMPTY_RESULT;
-  }
-
-  await atomicWriteJson(
+  const adapterTarget = await readUnstageTarget(
     locations.mcpAdapterJsonPath,
-    withPluginServers(config, pluginName, marketplaceName, {}),
+    ADAPTER_SERVER_KEYS,
+    pluginName,
+    marketplaceName,
+  );
+  const legacyTarget = await readUnstageTarget(
+    locations.mcpJsonPath,
+    PI_MCP_SERVER_KEYS,
+    pluginName,
+    marketplaceName,
   );
 
+  // PRD §5.7 / D-04: a file with nothing to remove is not rewritten. The
+  // mtime-stable invariant is what tests rely on.
+  const targets = [adapterTarget, legacyTarget].filter((target) => target !== undefined);
+  for (const { filePath, config } of targets) {
+    await atomicWriteJson(filePath, withPluginServers(config, pluginName, marketplaceName, {}));
+  }
+
+  const removed = [...new Set(targets.flatMap((target) => target.ownedNames))];
   return {
     removedNames: Object.freeze(removed),
     warnings: Object.freeze<string[]>([]),
