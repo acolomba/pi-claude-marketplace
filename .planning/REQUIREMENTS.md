@@ -63,7 +63,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 - [x] **AFILE-05**: Collision detection follows adapter 5's nine-source precedence (later source
   wins) and treats a partial entry (no `command`/`url`/`socket`) as an override, not a collision
   (closes MCPSRC-01).
-- [ ] **AFILE-06**: A user override written into our entry (for example `/mcp-adapter disable`)
+- [x] **AFILE-06**: A user override written into our entry (for example `/mcp-adapter disable`)
   survives a plugin update or reinstall; the carried-forward field set is closed and recorded as a
   decision.
 
@@ -171,7 +171,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | AFILE-03 | Phase 2 | Complete |
 | AFILE-04 | Phase 2 | Pending |
 | AFILE-05 | Phase 2 | Complete |
-| AFILE-06 | Phase 2 | Pending |
+| AFILE-06 | Phase 2 | Complete |
 | ANAME-01 | Phase 3 | Pending |
 | ANAME-02 | Phase 3 | Pending |
 | ANAME-03 | Phase 3 | Pending |

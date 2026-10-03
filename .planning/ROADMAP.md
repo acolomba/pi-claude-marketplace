@@ -138,7 +138,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. A server name that another source defines in full (`command`, `url` or `socket`) is reported as a collision, naming the source that wins under adapter 5's nine-source, later-wins precedence. A partial entry, such as a `/mcp-adapter disable` stub, is an override and blocks neither install nor update. This closes MCPSRC-01. (AFILE-05)
 5. A user override written into our entry (for example `disabled: true` from `/mcp-adapter disable`) is still there after `update` and `reinstall`. The carried-forward field set is closed, recorded under a decision ID, and pinned against the adapter's `ServerEntry`. (AFILE-06)
 
-**Plans**: 2/8 plans executed in 8 waves
+**Plans**: 3/8 plans executed in 8 waves
 
 **Wave 1**
 - [x] 02-01-PLAN.md — plugin MCP servers move to `mcp-adapter.json`, read as JSONC, refused when unparseable, `mcp-servers` honored (AFILE-01, AFILE-02, AFILE-03)
@@ -147,7 +147,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 - [x] 02-02-PLAN.md — nine-source later-wins collision walk, same-plugin exemptions, legacy `mcp.json` sweep (AFILE-05)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 02-03-PLAN.md — user overrides carried through update and reinstall, stubs absorbed (AFILE-06)
+- [x] 02-03-PLAN.md — user overrides carried through update and reinstall, stubs absorbed (AFILE-06)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 02-04-PLAN.md — comment and unreadable-file notices: seam, catalog, install routing, byte restore on failed install (AFILE-04)
@@ -184,7 +184,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 
 **Plans**: TBD
 
-**Notes.** Measure first: the length limit is unknown on Pi 1.0, because the features/mcp spike measured only Pi's built-in MCP, which hashes names at 64 characters. Confirm the Claude plugin tool form with `skills/claude-code-compat-research` before the name builder is written. Every requirement here changes the entry shape, so the shape must be final before Phase 5; a second rename costs users a second round of sign-ins and approvals.
+**Notes.** Measure first: the length limit is unknown on Pi 1.0, because the features/mcp spike measured only Pi's built-in MCP, which hashes names at 64 characters. Confirm the Claude plugin tool form with `skills/claude-code-compat-research` before the name builder is written. Every requirement here changes the entry shape, so the shape must be final before Phase 5; a second rename costs users a second round of sign-ins and approvals. ANAME-07 writes `requestTimeoutMs` from the manifest, but AFILE-06 carries that field forward from the previous entry, so this phase must decide how a translated value and a carried user value interact; without that decision a plugin's later timeout change never takes effect (02-RESEARCH.md Pitfall 5).
 
 ### Phase 4: Variable expansion at Claude Code parity
 
@@ -281,7 +281,7 @@ plan these phases with the UI gate skipped.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 9/9 | Complete    | 2026-10-02 |
-| 2. Adapter-file delivery | mcp-4 | 2/8 | In Progress|  |
+| 2. Adapter-file delivery | mcp-4 | 3/8 | In Progress|  |
 | 3. Claude Code tool names and tool search | mcp-4 | 0/TBD | Not started | - |
 | 4. Variable expansion at Claude Code parity | mcp-4 | 0/TBD | Not started | - |
 | 5. Automatic migration on /reload | mcp-4 | 0/TBD | Not started | - |

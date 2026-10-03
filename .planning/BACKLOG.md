@@ -3746,3 +3746,18 @@ Carried from `any-git-host` (`03-REVIEW-DISPOSITION.md`; milestone audit, 2026-0
   root. The `listRemotes` arm no longer uses `chmod`.
 - Code hygiene: WR-01/WR-06/WR-07 (stale JSDoc and flow header), WR-08
   (five positional parameters), WR-09, IN-02, IN-03, IN-06, IN-07, IN-08.
+
+## MCPOVR-01: MCP server overrides do not survive plugin disable then enable
+
+Surfaced by the `mcp-4` adapter-file delivery work (2026-10-03), source
+D-02-15. AFILE-06 carries a user's own fields (`disabled`, `approveTools`,
+`lifecycle` and the rest of the closed set) from the previous marked entry
+into the new one on `update` and `reinstall`. `disable` unstages the plugin's
+marked entries instead, so a `/mcp-adapter disable` choice, or any other
+carried field, is gone when the plugin is disabled and enabled again: the
+enable re-stages from the plugin's own entry with nothing to carry from.
+
+Scope when picked up: keeping the choices needs persisted state, because the
+MC-5 marker is a byte-stable contract and cannot hold them. Decide where the
+carried fields live while the plugin is disabled (the install record is the
+natural candidate) and how enable reads them back.
