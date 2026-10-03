@@ -35,6 +35,20 @@
       "key": "mcpConfigNotices",
       "decision": "AFILE-04 / D-02-09: the reload missing-dependency install carries its MCP config notices for the reconcile apply pass to route; the reconcile routing (plan 02-08) adds the read and must drop this row.",
       "mechanism": "D-02-09 makes every orchestrated install return its MCP config notices instead of sending them, and leaves the routing to the caller that owns the single cascade notification. installMissingDependencyWithTransaction sets the member on its installed arm, and its only production caller, reconcile/apply.ts applyDependencyInstalls, does not read it yet, so the analyzer finds no read. The failed arm is spread at its producer, which the analyzer counts as a read. Once apply.ts routes the notices this row matches no finding and the gate refuses the run, so the row cannot outlive the gap."
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:156:7",
+      "owner": "UninstallPluginOutcome",
+      "key": "mcpConfigNotices",
+      "decision": "AFILE-04 / D-02-09: the orchestrated uninstall carries its MCP config notices for the reconcile apply pass to route; the reconcile routing (plan 02-08) adds the read and must drop this row.",
+      "mechanism": "D-02-09 makes every orchestrated removal return its MCP config notices instead of sending them, and leaves the routing to the caller that owns the single cascade notification. runUninstallOutcome sets the member on its uninstalled arm, and its only orchestrated production caller, reconcile/apply.ts applyOnePluginUninstall, does not read it yet, so the analyzer finds no read. Once apply.ts routes the notices this row matches no finding and the gate refuses the run, so the row cannot outlive the gap."
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:164:7",
+      "owner": "UninstallPluginOutcome",
+      "key": "mcpConfigNotices",
+      "decision": "AFILE-04 / D-02-09: the orchestrated uninstall carries its MCP config notices for the reconcile apply pass to route; the reconcile routing (plan 02-08) adds the read and must drop this row.",
+      "mechanism": "D-02-09 makes every orchestrated removal return its MCP config notices instead of sending them, and leaves the routing to the caller that owns the single cascade notification. runUninstallOutcome sets the member on its failed arm, and its only orchestrated production caller, reconcile/apply.ts applyOnePluginUninstall, does not read it yet, so the analyzer finds no read. Once apply.ts routes the notices this row matches no finding and the gate refuses the run, so the row cannot outlive the gap."
     }
   ]
 }

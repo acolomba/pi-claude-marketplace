@@ -807,6 +807,69 @@ test("cascadeUnstagePlugin raises a typed workflows failure naming every unremov
   await assert.rejects(() => stat(removablePath), { code: "ENOENT" });
 });
 
+test("AFILE-04: cascadeUnstagePlugin carries the notice for a commented mcp-adapter.json", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-mcp-comments");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '// user note\n{"mcpServers":{"sample-server":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
+  );
+  const record = pluginRecord({ mcpServers: ["sample-server"] });
+  const expected: UnstageOutcome = {
+    ok: true,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["sample-server"],
+      workflows: [],
+    },
+    mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+  };
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(outcome, expected);
+});
+
+test("AFILE-04: cascadeUnstagePlugin keeps the notice when a later slot fails", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-mcp-comments-failure");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '/* user note */ {"mcpServers":{"sample-server":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
+  );
+  await mkdir(path.join(locations.workflowsSavedDir, "sample:blocked.json"), { recursive: true });
+  const record = pluginRecord({ mcpServers: ["sample-server"], workflows: ["sample:blocked"] });
+
+  // act
+  const { cause, ...outcome } = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: false,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["sample-server"],
+      workflows: [],
+    },
+    mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+  });
+  assert.ok(cause instanceof WorkflowsUnstageFailureError);
+  assert.deepStrictEqual(
+    cause.failedWorkflows.map((failure) => failure.name),
+    ["sample:blocked"],
+  );
+});
+
 test("cascadeUnstagePlugin deletes the staged hooks subtree from the scope root", async (t) => {
   // arrange
   const { locations } = await createProjectScope(t, "cascade-hooks-subtree");

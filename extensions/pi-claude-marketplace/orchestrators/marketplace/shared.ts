@@ -56,6 +56,7 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { BuildAuthCallbacksOpts } from "../../platform/git-auth-callbacks.ts";
 import type { ListRemotesResult } from "../../platform/git.ts";
 import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -333,6 +334,23 @@ export interface UnstageOutcome {
   };
   /** Set on failure: the FIRST throw, wrapped to Error if needed (D-03 fail-fast). */
   readonly cause?: Error;
+  /**
+   * AFILE-04: the MCP slot's config notices, carried for the caller to show
+   * after its rows instead of being dropped with the bridge's hygiene
+   * warnings. Set only when non-empty, on success and on failure: a later
+   * slot can fail after the MCP slot rewrote the file.
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
+}
+
+/**
+ * AFILE-04: spreads `mcpConfigNotices` onto an outcome only when there is at
+ * least one notice, so an empty list never appears on the outcome.
+ */
+export function mcpConfigNoticesMember(notices: readonly McpConfigNotice[]): {
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
+} {
+  return notices.length === 0 ? {} : { mcpConfigNotices: notices };
 }
 
 /**
@@ -366,6 +384,7 @@ export async function cascadeUnstagePlugin(
     mcpServers: [] as string[],
     workflows: [] as string[],
   };
+  let mcpConfigNotices: readonly McpConfigNotice[] = [];
 
   try {
     const skillsResult = await unstagePluginSkills({
@@ -416,6 +435,7 @@ export async function cascadeUnstagePlugin(
       pluginName: plugin,
     });
     dropped.mcpServers = [...mcpResult.removedNames];
+    mcpConfigNotices = mcpResult.notices;
 
     // WLIF-03: 6th cascade slot, after mcp so no existing ordering shifts. The
     // names come from the RECORD, never from a re-derivation off the plugin
@@ -450,6 +470,7 @@ export async function cascadeUnstagePlugin(
         mcpServers: Object.freeze([...dropped.mcpServers]),
         workflows: Object.freeze([...dropped.workflows]),
       }),
+      ...mcpConfigNoticesMember(mcpConfigNotices),
     });
   } catch (err) {
     return Object.freeze({
@@ -463,6 +484,7 @@ export async function cascadeUnstagePlugin(
         workflows: Object.freeze([...dropped.workflows]),
       }),
       cause: err instanceof Error ? err : new Error(String(err)),
+      ...mcpConfigNoticesMember(mcpConfigNotices),
     });
   }
 }

@@ -115,6 +115,7 @@ void unstageMcpInput;
 const unstageMcpResult: UnstageMcpResult = {
   removedNames: ["search"],
   warnings: ["preserved foreign server foreign-search"],
+  notices: [{ kind: "comments-dropped", scope: "user", file: "mcp.json" }],
 } satisfies UnstageMcpResult;
 void unstageMcpResult;
 

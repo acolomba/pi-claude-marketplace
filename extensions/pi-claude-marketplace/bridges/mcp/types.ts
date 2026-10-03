@@ -117,4 +117,10 @@ export interface UnstageMcpInput {
 export interface UnstageMcpResult {
   readonly removedNames: readonly string[];
   readonly warnings: readonly string[];
+  /**
+   * AFILE-04: one `comments-dropped` notice per file the unstage rewrote whose
+   * bytes held JSONC comments, `mcp-adapter.json` before `mcp.json`. Empty
+   * when nothing was removed.
+   */
+  readonly notices: readonly McpConfigNotice[];
 }

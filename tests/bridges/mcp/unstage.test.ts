@@ -142,6 +142,7 @@ test("removes every exact owner and preserves the complete foreign document", as
   assert.deepStrictEqual(unstage, {
     removedNames: ["owned-first", "owned-last"],
     warnings: [],
+    notices: [],
   });
   assert.strictEqual(rewrittenBytes, expectedBytes);
   assert.strictEqual(Object.hasOwn(rewrittenDocument.mcpServers, "__proto__"), true);
@@ -162,9 +163,10 @@ test("returns an empty frozen result without materializing a missing document", 
   const storedMetadata = await stat(locations.mcpAdapterJsonPath).catch((error: unknown) => error);
 
   // assert
-  assert.deepStrictEqual(unstage, { removedNames: [], warnings: [] });
+  assert.deepStrictEqual(unstage, { removedNames: [], warnings: [], notices: [] });
   assert.strictEqual(Object.isFrozen(unstage.removedNames), true);
   assert.strictEqual(Object.isFrozen(unstage.warnings), true);
+  assert.strictEqual(Object.isFrozen(unstage.notices), true);
   assert.ok(storedMetadata instanceof Error);
   assert.strictEqual((storedMetadata as NodeJS.ErrnoException).code, "ENOENT");
 });
@@ -184,7 +186,7 @@ test("treats an unavailable parent path as a missing document", async (t) => {
   const retainedBytes = await readFile(path.join(cwd, ".pi"), "utf8");
 
   // assert
-  assert.deepStrictEqual(unstage, { removedNames: [], warnings: [] });
+  assert.deepStrictEqual(unstage, { removedNames: [], warnings: [], notices: [] });
   assert.strictEqual(retainedBytes, scopeRootBytes);
 });
 
@@ -278,7 +280,7 @@ for (const { description, storedBytes } of [
     const retainedMetadata = await stat(locations.mcpAdapterJsonPath, { bigint: true });
 
     // assert
-    assert.deepStrictEqual(unstage, { removedNames: [], warnings: [] });
+    assert.deepStrictEqual(unstage, { removedNames: [], warnings: [], notices: [] });
     assert.strictEqual(retainedBytes, storedBytes);
     assert.deepStrictEqual(
       {
@@ -325,7 +327,7 @@ for (const { description, storedBytes } of [
     const retainedMetadata = await stat(locations.mcpAdapterJsonPath, { bigint: true });
 
     // assert
-    assert.deepStrictEqual(unstage, { removedNames: [], warnings: [] });
+    assert.deepStrictEqual(unstage, { removedNames: [], warnings: [], notices: [] });
     assert.strictEqual(retainedBytes, storedBytes);
     assert.deepStrictEqual(
       {
@@ -449,7 +451,7 @@ test("AFILE-01: removes owned entries under both server keys and keeps a marker-
   });
 
   // assert
-  assert.deepStrictEqual(unstage, { removedNames: ["owned", "old"], warnings: [] });
+  assert.deepStrictEqual(unstage, { removedNames: ["owned", "old"], warnings: [], notices: [] });
   assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), expectedBytes);
 });
 
@@ -489,6 +491,7 @@ test("removes owned prototype-named servers and keeps foreign inherited names", 
   assert.deepStrictEqual(unstage, {
     removedNames: ["__proto__", "constructor"],
     warnings: [],
+    notices: [],
   });
   assert.strictEqual(rewrittenBytes, expectedBytes);
 });
@@ -530,8 +533,8 @@ test("leaves the first rewritten document unchanged on a second unstage", async 
   const secondMetadata = await stat(locations.mcpAdapterJsonPath, { bigint: true });
 
   // assert
-  assert.deepStrictEqual(firstUnstage, { removedNames: ["owned"], warnings: [] });
-  assert.deepStrictEqual(secondUnstage, { removedNames: [], warnings: [] });
+  assert.deepStrictEqual(firstUnstage, { removedNames: ["owned"], warnings: [], notices: [] });
+  assert.deepStrictEqual(secondUnstage, { removedNames: [], warnings: [], notices: [] });
   assert.strictEqual(firstBytes, expectedBytes);
   assert.strictEqual(secondBytes, expectedBytes);
   assert.deepStrictEqual(
@@ -585,7 +588,7 @@ test("AFILE-01: removes the plugin's legacy mcp.json entries and keeps foreign e
   const adapterMetadata = await stat(locations.mcpAdapterJsonPath).catch((error: unknown) => error);
 
   // assert
-  assert.deepStrictEqual(unstage, { removedNames: ["owned"], warnings: [] });
+  assert.deepStrictEqual(unstage, { removedNames: ["owned"], warnings: [], notices: [] });
   assert.strictEqual(legacyBytes, expectedBytes);
   assert.ok(adapterMetadata instanceof Error);
   assert.strictEqual((adapterMetadata as NodeJS.ErrnoException).code, "ENOENT");
@@ -619,6 +622,7 @@ test("AFILE-01: lists adapter names first, then legacy names not already listed"
   assert.deepStrictEqual(unstage, {
     removedNames: ["first", "shared", "legacy"],
     warnings: [],
+    notices: [],
   });
   assert.strictEqual(adapterBytes, '{\n  "mcpServers": {}\n}\n');
   assert.strictEqual(legacyBytes, '{\n  "mcpServers": {}\n}\n');
@@ -647,7 +651,7 @@ test("AFILE-01: leaves a legacy mcp.json with no owned entry unwritten", async (
   const legacyMetadata = await stat(locations.mcpJsonPath, { bigint: true });
 
   // assert
-  assert.deepStrictEqual(unstage, { removedNames: ["owned"], warnings: [] });
+  assert.deepStrictEqual(unstage, { removedNames: ["owned"], warnings: [], notices: [] });
   assert.strictEqual(legacyBytes, legacyStoredBytes);
   assert.deepStrictEqual(
     { ino: legacyMetadata.ino, mtimeNs: legacyMetadata.mtimeNs },
@@ -705,11 +709,118 @@ test("AFILE-01: creates no legacy mcp.json when none exists", async (t) => {
   const legacyMetadata = await stat(locations.mcpJsonPath).catch((error: unknown) => error);
 
   // assert
-  assert.deepStrictEqual(unstage, { removedNames: ["owned"], warnings: [] });
+  assert.deepStrictEqual(unstage, { removedNames: ["owned"], warnings: [], notices: [] });
   assert.strictEqual(
     await readFile(locations.mcpAdapterJsonPath, "utf8"),
     '{\n  "mcpServers": {}\n}\n',
   );
   assert.ok(legacyMetadata instanceof Error);
   assert.strictEqual((legacyMetadata as NodeJS.ErrnoException).code, "ENOENT");
+});
+
+test("AFILE-04: reports dropped comments for a commented mcp-adapter.json it rewrites", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-adapter-comments-");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '{\n  // user note\n  "mcpServers": {"owned":{"command":"owned","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}\n}\n',
+    "utf8",
+  );
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+
+  // assert
+  assert.deepStrictEqual(unstage, {
+    removedNames: ["owned"],
+    warnings: [],
+    notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+  });
+  assert.strictEqual(Object.isFrozen(unstage.notices), true);
+  assert.strictEqual(
+    await readFile(locations.mcpAdapterJsonPath, "utf8"),
+    '{\n  "mcpServers": {}\n}\n',
+  );
+});
+
+test("AFILE-04: reports dropped comments for a commented legacy mcp.json it rewrites", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-legacy-comments-");
+  await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpJsonPath,
+    '/* legacy */ {"mcpServers":{"owned":{"command":"owned","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+    "utf8",
+  );
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+
+  // assert
+  assert.deepStrictEqual(unstage, {
+    removedNames: ["owned"],
+    warnings: [],
+    notices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+  });
+});
+
+test("AFILE-04: reports the adapter file before the legacy file when both held comments", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-both-comments-");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpJsonPath,
+    '// legacy\n{"mcpServers":{"legacy":{"command":"legacy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+    "utf8",
+  );
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '// adapter\n{"mcpServers":{"first":{"command":"first","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+    "utf8",
+  );
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+
+  // assert
+  assert.deepStrictEqual(unstage, {
+    removedNames: ["first", "legacy"],
+    warnings: [],
+    notices: [
+      { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+    ],
+  });
+});
+
+test("AFILE-04: reports nothing for a commented file with no owned entry", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-comments-foreign-");
+  const storedBytes = '// user note\n{"mcpServers":{"user":{"command":"user"}}}\n';
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, storedBytes, "utf8");
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+
+  // assert
+  assert.deepStrictEqual(unstage, { removedNames: [], warnings: [], notices: [] });
+  assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), storedBytes);
 });

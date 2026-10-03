@@ -67,6 +67,7 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { StateLockHeldError, errorMessage, isErrnoException } from "../../shared/errors.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginFailedMessage,
@@ -75,7 +76,11 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
+import {
+  AgentsUnstageFailureError,
+  cascadeUnstagePlugin,
+  mcpConfigNoticesMember,
+} from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
 import { buildScopeDeclarationIndex } from "./dependency-index.ts";
@@ -100,6 +105,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
 
@@ -136,15 +142,26 @@ export type UninstallPluginNotifications =
  * `reason` is typed as `Reason` (broader than `ContentReason`) so the
  * structural `"marketplace not added"` sentinel returned by the missing-marketplace arm
  * flows through the same field; mirrors `RemoveMarketplaceOutcome`.
+ *
+ * AFILE-04: `mcpConfigNotices` carries the cascade's MCP config notices for
+ * the caller to show, set only when non-empty. A failed uninstall can carry
+ * them too, because the cascade can rewrite the MCP file before a later step
+ * fails.
  */
 export type UninstallPluginOutcome =
-  | { readonly status: "uninstalled"; readonly name: string; readonly version?: string }
+  | {
+      readonly status: "uninstalled";
+      readonly name: string;
+      readonly version?: string;
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
+    }
   | { readonly status: "converged"; readonly name: string }
   | {
       readonly status: "failed";
       readonly reason: Reason;
       readonly error: Error;
       readonly cause: string;
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     };
 
 /**
@@ -359,6 +376,9 @@ function narrowCascadeFailure(cause: Error): ContentReason {
  * severity and the absent reload hint are already what a refused row needs.
  * Extracted from `uninstallPlugin` to keep cognitive complexity inside the
  * SonarJS lint budget.
+ *
+ * AFILE-04: notices from an MCP rewrite that ran before the failure follow
+ * the row in standalone mode and ride the outcome in orchestrated mode.
  */
 function emitCascadeFailure(args: {
   ctx: NotificationContext;
@@ -369,6 +389,7 @@ function emitCascadeFailure(args: {
   cause: Error;
   removedVersion: string | undefined;
   staleWorkflowCommand: boolean;
+  mcpConfigNotices: readonly McpConfigNotice[];
   orchestrated: boolean;
 }): UninstallPluginOutcome {
   const {
@@ -380,6 +401,7 @@ function emitCascadeFailure(args: {
     cause,
     removedVersion,
     staleWorkflowCommand,
+    mcpConfigNotices,
     orchestrated,
   } = args;
   const outcome: UninstallPluginOutcome = {
@@ -387,6 +409,7 @@ function emitCascadeFailure(args: {
     reason: narrowCascadeFailure(cause),
     error: cause,
     cause: errorMessage(cause),
+    ...mcpConfigNoticesMember(mcpConfigNotices),
   };
 
   if (!orchestrated) {
@@ -424,6 +447,7 @@ function emitCascadeFailure(args: {
       undefined,
       "single",
     );
+    notifyMcpConfigNotices(ctx, mcpConfigNotices);
   }
 
   return outcome;
@@ -549,6 +573,8 @@ function cascadeFailureCause(plugin: string, localOutcome: UnstageOutcome): Erro
  * cleanup; a failed member keeps its (possibly shrunken)
  * record and renders a warning row. `hooksDropped` is the routing-cache fact:
  * a hooks config left disk, so the cache must forget it after the save.
+ * `mcpConfigNotices` holds the member cascade's MCP config notices (AFILE-04),
+ * on a removed and on a failed member alike.
  */
 export interface PrunedMember {
   readonly marketplace: string;
@@ -556,6 +582,7 @@ export interface PrunedMember {
   readonly row: PluginUninstalledMessage | PluginFailedMessage;
   readonly removed: boolean;
   readonly hooksDropped: boolean;
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
 }
 
 /**
@@ -615,6 +642,7 @@ async function removeDependencyMember(args: {
       }),
       removed: true,
       hooksDropped: true,
+      mcpConfigNotices: outcome.mcpConfigNotices ?? [],
     };
   }
 
@@ -629,6 +657,7 @@ async function removeDependencyMember(args: {
     row: buildMemberFailedRow(member, cause),
     removed: false,
     hooksDropped: outcome.dropped.hooks.length > 0,
+    mcpConfigNotices: outcome.mcpConfigNotices ?? [],
   };
 }
 
@@ -1102,6 +1131,10 @@ async function runUninstallOutcome(
   // of the guard closure the way `removedVersion` already is, so the success
   // emission can name them without re-reading state outside the lock.
   let dependents: readonly string[] = [];
+  // AFILE-04: the MCP config notices of every cascade this command ran, the
+  // primary's first and then each pruned member's, hoisted so the failure
+  // arms and the success emission can all report them.
+  const mcpConfigNotices: McpConfigNotice[] = [];
   const keepData = opts.keepData ?? false;
 
   try {
@@ -1162,6 +1195,7 @@ async function runUninstallOutcome(
       // skills -> commands -> agents -> mcp).
       const localOutcome = await cascade(plugin, marketplace, locations, installed);
       retiredWorkflowCommand = localOutcome.dropped.workflows.length > 0;
+      mcpConfigNotices.push(...(localOutcome.mcpConfigNotices ?? []));
 
       // TR-03: split the failure handling by cause type.
       //   - AG-5 (AgentsUnstageFailureError): foreign content owned by
@@ -1213,6 +1247,7 @@ async function runUninstallOutcome(
           })),
         );
         dependents = survivingDependents(dependents, prunedMembers);
+        mcpConfigNotices.push(...prunedMembers.flatMap((member) => member.mcpConfigNotices));
       }
 
       // WR-04: explicit save on the mutating success arm, ONCE, after the
@@ -1237,6 +1272,7 @@ async function runUninstallOutcome(
       cause,
       removedVersion,
       staleWorkflowCommand: retiredWorkflowCommand,
+      mcpConfigNotices,
       orchestrated,
     });
   }
@@ -1276,6 +1312,7 @@ async function runUninstallOutcome(
       cause: cascadeFailure,
       removedVersion,
       staleWorkflowCommand: retiredWorkflowCommand,
+      mcpConfigNotices,
       orchestrated,
     });
   }
@@ -1334,6 +1371,7 @@ async function runUninstallOutcome(
     status: "uninstalled",
     name: plugin,
     ...(removedVersion !== undefined && { version: removedVersion }),
+    ...mcpConfigNoticesMember(mcpConfigNotices),
   };
   if (orchestrated) {
     return outcome;
@@ -1362,6 +1400,7 @@ async function runUninstallOutcome(
     undefined,
     "single",
   );
+  notifyMcpConfigNotices(ctx, mcpConfigNotices);
   return outcome;
 }
 

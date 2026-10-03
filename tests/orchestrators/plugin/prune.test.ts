@@ -1411,3 +1411,110 @@ test("a post-save failure preserves the original cause when every member failed"
     ]);
   });
 });
+
+// AFILE-04: a committed sweep that rewrote a commented MCP config file shows
+// the comments-removed notice after its rows.
+
+const COMMENTED_ORPHAN_ADAPTER =
+  '// user note\n{"mcpServers":{"orphan-server":{"command":"orphan","_piClaudeMarketplace":{"plugin":"orphan","marketplace":"mp"}}}}\n';
+
+test("AFILE-04: prune over a commented mcp-adapter.json shows the comments-removed notice after its rows", async () => {
+  await withHermeticEnvironment("prune-owner-afile04-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
+    await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ORPHAN_ADAPTER);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+      },
+      {
+        message:
+          "MCP config comments removed.\n\n" +
+          "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        severity: "warning",
+      },
+    ]);
+    assert.strictEqual(
+      await readFile(locations.mcpAdapterJsonPath, "utf8"),
+      '{\n  "mcpServers": {}\n}\n',
+    );
+  });
+});
+
+test("AFILE-04: a dry-run prune sends no notice", async () => {
+  await withHermeticEnvironment("prune-owner-afile04-preview-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
+    await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ORPHAN_ADAPTER);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun: true });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [project]\n  ○ orphan (will uninstall) {dependency pruned}" },
+    ]);
+    assert.strictEqual(
+      await readFile(locations.mcpAdapterJsonPath, "utf8"),
+      COMMENTED_ORPHAN_ADAPTER,
+    );
+  });
+});
+
+test("AFILE-04: a rolled-back prune keeps the commented original in its backup and sends no notice", async () => {
+  await withHermeticEnvironment("prune-owner-afile04-rollback-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
+    await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ORPHAN_ADAPTER);
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: () => Promise.reject(new Error("state save failed")),
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+
+    // assert
+    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
+      name.startsWith("prune-backup-"),
+    );
+    assert.ok(backupName);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
+          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    [skills] (rollback failed)\n" +
+          "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.\n" +
+          "    [mcp adapter] (rollback failed)\n" +
+          "      cause: Prune rollback found an occupied metadata path at mcp-adapter.json.",
+        severity: "error",
+      },
+    ]);
+    const manifest = JSON.parse(
+      await readFile(path.join(locations.extensionRoot, backupName, "manifest.json"), "utf8"),
+    ) as { entries: Array<{ phase: string; backup: string | null }> };
+    const entry = manifest.entries.find(({ phase }) => phase === "mcp adapter");
+    assert.ok(entry?.backup);
+    assert.strictEqual(
+      await readFile(path.join(locations.extensionRoot, backupName, entry.backup), "utf8"),
+      COMMENTED_ORPHAN_ADAPTER,
+    );
+  });
+});

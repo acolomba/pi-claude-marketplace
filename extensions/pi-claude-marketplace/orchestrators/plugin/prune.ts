@@ -7,7 +7,7 @@ import { pruneOrphans } from "../../domain/dependency-orphans.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
-import { notify } from "../../shared/notification-dispatch.ts";
+import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
@@ -339,5 +339,14 @@ export function createPrunePlugin(
           new Error(errorMessage(postCommitFailure.cause)),
       });
     }
+
+    // AFILE-04: a committed sweep rewrote the MCP config files for good, so
+    // the comments it dropped follow the rows. A rolled-back sweep never
+    // reaches this point: its failure row names each rewritten MCP file as a
+    // failed rollback, and the recovery backup keeps the original bytes.
+    notifyMcpConfigNotices(
+      options.ctx,
+      outcome.members.flatMap((member) => member.mcpConfigNotices),
+    );
   };
 }
