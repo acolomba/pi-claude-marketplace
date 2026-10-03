@@ -15,6 +15,10 @@
  *   reader still sees which credential form the message carried.
  * - A prefixed token needs a body of 16 or more characters, so a short
  *   identifier that happens to start with a prefix stays intact.
+ * - A `Bearer` secret sits on the same line, ends on a word character or
+ *   `=` padding, and is token-shaped (see `isTokenShaped`). Prose such as
+ *   `Bearer token required`, `a Bearer token.`, or `Bearer realm="GitHub"`
+ *   stays intact.
  * - The scp-style marketplace name `git@host:owner/repo` is a subject the user
  *   must see. It has no `scheme://`, so the userinfo pattern never matches it.
  *
@@ -23,11 +27,22 @@
 export function redactCredentials(text: string): string {
   const userinfo = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]+@/gi;
   const accessToken = /\b(x-access-token:)[^\s@/]+/gi;
-  const bearer = /\b(Bearer\s+)[\w.~+/=-]+/gi;
+  const bearer = /\b(Bearer[ \t]+)([\w.~+/-]*\w=*)/gi;
   const githubToken = /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_\w{16,})\b/g;
   return text
     .replace(userinfo, "$1***@")
     .replace(accessToken, "$1***")
-    .replace(bearer, "$1***")
+    .replace(bearer, (match: string, prefix: string, secret: string) =>
+      isTokenShaped(secret) ? `${prefix}***` : match,
+    )
     .replace(githubToken, "***");
+}
+
+/**
+ * PMOD-04 / D-05: a `Bearer` secret is token-shaped when it carries a digit or one of
+ * `_.~+/-`, or runs 16 or more characters. A plain word after `Bearer` is
+ * prose, so it stays.
+ */
+function isTokenShaped(secret: string): boolean {
+  return secret.length >= 16 || /[\d_.~+/-]/.test(secret);
 }

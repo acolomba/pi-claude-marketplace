@@ -36,8 +36,38 @@ for (const { name, input, expected } of [
   },
   {
     name: "PMOD-04 / D-05 matches a lower-case bearer scheme",
-    input: "authorization: bearer abc rejected",
+    input: "authorization: bearer abc123 rejected",
     expected: "authorization: bearer *** rejected",
+  },
+  {
+    name: "PMOD-04 / D-05 replaces a letters-only Bearer secret of 16 characters",
+    input: "Authorization: Bearer abcdefghijklmnop rejected",
+    expected: "Authorization: Bearer *** rejected",
+  },
+  {
+    name: "PMOD-04 / D-05 keeps the sentence period after a Bearer secret",
+    input: "sent Bearer abc.def-1.",
+    expected: "sent Bearer ***.",
+  },
+  {
+    name: "PMOD-04 leaves the prose word after Bearer unchanged",
+    input: "Bearer token required",
+    expected: "Bearer token required",
+  },
+  {
+    name: "PMOD-04 leaves a sentence-final Bearer word unchanged",
+    input: "the host wants a Bearer token.",
+    expected: "the host wants a Bearer token.",
+  },
+  {
+    name: "PMOD-04 leaves a Bearer challenge realm unchanged",
+    input: 'WWW-Authenticate: Bearer realm="GitHub"',
+    expected: 'WWW-Authenticate: Bearer realm="GitHub"',
+  },
+  {
+    name: "PMOD-04 leaves the word on the line after bearer unchanged",
+    input: "using bearer\nabc123 authentication",
+    expected: "using bearer\nabc123 authentication",
   },
   {
     name: "PMOD-04 / D-05 replaces a ghp_ token",
