@@ -3,16 +3,9 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  formatCauseChain,
-  ManualRecoveryError,
-} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import {
-  composeReconcileAppliedBody,
-  formatRawSurface,
-  renderMarketplaceInfo,
-  renderPluginInfo,
-} from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { formatRawSurface } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { toWirePayload } from "../../extensions/pi-claude-marketplace/shared/notification-json.ts";
 import { presentNotification } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import { resolveRawSurface } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -31,7 +24,7 @@ import {
   withTempRoot,
 } from "./temp-root-control.ts";
 
-import type { NotificationPresentation } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   NotificationMessage,
   PluginNotificationMessage,
@@ -747,8 +740,10 @@ test("AUTH-09 / D-11: a token-valued onDeviceCode call inside a line comment pas
  * AUTH-09 / PMOD-04 (D-07): the JSON path. Each row plants one credential at
  * one site that can carry a thrown message and reads three strings back: the
  * presentation (or the resolved raw surface), the JSON strategy's payload, and
- * the text the text strategy builds from the same value. Calling these pure
- * functions sends no notify emission, so the corpus gains no entry.
+ * the text the text strategy builds from the same value. A structured message
+ * reaches its text through `notify`, the production text strategy, so a
+ * credential that the dispatch formatter re-introduces fails the row. A raw
+ * surface reaches its text through `formatRawSurface`.
  */
 interface LeakProbe {
   readonly presentation: string;
@@ -760,15 +755,22 @@ const GITHUB_TOKEN = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
 const USERINFO_URL = "https://alice:s3cret@github.com/o/r.git";
 const USERINFO = ["alice:s3cret@", "s3cret"];
 
-function probePresentation(
-  message: NotificationMessage,
-  text: (presentation: NotificationPresentation) => string,
-): LeakProbe {
+function probePresentation(message: NotificationMessage): LeakProbe {
   const presentation = presentNotification(runWithAllLoaded(), message);
+  const delivered: string[] = [];
+  const ctx: NotificationContext = {
+    ui: {
+      notify: (text) => {
+        delivered.push(text);
+      },
+    },
+  };
+  notify(ctx, runWithAllLoaded(), message);
+  assert.strictEqual(delivered.length, 1, "AUTH-09 / PMOD-04: notify delivers one text");
   return {
     presentation: JSON.stringify(presentation),
     payload: JSON.stringify(toWirePayload(presentation)),
-    text: text(presentation),
+    text: delivered.join("\n"),
   };
 }
 
@@ -779,14 +781,6 @@ function probeRawSurface(surface: RawSurface): LeakProbe {
     payload: JSON.stringify(toWirePayload(resolved)),
     text: formatRawSurface(resolved)?.[0] ?? "",
   };
-}
-
-function cascadeText(presentation: NotificationPresentation): string {
-  assert.ok(presentation.kind === "cascade");
-  return [
-    composeReconcileAppliedBody(presentation.marketplaces),
-    ...(presentation.advisories ?? []),
-  ].join("\n");
 }
 
 function rowCascade(row: PluginNotificationMessage): NotificationMessage {
@@ -834,7 +828,6 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
           reasons: [],
           cause: new Error(`clone ${USERINFO_URL} failed`),
         }),
-        cascadeText,
       ),
   },
   {
@@ -849,7 +842,6 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
           reasons: [],
           cause: new Error("clone https://alice:p@ss@github.com/o/r.git failed"),
         }),
-        cascadeText,
       ),
   },
   {
@@ -867,7 +859,6 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
             { phase: "skills", cause: new Error(`restore with ${GITHUB_TOKEN} failed`) },
           ],
         }),
-        cascadeText,
       ),
   },
   {
@@ -882,7 +873,6 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
           reasons: ["rollback partial"],
           cause: new ManualRecoveryError("stuck", [`/tmp/clone-${GITHUB_TOKEN}`]),
         }),
-        cascadeText,
       ),
   },
   {
@@ -897,7 +887,6 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
           needsReload: true,
           cause: new Error("dependency fetch sent x-access-token:tok123secret"),
         }),
-        cascadeText,
       ),
   },
   {
@@ -963,68 +952,49 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
     site: "a url-source marketplace-info",
     planted: USERINFO,
     probe: () =>
-      probePresentation(
-        {
-          kind: "marketplace-info",
-          name: "mp",
-          scope: "user",
-          details: { autoupdate: false },
-          source: { sourceKind: "url", url: USERINFO_URL },
-        },
-        (presentation) => {
-          assert.ok(presentation.kind === "marketplace-info");
-          return renderMarketplaceInfo(presentation.message);
-        },
-      ),
+      probePresentation({
+        kind: "marketplace-info",
+        name: "mp",
+        scope: "user",
+        details: { autoupdate: false },
+        source: { sourceKind: "url", url: USERINFO_URL },
+      }),
   },
   {
     site: "the prune-committed-warning cause",
     planted: [GITHUB_TOKEN],
     probe: () =>
-      probePresentation(
-        {
-          kind: "prune-committed-warning",
-          scope: "user",
-          cause: new Error(`state save with ${GITHUB_TOKEN} failed`),
-        },
-        (presentation) => {
-          assert.ok(presentation.kind === "prune-committed-warning");
-          assert.ok(presentation.cause !== undefined);
-          return formatCauseChain(presentation.cause);
-        },
-      ),
+      probePresentation({
+        kind: "prune-committed-warning",
+        scope: "user",
+        cause: new Error(`state save with ${GITHUB_TOKEN} failed`),
+      }),
   },
   {
     site: "a cascade advisory",
     planted: ["abc.def.secret"],
     probe: () =>
-      probePresentation(
-        { marketplaces: [], advisories: ["retained staging: Bearer abc.def.secret"] },
-        cascadeText,
-      ),
+      probePresentation({
+        marketplaces: [],
+        advisories: ["retained staging: Bearer abc.def.secret"],
+      }),
   },
   {
     site: "a plugin-info note",
     planted: ["tok123secret"],
     probe: () =>
-      probePresentation(
-        {
-          kind: "plugin-info",
-          marketplaceName: "mp",
-          marketplaceScope: "user",
-          marketplaceDetails: { autoupdate: false },
-          plugin: {
-            status: "available",
-            name: "alpha",
-            componentsResolved: false,
-            notes: ["workflow wf: x-access-token:tok123secret rejected"],
-          },
+      probePresentation({
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "available",
+          name: "alpha",
+          componentsResolved: false,
+          notes: ["workflow wf: x-access-token:tok123secret rejected"],
         },
-        (presentation) => {
-          assert.ok(presentation.kind === "plugin-info");
-          return renderPluginInfo(presentation.message);
-        },
-      ),
+      }),
   },
 ];
 
