@@ -1,311 +1,148 @@
 ---
 phase: 01-pi-1-0-floor-and-adapter-only-detection
-reviewed: 2026-10-02T00:00:00Z
+reviewed: 2026-10-03T01:05:49Z
+iteration: 2
 depth: standard
-files_reviewed: 137
+files_reviewed: 7
 files_reviewed_list:
-  - .fallowrc.json
-  - .github/workflows/lint.yml
-  - AGENTS.md
-  - README.es.md
-  - README.md
-  - docs/adr/v2-001-structured-notify.md
-  - docs/messaging-style-guide.md
-  - docs/output-catalog.md
-  - docs/prd/pi-claude-marketplace-prd.md
-  - docs/research/claude-hooks-vs-pi-events.md
-  - docs/workflows-compatibility.md
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/prune.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
-  - extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts
-  - extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts
-  - extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts
-  - extensions/pi-claude-marketplace/orchestrators/types.ts
-  - extensions/pi-claude-marketplace/platform/pi-api.ts
-  - extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts
-  - extensions/pi-claude-marketplace/shared/notification-dispatch.ts
-  - extensions/pi-claude-marketplace/shared/notification-grammar.ts
-  - extensions/pi-claude-marketplace/shared/notification-types.ts
-  - extensions/pi-claude-marketplace/shared/notify-context.ts
-  - extensions/pi-claude-marketplace/shared/notify-reasons.ts
-  - package.json
-  - scripts/check-unused-type-members.contracts.json
   - scripts/pi.sh
-  - tests/architecture/catalog-uat/catalog-contract.test.ts
-  - tests/architecture/catalog-uat/catalog-parser.test.ts
-  - tests/architecture/catalog-uat/fixtures/plugin-info.ts
-  - tests/architecture/catalog-uat/mock-pi.ts
-  - tests/architecture/closed-set-enrollment.test.ts
-  - tests/architecture/compat-01-no-expansion.test.ts
-  - tests/architecture/cross-op-convergence.test.ts
-  - tests/architecture/manifest-read-agreement.test.ts
-  - tests/architecture/notify-closed-set-locks.test.ts
-  - tests/architecture/notify-grammar-invariant.test.ts
-  - tests/architecture/notify-producer-wire-coverage.test.ts
-  - tests/architecture/notify-will-reload-agreement.test.ts
-  - tests/architecture/partial-vocabulary-guard.test.ts
-  - tests/architecture/peer-floor.test.ts
-  - tests/architecture/workflows-doc-pins.test.ts
-  - tests/architecture/workflows-marker-coverage.test.ts
-  - tests/e2e/_helpers.ts
-  - tests/e2e/_rpc.ts
-  - tests/e2e/adapter-detection-rpc.test.ts
-  - tests/e2e/install-soft-deps.test.ts
-  - tests/edge/handlers/marketplace/add.test.ts
-  - tests/edge/handlers/marketplace/autoupdate.test.ts
-  - tests/edge/handlers/marketplace/info.test.ts
-  - tests/edge/handlers/marketplace/list.test.ts
-  - tests/edge/handlers/marketplace/remove.test.ts
-  - tests/edge/handlers/marketplace/update.test.ts
-  - tests/edge/handlers/plugin/bootstrap.test.ts
-  - tests/edge/handlers/plugin/browse.test.ts
-  - tests/edge/handlers/plugin/enable-disable.test.ts
-  - tests/edge/handlers/plugin/fetch.test.ts
-  - tests/edge/handlers/plugin/import.test.ts
-  - tests/edge/handlers/plugin/info.test.ts
-  - tests/edge/handlers/plugin/install.test.ts
-  - tests/edge/handlers/plugin/list.test.ts
-  - tests/edge/handlers/plugin/pending.test.ts
-  - tests/edge/handlers/plugin/prune.test.ts
-  - tests/edge/handlers/plugin/reinstall.test.ts
-  - tests/edge/handlers/plugin/uninstall.test.ts
-  - tests/edge/handlers/plugin/update.test.ts
-  - tests/edge/handlers/tools.test.ts
-  - tests/edge/notification-boundary.ts
-  - tests/edge/register.test.ts
-  - tests/index.test.ts
-  - tests/integration/marketplace-add-seed-mirrors.test.ts
-  - tests/integration/pi-subagents-peer.ts
-  - tests/integration/provenance-invisibility.test.ts
-  - tests/integration/skill-path-resolution.test.ts
-  - tests/live-uat/README.md
-  - tests/live-uat/manifest-absence-canary.mjs
-  - tests/live-uat/openai-stub-server.mjs
-  - tests/live-uat/stop-canary.mjs
-  - tests/live-uat/workflow-storage-canary.mjs
-  - tests/orchestrators/import/execute.messaging.test.ts
-  - tests/orchestrators/import/execute.test.ts
-  - tests/orchestrators/marketplace/add.test.ts
-  - tests/orchestrators/marketplace/autoupdate.test.ts
-  - tests/orchestrators/marketplace/info.test.ts
-  - tests/orchestrators/marketplace/list.test.ts
-  - tests/orchestrators/marketplace/remove.test.ts
-  - tests/orchestrators/marketplace/shared.test.ts
-  - tests/orchestrators/marketplace/update.messaging.test.ts
-  - tests/orchestrators/marketplace/update.test.ts
-  - tests/orchestrators/plugin/bootstrap.test.ts
-  - tests/orchestrators/plugin/enable-disable.messaging.test.ts
-  - tests/orchestrators/plugin/enable-disable.test.ts
-  - tests/orchestrators/plugin/fetch.test.ts
-  - tests/orchestrators/plugin/info.test.ts
-  - tests/orchestrators/plugin/install-cascade.messaging.test.ts
-  - tests/orchestrators/plugin/install-flow.test.ts
-  - tests/orchestrators/plugin/install.messaging.test.ts
-  - tests/orchestrators/plugin/list-flow.test.ts
-  - tests/orchestrators/plugin/list.messaging.test.ts
-  - tests/orchestrators/plugin/operations.test.ts
-  - tests/orchestrators/plugin/prune.test.ts
-  - tests/orchestrators/plugin/reinstall-flow.test.ts
-  - tests/orchestrators/plugin/reinstall.messaging.test.ts
-  - tests/orchestrators/plugin/shared.test.ts
-  - tests/orchestrators/plugin/uninstall.test.ts
-  - tests/orchestrators/plugin/update-cascade.test.ts
-  - tests/orchestrators/plugin/update-flow.test.ts
-  - tests/orchestrators/plugin/update.messaging.test.ts
-  - tests/orchestrators/reconcile/apply.test.ts
-  - tests/orchestrators/reconcile/pending.test.ts
-  - tests/orchestrators/reconcile/reconcile.messaging.test.ts
+  - CONTRIBUTING.md
+  - extensions/pi-claude-marketplace/platform/pi-api.ts
   - tests/platform/pi-api.test.ts
-  - tests/platform/pi-inventory-seed.ts
-  - tests/shared/concerns/soft-dep.test.ts
-  - tests/shared/notification-dispatch.test.ts
-  - tests/shared/notification-grammar.test.ts
-  - tests/shared/notification-summary.test.ts
-  - tests/shared/notification-types.test.ts
-  - tests/shared/notify-context.test.ts
+  - tests/e2e/adapter-detection-rpc.test.ts
+  - tests/architecture/peer-floor.test.ts
+  - docs/prd/pi-claude-marketplace-prd.md
 findings:
-  critical: 1
-  warning: 4
-  info: 7
-  total: 12
-status: issues_found
+  critical: 0
+  warning: 0
+  info: 11
+  total: 11
+status: clean
 ---
 
-# Phase 1: Code Review Report
+# Phase 1: Code Review Report (iteration 2)
 
-**Reviewed:** 2026-10-02T00:00:00Z
+**Reviewed:** 2026-10-03T01:05:49Z
 **Depth:** standard
-**Files Reviewed:** 137
-**Status:** issues_found
+**Files Reviewed:** 7
+**Status:** clean
 
 ## Summary
 
-I reviewed the Pi 1.0 floor move and the adapter-only MCP detection change at standard depth. I read the substantive files in full: the two-arm probe in `platform/pi-api.ts`, the companion mapping in `shared/concerns/soft-dep.ts`, the info `requires:` stamping in `orchestrators/plugin/info.ts`, the grammar and type changes, the RPC harness and its consumer, the shared seeds, the peer loader, the Stop canary, the stub server, `scripts/pi.sh` and `package.json`. I checked the mechanical edits (`PiInventory` rename, `requires pi-mcp-adapter` token, `createNotificationBoundary(..., probes)`) for consistency.
+This is a re-review after the iteration-1 fixes (`git diff 19b0cfd4..HEAD`: commits cd50c39b, d1e24ebd, 440968b4, c3488792). I checked each fix against the current source and against the installed Pi 1.0.0 and pi-mcp-adapter code. All five blocking findings (CR-01, WR-01..WR-04) are resolved. I found no new Critical or Warning issues. The seven prior Info findings are still open, and I add four new Info findings (IN-08..IN-11).
 
-I checked the probe against Pi 1.0's real `getCommands()` (`agent-session.js:2645`): it lists extension commands under `invocationName` (`mcp-adapter:<n>` on a collision, `runner.js:564`), plus prompt templates and `skill:<name>` entries with their own `sourceInfo`. The name arm is correct. The source arm is not limited to extension commands (WR-01). I checked the RPC harness against Pi 1.0's `rpc-mode.js`: the `prompt` response for an extension command is sent only after the handler finishes (`agent-session.js:1490-1494`), so tagging notifies by `lastSentId` is sound. All five contract pins in `check-unused-type-members.contracts.json` match the current source and the installed `types.d.ts` (525:5, 533:5).
+Resolution of the prior findings:
 
-The main problem is in `scripts/pi.sh`. It now loads pi-mcp-adapter 5.0.0 against the developer's real Pi agent directory. The phase's own research says adapter 5 writes `"-builtin:mcp"` into that directory's `settings.json` (CR-01). The other findings are about the probe's false all-clear surface, vacuous assertions in the RPC test, and a test title that claims a check the test does not make.
+| ID | Status | Evidence |
+|----|--------|----------|
+| CR-01 | Resolved | `scripts/pi.sh:206-208` sets `pi_home="$prefix/home"` when neither `--home` nor `PI_CODING_AGENT_DIR` is set, and `:210-214` then exports `PI_CODING_AGENT_DIR` and `PI_CODING_AGENT_SESSION_DIR` below it. The emptiness test `-z "${PI_CODING_AGENT_DIR:-}"` matches Pi's own truthiness check (`config.js:451`, `if (envDir)`), so an empty exported value also gets the sandbox. pi-mcp-adapter resolves its agent directory from the same env var (`agent-dir.ts:14`), so the adapter's `settings.json` write follows the sandbox. Precedence: `--home` > explicit `PI_CODING_AGENT_DIR` > `<prefix>/home`. The usage text and `CONTRIBUTING.md:47` document the default and the opt-in route. |
+| WR-01 | Resolved | `pi-api.ts:204-213` returns false unless `command.source === "extension"`, then accepts either the source or the `mcp-adapter[:n]` name signal. This matches Pi 1.0's `getCommands()` (`agent-session.js:2645-2665`), which tags extension commands `"extension"` and prompts/skills `"prompt"`/`"skill"`. New matrix rows (`pi-api.test.ts:483-502`) use non-adapter names, so they isolate the source signal. The PRD glossary, RH-4 row and §9.3 diagram now say "extension command". |
+| WR-02 | Resolved | `assertCleanSession` (`adapter-detection-rpc.test.ts:228-231`) asserts that `get_commands` succeeded and that `/inventory-probe` was `handled`. `inventoryEntries` (`:277-279`) fails loudly when the probe did not notify. |
+| WR-03 | Resolved | The sentinel PID read and its `t.after` SIGKILL now come first (`:367-374`). The stub PID read moved to the assert section, and a missing file becomes a named `assert.fail` (`:397-399`). See IN-09 for a remaining edge. |
+| WR-04 | Resolved | `peer-floor.test.ts:76,81` asserts `peerDependenciesMeta["pi-subagents"]` deep-equals `{ optional: true }`. `package.json:68-70` satisfies it. |
+| IN-01..IN-07 | Open | Re-checked against the current tree: none were in the fixer's scope, and each one still reproduces (details below). |
 
-## Structural Findings (fallow)
+I checked the regressions the caller asked about:
 
-fallow audit (changed since `64c94d78^`, project health config, CRAP off by design): verdict `warn`; 0 dead code, 0 complexity, 0 circular dependencies, 14 duplicate clone groups.
+- **pi.sh default home and env precedence:** correct as described above. Both the default and `--home` paths run `mkdir -p` before `exec`. The default sits after the prefix is canonicalized (`:149`), so it is absolute and does not depend on `--cd`.
+- **Adapter detection after the WR-01 change:** the `mcp-adapter` and `mcp-adapter:<n>` extension commands are still detected (rows at `pi-api.test.ts:354-381`). A tool from the adapter is still detected through the tool arm, which is unchanged. A fork install (`forkAdapterCommand`, foreign source, `source: "extension"`) and a `disableProxyTool` adapter (command only) still count (`:334-352`). Pi's built-in MCP (`builtin:mcp` source, `mcp` name) still does not count.
+- **Probe throws:** `probeArm` is unchanged. Both one-arm-throws tests (`:596-634`) and the both-throw test (`:813`) still hold, and a throw still degrades to not-loaded.
 
-| # | File:line | Related file | Instances |
-|---|-----------|--------------|-----------|
-| 1 | `tests/live-uat/manifest-absence-canary.mjs:629` | `tests/live-uat/stop-canary.mjs` | 2 |
-| 2 | `extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts:92` | `orchestrators/plugin/enable-disable.messaging.ts` | 5 |
-| 3 | `extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:293` | same file | 2 |
-| 4 | `extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts:92` | `orchestrators/plugin/enable-disable.messaging.ts` | 3 |
-| 5 | `extensions/pi-claude-marketplace/shared/notification-dispatch.ts:398` | same file | 2 |
-| 6 | `tests/architecture/catalog-uat/fixtures/plugin-info.ts:8` | same file | 3 |
-| 7 | `extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:311` | same file | 2 |
-| 8 | `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1628` | same file | 2 |
-| 9 | `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1698` | `orchestrators/plugin/install-flow.ts` | 2 |
-| 10 | `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:79` | `orchestrators/plugin/install.messaging.ts` | 2 |
-| 11 | `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:371` | `orchestrators/reconcile/apply-outcomes.ts` | 2 |
-| 12 | `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:2071` | same file | 2 |
-| 13 | `tests/architecture/catalog-uat/fixtures/plugin-info.ts:31` | same file | 2 |
-| 14 | `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:791` | `orchestrators/plugin/uninstall.ts` | 2 |
-
-Group 1 relates to IN-06. Groups 6 and 13 are in a fixture file that this phase extended with the `requires:` catalog states. The other groups sit in production files where this phase made only mechanical type renames, so I treat them as inherited.
+A recorded decision in `.planning/STATE.md:571` still says "a command or tool sourceInfo.source". That file is outside this review's scope, but the recorded decision now disagrees with the code and the PRD.
 
 ## Narrative Findings (AI reviewer)
 
-## Critical Issues
-
-### CR-01: `scripts/pi.sh` runs pi-mcp-adapter 5.0.0 against the developer's real Pi settings
-
-**File:** `scripts/pi.sh:99`, `scripts/pi.sh:195-197`
-**Issue:** The pin moves from `pi-mcp-adapter@2.37.0` to `pi-mcp-adapter@5.0.0`, and the script still loads the adapter (`-e "$mcp_adapter_extension"`) even without `--home`. `pi_home` defaults to `""` (line 31), so without `--home` the script exports no `PI_CODING_AGENT_DIR`, and Pi uses the developer's real `~/.pi/agent/`. The phase's research says: "Adapter 5 on first start writes `\"-builtin:mcp\"` into Pi's **user** `settings.json`" (`.planning/research/PITFALLS.md:282`). The phase context says: "any run that loads the real adapter needs a sandboxed `PI_CODING_AGENT_DIR`" (`01-CONTEXT.md`, Specific Ideas). `01-RESEARCH.md:575` lists the `pi.sh` prefix with mitigation "none (auto-reinstall)". So the first plain `scripts/pi.sh` run after this change installs adapter 5 and changes the developer's global Pi configuration. That change turns off Pi's built-in MCP in every later normal Pi session, and it stays after the script exits. The script's help text says nothing about it. No other path in this phase writes outside a sandbox.
-**Fix:** Sandbox by default, or refuse to run without a sandbox. For example:
-```bash
-# default the Pi home into the private prefix so the adapter's onboarding
-# write (adapter 5 adds "-builtin:mcp" to settings.json) never reaches ~/.pi
-if [[ -z "$pi_home" && -z "${PI_CODING_AGENT_DIR:-}" ]]; then
-  pi_home="$prefix/home"
-fi
-```
-Also document in `usage()` that the adapter edits `<agentDir>/settings.json`, and that `--home` (or the default sandbox) keeps the edit out of `~/.pi/agent`.
-
-## Warnings
-
-### WR-01: The command source arm counts prompt templates and skills, which can report the adapter loaded when it is not
-
-**File:** `extensions/pi-claude-marketplace/platform/pi-api.ts:201-211`
-**Issue:** `isAdapterCommand` checks `isAdapterSource(command.sourceInfo?.source)` before it checks `command.source === "extension"`. Pi 1.0's `getCommands()` also returns every prompt template (`source: "prompt"`) and every skill (`source: "skill"`), and each one carries its package's `sourceInfo` (`agent-session.js:2651-2662`). So any prompt or skill whose package source contains `pi-mcp-adapter` counts as the adapter being loaded. Two cases show this: a package whose extension is filtered off in settings while its skills or prompts stay on, and an unrelated skills-only package such as `npm:pi-mcp-adapter-recipes`. In both cases the `{requires pi-mcp-adapter}` marker goes away and the info line drops `(missing)`. That is the false all-clear that the house rule in `probeArm`'s comment ("never a false all-clear") forbids. The unit matrix covers the name arm for `prompt` and `skill` (`pi-api.test.ts`, "does not count a prompt template named mcp-adapter"). It has no case for a prompt or skill whose source names the adapter.
-**Fix:** Limit both command signals to extension commands:
-```ts
-function isAdapterCommand(command: CommandInventoryItem): boolean {
-  if (command.source !== "extension") {
-    return false;
-  }
-
-  return (
-    isAdapterSource(command.sourceInfo?.source) ||
-    (typeof command.name === "string" && ADAPTER_COMMAND_NAME.test(command.name))
-  );
-}
-```
-Add matrix rows for `{ source: "prompt" | "skill", sourceInfo: { source: "npm:pi-mcp-adapter" } }` that expect `piMcpAdapterLoaded: false`. Update the RH-4 wording in the PRD ("any command or tool whose `sourceInfo.source`...") to match.
-
-### WR-02: The RPC adapter-detection states pass even when their inventory evidence is missing
-
-**File:** `tests/e2e/adapter-detection-rpc.test.ts:46`, `:229-231`, `:270-277`, `:474-479`
-**Issue:** `assertCleanSession` checks dispositions only for `PLUGIN_STEP_IDS = ["add", "install", "list", "info"]`. It never checks that the `commands` (`get_commands`) step or the `inventory` (`/inventory-probe`) step succeeded. `listedCommands` returns `[]` for a failed or missing response. `inventoryEntries` falls back to `JSON.parse("{}")` and returns `[]` when no notify followed the `inventory` step. The "built-in MCP disabled" state expects `mcpCommands: []` and `mcpToolPaths: []`. Three of the four states expect `mcpToolPaths: []`. So if the probe fixture fails to load, or `get_commands` returns an error, those assertions still pass while proving nothing about the inventory they describe. The built-in-only case is not affected, because it asserts a non-empty `mcp__stub__echo` entry.
-**Fix:** Assert both evidence steps before reading them:
-```ts
-assert.equal(run.responses.get("commands")?.success, true);
-assert.equal(promptDisposition(run.responses.get("inventory")), "handled");
-assert.ok(run.notifies.some((n) => n.after === "inventory"), "inventory probe did not notify");
-```
-Alternatively, add `"inventory"` to `PLUGIN_STEP_IDS`, and make `inventoryEntries` throw when the notify is missing instead of parsing `"{}"`.
-
-### WR-03: The built-in RPC case registers sentinel cleanup only after a read that can throw
-
-**File:** `tests/e2e/adapter-detection-rpc.test.ts:357-365`
-**Issue:** `readPid(stubPidFile)` runs before `readPid(sentinelPidFile)` and before the `t.after` that kills the sentinel. Suppose the built-in MCP never starts the stub server, for example because Pi changes to lazy server start or the stub fails before it writes its PID file. Then `readPid` throws a raw `ENOENT`, which hides the clear assertions below it, and no cleanup is registered. If the case fails because the group kill regressed (the IN-05 property this test exists to prove), the sentinel (`setInterval(..., 1 << 30)`, about 12 days) leaks with no cleanup.
-**Fix:** Read the sentinel PID and register its cleanup first. Then read the stub PID in a way that turns a missing file into a named assertion:
-```ts
-const sentinelPid = await readPid(sentinelPidFile);
-t.after(() => { try { process.kill(sentinelPid, "SIGKILL"); } catch { /* gone */ } });
-const stubPid = await readPid(stubPidFile).catch((error: unknown) => {
-  assert.fail(`built-in MCP never started the stub server: ${String(error)}`);
-});
-```
-
-### WR-04: The PIFL-02 peer test says it checks that pi-subagents is optional, but it does not
-
-**File:** `tests/architecture/peer-floor.test.ts` ("package.json declares the optional pi-subagents peer at >=0.74.0 and the lock root mirrors it (PIFL-02)")
-**Issue:** The test title claims the peer is optional, but the body checks only the range and the lock mirror. The pi-mcp-adapter sibling test asserts `peerDependenciesMeta[...]` deep-equals `{ optional: true }`, and this test has no such check. If someone removes `peerDependenciesMeta["pi-subagents"]`, npm 7+ will auto-install pi-subagents as a required peer in consumers' trees, and this test stays green.
-**Fix:** Add the same check the adapter test has:
-```ts
-assert.deepStrictEqual(pkg.peerDependenciesMeta?.[SUBAGENTS_PEER], { optional: true });
-```
-
 ## Info
 
-### IN-01: Doc comments still say the probe reads only `getAllTools()`
+### IN-01: Doc comments still say the probe reads only `getAllTools()` (open, carried from iteration 1)
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:115`, `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:140`, `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts:171`, `tests/edge/handlers/plugin/uninstall.test.ts:23-26`
-**Issue:** These comments say `pi` "carries `getAllTools()` for RH-3/RH-4", or call `pi.getAllTools` "the source of truth". RH-4 (ADET-02) now reads `getCommands()` first. The renamed `PiInventory` type carries both methods.
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:115`, `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts:171`, `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:140`, `tests/edge/handlers/plugin/uninstall.test.ts:23-26`
+**Issue:** These comments say `pi` "carries `getAllTools()` for RH-3/RH-4", or call `pi.getAllTools` "the source of truth". RH-4 (ADET-02) now reads `getCommands()` first.
 **Fix:** Change the wording to "carries `getAllTools()` and `getCommands()` for the soft-dependency probes (RH-3, ADET-02, WDEP-01)".
 
-### IN-02: Live-UAT driver mocks do not define `getCommands`
+### IN-02: Live-UAT driver mocks do not define `getCommands` (open, carried from iteration 1)
 
 **File:** `tests/live-uat/stop-canary.mjs:399`, `tests/live-uat/manifest-absence-canary.mjs:319`, `tests/live-uat/workflow-storage-canary.mjs:158`
-**Issue:** These in-process mock Pis define only `getAllTools`. Every soft-dependency snapshot now calls `getCommands()`, which throws `TypeError` here. `probeArm` catches the error and reports "not loaded". The result happens to match what the drivers intend, but they now reach it through the error path, and they would hide a real probe defect. The same pattern is in several out-of-scope test mocks (`tests/integration/*.test.ts`, `tests/orchestrators/plugin/uninstall.test.ts:178`).
+**Issue:** These mocks still define only `getAllTools`. The adapter arm reaches "not loaded" only because `getCommands()` throws a `TypeError` that `probeArm` catches. That path would hide a real probe defect.
 **Fix:** Add `getCommands: () => []` beside each `getAllTools` stub.
 
-### IN-03: The README does not state the new pi-subagents floor
+### IN-03: The README does not state the new pi-subagents floor (open, carried from iteration 1)
 
-**File:** `README.md:39`, `README.md:137`; `README.es.md:39`
-**Issue:** The prerequisites now give floors for Pi (1.0.0) and pi-mcp-adapter (5.0.0), but not for pi-subagents, which `package.json` now requires at `>=0.74.0`. Line 137 still says `excludeTools` "needs pi-subagents 0.62.0 or newer. Older versions ignore the field". That statement no longer matters, because 0.62.0 is below the declared floor.
+**File:** `README.md:137`, `README.es.md:137`
+**Issue:** The README still says `excludeTools` "needs pi-subagents 0.62.0 or newer", but 0.62.0 is below the declared `>=0.74.0` floor.
 **Fix:** Write "pi-subagents 0.74.0 or newer" in both READMEs, and drop or reword the 0.62.0 caveat.
 
-### IN-04: The `dispatchRow` change removes the value's type before it casts
+### IN-04: The `dispatchRow` change removes the value's type before it casts (open, carried from iteration 1)
 
 **File:** `extensions/pi-claude-marketplace/shared/notify-context.ts:345-346`
-**Issue:** To satisfy `no-unsafe-enum-assignment` (PIFL-05), the code widens the render map to `Readonly<Record<string, unknown>>`, then casts the `unknown` lookup to `RenderFn<...> | undefined`. The old cast started from a `RenderFn`-typed member. This one accepts any value, so a non-function entry in a render map would no longer fail to compile at this site. The risk is low because `CommandContext.render` is typed at the producers.
-**Fix:** Widen only the key: `const render: Readonly<Record<string, RenderFn<Extract<Msg, { status: Status }>> | undefined>> = context.render;`. If the rule still fires, record why in a comment.
+**Issue:** The code still widens the render map to `Readonly<Record<string, unknown>>` and casts the lookup to `RenderFn<...> | undefined`. That cast accepts any value.
+**Fix:** Widen only the key and keep the `RenderFn` value type. If the lint rule still fires, record why in a comment.
 
-### IN-05: Three copies of a local `toolInfo` helper remain after the IN-03 consolidation
+### IN-05: Three copies of a local `toolInfo` helper remain (open, carried from iteration 1)
 
 **File:** `tests/orchestrators/plugin/install-flow.test.ts:292`, `tests/orchestrators/plugin/enable-disable.test.ts:118`, `tests/orchestrators/plugin/reinstall-flow.test.ts:178`
-**Issue:** D-01-13 moved the `ToolInfo` seed into `tests/platform/pi-inventory-seed.ts`. These three files still each define a private `toolInfo(name): ToolInventoryItem`, two of them byte-identical. The next change to the inventory item shape will have to touch all three.
-**Fix:** Export a `toolInventoryItem(name)` seed from `pi-inventory-seed.ts` and import it in all three files.
+**Issue:** Each file still defines its own private `toolInfo(name): ToolInventoryItem`.
+**Fix:** Export a `toolInventoryItem(name)` seed from `tests/platform/pi-inventory-seed.ts` and import it in all three files.
 
-### IN-06: An unexplained clone between the two canary drivers replaces the explained one
+### IN-06: An unexplained clone between the two canary drivers replaces the explained one (open, carried from iteration 1)
 
-**File:** `.fallowrc.json:150` (removed `ignoredClones`), `tests/live-uat/manifest-absence-canary.mjs:629`, `tests/live-uat/stop-canary.mjs:483-513`
-**Issue:** The `dup:cc950b18:2` ignore entry and its justification header were removed from both drivers. That makes sense, because the epilogues now differ. fallow still reports a 2-instance clone between the same two drivers: the `pi -p` drive spawn and timeout block (structural finding 1). The project convention keeps a justification beside every retained clone, and this one now has none. `.planning/codebase/CONVENTIONS.md` still describes the removed entry.
-**Fix:** Either add the old justification (standalone drivers, no sibling import) for the new clone, or make the two spawn blocks diverge. Also update the `ignoredClones` paragraph in CONVENTIONS.md.
+**File:** `tests/live-uat/manifest-absence-canary.mjs:629`, `tests/live-uat/stop-canary.mjs:483-513`, `.fallowrc.json` (no `ignoredClones`)
+**Issue:** The spawn and timeout clone between the drivers has no justification header, and `.planning/codebase/CONVENTIONS.md` still describes the removed `dup:cc950b18:2` entry.
+**Fix:** Either add the justification header or make the two spawn blocks diverge. Also update CONVENTIONS.md.
 
-### IN-07: The OpenAI stub server has no error handlers
+### IN-07: The OpenAI stub server has no error handlers (open, carried from iteration 1)
 
 **File:** `tests/live-uat/openai-stub-server.mjs:74-91`
-**Issue:** The server has no `error` listener (for example on `EADDRINUSE` when `STUB_PORT` is taken), and `req` has no `error` listener (for a client that aborts mid-body). Either case can crash the stub with a stack trace. The next canary run then fails as "provider unreachable" instead of naming the stub. This is low impact for an operator-run driver.
-**Fix:** Add `.on("error", (e) => { console.error(\`openai-stub: ${e.message}\`); process.exit(1); })` to the server, and add `req.on("error", () => res.destroy())`.
+**Issue:** The server has no `error` listener on the server or on `req`, so an `EADDRINUSE` or an aborted request can crash the stub without naming the cause.
+**Fix:** Add a server `error` listener that names the stub and exits 1, and add `req.on("error", () => res.destroy())`.
+
+### IN-08: The ADET-02 doc comment has an over-long line and a garbled clause (new)
+
+**File:** `extensions/pi-claude-marketplace/platform/pi-api.ts:229-231`
+**Issue:** The WR-01 edit rewrapped only part of the block. Line 231 is 98 characters, while the rest of the block wraps near 78. The clause "or an extension command or a tool `sourceInfo.source` contains" does not read correctly: it means "an extension command's or a tool's `sourceInfo.source`".
+**Fix:**
+```ts
+/**
+ * ADET-02: pi-mcp-adapter is loaded iff `pi.getCommands()` lists an extension
+ * command named `mcp-adapter`, or the `sourceInfo.source` of an extension
+ * command or of a tool contains "pi-mcp-adapter". The command is present with
+ * `disableProxyTool` and in a fork. A bare tool named `mcp` does not count,
+ * and neither does Pi's built-in MCP (`mcp__*` tools and an `mcp` command from
+ * `builtin:mcp`). ...
+ */
+```
+
+### IN-09: `readPid` accepts an empty or non-numeric PID file, and a missing sentinel file now pre-empts the clean-session diagnosis (new)
+
+**File:** `tests/e2e/adapter-detection-rpc.test.ts:293-295`, `:367-377`
+**Issue:** `readPid` returns `Number(contents)`. An empty file gives `0`, and the cleanup registered at `:368-374` would then run `process.kill(0, "SIGKILL")`, which signals the test runner's whole process group. This needs a sentinel PID file that is truncated but not yet written, which is very unlikely because the sentinel writes synchronously while its extension loads. Still, the WR-03 fix now registers that kill on more failure paths. A related issue: because `readPid(sentinelPidFile)` moved ahead of `assertCleanSession(run)`, a session where the sentinel extension failed to load now fails with a raw `ENOENT`. Before, `assertCleanSession` would have named the cause through `run.extensionErrors`.
+**Fix:** Validate the PID, and make a missing sentinel file non-fatal before the clean-session check:
+```ts
+async function readPid(pidFile: string): Promise<number> {
+  const pid = Number(await readFile(pidFile, "utf8"));
+  assert.ok(Number.isInteger(pid) && pid > 0, `${pidFile} holds no PID`);
+  return pid;
+}
+```
+Then register the cleanup only when the read succeeds (`readPid(...).catch(() => undefined)`), and assert the PID after `assertCleanSession(run)`.
+
+### IN-10: The pi.sh sandbox default has no regression guard, and the fresh home's missing credentials are not documented (new)
+
+**File:** `scripts/pi.sh:202-214`, `CONTRIBUTING.md:47`
+**Issue:** CR-01's safety property ("a plain `scripts/pi.sh` run never edits `~/.pi/agent/settings.json`") rests on four lines that no test exercises (`git grep pi.sh -- tests` finds only `tests/pi-runtime.ts` and a README). If a later edit moves or drops the default, the global settings write comes back without any test going red. Two smaller behavior changes are also not documented:
+- The default home starts without `auth.json` and `models.json`. A developer who used to run `scripts/pi.sh` against their logged-in `~/.pi/agent` now has to `/login` again, and the new credentials land under the XDG cache prefix.
+- The default overwrites an operator-exported `PI_CODING_AGENT_SESSION_DIR` when `PI_CODING_AGENT_DIR` is unset.
+**Fix:** Add one sentence to `CONTRIBUTING.md` and `usage()`: the default home starts without credentials, so log in once or use provider env vars. Consider honoring a preset `PI_CODING_AGENT_SESSION_DIR` (`export PI_CODING_AGENT_SESSION_DIR="${PI_CODING_AGENT_SESSION_DIR:-$pi_home/sessions}"` in the default branch only). If a cheap harness is possible, add a `tests/scripts` case that runs the script with a seeded prefix and asserts that `PI_CODING_AGENT_DIR` resolves under the prefix.
+
+### IN-11: Inventory and command readers still turn a shape change into an empty list (new, residual from WR-02)
+
+**File:** `tests/e2e/adapter-detection-rpc.test.ts:284`, `tests/e2e/_rpc.ts:374-382`
+**Issue:** After the WR-02 fix, a missing step fails loudly. A successful step with an unexpected payload shape still reads as `[]`: `inventoryEntries` when `tools` or `commands` is not an array, and `listedCommands` when `data.commands` is not an array. The "built-in MCP disabled" state expects `mcpCommands: []` and `mcpToolPaths: []`, so that state alone would pass vacuously. The sibling states expect non-empty `mcp` entries, so the suite as a whole would still go red.
+**Fix:** In `inventoryEntries`, call `assert.fail` when `entries` is not an array, instead of returning `[]`.
 
 ---
 
-_Reviewed: 2026-10-02T00:00:00Z_
+_Reviewed: 2026-10-03T01:05:49Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Iteration: 2_
