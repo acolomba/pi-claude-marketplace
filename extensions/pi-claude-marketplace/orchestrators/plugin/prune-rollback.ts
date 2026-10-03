@@ -25,6 +25,7 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 
 import type { IndexedRecord } from "./dependency-index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { McpWrittenFile } from "../../shared/errors-bridges.ts";
 import type { Stats } from "node:fs";
 
 interface SavedPath {
@@ -51,6 +52,11 @@ export interface PruneRestoreOps {
 /** Snapshot held until state persistence succeeds or every restore completes. */
 export interface PruneRollback {
   readonly backupName: string;
+  /**
+   * D-02-19: records the bytes a member's unstage wrote to an MCP config file.
+   * The last write to a path wins.
+   */
+  readonly recordMcpWrites: (files: readonly McpWrittenFile[]) => void;
   readonly rollback: () => Promise<readonly PruneRestoreFailure[]>;
   readonly discard: () => Promise<void>;
 }
@@ -191,14 +197,22 @@ async function restoreArtifact(saved: SavedPath, ops: PruneRestoreOps): Promise<
   }
 }
 
-async function metadataMatchesBackup(saved: SavedPath): Promise<boolean> {
+/** What the live metadata file holds relative to its backup. */
+type MetadataVerdict =
+  | { readonly kind: "matches-backup" | "occupied" }
+  | { readonly kind: "own-write"; readonly original: Buffer };
+
+async function metadataVerdict(
+  saved: SavedPath,
+  ownWrite: Buffer | undefined,
+): Promise<MetadataVerdict> {
   await assertPathInside(saved.root, saved.target, `prune ${saved.phase} restore`);
   if (saved.backup === undefined) {
-    return !(await pathExists(saved.target));
+    return { kind: (await pathExists(saved.target)) ? "occupied" : "matches-backup" };
   }
 
   if (!(await pathExists(saved.target))) {
-    return false;
+    return { kind: "occupied" };
   }
 
   const stat = await lstat(saved.target);
@@ -211,16 +225,30 @@ async function metadataMatchesBackup(saved: SavedPath): Promise<boolean> {
     throw new Error(`Prune rollback found an occupied metadata backup at ${saved.backup}.`);
   }
 
-  return (
-    stat.mode === backupStat.mode &&
-    (await readFile(saved.target)).equals(await readFile(saved.backup))
-  );
+  const [live, original] = await Promise.all([readFile(saved.target), readFile(saved.backup)]);
+  if (stat.mode === backupStat.mode && live.equals(original)) {
+    return { kind: "matches-backup" };
+  }
+
+  // D-02-19: live bytes equal to this prune's own last write mean no other
+  // writer changed the file after the unstage rewrote it. Any other content
+  // is another writer's change.
+  return ownWrite?.equals(live) === true ? { kind: "own-write", original } : { kind: "occupied" };
 }
 
-async function restoreMetadata(saved: SavedPath, ops: PruneRestoreOps): Promise<void> {
-  const matchesBackup = await metadataMatchesBackup(saved);
+async function restoreMetadata(
+  saved: SavedPath,
+  ops: PruneRestoreOps,
+  ownWrite: Buffer | undefined,
+): Promise<void> {
+  const verdict = await metadataVerdict(saved, ownWrite);
   await ops.afterMetadataRead?.(saved.target);
-  if (matchesBackup) {
+  if (verdict.kind === "matches-backup") {
+    return;
+  }
+
+  if (verdict.kind === "own-write") {
+    await writeFileAtomic(saved.target, verdict.original);
     return;
   }
 
@@ -348,8 +376,14 @@ export async function preparePruneRollback(
     throw error;
   }
 
+  const ownMcpWrites = new Map<string, Buffer>();
   return {
     backupName: path.basename(backupRoot),
+    recordMcpWrites: (files): void => {
+      for (const file of files) {
+        ownMcpWrites.set(file.path, file.bytes);
+      }
+    },
     rollback: async (): Promise<readonly PruneRestoreFailure[]> => {
       const failures: PruneRestoreFailure[] = [];
       for (const saved of artifacts) {
@@ -364,7 +398,7 @@ export async function preparePruneRollback(
       for (const saved of [agentsIndex, mcp, mcpAdapter]) {
         try {
           // eslint-disable-next-line no-await-in-loop -- restores run in order; each failure kept
-          await restoreMetadata(saved, ops);
+          await restoreMetadata(saved, ops, ownMcpWrites.get(saved.target));
         } catch (error: unknown) {
           failures.push({ phase: saved.phase, cause: asError(error) });
         }

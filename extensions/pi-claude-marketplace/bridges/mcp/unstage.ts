@@ -14,10 +14,12 @@
 // leaves both unchanged. The adapter file is written first. A crash between
 // the two writes leaves the legacy entries for the next unstage to remove
 // (NFR-3). The writer drops JSONC comments, so each rewritten file whose
-// bytes held comments yields a `comments-dropped` notice (AFILE-04). When the
+// bytes held comments yields a `comments-dropped` notice (AFILE-04). Each
+// rewritten file is returned with the exact bytes written to it, so a prune
+// rollback can tell its own rewrite from a later edit (D-02-19). When the
 // legacy write fails after the adapter file was rewritten, a typed
-// `McpUnstagePartialError` carries the adapter file's removed names and
-// notice, so the caller can still report them.
+// `McpUnstagePartialError` carries the adapter file's removed names, notice,
+// and written bytes, so the caller can still report and recognize them.
 //
 // MC-7 tolerances, per file (no write):
 //   - Missing file (ENOENT/ENOTDIR). Must NOT materialize the file just to
@@ -34,7 +36,11 @@
 // it (AFILE-02).
 
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
-import { McpConfigFileError, McpUnstagePartialError } from "../../shared/errors-bridges.ts";
+import {
+  McpConfigFileError,
+  McpUnstagePartialError,
+  type McpWrittenFile,
+} from "../../shared/errors-bridges.ts";
 
 import {
   ADAPTER_SERVER_KEYS,
@@ -94,34 +100,43 @@ function noticesOf(targets: readonly UnstageTarget[], scope: Scope): readonly Mc
 }
 
 /**
- * Writes each target in order. A failure after an earlier write succeeded
- * throws `McpUnstagePartialError` describing the rewritten files (AFILE-04).
+ * Writes each target in order and returns the bytes written to each file. A
+ * failure after an earlier write succeeded throws `McpUnstagePartialError`
+ * describing the rewritten files (AFILE-04, D-02-19).
  */
 async function writeUnstageTargets(
   targets: readonly UnstageTarget[],
   pluginName: string,
   marketplaceName: string,
   scope: Scope,
-): Promise<void> {
-  const written: UnstageTarget[] = [];
+): Promise<readonly McpWrittenFile[]> {
+  const writtenTargets: UnstageTarget[] = [];
+  const writtenFiles: McpWrittenFile[] = [];
   for (const target of targets) {
+    let bytes: Buffer;
     try {
-      await atomicWriteJson(
+      bytes = await atomicWriteJson(
         target.filePath,
         withPluginServers(target.config, pluginName, marketplaceName, {}),
       );
     } catch (err) {
-      if (written.length === 0) {
+      if (writtenTargets.length === 0) {
         throw err;
       }
 
-      throw new McpUnstagePartialError(removedNamesOf(written), noticesOf(written, scope), {
-        cause: err,
-      });
+      throw new McpUnstagePartialError(
+        removedNamesOf(writtenTargets),
+        noticesOf(writtenTargets, scope),
+        writtenFiles,
+        { cause: err },
+      );
     }
 
-    written.push(target);
+    writtenTargets.push(target);
+    writtenFiles.push({ path: target.filePath, bytes });
   }
+
+  return Object.freeze(writtenFiles);
 }
 
 export async function unstageMcpServers(input: UnstageMcpInput): Promise<UnstageMcpResult> {
@@ -145,11 +160,12 @@ export async function unstageMcpServers(input: UnstageMcpInput): Promise<Unstage
   // PRD §5.7 / D-04: a file with nothing to remove is not rewritten. The
   // mtime-stable invariant is what tests rely on.
   const targets = [adapterTarget, legacyTarget].filter((target) => target !== undefined);
-  await writeUnstageTargets(targets, pluginName, marketplaceName, locations.scope);
+  const written = await writeUnstageTargets(targets, pluginName, marketplaceName, locations.scope);
 
   return {
     removedNames: removedNamesOf(targets),
     warnings: Object.freeze<string[]>([]),
     notices: noticesOf(targets, locations.scope),
+    written,
   };
 }

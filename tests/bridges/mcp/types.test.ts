@@ -116,6 +116,7 @@ const unstageMcpResult: UnstageMcpResult = {
   removedNames: ["search"],
   warnings: ["preserved foreign server foreign-search"],
   notices: [{ kind: "comments-dropped", scope: "user", file: "mcp.json" }],
+  written: [{ path: "/scope/mcp.json", bytes: Buffer.from("{}\n") }],
 } satisfies UnstageMcpResult;
 void unstageMcpResult;
 
@@ -198,6 +199,13 @@ const unstageMcpResultWithoutWarnings: UnstageMcpResult = {
   removedNames: [],
 };
 void unstageMcpResultWithoutWarnings;
+// @ts-expect-error unstage results always expose the files they wrote
+const unstageMcpResultWithoutWritten: UnstageMcpResult = {
+  removedNames: [],
+  warnings: [],
+  notices: [],
+};
+void unstageMcpResultWithoutWritten;
 
 // @ts-expect-error raw MCP document fields are readonly
 wrappedMcpDoc.mcpServers = {};
@@ -226,3 +234,5 @@ void (true satisfies IsMutableArray<PreparedMcpStaged["stagedNames"]>);
 void (true satisfies IsMutableArray<UnstageMcpResult["removedNames"]>);
 // @ts-expect-error unstage result warnings are a readonly array
 void (true satisfies IsMutableArray<UnstageMcpResult["warnings"]>);
+// @ts-expect-error unstage result written files are a readonly array
+void (true satisfies IsMutableArray<UnstageMcpResult["written"]>);

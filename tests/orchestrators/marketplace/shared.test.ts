@@ -665,6 +665,9 @@ test("cascadeUnstagePlugin returns every removed resource in six-kind order", as
       mcpServers: ["sample-server"],
       workflows: [workflowName],
     },
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
   };
 
   // act
@@ -827,6 +830,9 @@ test("AFILE-04: cascadeUnstagePlugin carries the notice for a commented mcp-adap
       workflows: [],
     },
     mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
   };
 
   // act
@@ -862,6 +868,9 @@ test("AFILE-04: cascadeUnstagePlugin keeps the notice when a later slot fails", 
       workflows: [],
     },
     mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
   });
   assert.ok(cause instanceof WorkflowsUnstageFailureError);
   assert.deepStrictEqual(
@@ -908,6 +917,9 @@ test("AFILE-04: cascadeUnstagePlugin reports the adapter file's servers and noti
       workflows: [],
     },
     mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
   });
   const writeFailure = cause as NodeJS.ErrnoException | undefined;
   assert.deepStrictEqual(

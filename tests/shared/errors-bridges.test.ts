@@ -355,17 +355,19 @@ describe("McpConfigFileError", () => {
 });
 
 describe("McpUnstagePartialError", () => {
-  test("AFILE-04: carries frozen copies of the rewritten files' names and notices and the write failure", () => {
+  test("AFILE-04: carries frozen copies of the rewritten files' names, notices, and bytes and the write failure", () => {
     // arrange
     const cause = new Error("EACCES: permission denied");
     const removedNames = ["first"];
     const notices = [
       { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
     ] as const;
+    const written = [{ path: "/scope/mcp-adapter.json", bytes: Buffer.from("{}\n") }];
 
     // act
-    const error = new McpUnstagePartialError(removedNames, notices, { cause });
+    const error = new McpUnstagePartialError(removedNames, notices, written, { cause });
     removedNames.push("later");
+    written.push({ path: "/scope/mcp.json", bytes: Buffer.from("[]\n") });
 
     // assert
     assert.ok(error instanceof McpUnstagePartialError);
@@ -375,14 +377,19 @@ describe("McpUnstagePartialError", () => {
         message: error.message,
         removedNames: error.removedNames,
         notices: error.notices,
+        written: error.written,
         cause: error.cause,
-        frozen: Object.isFrozen(error.removedNames) && Object.isFrozen(error.notices),
+        frozen:
+          Object.isFrozen(error.removedNames) &&
+          Object.isFrozen(error.notices) &&
+          Object.isFrozen(error.written),
       },
       {
         name: "McpUnstagePartialError",
         message: "MCP unstage stopped after rewriting part of its config files.",
         removedNames: ["first"],
         notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+        written: [{ path: "/scope/mcp-adapter.json", bytes: Buffer.from("{}\n") }],
         cause,
         frozen: true,
       },

@@ -16,7 +16,7 @@ import { preparePruneRollback } from "./prune-rollback.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 import { finalizePrunedMembers, sweepOrphans } from "./uninstall.ts";
 
-import type { PruneRestoreFailure } from "./prune-rollback.ts";
+import type { PruneRestoreFailure, PruneRollback } from "./prune-rollback.ts";
 import type { PrunedMember, UninstallHooksRouting, UninstallTransaction } from "./uninstall.ts";
 import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -198,6 +198,21 @@ function notifyCommitted(
   );
 }
 
+/**
+ * D-02-19: hands each member's MCP config writes to the rollback as the
+ * cascade returns, so a rollback can restore a file this prune rewrote.
+ */
+function recordingCascade(
+  cascade: UninstallTransaction["cascadeUnstagePlugin"],
+  backup: PruneRollback,
+): UninstallTransaction["cascadeUnstagePlugin"] {
+  return async (...args) => {
+    const outcome = await cascade(...args);
+    backup.recordMcpWrites(outcome.writtenMcpFiles ?? []);
+    return outcome;
+  };
+}
+
 /** Binds the standalone sweep to uninstall's guarded removal capabilities. */
 export function createPrunePlugin(
   transaction: UninstallTransaction,
@@ -279,7 +294,10 @@ export function createPrunePlugin(
               initiallyGone: new Set<string>(),
               locations,
               keepData: false,
-              cascade: transaction.cascadeUnstagePlugin,
+              cascade:
+                backup === undefined
+                  ? transaction.cascadeUnstagePlugin
+                  : recordingCascade(transaction.cascadeUnstagePlugin, backup),
               transaction,
             });
             if (members.length > 0) {
@@ -342,8 +360,9 @@ export function createPrunePlugin(
 
     // AFILE-04: a committed sweep rewrote the MCP config files for good, so
     // the comments it dropped follow the rows. A rolled-back sweep never
-    // reaches this point: its failure row names each rewritten MCP file as a
-    // failed rollback, and the recovery backup keeps the original bytes.
+    // reaches this point: its rollback restores each MCP file it rewrote
+    // (D-02-19), or its failure row names the file and the recovery backup
+    // keeps the original bytes.
     notifyMcpConfigNotices(
       options.ctx,
       outcome.members.flatMap((member) => member.mcpConfigNotices),

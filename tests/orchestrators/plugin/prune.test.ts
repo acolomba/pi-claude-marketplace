@@ -1471,7 +1471,7 @@ test("AFILE-04: a dry-run prune sends no notice", async () => {
   });
 });
 
-test("AFILE-04: a rolled-back prune keeps the commented original in its backup and sends no notice", async () => {
+test("D-02-19: a rolled-back prune restores the commented original, keeps it in its backup, and sends no notice", async () => {
   await withHermeticEnvironment("prune-owner-afile04-rollback-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -1501,12 +1501,14 @@ test("AFILE-04: a rolled-back prune keeps the commented original in its backup a
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
           `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
           "    [skills] (rollback failed)\n" +
-          "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.\n" +
-          "    [mcp adapter] (rollback failed)\n" +
-          "      cause: Prune rollback found an occupied metadata path at mcp-adapter.json.",
+          "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
         severity: "error",
       },
     ]);
+    assert.strictEqual(
+      await readFile(locations.mcpAdapterJsonPath, "utf8"),
+      COMMENTED_ORPHAN_ADAPTER,
+    );
     const manifest = JSON.parse(
       await readFile(path.join(locations.extensionRoot, backupName, "manifest.json"), "utf8"),
     ) as { entries: Array<{ phase: string; backup: string | null }> };
@@ -1516,5 +1518,78 @@ test("AFILE-04: a rolled-back prune keeps the commented original in its backup a
       await readFile(path.join(locations.extensionRoot, backupName, entry.backup), "utf8"),
       COMMENTED_ORPHAN_ADAPTER,
     );
+  });
+});
+
+test("D-02-19: a rolled-back prune restores its own mcp-adapter.json rewrite byte-for-byte", async () => {
+  await withHermeticEnvironment("prune-owner-mcp-own-write-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: { orphan: { provenance: "dependency" } },
+    });
+    await rm(path.dirname(fixture.skills["orphan@mp"] ?? ""), { recursive: true });
+    const seeded = await loadState(locations.extensionRoot, { persistMigration: false });
+    const marketplace = seeded.marketplaces["mp"];
+    const orphan = marketplace?.plugins["orphan"];
+    assert.ok(marketplace && orphan);
+    await saveState(locations.extensionRoot, {
+      ...seeded,
+      marketplaces: {
+        mp: {
+          ...marketplace,
+          plugins: {
+            orphan: {
+              ...orphan,
+              resources: { ...orphan.resources, skills: [], mcpServers: ["orphan-server"] },
+            },
+          },
+        },
+      },
+    });
+    const originalAdapter = Buffer.from(
+      '// user note\n{"mcpServers":{"orphan-server":{"command":"orphan","_piClaudeMarketplace":{"plugin":"orphan","marketplace":"mp"}},"user-server":{"command":"user"}}}\n',
+    );
+    await writeFile(locations.mcpAdapterJsonPath, originalAdapter);
+    const originalState = await readFile(locations.stateJsonPath);
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: () => Promise.reject(new Error("state save failed")),
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        adapter: await readFile(locations.mcpAdapterJsonPath),
+        state: await readFile(locations.stateJsonPath),
+        backups: (await readdir(locations.extensionRoot)).filter((name) =>
+          name.startsWith("prune-backup-"),
+        ),
+        recordedServers: (await loadState(locations.extensionRoot, { persistMigration: false }))
+          .marketplaces["mp"]?.plugins["orphan"]?.resources.mcpServers,
+      },
+      {
+        adapter: originalAdapter,
+        state: originalState,
+        backups: [],
+        recordedServers: ["orphan-server"],
+      },
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {unreadable}\n" +
+          "    cause: state save failed",
+        severity: "error",
+      },
+    ]);
   });
 });

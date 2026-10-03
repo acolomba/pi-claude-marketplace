@@ -100,23 +100,37 @@ export class McpConfigFileError extends Error {
 }
 
 /**
+ * D-02-19: one MCP config file an unstage rewrote and the exact bytes it
+ * wrote there. A prune rollback restores the file only while it still holds
+ * these bytes.
+ */
+export interface McpWrittenFile {
+  readonly path: string;
+  readonly bytes: Buffer;
+}
+
+/**
  * AFILE-04: an MCP unstage that rewrote at least one config file and then
- * failed to write a later one. `removedNames` and `notices` describe only the
- * files already rewritten, so the caller can still report the removed servers
- * and the dropped comments. The write failure rides `Error.cause`.
+ * failed to write a later one. `removedNames`, `notices`, and `written`
+ * describe only the files already rewritten, so the caller can still report
+ * the removed servers and the dropped comments, and a rollback can still
+ * recognize its own write (D-02-19). The write failure rides `Error.cause`.
  */
 export class McpUnstagePartialError extends Error {
   readonly removedNames: readonly string[];
   readonly notices: readonly McpConfigNotice[];
+  readonly written: readonly McpWrittenFile[];
   constructor(
     removedNames: readonly string[],
     notices: readonly McpConfigNotice[],
+    written: readonly McpWrittenFile[],
     options: ErrorOptions,
   ) {
     super("MCP unstage stopped after rewriting part of its config files.", options);
     this.name = "McpUnstagePartialError";
     this.removedNames = Object.freeze([...removedNames]);
     this.notices = Object.freeze([...notices]);
+    this.written = Object.freeze([...written]);
   }
 }
 

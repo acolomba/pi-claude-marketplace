@@ -21,6 +21,23 @@ test("writes two-space JSON with one trailing newline", async (t) => {
   assert.strictEqual(jsonBytes, expectedJsonBytes);
 });
 
+test("D-02-19: returns the exact bytes it wrote to the file", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(os.tmpdir(), "atomic-json-returned-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, "out.json");
+  const expectedBytes = Buffer.from('{\n  "name": "café"\n}\n', "utf8");
+
+  // act
+  const writtenBytes = await atomicWriteJson(filePath, { name: "café" });
+
+  // assert
+  assert.deepStrictEqual(
+    { writtenBytes, fileBytes: await readFile(filePath) },
+    { writtenBytes: expectedBytes, fileBytes: expectedBytes },
+  );
+});
+
 test("creates a missing parent tree before writing the document", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(os.tmpdir(), "atomic-json-parent-"));

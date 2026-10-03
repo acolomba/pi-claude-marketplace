@@ -39,7 +39,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { McpUnstagePartialError } from "../../shared/errors-bridges.ts";
+import { McpUnstagePartialError, type McpWrittenFile } from "../../shared/errors-bridges.ts";
 import {
   errorMessage,
   InvalidMarketplaceManifestError,
@@ -342,6 +342,12 @@ export interface UnstageOutcome {
    * slot can fail after the MCP slot rewrote the file.
    */
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
+  /**
+   * D-02-19: each MCP config file the MCP slot rewrote and the exact bytes it
+   * wrote, so a prune rollback can recognize its own rewrite. Set only when
+   * non-empty, on success and on failure, like `mcpConfigNotices`.
+   */
+  readonly writtenMcpFiles?: readonly McpWrittenFile[];
 }
 
 /**
@@ -352,6 +358,13 @@ export function mcpConfigNoticesMember(notices: readonly McpConfigNotice[]): {
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
 } {
   return notices.length === 0 ? {} : { mcpConfigNotices: notices };
+}
+
+/** D-02-19: spreads `writtenMcpFiles` onto an outcome only when a file was rewritten. */
+function writtenMcpFilesMember(files: readonly McpWrittenFile[]): {
+  readonly writtenMcpFiles?: readonly McpWrittenFile[];
+} {
+  return files.length === 0 ? {} : { writtenMcpFiles: files };
 }
 
 /**
@@ -386,6 +399,7 @@ export async function cascadeUnstagePlugin(
     workflows: [] as string[],
   };
   let mcpConfigNotices: readonly McpConfigNotice[] = [];
+  let writtenMcpFiles: readonly McpWrittenFile[] = [];
 
   try {
     const skillsResult = await unstagePluginSkills({
@@ -437,6 +451,7 @@ export async function cascadeUnstagePlugin(
     });
     dropped.mcpServers = [...mcpResult.removedNames];
     mcpConfigNotices = mcpResult.notices;
+    writtenMcpFiles = mcpResult.written;
 
     // WLIF-03: 6th cascade slot, after mcp so no existing ordering shifts. The
     // names come from the RECORD, never from a re-derivation off the plugin
@@ -472,15 +487,17 @@ export async function cascadeUnstagePlugin(
         workflows: Object.freeze([...dropped.workflows]),
       }),
       ...mcpConfigNoticesMember(mcpConfigNotices),
+      ...writtenMcpFilesMember(writtenMcpFiles),
     });
   } catch (err) {
     // AFILE-04: an MCP unstage that rewrote the adapter file before its legacy
-    // write failed still reports the servers and comments it dropped there.
-    // The write failure is the plugin's cause.
+    // write failed still reports the servers and comments it dropped there,
+    // and the bytes it wrote (D-02-19). The write failure is the plugin's cause.
     let failure: unknown = err;
     if (err instanceof McpUnstagePartialError) {
       dropped.mcpServers = [...err.removedNames];
       mcpConfigNotices = err.notices;
+      writtenMcpFiles = err.written;
       failure = err.cause;
     }
 
@@ -496,6 +513,7 @@ export async function cascadeUnstagePlugin(
       }),
       cause: failure instanceof Error ? failure : new Error(String(failure)),
       ...mcpConfigNoticesMember(mcpConfigNotices),
+      ...writtenMcpFilesMember(writtenMcpFiles),
     });
   }
 }

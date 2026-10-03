@@ -6,6 +6,7 @@
 // `UnstageMcpInput` records cannot drift apart across modules.
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { McpWrittenFile } from "../../shared/errors-bridges.ts";
 import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 
 /**
@@ -123,4 +124,9 @@ export interface UnstageMcpResult {
    * when nothing was removed.
    */
   readonly notices: readonly McpConfigNotice[];
+  /**
+   * D-02-19: each file the unstage rewrote and the exact bytes it wrote, in
+   * write order. Empty when nothing was removed.
+   */
+  readonly written: readonly McpWrittenFile[];
 }
