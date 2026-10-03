@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 03
 current_phase_name: Typed Raw Surfaces
-status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-10-03T00:55:02.403Z"
-last_activity: 2026-10-02
-last_activity_desc: Completed 03-03 typed device-flow prompt and corpus ledger
-state_head: ea1a936f1655b69f3497f5bca0a95c119c67bd7c
+status: verifying
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-10-03T02:28:53.896Z"
+last_activity: 2026-10-03
+last_activity_desc: Completed 03-04 AUTH-09 planted controls and D-16 presentation-sink gate
+state_head: de9fe2138dc835bf9628a63428529187ffef6395
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 22
-  completed_plans: 21
+  completed_plans: 22
   percent: 29
 milestone_name: Mode-Keyed Presentation Strategies
 ---
@@ -33,10 +33,10 @@ component as a working Pi artifact.
 
 Phase: 03 (Typed Raw Surfaces) — EXECUTING
 Plan: 4 of 4
-Status: Executing Phase 03
-Last activity: 2026-10-02 — Completed 03-03 (typed device-flow prompt and corpus ledger)
+Status: Phase complete — ready for verification
+Last activity: 2026-10-03 — Completed 03-04 (AUTH-09 planted controls and D-16 presentation-sink gate)
 
-Progress: [███░░░░░░░] 29% (2 of 7 phases fully verified; 21 plans complete)
+Progress: [███░░░░░░░] 29% (2 of 7 phases fully verified; 22 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -170,16 +170,17 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-03T00:55:02.220Z
-**Stopped at:** Completed 03-03-PLAN.md
+**Last session:** 2026-10-03T02:28:53.699Z
+**Stopped at:** Completed 03-04-PLAN.md
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
 findings fixed (CR-01, WR-01..WR-06, IN-01..IN-03); D-07 now records 29 approved
 corpus replacements (29 / 2,632 / 2,661 against the original blob). The full
-`npm run check` passed at `571b6883`. Phase 3 (Typed Raw Surfaces) has 3 of 4
-plans complete; 03-04 (planted proofs and the phase gate) is next.
+`npm run check` passed at `571b6883`. Phase 3 (Typed Raw Surfaces) has all 4
+plans complete; the phase gate is green at `796bf822` (full check reused from
+its pre-commit, corpus 3134/0, ledger, catalog). Phase verification is next.
 
 **Corpus determinism (resolved by quick task 261002-dys):** prune rollback
 now receives its backup-directory creator through `PruneRestoreOps`, so tests
@@ -227,6 +228,7 @@ archived milestone artifacts.
 | Phase 03 P01 | 1h 17m | 2 tasks | 10 files |
 | Phase 03 P02 | 1h 15m | 2 tasks | 10 files |
 | Phase 03 P03 | 1h 13m | 2 tasks | 20 files |
+| Phase 03 P04 | 1h 3m | 2 tasks | 4 files |
 
 ## Decisions
 
@@ -270,3 +272,5 @@ archived milestone artifacts.
 - [Phase 03]: 03-03: the device-flow prompt is the device-flow-prompt raw kind; the domain passes { verificationUri, userCode } to onDeviceCode and auth-host binds it to notifyDeviceFlowPrompt (D-09, D-10, D-12)
 - [Phase 03]: 03-03: the AUTH-09 gate pairs a positive call count with an exact-form allow-list for onDeviceCode and for the provider binding (D-11)
 - [Phase 03]: 03-03: the D-17 corpus exception is a five-record ledger in its own commit; the baseline holds 3134 entries with 0 extras
+- [Phase 03]: 03-04: assertPlantedCopyRejects is the shared D-07-01 offender control; new architecture gates call it per data row instead of repeating the temp-root sequence
+- [Phase 03]: 03-04: the D-16 presentation-sink gate pairs two pattern clauses with a placement clause (exactly two notify spellings, both inside deliver); each clause is proven by its own planted offender

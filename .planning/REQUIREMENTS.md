@@ -47,7 +47,7 @@ model that already carries every presentation decision.
 
 ### Text Strategy
 
-- [ ] **TEXT-01**: Text output in `tui` and `print` is a pure formatter of the
+- [x] **TEXT-01**: Text output in `tui` and `print` is a pure formatter of the
   model and its bytes are unchanged: the `docs/output-catalog.md` diff is empty,
   and a pre-refactor capture of every emitted `(message, severity)` pair across
   the unit and integration suites diffs empty, except for PMOD-04 redaction.
@@ -101,7 +101,7 @@ model that already carries every presentation decision.
   message and usage, `usage-info`) for every verb.
 - [x] **RAWS-02**: Diagnostics are typed payloads (`diagnostic {header,
   lines[]}`).
-- [ ] **RAWS-03**: The device-flow prompt is a typed payload carrying
+- [x] **RAWS-03**: The device-flow prompt is a typed payload carrying
   `verificationUri` and `userCode` as fields; the domain passes the values, not
   a pre-formatted string.
 - [x] **RAWS-04**: The load-time "reconcile aborted" and "plugin PATH not
@@ -195,7 +195,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PMOD-03 | Phase 1 | Complete |
 | PMOD-04 | Phase 4 | Pending |
 | PMOD-05 | Phase 2 | Complete |
-| TEXT-01 | Phase 3 | Pending |
+| TEXT-01 | Phase 3 | Complete |
 | WIRE-01 | Phase 4 | Pending |
 | WIRE-02 | Phase 6 | Pending |
 | WIRE-03 | Phase 4 | Pending |
@@ -212,7 +212,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JOUT-05 | Phase 5 | Pending |
 | RAWS-01 | Phase 3 | Complete |
 | RAWS-02 | Phase 3 | Complete |
-| RAWS-03 | Phase 3 | Pending |
+| RAWS-03 | Phase 3 | Complete |
 | RAWS-04 | Phase 3 | Complete |
 | RAWS-05 | Phase 3 | Complete |
 | MODE-01 | Phase 5 | Pending |
