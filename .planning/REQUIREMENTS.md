@@ -54,7 +54,7 @@ model that already carries every presentation decision.
 
 ### Wire Schema
 
-- [ ] **WIRE-01**: Every JSON payload carries an integer `schemaVersion` and a
+- [x] **WIRE-01**: Every JSON payload carries an integer `schemaVersion` and a
   `kind` discriminant from one typebox union that covers every notification
   kind and every raw surface.
 - [ ] **WIRE-02**: Every payload carries required `severity` (the info /
@@ -71,7 +71,7 @@ model that already carries every presentation decision.
 - [x] **WIRE-06**: Plugin rows carry `id: "<name>@<marketplace>"`.
 - [ ] **WIRE-07**: Every command-origin payload of one command run carries the
   same `invocationId`, minted by an injectable generator.
-- [ ] **WIRE-08**: No payload discloses a path the text form does not show
+- [x] **WIRE-08**: No payload discloses a path the text form does not show
   (NFR-9), proven by a whole-payload walk test.
 - [x] **WIRE-09**: A JSON Schema file generated from the typebox source is
   committed and shipped in the npm package, and a test fails when it drifts.
@@ -82,7 +82,7 @@ model that already carries every presentation decision.
   emitted through `pi.appendEntry("claude-plugin", payload)` and none through
   `ctx.ui.notify`; `appendEntry` is callable only from the dispatch module,
   enforced by an ESLint rule proven by a planted violation.
-- [ ] **JOUT-02**: The JSON strategy is a format-only peer of the text strategy:
+- [x] **JOUT-02**: The JSON strategy is a format-only peer of the text strategy:
   every catalog fixture converts and validates against the schema, and a
   planted invalid fixture fails.
 - [ ] **JOUT-03**: Every command emits all of its payloads before its handler's
@@ -196,17 +196,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PMOD-04 | Phase 4 | Complete |
 | PMOD-05 | Phase 2 | Complete |
 | TEXT-01 | Phase 3 | Complete |
-| WIRE-01 | Phase 4 | Pending |
+| WIRE-01 | Phase 4 | Complete |
 | WIRE-02 | Phase 6 | Pending |
 | WIRE-03 | Phase 4 | Complete |
 | WIRE-04 | Phase 4 | Complete |
 | WIRE-05 | Phase 4 | Complete |
 | WIRE-06 | Phase 4 | Complete |
 | WIRE-07 | Phase 6 | Pending |
-| WIRE-08 | Phase 4 | Pending |
+| WIRE-08 | Phase 4 | Complete |
 | WIRE-09 | Phase 4 | Complete |
 | JOUT-01 | Phase 5 | Pending |
-| JOUT-02 | Phase 4 | Pending |
+| JOUT-02 | Phase 4 | Complete |
 | JOUT-03 | Phase 6 | Pending |
 | JOUT-04 | Phase 6 | Pending |
 | JOUT-05 | Phase 5 | Pending |

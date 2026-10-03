@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 04
 current_phase_name: Wire Schema and JSON Strategy
-status: executing
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-10-03T19:19:45.623Z"
+status: verifying
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-10-03T20:58:21.438Z"
 last_activity: 2026-10-03
-last_activity_desc: Completed 04-04 (credential redaction at every serialization site)
-state_head: ec517b2ac20efaa8e5f03cc7e1cf7834c299210b
+last_activity_desc: Completed 04-05 (catalog-wide wire validation and payload walk)
+state_head: d8d213a03c7653c75278a335d29920e02a2011db
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 27
-  completed_plans: 26
+  completed_plans: 27
   percent: 43
 milestone_name: Mode-Keyed Presentation Strategies
 ---
@@ -33,10 +33,10 @@ component as a working Pi artifact.
 
 Phase: 04 (Wire Schema and JSON Strategy) — EXECUTING
 Plan: 5 of 5
-Status: Executing Phase 04
-Last activity: 2026-10-03 — Completed 04-04 (credential redaction at every serialization site)
+Status: Phase complete — ready for verification
+Last activity: 2026-10-03 — Completed 04-05 (catalog-wide wire validation and payload walk)
 
-Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 26 plans complete)
+Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 27 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -170,8 +170,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-03T19:19:45.422Z
-**Stopped at:** Completed 04-04-PLAN.md
+**Last session:** 2026-10-03T20:58:04.844Z
+**Stopped at:** Completed 04-05-PLAN.md
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -236,6 +236,7 @@ archived milestone artifacts.
 | Phase 04 P02 | 85min | 2 tasks | 20 files |
 | Phase 04 P03 | 113min | 2 tasks | 17 files |
 | Phase 04 P04 | 84min | 2 tasks | 9 files |
+| Phase 04 P05 | 67 min | 2 tasks | 6 files |
 
 ## Decisions
 
@@ -290,3 +291,5 @@ archived milestone artifacts.
 - [Phase 04]: Raw payloads carry no summary, and the async-rewake-summary payload carries its text as text; RAW_SURFACE_SEVERITY is the one raw-kind severity table
 - [Phase 04]: PMOD-04: plugin-info-cascade blocks get the same notes redaction as a single plugin-info
 - [Phase 04]: PMOD-04: the D-08 redaction ledger is empty (corpus 3134 present, 0 extra; no catalog diff)
+- [Phase 04]: WIRE-08: the payload walk's path pattern is redactAbsolutePaths' pattern plus a bare UNC root, which the redactor does not match
+- [Phase 04]: WIRE-08: planted path, Error, and undefined offenders extend the prune committed-warning payload, the one catalog payload with a top-level cause chain
