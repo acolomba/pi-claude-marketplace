@@ -38,6 +38,18 @@ import type { ScanReport } from "./source-scan.ts";
  *   exist, both inside `deliver`. Both formatters are imported from the text
  *   strategy module, and each one reaches `deliver` at least once.
  *
+ * Mentions:
+ *   A sink reached through `.call`, a destructured `notify`, or an alias of
+ *   `deliver` matches none of the call patterns. So every mention of `ui` must
+ *   be one of the two notify calls inside `deliver`, and every mention of
+ *   `deliver` must be its declaration or a direct formatter call.
+ *
+ * Limit:
+ *   A body variable's provenance is not checked. The literal clause bounds
+ *   only what this module composes, so
+ *   `deliver(ctx, formatEnvelopeArguments(envelope, body))` passes whatever
+ *   `body` holds.
+ *
  * What the gate proves, and how:
  *   - It VISITED the module. The scan reports the paths it opened, and this file
  *     deep-compares them with the registry group (D-07-03). The placement clause
@@ -45,7 +57,9 @@ import type { ScanReport } from "./source-scan.ts";
  *     passing over nothing.
  *   - It FIRES. Temp-root copies of the real module with one planted offender
  *     reject (D-07-01). The third offender uses the sanctioned spelling outside
- *     `deliver`, so only the placement clause can reject it.
+ *     `deliver`, so only the placement clause can reject it. The `.call`,
+ *     destructure, and alias offenders each pin the mention message they must
+ *     fail with.
  *   - It is not failing everything. An unmutated copy passes, and a composed
  *     notify inside a line comment passes (D-07-04).
  *
@@ -127,7 +141,8 @@ const TEXT_STRATEGY_IMPORT =
 /**
  * D-16: the placement half of the gate. Exactly two notify spellings exist in
  * the comment-stripped module, both inside `deliver`, and each formatter
- * reaches `deliver` at least once.
+ * reaches `deliver` at least once. Every `ui` and `deliver` mention must be
+ * one of those counted calls or the `deliver` declaration.
  */
 async function assertSinkPlacement(root: string): Promise<void> {
   const stripped = stripComments(await readFile(path.join(root, SINK_FILE), "utf8"));
@@ -144,6 +159,25 @@ async function assertSinkPlacement(root: string): Promise<void> {
     sinkCalls,
     2,
     `D-16: deliver in ${SINK_FILE} holds ${sinkCalls} of the module's notify calls; it must hold both.`,
+  );
+
+  const uiMentions = [...stripped.matchAll(/\bui\b/g)].length;
+  const deliverMentions = [...stripped.matchAll(/\bdeliver\b/g)].length;
+  const formatterDeliverCalls = [
+    ...stripped.matchAll(
+      /\bdeliver\(\s*[A-Za-z_$][\w$.]*\s*,\s*(?:formatEnvelopeArguments|formatRawSurface)\(/g,
+    ),
+  ].length;
+
+  assert.strictEqual(
+    uiMentions,
+    sinkCalls,
+    `D-16: ${SINK_FILE} names ui ${uiMentions} time(s); only the ${sinkCalls} notify calls inside deliver may.`,
+  );
+  assert.strictEqual(
+    deliverMentions,
+    1 + formatterDeliverCalls,
+    `D-16: ${SINK_FILE} names deliver ${deliverMentions} time(s); only its declaration and ${formatterDeliverCalls} direct formatter call(s) may.`,
   );
   assert.match(
     stripped,
@@ -191,7 +225,15 @@ test("D-16 / SC-5: every notify argument in the dispatch module comes from the t
   );
 });
 
-const SINK_OFFENDERS: ReadonlyArray<{ readonly name: string; readonly line: string }> = [
+/**
+ * Planted offenders. `rejection` pins the clause an offender must fail on;
+ * without it, any D-16 message passes.
+ */
+const SINK_OFFENDERS: ReadonlyArray<{
+  readonly name: string;
+  readonly line: string;
+  readonly rejection?: RegExp;
+}> = [
   {
     name: "a direct notify with a composed template",
     line: 'export function leak(ctx: NotificationContext): void { ctx.ui.notify(`x`, "info"); }',
@@ -220,9 +262,24 @@ const SINK_OFFENDERS: ReadonlyArray<{ readonly name: string; readonly line: stri
     name: "a bracket-access notify",
     line: 'ctx.ui["notify"](args[0]);',
   },
+  {
+    name: "a notify reached through .call",
+    line: "function leak(ctx: NotificationContext, m: { cause: Error }): void { ctx.ui.notify.call(ctx.ui, m.cause.message); }",
+    rejection: /names ui 4 time\(s\); only the 2 notify calls/,
+  },
+  {
+    name: "a destructured notify",
+    line: "function leak(ctx: NotificationContext, m: { cause: Error }): void { const { notify: n } = ctx.ui; n(m.cause.message); }",
+    rejection: /names ui 3 time\(s\); only the 2 notify calls/,
+  },
+  {
+    name: "an aliased deliver handed a pre-composed tuple",
+    line: "function leak(ctx: NotificationContext, m: { cause: Error }): void { const d = deliver; d(ctx, [m.cause.message]); }",
+    rejection: /names deliver 4 time\(s\); only its declaration and 2 direct formatter call/,
+  },
 ];
 
-for (const { name, line } of SINK_OFFENDERS) {
+for (const { name, line, rejection = /D-16/ } of SINK_OFFENDERS) {
   test(`D-16 / SC-5: the presentation-sink gate rejects ${name}`, async () => {
     // act & assert
     await assertPlantedCopyRejects({
@@ -231,7 +288,7 @@ for (const { name, line } of SINK_OFFENDERS) {
       target: SINK_FILE,
       line,
       scan: scanPresentationSink,
-      rejection: /D-16/,
+      rejection,
     });
   });
 }
