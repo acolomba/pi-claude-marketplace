@@ -73,6 +73,38 @@ source; source comments cite requirement IDs (AFILE-0N), never `D-02-NN`.
   written by `/mcp-adapter disable` into the project file) is left in place; it
   is user-authored and inert without a full definition.
 
+### Post-research decisions (operator, 2026-10-02)
+Raised by 02-RESEARCH.md open questions; each answered by the operator.
+
+- **D-02-08:** Parse `mcp-adapter.json` with the runtime dependency
+  `strip-json-comments@^5.0.3`, the library and options pi-mcp-adapter 5.0.0
+  uses (`JSON.parse(stripJsonComments(stripBom(raw), { trailingCommas: true }))`),
+  so the grammar matches by construction. Justification for the new runtime
+  dependency: AFILE-02 requires reading the file the way the adapter reads it.
+- **D-02-09:** AFILE-04 covers every path that rewrites the file: install,
+  update, reinstall, enable, uninstall, disable, marketplace remove, prune and
+  the reconcile/import cascades. The bridge returns a structured
+  comments-dropped notice (not a `warnings` string, which standalone verbs
+  drop); orchestrators route it to a user-visible channel.
+- **D-02-10:** A marker-less override stub under one of our server names in the
+  target file is absorbed: only the D-02-06 carry-forward fields are copied into
+  our entry; credential-bearing fields are never copied.
+- **D-02-11:** A failed install restores the exact prior bytes of
+  `mcp-adapter.json` (replacement handle, as reinstall does) instead of
+  unstaging from the rewritten file.
+- **D-02-12:** Before the Phase 5 migration, the same plugin's marked entries in
+  the same scope's legacy `mcp.json` are not a collision, and uninstall (and
+  every unstage) also removes them, marker-keyed. Moving entries stays Phase 5.
+- **D-02-13:** The same plugin's own marked entries in the other scope's
+  adapter file are not a collision (Claude Code parity: one effective server;
+  adapter later-wins picks the project copy).
+- **D-02-14:** When the staged MCP set is empty and `mcp-adapter.json` cannot be
+  parsed, the operation proceeds without touching the file and the user gets a
+  notice naming it. Plugins with MCP servers refuse with the AFILE-02 typed
+  error; unstage keeps refusing on an unparseable file.
+- **D-02-15:** [informational] Overrides do not survive a plugin disable then enable (D-02-06
+  stays update/reinstall only); recorded as a backlog item.
+
 ### Claude's Discretion
 - Module split: extract the JSONC document reader and the entry handling out of
   `bridges/mcp/stage.ts` up front (it sits near fallow's `maxUnitSize` and
@@ -128,7 +160,11 @@ source; source comments cite requirement IDs (AFILE-0N), never `D-02-NN`.
 <deferred>
 ## Deferred Ideas
 
-None — discussion stayed within phase scope.
+- Keeping user overrides across plugin disable then enable (D-02-15): needs
+  persisted state; backlog.
+- Phase 3 hand-off: ANAME-07 will write `requestTimeoutMs` from the manifest,
+  but it is a carried field (D-02-06), so a plugin's later timeout change would
+  never apply. Phase 3 must decide how translation and carry-forward interact.
 
 </deferred>
 
