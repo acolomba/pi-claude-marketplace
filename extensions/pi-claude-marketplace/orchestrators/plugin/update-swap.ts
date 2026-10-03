@@ -134,6 +134,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
@@ -1071,6 +1072,8 @@ async function commitUpdatePhase3a(
   /** CR-03 / WR-01: what the workflows commit reported. The record write is
    * the only consumer. */
   readonly workflows: WorkflowsCommitReport;
+  /** AFILE-04: the MCP commit's file notices; empty when that commit threw. */
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
 }> {
   const failures: UpdatePhase3Failure[] = [];
 
@@ -1138,8 +1141,12 @@ async function commitUpdatePhase3a(
     failures.push({ phase: "hooks", msg: errorMessage(err), cause: err as Error });
   }
 
+  // AFILE-04: the notices describe a write, so they are taken only once the
+  // commit that performs it has returned.
+  let mcpConfigNotices: readonly McpConfigNotice[] = [];
   try {
     await commitPreparedMcp(handles.mcp);
+    mcpConfigNotices = handles.mcp.result.notices;
   } catch (err) {
     failures.push({ phase: "mcp", msg: errorMessage(err), cause: err as Error });
   }
@@ -1153,6 +1160,7 @@ async function commitUpdatePhase3a(
     failures,
     hookEntries,
     workflows: { committed: workflows.committed, placedNames: workflows.placedNames },
+    mcpConfigNotices,
   };
 }
 
@@ -1188,11 +1196,16 @@ function hasUpdatePhase3Failures(
  * 4-space cause-chain trailer beneath the failed plugin row. The cascade is
  * NOT re-rendered here -- aborting before the cascade walk means there is
  * exactly one row to surface.
+ *
+ * AFILE-04: `mcpConfigNotices` are the MCP commit's notices. A bridge after
+ * it, or the finalize, can fail once the file is already rewritten, so the
+ * failed outcome carries them for the caller to show after this row.
  */
 function composePhase3FailureOutcome(
   args: ThreePhaseArgs,
   failures: NonEmptyUpdatePhase3Failures,
   versions: { readonly fromVersion: string; readonly toVersion: string },
+  mcpConfigNotices: readonly McpConfigNotice[],
 ): UpdatePhase3FailedOutcome {
   const { plugin } = args;
   const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
@@ -1238,6 +1251,8 @@ function composePhase3FailureOutcome(
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
+    // NREG-01: absent when the MCP commit threw or reported nothing.
+    ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
   };
 }
 
@@ -1346,6 +1361,7 @@ export async function swapPluginUpdate(
     failures: phase3aFailures,
     hookEntries,
     workflows: workflowsCommit,
+    mcpConfigNotices,
   } = await commitUpdatePhase3a(removalOps, args, preflight, handles);
 
   // ─── Phase 2b: finalize state (TR-04) ─────────────────────────────────────
@@ -1390,7 +1406,12 @@ export async function swapPluginUpdate(
   // ─── Phase 3b: aggregate error path with recovery hint, OR success ────────
 
   if (hasUpdatePhase3Failures(phase3aFailures)) {
-    return composePhase3FailureOutcome(args, phase3aFailures, { fromVersion, toVersion });
+    return composePhase3FailureOutcome(
+      args,
+      phase3aFailures,
+      { fromVersion, toVersion },
+      mcpConfigNotices,
+    );
   }
 
   // PURL-06 / D-78-01: GC-after-swap. The finalize withStateGuard has committed
@@ -1494,6 +1515,9 @@ export async function swapPluginUpdate(
     // D-141-03 / D-141-05: same NREG-01 spread rule as `degradedKinds` -- a
     // clean update's outcome keeps the key absent.
     ...(updateWarnings.length > 0 && { notes: updateWarnings }),
+    // AFILE-04: same NREG-01 spread rule; the caller that renders the row
+    // routes these through `notifyMcpConfigNotices`.
+    ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
   };
 }
 

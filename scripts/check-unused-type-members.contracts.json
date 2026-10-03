@@ -506,20 +506,20 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts:101:50"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:72:26",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:73:26",
       "owner": "RemoveDataDirFn.options",
       "key": "recursive",
       "category": "type-refinement",
       "purpose": "Narrows recursive at this position, so a non-recursive removal cannot satisfy the seam.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:72:12"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:73:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:72:43",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:73:43",
       "owner": "RemoveDataDirFn.options",
       "key": "force",
       "category": "type-refinement",
       "purpose": "Narrows force at this position, so a non-forced removal cannot satisfy the seam.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:72:12"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:73:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:121:45",
@@ -618,20 +618,20 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:1382:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:869:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:892:42",
       "owner": "enumerateMarketplaceTarget.target",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:869:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:892:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:950:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:973:42",
       "owner": "resolveUpdateMarketplaceScope.target",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:950:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:973:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:185:56",
@@ -789,20 +789,20 @@
       "boundary": "extensions/pi-claude-marketplace/index.ts:180:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:235:3",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:236:3",
       "owner": "DirectRenderableFailedOutcome",
       "key": "cause",
       "category": "type-refinement",
       "purpose": "Closes the cause slot on a failure the caller renders directly, so an outcome carrying a phase-3 cause cannot satisfy this shape.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:233:45"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:234:45"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:238:3",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:239:3",
       "owner": "DirectRenderableFailedOutcome",
       "key": "toVersion",
       "category": "type-refinement",
       "purpose": "Closes the to-version slot on a failure the caller renders directly, so no version arrow can be rendered for an update that never swapped.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:233:45"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:234:45"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:476:63",

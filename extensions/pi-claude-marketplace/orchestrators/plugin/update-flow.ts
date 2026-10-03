@@ -71,6 +71,7 @@ import {
   PluginUpdatePhase3Error,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
@@ -365,6 +366,7 @@ async function updatePluginsWith(
       // headline would otherwise emit a contradictory `nothing to update` line
       // directly after the failure notification.
       renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality, composeCascade, true);
+      surfaceUpdateMcpConfigNotices(ctx, outcomes, outcome);
       return;
     }
 
@@ -373,6 +375,7 @@ async function updatePluginsWith(
 
   composeCascade(ctx, pi, outcomes, cardinality);
   surfaceUpdateDiscoveryWarnings(ctx, outcomes);
+  surfaceUpdateMcpConfigNotices(ctx, outcomes);
 }
 
 /**
@@ -403,6 +406,26 @@ function surfaceUpdateDiscoveryWarnings(
       warnings: outcome.notes,
     });
   }
+}
+
+/**
+ * AFILE-04: show the MCP config file notices of every updated plugin, in
+ * outcome order, after the rows they qualify. On a phase-3a abort the failing
+ * plugin's own notices follow, because its MCP commit may have rewritten the
+ * file before a later bridge or the finalize failed.
+ *
+ * Unlike `surfaceUpdateDiscoveryWarnings`, this also runs on the abort path,
+ * because the rewrite has already happened to the user's file.
+ */
+function surfaceUpdateMcpConfigNotices(
+  ctx: NotificationContext,
+  outcomes: readonly { readonly outcome: PluginUpdateOutcome }[],
+  failed?: UpdatePhase3FailedOutcome,
+): void {
+  const notices = outcomes.flatMap(({ outcome }) =>
+    outcome.partition === "updated" ? (outcome.mcpConfigNotices ?? []) : [],
+  );
+  notifyMcpConfigNotices(ctx, [...notices, ...(failed?.mcpConfigNotices ?? [])]);
 }
 
 /**

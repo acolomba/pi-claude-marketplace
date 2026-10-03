@@ -2300,8 +2300,8 @@ test("GAP-09: reinstallPlugin render=none success with bridgeWarnings returns an
 });
 
 test("GAP-10: reinstallPlugin render=none success with no warnings returns bare locked.outcome", async () => {
-  // When no bridge warnings and no maintenance warnings exist,
-  // the notes.length === 0 branch returns locked.outcome unchanged (no notes field).
+  // When no bridge warnings and no maintenance warnings exist, the outcome
+  // carries no notes field.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-none-nowarn-"));
     try {
@@ -9552,6 +9552,203 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through reinstall", 
           },
         },
       });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** AFILE-04: the exact comments-dropped notice for the project-scope adapter file. */
+const PROJECT_COMMENTS_DROPPED_NOTICE: NotifyRecord = {
+  severity: "warning",
+  message:
+    "MCP config comments removed.\n\nThe project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+};
+
+/** AFILE-04: install `hello` with one MCP server, then put a `//` comment at the top of the adapter file. */
+async function seedCommentedMcpReinstall(cwd: string): Promise<{
+  readonly locations: ReturnType<typeof locationsFor>;
+  readonly commentedText: string;
+}> {
+  const locations = locationsFor("project", cwd);
+  await seedMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    resources: { mcp: true },
+    install: true,
+  });
+  const commentedText = `// mine\n${await readFile(locations.mcpAdapterJsonPath, "utf8")}`;
+  await writeFile(locations.mcpAdapterJsonPath, commentedText);
+  return { locations, commentedText };
+}
+
+test("AFILE-04: reinstall over a commented mcp-adapter.json shows the comments-removed notice after its rows", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile04-"));
+    try {
+      await seedCommentedMcpReinstall(cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a rolled-back reinstall restores the comments and shows no notice", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile04-rollback-"));
+    try {
+      const { locations, commentedText } = await seedCommentedMcpReinstall(cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        stateTransaction: { saveState: () => Promise.reject(new Error("saveState failure")) },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {unreadable}",
+          severity: "error",
+        },
+      ]);
+      assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), commentedText);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: an orchestrated reinstall returns the notice on its outcome and sends nothing", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile04-orchestrated-"));
+    try {
+      await seedCommentedMcpReinstall(cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "reinstalled",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        version: "1.0.0",
+        resourcesChanged: true,
+        stagedAgentNames: [],
+        stagedMcpServerNames: ["server1"],
+        declaresAgents: false,
+        declaresMcp: true,
+        declaresWorkflows: false,
+        mcpConfigNotices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ],
+      });
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a self-rendered reinstall shows the notice after its row", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile04-self-"));
+    try {
+      await seedCommentedMcpReinstall(cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-02: reinstalling a plugin with no MCP servers over an unparseable mcp-adapter.json leaves it unchanged and says so", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile02-unparseable-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+      await writeFile(locations.mcpAdapterJsonPath, "{ not json");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        { message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes" },
+        {
+          message:
+            "MCP config left unchanged.\n\nThe project-scope mcp-adapter.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.",
+          severity: "warning",
+        },
+      ]);
+      assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{ not json");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

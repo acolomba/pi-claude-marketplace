@@ -111,6 +111,14 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * (NREG-01).
    */
   readonly discoveryWarnings?: readonly string[];
+  /**
+   * AFILE-04 / AFILE-02: the MCP config file notices from this reinstall's
+   * MCP replace. The outcome carries them because the rows render after the
+   * locked ledger finishes. A consumer routes them through
+   * `notifyMcpConfigNotices`. Populated only on the `render: "none"` arm, and
+   * omitted when there are none (NREG-01).
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 export interface ReinstallSkippedOutcome extends ReinstallOutcomeBase {
@@ -342,6 +350,13 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    * row (D-10-15).
    */
   readonly constraint: UpdateConstraintDisclosure | undefined;
+  /**
+   * AFILE-04 / AFILE-02: the MCP config file notices from this update's MCP
+   * commit. The outcome carries them because the rows render after the
+   * three-phase runner finishes. A consumer routes them through
+   * `notifyMcpConfigNotices`. Omitted when there are none (NREG-01).
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 /**
@@ -419,6 +434,13 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
   readonly phaseFailures?: readonly UpdatePhaseFailure[];
   readonly cleanupFailures?: readonly CleanupFailure[];
   readonly cause?: Error;
+  /**
+   * AFILE-04 / AFILE-02: the MCP config file notices from an MCP commit that
+   * succeeded before a later bridge or the finalize failed. A consumer routes
+   * them through `notifyMcpConfigNotices` after the failure row. Omitted when
+   * there are none (NREG-01).
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 /**

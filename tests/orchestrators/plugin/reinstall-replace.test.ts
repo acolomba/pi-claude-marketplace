@@ -448,3 +448,58 @@ test("normalizes a real bridge preparation failure", async () => {
     ),
   );
 });
+
+test("AFILE-04: a completed replace carries the MCP replace's file notices", async () => {
+  // arrange
+  const calls: string[] = [];
+  const notices = [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }];
+  const operations = fakeOperations(calls, {
+    prepareStageMcpServers: () => {
+      calls.push("prepare mcp");
+      return Promise.resolve({
+        result: { recorded: [], degraded: [], warnings: [], notices },
+      });
+    },
+  } as unknown as Partial<ReinstallReplaceOperations>);
+
+  // act
+  const replacement = await REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(
+    replacementInput(),
+    operations,
+  );
+
+  // assert
+  assert.deepStrictEqual(replacement.mcpConfigNotices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+  ]);
+});
+
+test("AFILE-04: a replace that fails after the MCP replace rolls the MCP file back and throws", async () => {
+  // arrange
+  const calls: string[] = [];
+  const operations = fakeOperations(calls, {
+    commitPreparedWorkflows: () => {
+      calls.push("commit workflows");
+      return Promise.reject(new Error("workflows commit denied"));
+    },
+  });
+
+  // act & assert
+  await assert.rejects(
+    REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(replacementInput(), operations),
+    (error: Error) =>
+      error.name === "ManualRecoveryError" && error.message === "workflows commit denied",
+  );
+  assert.deepStrictEqual(calls.slice(calls.indexOf("replace mcp")), [
+    "replace mcp",
+    "commit workflows",
+    "rollback mcp",
+    "rollback agents",
+    "rollback commands",
+    "rollback skills",
+    "abort mcp",
+    "abort agents",
+    "abort commands",
+    "abort skills",
+  ]);
+});

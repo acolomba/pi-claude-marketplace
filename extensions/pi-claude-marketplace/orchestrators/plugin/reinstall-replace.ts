@@ -56,6 +56,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RmOptions } from "node:fs";
 
@@ -108,6 +109,11 @@ export interface ReinstallReplacement {
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
   readonly discoveryWarnings: readonly string[];
   readonly bridgeWarnings: readonly string[];
+  /**
+   * AFILE-04: the MCP replace's file notices. Only a completed replace returns
+   * a replacement; a failed one restores the file's exact bytes and throws.
+   */
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
   /** Operations retained so compensation uses the same transaction owner. */
   readonly operations: ReinstallReplaceOperations;
   /**
@@ -282,6 +288,7 @@ async function replaceReinstalledPlugin(
     hookEntries,
     discoveryWarnings: warnings.discovery,
     bridgeWarnings: [...warnings.bridge, ...workflowsCommitLeaks],
+    mcpConfigNotices: handles.mcp.result.notices,
     operations,
     removalOps,
     locations: input.locations,

@@ -662,3 +662,158 @@ test("retains the intent ledger and old resource tree after a replacement failur
     }
   });
 });
+
+/** AFILE-04: seed `hello` 1.0.0 -> 2.0.0 with one MCP server over the given adapter file. */
+async function prepareMcpUpdate(cwd: string, adapterText: string) {
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasMcp: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const locations = locationsFor("project", cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, adapterText);
+  const args = {
+    plugin: "hello",
+    marketplace: "mp",
+    scope: "project",
+    cwd,
+    locations,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+    cascade: true,
+    cleanupClones: () => Promise.resolve(),
+  } as const;
+  return { locations, pluginRoot: path.join(marketplaceRoot, "plugins", "hello"), args };
+}
+
+async function preflightOf(args: Awaited<ReturnType<typeof prepareMcpUpdate>>["args"]) {
+  const preflight = await preparePluginUpdate({
+    plugin: args.plugin,
+    marketplace: args.marketplace,
+    scope: args.scope,
+    locations: args.locations,
+    cleanupClones: args.cleanupClones,
+  });
+  assert.ok(!("partition" in preflight));
+  return preflight;
+}
+
+const COMMENTED_ADAPTER_TEXT =
+  '{\n  // mine\n  "mcpServers": { "mine": { "command": "my-server" } }\n}\n';
+
+const PROJECT_COMMENTS_DROPPED = {
+  kind: "comments-dropped",
+  scope: "project",
+  file: "mcp-adapter.json",
+} as const;
+
+test("AFILE-04: a swap over a commented mcp-adapter.json carries the comments-removed notice", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-afile04-"));
+    try {
+      const { args } = await prepareMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
+      const preflight = await preflightOf(args);
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight);
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "2.0.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: ["server1"],
+        declaresAgents: false,
+        declaresMcp: true,
+        constraint: undefined,
+        declaresWorkflows: false,
+        mcpConfigNotices: [PROJECT_COMMENTS_DROPPED],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a swap over a comment-free mcp-adapter.json carries no notice", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-afile04-clean-"));
+    try {
+      const { args } = await prepareMcpUpdate(
+        cwd,
+        '{ "mcpServers": { "mine": { "command": "my-server" } } }\n',
+      );
+      const preflight = await preflightOf(args);
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight);
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "2.0.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: ["server1"],
+        declaresAgents: false,
+        declaresMcp: true,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a swap whose workflows commit fails after the MCP commit carries the notice", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-afile04-failed-"));
+    try {
+      const { locations, pluginRoot, args } = await prepareMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
+      await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+      await writeFile(
+        path.join(pluginRoot, "workflows", "greet.js"),
+        'export const meta = { name: "greet", description: "does greet" };\n',
+      );
+      const foreignPath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      await mkdir(locations.workflowsSavedDir, { recursive: true });
+      await writeFile(foreignPath, "{}");
+      const preflight = await preflightOf(args);
+      const refusal = `Cannot replace workflow target with non-previous content at ${foreignPath}`;
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight);
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "2.0.0",
+        notes: [
+          'Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+          `workflows: ${refusal}`,
+        ],
+        reasons: ["rollback partial"],
+        phaseFailures: [{ phase: "workflows", msg: refusal }],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        mcpConfigNotices: [PROJECT_COMMENTS_DROPPED],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
