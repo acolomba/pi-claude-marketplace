@@ -225,6 +225,10 @@ function assertCleanSession(run: RpcSessionResult): void {
   );
   assert.deepStrictEqual(run.extensionErrors, []);
   assert.deepStrictEqual(run.dialogs, []);
+  // The inventory assertions read these two steps, and a failed step reads as
+  // an empty list, so each one must have run.
+  assert.strictEqual(run.responses.get("commands")?.success, true, "get_commands failed");
+  assert.strictEqual(promptDisposition(run.responses.get("inventory")), "handled");
   assert.deepStrictEqual(
     PLUGIN_STEP_IDS.map((stepId) => promptDisposition(run.responses.get(stepId))),
     ["handled", "handled", "handled", "handled"],
@@ -270,7 +274,11 @@ function installNotifyType(run: RpcSessionResult): string | undefined | null {
 /** The `tools` or `commands` list the inventory probe notified. */
 function inventoryEntries(run: RpcSessionResult, key: "tools" | "commands"): readonly unknown[] {
   const notify = run.notifies.find((candidate) => candidate.after === "inventory");
-  const inventory: unknown = JSON.parse(notify?.message ?? "{}");
+  if (notify === undefined) {
+    assert.fail("the inventory probe did not notify");
+  }
+
+  const inventory: unknown = JSON.parse(notify.message);
   const entries: unknown =
     typeof inventory === "object" && inventory !== null ? Reflect.get(inventory, key) : undefined;
   return Array.isArray(entries) ? entries : [];
@@ -354,7 +362,8 @@ test(
 
     // act
     const run = await runPluginSession(env, [sentinel], "mcp__", t.signal);
-    const stubPid = await readPid(stubPidFile);
+    // Register the sentinel's cleanup before any read that can throw, so a
+    // failed case never leaves the long-lived sentinel running.
     const sentinelPid = await readPid(sentinelPidFile);
     t.after(() => {
       try {
@@ -385,6 +394,9 @@ test(
     assert.deepStrictEqual(requiresLines(run), ["    requires: pi-mcp-adapter (missing)"]);
     // Pi stops the stub MCP server, which runs in a process group of its own;
     // the session's group kill on Pi's exit stops the sentinel.
+    const stubPid = await readPid(stubPidFile).catch((error: unknown) => {
+      assert.fail(`the built-in MCP never started the stub server: ${String(error)}`);
+    });
     assert.deepStrictEqual(
       { stubGone: await processGone(stubPid), sentinelGone: await processGone(sentinelPid) },
       { stubGone: true, sentinelGone: true },
