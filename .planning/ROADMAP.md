@@ -16,7 +16,7 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 
 - [x] **Phase 1: Presentation Model** — Every presentation decision is computed once, upstream of a text renderer that no longer probes state or walks `Error` objects (16 plans complete; verification passed) (completed 2026-10-01)
 - [x] **Phase 2: Row Policies** — Per-verb rendering differences become a total row-policy map of data instead of string render callbacks (completed 2026-10-02)
-- [ ] **Phase 3: Typed Raw Surfaces** — Every raw-string output surface becomes a typed model kind, so text is a pure formatter of the model
+- [x] **Phase 3: Typed Raw Surfaces** — Every raw-string output surface becomes a typed model kind, so text is a pure formatter of the model (completed 2026-10-03)
 - [ ] **Phase 4: Wire Schema and JSON Strategy** — A versioned typebox wire schema and a format-only JSON strategy, validated as a pure function and first consumed by the LLM tools
 - [ ] **Phase 5: Mode-Selected JSON Sink** — `ctx.mode` selects the strategy, and `json`/`rpc` output reaches consumers through `pi.appendEntry` from every output site
 - [ ] **Phase 6: Command-Run Contract** — Payloads carry their origin and invocation, and every command run emits a complete set of payloads, even when it throws
@@ -146,7 +146,7 @@ Plans:
 4. Hook rewake summaries and the Stop-hook override-cap warning are hook kinds, distinct from command kinds, and the rewake text is carried as data. The `hooks-cap-notify` and `hooks-async-rewake` byte pins hold. The JSON `origin: hook` value that these kinds make derivable is emitted under WIRE-02 in Phase 6.
 5. No output surface hands the text sink a pre-composed string. The catalog diff and the full wire-corpus diff against the Phase 1 baseline are empty.
 
-**Plans:** 4/4 plans executed, sequential (waves 1-4)
+**Plans:** 4/4 plans complete, sequential (waves 1-4)
 
 **Wave 1**
 - [x] 03-01-PLAN.md — Tracer: load-time warnings as typed kinds through one sink that structured emissions share; usage and help kinds (RAWS-04, RAWS-01)
@@ -230,7 +230,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Presentation Model | 16/16 | Complete    | 2026-10-01 |
 | 2. Row Policies | 2/2 | Complete    | 2026-10-02 |
-| 3. Typed Raw Surfaces | 4/4 | In Progress|  |
+| 3. Typed Raw Surfaces | 4/4 | Complete    | 2026-10-03 |
 | 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |
 | 5. Mode-Selected JSON Sink | 0/TBD | Not started | - |
 | 6. Command-Run Contract | 0/TBD | Not started | - |

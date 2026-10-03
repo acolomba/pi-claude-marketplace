@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "Typed Raw Surfaces",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "4",
@@ -41,8 +41,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 03 of 7 · ready to verify"
+    "label": "Advance to the next step (plan phase 4)",
+    "reason": "Phase 4 of 7 — needs a plan"
   },
-  "updated_at": "2026-10-03T02:28:46.343Z"
+  "updated_at": "2026-10-03T05:21:51.490Z"
 }

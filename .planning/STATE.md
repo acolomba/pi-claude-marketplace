@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 03
-current_phase_name: Typed Raw Surfaces
-status: verifying
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-10-03T02:28:53.896Z"
+current_phase: 4
+current_phase_name: Wire Schema and JSON Strategy
+status: planning
+stopped_at: Phase 3 complete, ready to plan Phase 4
+last_updated: "2026-10-03T05:21:51.425Z"
 last_activity: 2026-10-03
-last_activity_desc: Completed 03-04 AUTH-09 planted controls and D-16 presentation-sink gate
-state_head: de9fe2138dc835bf9628a63428529187ffef6395
+last_activity_desc: Phase 3 complete, transitioned to Phase 4
+state_head: 9014123467f3ba760820c558eb0cc11e4dc0a1ec
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 22
   completed_plans: 22
-  percent: 29
+  percent: 43
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-10-01 after json-output Phase 1 verifi
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 03 — Typed Raw Surfaces
+**Current focus:** Phase 4 — Wire Schema and JSON Strategy
 
 ## Current Position
 
-Phase: 03 (Typed Raw Surfaces) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-10-03 — Completed 03-04 (AUTH-09 planted controls and D-16 presentation-sink gate)
+Phase: 4 — Wire Schema and JSON Strategy
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-03 — Phase 3 complete, transitioned to Phase 4
 
-Progress: [███░░░░░░░] 29% (2 of 7 phases fully verified; 22 plans complete)
+Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 22 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -171,7 +171,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Last session:** 2026-10-03T02:28:53.699Z
-**Stopped at:** Completed 03-04-PLAN.md
+**Stopped at:** Phase 3 complete, ready to plan Phase 4
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -179,8 +179,11 @@ and verified. Phase 2's review-fix loop closed after three iterations with ten
 findings fixed (CR-01, WR-01..WR-06, IN-01..IN-03); D-07 now records 29 approved
 corpus replacements (29 / 2,632 / 2,661 against the original blob). The full
 `npm run check` passed at `571b6883`. Phase 3 (Typed Raw Surfaces) has all 4
-plans complete; the phase gate is green at `796bf822` (full check reused from
-its pre-commit, corpus 3134/0, ledger, catalog). Phase verification is next.
+plans complete and is verified (11/11). Its review-fix loop converged clean
+after three iterations (three gate warnings fixed in 95237f7c, 16f507cd,
+13729cd8; four Info items open in 03-REVIEW-DISPOSITION.md). The full
+`npm run check` passed at `13729cd8`; corpus 3134 present / 0 extra per the
+D-17 ledger; catalog unchanged. Phase 4 (Wire Schema and JSON Strategy) is next.
 
 **Corpus determinism (resolved by quick task 261002-dys):** prune rollback
 now receives its backup-directory creator through `PruneRestoreOps`, so tests
@@ -203,7 +206,7 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Plan Phase 3 (Typed Raw Surfaces) under the original autonomous run.
+- Discuss and plan Phase 4 (Wire Schema and JSON Strategy) under the autonomous run.
 
 ## Performance Metrics
 
