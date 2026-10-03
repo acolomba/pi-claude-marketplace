@@ -103,6 +103,31 @@ plugin id. No new upstream research was needed.
   converter-returns-`{}` control, JOUT-02). Production never validates
   payloads (REQUIREMENTS Out of Scope).
 
+### Research follow-ups resolved by the orchestrator (2026-10-03)
+
+These apply D-04's rule ("emit what the text form shows, no more") and
+D-01/WIRE-04's absent-never-null rule; they are not new user decisions.
+
+- Catalog scope: the contract pins 21 modules, 260 states (the ROADMAP's
+  "205" is stale). The four `emit`-closure fixtures (two plugin-list, two
+  update no-op) get a harness hook so `noOp: true` is proven.
+- `dependencies` appears on wire rows only where the text form shows it; the
+  planner carries it on resolved rows if needed for that, otherwise the wire
+  omits it by explicit decision recorded in the plan.
+- LLM tool `details` (LLMT-01) use the wire marketplace-block and plugin-row
+  shapes. `source.raw` is dropped (it can carry URL userinfo and the text does
+  not show it); `pluginCount` stays only if the text form shows it. The plugin
+  tool resolves rows through `LIST_CONTEXT.rowPolicies` with
+  `openNotificationRun(pi)` so `details.reasons` matches `/claude:plugin list`.
+- `noOp` is present only when true (absent otherwise).
+- `lastUpdatedAt` is emitted whenever the model has it (research FEATURES:
+  display gating is text policy, and a timestamp is not a path disclosure).
+- Redaction: minimum token length 16 for prefix-matched tokens; `Bearer `
+  and `x-access-token:` prefixes are kept and only the secret becomes `***`;
+  the scp-style `git@host:owner/repo` subject is not userinfo and is left
+  alone. Research measured zero redaction diffs over the 3134 corpus entries
+  and the catalog, so D-08's ledger is expected to be empty.
+
 ### Claude's Discretion
 
 - Exact typebox type names, converter function names, and generator script
