@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 02
 current_phase_name: Adapter-file delivery
 status: executing
-stopped_at: Phase 01 complete, ready to plan Phase 2
-last_updated: "2026-10-03T11:05:22.941Z"
-last_activity: 2026-10-02
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: 98c55599bc7bd83fa01beeb67e56e62e3b6cbaf7
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-10-03T11:42:32.081Z"
+last_activity: 2026-10-03
+last_activity_desc: Plan 02-01 complete (MCP servers staged into mcp-adapter.json)
+state_head: 52c4db89715eeeabd934636ed7d7f245054fba36
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 9
+  completed_plans: 10
   percent: 14
 ---
 
@@ -27,17 +27,17 @@ See: `.planning/PROJECT.md` (updated 2026-10-01 at the mcp-4 start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 2 — Adapter-file delivery (Phase 1 verified 2026-10-02)
+**Current focus:** Phase 02 — Adapter-file delivery
 The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
 
 ## Current Position
 
-Phase: 02 (Adapter-file delivery) — READY TO EXECUTE
-Plan: Not started
+Phase: 02 (Adapter-file delivery) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-10-02 — Phase 01 complete, transitioned to Phase 2
+Last activity: 2026-10-03 — Plan 02-01 complete (MCP servers staged into mcp-adapter.json)
 
 Progress: [█░░░░░░░░░] 14%
 
@@ -259,6 +259,7 @@ still open with a comment explaining what landed.
 | Phase 01 P07 | 60min | 2 tasks | 15 files |
 | Phase 01 P08 | 45min | 2 tasks | 3 files |
 | Phase 01 P09 | 16 min | 3 tasks | 11 files |
+| Phase 02 P01 | 45min | 3 tasks | 34 files |
 
 ## Accumulated Context
 
@@ -575,6 +576,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Pi 1.0 starts each stdio MCP server in its own process group and stops it on shutdown, so the RPC harness proves its clean-exit group sweep with a same-group sentinel child, not the stub MCP server's PID
 - [Phase 01]: Stop canary exit contract: a proven STOP-07 regression exits 2; the expected headless cap-trip-warning result and an inconclusive drive exit 1 (PIFL-07)
 - [Phase 01]: Every canary passed on Pi 1.0.0 / engine 3.13.1, so the upstream-failure path did not fire; BACKLOG and PIFL-07 text unchanged
+- [Phase 02]: MCP servers stage into <scopeRoot>/mcp-adapter.json, read with strip-json-comments (adapter grammar); unreadable files refuse with a cause-less McpConfigFileError
+- [Phase 02]: readMcpConfigDoc server keys are a non-empty tuple; plan 02-02 PI_MCP_SERVER_KEYS should match
 
 ### Pending Todos
 
@@ -719,11 +722,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 01 complete, ready to plan Phase 2
+**Stopped at:** Completed 02-01-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-02T23:05:43.914Z
+Last session: 2026-10-03T11:42:31.972Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 

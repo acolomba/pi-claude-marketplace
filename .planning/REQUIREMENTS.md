@@ -49,15 +49,15 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 
 ### Adapter-file delivery (AFILE)
 
-- [ ] **AFILE-01**: Installing a plugin writes its MCP servers as marked entries into
+- [x] **AFILE-01**: Installing a plugin writes its MCP servers as marked entries into
   `<scopeRoot>/mcp-adapter.json` (user: `<Pi agent dir>/mcp-adapter.json`; project:
   `<cwd>/.pi/mcp-adapter.json`), and uninstalling removes exactly those entries; the NFR-10 write
   set includes the new file.
-- [ ] **AFILE-02**: A user's `mcp-adapter.json` with comments, trailing commas or a BOM is read the
+- [x] **AFILE-02**: A user's `mcp-adapter.json` with comments, trailing commas or a BOM is read the
   way the adapter reads it; a file that cannot be parsed is refused with a typed error and never
   replaced, and every foreign key (`settings`, `imports`, `claudePlugins`, user servers) survives
   a write.
-- [ ] **AFILE-03**: When the existing file uses the legacy `mcp-servers` key, our entries go under
+- [x] **AFILE-03**: When the existing file uses the legacy `mcp-servers` key, our entries go under
   that key, so the user's servers keep loading.
 - [ ] **AFILE-04**: When a rewrite would drop the user's JSONC comments, the user is warned once.
 - [ ] **AFILE-05**: Collision detection follows adapter 5's nine-source precedence (later source
@@ -166,9 +166,9 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | PIFL-07 | Phase 1 | Complete |
 | ADET-01 | Phase 1 | Complete |
 | ADET-02 | Phase 1 | Complete |
-| AFILE-01 | Phase 2 | Pending |
-| AFILE-02 | Phase 2 | Pending |
-| AFILE-03 | Phase 2 | Pending |
+| AFILE-01 | Phase 2 | Complete |
+| AFILE-02 | Phase 2 | Complete |
+| AFILE-03 | Phase 2 | Complete |
 | AFILE-04 | Phase 2 | Pending |
 | AFILE-05 | Phase 2 | Pending |
 | AFILE-06 | Phase 2 | Pending |
