@@ -1116,6 +1116,9 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
       return surface.lines.length === 0
         ? undefined
         : [`${surface.header}\n\n${surface.lines.join("\n")}`, "warning"];
+    case "device-flow-prompt":
+      // D-09: the provider's values pass through verbatim.
+      return [`Open ${surface.verificationUri} and enter: ${surface.userCode}`, "info"];
     case "async-rewake-summary":
       return surface.summary.length === 0 ? undefined : [surface.summary, "info"];
     case "stop-override-cap":

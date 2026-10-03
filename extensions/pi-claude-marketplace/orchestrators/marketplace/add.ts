@@ -942,8 +942,8 @@ async function addGithubInGuard(args: {
   // Flow as the onAuthRequired closure for this clone.
   // platform/git.ts::buildAuthCallbacks first consults
   // credentialOps.fill(host); only on a miss does it invoke the closure.
-  // AUTH-09: the closure interpolates ONLY user_code + verification_uri
-  // (via initiateDeviceFlow's notifyFn) -- the access token is acquired
+  // AUTH-09: the closure passes ONLY user_code + verification_uri, through
+  // initiateDeviceFlow's onDeviceCode callback -- the access token is acquired
   // LATER in the poll loop and is never passed back to a notify or Error.
   // D-77-06: this arm's source is statically `github`, whose host is the literal
   // `GITHUB_HOST` -- `hostFromCloneUrl` returns it without reading a url, so

@@ -26,9 +26,9 @@
  * only `import type` from platform/git.ts and its auth-callback sibling is
  * permitted -- so consumers (install-outcome.ts) that import it stay clean
  * under the no-orchestrator-network gate. It imports the provider registry
- * (domain), the Device Flow engine (domain), the raw notify seam (shared), the
- * auth-callback seam types (platform/git-auth-callbacks.ts), and the credential
- * surface (platform/git-credential.ts).
+ * (domain), the Device Flow engine (domain), the device-flow prompt helper
+ * (shared), the auth-callback seam types (platform/git-auth-callbacks.ts), and
+ * the credential surface (platform/git-credential.ts).
  *
  * AUTH-09: no credential field is ever interpolated into an Error/notify here;
  * enforced by tests/architecture/no-credential-leak.test.ts (PROV-05).
@@ -37,7 +37,7 @@
 import { findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
 import { NODE_CREDENTIAL_SPAWN, createCredentialOps } from "../platform/git-credential.ts";
-import { makeRawNotifyFn } from "../shared/notification-dispatch.ts";
+import { notifyDeviceFlowPrompt } from "../shared/notification-dispatch.ts";
 
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
 import type { AuthAttemptResult, OnAuthRequiredFn } from "../platform/git-auth-callbacks.ts";
@@ -179,7 +179,6 @@ export function buildAuthForHost(args: {
     return buildStoredCredentialAuth(host, credentialOps);
   }
 
-  const notifyFn = makeRawNotifyFn(ctx);
   const onAuthRequired: OnAuthRequiredFn = async (): Promise<AuthAttemptResult> => {
     // D-79-02: once-per-host memo short-circuits a repeated flow.
     const memoized = authMemo?.get(host);
@@ -191,7 +190,9 @@ export function buildAuthForHost(args: {
       provider,
       host,
       credentialOps,
-      notifyFn,
+      onDeviceCode: (prompt) => {
+        notifyDeviceFlowPrompt(ctx, prompt);
+      },
       ...(deviceFlowHttp !== undefined && { http: deviceFlowHttp }),
     });
     authMemo?.set(host, result);

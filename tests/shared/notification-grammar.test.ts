@@ -1503,6 +1503,16 @@ const RAW_SURFACE_ROWS: {
     surface: { kind: "diagnostic", header: "Warnings", lines: ["first", "second"] },
     expectedArguments: ["Warnings\n\nfirst\nsecond", "warning"],
   },
+  // The example values come from catalog-state `device-flow-prompt` in
+  // docs/output-catalog.md; this row holds that byte lock.
+  "device-flow-prompt": {
+    surface: {
+      kind: "device-flow-prompt",
+      verificationUri: "https://github.com/login/device",
+      userCode: "ABCD-1234",
+    },
+    expectedArguments: ["Open https://github.com/login/device and enter: ABCD-1234", "info"],
+  },
   "async-rewake-summary": {
     surface: { kind: "async-rewake-summary", summary: "ready" },
     expectedArguments: ["ready", "info"],
@@ -1531,7 +1541,8 @@ for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_
 // in caller order, duplicates and empty strings included, and only a
 // zero-length line list emits nothing. RAWS-05 / D-07 / D-08: the hook kinds
 // pass the author's summary and the plugin id through untouched, the cap is
-// data, and only a zero-length summary emits nothing.
+// data, and only a zero-length summary emits nothing. RAWS-03 / D-09: the
+// device-flow values pass through verbatim, empty or carrying a query string.
 for (const { title, surface, expectedArguments } of [
   {
     title: "keeps both blocks when the message equals the usage",
@@ -1572,6 +1583,23 @@ for (const { title, surface, expectedArguments } of [
     title: "keeps duplicate and empty diagnostic lines in caller order",
     surface: { kind: "diagnostic", header: "Warnings", lines: ["a", "", "a"] },
     expectedArguments: ["Warnings\n\na\n\na", "warning"],
+  },
+  {
+    title: "renders empty device-flow values verbatim",
+    surface: { kind: "device-flow-prompt", verificationUri: "", userCode: "" },
+    expectedArguments: ["Open  and enter: ", "info"],
+  },
+  {
+    title: "passes a device-flow URI with a query string through verbatim",
+    surface: {
+      kind: "device-flow-prompt",
+      verificationUri: "https://verify.example/device?user_code=ab%2Fcd&lang=EN",
+      userCode: "ab-CD",
+    },
+    expectedArguments: [
+      "Open https://verify.example/device?user_code=ab%2Fcd&lang=EN and enter: ab-CD",
+      "info",
+    ],
   },
   {
     title: "emits nothing for an empty async-rewake summary",

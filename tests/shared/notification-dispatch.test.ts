@@ -6,9 +6,9 @@ import {
   emitContextCascade,
   emitReconcileAppliedContextCascade,
   emitUpdateNoOpCascade,
-  makeRawNotifyFn,
   notify,
   notifyAsyncRewakeSummary,
+  notifyDeviceFlowPrompt,
   notifyDiagnostic,
   notifyPluginPathSkipped,
   notifyReconcileAborted,
@@ -5774,19 +5774,20 @@ test("notifyPluginPathSkipped emits the skipped scope and reason at warning seve
   );
 });
 
-test("raw dispatch preserves absent and explicit severity once each", (t) => {
+test("notifyDeviceFlowPrompt emits the verification URI and user code at info severity", (t) => {
   // arrange
   const ctx = createContext(t);
-  const rawNotify = makeRawNotifyFn(ctx as never);
 
   // act
-  rawNotify("plain");
-  rawNotify("failed", "error");
+  notifyDeviceFlowPrompt(ctx as never, {
+    verificationUri: "https://github.com/login/device",
+    userCode: "ABCD-1234",
+  });
 
   // assert
   assert.deepStrictEqual(
     ctx.ui.notify.mock.calls.map((call) => call.arguments),
-    [["plain"], ["failed", "error"]],
+    [["Open https://github.com/login/device and enter: ABCD-1234", "info"]],
   );
 });
 

@@ -85,8 +85,9 @@ const FORBIDDEN_STATE_FIELDS = /\b(password|access_token|githubToken|gitToken)\b
 
 const PROVIDER_FILES: ReadonlyArray<string> = [
   AUTH_REGISTRY_FILE,
-  // buildAuthForHost binds the provider flow + notifyFn per host; a token
-  // interpolation regression here would leak, so the PROV-05 scan covers it.
+  // buildAuthForHost binds the provider flow and the device-code prompt per
+  // host; a token interpolation regression here would leak, so the PROV-05
+  // scan covers it.
   AUTH_HOST_FILE,
 ];
 
@@ -159,13 +160,77 @@ function assertNoCredentialInLiterals(rel: string, stripped: string, callSite: R
 /** The `new Error(\`...\`)` call form, capturing the whole literal. */
 const ERROR_LITERAL_CALL_SITE = /new\s+Error\s*\(\s*(`(?:[^`\\]|\\.)*`)/g;
 
-/** The `new Error(\`...\`)` / `notifyFn(\`...\`)` call forms. */
-const ERROR_OR_NOTIFY_FN_LITERAL_CALL_SITE =
-  /(?:new\s+Error\s*\(|notifyFn\s*\()\s*(`(?:[^`\\]|\\.)*`)/g;
-
 /** The `new Error(\`...\`)` / `ctx.ui.notify(\`...\`)` call forms. */
 const ERROR_OR_UI_NOTIFY_LITERAL_CALL_SITE =
   /(?:new\s+Error\s*\(|ctx\.ui\.notify\s*\()\s*(`(?:[^`\\]|\\.)*`)/g;
+
+/**
+ * AUTH-09 / D-11: the only form in which the device-code callback may be
+ * called. The argument is an object literal holding exactly the verification
+ * URI and the user code from the device-code response, so neither a token
+ * field, a variable, nor a spread object can reach the callback.
+ */
+const ALLOWED_DEVICE_CODE_CALL =
+  /\.onDeviceCode\(\s*\{\s*verificationUri:\s*deviceCode\.verification_uri,\s*userCode:\s*deviceCode\.user_code,?\s*\}\s*\)/g;
+
+/**
+ * AUTH-09 / D-11: the only form in which a provider file may bind the
+ * device-code callback to the dispatch module's prompt helper. The bound
+ * callback forwards its argument and nothing else.
+ */
+const ALLOWED_PROMPT_BINDING =
+  /onDeviceCode:\s*\(\s*prompt\s*\)\s*=>\s*\{\s*notifyDeviceFlowPrompt\(\s*ctx\s*,\s*prompt\s*\);?\s*\}/g;
+
+/**
+ * Counts every device-code callback call in the Device Flow module under
+ * `root` and requires each one to be in the allowed form. At least one call
+ * must exist, so a renamed or removed callback fails the gate instead of
+ * leaving the allow-list satisfied by zero calls (D-07-03).
+ */
+async function scanDeviceCodeCalls(root: string): Promise<void> {
+  const stripped = stripComments(await readFile(path.join(root, GITHUB_AUTH_FILE), "utf8"));
+  const calls = [...stripped.matchAll(/\bonDeviceCode\s*\(/g)].length;
+  const allowedCalls = [...stripped.matchAll(ALLOWED_DEVICE_CODE_CALL)].length;
+
+  assert.ok(
+    calls > 0,
+    `D-07-03: no onDeviceCode call exists in ${GITHUB_AUTH_FILE}, so the AUTH-09 allow-list below passes over nothing. Re-aim the gate at the module that now passes the device-code prompt.`,
+  );
+  assert.strictEqual(
+    allowedCalls,
+    calls,
+    `AUTH-09 violation: ${GITHUB_AUTH_FILE} calls onDeviceCode ${calls} time(s), but only ${allowedCalls} call(s) pass exactly verificationUri and userCode from the device-code response.`,
+  );
+}
+
+/**
+ * Counts every prompt-helper call across the provider files under `root` and
+ * requires each one to sit inside the allowed device-code binding. At least
+ * one call must exist across the set (D-07-03). Returns the files it opened,
+ * in order.
+ */
+async function scanPromptBindings(root: string): Promise<ReadonlyArray<string>> {
+  const visited: string[] = [];
+  let helperCalls = 0;
+  let bindings = 0;
+  for (const rel of PROVIDER_FILES) {
+    const stripped = stripComments(await readFile(path.join(root, rel), "utf8"));
+    visited.push(rel);
+    helperCalls += [...stripped.matchAll(/\bnotifyDeviceFlowPrompt\s*\(/g)].length;
+    bindings += [...stripped.matchAll(ALLOWED_PROMPT_BINDING)].length;
+  }
+
+  assert.ok(
+    helperCalls > 0,
+    `D-07-03: no notifyDeviceFlowPrompt call exists in ${PROVIDER_FILES.join(" or ")}, so the AUTH-09 binding allow-list below passes over nothing. Re-aim the gate at the module that now binds the device-code prompt.`,
+  );
+  assert.strictEqual(
+    bindings,
+    helperCalls,
+    `AUTH-09 violation: the provider files call notifyDeviceFlowPrompt ${helperCalls} time(s), but only ${bindings} call(s) sit in the exact onDeviceCode: (prompt) => { notifyDeviceFlowPrompt(ctx, prompt); } binding.`,
+  );
+  return visited;
+}
 
 test("AUTH-09: no credential field name appears in any state-write code path", async () => {
   assert.ok(
@@ -227,7 +292,7 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
   assertNoCredentialInLiterals(GIT_CREDENTIAL_FILE, stripped, ERROR_LITERAL_CALL_SITE);
 });
 
-test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error or notifyFn message", async () => {
+test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error message and passes only the prompt values to onDeviceCode", async () => {
   const absPath = path.join(REPO_ROOT, GITHUB_AUTH_FILE);
   const exists = await access(absPath).then(
     () => true,
@@ -244,20 +309,22 @@ test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error or n
   //   - access_token, accessToken
   //   - cred.<field> (e.g. cred.password, cred.access_token)
   //   - r.accessToken (from the PollResult success branch)
-  // INSIDE a `new Error(...)` constructor OR a `notifyFn(...)` call.
-  const errorOrNotifyWithToken =
-    /(new\s+Error\s*\(|notifyFn\s*\()(?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
+  // INSIDE a `new Error(...)` constructor. The device-code prompt is held to
+  // its exact allowed form by `scanDeviceCodeCalls`.
+  const errorWithToken =
+    /new\s+Error\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
   assert.doesNotMatch(
     stripped,
-    errorOrNotifyWithToken,
-    "Error or notifyFn in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
+    errorWithToken,
+    "Error in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
   );
 
-  assertNoCredentialInLiterals(GITHUB_AUTH_FILE, stripped, ERROR_OR_NOTIFY_FN_LITERAL_CALL_SITE);
+  assertNoCredentialInLiterals(GITHUB_AUTH_FILE, stripped, ERROR_LITERAL_CALL_SITE);
+  await scanDeviceCodeCalls(REPO_ROOT);
 });
 
 test("AUTH-09: describeDeviceCodeErrorBody never references a credential field", async () => {
-  // The gate above scans new Error(...)/notifyFn(...) call sites; it cannot
+  // The gate above scans new Error(...) call sites; it cannot
   // see through the describeDeviceCodeErrorBody(res) call inside
   // requestCodeImpl's `new Error(...)` -- a lexical scan of that call site
   // only ever sees `res.status` and a function-call expression. This test
@@ -287,8 +354,8 @@ test("AUTH-09: describeDeviceCodeErrorBody never references a credential field",
 
 test("AUTH-09: domain/github-auth.ts reason: fields never interpolate a token", async () => {
   // DeviceFlowResult's failure arm is built as a plain object literal
-  // (`{ ok: false, reason: ... }`), not a `new Error(...)`/`notifyFn(...)`
-  // call, so the gate above does not scan it. This test covers that
+  // (`{ ok: false, reason: ... }`), not a `new Error(...)` call or the
+  // device-code prompt, so the gate above does not scan it. This test covers that
   // construction form directly.
   //
   // Two checks combine here. The first is the original bounded-prefix scan,
@@ -319,7 +386,7 @@ test("AUTH-09: domain/github-auth.ts reason: fields never interpolate a token", 
 test("AUTH-09: the git hookDebugLog calls never interpolate a credential field", async () => {
   // buildAuthCallbacks routes onAuth/onAuthFailure failure reasons through
   // hookDebugLog (see the CP-10 discussion above buildAuthCallbacks). That
-  // call form is not `new Error(...)` or `notifyFn(...)`, so it falls
+  // call form is not `new Error(...)` or the device-code prompt, so it falls
   // outside every other gate in this file; this test closes that gap.
   //
   // Two checks combine here (mirroring the twin `reason:` gate above). The
@@ -371,13 +438,14 @@ test("AUTH-09: the git hookDebugLog calls never interpolate a credential field",
   }
 });
 
-test("PROV-05: every provider file is scanned for token interpolation in an Error or notifyFn message", async () => {
+test("PROV-05: every provider file is scanned for token interpolation in an Error message, and every device-code prompt binding has the exact form", async () => {
   // Each provider descriptor file carries credential-shaping logic
   // (credentialFrom) and endpoint/clientId literals. A regression that
-  // interpolated a token into an Error or notifyFn here would leak it, so the
-  // AUTH-09 gate must cover the whole provider set, not just github-auth.ts.
-  const errorOrNotifyWithToken =
-    /(new\s+Error\s*\(|notifyFn\s*\()(?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
+  // interpolated a token into an Error or the device-code prompt here would
+  // leak it, so the AUTH-09 gate must cover the whole provider set, not just
+  // github-auth.ts.
+  const errorWithToken =
+    /new\s+Error\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
 
   assert.ok(
     PROVIDER_FILES.length > 0,
@@ -392,16 +460,21 @@ test("PROV-05: every provider file is scanned for token interpolation in an Erro
     const stripped = stripComments(src);
     assert.doesNotMatch(
       stripped,
-      errorOrNotifyWithToken,
-      `Error or notifyFn in ${rel} interpolates a token field (AUTH-09 violation)`,
+      errorWithToken,
+      `Error in ${rel} interpolates a token field (AUTH-09 violation)`,
     );
-    assertNoCredentialInLiterals(rel, stripped, ERROR_OR_NOTIFY_FN_LITERAL_CALL_SITE);
+    assertNoCredentialInLiterals(rel, stripped, ERROR_LITERAL_CALL_SITE);
   }
 
   assert.deepStrictEqual(
     visited,
     [...PROVIDER_FILES],
     "D-07-03: the scan must have opened every declared provider file; one that stopped resolving drops out of this list.",
+  );
+  assert.deepStrictEqual(
+    await scanPromptBindings(REPO_ROOT),
+    [...PROVIDER_FILES],
+    "D-07-03: the binding scan must have opened every declared provider file; one that stopped resolving drops out of this list.",
   );
 });
 

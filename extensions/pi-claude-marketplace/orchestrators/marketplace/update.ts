@@ -443,8 +443,8 @@ async function refreshRecord(
       // platform/git.ts::buildAuthCallbacks first consults
       // credentialOps.fill(host); on a hit (the post-add common case) the
       // stored token is returned and Device Flow does NOT trigger -- this is
-      // the AUTH-02 silent-reuse contract. AUTH-09: the closure interpolates
-      // ONLY user_code + verification_uri inside the flow's notifyFn.
+      // the AUTH-02 silent-reuse contract. AUTH-09: only the user code and
+      // the verification URI cross the flow's onDeviceCode callback.
       const { ctx, credentialOps, deviceFlowHttp } = args;
       const host = hostFromCloneUrl(
         `https://github.com/${source.owner}/${source.repo}.git`,

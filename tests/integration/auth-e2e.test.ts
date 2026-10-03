@@ -8,7 +8,8 @@
  *     -> onAuth / onAuthFailure closures
  *       -> initiateDeviceFlow (domain/github-auth.ts)
  *         -> CredentialOps (tests/platform/credential-ops-fake.ts)
- *         -> notifyFn (shared/notification-dispatch.ts makeRawNotifyFn)
+ *         -> onDeviceCode
+ *           -> notifyDeviceFlowPrompt (shared/notification-dispatch.ts)
  *
  * Tests:
  *   AUTH-01 -- fill-miss triggers Device Flow; token stored via approve
@@ -27,15 +28,17 @@ import {
   buildAuthCallbacks,
   type OnAuthRequiredFn,
 } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
-import { makeRawNotifyFn } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { notifyDeviceFlowPrompt } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 
 import type {
   DeviceCodeResponse,
+  InitiateDeviceFlowOpts,
   PollResult,
 } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 interface CredentialAdapterOptions {
   readonly store?: ReadonlyMap<string, GitCredentials>;
@@ -116,21 +119,24 @@ function createDeviceFlowHttp(initial: DeviceFlowAdapterOptions = {}) {
 
 function makeNotifyCapture(): {
   notifyCalls: Array<{ message: string; severity?: string }>;
-  notifyFn: ReturnType<typeof makeRawNotifyFn>;
+  onDeviceCode: InitiateDeviceFlowOpts["onDeviceCode"];
 } {
   const notifyCalls: Array<{ message: string; severity?: string }> = [];
-  const mockCtx = {
+  const context: NotificationContext = {
     ui: {
-      notify: (msg: string, sev?: string) => {
+      notify: (message, severity) => {
         notifyCalls.push({
-          message: msg,
-          ...(sev !== undefined && { severity: sev }),
+          message,
+          ...(severity !== undefined && { severity }),
         });
       },
     },
-  } as unknown as Parameters<typeof makeRawNotifyFn>[0];
-  const notifyFn = makeRawNotifyFn(mockCtx);
-  return { notifyCalls, notifyFn };
+  };
+  const onDeviceCode: InitiateDeviceFlowOpts["onDeviceCode"] = (prompt) => {
+    notifyDeviceFlowPrompt(context, prompt);
+  };
+
+  return { notifyCalls, onDeviceCode };
 }
 
 // ---------------------------------------------------------------------------
@@ -160,10 +166,10 @@ test("AUTH-01 add path E2E: fill-miss triggers Device Flow, token stored via app
     },
   });
 
-  const { notifyCalls, notifyFn } = makeNotifyCapture();
+  const { notifyCalls, onDeviceCode } = makeNotifyCapture();
 
   const onAuthRequired: OnAuthRequiredFn = () =>
-    initiateDeviceFlow({ host: "github.com", credentialOps: credOps, notifyFn, http });
+    initiateDeviceFlow({ host: "github.com", credentialOps: credOps, onDeviceCode, http });
 
   const { onAuth } = buildAuthCallbacks({
     credentialOps: credOps,
@@ -218,10 +224,10 @@ test("AUTH-02 / AUTH-08 silent reuse: fill-hit returns stored cred, no Device Fl
   // Device Flow mock present but should NEVER be invoked in this test.
   const { http } = createDeviceFlowHttp();
 
-  const { notifyCalls, notifyFn } = makeNotifyCapture();
+  const { notifyCalls, onDeviceCode } = makeNotifyCapture();
 
   const onAuthRequired: OnAuthRequiredFn = () =>
-    initiateDeviceFlow({ host: "github.com", credentialOps: credOps, notifyFn, http });
+    initiateDeviceFlow({ host: "github.com", credentialOps: credOps, onDeviceCode, http });
 
   const { onAuth } = buildAuthCallbacks({
     credentialOps: credOps,
@@ -284,11 +290,11 @@ test("AUTH-07 reject-evict-reflow: onAuthFailure evicts cred, next fill-miss re-
     },
   });
 
-  const { notifyCalls, notifyFn } = makeNotifyCapture();
+  const { notifyCalls, onDeviceCode } = makeNotifyCapture();
 
   // First-round onAuthRequired + callbacks.
   const onAuthRequired1: OnAuthRequiredFn = () =>
-    initiateDeviceFlow({ host: "github.com", credentialOps: credOps, notifyFn, http: dfHttp1 });
+    initiateDeviceFlow({ host: "github.com", credentialOps: credOps, onDeviceCode, http: dfHttp1 });
 
   const { onAuthFailure: onAuthFailure1 } = buildAuthCallbacks({
     credentialOps: credOps,
@@ -340,7 +346,7 @@ test("AUTH-07 reject-evict-reflow: onAuthFailure evicts cred, next fill-miss re-
   });
 
   const onAuthRequired2: OnAuthRequiredFn = () =>
-    initiateDeviceFlow({ host: "github.com", credentialOps: credOps, notifyFn, http: dfHttp2 });
+    initiateDeviceFlow({ host: "github.com", credentialOps: credOps, onDeviceCode, http: dfHttp2 });
 
   const { onAuth: onAuth2 } = buildAuthCallbacks({
     credentialOps: credOps,

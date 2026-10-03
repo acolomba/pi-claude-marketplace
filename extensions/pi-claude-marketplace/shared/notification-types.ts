@@ -1054,9 +1054,33 @@ export interface StopOverrideCapSurface {
 export type HookSurface = AsyncRewakeSummarySurface | StopOverrideCapSurface;
 
 /**
+ * D-10 / AUTH-03: the device-flow values a user needs to authorize this
+ * machine. AUTH-09: these two values are the only data that cross the
+ * device-code callback; no token exists yet when they do.
+ */
+export interface DeviceFlowPrompt {
+  readonly verificationUri: string;
+  readonly userCode: string;
+}
+
+/**
+ * RAWS-03 / D-12: the device-flow prompt. It belongs to no fixed-origin group
+ * (D-14), because the prompt fires during commands and during load-pass git
+ * installs.
+ */
+export interface DeviceFlowPromptSurface extends DeviceFlowPrompt {
+  readonly kind: "device-flow-prompt";
+}
+
+/**
  * D-01 / D-04: every raw output surface. It is deliberately not a
  * `NotificationMessage` member, so `notify()`'s run never reaches a raw call
  * site.
  */
 export type RawSurface =
-  UsageErrorSurface | UsageInfoSurface | DiagnosticSurface | HookSurface | LoadSurface;
+  | UsageErrorSurface
+  | UsageInfoSurface
+  | DiagnosticSurface
+  | DeviceFlowPromptSurface
+  | HookSurface
+  | LoadSurface;

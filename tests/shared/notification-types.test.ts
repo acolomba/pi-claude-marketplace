@@ -8,6 +8,8 @@ import {
   type AsyncRewakeSummarySurface,
   type ContentReason,
   type CascadeNotificationMessage,
+  type DeviceFlowPrompt,
+  type DeviceFlowPromptSurface,
   type DiagnosticSurface,
   type HookSurface,
   type LoadSurface,
@@ -345,6 +347,20 @@ void ({
   // @ts-expect-error D-07: the cap is a number, not text
   cap: "8",
 } satisfies StopOverrideCapSurface);
+void ({
+  kind: "device-flow-prompt",
+  verificationUri: "https://verify.example/device",
+  userCode: "CODE-1",
+} satisfies DeviceFlowPromptSurface);
+void ({
+  kind: "device-flow-prompt",
+  verificationUri: "https://verify.example/device",
+  userCode: "CODE-1",
+  // @ts-expect-error D-10 / AUTH-09: the prompt carries no token
+  accessToken: "token-1",
+} satisfies DeviceFlowPromptSurface);
+// @ts-expect-error RAWS-03: the prompt is values, not a composed sentence
+void ("Open https://verify.example/device and enter: CODE-1" satisfies DeviceFlowPrompt);
 void installedMessage;
 void skippedMessage;
 void contentReason;

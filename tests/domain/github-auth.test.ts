@@ -9,7 +9,6 @@ import {
   type DeviceFlowHttp,
   type DeviceFlowResult,
   type InitiateDeviceFlowOpts,
-  type NotifyFn,
   type PollResult,
 } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 
@@ -139,14 +138,17 @@ void ({
 describe("initiateDeviceFlow", () => {
   registerDeviceFlowContract(createProductionDeviceFlowParticipant);
 
-  test("uses the GitHub provider, notifies the user, and persists the credential", async () => {
+  test("uses the GitHub provider, passes the prompt values, and persists the credential", async () => {
     // arrange
     const deviceFlowHttp = mock<DeviceFlowHttp>({
       exactParams: true,
       name: "device flow HTTP",
     });
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0);
     when(() => deviceFlowHttp.requestCode("Ov23liNcyK08uGdU0mMl", "repo")).thenResolve(
       deviceCode(),
@@ -158,7 +160,7 @@ describe("initiateDeviceFlow", () => {
       scope: "repo",
     });
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
     when(() =>
       credentialOps.approve("github.com", {
@@ -171,7 +173,7 @@ describe("initiateDeviceFlow", () => {
     const deviceFlow = await initiateDeviceFlow({
       host: "github.com",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http: deviceFlowHttp,
       waitForPoll: pollingWait,
     });
@@ -184,19 +186,19 @@ describe("initiateDeviceFlow", () => {
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
-  test("emits the documented AUTH-03 prompt before any token is acquired", async () => {
+  test("passes the documented AUTH-03 values before any token is acquired", async () => {
     // arrange
-    // The device-code values and the expected prompt below are the published
-    // example in docs/output-catalog.md, "Out-of-band notifications" ->
-    // "Device Flow user-code prompt" (catalog-state: device-flow-prompt).
-    // Changing the emission string in domain/github-auth.ts needs a lockstep
-    // edit of that catalog entry and of the expected string here. The poll
-    // denies authorization, so no access token ever exists while the prompt is
-    // emitted (AUTH-09) and no credential is persisted.
+    // The device-code values below are the published example in
+    // docs/output-catalog.md, "Out-of-band notifications" -> "Device Flow
+    // user-code prompt" (catalog-state: device-flow-prompt). The composed bytes
+    // are locked by the text strategy's `device-flow-prompt` row in
+    // tests/shared/notification-grammar.test.ts. The poll denies authorization,
+    // so no access token exists while the values are passed (AUTH-09) and no
+    // credential is persisted.
     const { http } = createDeviceFlowFake({
       boundary: "memory",
       network: "disabled",
@@ -210,17 +212,20 @@ describe("initiateDeviceFlow", () => {
       pollResponses: [{ kind: "access_denied" }],
     });
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0);
     when(() => {
-      notification("Open https://github.com/login/device and enter: ABCD-1234", "info");
+      onDeviceCode({ verificationUri: "https://github.com/login/device", userCode: "ABCD-1234" });
     }).thenReturn(undefined);
 
     // act
     const deviceFlow = await initiateDeviceFlow({
       host: "github.com",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http,
       waitForPoll: pollingWait,
     });
@@ -232,7 +237,7 @@ describe("initiateDeviceFlow", () => {
       authAttempted: true,
     });
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -244,7 +249,10 @@ describe("initiateDeviceFlow", () => {
       name: "device flow HTTP",
     });
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0);
     when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(deviceCode());
     when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenResolve({
@@ -254,7 +262,7 @@ describe("initiateDeviceFlow", () => {
       scope: "read_repository",
     });
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
     when(() =>
       credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
@@ -264,7 +272,7 @@ describe("initiateDeviceFlow", () => {
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http: deviceFlowHttp,
       provider,
       waitForPoll: pollingWait,
@@ -278,7 +286,7 @@ describe("initiateDeviceFlow", () => {
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -290,7 +298,10 @@ describe("initiateDeviceFlow", () => {
       name: "device flow HTTP",
     });
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0, 0);
     when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(deviceCode());
     when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenResolve({
@@ -303,7 +314,7 @@ describe("initiateDeviceFlow", () => {
       scope: "read_repository",
     });
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
     when(() =>
       credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
@@ -313,7 +324,7 @@ describe("initiateDeviceFlow", () => {
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http: deviceFlowHttp,
       provider,
       waitForPoll: pollingWait,
@@ -323,7 +334,7 @@ describe("initiateDeviceFlow", () => {
     assert.strictEqual(deviceFlow.ok, true);
     verify(deviceFlowHttp);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -335,7 +346,10 @@ describe("initiateDeviceFlow", () => {
       name: "device flow HTTP",
     });
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = mock<NonNullable<InitiateDeviceFlowOpts["waitForPoll"]>>({
       exactParams: true,
       name: "polling wait",
@@ -357,7 +371,7 @@ describe("initiateDeviceFlow", () => {
       scope: "read_repository",
     });
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
     when(() =>
       credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
@@ -367,7 +381,7 @@ describe("initiateDeviceFlow", () => {
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http: deviceFlowHttp,
       provider,
       waitForPoll: pollingWait,
@@ -377,7 +391,7 @@ describe("initiateDeviceFlow", () => {
     assert.strictEqual(deviceFlow.ok, true);
     verify(deviceFlowHttp);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -390,7 +404,10 @@ describe("initiateDeviceFlow", () => {
       name: "device flow HTTP",
     });
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(
       deviceCode({ interval: 1 }),
     );
@@ -401,7 +418,7 @@ describe("initiateDeviceFlow", () => {
       scope: "read_repository",
     });
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
     when(() =>
       credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
@@ -411,7 +428,7 @@ describe("initiateDeviceFlow", () => {
     const pendingDeviceFlow = initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http: deviceFlowHttp,
       provider,
     });
@@ -429,7 +446,7 @@ describe("initiateDeviceFlow", () => {
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
   });
 
   for (const { pollResponse, expectedDeviceFlow, behavior } of [
@@ -482,21 +499,24 @@ describe("initiateDeviceFlow", () => {
         name: "device flow HTTP",
       });
       const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-      const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+      const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+        exactParams: true,
+        name: "device code prompt",
+      });
       const pollingWait = expectedPollingWait(0);
       when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(
         deviceCode(),
       );
       when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenResolve(pollResponse);
       when(() => {
-        notification("Open https://verify.example/device and enter: CODE-1", "info");
+        onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
       }).thenReturn(undefined);
 
       // act
       const deviceFlow = await initiateDeviceFlow({
         host: "auth.example",
         credentialOps,
-        notifyFn: notification,
+        onDeviceCode,
         http: deviceFlowHttp,
         provider,
         waitForPoll: pollingWait,
@@ -506,7 +526,7 @@ describe("initiateDeviceFlow", () => {
       assert.deepStrictEqual(deviceFlow, expectedDeviceFlow);
       verify(deviceFlowHttp);
       verify(credentialOps);
-      verify(notification);
+      verify(onDeviceCode);
       verify(pollingWait);
     });
   }
@@ -519,21 +539,24 @@ describe("initiateDeviceFlow", () => {
       name: "device flow HTTP",
     });
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0);
     when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(deviceCode());
     when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenReject(
       new Error("poll offline"),
     );
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
 
     // act
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http: deviceFlowHttp,
       provider,
       waitForPoll: pollingWait,
@@ -547,7 +570,7 @@ describe("initiateDeviceFlow", () => {
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -560,17 +583,20 @@ describe("initiateDeviceFlow", () => {
     const pollToken = t.mock.fn<DeviceFlowHttp["pollToken"]>(() => rejectNonError("poll offline"));
     const deviceFlowHttp = { requestCode, pollToken } satisfies DeviceFlowHttp;
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0);
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
 
     // act
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http: deviceFlowHttp,
       provider,
       waitForPoll: pollingWait,
@@ -583,7 +609,7 @@ describe("initiateDeviceFlow", () => {
       authAttempted: true,
     });
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -595,19 +621,22 @@ describe("initiateDeviceFlow", () => {
       name: "device flow HTTP",
     });
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(
       deviceCode({ expires_in: 0 }),
     );
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
 
     // act
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http: deviceFlowHttp,
       provider,
     });
@@ -621,7 +650,7 @@ describe("initiateDeviceFlow", () => {
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
   });
 
   test("cancels before polling when the abort signal is already aborted", async () => {
@@ -634,7 +663,10 @@ describe("initiateDeviceFlow", () => {
       name: "device flow HTTP",
     });
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = mock<NonNullable<InitiateDeviceFlowOpts["waitForPoll"]>>({
       exactParams: true,
       name: "polling wait",
@@ -643,7 +675,7 @@ describe("initiateDeviceFlow", () => {
       deviceCode({ interval: 60 }),
     );
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
     when(() => pollingWait(60_000, controller.signal)).thenReject(new Error("aborted"));
 
@@ -651,7 +683,7 @@ describe("initiateDeviceFlow", () => {
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http: deviceFlowHttp,
       provider,
       signal: controller.signal,
@@ -666,7 +698,7 @@ describe("initiateDeviceFlow", () => {
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -681,19 +713,22 @@ describe("initiateDeviceFlow", () => {
       name: "device flow HTTP",
     });
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(
       deviceCode({ interval: 60 }),
     );
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
 
     // act
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http: deviceFlowHttp,
       provider,
       signal: controller.signal,
@@ -707,7 +742,7 @@ describe("initiateDeviceFlow", () => {
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
   });
 
   for (const { requestFailure, expectedReason, behavior } of [
@@ -730,7 +765,10 @@ describe("initiateDeviceFlow", () => {
         name: "device flow HTTP",
       });
       const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-      const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+      const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+        exactParams: true,
+        name: "device code prompt",
+      });
       when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenReturn(
         requestFailure instanceof Error
           ? Promise.reject(requestFailure)
@@ -741,7 +779,7 @@ describe("initiateDeviceFlow", () => {
       const deviceFlow = await initiateDeviceFlow({
         host: "auth.example",
         credentialOps,
-        notifyFn: notification,
+        onDeviceCode,
         http: deviceFlowHttp,
         provider,
       });
@@ -754,7 +792,7 @@ describe("initiateDeviceFlow", () => {
       });
       verify(deviceFlowHttp);
       verify(credentialOps);
-      verify(notification);
+      verify(onDeviceCode);
     });
   }
 
@@ -767,7 +805,10 @@ describe("initiateDeviceFlow", () => {
       name: "device flow HTTP",
     });
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0);
     when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(deviceCode());
     when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenResolve({
@@ -777,7 +818,7 @@ describe("initiateDeviceFlow", () => {
       scope: "read_repository",
     });
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
     when(() =>
       credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
@@ -787,7 +828,7 @@ describe("initiateDeviceFlow", () => {
     const deviceFlow = initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       http: deviceFlowHttp,
       provider,
       waitForPoll: pollingWait,
@@ -800,7 +841,7 @@ describe("initiateDeviceFlow", () => {
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -808,7 +849,10 @@ describe("initiateDeviceFlow", () => {
     // arrange
     const provider = authProvider();
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0);
     const fetchSpy = t.mock.method(
       globalThis,
@@ -837,7 +881,7 @@ describe("initiateDeviceFlow", () => {
       },
     );
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
     when(() =>
       credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
@@ -847,7 +891,7 @@ describe("initiateDeviceFlow", () => {
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       provider,
       waitForPoll: pollingWait,
     });
@@ -887,7 +931,7 @@ describe("initiateDeviceFlow", () => {
       },
     ]);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -922,7 +966,10 @@ describe("initiateDeviceFlow", () => {
       // arrange
       const provider = authProvider();
       const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-      const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+      const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+        exactParams: true,
+        name: "device code prompt",
+      });
       t.mock.method(globalThis, "fetch", (): Promise<Response> =>
         Promise.resolve(new Response(responseBody, { status: 400 })),
       );
@@ -931,7 +978,7 @@ describe("initiateDeviceFlow", () => {
       const deviceFlow = await initiateDeviceFlow({
         host: "auth.example",
         credentialOps,
-        notifyFn: notification,
+        onDeviceCode,
         provider,
       });
 
@@ -942,7 +989,7 @@ describe("initiateDeviceFlow", () => {
         authAttempted: true,
       });
       verify(credentialOps);
-      verify(notification);
+      verify(onDeviceCode);
     });
   }
 
@@ -960,7 +1007,10 @@ describe("initiateDeviceFlow", () => {
       // arrange
       const provider = authProvider();
       const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-      const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+      const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+        exactParams: true,
+        name: "device code prompt",
+      });
       t.mock.method(globalThis, "fetch", (): Promise<Response> =>
         Promise.resolve(new Response(JSON.stringify(responseBody), { status: 200 })),
       );
@@ -969,7 +1019,7 @@ describe("initiateDeviceFlow", () => {
       const deviceFlow = await initiateDeviceFlow({
         host: "auth.example",
         credentialOps,
-        notifyFn: notification,
+        onDeviceCode,
         provider,
       });
 
@@ -980,7 +1030,7 @@ describe("initiateDeviceFlow", () => {
         authAttempted: true,
       });
       verify(credentialOps);
-      verify(notification);
+      verify(onDeviceCode);
     });
   }
 
@@ -988,7 +1038,10 @@ describe("initiateDeviceFlow", () => {
     // arrange
     const provider = authProvider();
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0);
     const fetchSpy = t.mock.method(globalThis, "fetch", unexpectedFetch);
     fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
@@ -997,7 +1050,7 @@ describe("initiateDeviceFlow", () => {
       1,
     );
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
     when(() =>
       credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
@@ -1007,7 +1060,7 @@ describe("initiateDeviceFlow", () => {
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       provider,
       waitForPoll: pollingWait,
     });
@@ -1019,7 +1072,7 @@ describe("initiateDeviceFlow", () => {
       authAttempted: true,
     });
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -1074,20 +1127,23 @@ describe("initiateDeviceFlow", () => {
       // arrange
       const provider = authProvider();
       const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-      const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+      const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+        exactParams: true,
+        name: "device code prompt",
+      });
       const pollingWait = expectedPollingWait(0);
       const fetchSpy = t.mock.method(globalThis, "fetch", unexpectedFetch);
       fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
       fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(responseBody)), 1);
       when(() => {
-        notification("Open https://verify.example/device and enter: CODE-1", "info");
+        onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
       }).thenReturn(undefined);
 
       // act
       const deviceFlow = await initiateDeviceFlow({
         host: "auth.example",
         credentialOps,
-        notifyFn: notification,
+        onDeviceCode,
         provider,
         waitForPoll: pollingWait,
       });
@@ -1095,7 +1151,7 @@ describe("initiateDeviceFlow", () => {
       // assert
       assert.deepStrictEqual(deviceFlow, expectedDeviceFlow);
       verify(credentialOps);
-      verify(notification);
+      verify(onDeviceCode);
       verify(pollingWait);
     });
   }
@@ -1104,7 +1160,10 @@ describe("initiateDeviceFlow", () => {
     // arrange
     const provider = authProvider();
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0, 0);
     const fetchSpy = t.mock.method(globalThis, "fetch", unexpectedFetch);
     fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
@@ -1117,7 +1176,7 @@ describe("initiateDeviceFlow", () => {
       2,
     );
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
     when(() =>
       credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
@@ -1127,7 +1186,7 @@ describe("initiateDeviceFlow", () => {
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       provider,
       waitForPoll: pollingWait,
     });
@@ -1135,7 +1194,7 @@ describe("initiateDeviceFlow", () => {
     // assert
     assert.strictEqual(deviceFlow.ok, true);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -1143,7 +1202,10 @@ describe("initiateDeviceFlow", () => {
     // arrange
     const provider = authProvider();
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0, 5_000);
     const fetchSpy = t.mock.method(globalThis, "fetch", unexpectedFetch);
     fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
@@ -1156,7 +1218,7 @@ describe("initiateDeviceFlow", () => {
       2,
     );
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
     when(() =>
       credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
@@ -1166,7 +1228,7 @@ describe("initiateDeviceFlow", () => {
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       provider,
       waitForPoll: pollingWait,
     });
@@ -1174,7 +1236,7 @@ describe("initiateDeviceFlow", () => {
     // assert
     assert.strictEqual(deviceFlow.ok, true);
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -1182,21 +1244,24 @@ describe("initiateDeviceFlow", () => {
     // arrange
     const provider = authProvider();
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0);
     const fetchSpy = t.mock.method(globalThis, "fetch", (): Promise<Response> =>
       Promise.reject(new TypeError("offline")),
     );
     fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
 
     // act
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       provider,
       waitForPoll: pollingWait,
     });
@@ -1208,7 +1273,7 @@ describe("initiateDeviceFlow", () => {
       authAttempted: true,
     });
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 
@@ -1216,20 +1281,23 @@ describe("initiateDeviceFlow", () => {
     // arrange
     const provider = authProvider();
     const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
-    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const onDeviceCode = mock<InitiateDeviceFlowOpts["onDeviceCode"]>({
+      exactParams: true,
+      name: "device code prompt",
+    });
     const pollingWait = expectedPollingWait(0);
     const fetchSpy = t.mock.method(globalThis, "fetch", unexpectedFetch);
     fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
     fetchSpy.mock.mockImplementationOnce(() => fetchResponse("not JSON", 502), 1);
     when(() => {
-      notification("Open https://verify.example/device and enter: CODE-1", "info");
+      onDeviceCode({ verificationUri: "https://verify.example/device", userCode: "CODE-1" });
     }).thenReturn(undefined);
 
     // act
     const deviceFlow = await initiateDeviceFlow({
       host: "auth.example",
       credentialOps,
-      notifyFn: notification,
+      onDeviceCode,
       provider,
       waitForPoll: pollingWait,
     });
@@ -1241,7 +1309,7 @@ describe("initiateDeviceFlow", () => {
       authAttempted: true,
     });
     verify(credentialOps);
-    verify(notification);
+    verify(onDeviceCode);
     verify(pollingWait);
   });
 });

@@ -2368,7 +2368,7 @@ test("AUTH-01 add: credentialOps.fill HIT bypasses Device Flow and clones with t
     assert.equal(
       notifications.filter((n) => n.message.startsWith("Open ")).length,
       0,
-      "Device Flow notifyFn must NOT fire on a fill HIT",
+      "Device Flow prompt must NOT fire on a fill HIT",
     );
   });
 });
@@ -2432,7 +2432,7 @@ test("AUTH-01 add: credentialOps.fill MISS triggers Device Flow which produces a
       "Device Flow must produce the mocked token",
     );
 
-    // Device Flow notifyFn must have emitted the byte-exact catalog prompt.
+    // The Device Flow prompt must carry the byte-exact catalog text.
     assert.ok(
       notifications.some(
         (n) =>

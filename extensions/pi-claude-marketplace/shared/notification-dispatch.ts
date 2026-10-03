@@ -33,13 +33,13 @@ import type { NotificationRun } from "./notification-run.ts";
 import type { StandaloneKind } from "./notification-summary.ts";
 import type {
   CascadeNotificationMessage,
+  DeviceFlowPrompt,
   HookSurface,
   LoadSurface,
   NotificationMessage,
   RawSurface,
   ReconcileAppliedCascadeMessage,
   RetainedWorkflowStaging,
-  Severity,
   UsageErrorMessage,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
@@ -175,6 +175,21 @@ export function notifyDiagnostic(
   lines: readonly string[],
 ): void {
   emitRawSurface(ctx, { kind: "diagnostic", header, lines });
+}
+
+/**
+ * RAWS-03 / D-09: shows the Device Flow prompt as the `device-flow-prompt`
+ * kind. `auth-host.ts` binds the domain's device-code callback to this helper.
+ * AUTH-09: it copies the two prompt values by name, so no other member of
+ * `prompt` reaches the kind. The text strategy composes the sentence at
+ * explicit `"info"` severity.
+ */
+export function notifyDeviceFlowPrompt(ctx: NotificationContext, prompt: DeviceFlowPrompt): void {
+  emitRawSurface(ctx, {
+    kind: "device-flow-prompt",
+    verificationUri: prompt.verificationUri,
+    userCode: prompt.userCode,
+  });
 }
 
 /**
@@ -352,26 +367,6 @@ export function notify(
   // `{summary}\n\n{cascade body}\n\n{tally}\n\n{reload-hint}` (UXG-07 / GRAM-01 /
   // OUT-03).
   emitWithSummary(ctx, envelope, body);
-}
-
-/**
- * AUTH-01 seam: create a raw notify callback bound to ctx.ui.notify for
- * use with domain-tier functions (e.g. initiateDeviceFlow) that require a
- * simple `(message, severity?) => void` callback rather than the structured
- * NotificationMessage surface. This is the ONLY sanctioned way to derive
- * a raw callback from ctx.ui.notify outside of notification-dispatch.ts itself --
- * all other code must use notify(ctx, run, NotificationMessage) directly.
- */
-export function makeRawNotifyFn(
-  ctx: NotificationContext,
-): (message: string, severity?: Severity) => void {
-  return (message: string, severity?: Severity): void => {
-    if (severity === undefined) {
-      ctx.ui.notify(message);
-    } else {
-      ctx.ui.notify(message, severity);
-    }
-  };
 }
 
 /**

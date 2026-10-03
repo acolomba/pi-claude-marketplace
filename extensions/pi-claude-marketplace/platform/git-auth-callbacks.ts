@@ -46,7 +46,7 @@ export type AuthAttemptResult =
  * `credentialOps.fill` returns null (no stored credential). The orchestrator
  * binds whatever the Device Flow needs at the call site, so this seam takes no
  * parameters: `orchestrators/auth-host.ts` binds `host`, `credentialOps`, and
- * `notifyFn`.
+ * `onDeviceCode`.
  */
 export type OnAuthRequiredFn = () => Promise<AuthAttemptResult>;
 
