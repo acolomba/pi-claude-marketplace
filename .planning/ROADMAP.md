@@ -138,7 +138,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. A server name that another source defines in full (`command`, `url` or `socket`) is reported as a collision, naming the source that wins under adapter 5's nine-source, later-wins precedence. A partial entry, such as a `/mcp-adapter disable` stub, is an override and blocks neither install nor update. This closes MCPSRC-01. (AFILE-05)
 5. A user override written into our entry (for example `disabled: true` from `/mcp-adapter disable`) is still there after `update` and `reinstall`. The carried-forward field set is closed, recorded under a decision ID, and pinned against the adapter's `ServerEntry`. (AFILE-06)
 
-**Plans**: 7/8 plans executed in 8 waves
+**Plans**: 8/8 plans executed in 8 waves
 
 **Wave 1**
 - [x] 02-01-PLAN.md — plugin MCP servers move to `mcp-adapter.json`, read as JSONC, refused when unparseable, `mcp-servers` honored (AFILE-01, AFILE-02, AFILE-03)
@@ -162,7 +162,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 - [x] 02-07-PLAN.md — notices on enable, disable and the cascade undos (AFILE-04)
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 02-08-PLAN.md — notices through the reload, import and marketplace update cascades (AFILE-04)
+- [x] 02-08-PLAN.md — notices through the reload, import and marketplace update cascades (AFILE-04)
 
 **Notes.** This is the highest-risk core, and it lands before entry content changes so a failure points at file handling, not at translation. Entries keep today's content shape here; Phases 3 and 4 change it. Extract the JSONC document reader and the entry translator into their own modules up front: `bridges/mcp/stage.ts` already sits near the fallow `maxUnitSize` and cognitive-complexity ceilings. Research flags: the carry-forward field list and the comment-handling details.
 
@@ -281,7 +281,7 @@ plan these phases with the UI gate skipped.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 9/9 | Complete    | 2026-10-02 |
-| 2. Adapter-file delivery | mcp-4 | 7/8 | In Progress|  |
+| 2. Adapter-file delivery | mcp-4 | 8/8 | In Progress|  |
 | 3. Claude Code tool names and tool search | mcp-4 | 0/TBD | Not started | - |
 | 4. Variable expansion at Claude Code parity | mcp-4 | 0/TBD | Not started | - |
 | 5. Automatic migration on /reload | mcp-4 | 0/TBD | Not started | - |

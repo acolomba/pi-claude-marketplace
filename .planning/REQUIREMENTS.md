@@ -59,7 +59,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
   a write.
 - [x] **AFILE-03**: When the existing file uses the legacy `mcp-servers` key, our entries go under
   that key, so the user's servers keep loading.
-- [ ] **AFILE-04**: When a rewrite would drop the user's JSONC comments, the user is warned once.
+- [x] **AFILE-04**: When a rewrite would drop the user's JSONC comments, the user is warned once.
 - [x] **AFILE-05**: Collision detection follows adapter 5's nine-source precedence (later source
   wins) and treats a partial entry (no `command`/`url`/`socket`) as an override, not a collision
   (closes MCPSRC-01).
@@ -169,7 +169,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | AFILE-01 | Phase 2 | Complete |
 | AFILE-02 | Phase 2 | Complete |
 | AFILE-03 | Phase 2 | Complete |
-| AFILE-04 | Phase 2 | Pending |
+| AFILE-04 | Phase 2 | Complete |
 | AFILE-05 | Phase 2 | Complete |
 | AFILE-06 | Phase 2 | Complete |
 | ANAME-01 | Phase 3 | Pending |
