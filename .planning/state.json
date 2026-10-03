@@ -21,7 +21,7 @@
     {
       "number": "4",
       "name": "Wire Schema and JSON Strategy",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "5",
@@ -44,5 +44,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 04 of 7 · executing"
   },
-  "updated_at": "2026-10-03T13:09:49.397Z"
+  "updated_at": "2026-10-03T15:03:29.168Z"
 }

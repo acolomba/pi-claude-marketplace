@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 04
 current_phase_name: Wire Schema and JSON Strategy
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-10-03T13:09:52.505Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-10-03T15:03:32.424Z"
 last_activity: 2026-10-03
-last_activity_desc: Completed 04-01 (wire schema tracer and generated JSON Schema)
-state_head: 29a05bd50ab50f454635513e4e30436938ab7093
+last_activity_desc: Completed 04-02 (cascade-family presentations and marketplace tool wire blocks)
+state_head: 2c561635396092252b734cef56c6677c882d688c
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 27
-  completed_plans: 23
+  completed_plans: 24
   percent: 43
 milestone_name: Mode-Keyed Presentation Strategies
 ---
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 04 (Wire Schema and JSON Strategy) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Executing Phase 04
-Last activity: 2026-10-03 — Completed 04-01 (wire schema tracer and generated JSON Schema)
+Last activity: 2026-10-03 — Completed 04-02 (cascade-family presentations and marketplace tool wire blocks)
 
-Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 23 plans complete)
+Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 24 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -170,8 +170,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-03T13:09:52.294Z
-**Stopped at:** Completed 04-01-PLAN.md
+**Last session:** 2026-10-03T15:03:32.211Z
+**Stopped at:** Completed 04-02-PLAN.md
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -233,6 +233,7 @@ archived milestone artifacts.
 | Phase 03 P03 | 1h 13m | 2 tasks | 20 files |
 | Phase 03 P04 | 1h 3m | 2 tasks | 4 files |
 | Phase 04 P01 | 89min | 2 tasks | 15 files |
+| Phase 04 P02 | 85min | 2 tasks | 20 files |
 
 ## Decisions
 
@@ -280,3 +281,5 @@ archived milestone artifacts.
 - [Phase 03]: 03-04: the D-16 presentation-sink gate pairs two pattern clauses with a placement clause (exactly two notify spellings, both inside deliver); each clause is proven by its own planted offender
 - [Phase 04]: Wire closed-set fields use Type.Enum over Record<ClosedSet, true> enrollment keys; typebox 1.3.34 Static of a Union over a non-tuple array is never
 - [Phase 04]: Plugin LLM tool details are wire marketplace blocks with verbatim statuses (details.marketplaces replaces the flat plugins list)
+- [Phase 04]: Marketplace LIST_CONTEXT renamed MARKETPLACE_LIST_CONTEXT so tools.ts can import both list contexts without a fallow duplicate export
+- [Phase 04]: composeContextBlocks stays as the cascade formatter's block composer (only production reader of renderMpHeader/composePluginLines); composeMarketplaceBlock is grammar-private

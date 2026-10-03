@@ -66,7 +66,7 @@ model that already carries every presentation decision.
   booleans; install-scoped rows always carry an explicit `scope`; optional
   fields are absent, never `null`; empty collections are `[]`; arrays keep model
   order.
-- [ ] **WIRE-05**: Payloads carry the model's `summary` line on warning and
+- [x] **WIRE-05**: Payloads carry the model's `summary` line on warning and
   error, a numeric `tally`, and a `noOp` flag on the update no-op cascade.
 - [ ] **WIRE-06**: Plugin rows carry `id: "<name>@<marketplace>"`.
 - [ ] **WIRE-07**: Every command-origin payload of one command run carries the
@@ -126,7 +126,7 @@ model that already carries every presentation decision.
 
 ### LLM Tool Surface
 
-- [ ] **LLMT-01**: The `details` of both LLM tools (`edge/handlers/tools.ts`)
+- [x] **LLMT-01**: The `details` of both LLM tools (`edge/handlers/tools.ts`)
   use the wire schema's marketplace-block and plugin-row shapes and verbatim
   status tokens (`upgradable` is no longer projected to `[installed]`); the
   tools' line-format text content is unchanged.
@@ -200,7 +200,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WIRE-02 | Phase 6 | Pending |
 | WIRE-03 | Phase 4 | Pending |
 | WIRE-04 | Phase 4 | Pending |
-| WIRE-05 | Phase 4 | Pending |
+| WIRE-05 | Phase 4 | Complete |
 | WIRE-06 | Phase 4 | Pending |
 | WIRE-07 | Phase 6 | Pending |
 | WIRE-08 | Phase 4 | Pending |
@@ -219,7 +219,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MODE-02 | Phase 5 | Pending |
 | MODE-03 | Phase 7 | Pending |
 | MODE-04 | Phase 7 | Pending |
-| LLMT-01 | Phase 4 | Pending |
+| LLMT-01 | Phase 4 | Complete |
 | TENB-01 | Phase 5 | Pending |
 | TENB-02 | Phase 5 | Pending |
 | TENB-03 | Phase 7 | Pending |
