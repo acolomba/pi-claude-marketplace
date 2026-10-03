@@ -10649,3 +10649,75 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
     }
   });
 });
+
+test("AFILE-06: a disabled plugin MCP server stays disabled through update", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-afile06-disabled-");
+    try {
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: { version: "1.0.0", hasSkill: false, omitPluginJsonVersion: true },
+        },
+      });
+      await writeFile(
+        path.join(pluginRoot, ".mcp.json"),
+        JSON.stringify({ mcpServers: { server1: { command: "node", args: ["v1.js"] } } }),
+      );
+      const seed = makeCtx();
+      await createInstallOperation(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      )({ ctx: seed.ctx, pi: seed.pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
+        mcpServers: Record<string, Record<string, unknown>>;
+      };
+      installed.mcpServers.server1 = { ...installed.mcpServers.server1, disabled: true };
+      await writeFile(locations.mcpAdapterJsonPath, `${JSON.stringify(installed, null, 2)}\n`);
+      await writeFile(
+        path.join(pluginRoot, ".mcp.json"),
+        JSON.stringify({ mcpServers: { server1: { command: "deno", args: ["v2.js"] } } }),
+      );
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.1" } });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.strictEqual(record?.version, "1.0.1");
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
+        mcpServers: {
+          server1: {
+            command: "deno",
+            args: ["v2.js"],
+            env: {
+              CLAUDE_PLUGIN_ROOT: pluginRoot,
+              CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
+              CLAUDE_PROJECT_DIR: cwd,
+            },
+            disabled: true,
+            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+          },
+        },
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

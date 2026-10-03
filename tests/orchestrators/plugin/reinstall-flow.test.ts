@@ -9508,3 +9508,52 @@ test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification th
     }
   });
 });
+
+test("AFILE-06: a disabled plugin MCP server stays disabled through reinstall", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile06-disabled-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const { pluginRoot } = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { mcp: true },
+        install: true,
+      });
+      const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
+        mcpServers: Record<string, Record<string, unknown>>;
+      };
+      installed.mcpServers.server1 = { ...installed.mcpServers.server1, disabled: true };
+      await writeFile(locations.mcpAdapterJsonPath, `${JSON.stringify(installed, null, 2)}\n`);
+      await writeFile(
+        path.join(pluginRoot, ".mcp.json"),
+        JSON.stringify({ mcpServers: { server1: { command: "deno", args: ["v2.js"] } } }),
+      );
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.strictEqual(outcome.partition, "reinstalled");
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
+        mcpServers: {
+          server1: {
+            command: "deno",
+            args: ["v2.js"],
+            env: {
+              CLAUDE_PLUGIN_ROOT: pluginRoot,
+              CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
+              CLAUDE_PROJECT_DIR: cwd,
+            },
+            disabled: true,
+            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+          },
+        },
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

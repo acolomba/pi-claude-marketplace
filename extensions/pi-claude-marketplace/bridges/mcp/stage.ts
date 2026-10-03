@@ -7,9 +7,10 @@
 // partitions existing entries into ours-vs-theirs by `_piClaudeMarketplace`
 // marker across both server keys, checks every new name against the full
 // definitions in pi-mcp-adapter's nine config sources (AFILE-05, MC-4, RN-5),
-// short-circuits AS-8 noops, stamps the new entries
-// with the marker (MC-5), and builds the next doc IN MEMORY only, writing
-// under the key the adapter loads (AFILE-03). Commit is a single
+// short-circuits AS-8 noops, hands the new entries and the entries they
+// replace to adapter-entry.ts, which applies the AFILE-06 carry-forward and
+// the MC-5 marker, and builds the next doc IN MEMORY only, writing under the
+// key the adapter loads (AFILE-03). Commit is a single
 // `atomicWriteJson` -- no per-file rename loop, no EXDEV risk, no
 // partial-state recovery surface. Abort is a synchronous no-op because
 // prepare wrote nothing to disk.
@@ -37,11 +38,11 @@ import {
   withPluginServers,
   type McpConfigDoc,
 } from "./adapter-doc.ts";
+import { stampServers } from "./adapter-entry.ts";
 import { walkMcpSources, type McpSourceWalk } from "./collision-slots.ts";
-import { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker, isOwnedBy } from "./marker.ts";
-import { safeSet } from "./safe-set.ts";
-import { substituteAndInject, type McpSubstitutionContext } from "./substitute.ts";
+import { isOwnedBy } from "./marker.ts";
 
+import type { McpSubstitutionContext } from "./substitute.ts";
 import type {
   McpReplacement,
   PreparedMcpStaging,
@@ -124,55 +125,6 @@ async function assertNoMcpCollisions(check: McpCollisionCheck): Promise<void> {
   }
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function stampServers(
-  servers: Record<string, unknown>,
-  pluginName: string,
-  marketplaceName: string,
-  subCtx: McpSubstitutionContext,
-): { stamped: Record<string, unknown>; warnings: string[] } {
-  const marker = buildMarker(pluginName, marketplaceName);
-  const stamped: Record<string, unknown> = {};
-  const warnings: string[] = [];
-  for (const [name, entry] of Object.entries(servers)) {
-    // Deep-substitute + inject env BEFORE the marker is spread on, so the
-    // marker never enters the walk (MENV-01/02, D-92-01/02). Non-object
-    // entries keep the existing `{}` tolerance -- no substitution attempted --
-    // but each normalization is surfaced as a warning instead of silently
-    // reporting a dead entry as staged.
-    let entryObj: Record<string, unknown>;
-    if (isPlainObject(entry)) {
-      // A malformed declared env on a stdio entry is discarded by the
-      // injection step (injected defaults only); say so instead of leaving
-      // the plugin author to diff mcp-adapter.json against their source.
-      if (
-        typeof entry.command === "string" &&
-        entry.env !== undefined &&
-        !isPlainObject(entry.env)
-      ) {
-        warnings.push(
-          `mcp server "${name}": declared env is not an object; it was ignored (injected defaults only)`,
-        );
-      }
-
-      entryObj = substituteAndInject(entry, subCtx);
-    } else {
-      warnings.push(`mcp server "${name}": entry is not an object; staged as an empty entry`);
-      entryObj = {};
-    }
-
-    // safeSet copies a plugin-declared server literally named `__proto__` as an
-    // own key so it is stamped and written rather than dropped via the
-    // inherited setter (which would diverge state.json from disk) -- WR-01.
-    safeSet(stamped, name, { ...entryObj, [CLAUDE_MARKETPLACE_MARKER_KEY]: marker });
-  }
-
-  return { stamped, warnings };
-}
-
 function noopStaging(warnings: readonly string[]): PreparedMcpStaging {
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze<string[]>([]),
@@ -207,8 +159,9 @@ async function readTargetConfig(
  * partitions existing entries by marker across both server keys, checks each
  * new name against the full definitions in pi-mcp-adapter's nine config
  * sources (AFILE-05, MC-4; the plugin's own marked entries are exempt in every
- * source), stamps every new entry with the marker (MC-5), and builds the next
- * doc. A staged entry replaces a marker-less override under its name. AS-8 noop short-circuits when
+ * source), stamps every new entry (AFILE-06 carry-forward, MC-5 marker), and
+ * builds the next doc. A staged entry replaces a marker-less override under
+ * its name and absorbs its carried fields. AS-8 noop short-circuits when
  * there is nothing new AND nothing previously-ours -- in that case
  * `commitPreparedMcp` writes no file (PRD success criterion: AS-8 noop
  * produces no `mcp-adapter.json`).
@@ -229,7 +182,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   }
 
   // Partition existing into ours-vs-theirs by marker (MC-5).
-  const { ours, theirs } = partitionServers(config, pluginName, marketplaceName);
+  const { ours, overlays, theirs } = partitionServers(config, pluginName, marketplaceName);
 
   // AFILE-05 / MC-4: any other full definition of a new name refuses.
   await assertNoMcpCollisions({
@@ -248,21 +201,25 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     return noopStaging([]);
   }
 
-  // MC-5 marker stamp -- every new entry carries `_piClaudeMarketplace`.
   // The CLAUDE_PROJECT_DIR arm is decided HERE, once (MENV-03): project scope
   // resolves it to the project root `cwd` (NOT scopeRoot); user scope carries
   // `undefined` so neither substitution nor injection can emit it.
-  const subCtx: McpSubstitutionContext = {
+  const substitution: McpSubstitutionContext = {
     pluginRoot,
     pluginData,
     projectDir: locations.scope === "project" ? cwd : undefined,
   };
-  const { stamped, warnings: stampWarnings } = stampServers(
+  // AFILE-06: each new entry carries the user's fields from the entry it
+  // replaces. A marker-less override stub under the selected key wins over the
+  // plugin's previous marked entry. Object spread defines own data properties,
+  // so a server named `__proto__` stays an own key (WR-01).
+  const { stamped, warnings: stampWarnings } = stampServers({
     servers,
     pluginName,
     marketplaceName,
-    subCtx,
-  );
+    substitution,
+    previous: { ...ours, ...overlays },
+  });
 
   // Keep theirs verbatim; replace ours with stamped (or drop ours when
   // there are no new servers).

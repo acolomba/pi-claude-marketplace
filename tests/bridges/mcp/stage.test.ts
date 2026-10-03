@@ -519,11 +519,9 @@ describe("prepareStageMcpServers", () => {
     );
   });
 
-  test("normalizes malformed server values with complete ordered warnings", async (t) => {
+  test("returns the stamping warnings in the commit result", async (t) => {
     // arrange
-    const { cwd, locations } = await createProjectScope(t, "mcp-stage-normalize-");
-    const pluginRoot = path.join(cwd, "plugins", "acme");
-    const pluginData = path.join(cwd, "data", "acme");
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-warnings-");
 
     // act
     const prepared = await prepareStageMcpServers({
@@ -531,50 +529,22 @@ describe("prepareStageMcpServers", () => {
       cwd,
       marketplaceName: "catalog",
       pluginName: "acme",
-      pluginRoot,
-      pluginData,
-      servers: {
-        malformedEnv: { command: "node", env: ["invalid"] },
-        urlWithScalarEnv: { url: "https://mcp.example.test", env: "opaque" },
-        scalar: "invalid",
-        nil: null,
-      },
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { scalar: "invalid" },
     });
 
     // assert
-    assert.strictEqual(prepared.kind, "staged");
-    if (prepared.kind !== "staged") {
-      return;
-    }
-
-    assert.deepStrictEqual(prepared.result.warnings, [
-      'mcp server "malformedEnv": declared env is not an object; it was ignored (injected defaults only)',
-      'mcp server "scalar": entry is not an object; staged as an empty entry',
-      'mcp server "nil": entry is not an object; staged as an empty entry',
-    ]);
-    assert.deepStrictEqual(prepared._nextDoc, {
-      mcpServers: {
-        malformedEnv: {
-          command: "node",
-          env: {
-            CLAUDE_PLUGIN_ROOT: pluginRoot,
-            CLAUDE_PLUGIN_DATA: pluginData,
-            CLAUDE_PROJECT_DIR: cwd,
-          },
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: ["scalar"],
+      recorded: [
+        {
+          generatedName: "scalar",
+          sourcePath: "acme#mcpServers",
+          targetPath: locations.mcpAdapterJsonPath,
         },
-        urlWithScalarEnv: {
-          url: "https://mcp.example.test",
-          env: "opaque",
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
-        },
-        scalar: {
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
-        },
-        nil: {
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
-        },
-      },
+      ],
+      warnings: ['mcp server "scalar": entry is not an object; staged as an empty entry'],
     });
   });
 
@@ -839,7 +809,7 @@ describe("prepareStageMcpServers", () => {
     assert.strictEqual(storedBytes, ACME_ONLY_BYTES);
   });
 
-  test("AFILE-05: the staged entry replaces a marker-less overlay under its name in the target file", async (t) => {
+  test("AFILE-05: the staged entry replaces a marker-less overlay under its name and keeps its disabled flag", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-overlay-");
     await writeSource(
@@ -853,6 +823,7 @@ describe("prepareStageMcpServers", () => {
     },
     "server": {
       "url": "https://acme.example/mcp",
+      "disabled": true,
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog"
@@ -868,6 +839,91 @@ describe("prepareStageMcpServers", () => {
 
     // assert
     assert.strictEqual(storedBytes, expectedBytes);
+  });
+
+  test("AFILE-06: absorbs a disable stub's carried fields and none of its credentials", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-absorb-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      JSON.stringify({
+        mcpServers: {
+          server: {
+            disabled: true,
+            env: { STUB_TOKEN: "stub-env" },
+            headers: { Authorization: "stub-header" },
+            bearerToken: "t",
+          },
+        },
+      }),
+    );
+    const pluginRoot = path.join(cwd, "plugins", "acme");
+    const pluginData = path.join(cwd, "data", "acme");
+    const expectedBytes = `{
+  "mcpServers": {
+    "server": {
+      "command": "acme",
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": ${JSON.stringify(pluginRoot)},
+        "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)},
+        "CLAUDE_PROJECT_DIR": ${JSON.stringify(cwd)},
+        "PLUGIN_TOKEN": "plugin-env"
+      },
+      "disabled": true,
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
+
+    // act
+    await commitPreparedMcp(
+      await prepareStageMcpServers({
+        locations,
+        cwd,
+        marketplaceName: "catalog",
+        pluginName: "acme",
+        pluginRoot,
+        pluginData,
+        servers: { server: { command: "acme", env: { PLUGIN_TOKEN: "plugin-env" } } },
+      }),
+    );
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, expectedBytes);
+  });
+
+  test("AFILE-06: staging the same plugin version twice writes identical bytes", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-idempotent-");
+    await writeSource(locations.mcpAdapterJsonPath, '{"mcpServers":{"server":{"disabled":true}}}');
+    const expectedBytes = `{
+  "mcpServers": {
+    "server": {
+      "url": "https://acme.example/mcp",
+      "disabled": true,
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const firstBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const secondBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(firstBytes, expectedBytes);
+    assert.strictEqual(secondBytes, expectedBytes);
   });
 
   test("omits project substitution and injection in a user scope", async (t) => {
