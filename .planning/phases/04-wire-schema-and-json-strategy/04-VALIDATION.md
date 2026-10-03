@@ -61,7 +61,24 @@ created: "2026-10-03"
 
 ## Per-Task Verification Map
 
-Filled by the planner per task.
+Every task also runs `npm run typecheck`, `npm run lint:type-members`, and its
+pre-commit hooks. Tasks that touch a text path also run the corpus wrapper
+(3134 present, 0 extra) and `git diff --exit-code 4e6c568a -- docs/output-catalog.md`.
+New test files are created inside their own task (TDD), so no task depends on
+a separate Wave 0 scaffold.
+
+| Task | Wave | Requirements | Threat refs | Test type | Automated command | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| 04-01-T1 | 1 | LLMT-01, WIRE-03, WIRE-04, WIRE-05, WIRE-06 | T-04-01, T-04-02 | unit + corpus | `node --test tests/shared/notification-present.test.ts tests/shared/notification-wire.test.ts tests/shared/notification-json.test.ts tests/shared/notification-dispatch.test.ts tests/edge/handlers/tools.test.ts` | pending |
+| 04-01-T2 | 1 | WIRE-09 | T-04-03 | unit + package | `node --test tests/scripts/generate-wire-schema.test.ts`, then `npm pack --dry-run --json` lists `schema/claude-plugin.schema.json` | pending |
+| 04-02-T1 | 2 | LLMT-01 | T-04-05, T-04-06 | unit | `node --test tests/orchestrators/marketplace/list.test.ts tests/edge/handlers/tools.test.ts tests/architecture/no-orchestrator-network.test.ts` | pending |
+| 04-02-T2 | 2 | WIRE-05 | T-04-07, T-04-08 | unit + corpus | `node --test tests/shared/notification-present.test.ts tests/shared/notification-json.test.ts tests/shared/notification-dispatch.test.ts tests/shared/notify-context.test.ts tests/scripts/generate-wire-schema.test.ts` | pending |
+| 04-03-T1 | 3 | WIRE-01, WIRE-03, WIRE-04, WIRE-06 | T-04-09, T-04-10 | unit + corpus | `node --test tests/shared/notification-present.test.ts tests/shared/notification-json.test.ts tests/shared/notification-dispatch.test.ts tests/shared/notification-grammar.test.ts tests/scripts/generate-wire-schema.test.ts` | pending |
+| 04-03-T2 | 3 | WIRE-01 | T-04-11, T-04-12 | unit + corpus | `node --test tests/shared/notification-json.test.ts tests/shared/notification-wire.test.ts tests/shared/notification-grammar.test.ts tests/architecture/hooks-cap-notify.test.ts tests/architecture/hooks-async-rewake.test.ts` | pending |
+| 04-04-T1 | 4 | PMOD-04 | T-04-13, T-04-14, T-04-15, T-04-16 | unit + corpus | `node --test tests/shared/redact-credentials.test.ts tests/shared/errors.test.ts tests/shared/notification-resolve.test.ts tests/shared/notification-present.test.ts` | pending |
+| 04-04-T2 | 4 | PMOD-04 (AUTH-09 on the JSON path) | T-04-13, T-04-14 | architecture | `node --test tests/architecture/no-credential-leak.test.ts tests/architecture/gate-targets.test.ts` | pending |
+| 04-05-T1 | 5 | JOUT-02, WIRE-01 | T-04-17 | architecture | `node --test tests/architecture/catalog-uat/catalog-wire.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts` | pending |
+| 04-05-T2 | 5 | WIRE-08, phase gate | T-04-18 | architecture + full | `node --test tests/architecture/catalog-uat/catalog-wire.test.ts`, then `npm run check` with its exit code logged | pending |
 
 ---
 
