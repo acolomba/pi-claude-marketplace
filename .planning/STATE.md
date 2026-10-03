@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 03
 current_phase_name: Typed Raw Surfaces
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-10-02T23:09:57.157Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-10-03T00:55:02.403Z"
 last_activity: 2026-10-02
-last_activity_desc: Completed 03-02 typed diagnostic and hook surfaces
-state_head: 107b50a77622ada67581d36b2bbeba1bc838c812
+last_activity_desc: Completed 03-03 typed device-flow prompt and corpus ledger
+state_head: ea1a936f1655b69f3497f5bca0a95c119c67bd7c
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 22
-  completed_plans: 20
+  completed_plans: 21
   percent: 29
 milestone_name: Mode-Keyed Presentation Strategies
 ---
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03 (Typed Raw Surfaces) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Executing Phase 03
-Last activity: 2026-10-02 — Completed 03-02 (typed diagnostic and hook surfaces)
+Last activity: 2026-10-02 — Completed 03-03 (typed device-flow prompt and corpus ledger)
 
-Progress: [███░░░░░░░] 29% (2 of 7 phases fully verified; 20 plans complete)
+Progress: [███░░░░░░░] 29% (2 of 7 phases fully verified; 21 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -170,21 +170,23 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-02T23:09:56.971Z
-**Stopped at:** Completed 03-02-PLAN.md
+**Last session:** 2026-10-03T00:55:02.220Z
+**Stopped at:** Completed 03-03-PLAN.md
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
 findings fixed (CR-01, WR-01..WR-06, IN-01..IN-03); D-07 now records 29 approved
 corpus replacements (29 / 2,632 / 2,661 against the original blob). The full
-`npm run check` passed at `571b6883`. Phase 3 (Typed Raw Surfaces) is next.
+`npm run check` passed at `571b6883`. Phase 3 (Typed Raw Surfaces) has 3 of 4
+plans complete; 03-04 (planted proofs and the phase gate) is next.
 
 **Corpus determinism (resolved by quick task 261002-dys):** prune rollback
 now receives its backup-directory creator through `PruneRestoreOps`, so tests
 name a fixed `prune-backup-ABC123`. The 8 prune.test.ts corpus entries that
 held random suffixes were re-captured; `node scripts/notify-corpus.mjs check`
-exits 0 (3,133 present, 0 extra). Later phases compare the catalog against
+exits 0 (3,133 present, 0 extra). The D-17 ledger then removed 2 and added 3
+entries, so the baseline holds 3,134. Later phases compare the catalog against
 main's `8b6ac3bc` (or the latest merged main) rather than `e40d3dda`, because
 #198 changed catalog bytes.
 
@@ -224,6 +226,7 @@ archived milestone artifacts.
 | Phase 01 P16 | 78 min | 2 tasks | 26 files |
 | Phase 03 P01 | 1h 17m | 2 tasks | 10 files |
 | Phase 03 P02 | 1h 15m | 2 tasks | 10 files |
+| Phase 03 P03 | 1h 13m | 2 tasks | 20 files |
 
 ## Decisions
 
@@ -264,3 +267,6 @@ archived milestone artifacts.
 - [Phase 03]: 03-01: each TDD task lands as one feat commit with its owner tests, because the full-check pre-commit hook rejects a failing RED commit; RED is observed locally
 - [Phase 03]: 03-02: diagnostic, async-rewake-summary, and stop-override-cap are typed raw kinds; formatRawSurface returns undefined only for a zero-length line list or summary, and deliver skips it (D-05, D-08, D-15)
 - [Phase 03]: 03-02: HookSurface has its own private emitHookSurface entry; settle passes STOP_OVERRIDE_CAP exported from bridges/hooks/runtime.ts, so the shared layer holds no cap literal (D-07, D-14)
+- [Phase 03]: 03-03: the device-flow prompt is the device-flow-prompt raw kind; the domain passes { verificationUri, userCode } to onDeviceCode and auth-host binds it to notifyDeviceFlowPrompt (D-09, D-10, D-12)
+- [Phase 03]: 03-03: the AUTH-09 gate pairs a positive call count with an exact-form allow-list for onDeviceCode and for the provider binding (D-11)
+- [Phase 03]: 03-03: the D-17 corpus exception is a five-record ledger in its own commit; the baseline holds 3134 entries with 0 extras

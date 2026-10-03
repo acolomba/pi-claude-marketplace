@@ -146,7 +146,7 @@ Plans:
 4. Hook rewake summaries and the Stop-hook override-cap warning are hook kinds, distinct from command kinds, and the rewake text is carried as data. The `hooks-cap-notify` and `hooks-async-rewake` byte pins hold. The JSON `origin: hook` value that these kinds make derivable is emitted under WIRE-02 in Phase 6.
 5. No output surface hands the text sink a pre-composed string. The catalog diff and the full wire-corpus diff against the Phase 1 baseline are empty.
 
-**Plans:** 2/4 plans executed, sequential (waves 1-4)
+**Plans:** 3/4 plans executed, sequential (waves 1-4)
 
 **Wave 1**
 - [x] 03-01-PLAN.md — Tracer: load-time warnings as typed kinds through one sink that structured emissions share; usage and help kinds (RAWS-04, RAWS-01)
@@ -155,7 +155,7 @@ Plans:
 - [x] 03-02-PLAN.md — Diagnostic kind with the empty no-op in the text strategy; hook kinds carrying the bridge's cap (RAWS-02, RAWS-05)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 03-03-PLAN.md — Device-flow values cross the domain as a typed kind; raw callback deleted; AUTH-09 retargeted; approved corpus ledger (RAWS-03, D-17)
+- [x] 03-03-PLAN.md — Device-flow values cross the domain as a typed kind; raw callback deleted; AUTH-09 retargeted; approved corpus ledger (RAWS-03, D-17)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 03-04-PLAN.md — Planted-violation proofs for AUTH-09 and the D-16 presentation sink; phase gate (TEXT-01, SC-5)
@@ -230,7 +230,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Presentation Model | 16/16 | Complete    | 2026-10-01 |
 | 2. Row Policies | 2/2 | Complete    | 2026-10-02 |
-| 3. Typed Raw Surfaces | 2/4 | In Progress|  |
+| 3. Typed Raw Surfaces | 3/4 | In Progress|  |
 | 4. Wire Schema and JSON Strategy | 0/TBD | Not started | - |
 | 5. Mode-Selected JSON Sink | 0/TBD | Not started | - |
 | 6. Command-Run Contract | 0/TBD | Not started | - |
