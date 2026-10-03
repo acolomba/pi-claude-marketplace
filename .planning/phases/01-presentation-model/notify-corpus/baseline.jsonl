@@ -2945,6 +2945,7 @@
 {"file":"tests/shared/notification-dispatch.test.ts","message":"A plugin operation needs attention.\n\n\u25cf official [user]\n  \u25cf helper v1.0.0 (installed) {malformed skill}\n\n/reload to pick up changes","severity":"warning","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Nothing to prune in project scope: no orphaned dependency installs were found.","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Nothing to prune in user scope: no orphaned dependency installs were found.","severity":null,"argc":1}
+{"file":"tests/shared/notification-dispatch.test.ts","message":"Open https://github.com/login/device and enter: ABCD-1234","severity":"info","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Pending: next reload will apply 0 actions.","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Plugin update: nothing to update","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Prune committed; finalization needs attention.\n\nPrune committed in project scope.\n  cause: lock release failed after save\n\n/reload to pick up changes","severity":"warning","argc":2}
@@ -2964,10 +2965,10 @@
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Usage: /claude:plugin ...","severity":"info","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"Warnings\n\nfirst\nsecond","severity":"warning","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\n\n\u25cf official [user] <no autoupdate>\n  \u25cb alpha (available)\n    components: not resolved","severity":"error","argc":2}
-{"file":"tests/shared/notification-dispatch.test.ts","message":"failed","severity":"error","argc":2}
-{"file":"tests/shared/notification-dispatch.test.ts","message":"plain","severity":null,"argc":1}
+{"file":"tests/shared/notification-dispatch.test.ts","message":"plugin PATH not refreshed for project scope (install state unreadable): schema unsupported","severity":"warning","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"ready","severity":"info","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"ready","severity":"info","argc":2}
+{"file":"tests/shared/notification-dispatch.test.ts","message":"reconcile aborted: boom","severity":"error","argc":2}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf alpha-mp [user] (added)\n  \u25cf alpha-plugin v1.0.0 (installed)\n\n\u25cf beta-mp [project] (added)\n  \u25cf beta-plugin v2.0.0 (installed)\n\n/reload to pick up changes","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf claude-plugins-official [user] (added)\n  \u25cf foo-plugin v1.2.3 (installed)\n\n/reload to pick up changes","severity":null,"argc":1}
 {"file":"tests/shared/notification-dispatch.test.ts","message":"\u25cf claude-plugins-official [user] <autoupdate>\ngithub: anthropics/claude-plugins-official#main\nlast_updated: 2026-05-01T12:34:56Z\ndescription: The official Claude plugin marketplace.","severity":null,"argc":1}
