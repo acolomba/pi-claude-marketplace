@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 02
 current_phase_name: Adapter-file delivery
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-10-03T11:42:32.081Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-10-03T12:42:54.427Z"
 last_activity: 2026-10-03
-last_activity_desc: Plan 02-01 complete (MCP servers staged into mcp-adapter.json)
-state_head: 52c4db89715eeeabd934636ed7d7f245054fba36
+last_activity_desc: Plan 02-02 complete (nine-source MCP collision walk, legacy mcp.json sweep)
+state_head: f1ca80d1d4367b6668caa2006bc865603627c529
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 10
+  completed_plans: 11
   percent: 14
 ---
 
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 02 (Adapter-file delivery) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
-Last activity: 2026-10-03 — Plan 02-01 complete (MCP servers staged into mcp-adapter.json)
+Last activity: 2026-10-03 — Plan 02-02 complete (nine-source MCP collision walk, legacy mcp.json sweep)
 
 Progress: [█░░░░░░░░░] 14%
 
@@ -260,6 +260,7 @@ still open with a comment explaining what landed.
 | Phase 01 P08 | 45min | 2 tasks | 3 files |
 | Phase 01 P09 | 16 min | 3 tasks | 11 files |
 | Phase 02 P01 | 45min | 3 tasks | 34 files |
+| Phase 02 P02 | 27min | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -578,6 +579,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Every canary passed on Pi 1.0.0 / engine 3.13.1, so the upstream-failure path did not fire; BACKLOG and PIFL-07 text unchanged
 - [Phase 02]: MCP servers stage into <scopeRoot>/mcp-adapter.json, read with strip-json-comments (adapter grammar); unreadable files refuse with a cause-less McpConfigFileError
 - [Phase 02]: readMcpConfigDoc server keys are a non-empty tuple; plan 02-02 PI_MCP_SERVER_KEYS should match
+- [Phase 02]: Ancestor roots follow adapter 5.0.0: only a ~/ prefix expands; a bare ~ entry is skipped
+- [Phase 02]: The MCP collision walk exempts the plugin's own marked entries in every one of the nine sources
+- [Phase 02]: Unstage reads both mcp-adapter.json and the legacy mcp.json before writing either; adapter file written first
 
 ### Pending Todos
 
@@ -722,11 +726,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 02-01-PLAN.md
+**Stopped at:** Completed 02-02-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-03T11:42:31.972Z
+Last session: 2026-10-03T12:42:54.321Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
