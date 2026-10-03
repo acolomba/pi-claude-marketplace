@@ -37,7 +37,7 @@ model that already carries every presentation decision.
 - [x] **PMOD-03**: Failure detail is carried as a serialized, redacted cause
   chain (`causeChain: string[]` with a `truncated` flag, plus per-phase rollback
   entries), never as a live `Error`.
-- [ ] **PMOD-04**: Credentials -- URL userinfo and any token -- are absent from
+- [x] **PMOD-04**: Credentials -- URL userinfo and any token -- are absent from
   every presentation, text and JSON; the model redacts them before either
   strategy sees them, and the credential-leak gate (AUTH-09) covers the JSON
   path.
@@ -193,7 +193,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PMOD-01 | Phase 1 | Complete |
 | PMOD-02 | Phase 2 | Complete |
 | PMOD-03 | Phase 1 | Complete |
-| PMOD-04 | Phase 4 | Pending |
+| PMOD-04 | Phase 4 | Complete |
 | PMOD-05 | Phase 2 | Complete |
 | TEXT-01 | Phase 3 | Complete |
 | WIRE-01 | Phase 4 | Pending |

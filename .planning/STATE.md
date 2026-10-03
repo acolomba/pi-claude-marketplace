@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 04
 current_phase_name: Wire Schema and JSON Strategy
 status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-10-03T17:24:50.860Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-10-03T19:19:45.623Z"
 last_activity: 2026-10-03
-last_activity_desc: Completed 04-03 (total presentation and the 18-kind wire union)
-state_head: 731794b4212ceb5bedb3cc6579e9738ce69964a8
+last_activity_desc: Completed 04-04 (credential redaction at every serialization site)
+state_head: ec517b2ac20efaa8e5f03cc7e1cf7834c299210b
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 27
-  completed_plans: 25
+  completed_plans: 26
   percent: 43
 milestone_name: Mode-Keyed Presentation Strategies
 ---
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 04 (Wire Schema and JSON Strategy) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Executing Phase 04
-Last activity: 2026-10-03 — Completed 04-03 (total presentation and the 18-kind wire union)
+Last activity: 2026-10-03 — Completed 04-04 (credential redaction at every serialization site)
 
-Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 25 plans complete)
+Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 26 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -170,8 +170,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-03T17:24:50.658Z
-**Stopped at:** Completed 04-03-PLAN.md
+**Last session:** 2026-10-03T19:19:45.422Z
+**Stopped at:** Completed 04-04-PLAN.md
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -235,6 +235,7 @@ archived milestone artifacts.
 | Phase 04 P01 | 89min | 2 tasks | 15 files |
 | Phase 04 P02 | 85min | 2 tasks | 20 files |
 | Phase 04 P03 | 113min | 2 tasks | 17 files |
+| Phase 04 P04 | 84min | 2 tasks | 9 files |
 
 ## Decisions
 
@@ -287,3 +288,5 @@ archived milestone artifacts.
 - [Phase 04]: renderPruneCommittedWarning takes the scope and the serialized cause chain (or undefined), so the grammar owner test covers the no-cause branch without a new emitting dispatch case
 - [Phase 04]: isInfoKind and StandaloneKind are module-private once dispatchInfoMessage is gone; no production module imports them
 - [Phase 04]: Raw payloads carry no summary, and the async-rewake-summary payload carries its text as text; RAW_SURFACE_SEVERITY is the one raw-kind severity table
+- [Phase 04]: PMOD-04: plugin-info-cascade blocks get the same notes redaction as a single plugin-info
+- [Phase 04]: PMOD-04: the D-08 redaction ledger is empty (corpus 3134 present, 0 extra; no catalog diff)
