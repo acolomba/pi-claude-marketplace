@@ -1372,6 +1372,51 @@ test("D-02-20: an adapter removed after the rollback reads the recorded unstage 
   });
 });
 
+test("D-02-20: a symlink swapped in after the rollback reads the recorded unstage write is refused", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-symlink-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    const outside = path.join(cwd, "outside.json");
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      afterMetadataRead: async (target: string): Promise<void> => {
+        if (target === locations.mcpAdapterJsonPath) {
+          await writeFile(outside, ownBytes);
+          await rm(target);
+          await symlink(outside, target);
+        }
+      },
+    });
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [
+        {
+          phase: "mcp adapter",
+          message: `Prune rollback found an occupied metadata path at ${locations.mcpAdapterJsonPath}.`,
+        },
+      ],
+    );
+    assert.deepStrictEqual(
+      {
+        outside: await readFile(outside),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      },
+      { outside: ownBytes, backup: original },
+    );
+  });
+});
+
 test("state restore refusal keeps the backup and reports state failure", async () => {
   await withHermeticEnvironment("prune-rollback-state-refusal-", async ({ cwd }) => {
     // arrange
