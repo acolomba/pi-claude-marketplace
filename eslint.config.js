@@ -5,6 +5,28 @@ import sonarjs from "eslint-plugin-sonarjs";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+/**
+ * D-11: the plugin and marketplace ledger entry points, as BLOCK C zone paths.
+ * A ledger owns a transactional verb end to end. Their `*-probe`, `*-swap`,
+ * `*-record`, `*-row`, and `*-outcome` siblings are helpers and leaf
+ * composers, and `orchestrators/plugin/bootstrap.ts` is a composer whose job
+ * is calling marketplace verbs, so none of them is listed.
+ */
+const PLUGIN_LEDGERS = [
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+];
+
+const MARKETPLACE_LEDGERS = [
+  "./extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts",
+];
+
 export default tseslint.config(
   {
     ignores: [
@@ -184,9 +206,14 @@ export default tseslint.config(
     },
   },
   {
-    // BLOCK C (D-11): Import-direction enforcement. 8-zone no-restricted-paths
-    // mapping: each folder declares which sibling folders MUST NOT import from
-    // it (i.e. enforces the upward/inward direction of the dep graph).
+    // BLOCK C (D-11): Import-direction enforcement. The first eight zones map
+    // each layer folder to the sibling folders that MUST NOT import from it
+    // (i.e. they enforce the upward/inward direction of the dep graph). The
+    // last four keep the ledger modules apart, type-only and dynamic imports
+    // included: no orchestrators/marketplace/ file imports a plugin ledger, no
+    // plugin ledger imports a marketplace ledger, and no ledger imports another
+    // ledger of its own kind. Cycle detection reports a cycle only once the
+    // graph is already circular, so these zones stop the first edge.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
     rules: {
       "import-x/no-restricted-paths": [
@@ -277,6 +304,28 @@ export default tseslint.config(
                 "./extensions/pi-claude-marketplace/persistence",
               ],
               message: "shared/ may only import from platform/ for Pi API types.",
+            },
+            {
+              target: "./extensions/pi-claude-marketplace/orchestrators/marketplace",
+              from: PLUGIN_LEDGERS,
+              message:
+                "D-11: orchestrators/marketplace/ must not import a plugin ledger module. Import the leaf row composer (plugin/update-row.ts), a shared type from orchestrators/types.ts, or the injected pluginUpdate seam instead.",
+            },
+            {
+              target: PLUGIN_LEDGERS,
+              from: MARKETPLACE_LEDGERS,
+              message:
+                "D-11: a plugin ledger must not import a marketplace ledger module. Only orchestrators/marketplace/shared.ts is reachable from a plugin ledger.",
+            },
+            {
+              target: PLUGIN_LEDGERS,
+              from: PLUGIN_LEDGERS,
+              message: "D-11: plugin ledger modules must not import each other.",
+            },
+            {
+              target: MARKETPLACE_LEDGERS,
+              from: MARKETPLACE_LEDGERS,
+              message: "D-11: marketplace ledger modules must not import each other.",
             },
           ],
         },

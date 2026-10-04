@@ -94,8 +94,7 @@ const NOT_UNIQUE_SYMBOL = String.raw`(?!\s*unique\s+symbol\b)`;
  * still fail, and under this alternation they do.
  *
  * Non-global on purpose -- a `/g` regex carries `lastIndex` across `.test()`
- * calls and would skip every second file of a 200-file walk, which
- * `import-boundaries.test.ts` already records for the same reason.
+ * calls and would skip every second file of a 200-file walk.
  */
 const TEST_ONLY_MEMBER = new RegExp(
   `${MEMBER_POSITION}(?:${NOT_BRAND_DECLARATION}${MEMBER_NAME}|${MEMBER_NAME}${NOT_UNIQUE_SYMBOL})`,

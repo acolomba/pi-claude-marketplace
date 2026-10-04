@@ -167,7 +167,7 @@ export const DIRECTORY_ROOT_TARGETS = [
 export const EXTENSION_ROOT_REL: (typeof DIRECTORY_ROOT_TARGETS)[number] =
   "extensions/pi-claude-marketplace";
 
-/** The orchestrator layer. Root of the D-11 ledger walk and the cast-read walk. */
+/** The orchestrator layer. Root of the cast-read walk. */
 export const ORCHESTRATORS_REL: (typeof DIRECTORY_ROOT_TARGETS)[number] =
   "extensions/pi-claude-marketplace/orchestrators";
 
@@ -227,28 +227,7 @@ export const NO_CONSOLE_EXEMPT_TARGETS = [
 ] as const;
 
 /**
- * D-11 / D-21-02: the eight layer folders the import-boundary matrix names as
- * zone targets.
- *
- * The `./` prefix is part of the value, not decoration: these strings are
- * compared against the `target` field of an ESLint `no-restricted-paths` zone,
- * which spells them that way. A gate that rewrote them without the prefix would
- * compare two things that never match and report a difference that is an artifact
- * of its own normalisation.
- */
-export const ZONE_FOLDER_TARGETS = [
-  "./extensions/pi-claude-marketplace/edge",
-  "./extensions/pi-claude-marketplace/orchestrators",
-  "./extensions/pi-claude-marketplace/bridges",
-  "./extensions/pi-claude-marketplace/domain",
-  "./extensions/pi-claude-marketplace/transaction",
-  "./extensions/pi-claude-marketplace/persistence",
-  "./extensions/pi-claude-marketplace/platform",
-  "./extensions/pi-claude-marketplace/shared",
-] as const;
-
-/**
- * D-11: one real module per zone folder, in `ZONE_FOLDER_TARGETS` order.
+ * D-11: one real module per layer zone folder, in BLOCK C zone order.
  *
  * A zone matrix is resolved per FILE, not per folder, so proving the matrix
  * applies needs a file inside each zone that actually exists. These are chosen
@@ -267,27 +246,9 @@ export const ZONE_REPRESENTATIVE_TARGETS = [
 ] as const;
 
 /**
- * D-11: the five plugin ledger entry points.
- *
- * A ledger owns a transactional verb end to end. Their sibling `*-probe`,
- * `*-swap`, `*-record`, `*-row`, and `*-outcome` modules are extracted helpers
- * and leaf composers, and are deliberately absent -- so is `bootstrap.ts`, a
- * composer whose whole job is calling marketplace verbs. The bare module names a
- * regex needs are derived from these paths, never spelled separately: a name
- * that resolves to nothing stops matching silently instead of failing.
- */
-export const PLUGIN_LEDGER_TARGETS = [
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
-] as const;
-
-/**
- * D-11: the four marketplace ledger entry points, the other half of the
- * no-ledger-imports-a-ledger pair. A plugin ledger reaches marketplace code only
- * through `orchestrators/marketplace/shared.ts`.
+ * D-11: the four marketplace ledger entry points. BLOCK C in `eslint.config.js`
+ * keeps the ledgers from importing each other; a plugin ledger reaches
+ * marketplace code only through `orchestrators/marketplace/shared.ts`.
  */
 export const MARKETPLACE_LEDGER_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
