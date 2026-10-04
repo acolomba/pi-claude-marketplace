@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-04T16:01:17.675Z"
+last_updated: "2026-10-04T20:25:23.419Z"
 last_activity: 2026-10-04
-last_activity_desc: Completed quick task 261004-f34 (negative tests removed)
-state_head: f07734d188700afbda2c85a3b2e6cf119fc4c0f2
+last_activity_desc: Completed quick task 261004-kwl (tooling tests to ESLint)
+state_head: babd67ccfb0727d54a0c60b98925bcfa1705bbd6
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-04 — Completed quick task 261004-f34: removed negative controls and planted-violation tests
+Last activity: 2026-10-04 — Completed quick task 261004-kwl: tooling self-tests removed; network and ledger gates moved into ESLint
 
 ### workflows-replay closeout (merged from main)
 
@@ -603,6 +603,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261004-az6 | Run negative controls only when their checker changes; drop planning-data test readers | 2026-10-04 | 1d2cdd51 | [261004-az6-run-negative-controls-only-when-their-ch](./quick/261004-az6-run-negative-controls-only-when-their-ch/) |
 | 261004-d9z | Make pre-commit incremental-only; move whole-suite checks to checkpoints | 2026-10-04 | 6708e06a | [261004-d9z-make-pre-commit-incremental-only-move-wh](./quick/261004-d9z-make-pre-commit-incremental-only-move-wh/) |
 | 261004-f34 | Remove negative controls and planted-violation tests | 2026-10-04 | f07734d1 | [261004-f34-remove-negative-controls-and-planted-vio](./quick/261004-f34-remove-negative-controls-and-planted-vio/) |
+| 261004-kwl | Remove tooling self-tests; replace network and ledger gates with ESLint rules | 2026-10-04 | babd67cc | [261004-kwl-remove-tooling-self-tests-replace-networ](./quick/261004-kwl-remove-tooling-self-tests-replace-networ/) |
 
 ## Deferred Items
 
