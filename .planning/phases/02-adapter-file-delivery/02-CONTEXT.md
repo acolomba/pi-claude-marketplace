@@ -151,6 +151,12 @@ Raised by 02-REVIEW.md findings WR-04 and WR-06.
   longer has (the adapter's enable deletes `disabled`) is left out. Every
   other field comes back exactly as kept.
   (Operator decision at the gap-closure code review; resolves its WR-01.)
+- **D-02-23:** Amends D-02-22. Write-back restores only the carried fields
+  the user's original stub had, each taking the live entry's value (and left
+  out if the live entry no longer has it). A carried field the stub did not
+  have is never added, so a plugin-declared value (such as `lifecycle`) does
+  not leak into the user's own entry. (Operator decision at Phase 2
+  re-verification; resolves the gap-closure review's IN-04.)
 
 ### Claude's Discretion
 - Module split: extract the JSONC document reader and the entry handling out of

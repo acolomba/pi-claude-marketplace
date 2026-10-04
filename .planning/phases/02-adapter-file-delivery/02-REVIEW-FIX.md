@@ -1,8 +1,8 @@
 ---
 phase: 02-adapter-file-delivery
-fixed_at: 2026-10-04T10:04:51Z
+fixed_at: 2026-10-04T12:00:00Z
 review_path: .planning/phases/02-adapter-file-delivery/02-REVIEW.md
-iteration: 1
+iteration: 2
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -11,65 +11,60 @@ status: all_fixed
 
 # Phase 2: Code Review Fix Report (gap closure)
 
-**Fixed at:** 2026-10-04T10:04:51Z
+**Fixed at:** 2026-10-04T12:00:00Z
 **Source review:** .planning/phases/02-adapter-file-delivery/02-REVIEW.md
-**Iteration:** 1
+**Iteration:** 2
 
 **Summary:**
 
-- Findings in scope: 1 (WR-01; IN-01..IN-03 are out of scope)
+- Findings in scope: 1 (IN-04, promoted to a fix by the operator under D-02-23)
 - Fixed: 1
 - Skipped: 0
 
+Iteration 1 fixed WR-01 in commit 4a206e4a. It added `restoredOverride` and applied D-02-22: a written-back override takes the live entry's carried fields. Iteration 2 narrows that rule under D-02-23.
+
 ## Fixed Issues
 
-### WR-01: A kept override overrides the user's later choice: uninstall and plugin disable/enable bring back a stale `disabled: true`
+### IN-04: A plugin's own carried fields are written into the user's override at unstage and stay there after the plugin is gone
 
-**Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts`, `extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts`, `extensions/pi-claude-marketplace/bridges/mcp/marker.ts` (comment), `extensions/pi-claude-marketplace/bridges/mcp/unstage.ts` (comment), `docs/prd/pi-claude-marketplace-prd.md` (MC-5), `docs/output-catalog.md` (mcp-override-kept prose), `tests/bridges/mcp/adapter-entry.test.ts`, `tests/bridges/mcp/adapter-doc.test.ts`, `tests/bridges/mcp/unstage.test.ts`, `tests/integration/mcp-override-lifecycle.test.ts`
-**Commit:** 4a206e4a
-**Status:** fixed: requires human verification (a semantic change to the write-back rule, D-02-22)
+**Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts`, `extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts` (comments), `extensions/pi-claude-marketplace/bridges/mcp/marker.ts` (comment), `extensions/pi-claude-marketplace/bridges/mcp/unstage.ts` (comment), `docs/prd/pi-claude-marketplace-prd.md` (MC-5), `docs/output-catalog.md` (mcp-override-kept prose), `tests/bridges/mcp/adapter-entry.test.ts`, `tests/integration/mcp-override-lifecycle.test.ts`
+**Commit:** 6cb09db2
+**Status:** fixed: requires human verification (a semantic change to the write-back rule, D-02-23)
 
-**Applied fix (D-02-22, review option a):**
+**Applied fix (D-02-23):**
 
-- New export `restoredOverride(kept, live)` in `adapter-entry.ts`. It reuses the one carried-field list (`CARRIED_FIELDS` / `CARRIED_FIELD_SET`, through the existing private `carriedFields`). Each kept field outside the carried set comes back verbatim, in kept key order, through `safeSet`. Each kept carried field takes the live entry's value in its kept position. A carried field that only the live entry holds is appended in carried-set order.
-- `survivingEntry` in `adapter-doc.ts` now returns `restoredOverride(kept, entry)` for an owned, non-restaged entry whose `restorableOverride` is defined. The single write-back table still decides every unstage: uninstall, plugin disable, prune, marketplace remove, reconcile and cascade undo, plus a stage that drops the server. `restoredOverrideNames` and the restage carry path are unchanged.
-- Credentials and other non-carried fields come only from the kept override and never from the live entry. The overlay changes only carried fields, so the result is still an override (AFILE-05). `restorableOverride` already rejects a kept full definition before the overlay runs.
+- `restoredOverride(kept, live)` now returns only the kept override's own fields. It no longer appends the carried fields that only the live entry holds. Each kept field outside the carried set comes back verbatim, in kept key order. Each kept carried field takes the live entry's value in its kept position, or is left out when the live entry lacks it. The D-02-22 behavior stays: a user `/mcp-adapter enable` while the plugin is installed removes `disabled`, so it is left out on write-back.
+- The code change is one line: `return { ...restored, ...liveCarried };` became `return restored;`. `survivingEntry` and every caller are unchanged.
+- Credentials and other non-carried fields still come only from the kept override. The result can hold only keys the kept override holds, so it stays a partial override (AFILE-05).
+- Comments in `adapter-entry.ts`, `adapter-doc.ts` (module header, `survivingEntry`, `withPluginServers`), `marker.ts` and `unstage.ts`, the PRD MC-5 row, and the `mcp-override-kept` catalog prose now state the narrowed rule. They cite AFILE-05/AFILE-06 only. The `withPluginServers` paragraph was rewrapped to 100 columns while editing it, which also clears IN-06's 112-column line.
 
-**Absent carried field: left out of the written-back override.** This matches the stage path: `carriedFields(previous)` copies only the carried fields the replaced entry holds as own properties, so a restage leaves out a field the live entry lacks. It is also required for the real adapter flow. pi-mcp-adapter 5.0.0's `writeProjectServerDisabledOverride(..., false)` (`dist/config.js:1555-1576`, checked in `/tmp/pmaverify/package`) removes `disabled` from the entry. It writes `disabled: false` only when a lower config source disables the server. If an absent field kept its kept value instead, the usual `/mcp-adapter enable` would still bring back `disabled: true`, and WR-01 would not be fixed. One consequence: a kept override of only `{ "disabled": true }` comes back as `{}` after the user enables the server. The fix writes `{}` and does not delete the entry. `{}` is a valid inert override, and an original `{}` stub already round-trips the same way. The adapter's own writer deletes an emptied entry, so deleting it here would also be defensible. That is a possible follow-up, not part of this fix.
+**Reproduction:** the reviewer's probe `/tmp/afile-probe2/probe2.ts` (stub `{ "disabled": true }`, plugin server `{ command: "node", lifecycle: "eager", debug: true }`, stage then unstage). On HEAD before the fix it wrote back `srv: { disabled: true, lifecycle: "eager", debug: true }`. After the fix it writes back `srv: { disabled: true }`.
 
-**Residual consequence (flagged for the operator):** the live entry's carried fields are not always user choices. A plugin's own entry can set a carried field, for example `lifecycle` today, or the `requestTimeoutMs` that ANAME-07 will translate in Phase 3. D-02-22 overlays all of the live entry's carried fields, so such a plugin-set value is written back into the user's override on unstage. This is the same user-versus-plugin ambiguity as the Phase 3 hand-off note in 02-CONTEXT.md "Deferred Ideas". It is the documented decision, so the fix follows it.
+**Tests changed:**
 
-**Reproduction (before the fix, against the real modules):**
+- `tests/bridges/mcp/adapter-entry.test.ts`, `describe("restoredOverride")`:
+  - Replaced "carried fields only the live entry holds follow the kept fields in set order" with "a carried field the plugin's live entry declares and the kept override lacks is not added". The kept value is `{ disabled: true }` and the live entry holds `lifecycle: "eager"`, `debug: true`, `disabled: true`. The expected result is `{"disabled":true}`.
+  - Reworked the AFILE-05 case so it still checks something: the kept override now holds `env` plus every carried key, and the live entry is a full `ServerEntry`. The expected result is the kept `env` followed by each carried key with its live value, in kept order. No non-carried live field appears.
+  - The two D-02-22 cases (live `disabled: false` replaces kept `true`; a carried field the live entry lacks is left out) are unchanged and pass.
+- `tests/integration/mcp-override-lifecycle.test.ts`: new case "uninstall writes back no carried field the plugin's entry declares and the user's override lacks". It runs the real install and uninstall operations with a plugin server that declares `lifecycle: "eager"` and `debug: true`, and a stub `{ "disabled": true }`. It asserts that those three fields are active after install, and that the bytes after uninstall equal the original stub bytes. `seedMcpPlugin` gained an optional `server` parameter. Its default is the existing `{ command: "node", args: ["v1.js"] }`, so the other three cases are unchanged. The existing D-02-22 integration case ("a /mcp-adapter enable made while the plugin is installed survives plugin disable, enable and uninstall") passes unchanged.
 
-- `node tmp/review-gap/repro1.ts`: after uninstall, `srv` was `{"disabled": true, "env": {...}}`. After the fix it is `{"disabled": false, "env": {...}}`.
-- `node tmp/review-gap/repro2.ts`: "active disabled after plugin disable+enable: true". After the fix it prints `false`.
-
-**Tests added or changed:**
-
-- `tests/bridges/mcp/adapter-entry.test.ts`, new `describe("restoredOverride")`, 4 cases. They cover: a live `disabled: false` that replaces a kept `true` in its kept position, an absent carried field that is left out, carried fields that only the live entry holds and are appended in set order, and no non-carried field of a full live `ServerEntry` that reaches the override. Each case compares the whole value through `JSON.stringify`, so key order is part of the assertion.
-- `tests/bridges/mcp/adapter-doc.test.ts`, new `withPluginServers` case: "a written-back override takes each carried field from the live entry and keeps every other field". It covers both the `disabled: false` path and the absent `disabled` path.
-- `tests/integration/mcp-override-lifecycle.test.ts`, new case: "a /mcp-adapter enable made while the plugin is installed survives plugin disable, enable and uninstall". The case runs the real install. It then removes `disabled` the way the adapter 5.0.0 writer does. Then it runs the real `createEnableOperation` disable and enable, and the real uninstall. It asserts the exact bytes after disable and after uninstall, and the whole re-enabled entry with no `disabled`.
-- Fixture update in 5 existing cases (3 in adapter-doc, 2 in unstage; one unstage fixture string occurs in both). Their synthetic live entries kept `{disabled|debug|lifecycle}` in the marker but did not hold the field as an active field. A real absorb always makes it active, so these fixtures now carry it. The asserted outputs are unchanged.
-
-**Negative control:** I temporarily changed `survivingEntry` back to returning the kept override verbatim. The new adapter-doc case and the new integration case failed (2 fail / 90 pass across adapter-doc, unstage and the integration file). With the fix restored, they passed. The `restoredOverride` unit cases cannot run without the export.
+**Negative control:** I temporarily restored HEAD's `adapter-entry.ts` and ran both test files. The two new cases failed (2 fail / 25 pass). With the fix restored, all 27 passed. `git diff` confirmed that the restored file matched the fix.
 
 ## Verification
 
 All gates ran in the **main checkout** (`/home/acolomba/src/pi-claude-marketplace-mcp-4`, branch `features/mcp-4`, `workflow.use_worktrees=false` path; no worktree). Node v26.10.0.
 
-- `npm run typecheck`: exit 0. ESLint over the 8 changed `.ts` files: exit 0.
-- Owner and related suites (`tests/bridges/mcp/*`, integration lifecycle, enable-disable, uninstall, prune, prune-rollback, install-flow, marketplace shared): green after the fixture update.
-- `npm run test:coverage:direct`: adapter-entry.ts 31/31 branches, 8/8 functions, 184/184 lines. adapter-doc.ts 90/90, 20/20, 386/386.
-- `npx fallow health`: exit 0.
-- `SKIP=trufflehog pre-commit run --files <10 committed files>` (`tmp/gapfix-precommit.log`): **PRECOMMIT_EXIT=0** on the first complete run. `npm changed checks` passed, and the hooks rewrote no file. An earlier attempt was stopped by the agent's 10-minute background limit while `npm changed checks` was still running. It was not a hook failure.
+- `node --test tests/bridges/mcp/*.test.ts tests/integration/mcp-override-lifecycle.test.ts`: before the test update, only the two `restoredOverride` cases that asserted the appended fields failed. After the update, all passed.
+- `npx prettier --check` on the six changed `.ts` files: clean. `npx fallow health`: exit 0.
+- `SKIP=trufflehog pre-commit run --files <8 committed files>` (`tmp/d0223-precommit.log`). In the first run, mdformat re-padded the edited MC-5 table row in the PRD, and every other hook passed, `npm changed checks` included. The second run gave **PRECOMMIT_EXIT=0**.
 - `npx fallow audit --format json --quiet --explain --gate-marker agent`: verdict **warn** (dead code 0, complexity 0, 14 clone groups, the known pre-existing set). Not `fail`.
-- No `!` or `as` was added under `extensions/`. No type member moved, and `scripts/check-unused-type-members.contracts.json` has no pins in the changed modules.
+- No `!` or `as` was added under `extensions/` (the only added code line is `return restored;`). No type member moved, and `scripts/check-unused-type-members.contracts.json` has no pins in the changed modules.
 - focused task verification passed; full phase/PR verification pending
 
-**Commit-title note:** the committed title is 74 characters, above the 72-character limit in AGENTS.md. No commit-msg hook is installed, so gitlint did not run. History is never rewritten, so the commit stays as it is. The squash-merge title at PR time replaces it.
+Commit title: 52 characters.
 
 ---
 
-_Fixed: 2026-10-04T10:04:51Z_
+_Fixed: 2026-10-04T12:00:00Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 2_
