@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-04T05:42:00.956Z"
+last_updated: "2026-10-04T10:37:39.999Z"
 last_activity: 2026-10-04
 last_activity_desc: Completed quick task 261003-w7b (faster commit-time checks)
-state_head: 8cff1fc474995b7f3a8825cc017fe9a312c98b0b
+state_head: 5b5d06c763b54affc7e13139d183585f92722c2a
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -599,6 +599,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 260917-hfp | Clear the phase 5 review nits IN-01, IN-02, IN-03, IN-07, IN-08; IN-04 carried to BACKLOG `PRUNE-GUARD-MR-01` | 2026-09-17 | 97c9ce14 | [260917-hfp-clear-the-phase-5-review-nits-in-01-in-0](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/) |
 | 261001-g4u | Resolve the 23 SonarCloud findings on PR 198 with real fixes and no-await-in-loop directives | 2026-10-01 | 4455c76f | [261001-g4u-resolve-the-23-sonarcloud-findings-on-pr](./quick/261001-g4u-resolve-the-23-sonarcloud-findings-on-pr/) |
 | 261003-w7b | Speed up commit-time checks: targeted check-changed rules, lock, log, quiet output, agent guidance | 2026-10-04 | 8cff1fc4 | [261003-w7b-speed-up-commit-time-checks-targeted-che](./quick/261003-w7b-speed-up-commit-time-checks-targeted-che/) |
+| 15 | check-changed: Markdown under .agents/ and .claude/ selects no checks | 2026-10-04 | 5b5d06c7 | — |
 
 ## Deferred Items
 
