@@ -15,6 +15,7 @@ import {
 } from "./test-coverage-direct.pin.mjs";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const reporterPath = fileURLToPath(new URL("./test-reporter.mjs", import.meta.url));
 const productionRoot = "extensions/pi-claude-marketplace";
 const testRoot = "tests";
 
@@ -623,7 +624,7 @@ export async function runPair({ sourcePath, testPath }) {
         [
           "--test",
           "--experimental-test-coverage",
-          "--test-reporter=spec",
+          `--test-reporter=${reporterPath}`,
           "--test-reporter-destination=stdout",
           "--test-reporter=lcov",
           `--test-reporter-destination=${lcovPath}`,

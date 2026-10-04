@@ -23,7 +23,12 @@ const fullChecks = (files) => [
   npm("check"),
   ...(files.some((file) => file.startsWith("tests/e2e/")) ? [npm("test:e2e")] : []),
 ];
-const testRun = ["node", "--test", "--test-concurrency=4"];
+const testRun = [
+  "node",
+  "--test",
+  "--test-reporter=./scripts/test-reporter.mjs",
+  "--test-concurrency=4",
+];
 const prettierCheck = [
   "node",
   "node_modules/prettier/bin/prettier.cjs",

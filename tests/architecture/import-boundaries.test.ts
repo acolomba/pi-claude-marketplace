@@ -209,7 +209,8 @@ test("D-11: npm run fallow gates cycles over the whole repository", async () => 
   // Measured: adding `--unused-exports` to the script drops a planted
   // two-file cycle from exit 1 to exit 0 while a denylist of three flags
   // stays green. Anything unrecognized here fails until someone proves the
-  // addition still reports cycles.
+  // addition still reports cycles. `--quiet` only suppresses progress output:
+  // planted production and tests/ cycles still exit 1 and print under it.
   const deadCodeSegments = fallowScript
     .split(/&&|\|\||;/)
     .map((segment) => segment.trim())
@@ -232,6 +233,7 @@ test("D-11: npm run fallow gates cycles over the whole repository", async () => 
     "--fail-on-issues",
     "--format",
     "human",
+    "--quiet",
   ]);
 
   for (const token of deadCodeSegment.split(/\s+/).filter((t) => t.length > 0)) {
@@ -270,7 +272,9 @@ test("D-11: npm run fallow gates cycles over the whole repository", async () => 
 
   // The same allowlist discipline as above, for the same reason: any further
   // only-report filter, `--file`, or `--top` narrows this run past the cycle
-  // classes it exists to carry.
+  // classes it exists to carry. `--no-cache` only skips the graph cache, which
+  // the production-scoped run owns; sharing it makes each run evict the other
+  // and print a cache warning.
   const ALLOWED_CYCLE_TOKENS = new Set([
     "npx",
     "fallow",
@@ -281,6 +285,8 @@ test("D-11: npm run fallow gates cycles over the whole repository", async () => 
     "--fail-on-issues",
     "--format",
     "human",
+    "--quiet",
+    "--no-cache",
   ]);
 
   for (const token of cycleSegment.split(/\s+/).filter((t) => t.length > 0)) {

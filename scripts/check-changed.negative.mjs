@@ -34,7 +34,13 @@ const typeMemberData = [
   "scripts/check-unused-type-members.exceptions.json",
 ];
 const run = (script) => ["npm", "run", script];
-const testRun = (...files) => ["node", "--test", "--test-concurrency=4", ...files];
+const testRun = (...files) => [
+  "node",
+  "--test",
+  "--test-reporter=./scripts/test-reporter.mjs",
+  "--test-concurrency=4",
+  ...files,
+];
 const eslint = (...files) => ["node", "node_modules/eslint/bin/eslint.js", ...files];
 const prettier = (...files) => [
   "node",
