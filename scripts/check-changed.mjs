@@ -209,7 +209,7 @@ function affectedSources(root, changed) {
 function isInstruction(file) {
   return (
     file.startsWith(".planning/") ||
-    (file.startsWith("skills/") && file.endsWith(".md")) ||
+    (/^(skills|\.agents|\.claude)\//.test(file) && file.endsWith(".md")) ||
     ["AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md"].includes(file)
   );
 }

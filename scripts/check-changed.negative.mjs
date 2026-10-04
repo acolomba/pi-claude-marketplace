@@ -162,10 +162,13 @@ try {
     ".planning/notify-corpus/run.jsonl",
     ".planning/STATE.md",
     "skills/local-verification/SKILL.md",
+    ".agents/skills/babysit-pr/SKILL.md",
+    ".claude/commands/merge-dependabot-prs.md",
     "AGENTS.md",
   ]);
   assert.equal(exempt.scope, "none");
   assert.deepEqual(exempt.commands, []);
+  assert.equal(planChecks(root, [".claude/settings.json"]).scope, "full");
 
   // Files that tests read run exactly their readers, and broaden once a reader is gone.
   for (const [file, readers] of DATA_READERS) {
