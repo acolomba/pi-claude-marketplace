@@ -139,10 +139,11 @@ function affectedSources(root, changed) {
 
 function isInstruction(file) {
   return (
-    file.endsWith(".md") &&
-    (file.startsWith(".planning/") ||
-      file.startsWith("skills/") ||
-      ["AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md"].includes(file))
+    file === ".planning/HANDOFF.json" ||
+    (file.endsWith(".md") &&
+      (file.startsWith(".planning/") ||
+        file.startsWith("skills/") ||
+        ["AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md"].includes(file)))
   );
 }
 

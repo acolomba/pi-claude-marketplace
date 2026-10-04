@@ -94,7 +94,11 @@ try {
   }
 
   assert.deepEqual(
-    planChecks(root, [".planning/STATE.md", "skills/local-verification/SKILL.md"]).commands,
+    planChecks(root, [
+      ".planning/STATE.md",
+      ".planning/HANDOFF.json",
+      "skills/local-verification/SKILL.md",
+    ]).commands,
     [],
   );
   assert.equal(planChecks(root, [".planning/config.json"]).scope, "full");
