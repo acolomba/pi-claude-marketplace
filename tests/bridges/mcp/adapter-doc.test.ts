@@ -11,6 +11,7 @@ import {
   isFullDefinition,
   partitionServers,
   readMcpConfigDoc,
+  restoredOverrideNames,
   withPluginServers,
   type McpConfigDoc,
   type McpServerKey,
@@ -817,5 +818,77 @@ describe("withPluginServers", () => {
 
     // assert
     assert.strictEqual(JSON.stringify(next), '{"mcpServers":{"__proto__":{"disabled":true}}}');
+  });
+});
+
+describe("restoredOverrideNames", () => {
+  test("AFILE-06: lists the plugin's entries that keep a restorable override, selected key first, once each", () => {
+    // arrange
+    const unselected = {
+      first: {
+        command: "first",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { disabled: true } },
+      },
+      shared: {
+        command: "shared-old",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { debug: true } },
+      },
+    };
+    const selected = {
+      shared: {
+        command: "shared",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { env: { TOKEN: "token-1" } } },
+      },
+      invalid: {
+        command: "invalid",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { url: "https://user.example" } },
+      },
+      plain: { command: "plain", _piClaudeMarketplace: ACME_MARKER },
+      foreign: {
+        command: "foreign",
+        _piClaudeMarketplace: { ...OTHER_MARKER, keptOverride: { disabled: true } },
+      },
+      user: { disabled: true },
+      last: {
+        command: "last",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { lifecycle: "eager" } },
+      },
+    };
+    const config = {
+      doc: { mcpServers: unselected, "mcp-servers": selected },
+      serverKey: "mcp-servers",
+      serverMaps: new Map<McpServerKey, Readonly<Record<string, unknown>>>([
+        ["mcpServers", unselected],
+        ["mcp-servers", selected],
+      ]),
+      hadComments: false,
+    } satisfies McpConfigDoc;
+
+    // act
+    const names = restoredOverrideNames(config, "acme", "catalog");
+
+    // assert
+    assert.deepStrictEqual(names, ["shared", "last", "first"]);
+    assert.strictEqual(Object.isFrozen(names), true);
+  });
+
+  test("AFILE-06: lists nothing when no entry of the plugin keeps an override", () => {
+    // arrange
+    const servers = {
+      plain: { command: "plain", _piClaudeMarketplace: ACME_MARKER },
+      user: { disabled: true },
+    };
+    const config = {
+      doc: { mcpServers: servers },
+      serverKey: "mcpServers",
+      serverMaps: new Map([["mcpServers", servers]]),
+      hadComments: false,
+    } satisfies McpConfigDoc;
+
+    // act
+    const names = restoredOverrideNames(config, "acme", "catalog");
+
+    // assert
+    assert.deepStrictEqual(names, []);
   });
 });

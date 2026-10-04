@@ -38,7 +38,7 @@ import {
   withPluginServers,
   type McpConfigDoc,
 } from "./adapter-doc.ts";
-import { stampServers } from "./adapter-entry.ts";
+import { inactiveOverrideFields, stampServers } from "./adapter-entry.ts";
 import { walkMcpSources, type McpSourceWalk } from "./collision-slots.ts";
 import { isOwnedBy } from "./marker.ts";
 
@@ -50,7 +50,12 @@ import type {
   StageMcpInput,
   StagedMcpRecord,
 } from "./types.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type {
+  McpConfigFileNotice,
+  McpConfigNotice,
+  McpOverrideKeptNotice,
+} from "../../shared/notification-dispatch.ts";
+import type { Scope } from "../../shared/types.ts";
 
 interface McpReplacementInternals {
   /** The raw prior bytes, so a restore is byte-exact even for invalid UTF-8. */
@@ -129,6 +134,45 @@ async function assertNoMcpCollisions(check: McpCollisionCheck): Promise<void> {
   }
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function commentsDroppedNotices(hadComments: boolean, scope: Scope): McpConfigFileNotice[] {
+  return hadComments ? [{ kind: "comments-dropped", scope, file: "mcp-adapter.json" }] : [];
+}
+
+/**
+ * AFILE-06: one notice per staged name, in the plugin's declared order, that
+ * absorbs a marker-less override holding fields the new entry does not carry.
+ * A restaged name that carries a kept override absorbs no overlay, so it adds
+ * no notice.
+ */
+function overrideKeptNotices(
+  names: readonly string[],
+  overlays: Readonly<Record<string, unknown>>,
+  scope: Scope,
+  pluginName: string,
+): McpOverrideKeptNotice[] {
+  const notices: McpOverrideKeptNotice[] = [];
+  for (const server of names) {
+    const overlay = Object.hasOwn(overlays, server) ? overlays[server] : undefined;
+    const fields = isPlainObject(overlay) ? inactiveOverrideFields(overlay) : [];
+    if (fields.length > 0) {
+      notices.push({
+        kind: "override-kept",
+        scope,
+        file: "mcp-adapter.json",
+        plugin: pluginName,
+        server,
+        fields,
+      });
+    }
+  }
+
+  return notices;
+}
+
 function noopStaging(notices: readonly McpConfigNotice[]): PreparedMcpStaging {
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze<string[]>([]),
@@ -185,9 +229,12 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   if (config instanceof McpConfigFileError) {
     // AS-8 / AFILE-02: nothing is written, so the unreadable file keeps its
     // bytes, and the orchestrator tells the user it was left unchanged.
-    return noopStaging([
-      { kind: "left-unchanged", scope: locations.scope, file: "mcp-adapter.json" },
-    ]);
+    const leftUnchanged: McpConfigFileNotice = {
+      kind: "left-unchanged",
+      scope: locations.scope,
+      file: "mcp-adapter.json",
+    };
+    return noopStaging([leftUnchanged]);
   }
 
   // Partition existing into ours-vs-theirs by marker (MC-5).
@@ -257,12 +304,12 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
 
   // AFILE-04: the staged branch always rewrites the file, and the writer drops
   // JSONC comments, so a commented file is reported. The noop branches write
-  // nothing and keep the comments.
-  const notices = Object.freeze<McpConfigNotice[]>(
-    config.hadComments
-      ? [{ kind: "comments-dropped", scope: locations.scope, file: "mcp-adapter.json" }]
-      : [],
-  );
+  // nothing and keep the comments. AFILE-06: each absorbed override with
+  // fields the new entry does not carry is reported after it.
+  const notices = Object.freeze<McpConfigNotice[]>([
+    ...commentsDroppedNotices(config.hadComments, locations.scope),
+    ...overrideKeptNotices(newNames, overlays, locations.scope, pluginName),
+  ]);
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...newNames]),
     recorded,

@@ -4168,6 +4168,22 @@ The project-scope mcp-adapter.json is not a valid MCP config, so it was left unc
 
 Emitted via `notifyMcpConfigNotices` when a command with no MCP servers to write (install, update, reinstall or enable of such a plugin, directly or inside a cascade) meets an `mcp-adapter.json` that is not a valid MCP config. The file is not rewritten and keeps its exact bytes. A plugin that does have MCP servers refuses instead, and its failed row names the file. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts`.
 
+### MCP server override kept (AFILE-06)
+
+<!-- catalog-state: mcp-override-kept -->
+
+```text
+MCP server override kept.
+
+hello now provides "srv" in the project-scope mcp-adapter.json. Your override for "srv" is kept, but these fields of it stop applying: env, headers. It comes back when you uninstall or disable hello.
+```
+
+Emitted via `notifyMcpConfigNotices` when a command that stages a plugin's MCP servers finds a user override under one of the plugin's server names. The commands are install, update, reinstall and enable, run directly or inside the reconcile, import and marketplace update cascades. An override is a marker-less entry with no `command`, `url` or `socket` in the target `mcp-adapter.json`, such as the `{ "disabled": true }` stub that `/mcp-adapter disable` writes. The notice fires only when the override holds fields that the plugin's entry does not carry.
+
+The plugin's entry replaces the override and keeps it verbatim as `_piClaudeMarketplace.keptOverride`. pi-mcp-adapter does not read that member. The carried fields (`disabled`, `approveTools`, `includeTools`, `excludeTools`, `lifecycle`, `idleTimeout`, `requestTimeoutMs`, `debug`, `searchKeywords`) apply from the entry. The line names the other fields, never their values. An override whose fields are all carried is kept with no notice.
+
+Uninstall, disable, prune, marketplace remove, a cascade undo, and an update that drops the server write the override back. A command that writes the override back in the same run shows no notice for it. The command's rows come first, then any comments-removed notice, then this one. Severity: `warning`. One line per server. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+
 ______________________________________________________________________
 
 ## Cross-references

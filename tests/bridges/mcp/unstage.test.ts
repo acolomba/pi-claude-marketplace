@@ -536,7 +536,9 @@ test("AFILE-01: writes an owned entry's kept override back marker-less in place"
   assert.deepStrictEqual(unstage, {
     removedNames: ["server"],
     warnings: [],
-    notices: [],
+    notices: [
+      { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "server" },
+    ],
     written: [{ path: locations.mcpAdapterJsonPath, bytes: Buffer.from(expectedBytes) }],
   });
   assert.strictEqual(rewrittenBytes, expectedBytes);
@@ -1002,6 +1004,109 @@ test("AFILE-04: a failed legacy write after the adapter rewrite reports the adap
     },
   );
   assert.strictEqual(adapterBytes, '{\n  "mcpServers": {}\n}\n');
+});
+
+test("AFILE-06: each rewritten file reports its comments notice, then one override-restored fact per override it writes back", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-override-restored-");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '// adapter\n{"mcpServers":{"first":{"command":"first","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"env":{"FIRST":"first-secret"}}}},"plain":{"command":"plain","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}},"second":{"command":"second","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"disabled":true}}}}}\n',
+    "utf8",
+  );
+  await writeFile(
+    locations.mcpJsonPath,
+    '{"mcpServers":{"legacy":{"command":"legacy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"debug":true}}}}}\n',
+    "utf8",
+  );
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+
+  // assert
+  assert.deepStrictEqual(unstage, {
+    removedNames: ["first", "plain", "second", "legacy"],
+    warnings: [],
+    notices: [
+      { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "first" },
+      { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "second" },
+      { kind: "override-restored", scope: "project", file: "mcp.json", server: "legacy" },
+    ],
+    written: [
+      {
+        path: locations.mcpAdapterJsonPath,
+        bytes: Buffer.from(
+          '{\n  "mcpServers": {\n    "first": {\n      "env": {\n        "FIRST": "first-secret"\n      }\n    },\n    "second": {\n      "disabled": true\n    }\n  }\n}\n',
+        ),
+      },
+      {
+        path: locations.mcpJsonPath,
+        bytes: Buffer.from(
+          '{\n  "mcpServers": {\n    "legacy": {\n      "debug": true\n    }\n  }\n}\n',
+        ),
+      },
+    ],
+  });
+});
+
+test("AFILE-06: a failed legacy write reports the override the adapter file already wrote back", async (t) => {
+  // arrange
+  const { cwd, locations } = await createScope(t, "mcp-unstage-override-partial-");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '{"mcpServers":{"server":{"command":"server","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"disabled":true}}}}}\n',
+    "utf8",
+  );
+  const lockedDirectory = await lockedLink(
+    t,
+    cwd,
+    locations.mcpJsonPath,
+    '{"mcpServers":{"legacy":{"command":"legacy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"debug":true}}}}}\n',
+  );
+
+  // act
+  const failure = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await chmod(lockedDirectory, 0o700);
+
+  // assert
+  assert.ok(failure instanceof McpUnstagePartialError);
+  assert.deepStrictEqual(
+    {
+      removedNames: failure.removedNames,
+      notices: failure.notices,
+      written: failure.written,
+      cause: errnoFields(failure.cause),
+    },
+    {
+      removedNames: ["server"],
+      notices: [
+        { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "server" },
+      ],
+      written: [
+        {
+          path: locations.mcpAdapterJsonPath,
+          bytes: Buffer.from(
+            '{\n  "mcpServers": {\n    "server": {\n      "disabled": true\n    }\n  }\n}\n',
+          ),
+        },
+      ],
+      cause: { code: "EACCES", syscall: "open" },
+    },
+  );
 });
 
 test("TR-03: a failed legacy write does not report a name the legacy file still holds as removed", async (t) => {

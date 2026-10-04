@@ -28,6 +28,8 @@ const CARRIED_FIELDS = [
   "searchKeywords",
 ] as const;
 
+const CARRIED_FIELD_SET: ReadonlySet<string> = new Set(CARRIED_FIELDS);
+
 /** The servers one plugin stages, and the entries they replace. */
 export interface StampServersInput {
   /** The plugin's server map, keyed by server name. */
@@ -95,6 +97,18 @@ function carriedFields(previous: unknown): Record<string, unknown> {
   }
 
   return carried;
+}
+
+/**
+ * AFILE-06: the fields of a kept override that do not apply while the
+ * plugin's entry holds the server name, in the override's key order. These are
+ * its own fields outside the carried set. `directTools` and `toolPrefix` are
+ * among them, because the plugin's entry owns both.
+ */
+export function inactiveOverrideFields(
+  override: Readonly<Record<string, unknown>>,
+): readonly string[] {
+  return Object.freeze(Object.keys(override).filter((field) => !CARRIED_FIELD_SET.has(field)));
 }
 
 /**

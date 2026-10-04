@@ -211,52 +211,125 @@ export function notifyStopHookOverrideCap(ctx: NotificationContext, pluginId: st
  * rewrote or left alone. The MCP bridge reports it and the orchestrator
  * routes it to `notifyMcpConfigNotices` after its own row.
  */
-export interface McpConfigNotice {
+export interface McpConfigFileNotice {
   readonly kind: "comments-dropped" | "left-unchanged";
   readonly scope: Scope;
   readonly file: "mcp-adapter.json" | "mcp.json";
 }
 
-const MCP_CONFIG_NOTICE_KINDS: readonly McpConfigNotice["kind"][] = [
-  "comments-dropped",
-  "left-unchanged",
-];
-
-function mcpConfigNoticeSummary(kind: McpConfigNotice["kind"]): string {
-  return kind === "comments-dropped"
-    ? "MCP config comments removed."
-    : "MCP config left unchanged.";
+/**
+ * AFILE-06: a stage replaced a user's marker-less override with the plugin's
+ * entry and keeps the override in that entry's marker. `fields` lists the
+ * override's fields that stop applying while the plugin provides `server`, in
+ * the override's key order. It names fields, never their values.
+ */
+export interface McpOverrideKeptNotice {
+  readonly kind: "override-kept";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+  readonly fields: readonly string[];
 }
 
-function mcpConfigNoticeLine(notice: McpConfigNotice): string {
+/**
+ * AFILE-01 / AFILE-06: an unstage wrote a kept override back as a marker-less
+ * entry. It renders nothing. It cancels an earlier override-kept notice for
+ * the same scope, file and server, so a command that keeps and then writes
+ * back an override shows no warning for it.
+ */
+export interface McpOverrideRestoredNotice {
+  readonly kind: "override-restored";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json" | "mcp.json";
+  readonly server: string;
+}
+
+/** AFILE-04 / AFILE-06: one MCP config fact a command routes to `notifyMcpConfigNotices`. */
+export type McpConfigNotice =
+  McpConfigFileNotice | McpOverrideKeptNotice | McpOverrideRestoredNotice;
+
+function mcpConfigFileLine(notice: McpConfigFileNotice): string {
   return notice.kind === "comments-dropped"
     ? `The ${notice.scope}-scope ${notice.file} was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.`
     : `The ${notice.scope}-scope ${notice.file} is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.`;
 }
 
+function mcpOverrideKeptLine(notice: McpOverrideKeptNotice): string {
+  return `${notice.plugin} now provides "${notice.server}" in the ${notice.scope}-scope ${notice.file}. Your override for "${notice.server}" is kept, but these fields of it stop applying: ${notice.fields.join(", ")}. It comes back when you uninstall or disable ${notice.plugin}.`;
+}
+
+function mcpConfigFileLines(
+  notices: readonly McpConfigNotice[],
+  kind: McpConfigFileNotice["kind"],
+): string[] {
+  const lines: string[] = [];
+  for (const notice of notices) {
+    if (notice.kind === kind) {
+      lines.push(mcpConfigFileLine(notice));
+    }
+  }
+
+  return lines;
+}
+
+function overrideKey(notice: McpOverrideKeptNotice | McpOverrideRestoredNotice): string {
+  return JSON.stringify([notice.scope, notice.file, notice.server]);
+}
+
 /**
- * AFILE-04 / AFILE-02 IL-2 seam: the one surface for MCP config file notices.
- * Bridges report the fact and orchestrators call this after their own row.
- * It sends one `"warning"` notification per kind present, comments-dropped
- * first: a summary line, a blank line, then one line per distinct
- * `(kind, scope, file)` notice in first-seen order. An empty list sends
- * nothing. A line names the scope and the file basename only, so it carries
- * no absolute path to redact. The host UI prepends the `Warning:` label to
- * the summary line. The byte form is locked by
+ * AFILE-06: the override-kept notices still standing after the list's
+ * write-backs, in the order each server's notice was first set. A later keep
+ * for the same scope, file and server replaces the earlier one, and a
+ * restore removes it. The list is in the order the command wrote the files.
+ */
+function standingOverrideNotices(
+  notices: readonly McpConfigNotice[],
+): readonly McpOverrideKeptNotice[] {
+  const standing = new Map<string, McpOverrideKeptNotice>();
+  for (const notice of notices) {
+    if (notice.kind === "override-kept") {
+      standing.set(overrideKey(notice), notice);
+    } else if (notice.kind === "override-restored") {
+      standing.delete(overrideKey(notice));
+    }
+  }
+
+  return [...standing.values()];
+}
+
+/**
+ * AFILE-04 / AFILE-02 / AFILE-06 IL-2 seam: the one surface for MCP config
+ * notices. Bridges report the facts and orchestrators call this after their
+ * own row. It sends one `"warning"` notification per kind present, in the
+ * order comments-dropped, left-unchanged, override-kept: a summary line, a
+ * blank line, then one distinct line per notice in first-seen order. An
+ * override-kept line stands only when no later override-restored notice for
+ * the same scope, file and server cancels it. An override-restored notice
+ * renders nothing. An empty list sends nothing. A line names the scope, the
+ * file basename, the plugin, the server and override field names only, so it
+ * carries no absolute path and no field value. The host UI prepends the
+ * `Warning:` label to the summary line. The byte form is locked by
  * `tests/architecture/mcp-config-notices.test.ts` against the
- * `mcp-comments-dropped` and `mcp-config-left-unchanged` blocks in
- * `docs/output-catalog.md`.
+ * `mcp-comments-dropped`, `mcp-config-left-unchanged` and `mcp-override-kept`
+ * blocks in `docs/output-catalog.md`.
  */
 export function notifyMcpConfigNotices(
   ctx: NotificationContext,
   notices: readonly McpConfigNotice[],
 ): void {
-  for (const kind of MCP_CONFIG_NOTICE_KINDS) {
-    const lines = new Set(
-      notices.filter((notice) => notice.kind === kind).map((notice) => mcpConfigNoticeLine(notice)),
-    );
-    if (lines.size > 0) {
-      ctx.ui.notify(`${mcpConfigNoticeSummary(kind)}\n\n${[...lines].join("\n")}`, "warning");
+  const warnings: ReadonlyArray<readonly [summary: string, lines: readonly string[]]> = [
+    ["MCP config comments removed.", mcpConfigFileLines(notices, "comments-dropped")],
+    ["MCP config left unchanged.", mcpConfigFileLines(notices, "left-unchanged")],
+    [
+      "MCP server override kept.",
+      standingOverrideNotices(notices).map((notice) => mcpOverrideKeptLine(notice)),
+    ],
+  ];
+  for (const [summary, lines] of warnings) {
+    const distinct = new Set(lines);
+    if (distinct.size > 0) {
+      ctx.ui.notify(`${summary}\n\n${[...distinct].join("\n")}`, "warning");
     }
   }
 }

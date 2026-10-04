@@ -3484,6 +3484,186 @@ test("AFILE-04: an install that lands disabled reports the notices of both its s
   });
 });
 
+/** AFILE-06: the exact override-kept notice for hello's `server1` in the project adapter file. */
+const PROJECT_OVERRIDE_KEPT_NOTICE: NotifyRecord = {
+  severity: "warning",
+  message:
+    "MCP server override kept.\n\n" +
+    'hello now provides "server1" in the project-scope mcp-adapter.json. Your override for "server1" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable hello.',
+};
+
+/**
+ * AFILE-06: writes a comment-free project mcp-adapter.json, in the two-space
+ * form the bridge writes, holding a user override with an env field under
+ * `server`. Returns the path and the bytes written.
+ */
+async function writeProjectOverrideFile(
+  cwd: string,
+  server: string,
+): Promise<{ readonly adapterPath: string; readonly overrideBytes: string }> {
+  const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+  const overrideBytes = `{
+  "mcpServers": {
+    "${server}": {
+      "disabled": true,
+      "env": {
+        "STUB_TOKEN": "stub-secret"
+      }
+    }
+  }
+}
+`;
+  await mkdir(path.dirname(adapterPath), { recursive: true });
+  await writeFile(adapterPath, overrideBytes);
+  return { adapterPath, overrideBytes };
+}
+
+test("AFILE-06: install over a project override with an env field shows the override notice after its row", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile06-override-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      await writeProjectOverrideFile(cwd, "server1");
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+        PROJECT_OVERRIDE_KEPT_NOTICE,
+      ]);
+      assert.deepStrictEqual(
+        notifications.filter((notification) => notification.message.includes("stub-secret")),
+        [],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-06: an install that lands disabled writes the override back and shows no override notice", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile06-landed-disabled-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+        entryDefaultEnabled: false,
+      });
+      const { adapterPath, overrideBytes } = await writeProjectOverrideFile(cwd, "server1");
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ◍ hello v0.0.1 (disabled) {installs disabled}\n" +
+            "    Run enable on this plugin to use its components.",
+        },
+      ]);
+      assert.equal(await readFile(adapterPath, "utf8"), overrideBytes);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-06: a failed dependency cascade writes its dependency's override back and shows no override notice", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile06-cascade-failed-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      const { adapterPath, overrideBytes } = await writeProjectOverrideFile(cwd, "server2");
+      const agentsPath = await seedForeignServer1();
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed)\n" +
+            `    cause: Refusing to stage MCP server "server1": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+        },
+      ]);
+      assert.equal(await readFile(adapterPath, "utf8"), overrideBytes);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: install over a commented file holding an override shows the comments notice, then the override notice", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-override-comments-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await mkdir(path.dirname(adapterPath), { recursive: true });
+      await writeFile(
+        adapterPath,
+        '{\n  // mine\n  "mcpServers": { "server1": { "disabled": true, "env": { "STUB_TOKEN": "stub-secret" } } }\n}\n',
+      );
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+        PROJECT_OVERRIDE_KEPT_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 /**
  * AFILE-04: an install transaction whose state save is refused. Every MCP
  * config rewrite before the save still runs for real.

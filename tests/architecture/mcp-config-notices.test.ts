@@ -4,10 +4,10 @@
 // `notifyMcpConfigNotices` calls ctx.ui.notify directly, outside the structured
 // NotificationMessage entrypoint, so the catalog-uat walk and the
 // notify-grammar invariant never drive it. This dedicated lock reads the
-// `mcp-comments-dropped` and `mcp-config-left-unchanged` blocks from
-// docs/output-catalog.md and asserts that the seam emits each one byte for
-// byte, in one warning-severity call, with a non-empty summary line followed
-// by a blank line.
+// `mcp-comments-dropped`, `mcp-config-left-unchanged` and `mcp-override-kept`
+// blocks from docs/output-catalog.md and asserts that the seam emits each one
+// byte for byte, in one warning-severity call, with a non-empty summary line
+// followed by a blank line (AFILE-06).
 
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
@@ -33,6 +33,17 @@ const CATALOG_NOTICE_ROWS: readonly CatalogNoticeRow[] = [
   {
     state: "mcp-config-left-unchanged",
     notice: { kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" },
+  },
+  {
+    state: "mcp-override-kept",
+    notice: {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    },
   },
 ];
 

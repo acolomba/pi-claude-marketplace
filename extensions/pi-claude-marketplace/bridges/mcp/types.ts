@@ -59,8 +59,10 @@ export interface StageMcpCommitResult {
   readonly recorded: readonly StagedMcpRecord[];
   readonly warnings: readonly string[];
   /**
-   * AFILE-04 / AFILE-02: facts about the config file this stage rewrites or
-   * leaves alone, for the orchestrator to route to the user. Distinct from
+   * AFILE-04 / AFILE-02 / AFILE-06: facts about the config file this stage
+   * rewrites or leaves alone, for the orchestrator to route to the user: a
+   * `comments-dropped` or `left-unchanged` notice, then one `override-kept`
+   * notice per absorbed override whose fields stop applying. Distinct from
    * `warnings`, which are hygiene notes standalone commands do not show.
    */
   readonly notices: readonly McpConfigNotice[];
@@ -119,9 +121,10 @@ export interface UnstageMcpResult {
   readonly removedNames: readonly string[];
   readonly warnings: readonly string[];
   /**
-   * AFILE-04: one `comments-dropped` notice per file the unstage rewrote whose
-   * bytes held JSONC comments, `mcp-adapter.json` before `mcp.json`. Empty
-   * when nothing was removed.
+   * AFILE-04 / AFILE-06: for each file the unstage rewrote,
+   * `mcp-adapter.json` before `mcp.json`, a `comments-dropped` notice when
+   * its bytes held JSONC comments, then one `override-restored` notice per
+   * kept override it wrote back. Empty when nothing was removed.
    */
   readonly notices: readonly McpConfigNotice[];
   /**

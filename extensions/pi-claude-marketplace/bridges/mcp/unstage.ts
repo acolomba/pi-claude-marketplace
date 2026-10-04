@@ -16,11 +16,12 @@
 // leaves both unchanged. The adapter file is written first. A crash between
 // the two writes leaves the legacy entries for the next unstage to remove
 // (NFR-3). The writer drops JSONC comments, so each rewritten file whose
-// bytes held comments yields a `comments-dropped` notice (AFILE-04). Each
-// rewritten file is returned with the exact bytes written to it, so a prune
-// rollback can tell its own rewrite from a later edit (NFR-3). When the
-// legacy write fails after the adapter file was rewritten, a typed
-// `McpUnstagePartialError` carries the adapter file's notice and written
+// bytes held comments yields a `comments-dropped` notice (AFILE-04), followed
+// by one `override-restored` notice per kept override the file gets back
+// (AFILE-06). Each rewritten file is returned with the exact bytes written to
+// it, so a prune rollback can tell its own rewrite from a later edit (NFR-3).
+// When the legacy write fails after the adapter file was rewritten, a typed
+// `McpUnstagePartialError` carries the adapter file's notices and written
 // bytes, so the caller can still report and recognize them. Its removed names
 // leave out any name the legacy file still holds (TR-03).
 //
@@ -50,13 +51,18 @@ import {
   PI_MCP_SERVER_KEYS,
   partitionServers,
   readMcpConfigDoc,
+  restoredOverrideNames,
   withPluginServers,
   type McpConfigDoc,
   type McpServerKey,
 } from "./adapter-doc.ts";
 
 import type { UnstageMcpInput, UnstageMcpResult } from "./types.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type {
+  McpConfigFileNotice,
+  McpConfigNotice,
+  McpOverrideRestoredNotice,
+} from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /** One config file and the plugin's entries in it. */
@@ -94,12 +100,41 @@ function removedNamesOf(targets: readonly UnstageTarget[]): readonly string[] {
   return Object.freeze([...new Set(targets.flatMap((target) => target.ownedNames))]);
 }
 
-function noticesOf(targets: readonly UnstageTarget[], scope: Scope): readonly McpConfigNotice[] {
-  return Object.freeze(
-    targets
-      .filter((target) => target.config.hadComments)
-      .map((target): McpConfigNotice => ({ kind: "comments-dropped", scope, file: target.file })),
-  );
+/** The owner of the entries an unstage removes, and the scope it writes. */
+interface UnstageOwner {
+  readonly pluginName: string;
+  readonly marketplaceName: string;
+  readonly scope: Scope;
+}
+
+/**
+ * The notices for one rewritten file: its `comments-dropped` notice when the
+ * read bytes held comments (AFILE-04), then one `override-restored` notice per
+ * kept override it gets back (AFILE-06).
+ */
+function targetNotices(target: UnstageTarget, owner: UnstageOwner): McpConfigNotice[] {
+  const { scope } = owner;
+  const commentsDropped: McpConfigFileNotice[] = target.config.hadComments
+    ? [{ kind: "comments-dropped", scope, file: target.file }]
+    : [];
+  const restored = restoredOverrideNames(
+    target.config,
+    owner.pluginName,
+    owner.marketplaceName,
+  ).map((server): McpOverrideRestoredNotice => ({
+    kind: "override-restored",
+    scope,
+    file: target.file,
+    server,
+  }));
+  return [...commentsDropped, ...restored];
+}
+
+function noticesOf(
+  targets: readonly UnstageTarget[],
+  owner: UnstageOwner,
+): readonly McpConfigNotice[] {
+  return Object.freeze(targets.flatMap((target) => targetNotices(target, owner)));
 }
 
 /**
@@ -109,9 +144,7 @@ function noticesOf(targets: readonly UnstageTarget[], scope: Scope): readonly Mc
  */
 async function writeUnstageTargets(
   targets: readonly UnstageTarget[],
-  pluginName: string,
-  marketplaceName: string,
-  scope: Scope,
+  owner: UnstageOwner,
 ): Promise<readonly McpWrittenFile[]> {
   const writtenTargets: UnstageTarget[] = [];
   const writtenFiles: McpWrittenFile[] = [];
@@ -120,7 +153,7 @@ async function writeUnstageTargets(
     try {
       bytes = await atomicWriteJson(
         target.filePath,
-        withPluginServers(target.config, pluginName, marketplaceName, {}),
+        withPluginServers(target.config, owner.pluginName, owner.marketplaceName, {}),
       );
     } catch (err) {
       if (writtenTargets.length === 0) {
@@ -134,7 +167,7 @@ async function writeUnstageTargets(
       );
       throw new McpUnstagePartialError(
         removedNamesOf(writtenTargets).filter((name) => !stillOwned.has(name)),
-        noticesOf(writtenTargets, scope),
+        noticesOf(writtenTargets, owner),
         writtenFiles,
         { cause: err },
       );
@@ -168,12 +201,13 @@ export async function unstageMcpServers(input: UnstageMcpInput): Promise<Unstage
   // PRD §5.7 / D-04: a file with nothing to remove is not rewritten. The
   // mtime-stable invariant is what tests rely on.
   const targets = [adapterTarget, legacyTarget].filter((target) => target !== undefined);
-  const written = await writeUnstageTargets(targets, pluginName, marketplaceName, locations.scope);
+  const owner: UnstageOwner = { pluginName, marketplaceName, scope: locations.scope };
+  const written = await writeUnstageTargets(targets, owner);
 
   return {
     removedNames: removedNamesOf(targets),
     warnings: Object.freeze<string[]>([]),
-    notices: noticesOf(targets, locations.scope),
+    notices: noticesOf(targets, owner),
     written,
   };
 }

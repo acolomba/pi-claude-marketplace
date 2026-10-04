@@ -1107,6 +1107,136 @@ describe("prepareStageMcpServers", () => {
     assert.strictEqual(secondBytes, expectedBytes);
   });
 
+  test("AFILE-06: staging over a stub with env and headers reports one override-kept notice naming them", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-notice-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"server":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"},"headers":{"Authorization":"stub-header"}}}}',
+    );
+
+    // act
+    const prepared = await prepareAcme(locations, cwd);
+
+    // assert
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: ["server"],
+      recorded: [
+        {
+          generatedName: "server",
+          sourcePath: "acme#mcpServers",
+          targetPath: locations.mcpAdapterJsonPath,
+        },
+      ],
+      warnings: [],
+      notices: [
+        {
+          kind: "override-kept",
+          scope: "project",
+          file: "mcp-adapter.json",
+          plugin: "acme",
+          server: "server",
+          fields: ["env", "headers"],
+        },
+      ],
+    });
+  });
+
+  test("AFILE-06: override-kept notices follow the plugin's declared server order", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-order-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"alpha":{"env":{"ALPHA":"alpha-secret"}},"beta":{"debug":true,"cwd":"/beta"}}}',
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: {
+        beta: { url: "https://beta.example/mcp" },
+        alpha: { url: "https://alpha.example/mcp" },
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "override-kept",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "beta",
+        fields: ["cwd"],
+      },
+      {
+        kind: "override-kept",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "alpha",
+        fields: ["env"],
+      },
+    ]);
+  });
+
+  test("AFILE-06: staging over a disable-only stub reports no notice", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-carried-");
+    await writeSource(locations.mcpAdapterJsonPath, '{"mcpServers":{"server":{"disabled":true}}}');
+
+    // act
+    const prepared = await prepareAcme(locations, cwd);
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, []);
+  });
+
+  test("AFILE-06: restaging an entry that keeps an override reports no notice", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-restage-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"server":{"url":"https://old.example/mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"env":{"STUB_TOKEN":"stub-secret"}}}}}}',
+    );
+
+    // act
+    const prepared = await prepareAcme(locations, cwd);
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, []);
+  });
+
+  test("AFILE-06: a commented file holding a stub with env reports the comments, then the override", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-comments-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{\n  // mine\n  "mcpServers": { "server": { "env": { "STUB_TOKEN": "stub-secret" } } }\n}\n',
+    );
+
+    // act
+    const prepared = await prepareAcme(locations, cwd);
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      {
+        kind: "override-kept",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "server",
+        fields: ["env"],
+      },
+    ]);
+  });
+
   test("AFILE-01: a stage that drops a server writes its kept override back marker-less in place", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-kept-dropped-");

@@ -98,36 +98,36 @@
       "filter": "extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts:141:17"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:317:48",
+      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:364:48",
       "owner": "replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:317:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:364:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:362:42",
+      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:409:42",
       "owner": "requireMcpReplacementInternals.replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:362:16"
+      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:409:16"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:61:29",
+      "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:66:29",
       "owner": "mcpReplacementInternals",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:61:3"
+      "filter": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:66:3"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:102:52",
+      "id": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:104:52",
       "owner": "McpReplacementNoop.prepared",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PreparedMcpStaging by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:102:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:104:22"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:566:51",
@@ -698,12 +698,12 @@
       "filter": "extensions/pi-claude-marketplace/platform/pi-api.ts:124:32"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:273:43",
+      "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:346:43",
       "owner": "dispatchInfoMessage.message",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:273:12"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:346:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1621:46",

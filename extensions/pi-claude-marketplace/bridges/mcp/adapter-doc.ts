@@ -270,6 +270,34 @@ export function partitionServers(
 }
 
 /**
+ * AFILE-01 / AFILE-06: the server names of the plugin's own entries whose
+ * kept override an unstage writes back, which is what
+ * `withPluginServers(config, pluginName, marketplaceName, {})` does. The
+ * selected key comes first, each map in file order, and a name appears once.
+ * The same `restorableOverride` test decides both, so the names and the
+ * write-back agree on which kept values are still overrides.
+ */
+export function restoredOverrideNames(
+  config: McpConfigDoc,
+  pluginName: string,
+  marketplaceName: string,
+): readonly string[] {
+  const names = new Set<string>();
+  for (const servers of selectedKeyFirst(config)) {
+    for (const [name, entry] of Object.entries(servers)) {
+      if (
+        isOwnedBy(entry, pluginName, marketplaceName) &&
+        restorableOverride(entry) !== undefined
+      ) {
+        names.add(name);
+      }
+    }
+  }
+
+  return Object.freeze([...names]);
+}
+
+/**
  * What one existing entry leaves in its place: itself, the override its
  * marker keeps, or nothing. A name in `replaced` is restaged in this map, so
  * the new entry carries the plugin's kept override and absorbs an overlay.

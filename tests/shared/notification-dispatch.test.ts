@@ -5893,6 +5893,276 @@ test("AFILE-04: mixed MCP config notices send comments-dropped first, then left-
   );
 });
 
+test("AFILE-06: one override-kept notice sends its exact warning bytes", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server override kept.\n\nhello now provides "srv" in the project-scope mcp-adapter.json. Your override for "srv" is kept, but these fields of it stop applying: env, headers. It comes back when you uninstall or disable hello.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AFILE-06: override-kept notices for two servers share one warning with a line each, in list order", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "alpha",
+      fields: ["env"],
+    },
+    {
+      kind: "override-kept",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "beta",
+      fields: ["cwd"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP server override kept.\n\n" +
+          'hello now provides "alpha" in the project-scope mcp-adapter.json. Your override for "alpha" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable hello.\n' +
+          'hello now provides "beta" in the user-scope mcp-adapter.json. Your override for "beta" is kept, but these fields of it stop applying: cwd. It comes back when you uninstall or disable hello.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AFILE-06: a repeated override-kept notice renders once", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    },
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server override kept.\n\nhello now provides "srv" in the project-scope mcp-adapter.json. Your override for "srv" is kept, but these fields of it stop applying: env, headers. It comes back when you uninstall or disable hello.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AFILE-06: mixed MCP config notices send comments-dropped, then left-unchanged, then override-kept", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    },
+    { kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" },
+    { kind: "comments-dropped", scope: "user", file: "mcp-adapter.json" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP config comments removed.\n\nThe user-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        "warning",
+      ],
+      [
+        "MCP config left unchanged.\n\nThe project-scope mcp-adapter.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.",
+        "warning",
+      ],
+      [
+        'MCP server override kept.\n\nhello now provides "srv" in the project-scope mcp-adapter.json. Your override for "srv" is kept, but these fields of it stop applying: env, headers. It comes back when you uninstall or disable hello.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AFILE-06: an override-restored notice alone sends nothing", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "srv" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [],
+  );
+});
+
+test("AFILE-06: an override-restored notice cancels an earlier override-kept notice for the same server", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    },
+    { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "srv" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [],
+  );
+});
+
+test("AFILE-06: an override-kept notice after an override-restored notice for the same server stands", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "srv" },
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server override kept.\n\nhello now provides "srv" in the project-scope mcp-adapter.json. Your override for "srv" is kept, but these fields of it stop applying: env, headers. It comes back when you uninstall or disable hello.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AFILE-06: a restore for another server, scope or file leaves the override-kept line standing", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    },
+    { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "other" },
+    { kind: "override-restored", scope: "user", file: "mcp-adapter.json", server: "srv" },
+    { kind: "override-restored", scope: "project", file: "mcp.json", server: "srv" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server override kept.\n\nhello now provides "srv" in the project-scope mcp-adapter.json. Your override for "srv" is kept, but these fields of it stop applying: env, headers. It comes back when you uninstall or disable hello.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AFILE-06: comments-dropped notices still render beside a cancelled override", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    { kind: "comments-dropped", scope: "user", file: "mcp-adapter.json" },
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    },
+    { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "srv" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP config comments removed.\n\nThe user-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        "warning",
+      ],
+    ],
+  );
+});
+
 test("usage info dispatch preserves usage message at info severity", (t) => {
   // arrange
   const ctx = createContext(t);
