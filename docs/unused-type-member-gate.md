@@ -17,7 +17,7 @@ The gate runs over the whole project in `npm run check` at completion and in CI.
 
 `npm run check` runs the gate at the end of its chain. `npm run check:controls` runs the sensitivity controls after the faster controls of the other checker scripts. Continuous integration runs `npm run check` on every run and adds `npm run check:controls` on pull requests, the path every change takes to main.
 
-Local commits run `npm run check:changed`. Ordinary source/test edits get focused checks. A change to the gate script, to one of its `scripts/check-unused-type-members.*.mjs` helper modules, or to its control runs the sensitivity controls. A change to the recorded decisions or contracts runs the gate. Dependency and toolchain configuration changes broaden to the full check and add `npm run check:controls`, so they run both member commands. Other configuration changes broaden to the full check, which runs the gate. The full member gate also runs at completion, where it can detect a removed reader in a different file.
+Local commits run `npm run check:changed`. Ordinary source/test edits get focused checks. A change to the gate script, to one of its `scripts/check-unused-type-members.*.mjs` helper modules, or to its control runs the sensitivity controls. A change to the recorded decisions or contracts runs the gate when the commit's other changes keep the checks focused. Dependency and toolchain configuration changes select the broad check and add `npm run check:controls`, which runs the sensitivity controls. The broad check never runs the gate itself. The full member gate runs in `npm run check` at completion and in CI, where it can detect a removed reader in a different file.
 
 ## Exit status
 
