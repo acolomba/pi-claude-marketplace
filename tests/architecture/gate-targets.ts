@@ -603,22 +603,6 @@ export const TYPE_MEMBER_NEGATIVE_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[
 export const TYPE_MEMBER_EXCEPTIONS_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
   "scripts/check-unused-type-members.exceptions.json";
 
-/**
- * D-07-17: the records that carry a finding's disposition when the evidence for
- * it is a command run this cycle rather than a change to the tree.
- *
- * A record like this is a target in exactly the sense the rest of this file
- * means: a gate that cannot open it inspects nothing, and it is as liable to be
- * renamed as any module.
- */
-export const EVIDENCE_RECORD_TARGETS = [
-  ".planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-FINDING-DISPOSITIONS.md",
-] as const;
-
-/** The disposition of every finding routed to the gate-integrity work. */
-export const FINDING_DISPOSITIONS_REL: (typeof EVIDENCE_RECORD_TARGETS)[number] =
-  ".planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-FINDING-DISPOSITIONS.md";
-
 /** WDEP-05: the workflows bridge, whose commit path must never call a probe. */
 export const WORKFLOWS_BRIDGE_TARGETS = [
   "extensions/pi-claude-marketplace/bridges/workflows",

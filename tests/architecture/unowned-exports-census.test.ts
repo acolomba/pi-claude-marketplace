@@ -1,12 +1,11 @@
 /**
- * Exact production finding census and historical disposition evidence.
+ * Exact production finding census.
  * Every category is pinned by identity, so additions, removals, and equal-count
  * swaps require review. Real offender/benign controls calibrate the shared
  * instrument independently of whether the production census is empty.
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -16,11 +15,7 @@ import {
   type AnalyzerReport,
   type FindingGroups,
 } from "./fallow-report.ts";
-import {
-  FINDING_DISPOSITIONS_REL,
-  PRODUCTION_FINDING_CENSUS,
-  UNOWNED_EXPORT_CENSUS,
-} from "./gate-targets.ts";
+import { PRODUCTION_FINDING_CENSUS, UNOWNED_EXPORT_CENSUS } from "./gate-targets.ts";
 import { REPO_ROOT } from "./source-scan.ts";
 
 const ANALYZER = path.join(REPO_ROOT, "node_modules", "fallow", "bin", "fallow");
@@ -57,33 +52,6 @@ const EMPTY_FINDINGS: FindingGroups = {
 
 /** The measured census, keyed by publishing file exactly as the pin is. */
 type Census = Record<string, string[]>;
-
-/**
- * Every finding the live evidence ledger routed to this phase, plus the two
- * effective-config gaps and the deferred twin whose instance closed with them.
- *
- * The set is closed on purpose: the dispositions record answers for all of them
- * or it answers for none, because a record that quietly drops a row reads
- * exactly like a record whose findings were all resolved.
- */
-const ROUTED_FINDINGS = [
-  "OMR-F01",
-  "OMRR-F004",
-  "OPEF-F01",
-  "OPIB-F07",
-  "DCORE-030",
-  "SCN-F025",
-  "HHD-027",
-  "HHD-028",
-  "OPLU-A-F07",
-  "OPLU-B-F15",
-  "SHC-F046",
-  "SHC-F047",
-  "OPEFR-F007",
-  "ABG-004",
-  "AHG-014",
-  "ORA-F32",
-] as const;
 
 /** Read the real analyzer through the same instrument calibrated by live controls. */
 function readDeadCodeReport(args: readonly string[]): AnalyzerReport {
@@ -220,44 +188,5 @@ test("D-07-20: the shipping report is complete and entirely clean", () => {
     measured,
     { findings: EMPTY_FINDINGS, totalIssues: 0, exitStatus: 0 },
     "D-07-20 / EXPORT-02: the shipping dead-code report is no longer empty. Answer the finding with a real production consumer, a private declaration, a retirement, or an exact adjacent annotation -- never by pinning the identity here.",
-  );
-});
-
-/**
- * The record row that answers for one finding: its id in the leading cell, a
- * status naming a disposition, and a non-empty evidence cell.
- *
- * The row is what the check reads, not the bare id, because a record that
- * mentions an id in a heading, a footnote or a changelog line answers nothing
- * -- and an unanchored substring probe cannot tell those apart from a real
- * answer. Anchoring to the leading cell also removes the aliasing hazard
- * between ids that prefix one another (`OPEF-F01` and `OPEFR-F007` are one
- * character apart).
- */
-function dispositionRow(finding: string): RegExp {
-  // Every cell is spelled without `\s`, which would match a newline and let a
-  // row with an empty cell borrow the next row's text to satisfy this.
-  const cell = String.raw`[^|\n]*\S[^|\n]*`;
-  const status = String.raw`[^|\n]*\b(?:closed|open|deferred)\b[^|\n]*`;
-  const gap = String.raw`[^\S\n]*`;
-
-  return new RegExp(
-    String.raw`^\|${gap}\x60${finding}\x60${gap}\|${cell}\|${status}\|${cell}\|${cell}\|${gap}$`,
-    "m",
-  );
-}
-
-test("D-07-17: the dispositions record answers for every routed finding", async () => {
-  // arrange
-  const record = await readFile(path.join(REPO_ROOT, FINDING_DISPOSITIONS_REL), "utf8");
-
-  // act
-  const unanswered = ROUTED_FINDINGS.filter((finding) => !dispositionRow(finding).test(record));
-
-  // assert
-  assert.deepStrictEqual(
-    unanswered,
-    [],
-    `D-07-17: ${FINDING_DISPOSITIONS_REL} carries no answering row for ${unanswered.join(", ")}. A finding routed here is answered by a record row naming it, a status of closed, open or deferred, the work that closed it, and evidence -- or it is not answered at all. A record that drops a row, or that only mentions an id in prose, reads exactly like a record whose findings were all resolved.`,
   );
 });

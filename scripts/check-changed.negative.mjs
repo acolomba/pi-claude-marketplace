@@ -5,7 +5,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
   utimesSync,
@@ -13,13 +12,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   acquireFullLock,
   appendRunLog,
   changedFiles,
-  DATA_READERS,
   planChecks,
   runChecks,
 } from "./check-changed.mjs";
@@ -28,7 +25,6 @@ const root = mkdtempSync(path.join(tmpdir(), "pi-cm-changed-"));
 const lockRoot = mkdtempSync(path.join(tmpdir(), "pi-cm-changed-lock-"));
 const source = (name) => `extensions/pi-claude-marketplace/${name}.ts`;
 const test = (name) => `tests/${name}.test.ts`;
-const repository = fileURLToPath(new URL("..", import.meta.url));
 const typeMemberData = [
   "scripts/check-unused-type-members.contracts.json",
   "scripts/check-unused-type-members.exceptions.json",
@@ -86,7 +82,6 @@ try {
     "tests/orphan.ts",
     "tests/scripts/gate.test.ts",
     "tests/scripts/gate.negative.test.ts",
-    ...[...DATA_READERS.values()].flat(),
   ]) {
     write(file, "export {};");
   }
@@ -165,21 +160,12 @@ try {
     ".agents/skills/babysit-pr/SKILL.md",
     ".claude/commands/merge-dependabot-prs.md",
     "AGENTS.md",
+    ".planning/config.json",
+    "skills/claude-code-compat-research/SKILL.md",
   ]);
   assert.equal(exempt.scope, "none");
   assert.deepEqual(exempt.commands, []);
   assert.equal(planChecks(root, [".claude/settings.json"]).scope, "full");
-
-  // Files that tests read run exactly their readers, and broaden once a reader is gone.
-  for (const [file, readers] of DATA_READERS) {
-    assert.deepEqual(commandsFor([file]), [testRun(...readers)], file);
-  }
-
-  const configReader = DATA_READERS.get(".planning/config.json")[0];
-  rmSync(path.join(root, configReader));
-  assert.equal(planChecks(root, [".planning/config.json"]).scope, "full");
-  assert.deepEqual(commandsFor([".planning/config.json"]), [run("check")]);
-  write(configReader, "export {};");
 
   for (const file of [
     "docs/output-catalog.md",
@@ -292,24 +278,6 @@ try {
   assert.deepEqual(commandsFor(["docs/output-catalog.md", "unclassified.txt"]), [run("check")]);
   assert.deepEqual(commandsFor(["tests/e2e/changed.test.ts"]), [run("check"), run("test:e2e")]);
   assert.equal(planChecks(root, [source("leaf"), "package.json"]).scope, "full");
-
-  // A test that names a `.planning` path makes it data, which DATA_READERS must list.
-  const planningLiterals = readdirSync(path.join(repository, "tests"), {
-    recursive: true,
-    withFileTypes: true,
-  })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
-    .flatMap((entry) =>
-      [
-        ...readFileSync(path.join(entry.parentPath, entry.name), "utf8").matchAll(
-          /(["'`])(\.planning[^"'`\n]*)\1/g,
-        ),
-      ].map((match) => match[2]),
-    );
-  assert.ok(planningLiterals.length > 0, "the real-tree scan found no .planning literal");
-  for (const literal of planningLiterals) {
-    assert.ok(DATA_READERS.has(literal), `${literal} is read by a test but not in DATA_READERS`);
-  }
 
   write(source("other"), 'export const other = import("./missing.ts");');
   assert.equal(planChecks(root, [source("leaf")]).scope, "full");

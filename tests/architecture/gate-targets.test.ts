@@ -71,7 +71,7 @@ function registryGroups(): Array<[string, ReadonlyArray<string>]> {
  * is checked separately, and first, so the class is named where it happens.
  */
 const REPO_RELATIVE_ENTRY =
-  /^(?:\.\/)?(?:docs|extensions|scripts|tests|\.planning)\/[\w.-]+(?:\/[\w.-]+)*$|^[\w.-]+\.(?:js|json|md|mjs|ts)$/;
+  /^(?:\.\/)?(?:docs|extensions|scripts|tests)\/[\w.-]+(?:\/[\w.-]+)*$|^[\w.-]+\.(?:js|json|md|mjs|ts)$/;
 
 /** Whether `rel` is a repository-relative path that climbs nowhere. */
 function isRepoRelativeEntry(rel: string): boolean {

@@ -38,26 +38,6 @@ const prettierCheck = [
   "content",
 ];
 
-/**
- * Inputs that tests read as data. Each runs only its reader tests. Every other
- * `.planning/` path and skill Markdown file is exempt, so the negative control's
- * real-tree guard fails when a test reads a `.planning` path missing here.
- */
-export const DATA_READERS = new Map([
-  [".planning/config.json", ["tests/scripts/gsd-discuss-integration.test.ts"]],
-  [
-    ".planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-FINDING-DISPOSITIONS.md",
-    [
-      "tests/architecture/gate-targets.test.ts",
-      "tests/architecture/unowned-exports-census.test.ts",
-    ],
-  ],
-  [
-    "skills/claude-code-compat-research/SKILL.md",
-    ["tests/scripts/gsd-discuss-integration.test.ts"],
-  ],
-]);
-
 /** Only `npm run lint:type-members` reads these; the analyzer tests build their own copies. */
 const typeMemberData = new Set([
   "scripts/check-unused-type-members.contracts.json",
@@ -206,6 +186,7 @@ function affectedSources(root, changed) {
   return [...affected].map((file) => path.relative(root, file).split(path.sep).join("/")).sort();
 }
 
+/** Planning records and agent instruction Markdown select no checks: no test reads them. */
 function isInstruction(file) {
   return (
     file.startsWith(".planning/") ||
@@ -239,7 +220,6 @@ function analyzerTest(file, root) {
 
 /** First match wins; `full` is also the fallback for unrecognized inputs. */
 const rules = [
-  [(file) => DATA_READERS.has(file), "reader"],
   [isInstruction, "none"],
   [isDocumentation, "documentation"],
   [(file, root) => !existsSync(path.join(root, file)), "full"],
@@ -385,20 +365,6 @@ function walkSupport(tree, start) {
   return [...reached].sort();
 }
 
-function selectReaders(context, file, selection) {
-  const readers = DATA_READERS.get(file);
-  if (readers.some((reader) => !existsSync(path.join(context.root, reader)))) {
-    return true;
-  }
-
-  for (const reader of readers) {
-    selection.tests.add(reader);
-  }
-
-  selection.reasons.add("Data read by tests");
-  return false;
-}
-
 /** Documentation pins live in architecture tests only. */
 function selectDocumentation(_context, _file, selection) {
   selection.suites.add("test:architecture");
@@ -480,7 +446,6 @@ function selectAnalyzer(context, file, selection) {
 }
 
 const selectors = {
-  reader: selectReaders,
   documentation: selectDocumentation,
   unpairedTest: selectUnpairedTest,
   support: selectSupport,
