@@ -116,7 +116,7 @@ Raised by 02-RESEARCH.md open questions; each answered by the operator.
 ### Post-review decisions (operator, 2026-10-03)
 Raised by 02-REVIEW.md findings WR-04 and WR-06.
 
-- **D-02-18:** D-02-11's byte restore covers a single-plugin install only. A
+- **D-02-18 [informational]:** D-02-11's byte restore covers a single-plugin install only. A
   multi-member install or enable cascade that fails partway keeps the
   marker-keyed unstage of its earlier members; the comments-dropped notice
   already tells the user when that rewrite removed comments. (Resolves WR-06.)

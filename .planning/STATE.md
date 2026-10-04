@@ -36,7 +36,7 @@ sign-ins and approvals.
 
 Phase: 02 (Adapter-file delivery) — EXECUTING
 Plan: 8 of 8
-Status: Phase complete — ready for verification
+Status: Gap closure planned (02-09..02-12) — ready to execute
 Last activity: 2026-10-03 — Plan 02-08 complete (MCP config notices through the reload, import and marketplace update cascades)
 
 Progress: [█░░░░░░░░░] 14%
@@ -749,11 +749,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 02-08-PLAN.md
+**Stopped at:** Phase 2 gap closure planned (02-09..02-12, D-02-21); next: execute gap plans
 
-**Resume file:** None
+**Resume file:** .planning/phases/02-adapter-file-delivery/.continue-here.md
 
-Last session: 2026-10-03T19:16:51.035Z
+Last session: 2026-10-03T21:30:00.000Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
