@@ -1,8 +1,9 @@
 ---
 phase: 02-adapter-file-delivery
-reviewed: 2026-10-03T00:00:00Z
-depth: standard
-files_reviewed: 74
+reviewed: 2026-10-04T00:42:27Z
+depth: deep
+iteration: 3
+files_reviewed: 76
 files_reviewed_list:
   - AGENTS.md
   - docs/output-catalog.md
@@ -36,6 +37,7 @@ files_reviewed_list:
   - extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts
   - extensions/pi-claude-marketplace/orchestrators/types.ts
   - extensions/pi-claude-marketplace/persistence/locations.ts
+  - extensions/pi-claude-marketplace/shared/atomic-json.ts
   - extensions/pi-claude-marketplace/shared/errors-bridges.ts
   - extensions/pi-claude-marketplace/shared/notification-dispatch.ts
   - package.json
@@ -76,197 +78,256 @@ files_reviewed_list:
   - tests/orchestrators/reconcile/apply.test.ts
   - tests/orchestrators/reconcile/backfill.test.ts
   - tests/persistence/locations.test.ts
+  - tests/shared/atomic-json.test.ts
   - tests/shared/errors-bridges.test.ts
   - tests/shared/notification-dispatch.test.ts
 findings:
-  critical: 1
-  warning: 7
-  info: 4
-  total: 12
-status: issues_found
+  critical: 0
+  warning: 0
+  info: 8
+  total: 8
+status: clean
 ---
 
-# Phase 2: Code Review Report
+# Phase 2: Code Review Report (iteration 3, plus a narrow post-cap pass)
 
-**Reviewed:** 2026-10-03
-**Depth:** standard
-**Files Reviewed:** 74
+**Reviewed:** 2026-10-04T00:42:27Z
+**Depth:** deep (post-cap pass, two files)
+**Files Reviewed:** 76 (full scope in frontmatter); the last pass read 2
 **Status:** issues_found
 
 ## Summary
 
-I reviewed the MCP bridge rewrite (`adapter-doc`, `adapter-entry`, `collision-*`,
-`stage`, `unstage`) in full. I also read the phase's diff (`c6fa7367..HEAD`) in every
-orchestrator that now routes `McpConfigNotice`s. The JSONC grammar, the
-`mcp-servers` key choice, carry-forward and the nine-source walk all match the
-locked decisions. One defect breaks the phase's core promise ("never lose or
-corrupt anything the user or the adapter wrote"). The self-replace exemption in the
-collision check reads owned entries from both server keys. When the plugin's old
-entry sits under the shadowed key, a staged entry silently overwrites a user's own
-full server definition of the same name. I reproduced this against the real
-`adapter-doc.ts` functions (CR-01).
+The 3-iteration auto-fix loop ended with two Warnings (WR-01, WR-02 of
+iteration 3; saved as `02-REVIEW.iter4.md`). Both came from the rename-aside
+metadata restore that `f692a2c7` added. The operator chose D-02-20, and
+commit `4658eb59` implements it.
 
-The rest are notice-routing gaps on error paths and two partial readings of
-D-02-11. I checked both gaps the executors already flagged against the code, and
-both are real:
+**This last pass was narrow.** It covered two files only:
+`extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts` and
+`tests/orchestrators/plugin/prune-rollback.test.ts`. The other 74 files in the
+frontmatter list were not re-read. Their carried Info findings (IN-01..IN-06)
+are copied unchanged from iteration 3.
 
-- **Known gap (1), confirmed.** `restoreMetadata` (`prune-rollback.ts:220-230`)
-  never writes a target that differs from its backup. A rolled-back prune that
-  rewrote `mcp-adapter.json` always reports `occupied metadata path`, and the file
-  stays in its post-unstage form while `state.json` is restored. See WR-04.
-- **Known gap (2), confirmed.** `runRemoveOutcome` rethrows every non-sentinel
-  error (`remove.ts:819-822`) before any notice call. The collected
-  `mcpConfigNotices` are dropped. See WR-03.
+What I checked:
 
-The same notice-loss class also exists in places the executors did not flag:
-install (WR-01), bulk update (WR-02) and the unstage bridge (WR-05).
+- `git diff f692a2c7^ 4658eb59 -- prune-rollback.ts` touches only the
+  metadata seam: the new `writeMetadata` member (`prune-rollback.ts:50`), the
+  `ownWrite` field on the verdict (`:204`, `:237-239`), `holdsBytes`
+  (`:242-246`), and the D-02-20 branch (`:259-266`). `restoreArtifact`
+  (`:164-199`) has no diff against `f692a2c7^`. It is back to its
+  pre-`f692a2c7` behavior byte for byte. `rename` and `publishBackupCopy` are
+  gone, and no `.prune-restore-` staging is created for metadata. The only
+  remaining `mkdtemp` is the artifact restore (`:182`), as before.
+- D-02-19: the restore runs only when the live bytes equal the prune's last
+  recorded write (`:237`, re-checked at `:263`). Anything else throws the
+  unchanged "occupied metadata path" refusal (`:270`).
+- D-02-20: the final compare (`:263`) runs right before
+  `writeFileAtomic` (`:264`). Nothing awaits between them except the compare
+  itself. The live file is never renamed or deleted, and no staging directory
+  is made. The window is documented at `:259-262`. The accepted window is not
+  a finding.
+- Every failure path of the metadata restore. A missing, non-file, or
+  different live file at the final compare gives the refusal (`:263`, `:270`).
+  A throw from `holdsBytes` or from the write escapes as a raw error. In each
+  case the live file is left as it was, `failures` is non-empty, and the backup
+  is kept (`:415-416`, `:431`). A failed `writeFileAtomic` cleans up its own
+  temp file and leaves the target alone.
+- Gates on the two files: `prune-rollback.test.ts` passes 43/43.
+  `npm run lint:type-members` passes, so the optional `writeMetadata` member
+  needs no contracts pin. ESLint shows 0 errors. Its three
+  unused-directive warnings (`:346`, `:404`, `:413`) are older than this
+  commit and outside the seam.
+- Test strength, measured by mutating a scratch copy of the module (since
+  deleted):
+  - Removing the final recheck at `:263` fails 2 tests (`:1231`, `:1333`).
+  - Replacing `ops.writeMetadata ?? writeFileAtomic` with the bare call fails
+    `:1281`.
+  - Removing `pathExists` from `holdsBytes` fails `:1333`.
+  - Removing `.isFile()` from `holdsBytes` fails **nothing** (see WR-03).
 
-## Structural Findings (fallow)
+### Resolved after the iteration cap
 
-fallow found 5 duplicate-block candidates (`fallow audit --changed-since ebc971de^`). `npm run fallow` itself passes on percentage. All five are treated as candidates, not proven defects:
-
-| # | File:line | Related file | Note |
-|---|-----------|--------------|------|
-| S-1 | `shared/notification-dispatch.ts:453` | same file | `emitCascadeWith` / `emitUpdateNoOpCascade` share their probe-and-block loop. This code was there before the phase; the phase only added `notifyMcpConfigNotices`. |
-| S-2 | `orchestrators/plugin/install-flow.ts:1672` | same file | `buildInstallLedgerOptions` call shape inside the cascade options. This code was there before the phase. |
-| S-3 | `orchestrators/plugin/enable-disable.ts:1779` | `install-flow.ts` | Hook hydration loop (`withHooks` / `hooksJsonPath`). This code was there before the phase. |
-| S-4 | `orchestrators/plugin/reinstall.messaging.ts:371` | `reconcile/apply-outcomes.ts` | `dependenciesFromOutcome` / `dependenciesFromInstall` soft-dep list builders. This code was there before the phase. |
-| S-5 | `orchestrators/plugin/install-flow.ts:826` | `uninstall.ts` | Workflow-staging GC try/catch and debug-log block. This code was there before the phase. |
-
-None of the five clone groups comes from this phase's code. The phase did add one
-real duplicated helper that fallow does not report (IN-03).
+| ID (iter. 3) | Status | Evidence |
+|----|--------|----------|
+| WR-01 (staging dir outside NFR-10, not reported) | Resolved by `4658eb59` / D-02-20 | The metadata restore makes no staging directory. The only `mkdtemp` left is the artifact restore at `prune-rollback.ts:182`, whose targets lie under `extensionRoot`/`agentsDir`. The raw `EEXIST` departure from D-02-19 is gone: every compare mismatch throws the refusal at `:270`. The test that pinned `EEXIST` was rewritten (`prune-rollback.test.ts:1281-1331`), and it now asserts that the config directory holds no extra entry at write time and after the rollback. |
+| WR-02 (non-`EEXIST` failure deletes the live MCP file) | Resolved by `4658eb59` / D-02-20 | The live file is never moved. The only mutation is `writeFileAtomic` (`:264`), which replaces the file or leaves it alone. `prune-rollback.test.ts:1281` faults the write and asserts that the live file still holds the prune's bytes and the backup is kept. `:1333` deletes the file after the verdict and asserts that it stays absent, the refusal is raised, and the backup is kept. |
+| WR-03 (narrow pass: no test pins the `isFile()` guard) | Resolved by `25ea04c6` | The orchestrator added the review's proposed case, "D-02-20: a symlink swapped in after the rollback reads the recorded unstage write is refused" (`prune-rollback.test.ts`). It passes on the real module and fails when `.isFile()` is removed from `holdsBytes` (checked by mutation, module restored). |
+| IN-07 (in-place writer lost by `rm(stagingRoot)`) | Superseded by `4658eb59` | The rename and the staging `rm` it cited (old `:287`, `:291`, `:305-308`) no longer exist. An in-place writer that writes between the final compare and the rename is now part of the window D-02-20 accepts. The original text is kept below for the record. |
 
 ## Narrative Findings (AI reviewer)
 
-## Critical Issues
-
-### CR-01: The self-replace exemption overwrites a user's full server definition when the plugin's old entry sits under the shadowed key
-
-**File:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts:111-114`, `extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts:188-203`, `:259-286`
-**Issue:** `partitionServers` builds `ours` from every server map (`ownedServers` walks `selectedKeyFirst`). It builds `theirs` from the selected key only. `assertNoMcpCollisions` then skips any name in `ours` (`if (Object.hasOwn(check.ours, name)) continue;`) before it looks at `theirs`. Here is how that goes wrong:
-
-1. The file holds only `mcp-servers`, so the plugin's marked `x` was written there (AFILE-03).
-2. Later the user, or another tool, adds an `mcpServers` key that holds the user's own full definition of `x`, for example with an `env` token. The adapter now loads `mcpServers` and ignores the plugin's `x`.
-3. The plugin is updated or reinstalled. `ours.x` exists, so the collision check is skipped. `withPluginServers` keeps the user's `x` in the selected map (it is neither owned nor an overlay). Then `safeSet(target, "x", stamped)` replaces it.
-
-The user's definition, credentials included, is deleted without a refusal or a notice.
-
-I reproduced this with the real module. The input was `{"mcpServers":{"x":{"command":"user-own-server","env":{"TOKEN":"secret"}}},"mcp-servers":{"x":{...marked p@m...}}}`. `partitionServers` reported `ours has x: true theirs has x: true`, and `withPluginServers` returned `{"mcpServers":{"x":{"command":"plugin-new",...}},"mcp-servers":{}}`. This breaks the phase boundary ("never lose or corrupt anything the user ... wrote there") and AFILE-05. Before the phase, `ours` came from one key, so this could not happen. The both-key partition introduced it.
-**Fix:** A foreign full definition under the selected key must refuse even when the plugin owns the name elsewhere. Exempt only a name the plugin owns under the selected key:
-```ts
-// stage.ts assertNoMcpCollisions
-for (const name of check.names) {
-  // A self-replace is exempt only when no foreign entry in the loaded map holds the name.
-  if (Object.hasOwn(check.ours, name) && !Object.hasOwn(check.theirs, name)) {
-    continue;
-  }
-  ...
-}
-```
-Add a `stage.test.ts` case with the two-key fixture above. It should assert `McpServerCollisionError` and unchanged file bytes.
-
 ## Warnings
 
-### WR-01: Install drops the comments-dropped notice when the config write-back or the save throws after a successful cascade
+None open. WR-03 below is kept for the record and is resolved (see the table above).
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1480`, `:1590`, `:1733-1842`, `:1960`, `:2290`, `:2420`, `:2458`
-**Issue:** `CascadeFailureSink.mcpConfigNotices` is only set by `unwrapCascade` on `member-failed`. On the success path, the cascade (and the landed-disabled disable cascade) has already rewritten `mcp-adapter.json` by the time several later steps run: `writeAdoptingConfigEntries`, `writeReEnabledCascadeMemberConfigEntries`, `writeOrchestratedDeclarations` and `tx.save()` (line 1842). Nothing rolls those artifacts back when one of these steps throws. The catch at line 1960 reports `cascadeFailure.mcpConfigNotices`, which is still `[]`. The same holds for:
+### WR-03 (resolved by `25ea04c6`): No test pins the `isFile()` guard in the final compare, and without it the restore writes through a symlink outside the scope
 
-- the promotion arm: `promoteDependencyRecord` re-materializes, then `tx.save()` at line 1590 throws;
-- `installMissingDependencyWithTransaction`: `tx.save()` at line 2420, then the catch at line 2458.
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts:242-246`, `:263-264`; `tests/orchestrators/plugin/prune-rollback.test.ts:1231-1373`
+**Issue:** `holdsBytes` checks `(await lstat(file)).isFile()` (`:244`) before
+it reads the bytes. That check is what stops the D-02-20 write when someone
+swaps the live MCP file for a symlink after the verdict (`:219-222` runs only
+at verdict time). `readFile` follows symlinks, and so does `writeFileAtomic`,
+which resolves the real path before it writes. Without the check, a symlink
+to a file holding the prune's bytes passes the compare. The restore then
+writes the original over the symlink's target, which can be outside
+`<scopeRoot>` (NFR-10). Because the rollback then reports no failure, the
+backup is deleted too (`:431-433`).
 
-Comments are lost without notice, which breaks D-02-09 ("AFILE-04 covers every path that rewrites the file"). Plan 02-07 fixed this same class in `enable-disable.ts` with a sink set before the throw points. Install was not given the same fix.
-**Fix:** Write the notices onto the sink as soon as each rewrite returns, before any throw point:
+The current module is correct. The gap is in the tests: none of the three
+tests that drive the post-verdict window (`:1231`, `:1281`, `:1333`) puts a
+non-regular file at the target. I deleted `.isFile()` in a scratch copy and
+all 43 tests still passed. This seam has regressed in three fix rounds in a
+row, so a guard that the suite does not hold should be treated as unprotected.
+
+Reproduced with a throwaway test in the scratch copy (since deleted).
+`afterMetadataRead` replaces `mcp-adapter.json` with a symlink to
+`<cwd>/outside.json`, which holds the recorded own-write bytes.
+- Real module: the result is `[["mcp adapter","Prune rollback found an occupied metadata path at …/.pi/mcp-adapter.json."]]`, and `outside.json` is unchanged.
+- `.isFile()` removed: the result is `[]`, and `outside.json` is overwritten
+  with the backup's `{ "mcpServers": { "orphan": 1 } }`.
+
+**Fix:** Add a case next to `:1333`. It swaps a symlink in after the verdict
+and asserts the refusal, the untouched link target, and the kept backup:
 ```ts
-const installed = unwrapCascade(cascade, capture, rootKey, cascadeFailure);
-...
-cascadeFailure.mcpConfigNotices = installed.mcpConfigNotices;          // after the cascade
-...
-cascadeFailure.mcpConfigNotices = mcpConfigNotices;                      // after disableFreshInstall
-// promotion arm: cascadeFailure.mcpConfigNotices = promotion.mcpConfigNotices before tx.save()
-```
-Then add a test that injects a `tx.save()` failure over a commented file.
+test("D-02-20: a symlink swapped in after the rollback reads the recorded unstage write is refused", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-symlink-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    const outside = path.join(cwd, "outside.json");
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      afterMetadataRead: async (target: string): Promise<void> => {
+        if (target === locations.mcpAdapterJsonPath) {
+          await writeFile(outside, ownBytes);
+          await rm(target);
+          await symlink(outside, target);
+        }
+      },
+    });
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
 
-### WR-02: A bulk update that aborts on a thrown plugin or sync failure drops the notices of plugins it already updated
+    // act
+    const failures = await rollback.rollback();
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:286-306`, `:322-339`
-**Issue:** `surfaceUpdateMcpConfigNotices` runs only on the success path and on the phase-3a aggregate abort (lines 368, 378). The two `notifyDirectFailure(...); return;` arms skip it:
-
-- the `syncCloneOnce` failure;
-- the `runPluginUpdate` throw.
-
-Earlier targets in `outcomes` have already committed and rewritten `mcp-adapter.json`, so their comments-dropped notices are lost. For example, plugins 1 to 3 in marketplace A update, then the sync of marketplace B fails. This is the same AFILE-04 / D-02-09 gap. The rows for those plugins were already missing before the phase, but the notices are new obligations that this phase took on.
-**Fix:** Call `surfaceUpdateMcpConfigNotices(ctx, outcomes)` after `notifyDirectFailure` in both early-return arms. Better, also render the accumulated cascade, as the phase-3a arm does.
-
-### WR-03: removeMarketplace loses collected MCP notices when its state transaction throws (known gap 2, confirmed)
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:796-828`
-**Issue:** I confirmed this on the code. `cascadePluginsInPlace` pushes each cascade's notices into the hoisted `mcpConfigNotices`. When `withLockedStateTransaction` throws anything other than `cfgInvalidSentinel`, for example `tx.save()` or the config write in `runRemoveLockBody`, the catch rethrows at line 821 before either notify site. Standalone mode shows no notice. In a reconcile, `applyMarketplaceRemoves` turns the throw into an `mp-remove-failed` row with no notices (`apply.ts:286`). The plugin cascades have already rewritten `mcp-adapter.json` and `mcp.json` by then.
-**Fix:** In the catch, before the rethrow, call `notifyMcpConfigNotices(opts.ctx, mcpConfigNotices)` when `!orchestrated`. For orchestrated callers, attach the notices to a typed error, or return a `failed` outcome that carries `mcpConfigNotices` instead of rethrowing.
-
-### WR-04: A rolled-back prune never restores mcp-adapter.json, leaving state and the adapter file out of step (known gap 1, confirmed)
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts:220-230`, `:323-331`, `:364-372`
-**Issue:** I confirmed this on the code. `restoreMetadata` returns only when the target already matches its backup. Otherwise it throws `Prune rollback found an occupied metadata path`. The prune's own unstage always changes `mcp-adapter.json` when a pruned member had MCP servers, so every rollback over such a member ends this way. Three problems follow:
-
-- The swept members' entries are not restored. `state.json` is restored and still records them, so state and the file disagree until a manual merge from `prune-backup-*/` (NFR-3).
-- The message blames "other writers" for a change this same prune made.
-- The comments are gone from the live file. No comments-dropped notice is sent; the rollback-failed row names the file instead.
-
-This behavior was already there for `mcp.json` and `agents-index.json`. The phase extends it to the file that now holds every plugin entry.
-**Fix:** Record, per metadata target, the bytes this prune wrote (or their hash) right after the unstage. In `restoreMetadata`, restore the backup when the live file still equals what this prune wrote, and keep the "occupied" refusal for a real third-party change. At minimum, reword the error so it does not claim an outside writer.
-
-### WR-05: An unstage that fails on the legacy write loses the adapter file's notice and reports no dropped MCP servers
-
-**File:** `extensions/pi-claude-marketplace/bridges/mcp/unstage.ts:285-288`, `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:432-438`
-**Issue:** `unstageMcpServers` writes `mcp-adapter.json` first, then `mcp.json`. It builds `notices` only after both writes succeed. If the second `atomicWriteJson` throws (EACCES, ENOSPC), the adapter file is already rewritten, with comments dropped and owned entries removed, but the function throws. `cascadeUnstagePlugin` then keeps `mcpConfigNotices = []` and `dropped.mcpServers = []` (both are assigned after the `await`). Two things go wrong. The comment loss is not reported. And `applyPartialCascadeFold` keeps every MCP server name in the record even though they have left the adapter file. A retry is harmless (unstage is marker-keyed), but the user is never told about the comments.
-**Fix:** Build the result per file as each write succeeds. On a throw, attach what was already done to the error, for example a typed `McpUnstagePartialError { removedNames, notices, cause }`, so `cascadeUnstagePlugin` can still fill `dropped.mcpServers` and `mcpConfigNotices`.
-
-### WR-06: A failed multi-member install or enable cascade does not restore mcp-adapter.json bytes, which departs from D-02-11's wording
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1007-1070`, `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:830-857`
-**Issue:** D-02-11 says: "A failed install restores the exact prior bytes of `mcp-adapter.json` ... instead of unstaging from the rewritten file." Only the inner per-plugin ledger does that (`install-outcome.ts` mcp phase). When member B of a dependency cascade fails, the outer undo for already-materialized member A calls `cascadeUnstagePlugin`. That unstages from the rewritten file, the exact pattern D-02-11 rules out. The install fails, yet the user's file comes back reformatted and without its comments. The enable cascade's `unstageBackToDisabled` does the same. Plan 02-04 narrowed D-02-11 to single-plugin installs and reports a notice instead. No SUMMARY records that narrowing as a deviation from a locked decision.
-**Fix:** Snapshot the `mcp-adapter.json` text (as a Buffer, see WR-07) once, before the first member phase in `runInstallCascade` and `runEnableCascade*`. When the outer ledger unwinds with no rollback partials, write the snapshot back and drop the members' comments-dropped notices. Otherwise, take the narrowing back to the operator as an amendment to D-02-11.
-
-### WR-07: The "exact prior bytes" restore decodes as UTF-8, so it is not byte-exact
-
-**File:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts:301`, `:328-330`, `:361-371`
-**Issue:** `replacePreparedMcp` captures `oldText` with `readFile(path, "utf8")`, and `rollbackMcpReplacement` writes that string back. Any byte sequence that is not valid UTF-8 becomes U+FFFD and stays that way after the restore. Such bytes can sit in a JSONC comment or in a string value; the file still parses, so the stage goes ahead. D-02-11 and T-02-15 promise the exact prior bytes. Install now relies on this path (it is no longer reinstall-only), so the gap affects every failed install.
-**Fix:** Capture and restore raw bytes:
-```ts
-const oldBytes: Buffer | undefined = await readOptionalBytes(path); // readFile(path) without encoding
-...
-await writeFileAtomic(target, internals.oldBytes);
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [{ phase: "mcp adapter", message: `Prune rollback found an occupied metadata path at ${locations.mcpAdapterJsonPath}.` }],
+    );
+    assert.deepStrictEqual(
+      {
+        outside: await readFile(outside),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      },
+      { outside: ownBytes, backup: original },
+    );
+  });
+});
 ```
 
 ## Info
 
-### IN-01: Stub absorption drops the stub's other fields without notice, and uninstall then loses the user's override
+### IN-01: Stub absorption drops the stub's other fields without notice, and uninstall then loses the user's override (carried forward)
 
-**File:** `extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts:231-248`, `extensions/pi-claude-marketplace/bridges/mcp/stage.ts:220-230`
-**Issue:** D-02-10 copies only the carried fields from a marker-less stub. `withPluginServers` then removes the stub. Any other field the user put in it is deleted without a notice, for example an `env` or `headers` override for the same plugin installed in the other scope. After a later uninstall, D-02-07 has nothing left to preserve: the user's project-level `disabled: true` for the user-scope copy is gone, and the server comes back in that project. The locked decisions allow this, but the user is never told.
-**Fix:** Consider a notice (closed-catalog amendment) when an absorbed stub carried fields outside `CARRIED_FIELDS`. Alternatively, record this in BACKLOG next to MCPOVR-01.
+**File:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts:219-233`, `extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts:259`
+**Issue:** Unchanged. D-02-10 copies only the carried fields from a
+marker-less stub, and `withPluginServers` then drops the stub. Any other field
+the user put in it is deleted without a notice.
+**Fix:** Consider a closed-catalog notice, or a BACKLOG entry next to MCPOVR-01.
 
-### IN-02: Update and reinstall leave the plugin's stale legacy mcp.json entries live until Phase 5
+### IN-02: Update and reinstall leave the plugin's stale legacy `mcp.json` entries live until Phase 5 (carried forward)
 
-**File:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts:230`, `:282`
-**Issue:** Staging rewrites only `mcp-adapter.json`. A server that the new plugin version drops or renames still has its marked entry in `<scopeRoot>/mcp.json`. The adapter keeps loading it (source 4 or 8), and only an unstage removes it (D-02-12). The release rule (Phases 2 to 5 in one release) keeps users from seeing this. Still, Phase 5's migration must move only names the current record lists, and must delete orphaned legacy entries rather than move them.
-**Fix:** Add this as a Phase 5 note in ROADMAP. Optionally, have stage remove the plugin's legacy entries for names absent from `servers`.
+**File:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts:233`, `:285`
+**Issue:** Unchanged. Staging rewrites only `mcp-adapter.json`, so a dropped
+or renamed server keeps its marked legacy entry. Since the iteration-2 WR-02
+fix, a partial unstage now keeps such a name in the record. That is correct,
+but it means the stale legacy entry lasts longer.
+**Fix:** Add a Phase 5 note: migrate only names the record lists, and delete
+orphaned legacy entries.
 
-### IN-03: Helpers duplicated across modules, with diverging policies
+### IN-03: Duplicated helpers with diverging policies (carried forward)
 
-**File:** `orchestrators/plugin/install-flow.ts:648` and `orchestrators/marketplace/shared.ts:350` (`mcpConfigNoticesMember`), `orchestrators/reconcile/apply-outcomes.ts:688` (`carriedMcpConfigNotices`); `bridges/mcp/adapter-doc.ts:71`, `adapter-entry.ts:43`, `collision-slots.ts:121` (`isPlainObject` / `isSettingsObject`); `bridges/mcp/adapter-doc.ts:102` vs `stage.ts:361` (`readOptionalText`)
-**Issue:** Three omit-when-empty spread helpers do the same job. The two `readOptionalText` copies treat errors differently: `adapter-doc` treats `ENOTDIR` as a missing file, while `stage.ts` throws on it. So prepare and replace can disagree about whether the file exists.
-**Fix:** Have install-flow import `mcpConfigNoticesMember` from `marketplace/shared.ts`, as plan 02-06 intended. Export one `readOptionalText` from `adapter-doc.ts` and reuse it in `stage.ts`.
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:651` and `orchestrators/marketplace/shared.ts:357` (`mcpConfigNoticesMember`); `orchestrators/marketplace/shared.ts:364` (`writtenMcpFilesMember`); `bridges/mcp/adapter-doc.ts:102-107` (`readOptionalText`, which treats `ENOTDIR` as absent) vs `bridges/mcp/stage.ts:362-371` (`readOptionalBytes`, which throws on `ENOTDIR`)
+**Issue:** Unchanged. The prepare step reads `ENOTDIR` as an absent file, but
+replace throws on it.
+**Fix:** Import `mcpConfigNoticesMember` in install-flow. Give
+`readOptionalBytes` the same `ENOENT || ENOTDIR` rule, or share one reader.
 
-### IN-04: A non-object `mcp-servers` blocks every install and uninstall even when `mcpServers` is present and the adapter ignores `mcp-servers`
+### IN-04: A non-object `mcp-servers` blocks every install and uninstall even when the adapter ignores it (carried forward)
 
-**File:** `extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts:124-144`, `:174-175`
-**Issue:** `collectServerMaps` validates every server key that is present. A file such as `{"mcpServers":{...},"mcp-servers":null}` loads fine in pi-mcp-adapter (it uses `mcpServers` and never reads `mcp-servers`). Here it raises `McpConfigFileError("mcp-servers-not-object")`. That refuses the install of every MCP plugin, and, through unstage, every uninstall, disable, marketplace remove and prune in that scope. The inverse case (`mcpServers: null`, which the adapter's `??` falls back from) also refuses. Refusing is safe, but stricter than D-02-01's "read with the adapter's grammar".
-**Fix:** Validate only the selected key, and the other key when it holds an object; leave other values to pass through untouched via the `{ ...config.doc }` spread.
+**File:** `extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts:124`, `:174-175`
+**Issue:** Unchanged. `collectServerMaps` validates every server key that is
+present, including the one pi-mcp-adapter never reads.
+**Fix:** Validate the selected key, and the other key only when it holds an
+object.
+
+### IN-05: Bulk-update abort arms show comments-dropped notices for plugins whose updated rows are never shown (carried forward, was IN-06)
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:307`, `:342` (vs `:372-373`)
+**Issue:** Unchanged. These two arms show the notices but skip
+`renderUpdateCascadeIfAny`, which the phase-3a arm calls. The fix report
+deferred this on purpose because it changes existing output, so it is an
+operator call.
+**Fix:** Call `renderUpdateCascadeIfAny(...)` before
+`surfaceUpdateMcpConfigNotices` in both arms.
+
+### IN-06: `MarketplaceRemoveFailureError` lives in an orchestrator file, not with the typed errors (carried forward, was IN-07)
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:102`; imported at `orchestrators/reconcile/apply.ts:78`
+**Issue:** Unchanged. CONVENTIONS.md puts every domain error class in
+`shared/errors.ts` / `errors-bridges.ts`.
+**Fix:** Move it to `shared/errors.ts` next to `MarketplaceUpdateError`.
+
+### IN-08: A race inside `holdsBytes` raises a raw errno instead of the occupied-path refusal
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts:242-246`
+**Issue:** `holdsBytes` makes three separate calls: `pathExists`, `lstat`, and
+`readFile`. If the file is removed or replaced between them, `lstat` or
+`readFile` throws `ENOENT` (or `EISDIR`). That raw error replaces the D-02-19
+"occupied metadata path" refusal (`:270`). Nothing is written, and the backup
+is kept (`:431`), so the only effect is the wording on the failed row. The
+same pattern already exists in `metadataVerdict` (`:215-229`).
+**Fix:** Optional. Catch `ENOENT`/`ENOTDIR`/`EISDIR` inside `holdsBytes` and
+return `false`, so every "the file is not the prune's write" outcome takes
+the refusal path.
+
+### IN-09: The failed-write test keeps a `link` stub that no longer drives any path
+
+**File:** `tests/orchestrators/plugin/prune-rollback.test.ts:1292-1298`
+**Issue:** The metadata restore no longer calls `ops.link`
+(`prune-rollback.ts:263-264`). The artifact restores call it with
+non-adapter targets, so the stub's throwing branch is never reached. A return
+to rename-aside would already fail on `entriesAtWrite` (`:1320-1323`). The
+stub is therefore dead arrangement. It suggests a link path that the module
+no longer has.
+**Fix:** Remove the `link` override, or add a one-line comment saying it is a
+regression trap for a link-based restore.
+
+## Superseded
+
+### IN-07 (superseded by `4658eb59`, not counted): An in-place writer that opened the file before the rename can still lose its write
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts:287`, `:291`, `:305-308`
+**Issue:** The rename closes the window for writers that replace the file,
+like write-file-atomic and most editors. Some writers instead open the file
+and write in place, for example vim with `backupcopy=yes`. If such a writer
+opened `target` before the rename, its write lands in the inode now at
+`aside`. If that write happens after `holdsBytes` has read the bytes (`:291`),
+the publish succeeds. Then `rm(stagingRoot)` (`:308`) deletes the edited
+inode. The window is small, and this is not a regression: the earlier
+`writeFileAtomic` overwrite had the same exposure.
+**Fix:** Optional. After a successful publish, re-check that `aside` still
+holds `ownWrite` before removing the staging directory. If it does not, keep
+the staging directory and report it, as WR-01 suggests.
 
 ---
 
-_Reviewed: 2026-10-03_
+_Reviewed: 2026-10-04T00:42:27Z (narrow post-cap pass over 2 files; iteration 3 covered 76 files on 2026-10-03T23:30:00Z)_
 _Reviewer: Claude (gsd-code-reviewer)_
-_Depth: standard_
+_Depth: deep (post-cap pass), standard (iteration 3)_

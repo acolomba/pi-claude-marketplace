@@ -1,233 +1,153 @@
 ---
 phase: 02-adapter-file-delivery
-fixed_at: 2026-10-03T17:10:00Z
+fixed_at: 2026-10-04T00:35:51Z
 review_path: .planning/phases/02-adapter-file-delivery/02-REVIEW.md
-iteration: 1
-findings_in_scope: 8
-fixed: 6
-skipped: 2
-status: partial
+iteration: 3
+findings_in_scope: 2
+fixed: 2
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 2: Code Review Fix Report
 
-**Fixed at:** 2026-10-03T17:10:00Z
+**Fixed at:** 2026-10-04T00:35:51Z
 **Source review:** .planning/phases/02-adapter-file-delivery/02-REVIEW.md
-**Iteration:** 1
+**Iteration:** 3
 
 **Summary:**
 
-- Findings in scope: 8 (CR-01, WR-01..WR-07; Info excluded by `critical_warning` scope)
-- Fixed: 6 (CR-01, WR-01, WR-02, WR-03, WR-05, WR-07)
-- Skipped: 2 (WR-04, WR-06), each needing an operator decision
+- Findings in scope: 2 (WR-01 and WR-02 of the iteration-3 review). The seven
+  Info findings are out of scope.
+- Fixed: 2, both by one commit that follows operator decision D-02-20
+- Skipped: 0
 
-Every fix ships with a test that fails without it. I confirmed each one by
-reverting the production change and re-running the new cases. `rg "D-02-" extensions tests` stays at 11 lines.
-
-## Merge status (action needed)
-
-The five fix commits are on the branch `gsd-reviewfix/02-1834034`
-(`e6cd1997..b494a389`), and that branch sits directly on top of `574f4afe`. They are
-**not yet on `features/mcp-4`**. The permission classifier denied the cleanup's
-fast-forward (`git merge --ff-only gsd-reviewfix/02-1834034` in this checkout), so I
-kept the branch for a manual merge. The worktree is removed and the recovery sentinel
-is deleted. To land the fixes, run `git merge --ff-only gsd-reviewfix/02-1834034` on
-`features/mcp-4`, then `git branch -D gsd-reviewfix/02-1834034`.
-
-## Verification
-
-- Where the gates ran: an isolated worktree (`.claude/worktrees/rf-02-*`, branch
-  `gsd-reviewfix/02-1834034`). Its `node_modules` was a `cp -a --reflink` copy of the
-  main checkout's, because `lint:type-members` rejects a symlinked `node_modules`.
-  The worktree was removed afterwards. To reproduce, run the gates in the main
-  checkout at `b494a389`.
-- Command: `TMPDIR=/var/tmp/mcp4-p2-fix SKIP=trufflehog pre-commit run --files <17 changed paths>`
-  gave `PRECOMMIT_EXIT=0`. Because the contracts file changed, `check:changed` ran at
-  `scope: full`: `npm run check` and `npm run test:coverage:direct:all`.
-- Node v26.10.0. The tree that ran was byte-identical to commit `b494a389`. The
-  contracts file was re-split per commit afterwards, and the final file is identical.
-- Before that run, focused checks also passed: `tsc --noEmit`, ESLint on the changed
-  files (only warnings that were already there), `fallow health` and `fallow dupes`
-  (exit 0), `lint:type-members`, and `test:coverage:direct` on all 8 changed production
-  modules (100% branches, functions and lines each).
-- Scope: the full check passed on the combined tree, so this is not only a focused
-  result.
+Both Warnings came from the rename-aside restore that `f692a2c7` added. D-02-20
+removes that mechanism, so one restructure fixes both findings. I did not
+apply either finding's suggested patch. Each patch kept the staging directory,
+and D-02-20 forbids it.
 
 ## Fixed Issues
 
-### CR-01: The self-replace exemption overwrites a user's full server definition when the plugin's old entry sits under the shadowed key
+### WR-01: The kept `.prune-restore-*` directory sits outside NFR-10 containment, and nothing points the user to it
 
-**Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts`, `tests/bridges/mcp/stage.test.ts`, `scripts/check-unused-type-members.contracts.json` (line re-pins only)
-**Commit:** e6cd1997 (shared with WR-07: same file)
-**Status:** fixed: requires human verification (logic condition change)
-**Applied fix:** `assertNoMcpCollisions` now skips a name only when the plugin owns it
-**and** no foreign entry under the loaded key holds it
-(`ours && !theirs`). Otherwise the target file counts as a declarer, and staging
-refuses with `McpServerCollisionError` naming the target. The new case uses the
-reviewer's exact input: the user's `server` (with an `env` token) under
-`mcpServers`, and the plugin's marked `server` under `mcp-servers`. It asserts the
-refusal fields and unchanged file bytes.
+### WR-02: Any non-`EEXIST` failure after the rename leaves the live MCP config file deleted
 
-### WR-07: The "exact prior bytes" restore decodes as UTF-8, so it is not byte-exact
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts`, `tests/orchestrators/plugin/prune-rollback.test.ts`
+**Commit:** 4658eb59
+**Status:** fixed: requires human verification (the restore condition and its ordering changed)
+**Applied fix (D-02-20):**
 
-**Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts`, `tests/bridges/mcp/stage.test.ts`
-**Commit:** e6cd1997 (shared with CR-01)
-**Applied fix:** `replacePreparedMcp` now captures the prior file as a `Buffer`
-(`readOptionalBytes`), and `rollbackMcpReplacement` writes that `Buffer` back. A new
-case puts bytes `0xff 0xfe` inside a JSONC comment and compares the restored file as
-a whole `Buffer`.
+- I removed `restoreOverOwnWrite`, `OwnWriteVerdict`, and the `rename` import.
+  The metadata restore no longer creates a `.prune-restore-*` directory and
+  never renames, unlinks, or moves the live file. This fixes WR-01, because
+  there is no staging directory left to hide or keep. It also fixes WR-02,
+  because no step removes the target.
+- `publishBackupCopy` existed only so the metadata restore could share it.
+  I inlined it back into `restoreArtifact`, which now has the same shape it
+  had before `f692a2c7`. Artifact-restore behavior did not change.
+- The verdict carries the recorded write and the backup bytes again
+  (`{ kind: "own-write", ownWrite, original }`). The restore runs in this
+  order:
+  1. `metadataVerdict` reads the live bytes and compares them with the
+     recorded write.
+  2. The `afterMetadataRead` seam runs.
+  3. `holdsBytes` checks the live file again. It must still exist, still be
+     a regular file, and still hold the recorded bytes (a `Buffer.equals`
+     check).
+  4. `writeFileAtomic(target, original)` runs.
 
-### WR-05: An unstage that fails on the legacy write loses the adapter file's notice and reports no dropped MCP servers
+  If either compare fails, the restore gives the "Prune rollback found an
+  occupied metadata path at …" refusal and keeps the backup. A file that is
+  removed between the two compares gives the same refusal, not a raw
+  `ENOENT`.
+- A comment at the write names D-02-20 and the accepted window: an edit that
+  lands between the last compare and the atomic rename is overwritten. The
+  `state.json` restore has the same window.
+- `PruneRestoreOps` gained an optional `writeMetadata?: (target, bytes) =>
+  Promise<void>` fault seam. Production passes nothing, so it uses
+  `writeFileAtomic`. The module had no existing seam that could make the
+  metadata write fail. `npm run lint:type-members` passed, and no pin needed
+  changes.
 
-**Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/unstage.ts`, `extensions/pi-claude-marketplace/shared/errors-bridges.ts`, `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts`, `tests/bridges/mcp/unstage.test.ts`, `tests/shared/errors-bridges.test.ts`, `tests/orchestrators/marketplace/shared.test.ts`
-**Commit:** 883ddd21
-**Applied fix:** I added a new typed error, `McpUnstagePartialError { removedNames, notices }`, with the
-write failure on `cause`. `unstageMcpServers` writes each target in order. If a write
-fails after an earlier write succeeded, it throws this error. It describes only the
-files already rewritten. A failure on the first write is rethrown unchanged.
-`cascadeUnstagePlugin` puts the carried names into `dropped.mcpServers` and the
-notices into `mcpConfigNotices`. It reports the underlying write failure as the
-plugin's cause, so the text the user sees does not change. The tests cause a real
-EACCES: they point the file at a symlink into a 0o555 directory, so the read succeeds
-and the atomic write fails.
+**Tests (`tests/orchestrators/plugin/prune-rollback.test.ts`):**
 
-### WR-03: removeMarketplace loses collected MCP notices when its state transaction throws
+- Removed: "D-02-19: an edit that cannot be linked back stays in the restore
+  staging directory". It tested the mechanism that this fix removes.
+- Added: "D-02-20: a failed restore write leaves the adapter file in place and
+  keeps its backup". The test makes both write primitives fail for the adapter
+  path: `ops.link` and the new `ops.writeMetadata`. It checks four things:
+  - The failure is the write error.
+  - `mcp-adapter.json` still exists with the bytes the prune wrote.
+  - The backup holds the original.
+  - The scope root has no `.prune-restore-*` entry, both while the write runs
+    and after it. The entries are recorded from inside the `writeMetadata`
+    fault.
+- Added: "D-02-20: an adapter removed after the rollback reads the recorded
+  unstage write stays absent with its backup". It covers the `pathExists`
+  branch of the second compare: the result is the refusal, no file is created,
+  and the backup is kept.
+- These cases still pass: "D-02-19: an adapter edit after the rollback reads
+  the recorded unstage write stays current with its backup" (it still asserts
+  that no `.prune-restore-*` entry exists) and "MCP edit during rollback
+  observation remains current with recovery backup". The pinned `prune.test.ts`
+  cases also pass: "an MCP edit after a cascade with no MCP resources survives
+  failed persistence" and "D-02-19: a rolled-back prune restores its own
+  mcp-adapter.json rewrite byte-for-byte". Results: `prune-rollback.test.ts`
+  43/43, `prune.test.ts` 34/34.
 
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`, `tests/orchestrators/marketplace/remove.test.ts`, `tests/orchestrators/reconcile/apply.test.ts`, `scripts/check-unused-type-members.contracts.json` (line re-pins only)
-**Commit:** 13958368
-**Applied fix:** The catch in `runRemoveOutcome` now calls
-`rethrowWithMcpConfigNotices`, which handles three cases:
+**Negative control:** I copied `prune-rollback.ts` from `HEAD` (`d018b6a5`,
+which has the `f692a2c7` code) over my version. Then I ran the two D-02-20
+cases, and both failed (exit 1):
 
-- No notices: the error is rethrown as before.
-- Standalone: the notices are shown, then the original error is rethrown.
-- Orchestrated: it throws the new `MarketplaceRemoveFailureError { mcpConfigNotices }`,
-  with the original error as its cause.
+- The failed-write case gave the `adapter link refused` failure. This is the
+  link fault, which reaches the restore only after `rename` has moved the live
+  file aside. That is the WR-02 path, where the review found `ENOENT` on the
+  live file.
+- The removed-file case gave a raw `ENOENT … rename … .prune-restore-*/aside`.
 
-`applyMarketplaceRemoves` unwraps that error. It classifies and logs the original
-cause, so the reason stays the same. It also adds the notices to the
-`mp-remove-failed` row. The remove tests inject a failing `saveState`. The apply test
-gets a real save refusal: `state.json` is a symlink into a read-only directory, so
-reads and the scope lock still work.
+I then restored my version, and `cmp` confirmed it matched. Note: the
+`writeMetadata` seam does not exist in the old code. The old code fails this
+test through the `link` fault, which is its write primitive.
 
-### WR-02: A bulk update that aborts on a thrown plugin or sync failure drops the notices of plugins it already updated
+## Verification
 
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts`, `tests/orchestrators/plugin/update-flow.test.ts`, `scripts/check-unused-type-members.contracts.json` (line re-pins only)
-**Commit:** c889c87a
-**Applied fix:** Both early-return arms (the `syncCloneOnce` failure and the
-`runPluginUpdate` throw) now call `surfaceUpdateMcpConfigNotices(ctx, outcomes)`
-after `notifyDirectFailure`. I did not add the "also render the accumulated cascade"
-extension. Those rows were already missing before this phase, and adding them would
-change existing output. Two new cases check the exact notifications:
-
-- A later plugin fails because a locked state load throws once `hello` is saved at
-  1.0.1.
-- A later GitHub marketplace sync fails.
-
-### WR-01: Install drops the comments-dropped notice when the config write-back or the save throws after a successful cascade
-
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts`, `tests/orchestrators/plugin/install-flow.test.ts`, `scripts/check-unused-type-members.contracts.json` (line re-pins only)
-**Commit:** b494a389
-**Applied fix:** `cascadeFailure.mcpConfigNotices` is now set as soon as each
-rewrite returns:
-
-- after a successful cascade;
-- after the landed-disabled disable cascade, with the merged list;
-- inside `promoteDependencyRecord`, right after the re-materialization and before
-  `declarePromotedPlugin`, through a new `sink` field on `PromotionArgs`;
-- in `installMissingDependencyWithTransaction`, before `tx.save()`.
-
-The existing catch arms already render the sink after the failed row. Four new cases
-use a transaction whose `save` rejects:
-
-- plain install;
-- landed-disabled install with a commented legacy `mcp.json` (both notices);
-- promotion of a disabled dependency;
-- reload missing-dependency install (notice on the failed outcome).
-
-## Skipped Issues
-
-### WR-04: A rolled-back prune never restores mcp-adapter.json, leaving state and the adapter file out of step
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts:220-230`
-**Reason:** A correct fix needs a design choice that no locked decision settles, so I
-skipped it. I tried the suggested direction: record the metadata bytes after each
-member's unstage, by wrapping the injected cascade, and restore when the live file
-still matches. That breaks the pinned test `an MCP edit after a cascade with no MCP
-resources survives failed persistence` (`tests/orchestrators/plugin/prune.test.ts:1015`).
-That test puts a third-party edit inside the cascade call. Re-reading the file from
-disk cannot tell that edit apart from the prune's own rewrite. That re-read is
-"assume", not "compare". I reverted the attempt; nothing was committed.
-
-**Proposed approach (operator to choose):**
-
-1. Exact: `unstageMcpServers` returns the serialized bytes it wrote for each file.
-   `McpUnstagePartialError` carries the bytes for the file it already rewrote. These
-   go through `UnstageOutcome` (for example as `writtenMcpFiles`). Prune records them
-   for each member, and the last write wins for each path. `restoreMetadata` writes
-   the backup back only when the live bytes equal the recorded bytes, and keeps the
-   "occupied" refusal otherwise. `agents-index.json` keeps today's behavior unless the
-   agents bridge gets the same contract.
-2. Cheaper: re-read after the cascade, but only for members whose outcome dropped MCP
-   servers. This passes the pinned test. A concurrent edit that lands in the
-   milliseconds between the bridge's write and the re-read would be treated as the
-   prune's own and overwritten.
-3. At minimum: reword the comment near the refusal so it no longer blames an outside
-   writer.
-
-**Original issue:** `restoreMetadata` refuses whenever the target differs from its
-backup. The prune's own unstage always rewrites `mcp-adapter.json` for a member that
-has MCP servers. So every rollback reports `occupied metadata path` and leaves state
-and the adapter file out of step.
-
-### WR-06: A failed multi-member install or enable cascade does not restore mcp-adapter.json bytes, which departs from D-02-11's wording
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1007-1070`, `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:830-857`
-**Reason:** This needs an operator decision. Implementing it reverses the
-single-plugin narrowing that existing tests pin on purpose. For example,
-`install-flow.test.ts` "AFILE-04: a failed dependency cascade still reports the
-removed comments after its failed row" asserts the reformatted file and the notice.
-D-02-11 also leaves these choices open:
-
-- whether enable cascades are covered (D-02-11 names install only);
-- what happens when the outer undo itself records rollback partials;
-- whether the legacy `mcp.json` is snapshotted too (the outer undo's
-  `cascadeUnstagePlugin` rewrites it, per D-02-12);
-- whether the members' comments-dropped notices are dropped after a restore.
-
-The reviewer offers both a fix and an amendment to D-02-11, and the fix guidance names
-this finding as one to send to the operator.
-
-**Proposed approach:**
-
-- Option A (honor D-02-11 for cascades): before the first member phase in
-  `runInstallCascade`, and in `runEnableCascade*` if the operator extends D-02-11,
-  snapshot the raw bytes of `mcp-adapter.json` and probably `mcp.json`, as a `Buffer`
-  (see WR-07). On `member-failed` with zero rollback partials, write the snapshots back
-  with `writeFileAtomic` and drop the members' comments-dropped notices. Update the
-  pinned AFILE-04 cascade tests.
-- Option B: amend D-02-11 to record the single-plugin narrowing, and record it as a
-  deviation in the phase summary.
-
-**Original issue:** When member B of a dependency cascade fails, the outer undo
-unstages the already-materialized member A from the rewritten file. The user's file
-comes back reformatted and without its comments. D-02-11 rules out that pattern.
-
-## Deviations from the fixer protocol
-
-- I anchored the worktree on this checkout (`features/mcp-4`, a linked worktree), not on
-  the first `git worktree list` entry. That entry is the main repo on `main`, and a
-  fast-forward there would have merged into the wrong branch.
-- I split the line re-pins in `scripts/check-unused-type-members.contracts.json` by
-  source file across the per-finding commits. Each commit's pins match that commit's
-  sources, and the final file is byte-identical to the one the full check validated.
-  Without the split, every finding that touched a pinned file would collapse into one
-  commit.
-- Commit subjects use `fix(mcp): ...` with the finding IDs in the body. The project's
-  commit rules forbid phase numbers in commit messages, so I did not use
-  `fix(02): <ID> ...`.
+- Where it ran: directly in the main checkout on `features/mcp-4`, with no
+  worktree (operator instruction). The results can be reproduced from this
+  checkout.
+- Focused checks before the hook run:
+  - `tsc --noEmit`: exit 0.
+  - ESLint on both files: 0 errors. The only warnings are the three
+    `no-await-in-loop` directives that were already unused.
+  - Prettier: ran.
+  - `npx fallow health`: exit 0, 0 above threshold.
+  - `npm run test:coverage:direct -- tests/orchestrators/plugin/prune-rollback.test.ts`:
+    passed. Coverage of `prune-rollback.ts` was branches 119/119, functions
+    21/21, lines 450/450.
+  - `npm run lint:type-members`: passed.
+- Hook run: `SKIP=trufflehog pre-commit run --files <2 changed paths>` gave
+  `PRECOMMIT_EXIT=0` on the first run, including "npm changed checks". The
+  hooks rewrote nothing: `git diff --stat` was the same before and after.
+- `npx fallow audit --format json --quiet --explain --gate-marker agent`: verdict
+  `warn`, not `fail`. The only "introduced" clone groups are in
+  `tests/architecture/catalog-uat/fixtures/plugin-info.ts`, as in earlier
+  iterations. This change does not touch that file.
+- Node v26.10.0.
+- Scope: focused task verification passed. Full phase and PR verification is
+  still pending.
 
 ---
 
-_Fixed: 2026-10-03T17:10:00Z_
+_Fixed: 2026-10-04T00:35:51Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 3_
+
+## Post-cap test fix: WR-03 (narrow review)
+
+The narrow review of `4658eb59` found that no test held the `isFile()` guard
+in `holdsBytes` (`prune-rollback.ts`). The orchestrator added the review's
+proposed case in `25ea04c6`: "D-02-20: a symlink swapped in after the rollback
+reads the recorded unstage write is refused". It passes on the real module and
+fails when `.isFile()` is removed (mutation run, module restored and clean).
+Hooks: `PRECOMMIT_EXIT=0` (`tmp/wr03-precommit.log`). fallow audit: `warn`,
+from clone groups that were already there, not `fail`. The final review status is `clean`.

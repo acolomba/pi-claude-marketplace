@@ -125,6 +125,12 @@ Raised by 02-REVIEW.md findings WR-04 and WR-06.
   wrote: the unstage returns those bytes, they travel up through
   `UnstageOutcome`, and rollback compares against them. Any other content
   keeps today's "occupied metadata path" refusal and backup. (Resolves WR-04.)
+- **D-02-20:** The D-02-19 restore re-reads the live file and compares its
+  bytes against the recorded write immediately before `writeFileAtomic`, and
+  never moves or deletes the live file. No staging directory is created. The
+  window between that last compare and the atomic rename is accepted and
+  documented; the `state.json` restore has the same window. (Resolves the
+  iteration-3 review's WR-01 and WR-02, which the rename-aside restore caused.)
 
 ### Claude's Discretion
 - Module split: extract the JSONC document reader and the entry handling out of
