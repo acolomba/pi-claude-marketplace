@@ -14,106 +14,23 @@
  * This file registers no case of its own.
  */
 
-/**
- * Directory roots the gates walk rather than name file by file.
- *
- * D-07-05 covers a directory the same way it covers a file: a gate that
- * re-spells `extensions/pi-claude-marketplace` locally defeats the single scan
- * point exactly as a re-spelled module path does, and a walk rooted at a
- * directory that stopped existing enumerates nothing without raising. Membership
- * means "some gate opens this directory and treats what it finds as its target
- * set".
- */
-export const DIRECTORY_ROOT_TARGETS = [
-  "extensions/pi-claude-marketplace",
-  "extensions/pi-claude-marketplace/orchestrators",
-  "extensions/pi-claude-marketplace/orchestrators/plugin",
-  "extensions/pi-claude-marketplace/bridges/hooks",
-  "extensions/pi-claude-marketplace/edge/handlers/plugin",
-  "tests/architecture",
-] as const;
-
 /** The extension tree. Root of the vocabulary, shell-out, and seam walks. */
-export const EXTENSION_ROOT_REL: (typeof DIRECTORY_ROOT_TARGETS)[number] =
-  "extensions/pi-claude-marketplace";
+export const EXTENSION_ROOT_REL = "extensions/pi-claude-marketplace";
 
 /** The orchestrator layer. Root of the cast-read walk. */
-export const ORCHESTRATORS_REL: (typeof DIRECTORY_ROOT_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/orchestrators";
+export const ORCHESTRATORS_REL = "extensions/pi-claude-marketplace/orchestrators";
 
 /** The plugin orchestrators. The four lifecycle owners live directly inside it. */
-export const PLUGIN_ORCHESTRATORS_REL: (typeof DIRECTORY_ROOT_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/orchestrators/plugin";
-
-/** The hooks bridge. Root of the dispatch and async-rewake surfaces. */
-export const HOOKS_BRIDGE_REL: (typeof DIRECTORY_ROOT_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/bridges/hooks";
+export const PLUGIN_ORCHESTRATORS_REL = "extensions/pi-claude-marketplace/orchestrators/plugin";
 
 /** SURF-03: the plugin edge handlers, where the scope-fence surface lives. */
-export const PLUGIN_EDGE_HANDLERS_REL: (typeof DIRECTORY_ROOT_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/edge/handlers/plugin";
+export const PLUGIN_EDGE_HANDLERS_REL = "extensions/pi-claude-marketplace/edge/handlers/plugin";
 
-/** The gate corpus itself, walked by the vocabulary guard and the registry gate. */
-export const ARCHITECTURE_DIR_REL: (typeof DIRECTORY_ROOT_TARGETS)[number] = "tests/architecture";
-
-/**
- * Repository-root manifests and configs the gates read as data.
- *
- * These are not extension modules, but they are targets in the same sense: a
- * gate that cannot open one inspects nothing, and the path is as liable to move
- * as any other. `eslint.config.js` in particular is read by two gates that
- * resolve rule state out of it.
- */
-export const REPO_MANIFEST_TARGETS = [
-  "package.json",
-  "package-lock.json",
-  "eslint.config.js",
-] as const;
-
-/** The package manifest: version sync, peer floor, telemetry ban, unit-suite glob. */
-export const PACKAGE_JSON_REL: (typeof REPO_MANIFEST_TARGETS)[number] = "package.json";
+/** The package manifest: version sync, peer floor, telemetry ban. */
+export const PACKAGE_JSON_REL = "package.json";
 
 /** The lockfile, read alongside the manifest by the peer-floor gate. */
-export const PACKAGE_LOCK_REL: (typeof REPO_MANIFEST_TARGETS)[number] = "package-lock.json";
-
-/** The flat ESLint config, the source of the zone matrix and the no-console cascade. */
-export const ESLINT_CONFIG_REL: (typeof REPO_MANIFEST_TARGETS)[number] = "eslint.config.js";
-
-/**
- * OBS-01 / IL-2 / IL-3: the complete set of extension modules allowed a
- * `no-console` exemption.
- *
- * Membership is a closed obligation, not a convenience list -- the claim is that
- * these three files and no others may write to the console, so the set has to be
- * complete for a sweep over it to mean anything. `migrate.ts` carries the
- * sanctioned load-time legacy-migration warning; `debug-log.ts` is the debug
- * trace channel; `notification-dispatch.ts` is the sole sanctioned user-visible
- * output surface.
- */
-export const NO_CONSOLE_EXEMPT_TARGETS = [
-  "extensions/pi-claude-marketplace/persistence/migrate.ts",
-  "extensions/pi-claude-marketplace/shared/debug-log.ts",
-  "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
-] as const;
-
-/**
- * D-11: one real module per layer zone folder, in BLOCK C zone order.
- *
- * A zone matrix is resolved per FILE, not per folder, so proving the matrix
- * applies needs a file inside each zone that actually exists. These are chosen
- * for being long-lived owners of their layer rather than for anything they
- * contain; the gate only ever asks the config resolver what rules reach them.
- */
-export const ZONE_REPRESENTATIVE_TARGETS = [
-  "extensions/pi-claude-marketplace/edge/router.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts",
-  "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
-  "extensions/pi-claude-marketplace/domain/manifest.ts",
-  "extensions/pi-claude-marketplace/transaction/phase-ledger.ts",
-  "extensions/pi-claude-marketplace/persistence/locations.ts",
-  "extensions/pi-claude-marketplace/platform/git.ts",
-  "extensions/pi-claude-marketplace/shared/path-safety.ts",
-] as const;
+export const PACKAGE_LOCK_REL = "package-lock.json";
 
 /**
  * D-11: the four marketplace ledger entry points. BLOCK C in `eslint.config.js`
@@ -341,129 +258,3 @@ export const SCOPE_ORDER_CANONICAL_TARGETS = [
   "extensions/pi-claude-marketplace/shared/types.ts",
   "extensions/pi-claude-marketplace/shared/compare-name-scope.ts",
 ] as const;
-
-/**
- * D-75-01: the three modules whose `description:` string VALUES are user-facing
- * completion prose, scanned for the retired plugin-level vocabulary.
- *
- * `flag-catalog.ts` is the single source of truth the two completion modules
- * derive from, so all three carry the same obligation and a scan of any one
- * alone would miss where the prose actually originates.
- */
-export const COMPLETION_DESCRIPTION_TARGETS = [
-  "extensions/pi-claude-marketplace/edge/completions/provider.ts",
-  "extensions/pi-claude-marketplace/edge/completions/data.ts",
-  "extensions/pi-claude-marketplace/edge/flag-catalog.ts",
-] as const;
-
-/**
- * The unused-type-member gate's own subjects.
- *
- * The runner and its recorded decisions are targets in the sense this registry
- * means, and so are the suites beside them: the claim-to-control ledger names a
- * case inside each one, and a suite that moved would leave a stated capability
- * with no discriminating test.
- */
-export const UNUSED_TYPE_MEMBER_GATE_TARGETS = [
-  "scripts/check-unused-type-members.mjs",
-  "scripts/check-unused-type-members.exceptions.json",
-  "tests/scripts/check-unused-type-members.test.ts",
-  "tests/scripts/check-unused-type-members.model.test.ts",
-  "tests/scripts/check-unused-type-members.operations.test.ts",
-] as const;
-
-/** The gate's command-line entry point, which states the claims it supports. */
-export const TYPE_MEMBER_GATE_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
-  "scripts/check-unused-type-members.mjs";
-
-/**
- * The recorded decisions the gate's exit status accepts: one entry per member,
- * each naming exact coordinates and the mechanism that was measured. This is a
- * target in the sense this file means -- a gate that cannot open it accepts
- * whatever it happens to contain.
- */
-export const TYPE_MEMBER_EXCEPTIONS_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
-  "scripts/check-unused-type-members.exceptions.json";
-
-/** WDEP-05: the workflows bridge, whose commit path must never call a probe. */
-export const WORKFLOWS_BRIDGE_TARGETS = [
-  "extensions/pi-claude-marketplace/bridges/workflows",
-  "extensions/pi-claude-marketplace/bridges/workflows/discover.ts",
-  "extensions/pi-claude-marketplace/bridges/workflows/index.ts",
-  "extensions/pi-claude-marketplace/bridges/workflows/stage.ts",
-  "extensions/pi-claude-marketplace/bridges/workflows/types.ts",
-  "extensions/pi-claude-marketplace/bridges/workflows/unstage.ts",
-] as const;
-
-/** WPTH-06: the staging-tree scan that must never write. */
-export const WORKFLOWS_STAGING_SCAN_TARGETS = [
-  "extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts",
-] as const;
-
-/** WNAM-06 / WVAL-02: the module the workflows doc-pin and single-parse gates read. */
-export const WORKFLOWS_SCRIPT_TARGETS = [
-  "extensions/pi-claude-marketplace/domain/workflow-script.ts",
-] as const;
-
-/** WDEP-04 / SNM-06: the `Dependency[]` derivation sites the marker-coverage gate drives. */
-export const WORKFLOWS_MARKER_COVERAGE_TARGETS = [
-  "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
-  "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts",
-] as const;
-
-/**
- * D-07-19 / GGAT-04: every export the repository publishes that no production
- * consumer reads, keyed by the file that publishes it.
- *
- * THIS IS A MEASUREMENT, NOT AN ALLOW-LIST. Nothing here is approved, accepted,
- * or waived. Each entry is a fact about the tree as it stands, and the gate that
- * reads it (`unowned-exports-census.test.ts`) re-measures the same question and
- * compares for EXACT equality -- so an addition fails, a removal fails, and a
- * one-in-one-out swap fails. An allow-list forgives its named entries silently
- * and forever; a pinned set forces whoever changes the export surface of the
- * tree to change this record in the same commit and say why.
- *
- * Many members are legitimate design. The `create*` factories exist for the
- * dependency-injection pattern `CONVENTIONS.md` prescribes, the closed tuples in
- * `shared/notification-types.ts` derive their union types in the file that
- * declares them, and the barrel rows are re-export chains whose only reader is a
- * test. Membership is therefore not an accusation -- it is the statement that
- * production does not read this, which is exactly the fact a reader needs when
- * they wonder whether deleting it is safe.
- *
- * Each file's export names are sorted, and that order is part of the pin: the
- * gate sorts what it measures the same way, so a reordering can never be
- * mistaken for a change and a change can never hide inside a reordering.
- *
- * The record is keyed rather than listed because every ARRAY-valued export of
- * this module is a list of paths that must resolve on disk, and a census entry
- * carries an export name as well as a path. Keying by path keeps every path a
- * bare string literal, which is what the literal-match scan over this file needs.
- *
- * The record is EMPTY, and an empty measurement is not a disabled one. The gate
- * still runs the analyzer, still validates the report envelope, and still
- * compares for exact equality -- so the first export that production stops
- * reading fails here rather than landing unremarked. Emptiness is the strongest
- * state this pin can be in, not the weakest.
- */
-export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> = {};
-
-/**
- * Complete production finding identities; additions, removals, and swaps require review.
- *
- * Every category is empty, which is the measured state of the tree and not a
- * suppression of it. Three declarations production reachability cannot follow
- * -- the manifest-loaded entry default, the test reporter's default that
- * `node --test` loads, and the ring buffer's `read` -- carry an exact adjacent
- * annotation naming their real loader and their real callers.
- */
-export const PRODUCTION_FINDING_CENSUS = {
-  unused_exports: [],
-  unused_types: [],
-  unused_files: [],
-  unused_class_members: [],
-  duplicate_exports: [],
-} as const;
