@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-04T13:23:39.769Z"
+last_updated: "2026-10-04T14:46:50.890Z"
 last_activity: 2026-10-04
-last_activity_desc: Completed quick task 261004-az6 (checker controls on demand)
-state_head: 1d2cdd516e51f5f702a4cd6f776c0ab37d8fe142
+last_activity_desc: Completed quick task 261004-d9z (incremental pre-commit)
+state_head: 6708e06a5a7e27728ad157354013a4c9dc8f2b45
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-04 — Completed quick task 261004-az6: checker controls run on demand; planning-data test readers removed
+Last activity: 2026-10-04 — Completed quick task 261004-d9z: pre-commit runs incremental checks only; whole-suite checks at checkpoints
 
 ### workflows-replay closeout (merged from main)
 
@@ -601,6 +601,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261003-w7b | Speed up commit-time checks: targeted check-changed rules, lock, log, quiet output, agent guidance | 2026-10-04 | 8cff1fc4 | [261003-w7b-speed-up-commit-time-checks-targeted-che](./quick/261003-w7b-speed-up-commit-time-checks-targeted-che/) |
 | 15 | check-changed: Markdown under .agents/ and .claude/ selects no checks | 2026-10-04 | 5b5d06c7 | — |
 | 261004-az6 | Run negative controls only when their checker changes; drop planning-data test readers | 2026-10-04 | 1d2cdd51 | [261004-az6-run-negative-controls-only-when-their-ch](./quick/261004-az6-run-negative-controls-only-when-their-ch/) |
+| 261004-d9z | Make pre-commit incremental-only; move whole-suite checks to checkpoints | 2026-10-04 | 6708e06a | [261004-d9z-make-pre-commit-incremental-only-move-wh](./quick/261004-d9z-make-pre-commit-incremental-only-move-wh/) |
 
 ## Deferred Items
 
