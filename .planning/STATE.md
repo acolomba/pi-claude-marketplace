@@ -4,16 +4,16 @@ milestone: mcp-4
 milestone_name: MCP 4
 current_phase: 02
 current_phase_name: Adapter-file delivery
-status: verifying
+status: executing
 stopped_at: Completed 02-08-PLAN.md
-last_updated: "2026-10-03T19:16:59.480Z"
+last_updated: "2026-10-04T02:47:32.327Z"
 last_activity: 2026-10-03
-last_activity_desc: Plan 02-08 complete (MCP config notices through the reload, import and marketplace update cascades)
-state_head: 82e598e90724b8292015c400935812afb7e86ddc
+last_activity_desc: Plans 02-09..02-12 complete (D-02-21 keep-and-restore override)
+state_head: ceb44007b34200f4e2609ce804a0d262176ae3d9
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 17
+  total_plans: 21
   completed_plans: 17
   percent: 14
 ---
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 02 (Adapter-file delivery) — EXECUTING
-Plan: 8 of 8
-Status: Gap closure planned (02-09..02-12) — ready to execute
-Last activity: 2026-10-03 — Plan 02-08 complete (MCP config notices through the reload, import and marketplace update cascades)
+Plan: 12 of 12 (gap closure 02-09..02-12 executed)
+Status: Gap closure executed — code review, full check and re-verification next
+Last activity: 2026-10-04 — Plans 02-09..02-12 complete (D-02-21 keep-and-restore override)
 
 Progress: [█░░░░░░░░░] 14%
 

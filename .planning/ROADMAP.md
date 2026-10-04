@@ -138,7 +138,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. A server name that another source defines in full (`command`, `url` or `socket`) is reported as a collision, naming the source that wins under adapter 5's nine-source, later-wins precedence. A partial entry, such as a `/mcp-adapter disable` stub, is an override and blocks neither install nor update. This closes MCPSRC-01. (AFILE-05)
 5. A user override written into our entry (for example `disabled: true` from `/mcp-adapter disable`) is still there after `update` and `reinstall`. The carried-forward field set is closed, recorded under a decision ID, and pinned against the adapter's `ServerEntry`. (AFILE-06)
 
-**Plans**: 8/12 plans executed in 12 waves (02-09 to 02-12 close the two verification gaps)
+**Plans**: 12/12 plans executed in 12 waves (02-09 to 02-12 close the two verification gaps)
 
 **Wave 1**
 - [x] 02-01-PLAN.md — plugin MCP servers move to `mcp-adapter.json`, read as JSONC, refused when unparseable, `mcp-servers` honored (AFILE-01, AFILE-02, AFILE-03)
@@ -165,16 +165,16 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 - [x] 02-08-PLAN.md — notices through the reload, import and marketplace update cascades (AFILE-04)
 
 **Wave 9** *(gap closure; blocked on Wave 8 completion)*
-- [ ] 02-09-PLAN.md — source comments and test titles cite NFR-3 and AFILE-04 instead of D-02-19 / D-02-20
+- [x] 02-09-PLAN.md — source comments and test titles cite NFR-3 and AFILE-04 instead of D-02-19 / D-02-20
 
 **Wave 10** *(blocked on Wave 9 completion)*
-- [ ] 02-10-PLAN.md — a user's override under a plugin server name is kept in the entry's marker and written back on every unstage; proof that pi-mcp-adapter 5.0.0 ignores the marker (AFILE-06, AFILE-01, D-02-21)
+- [x] 02-10-PLAN.md — a user's override under a plugin server name is kept in the entry's marker and written back on every unstage; proof that pi-mcp-adapter 5.0.0 ignores the marker (AFILE-06, AFILE-01, D-02-21)
 
 **Wave 11** *(blocked on Wave 10 completion)*
-- [ ] 02-11-PLAN.md — install warns once, naming the override fields that stop applying; a write-back in the same command cancels the warning (AFILE-06, D-02-21)
+- [x] 02-11-PLAN.md — install warns once, naming the override fields that stop applying; a write-back in the same command cancels the warning (AFILE-06, D-02-21)
 
 **Wave 12** *(blocked on Wave 11 completion)*
-- [ ] 02-12-PLAN.md — the cross-scope lifecycle, prune rollback, the cascade primitive, disable/enable and the commented uninstall keep the override (AFILE-01, AFILE-05, AFILE-06)
+- [x] 02-12-PLAN.md — the cross-scope lifecycle, prune rollback, the cascade primitive, disable/enable and the commented uninstall keep the override (AFILE-01, AFILE-05, AFILE-06)
 
 **Notes.** This is the highest-risk core, and it lands before entry content changes so a failure points at file handling, not at translation. Entries keep today's content shape here; Phases 3 and 4 change it. Extract the JSONC document reader and the entry translator into their own modules up front: `bridges/mcp/stage.ts` already sits near the fallow `maxUnitSize` and cognitive-complexity ceilings. Research flags: the carry-forward field list and the comment-handling details.
 
@@ -295,7 +295,7 @@ plan these phases with the UI gate skipped.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 9/9 | Complete    | 2026-10-02 |
-| 2. Adapter-file delivery | mcp-4 | 8/12 | In Progress|  |
+| 2. Adapter-file delivery | mcp-4 | 12/12 | In Progress|  |
 | 3. Claude Code tool names and tool search | mcp-4 | 0/TBD | Not started | - |
 | 4. Variable expansion at Claude Code parity | mcp-4 | 0/TBD | Not started | - |
 | 5. Automatic migration on /reload | mcp-4 | 0/TBD | Not started | - |
