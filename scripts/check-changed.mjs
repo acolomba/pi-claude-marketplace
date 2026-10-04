@@ -20,15 +20,17 @@ const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const productionRoot = "extensions/pi-claude-marketplace/";
 const npm = (script) => ["npm", "run", script];
 /**
- * The full check runs no control by itself. A toolchain change runs every
- * control, and a changed checker file runs its own.
+ * The broad check runs whole-repository static checks, each cached or
+ * incremental; unit coverage, the integration suite, member analysis, and e2e
+ * tests wait for `npm run check`.
  */
-const fullChecks = (root, files) => [
-  npm("check"),
-  ...(files.some(isToolchain)
-    ? [npm("check:controls")]
-    : familyControls(root, files).map((control) => ["node", control])),
-  ...(files.some((file) => file.startsWith("tests/e2e/")) ? [npm("test:e2e")] : []),
+const broadChecks = [
+  npm("format:check"),
+  npm("typecheck"),
+  npm("lint"),
+  npm("lint:workflows"),
+  npm("fallow"),
+  npm("test:corresponding"),
 ];
 const testRun = [
   "node",
@@ -43,6 +45,19 @@ const prettierCheck = [
   "--cache",
   "--cache-strategy",
   "content",
+];
+/**
+ * Shares the cache of `npm run lint`. Typed rules can leave a stale cached
+ * pass, so CI lints from an empty cache.
+ */
+const eslintCheck = [
+  "node",
+  "node_modules/eslint/bin/eslint.js",
+  "--cache",
+  "--cache-strategy",
+  "content",
+  "--cache-location",
+  "node_modules/.cache/eslint/",
 ];
 
 /** Only `npm run lint:type-members` reads these; the analyzer tests build their own copies. */
@@ -104,6 +119,13 @@ function familyControls(root, files) {
     .map((match) => `scripts/${match[1]}.negative.mjs`)
     .filter((control) => existsSync(path.join(root, control)));
   return [...new Set(controls)].sort();
+}
+
+/** A toolchain change runs every control, and a changed checker file runs its own. */
+function controlCommands(root, files) {
+  return files.some(isToolchain)
+    ? [npm("check:controls")]
+    : familyControls(root, files).map((control) => ["node", control]);
 }
 
 function git(root, args) {
@@ -171,7 +193,7 @@ function hasComputedImport(node) {
 function moduleDependencies(file, options) {
   const source = readFileSync(file, "utf8");
   if (hasComputedImport(ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true))) {
-    throw new Error("Computed module imports require full verification");
+    throw new Error("Computed module imports require broad verification");
   }
 
   return ts
@@ -259,22 +281,23 @@ function analyzerTest(file, root) {
   return test && existsSync(path.join(root, test)) ? test : undefined;
 }
 
-/** First match wins; `full` is also the fallback for unrecognized inputs. */
+/** First match wins; `broad` is also the fallback for unrecognized inputs. */
 const rules = [
   [isInstruction, "none"],
   [isDocumentation, "documentation"],
-  [(file, root) => !existsSync(path.join(root, file)), "full"],
+  [(file, root) => !existsSync(path.join(root, file)), "broad"],
   [isPair, "pair"],
-  [(file) => /^tests\/(e2e|live-uat)\//.test(file), "full"],
+  [(file) => /^tests\/(e2e|live-uat)\//.test(file), "broad"],
   [(file) => file.startsWith("tests/") && file.endsWith(".test.ts"), "unpairedTest"],
   [(file) => file.startsWith("tests/") && file.endsWith(".ts"), "support"],
   [(file) => file.startsWith("tests/"), "fixture"],
   [(file) => typeMemberData.has(file), "typeMembers"],
   [(file, root) => analyzerTest(file, root) !== undefined, "analyzer"],
+  [(file, root) => familyControls(root, [file]).length > 0, "checker"],
 ];
 
 function classify(file, root) {
-  return rules.find(([matches]) => matches(file, root))?.[1] ?? "full";
+  return rules.find(([matches]) => matches(file, root))?.[1] ?? "broad";
 }
 
 function emptySelection() {
@@ -287,7 +310,6 @@ function emptySelection() {
     coverage: new Set(),
     typeMembers: false,
     suites: new Set(),
-    controls: new Set(),
     tests: new Set(),
     reasons: new Set(),
   };
@@ -386,7 +408,7 @@ function consumersOf(tree, target) {
     .map(({ file }) => file);
 }
 
-/** Commit-time checks never run e2e tests, so the walk drops e2e files as the full path does. */
+/** Commit-time checks never run e2e tests, so the walk drops e2e files. */
 function walkSupport(tree, start) {
   const reached = new Set();
   const queue = [start];
@@ -478,6 +500,18 @@ function selectAnalyzer(context, file, selection) {
   return false;
 }
 
+/**
+ * A checker file without its own test is proven by its family control, which
+ * plants failures into the checker.
+ */
+function selectChecker(_context, file, selection) {
+  selection.format.add(file);
+  selection.lint.add(file);
+  selection.fallow = true;
+  selection.reasons.add("Checker scripts and their controls");
+  return false;
+}
+
 const selectors = {
   documentation: selectDocumentation,
   unpairedTest: selectUnpairedTest,
@@ -485,42 +519,53 @@ const selectors = {
   fixture: selectFixture,
   typeMembers: selectTypeMembers,
   analyzer: selectAnalyzer,
+  checker: selectChecker,
 };
 
 function suiteCommands(selection) {
   return suites.filter(([suite]) => selection.suites.has(suite)).map(([suite]) => npm(suite));
 }
 
-/** Assembles commands in one fixed order; suites already cover their own test files. */
-function assembleCommands(selection) {
+/** Static checks in one fixed order. */
+function staticCommands(selection) {
   const format = [...selection.format].filter(isFormatted).sort();
+  return [
+    ...(format.length > 0 ? [[...prettierCheck, ...format]] : []),
+    ...(selection.typecheck ? [npm("typecheck")] : []),
+    ...(selection.lint.size > 0 ? [[...eslintCheck, ...[...selection.lint].sort()]] : []),
+    ...(selection.fallow ? [npm("fallow")] : []),
+    ...(selection.corresponding ? [npm("test:corresponding")] : []),
+  ];
+}
+
+/** Test commands in one fixed order; suites already cover their own test files. */
+function testCommands(selection, controls) {
   const tests = [...selection.tests]
     .filter((file) => !selection.suites.has(containingSuite(file)))
     .sort();
   return [
-    ...(format.length > 0 ? [[...prettierCheck, ...format]] : []),
-    ...(selection.typecheck ? [npm("typecheck")] : []),
-    ...(selection.lint.size > 0
-      ? [["node", "node_modules/eslint/bin/eslint.js", ...[...selection.lint].sort()]]
-      : []),
-    ...(selection.fallow ? [npm("fallow")] : []),
-    ...(selection.corresponding ? [npm("test:corresponding")] : []),
     ...(selection.coverage.size > 0
       ? [["node", "scripts/test-coverage-direct.mjs", ...[...selection.coverage].sort()]]
       : []),
     ...(selection.typeMembers ? [npm("lint:type-members")] : []),
     ...suiteCommands(selection),
-    ...[...selection.controls].sort().map((control) => ["node", control]),
+    ...controls,
     ...(tests.length > 0 ? [[...testRun, ...tests]] : []),
   ];
 }
 
-function fullPlan(root, changed, triggers) {
+/**
+ * The broad commands cover every static selection. The broad check never runs
+ * member analysis or the integration suite, even when another rule selected them.
+ */
+function broadPlan(triggers, selection, controls) {
+  selection.typeMembers = false;
+  selection.suites.delete("test:integration");
   const more = triggers.length > 5 ? ` and ${triggers.length - 5} more` : "";
   return {
-    scope: "full",
-    reason: `Full check required by ${triggers.slice(0, 5).join(", ")}${more}`,
-    commands: fullChecks(root, changed),
+    scope: "broad",
+    reason: `Broad check required by ${triggers.slice(0, 5).join(", ")}${more}`,
+    commands: [...broadChecks, ...testCommands(selection, controls)],
   };
 }
 
@@ -532,11 +577,7 @@ function selectChecks(root, changed) {
     return { scope: "none", reason: "No executable inputs changed", commands: [] };
   }
 
-  const triggers = inputs.filter(([, kind]) => kind === "full").map(([file]) => file);
-  if (triggers.length > 0) {
-    return fullPlan(root, changed, triggers);
-  }
-
+  const triggers = inputs.filter(([, kind]) => kind === "broad").map(([file]) => file);
   const selection = emptySelection();
   const pairs = inputs.filter(([, kind]) => kind === "pair").map(([file]) => file);
   if (pairs.length > 0) {
@@ -545,32 +586,36 @@ function selectChecks(root, changed) {
 
   const context = { root, tree: undefined };
   for (const [file, kind] of inputs) {
-    if (kind !== "pair" && selectors[kind](context, file, selection)) {
+    if (kind !== "pair" && kind !== "broad" && selectors[kind](context, file, selection)) {
       triggers.push(file);
     }
   }
 
+  const controls = controlCommands(root, changed);
   if (triggers.length > 0) {
-    return fullPlan(root, changed, triggers);
-  }
-
-  for (const control of familyControls(root, changed)) {
-    selection.controls.add(control);
+    return broadPlan(triggers, selection, controls);
   }
 
   return {
     scope: "focused",
     reason: [...selection.reasons].join("; "),
-    commands: assembleCommands(selection),
+    commands: [...staticCommands(selection), ...testCommands(selection, controls)],
   };
 }
 
-/** Plans feedback checks. Unknown inputs broaden; a focused pass is never a full verdict. */
+/**
+ * Plans commit-time checks. Unknown inputs broaden to the broad check; no plan
+ * runs `npm run check`, and a focused or broad pass is never a full verdict.
+ */
 export function planChecks(root, changed) {
   try {
     return selectChecks(root, changed);
   } catch (error) {
-    return { scope: "full", reason: error.message, commands: fullChecks(root, changed) };
+    return {
+      scope: "broad",
+      reason: error.message,
+      commands: [...broadChecks, ...controlCommands(root, changed)],
+    };
   }
 }
 
@@ -679,10 +724,10 @@ function releaseLock(lockDir, owner) {
 }
 
 /**
- * Serializes full runs across worktrees with an mkdir lock on `node:fs`.
+ * Serializes broad runs across worktrees with an mkdir lock on `node:fs`.
  * proper-lockfile has no dead-pid recovery, and it refreshes staleness from
  * timers that cannot fire while spawnSync blocks the event loop for a whole
- * full check. A dead pid or an age past `staleMs` frees the lock, so waiting
+ * broad check. A dead pid or an age past `staleMs` frees the lock, so waiting
  * needs no time limit.
  */
 export function acquireFullLock(
@@ -715,7 +760,7 @@ export function acquireFullLock(
 
     if (!announced) {
       process.stdout.write(
-        `Waiting for the full check running in ${holder.worktree} (pid ${holder.pid ?? "unknown"})\n`,
+        `Waiting for the broad check running in ${holder.worktree} (pid ${holder.pid ?? "unknown"})\n`,
       );
       announced = true;
     }
@@ -757,6 +802,12 @@ export function appendRunLog(root, run, warn = (message) => process.stderr.write
   }
 }
 
+const passMessages = {
+  none: "Checks passed.\n",
+  focused: "Focused checks passed; full completion verification is still required.\n",
+  broad: "Broad checks passed; full completion verification is still required.\n",
+};
+
 function main() {
   const startedAt = Date.now();
   const { values } = parseArgs({
@@ -772,17 +823,13 @@ function main() {
   let exitStatus = 1;
   let lock;
   try {
-    if (plan.scope === "full") {
+    if (plan.scope === "broad") {
       lock = acquireFullLock(gitCommonDir(projectRoot));
     }
 
     runChecks(projectRoot, plan.commands);
     exitStatus = 0;
-    process.stdout.write(
-      plan.scope === "focused"
-        ? "Focused checks passed; full completion verification is still required.\n"
-        : "Checks passed.\n",
-    );
+    process.stdout.write(passMessages[plan.scope]);
   } finally {
     lock?.release();
     appendRunLog(projectRoot, {

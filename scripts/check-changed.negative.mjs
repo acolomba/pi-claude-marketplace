@@ -37,7 +37,16 @@ const testRun = (...files) => [
   "--test-concurrency=4",
   ...files,
 ];
-const eslint = (...files) => ["node", "node_modules/eslint/bin/eslint.js", ...files];
+const eslint = (...files) => [
+  "node",
+  "node_modules/eslint/bin/eslint.js",
+  "--cache",
+  "--cache-strategy",
+  "content",
+  "--cache-location",
+  "node_modules/.cache/eslint/",
+  ...files,
+];
 const prettier = (...files) => [
   "node",
   "node_modules/prettier/bin/prettier.cjs",
@@ -47,6 +56,16 @@ const prettier = (...files) => [
   "content",
   ...files,
 ];
+const broad = [
+  run("format:check"),
+  run("typecheck"),
+  run("lint"),
+  run("lint:workflows"),
+  run("fallow"),
+  run("test:corresponding"),
+];
+const coverage = (...files) => ["node", "scripts/test-coverage-direct.mjs", ...files];
+const gateControl = ["node", "scripts/gate.negative.mjs"];
 const commandsFor = (files) => planChecks(root, files).commands;
 
 function write(file, contents) {
@@ -135,16 +154,14 @@ try {
   assert.deepEqual(focused.commands.at(-1), testRun(test("middle"), test("top")));
   assert.deepEqual(
     focused.commands.find((command) => command[1] === "node_modules/eslint/bin/eslint.js"),
-    [
-      "node",
-      "node_modules/eslint/bin/eslint.js",
+    eslint(
       source("leaf"),
       source("middle"),
       source("top"),
       test("leaf"),
       test("middle"),
       test("top"),
-    ],
+    ),
   );
   assert.deepEqual(
     focused.commands.find((command) => command[1] === "scripts/test-coverage-direct.mjs"),
@@ -174,7 +191,7 @@ try {
   ]);
   assert.equal(exempt.scope, "none");
   assert.deepEqual(exempt.commands, []);
-  assert.equal(planChecks(root, [".claude/settings.json"]).scope, "full");
+  assert.equal(planChecks(root, [".claude/settings.json"]).scope, "broad");
 
   for (const file of [
     "docs/output-catalog.md",
@@ -232,19 +249,18 @@ try {
     eslint("scripts/gate.mjs", "tests/scripts/gate.test.ts"),
     run("fallow"),
     run("test:analyzers"),
-    ["node", "scripts/gate.negative.mjs"],
+    gateControl,
   ]);
   assert.deepEqual(commandsFor(["scripts/gate.negative.mjs"]), [
     prettier("scripts/gate.negative.mjs"),
     eslint("scripts/gate.negative.mjs", "tests/scripts/gate.negative.test.ts"),
     run("fallow"),
     run("test:analyzers"),
-    ["node", "scripts/gate.negative.mjs"],
+    gateControl,
   ]);
 
   // A checker's helper modules and its control select the checker's control,
-  // once, in focused and full plans alike.
-  const gateControl = ["node", "scripts/gate.negative.mjs"];
+  // once, in focused and broad plans alike.
   assert.deepEqual(commandsFor(["scripts/gate.helper.mjs"]), [
     prettier("scripts/gate.helper.mjs"),
     eslint("scripts/gate.helper.mjs", "tests/scripts/gate.helper.test.ts"),
@@ -264,18 +280,25 @@ try {
     run("test:analyzers"),
     gateControl,
   ]);
-  for (const file of ["scripts/gate.pin.mjs", "scripts/gate.removed.mjs"]) {
-    assert.deepEqual(commandsFor([file]), [run("check"), gateControl], file);
-  }
-
+  // A checker helper without its own test runs the narrow checks plus its control.
+  const pin = planChecks(root, ["scripts/gate.pin.mjs"]);
+  assert.equal(pin.scope, "focused");
+  assert.deepEqual(pin.commands, [
+    prettier("scripts/gate.pin.mjs"),
+    eslint("scripts/gate.pin.mjs"),
+    run("fallow"),
+    gateControl,
+  ]);
+  const removedHelper = planChecks(root, ["scripts/gate.removed.mjs"]);
+  assert.equal(removedHelper.scope, "broad");
+  assert.deepEqual(removedHelper.commands, [...broad, gateControl]);
   assert.deepEqual(commandsFor(["package.json", "scripts/gate.pin.mjs"]), [
-    run("check"),
+    ...broad,
     run("check:controls"),
   ]);
   assert.deepEqual(commandsFor(["tests/e2e/changed.test.ts", "scripts/gate.pin.mjs"]), [
-    run("check"),
+    ...broad,
     gateControl,
-    run("test:e2e"),
   ]);
 
   // Rules union in fixed order; a test that a selected suite covers runs once, in the suite.
@@ -284,15 +307,15 @@ try {
     ...[...command.slice(prefix), arch].sort(),
   ];
   assert.deepEqual(commandsFor([source("leaf"), "docs/output-catalog.md", arch]), [
-    withArch(focused.commands[0], 6),
+    withArch(focused.commands[0], prettier().length),
     focused.commands[1],
-    withArch(focused.commands[2], 2),
+    withArch(focused.commands[2], eslint().length),
     ...focused.commands.slice(3, -1),
     run("test:architecture"),
     focused.commands.at(-1),
   ]);
 
-  // A toolchain change runs every control after the full check.
+  // A toolchain change runs every control after the broad check.
   const toolchainInputs = [
     "package.json",
     "package-lock.json",
@@ -307,7 +330,7 @@ try {
     ".node-version",
   ];
   for (const file of toolchainInputs) {
-    assert.deepEqual(commandsFor([file]), [run("check"), run("check:controls")], file);
+    assert.deepEqual(commandsFor([file]), [...broad, run("check:controls")], file);
   }
 
   const broadInputs = [
@@ -329,33 +352,52 @@ try {
     "tests/fixtures/shared.json",
   ];
   for (const file of broadInputs) {
-    const broad = planChecks(root, [file]);
-    assert.equal(broad.scope, "full", file);
+    const plan = planChecks(root, [file]);
+    assert.equal(plan.scope, "broad", file);
     assert.deepEqual(
-      broad.commands,
-      toolchainInputs.includes(file) ? [run("check"), run("check:controls")] : [run("check")],
+      plan.commands,
+      toolchainInputs.includes(file) ? [...broad, run("check:controls")] : broad,
       file,
     );
   }
 
-  assert.match(
+  assert.equal(
     planChecks(root, broadInputs).reason,
-    /package\.json.*, \.fallowrc\.json and 9 more$/,
+    "Broad check required by package.json, package-lock.json, tsconfig.json, eslint.config.js, .fallowrc.json and 11 more",
   );
-  assert.deepEqual(commandsFor(["schema/settings.json"]), [run("check")]);
-  assert.deepEqual(commandsFor(["docs/output-catalog.md", "unclassified.txt"]), [run("check")]);
-  assert.deepEqual(commandsFor(["tests/e2e/changed.test.ts"]), [run("check"), run("test:e2e")]);
-  assert.equal(planChecks(root, [source("leaf"), "package.json"]).scope, "full");
+  assert.equal(planChecks(root, ["schema/settings.json"]).scope, "broad");
+  assert.deepEqual(commandsFor(["schema/settings.json"]), broad);
+  assert.deepEqual(commandsFor(["docs/output-catalog.md", "unclassified.txt"]), [
+    ...broad,
+    run("test:architecture"),
+  ]);
+  assert.deepEqual(commandsFor(["tests/e2e/changed.test.ts"]), broad);
+  assert.deepEqual(commandsFor([source("leaf"), "package.json"]), [
+    ...broad,
+    coverage(source("leaf")),
+    run("check:controls"),
+    testRun(test("middle"), test("top")),
+  ]);
+
+  // The broad check never runs member analysis or the integration suite, even
+  // when another rule selected them.
+  assert.deepEqual(commandsFor([typeMemberData[0], "package.json"]), [
+    ...broad,
+    run("check:controls"),
+  ]);
+  assert.deepEqual(commandsFor(["tests/integration/lonely.ts", "schema/settings.json"]), broad);
 
   write(source("other"), 'export const other = import("./missing.ts");');
-  assert.equal(planChecks(root, [source("leaf")]).scope, "full");
+  assert.equal(planChecks(root, [source("leaf")]).scope, "broad");
   // The selection-error fallback keeps the family control.
   assert.deepEqual(commandsFor([source("leaf"), "scripts/gate.helper.mjs"]), [
-    run("check"),
+    ...broad,
     gateControl,
   ]);
   write(source("other"), 'const name = "./leaf.ts"; export const other = import(name);');
-  assert.equal(planChecks(root, [source("leaf")]).scope, "full");
+  const computed = planChecks(root, [source("leaf")]);
+  assert.equal(computed.scope, "broad");
+  assert.equal(computed.reason, "Computed module imports require broad verification");
   write(source("other"), 'export const other = import("./leaf.ts");');
   assert.ok(
     planChecks(root, [source("leaf")])
@@ -365,7 +407,7 @@ try {
   write(source("other"), 'import { readFile } from "node:fs"; export const other = readFile;');
   assert.equal(planChecks(root, [source("leaf")]).scope, "focused");
   rmSync(path.join(root, test("top")));
-  assert.equal(planChecks(root, [source("leaf")]).scope, "full");
+  assert.equal(planChecks(root, [source("leaf")]).scope, "broad");
   write(test("top"), "export {};");
 
   assert.throws(() => changedFiles(root), /git rev-parse failed/);
@@ -443,7 +485,7 @@ try {
       "untracked with spaces.txt",
     ].sort(),
   );
-  assert.equal(planChecks(root, changedFiles(root)).scope, "full");
+  assert.equal(planChecks(root, changedFiles(root)).scope, "broad");
   git("add", ".");
   git("commit", "-m", "test: change fixture");
   assert.deepEqual(changedFiles(root), []);
@@ -530,7 +572,7 @@ try {
     /signal SIGTERM/,
   );
   process.stdout.write(
-    "Changed-check controls passed: dependency selection, targeted rules and their union, broad fallbacks, checker and toolchain controls, git paths, child failures, the full-run lock, and the run log.\n",
+    "Changed-check controls passed: dependency selection, targeted rules and their union, broad plans with targeted tests and exclusions, checker and toolchain controls, git paths, child failures, the full-run lock, and the run log.\n",
   );
 } finally {
   rmSync(root, { recursive: true, force: true });
