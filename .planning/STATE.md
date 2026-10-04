@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 04
 current_phase_name: Wire Schema and JSON Strategy
 status: executing
-stopped_at: Phase 4 gap closure planned (04-06)
-last_updated: "2026-10-04T03:30:19.000Z"
+stopped_at: Completed 04-06-PLAN.md (Phase 4 gap closure executed; ready for re-verification)
+last_updated: "2026-10-04T11:45:00.000Z"
 last_activity: 2026-10-04
-last_activity_desc: Planned 04-06 (gap closure for SC3 / PMOD-04 subject names)
+last_activity_desc: Executed 04-06 (subject names redacted in the model; AUTH-09 gains three rows)
 state_head: 42f80dec9b3fb56235f80bd88c44fef32efe8668
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 28
-  completed_plans: 27
+  completed_plans: 28
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -32,10 +32,10 @@ component as a working Pi artifact.
 
 Phase: 04 (Wire Schema and JSON Strategy) — EXECUTING (gap closure)
 Plan: 6 of 6
-Status: Gap closure planned — ready to execute 04-06
-Last activity: 2026-10-04 — Planned 04-06 (gap closure for SC3 / PMOD-04 subject names)
+Status: Gap closure executed — ready for Phase 4 re-verification
+Last activity: 2026-10-04 — Executed 04-06 (subject names redacted in the model; AUTH-09 gains three rows)
 
-Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 27 of 28 plans complete)
+Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 28 of 28 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,8 +169,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-04T03:30:19.000Z
-**Stopped at:** Phase 4 gap closure planned (04-06)
+**Last session:** 2026-10-04T11:45:00.000Z
+**Stopped at:** Completed 04-06-PLAN.md (Phase 4 gap closure executed; ready for re-verification)
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -187,7 +187,14 @@ all 5 plans executed; its review-fix loop converged clean at iteration 2 (CR-01
 and WR-01..WR-05 fixed, WR-06 deferred to Phase 5 criterion 6, nine Info items
 open in 04-REVIEW-DISPOSITION.md), and the full check passed on `ad5348ab`.
 Verification found one gap (SC3 / PMOD-04: marketplace block names and other
-subject names are not redacted); gap-closure plan 04-06 is planned and checked.
+subject names are not redacted). Gap-closure plan 04-06 is executed
+(`c8a45a9b`, `5d988d7d`, SUMMARY `8c861f3b`): `resolveRows` redacts every block
+and plugin row name, `presentNotification` redacts the marketplace-not-added
+name, and AUTH-09 has three subject-name rows, each proven to fail before its
+fix. Corpus 3143 present / 0 extra; catalog unchanged from `4e6c568a`. The
+full-scope pre-commit (`npm run check` plus all-pair coverage) passed on the
+exact code committed as `5d988d7d`. Phase 4 is not yet marked complete; it
+needs re-verification.
 
 **Corpus determinism (resolved by quick task 261002-dys):** prune rollback
 now receives its backup-directory creator through `PruneRestoreOps`, so tests
@@ -210,7 +217,7 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Execute gap-closure plan 04-06 (`/gsd-execute-phase 4 --gaps-only`), then re-verify Phase 4.
+- Re-verify Phase 4 (`/gsd-verify-work 4` or the execute-phase verifier) now that 04-06 is executed.
 
 ## Performance Metrics
 
@@ -241,6 +248,7 @@ archived milestone artifacts.
 | Phase 04 P03 | 113min | 2 tasks | 17 files |
 | Phase 04 P04 | 84min | 2 tasks | 9 files |
 | Phase 04 P05 | 67 min | 2 tasks | 6 files |
+| Phase 04 P06 | 83 min | 2 tasks | 6 files |
 
 ## Decisions
 
@@ -297,3 +305,5 @@ archived milestone artifacts.
 - [Phase 04]: PMOD-04: the D-08 redaction ledger is empty (corpus 3134 present, 0 extra; no catalog diff)
 - [Phase 04]: WIRE-08: the payload walk's path pattern is redactAbsolutePaths' pattern plus a bare UNC root, which the redactor does not match
 - [Phase 04]: WIRE-08: planted path, Error, and undefined offenders extend the prune committed-warning payload, the one catalog payload with a top-level cause chain
+- [Phase 04]: PMOD-04: block names and plugin row names are redacted in resolveRows, and the marketplace-not-added name in presentNotification; record-backed names and the scp subject pass through unchanged
+- [Phase 04]: PMOD-04: an out-of-band plugin row without a name keeps that shape; resolveRows redacts a row name only when the row carries one
