@@ -65,7 +65,7 @@ findings:
     title: "The credential-leak gate's \"text\" leg does not run the production text strategy"
   - id: WR-06
     severity: warning
-    disposition: skipped
+    disposition: deferred
     title: "The JSON strategy emits payloads for raw surfaces that the text strategy suppresses"
 open: 9
 total: 16
@@ -76,22 +76,22 @@ recorded: 2026-10-04T02:04:03.525Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
-| IN-03 | info | open | - |
-| IN-04 | info | open | - |
-| IN-05 | info | open | - |
-| IN-06 | info | open | - |
-| IN-07 | info | open | - |
-| IN-08 | info | open | - |
-| IN-09 | info | open | - |
-| CR-01 | critical | fixed | 04-REVIEW-FIX.md (not in the current review) |
-| WR-01 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
-| WR-02 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
-| WR-03 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
-| WR-04 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
-| WR-05 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
-| WR-06 | warning | skipped | 04-REVIEW-FIX.md (not in the current review) |
+| IN-01 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
+| IN-02 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
+| IN-03 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
+| IN-04 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
+| IN-05 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
+| IN-06 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
+| IN-07 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
+| IN-08 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
+| IN-09 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
+| CR-01 | critical | fixed | 04-REVIEW-FIX.md iteration 1, commit 45449a48 (not in the current review) |
+| WR-01 | warning | fixed | 04-REVIEW-FIX.md iteration 1, commit 6268a0be (not in the current review) |
+| WR-02 | warning | fixed | 04-REVIEW-FIX.md iteration 1, commit a2f32c6e (not in the current review) |
+| WR-03 | warning | fixed | 04-REVIEW-FIX.md iteration 1, commit 21f69324 (not in the current review) |
+| WR-04 | warning | fixed | 04-REVIEW-FIX.md iteration 1, commit 53cab366 (not in the current review) |
+| WR-05 | warning | fixed | 04-REVIEW-FIX.md iteration 1, commit 29ec1fc1 (not in the current review) |
+| WR-06 | warning | deferred | ROADMAP Phase 5 success criterion 6 (the JSON strategy keeps the text strategy's empty no-ops); 04-REVIEW-FIX.md iteration 1 (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
