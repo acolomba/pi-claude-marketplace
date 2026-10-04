@@ -82,6 +82,7 @@ try {
     "tests/orphan.ts",
     "tests/scripts/gate.test.ts",
     "tests/scripts/gate.negative.test.ts",
+    "tests/scripts/gate.helper.test.ts",
   ]) {
     write(file, "export {};");
   }
@@ -99,6 +100,8 @@ try {
   for (const file of [
     "scripts/gate.mjs",
     "scripts/gate.negative.mjs",
+    "scripts/gate.helper.mjs",
+    "scripts/gate.pin.mjs",
     "scripts/tool.mjs",
     "scripts/check-changed.mjs",
     "eslint.config.js",
@@ -113,8 +116,14 @@ try {
     ".fallowrc.json",
     ".prettierrc.json",
     "rule-packs/architecture.json",
+    "tsconfig.build.json",
+    "schema/settings.json",
   ]) {
     write(file, "{}");
+  }
+
+  for (const file of [".prettierignore", ".nvmrc", ".node-version"]) {
+    write(file, "line\n");
   }
 
   write(".github/workflows/ci.yml", "on: push\n");
@@ -233,6 +242,42 @@ try {
     ["node", "scripts/gate.negative.mjs"],
   ]);
 
+  // A checker's helper modules and its control select the checker's control,
+  // once, in focused and full plans alike.
+  const gateControl = ["node", "scripts/gate.negative.mjs"];
+  assert.deepEqual(commandsFor(["scripts/gate.helper.mjs"]), [
+    prettier("scripts/gate.helper.mjs"),
+    eslint("scripts/gate.helper.mjs", "tests/scripts/gate.helper.test.ts"),
+    run("fallow"),
+    run("test:analyzers"),
+    gateControl,
+  ]);
+  assert.deepEqual(commandsFor(["scripts/gate.mjs", "scripts/gate.helper.mjs"]), [
+    prettier("scripts/gate.helper.mjs", "scripts/gate.mjs"),
+    eslint(
+      "scripts/gate.helper.mjs",
+      "scripts/gate.mjs",
+      "tests/scripts/gate.helper.test.ts",
+      "tests/scripts/gate.test.ts",
+    ),
+    run("fallow"),
+    run("test:analyzers"),
+    gateControl,
+  ]);
+  for (const file of ["scripts/gate.pin.mjs", "scripts/gate.removed.mjs"]) {
+    assert.deepEqual(commandsFor([file]), [run("check"), gateControl], file);
+  }
+
+  assert.deepEqual(commandsFor(["package.json", "scripts/gate.pin.mjs"]), [
+    run("check"),
+    run("check:controls"),
+  ]);
+  assert.deepEqual(commandsFor(["tests/e2e/changed.test.ts", "scripts/gate.pin.mjs"]), [
+    run("check"),
+    gateControl,
+    run("test:e2e"),
+  ]);
+
   // Rules union in fixed order; a test that a selected suite covers runs once, in the suite.
   const withArch = (command, prefix) => [
     ...command.slice(0, prefix),
@@ -246,6 +291,24 @@ try {
     run("test:architecture"),
     focused.commands.at(-1),
   ]);
+
+  // A toolchain change runs every control after the full check.
+  const toolchainInputs = [
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+    "tsconfig.build.json",
+    "eslint.config.js",
+    ".fallowrc.json",
+    ".prettierrc.json",
+    ".prettierignore",
+    "rule-packs/architecture.json",
+    ".nvmrc",
+    ".node-version",
+  ];
+  for (const file of toolchainInputs) {
+    assert.deepEqual(commandsFor([file]), [run("check"), run("check:controls")], file);
+  }
 
   const broadInputs = [
     "package.json",
@@ -268,19 +331,29 @@ try {
   for (const file of broadInputs) {
     const broad = planChecks(root, [file]);
     assert.equal(broad.scope, "full", file);
-    assert.deepEqual(broad.commands, [run("check")], file);
+    assert.deepEqual(
+      broad.commands,
+      toolchainInputs.includes(file) ? [run("check"), run("check:controls")] : [run("check")],
+      file,
+    );
   }
 
   assert.match(
     planChecks(root, broadInputs).reason,
     /package\.json.*, \.fallowrc\.json and 9 more$/,
   );
+  assert.deepEqual(commandsFor(["schema/settings.json"]), [run("check")]);
   assert.deepEqual(commandsFor(["docs/output-catalog.md", "unclassified.txt"]), [run("check")]);
   assert.deepEqual(commandsFor(["tests/e2e/changed.test.ts"]), [run("check"), run("test:e2e")]);
   assert.equal(planChecks(root, [source("leaf"), "package.json"]).scope, "full");
 
   write(source("other"), 'export const other = import("./missing.ts");');
   assert.equal(planChecks(root, [source("leaf")]).scope, "full");
+  // The selection-error fallback keeps the family control.
+  assert.deepEqual(commandsFor([source("leaf"), "scripts/gate.helper.mjs"]), [
+    run("check"),
+    gateControl,
+  ]);
   write(source("other"), 'const name = "./leaf.ts"; export const other = import(name);');
   assert.equal(planChecks(root, [source("leaf")]).scope, "full");
   write(source("other"), 'export const other = import("./leaf.ts");');
@@ -457,7 +530,7 @@ try {
     /signal SIGTERM/,
   );
   process.stdout.write(
-    "Changed-check controls passed: dependency selection, targeted rules and their union, broad fallbacks, git paths, child failures, the full-run lock, and the run log.\n",
+    "Changed-check controls passed: dependency selection, targeted rules and their union, broad fallbacks, checker and toolchain controls, git paths, child failures, the full-run lock, and the run log.\n",
   );
 } finally {
   rmSync(root, { recursive: true, force: true });

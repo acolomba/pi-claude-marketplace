@@ -326,12 +326,18 @@ test("every capability the gate claims has a discriminating control", async () =
 // `package.json`, the CI workflow and the real decision list, and
 // the last one runs the real gate over the real tree with a new unread member
 // planted into it.
+//
+// `npm run check` runs the gate, and `npm run check:controls` runs its negative
+// controls. The changed-check selector runs the type-member control when a
+// type-member checker file changes and every control when the toolchain
+// changes. CI runs `npm run check:controls` on pull requests.
 // ---------------------------------------------------------------------------
 
 const CI_WORKFLOW_REL = ".github/workflows/ci.yml";
 
 const GATE_SCRIPT = "lint:type-members";
 const NEGATIVE_SCRIPT = "lint:type-members:negative";
+const CONTROLS_SCRIPT = "check:controls";
 
 /** The fields one recorded decision may carry, and no others. */
 const EXCEPTION_FIELDS = ["id", "owner", "key", "decision", "mechanism"];
@@ -356,46 +362,51 @@ async function readRecordedDecisions(): Promise<readonly RecordedDecision[]> {
   return parsed.exceptions;
 }
 
-test("the mandatory check chain runs the gate and its negative controls", async () => {
+test("the check chain runs the gate and the controls chain runs its negative controls", async () => {
   // arrange
   const manifest = JSON.parse(await readRepoFile(PACKAGE_JSON_REL)) as {
     scripts: Readonly<Record<string, string>>;
   };
-  const chain = manifest.scripts.check ?? "";
 
   // act
-  const runs = [GATE_SCRIPT, NEGATIVE_SCRIPT].filter(
-    (script) => !chain.split(" && ").includes(`npm run ${script}`),
-  );
+  const checkMembers = (manifest.scripts.check ?? "").split(" && ");
+  const controlsMembers = (manifest.scripts[CONTROLS_SCRIPT] ?? "").split(" && ");
+  const wiring = {
+    gateInCheck: checkMembers.includes(`npm run ${GATE_SCRIPT}`),
+    negativeInControls: controlsMembers.includes(`npm run ${NEGATIVE_SCRIPT}`),
+    gate: manifest.scripts[GATE_SCRIPT],
+    negative: manifest.scripts[NEGATIVE_SCRIPT],
+  };
 
   // assert
   assert.deepStrictEqual(
+    wiring,
     {
-      missingFromChain: runs,
-      gate: manifest.scripts[GATE_SCRIPT],
-      negative: manifest.scripts[NEGATIVE_SCRIPT],
-    },
-    {
-      missingFromChain: [],
+      gateInCheck: true,
+      negativeInControls: true,
       gate: `node ${TYPE_MEMBER_GATE_REL}`,
       negative: `node ${TYPE_MEMBER_NEGATIVE_REL}`,
     },
-    "npm run check is the mandatory path, and both scripts must invoke the real executables rather than a stand-in.",
+    "npm run check runs the gate, npm run check:controls runs its negative controls, and both scripts must invoke the real executables rather than a stand-in.",
   );
 });
 
-test("continuous integration runs the same chain the local path runs", async () => {
+test("continuous integration runs the check chain and the controls chain", async () => {
   // arrange
   const workflow = await readRepoFile(CI_WORKFLOW_REL);
 
   // act
-  const invokesCheck = workflow.includes("run: npm run check");
+  const lines = workflow.split("\n").map((line) => line.trim());
+  const runs = {
+    check: lines.includes("run: npm run check"),
+    controls: lines.includes(`run: npm run ${CONTROLS_SCRIPT}`),
+  };
 
   // assert
-  assert.strictEqual(
-    invokesCheck,
-    true,
-    `${CI_WORKFLOW_REL} must invoke npm run check, so CI's member-gate invocation can never be weaker than the local one.`,
+  assert.deepStrictEqual(
+    runs,
+    { check: true, controls: true },
+    `${CI_WORKFLOW_REL} must invoke both npm run check and npm run check:controls, so every pull request runs the member gate and its negative controls.`,
   );
 });
 

@@ -95,6 +95,15 @@ jobs:
           overwrite: true
           retention-days: 7
 
+      # The negative controls prove that each checker script still fails on a
+      # planted problem. Their result changes only with a checker, its helper
+      # modules or configuration, or the toolchain. Such changes reach main
+      # only through a pull request, so the controls run there and not in
+      # every `npm run check`.
+      - name: Run checker controls
+        if: github.event_name == 'pull_request'
+        run: npm run check:controls
+
   sonarcloud:
     needs: [check]
     # Release tags keep the complete test gate but do not need another scan.

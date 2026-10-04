@@ -19,8 +19,15 @@ import ts from "typescript";
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const productionRoot = "extensions/pi-claude-marketplace/";
 const npm = (script) => ["npm", "run", script];
-const fullChecks = (files) => [
+/**
+ * The full check runs no control by itself. A toolchain change runs every
+ * control, and a changed checker file runs its own.
+ */
+const fullChecks = (root, files) => [
   npm("check"),
+  ...(files.some(isToolchain)
+    ? [npm("check:controls")]
+    : familyControls(root, files).map((control) => ["node", control])),
   ...(files.some((file) => file.startsWith("tests/e2e/")) ? [npm("test:e2e")] : []),
 ];
 const testRun = [
@@ -64,6 +71,40 @@ const suites = [
   ],
   ["test:integration", ["tests/integration/"]],
 ];
+
+/**
+ * Dependency, Node, TypeScript, ESLint, Fallow, and Prettier configuration can
+ * change what any checker does, so these inputs run every control.
+ */
+function isToolchain(file) {
+  return (
+    [
+      "package.json",
+      "package-lock.json",
+      ".nvmrc",
+      ".node-version",
+      "eslint.config.js",
+      ".fallowrc.json",
+      ".prettierignore",
+    ].includes(file) ||
+    /^tsconfig[^/]*\.json$/.test(file) ||
+    /^\.prettierrc[^/]*$/.test(file) ||
+    file.startsWith("rule-packs/")
+  );
+}
+
+/**
+ * A checker's helper modules and its control share the checker's file-name
+ * stem, so a change to any of them selects that control.
+ */
+function familyControls(root, files) {
+  const controls = files
+    .map((file) => /^scripts\/([^/.]+)(?:\.[^/]+)?\.mjs$/.exec(file))
+    .filter((match) => match !== null)
+    .map((match) => `scripts/${match[1]}.negative.mjs`)
+    .filter((control) => existsSync(path.join(root, control)));
+  return [...new Set(controls)].sort();
+}
 
 function git(root, args) {
   const child = spawnSync("git", args, { cwd: root, encoding: "utf8" });
@@ -428,19 +469,11 @@ function selectTypeMembers(_context, file, selection) {
  * names a script's other consumers; the whole analyzer suite runs instead.
  */
 function selectAnalyzer(context, file, selection) {
-  const name = file.slice("scripts/".length, -".mjs".length);
-  const control = `scripts/${name}.negative.mjs`;
   selection.format.add(file);
   selection.lint.add(file);
   selection.lint.add(analyzerTest(file, context.root));
   selection.fallow = true;
   selection.suites.add("test:analyzers");
-  if (existsSync(path.join(context.root, control))) {
-    selection.controls.add(control);
-  } else if (name.endsWith(".negative")) {
-    selection.controls.add(file);
-  }
-
   selection.reasons.add("Analyzer scripts and their tests");
   return false;
 }
@@ -482,12 +515,12 @@ function assembleCommands(selection) {
   ];
 }
 
-function fullPlan(changed, triggers) {
+function fullPlan(root, changed, triggers) {
   const more = triggers.length > 5 ? ` and ${triggers.length - 5} more` : "";
   return {
     scope: "full",
     reason: `Full check required by ${triggers.slice(0, 5).join(", ")}${more}`,
-    commands: fullChecks(changed),
+    commands: fullChecks(root, changed),
   };
 }
 
@@ -501,7 +534,7 @@ function selectChecks(root, changed) {
 
   const triggers = inputs.filter(([, kind]) => kind === "full").map(([file]) => file);
   if (triggers.length > 0) {
-    return fullPlan(changed, triggers);
+    return fullPlan(root, changed, triggers);
   }
 
   const selection = emptySelection();
@@ -518,7 +551,11 @@ function selectChecks(root, changed) {
   }
 
   if (triggers.length > 0) {
-    return fullPlan(changed, triggers);
+    return fullPlan(root, changed, triggers);
+  }
+
+  for (const control of familyControls(root, changed)) {
+    selection.controls.add(control);
   }
 
   return {
@@ -533,7 +570,7 @@ export function planChecks(root, changed) {
   try {
     return selectChecks(root, changed);
   } catch (error) {
-    return { scope: "full", reason: error.message, commands: fullChecks(changed) };
+    return { scope: "full", reason: error.message, commands: fullChecks(root, changed) };
   }
 }
 
