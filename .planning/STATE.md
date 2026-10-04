@@ -1,13 +1,13 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.20
-milestone_name: transitive-dependencies
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-01T18:37:22.326Z"
-last_activity: 2026-10-01
-last_activity_desc: Completed quick task 261001-g4u (PR 198 SonarCloud findings)
-state_head: 4455c76f52ca9e94f458687d19a2930272b5edc4
+last_updated: "2026-10-04T05:42:00.956Z"
+last_activity: 2026-10-04
+last_activity_desc: Completed quick task 261003-w7b (faster commit-time checks)
+state_head: 8cff1fc474995b7f3a8825cc017fe9a312c98b0b
+milestone_name: transitive-dependencies
 progress:
   total_phases: 12
   completed_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-01 — Completed quick task 261001-g4u: resolved the 23 SonarCloud findings on PR 198
+Last activity: 2026-10-04 — Completed quick task 261003-w7b: targeted commit-time checks, full-run lock and log, quiet passing output
 
 ### workflows-replay closeout (merged from main)
 
@@ -598,6 +598,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 260917-g97 | Resolve window #59 (#32 before the 2026-09-20 merge from main renumbered it): the cold-git `(remote)` info row renders its entry-declared dependencies line (D-01-32) | 2026-09-17 | 975e6236 | [260917-g97-resolve-window-32-give-the-componentsres](./quick/260917-g97-resolve-window-32-give-the-componentsres/) |
 | 260917-hfp | Clear the phase 5 review nits IN-01, IN-02, IN-03, IN-07, IN-08; IN-04 carried to BACKLOG `PRUNE-GUARD-MR-01` | 2026-09-17 | 97c9ce14 | [260917-hfp-clear-the-phase-5-review-nits-in-01-in-0](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/) |
 | 261001-g4u | Resolve the 23 SonarCloud findings on PR 198 with real fixes and no-await-in-loop directives | 2026-10-01 | 4455c76f | [261001-g4u-resolve-the-23-sonarcloud-findings-on-pr](./quick/261001-g4u-resolve-the-23-sonarcloud-findings-on-pr/) |
+| 261003-w7b | Speed up commit-time checks: targeted check-changed rules, lock, log, quiet output, agent guidance | 2026-10-04 | 8cff1fc4 | [261003-w7b-speed-up-commit-time-checks-targeted-che](./quick/261003-w7b-speed-up-commit-time-checks-targeted-che/) |
 
 ## Deferred Items
 
