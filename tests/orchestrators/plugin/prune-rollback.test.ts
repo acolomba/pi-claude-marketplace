@@ -1124,7 +1124,7 @@ test("AFILE-01: a byte-identical adapter file restores cleanly", async () => {
   });
 });
 
-test("D-02-19: MCP config files holding the recorded unstage bytes restore from their backups", async () => {
+test("NFR-3: MCP config files holding the recorded unstage bytes restore from their backups", async () => {
   await withHermeticEnvironment("prune-rollback-own-write-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -1162,7 +1162,7 @@ test("D-02-19: MCP config files holding the recorded unstage bytes restore from 
   });
 });
 
-test("D-02-19: an adapter edit after the recorded unstage write stays current with its backup", async () => {
+test("NFR-3: an adapter edit after the recorded unstage write stays current with its backup", async () => {
   await withHermeticEnvironment("prune-rollback-own-write-edited-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -1199,7 +1199,7 @@ test("D-02-19: an adapter edit after the recorded unstage write stays current wi
   });
 });
 
-test("D-02-19: the last recorded write to a path is the one the rollback compares", async () => {
+test("NFR-3: the last recorded write to a path is the one the rollback compares", async () => {
   await withHermeticEnvironment("prune-rollback-own-write-last-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -1228,7 +1228,7 @@ test("D-02-19: the last recorded write to a path is the one the rollback compare
   });
 });
 
-test("D-02-19: an adapter edit after the rollback reads the recorded unstage write stays current with its backup", async () => {
+test("NFR-3: an adapter edit after the rollback reads the recorded unstage write stays current with its backup", async () => {
   await withHermeticEnvironment("prune-rollback-own-write-read-race-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -1278,7 +1278,7 @@ test("D-02-19: an adapter edit after the rollback reads the recorded unstage wri
   });
 });
 
-test("D-02-20: a failed restore write leaves the adapter file in place and keeps its backup", async () => {
+test("NFR-3: a failed restore write leaves the adapter file in place and keeps its backup", async () => {
   await withHermeticEnvironment("prune-rollback-own-write-failed-write-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -1330,7 +1330,7 @@ test("D-02-20: a failed restore write leaves the adapter file in place and keeps
   });
 });
 
-test("D-02-20: an adapter removed after the rollback reads the recorded unstage write stays absent with its backup", async () => {
+test("NFR-3: an adapter removed after the rollback reads the recorded unstage write stays absent with its backup", async () => {
   await withHermeticEnvironment("prune-rollback-own-write-removed-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -1372,7 +1372,7 @@ test("D-02-20: an adapter removed after the rollback reads the recorded unstage 
   });
 });
 
-test("D-02-20: a symlink swapped in after the rollback reads the recorded unstage write is refused", async () => {
+test("NFR-3: a symlink swapped in after the rollback reads the recorded unstage write is refused", async () => {
   await withHermeticEnvironment("prune-rollback-own-write-symlink-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);

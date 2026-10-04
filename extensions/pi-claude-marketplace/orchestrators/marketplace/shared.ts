@@ -343,7 +343,7 @@ export interface UnstageOutcome {
    */
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
   /**
-   * D-02-19: each MCP config file the MCP slot rewrote and the exact bytes it
+   * NFR-3: each MCP config file the MCP slot rewrote and the exact bytes it
    * wrote, so a prune rollback can recognize its own rewrite. Set only when
    * non-empty, on success and on failure, like `mcpConfigNotices`.
    */
@@ -360,7 +360,7 @@ export function mcpConfigNoticesMember(notices: readonly McpConfigNotice[]): {
   return notices.length === 0 ? {} : { mcpConfigNotices: notices };
 }
 
-/** D-02-19: spreads `writtenMcpFiles` onto an outcome only when a file was rewritten. */
+/** NFR-3: spreads `writtenMcpFiles` onto an outcome only when a file was rewritten. */
 function writtenMcpFilesMember(files: readonly McpWrittenFile[]): {
   readonly writtenMcpFiles?: readonly McpWrittenFile[];
 } {
@@ -492,7 +492,7 @@ export async function cascadeUnstagePlugin(
   } catch (err) {
     // AFILE-04: an MCP unstage that rewrote the adapter file before its legacy
     // write failed still reports the comments it dropped there, the servers no
-    // file still holds (TR-03), and the bytes it wrote (D-02-19). The write
+    // file still holds (TR-03), and the bytes it wrote (NFR-3). The write
     // failure is the plugin's cause.
     let failure: unknown = err;
     if (err instanceof McpUnstagePartialError) {

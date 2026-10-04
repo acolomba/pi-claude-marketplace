@@ -1471,7 +1471,7 @@ test("AFILE-04: a dry-run prune sends no notice", async () => {
   });
 });
 
-test("D-02-19: a rolled-back prune restores the commented original, keeps it in its backup, and sends no notice", async () => {
+test("AFILE-04: a rolled-back prune restores the commented original, keeps it in its backup, and sends no notice", async () => {
   await withHermeticEnvironment("prune-owner-afile04-rollback-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -1521,7 +1521,7 @@ test("D-02-19: a rolled-back prune restores the commented original, keeps it in 
   });
 });
 
-test("D-02-19: a rolled-back prune restores its own mcp-adapter.json rewrite byte-for-byte", async () => {
+test("NFR-3: a rolled-back prune restores its own mcp-adapter.json rewrite byte-for-byte", async () => {
   await withHermeticEnvironment("prune-owner-mcp-own-write-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);

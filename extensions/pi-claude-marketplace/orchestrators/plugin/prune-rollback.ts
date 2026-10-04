@@ -54,7 +54,7 @@ export interface PruneRestoreOps {
 export interface PruneRollback {
   readonly backupName: string;
   /**
-   * D-02-19: records the bytes a member's unstage wrote to an MCP config file.
+   * NFR-3: records the bytes a member's unstage wrote to an MCP config file.
    * The last write to a path wins.
    */
   readonly recordMcpWrites: (files: readonly McpWrittenFile[]) => void;
@@ -231,7 +231,7 @@ async function metadataVerdict(
     return { kind: "matches-backup" };
   }
 
-  // D-02-19: live bytes equal to this prune's own last write mean no other
+  // NFR-3: live bytes equal to this prune's own last write mean no other
   // writer changed the file after the unstage rewrote it. Any other content
   // is another writer's change.
   return ownWrite?.equals(live) === true
@@ -256,7 +256,7 @@ async function restoreMetadata(
     return;
   }
 
-  // D-02-20: the last byte check runs just before the atomic write, and the
+  // NFR-3: the last byte check runs just before the atomic write, and the
   // restore never moves or deletes the live file. An edit that lands between
   // this check and the write's rename is overwritten; the state.json restore
   // accepts the same window.

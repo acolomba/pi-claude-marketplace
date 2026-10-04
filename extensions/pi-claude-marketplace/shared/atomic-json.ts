@@ -22,7 +22,7 @@ import writeFileAtomic from "write-file-atomic";
  * surfaces a privilege concern.
  *
  * Returns the exact bytes written, so a caller can later tell its own write
- * from a later edit (D-02-19).
+ * from a later edit (NFR-3).
  */
 export async function atomicWriteJson(filePath: string, value: unknown): Promise<Buffer> {
   await mkdir(path.dirname(filePath), { recursive: true });

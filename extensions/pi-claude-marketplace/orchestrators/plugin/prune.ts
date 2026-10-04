@@ -199,7 +199,7 @@ function notifyCommitted(
 }
 
 /**
- * D-02-19: hands each member's MCP config writes to the rollback as the
+ * NFR-3: hands each member's MCP config writes to the rollback as the
  * cascade returns, so a rollback can restore a file this prune rewrote.
  */
 function recordingCascade(
@@ -361,7 +361,7 @@ export function createPrunePlugin(
     // AFILE-04: a committed sweep rewrote the MCP config files for good, so
     // the comments it dropped follow the rows. A rolled-back sweep never
     // reaches this point: its rollback restores each MCP file it rewrote
-    // (D-02-19), or its failure row names the file and the recovery backup
+    // (NFR-3), or its failure row names the file and the recovery backup
     // keeps the original bytes.
     notifyMcpConfigNotices(
       options.ctx,

@@ -16,7 +16,7 @@
 // (NFR-3). The writer drops JSONC comments, so each rewritten file whose
 // bytes held comments yields a `comments-dropped` notice (AFILE-04). Each
 // rewritten file is returned with the exact bytes written to it, so a prune
-// rollback can tell its own rewrite from a later edit (D-02-19). When the
+// rollback can tell its own rewrite from a later edit (NFR-3). When the
 // legacy write fails after the adapter file was rewritten, a typed
 // `McpUnstagePartialError` carries the adapter file's notice and written
 // bytes, so the caller can still report and recognize them. Its removed names
@@ -103,7 +103,7 @@ function noticesOf(targets: readonly UnstageTarget[], scope: Scope): readonly Mc
 /**
  * Writes each target in order and returns the bytes written to each file. A
  * failure after an earlier write succeeded throws `McpUnstagePartialError`
- * describing the rewritten files (AFILE-04, D-02-19).
+ * describing the rewritten files (AFILE-04, NFR-3).
  */
 async function writeUnstageTargets(
   targets: readonly UnstageTarget[],

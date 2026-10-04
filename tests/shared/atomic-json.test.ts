@@ -21,7 +21,7 @@ test("writes two-space JSON with one trailing newline", async (t) => {
   assert.strictEqual(jsonBytes, expectedJsonBytes);
 });
 
-test("D-02-19: returns the exact bytes it wrote to the file", async (t) => {
+test("NFR-3: returns the exact bytes it wrote to the file", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(os.tmpdir(), "atomic-json-returned-"));
   t.after(() => rm(directory, { recursive: true, force: true }));

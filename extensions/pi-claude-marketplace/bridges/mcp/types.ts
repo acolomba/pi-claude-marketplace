@@ -125,7 +125,7 @@ export interface UnstageMcpResult {
    */
   readonly notices: readonly McpConfigNotice[];
   /**
-   * D-02-19: each file the unstage rewrote and the exact bytes it wrote, in
+   * NFR-3: each file the unstage rewrote and the exact bytes it wrote, in
    * write order. Empty when nothing was removed.
    */
   readonly written: readonly McpWrittenFile[];
