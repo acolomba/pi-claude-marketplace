@@ -86,7 +86,7 @@ The planner and the apply path coordinate via one structural sentinel, plus two 
 
 ## Preview path
 
-`preview.ts::previewReconcile` is the read-only mirror: NEVER writes (no `tx.save()`, no `saveConfig`), NEVER touches the network (the architecture grep-gate at `tests/architecture/no-orchestrator-network.test.ts` arms this file). It runs `loadMergedScopeConfig` per scope, surfaces CFG-03 and state-load throws as structured `(failed)` basename rows, and otherwise calls `planReconcile` against a synthetic post-migration merged view (`mergedViewForPlanning`) so a pre-migration window (base config absent, populated state) is not misrendered as a mass-uninstall plan. The single `notify()` call dispatches the `CascadeNotificationMessage` from the projection, or the dedicated `ReconcilePreviewEmptyMessage` for the empty-steady-state path.
+`preview.ts::previewReconcile` is the read-only mirror: NEVER writes (no `tx.save()`, no `saveConfig`), NEVER touches the network (BLOCK F in `eslint.config.js` lints the reconcile `pending.ts`, `plan.ts`, and `notify.ts` for git surface). It runs `loadMergedScopeConfig` per scope, surfaces CFG-03 and state-load throws as structured `(failed)` basename rows, and otherwise calls `planReconcile` against a synthetic post-migration merged view (`mergedViewForPlanning`) so a pre-migration window (base config absent, populated state) is not misrendered as a mass-uninstall plan. The single `notify()` call dispatches the `CascadeNotificationMessage` from the projection, or the dedicated `ReconcilePreviewEmptyMessage` for the empty-steady-state path.
 
 ## Analog modules
 

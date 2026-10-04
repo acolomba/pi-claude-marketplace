@@ -9,7 +9,7 @@
 // constraint can demand a different tag than the cached one.
 //
 // Gate placement. This module is deliberately ABSENT from
-// `tests/architecture/gate-targets.ts`'s `NETWORK_FREE_TARGETS` while both
+// `eslint.config.js`'s `NETWORK_FREE_TARGETS` while both
 // install owners stay in it. That is the arrangement `install-clone-probe.ts`
 // already uses to let those gated owners reach git legally: the owner composes
 // the leaf and invokes it through an injected field whose name is not one the

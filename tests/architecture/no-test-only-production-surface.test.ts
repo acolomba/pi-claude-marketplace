@@ -57,11 +57,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  EXTENSION_ROOT_REL,
-  MARKETPLACE_LEDGER_TARGETS,
-  NETWORK_FREE_TARGETS,
-} from "./gate-targets.ts";
+import { EXTENSION_ROOT_REL, MARKETPLACE_LEDGER_TARGETS } from "./gate-targets.ts";
 import { assertNoForbiddenSurface, REPO_ROOT, stripComments } from "./source-scan.ts";
 
 /**
@@ -165,19 +161,16 @@ interface ClassifiedSeam {
 }
 
 /*
- * The modules the classified seams live on, each annotated with the registry
- * group that already names it. The annotation is the membership check: assigning
- * a path the group does not name stops compiling, so these references cannot
- * drift away from the registry (D-07-05). `NETWORK_FREE_TARGETS` and
- * `MARKETPLACE_LEDGER_TARGETS` carry every module needed here.
+ * The modules the classified seams live on. The two marketplace ledgers carry
+ * the `MARKETPLACE_LEDGER_TARGETS` annotation, so naming a path that group does
+ * not hold stops compiling (D-07-05). The four plugin owners are spelled here:
+ * the network-free list in `eslint.config.js` is not a module this file can
+ * read a type from.
  */
-const INSTALL_FLOW_REL: (typeof NETWORK_FREE_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
-const FETCH_REL: (typeof NETWORK_FREE_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
-const PLUGIN_INFO_REL: (typeof NETWORK_FREE_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
-const REINSTALL_FLOW_REL: (typeof NETWORK_FREE_TARGETS)[number] =
+const INSTALL_FLOW_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+const FETCH_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
+const PLUGIN_INFO_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
+const REINSTALL_FLOW_REL =
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 const MARKETPLACE_ADD_REL: (typeof MARKETPLACE_LEDGER_TARGETS)[number] =
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";

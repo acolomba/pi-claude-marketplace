@@ -27,6 +27,213 @@ const MARKETPLACE_LEDGERS = [
   "./extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts",
 ];
 
+// Options BLOCK A and BLOCK E apply to the whole extension. BLOCK F restates
+// them for the network-free files, because a later block that sets a rule's
+// options replaces the earlier options for the files it matches.
+const OUTPUT_DISCIPLINE_SELECTORS = [
+  {
+    selector:
+      "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdout'][callee.property.name='write']",
+    message:
+      "Direct process.stdout.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
+  },
+  {
+    selector:
+      "CallExpression[callee.object.object.name='process'][callee.object.property.name='stderr'][callee.property.name='write']",
+    message:
+      "Direct process.stderr.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
+  },
+  {
+    selector: "CallExpression[callee.object.name='console'][callee.property.name='log']",
+    message:
+      "console.log is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
+  },
+  {
+    selector: "CallExpression[callee.object.name='console'][callee.property.name='warn']",
+    message:
+      "console.warn is forbidden in the extension (IL-2) except at the single sanctioned migrateLegacyMarketplaceRecords callsite, which is allowed via a block-level files-override in this config.",
+  },
+  {
+    selector: "CallExpression[callee.object.name='console'][callee.property.name='error']",
+    message:
+      "console.error is forbidden in the extension (IL-2). Use notify(ctx, pi, NotificationMessage) (failed status carries cause via per-plugin cause?: Error) from shared/notification-dispatch.ts.",
+  },
+  {
+    selector: "CallExpression[callee.object.name='console'][callee.property.name='info']",
+    message:
+      "console.info is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
+  },
+  {
+    selector: "CallExpression[callee.property.name='notify'][callee.object.property.name='ui']",
+    message:
+      "Direct ctx.ui.notify is forbidden -- use notify(ctx, pi, NotificationMessage) or notifyUsageError(ctx, UsageErrorMessage) from shared/notification-dispatch.ts.",
+  },
+];
+
+const PI_PEER_IMPORT_RESTRICTION = {
+  name: "@earendil-works/pi-coding-agent",
+  message: "Import Pi API types from extensions/pi-claude-marketplace/platform/pi-api.ts instead.",
+};
+
+/**
+ * NFR-5 / PI-2 / PL-3 / PRL-07: every module that must name no git surface of
+ * its own. BLOCK F applies to exactly these files. That is a narrower claim
+ * than "performs no network operation", and the membership splits two ways.
+ * Most targets are network-free by contract -- the read surfaces (`list`,
+ * plugin `info`, marketplace `info`), the reconcile pending/planner/projection
+ * family, both reinstall owners (cached manifests only), and the resolver, one
+ * file OUTSIDE the orchestrator layer. The resolver inherits its obligation
+ * from the two read surfaces it answers for. The others are MUTATING verbs
+ * that do reach git -- `install-flow.ts` and `fetch.ts` materialize a clone on
+ * a cache miss, and `enable-disable.ts` re-materializes through the install
+ * ledger -- and they qualify because they reach it ONLY through the
+ * `clone-cache.ts` seam, by entrypoint name.
+ *
+ * The rule is per file, which a fallow boundary zone cannot express:
+ * `orchestrators` -> `platform` is a legal edge for `update-flow.ts`,
+ * `clone-cache.ts`, and `auth-host.ts`, and fallow zones are directory-scoped.
+ *
+ * Exempt files (do NOT add):
+ *   - `orchestrators/plugin/update-flow.ts` and `update-preflight.ts`: PUP-2
+ *     `syncClone` REQUIRES gitOps; they legitimately name the `GitOps` surface
+ *     via the `orchestrators/marketplace/shared.ts` re-export (Pattern S-9).
+ */
+const NETWORK_FREE_TARGETS = [
+  // The update flow owns refresh enumeration and its injected Git seam, so it
+  // remains the exact update exemption documented above and is not gated here.
+  // NFR-5 (amended): both install owners carry ZERO git surface of their own. A
+  // git-source (url / git-subdir / github) clone is delegated to the
+  // install-clone-probe.ts leaf, which reaches the clone-cache.ts sibling seam
+  // where the git surface legally lives. The flow composes the leaf and the
+  // ledger invokes that injected operation; neither owner names `gitOps`.
+  // The ledger reads the cached manifest with no
+  // network sync of its own; the only network touch is the cache-miss clone
+  // inside the seam. Keep both targets so splitting composition from the
+  // ledger cannot weaken the original gate. operations.ts is the third install
+  // owner: it binds the concrete runPhases and withLockedStateTransaction
+  // wrappers around the semantic factory, so it is exactly where a direct git
+  // import would land once composition moved out of the flow.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts",
+  // PL-3 + NFR-5: list is read-only against state + manifest; no network.
+  // Every list owner is gated, not just the flow: candidate-row owns the
+  // cold/warm `(remote)` vs `(available)` classification and installed-row
+  // drives the upgrade probe, so both are the sites where a "refresh the
+  // mirror" edit would land. Keep all four so splitting row composition and
+  // orphan folding out of the flow cannot weaken the original gate.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-row.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list-orphan-fold.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts",
+  // PUP-2 + NFR-5: the update family splits its Git seam across exactly two
+  // owners, so the other four are gated. update-swap.ts matters most: it
+  // performs the physical replace inside the window where the old tree is
+  // already gone, which is where a stray fetch would do the most damage.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts",
+  // PRL-07: the public reinstall flow uses cached manifests only -- which is
+  // also why refreshGitHubClone is one of the gated patterns. The flow owner
+  // contains the complete sequencing body, so this one target guards the full
+  // operation without a retired compatibility path.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
+  // INFO-02 + NFR-5: info is a read-only seam over the local state + on-disk
+  // marketplace manifests; no network.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
+  // INFO-01 + NFR-5: marketplace info is read-only against local state +
+  // marketplace.json; no network.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
+  // ML-1..4 + NFR-5: marketplace list is read-only against state.json alone --
+  // it reads no manifest and holds no clone. A future need to show a remote
+  // freshness column must route through orchestrators/plugin/clone-cache.ts,
+  // the seam where the git surface legally lives, never through a git import
+  // here.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts",
+  // MAU-1..5 + NFR-5: autoupdate rewrites config entries and state records; the
+  // refresh it schedules is performed by the update verb, not by autoupdate
+  // itself, so this owner is network-free by contract. A future need to probe a
+  // remote before scheduling must route through
+  // orchestrators/plugin/clone-cache.ts.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts",
+  // MR-1..8 + NFR-5: remove unstages local artifacts and collects orphaned
+  // clones through orchestrators/plugin/clone-gc.ts, which deletes directories
+  // and never fetches. The file carries no NFR-5 header of its own, so this
+  // entry is where the network-free-by-contract claim is recorded: a future
+  // need to consult a remote before deleting must route through
+  // orchestrators/plugin/clone-cache.ts.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts",
+  // DIFF-01 SC #2: the reconcile pending/planner/projection
+  // family is read-only and pure. pending.ts is the user-facing orchestrator;
+  // plan.ts + notify.ts are belt-and-braces (plan.ts also has the stricter
+  // reconcile-planner-purity gate -- this is cheap defensive cover).
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
+  // LOAD-01 / NFR-5 / WR-06: the satisfaction walk composes dependency-index.ts
+  // -- already gated one group below -- and reads the memoized manifest cache
+  // and the warm clone cache only. It sits on the load path, where a stray
+  // fetch would make every session start wait on a remote, so the file that
+  // claims the walk is offline carries the gate that pins it. A future need to
+  // refresh a clone before deciding must route through
+  // orchestrators/plugin/clone-cache.ts.
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts",
+  // ENBL-03: the enable/disable orchestrator re-materializes from cache
+  // -- NO network.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+  // NFR-5 / D-05-06 / PRUNE-05: uninstall composes an offline manifest read
+  // through the declaration-index leaf before it decides anything -- the
+  // dependents guard reads what every other record in the scope declares from
+  // the memoized manifest cache and the warm clone cache only. Neither owner
+  // names a git surface; a future need to refresh a clone before deciding must
+  // route through orchestrators/plugin/clone-cache.ts.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts",
+  // FTCH-01: fetch reaches git ONLY through the clone-cache.ts seam (by
+  // entrypoint name), install-style. It names zero gitOps surface, so it is
+  // locked here permanently. It is NOT exempt: among the gated orchestrator
+  // candidates, update-flow.ts is the only file allowed the gitOps surface (seam
+  // files such as clone-cache.ts sit outside this gate's candidate set).
+  "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts",
+  // NFR-5 / OUT-05: the resolver now answers a question for `list` and `info`,
+  // two surfaces that are network-free by contract, so the file that answers it
+  // inherits their obligation. It carries no git surface today, which is exactly
+  // why the gate is cheap here -- it is defense in depth, and it is the
+  // STRUCTURAL half of the network-free guarantee. The behavioral half can only
+  // show that no call happened on the paths a test exercises; it can never show
+  // the surface is absent.
+  "extensions/pi-claude-marketplace/domain/plugin-resolver.ts",
+];
+
+const NETWORK_FREE_SYNTAX_SELECTORS = [
+  {
+    selector: "ImportExpression[source.value=/platform\\/git/]",
+    message: "NFR-5: network-free modules must not dynamically import a platform/git module.",
+  },
+  {
+    selector: "TSImportType Literal[value=/platform\\/git/]",
+    message: "NFR-5: network-free modules must not name a platform/git type through import().",
+  },
+  {
+    selector:
+      ":matches(Identifier, PrivateIdentifier)[name=/^(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)$/]",
+    message:
+      "NFR-5: network-free modules must not name gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone. Only update-flow.ts and update-preflight.ts may name the git seam.",
+  },
+  {
+    selector: "Literal[value=/\\b(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)\\b/]",
+    message:
+      "NFR-5: network-free modules must not spell gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone in a string.",
+  },
+  {
+    selector: "TemplateElement[value.raw=/\\b(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)\\b/]",
+    message:
+      "NFR-5: network-free modules must not spell gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone in a string.",
+  },
+];
+
 export default tseslint.config(
   {
     ignores: [
@@ -124,47 +331,7 @@ export default tseslint.config(
     // B-2). No inline `eslint-disable-next-line` directive is required.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdout'][callee.property.name='write']",
-          message:
-            "Direct process.stdout.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-        },
-        {
-          selector:
-            "CallExpression[callee.object.object.name='process'][callee.object.property.name='stderr'][callee.property.name='write']",
-          message:
-            "Direct process.stderr.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-        },
-        {
-          selector: "CallExpression[callee.object.name='console'][callee.property.name='log']",
-          message:
-            "console.log is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-        },
-        {
-          selector: "CallExpression[callee.object.name='console'][callee.property.name='warn']",
-          message:
-            "console.warn is forbidden in the extension (IL-2) except at the single sanctioned migrateLegacyMarketplaceRecords callsite, which is allowed via a block-level files-override in this config.",
-        },
-        {
-          selector: "CallExpression[callee.object.name='console'][callee.property.name='error']",
-          message:
-            "console.error is forbidden in the extension (IL-2). Use notify(ctx, pi, NotificationMessage) (failed status carries cause via per-plugin cause?: Error) from shared/notification-dispatch.ts.",
-        },
-        {
-          selector: "CallExpression[callee.object.name='console'][callee.property.name='info']",
-          message:
-            "console.info is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-        },
-        {
-          selector:
-            "CallExpression[callee.property.name='notify'][callee.object.property.name='ui']",
-          message:
-            "Direct ctx.ui.notify is forbidden -- use notify(ctx, pi, NotificationMessage) or notifyUsageError(ctx, UsageErrorMessage) from shared/notification-dispatch.ts.",
-        },
-      ],
+      "no-restricted-syntax": ["error", ...OUTPUT_DISCIPLINE_SELECTORS],
       // Catches console.debug / console.trace / console.dir which the AST
       // selectors above don't enumerate.
       "no-console": "error",
@@ -344,14 +511,37 @@ export default tseslint.config(
       "no-restricted-imports": [
         "error",
         {
-          paths: [
+          paths: [PI_PEER_IMPORT_RESTRICTION],
+        },
+      ],
+    },
+  },
+  {
+    // BLOCK F (NFR-5 / PI-2 / PL-3 / PRL-07): the modules in NETWORK_FREE_TARGETS
+    // name no git surface: no platform/git import of any kind (type-only and
+    // dynamic included) and no gitOps / DEFAULT_GIT_OPS / refreshGitHubClone
+    // identifier, key, or string. Both rules restate the extension-wide options
+    // of BLOCK A and BLOCK E, because a later block that sets a rule's options
+    // replaces the earlier options for the files it matches.
+    files: NETWORK_FREE_TARGETS,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [PI_PEER_IMPORT_RESTRICTION],
+          patterns: [
             {
-              name: "@earendil-works/pi-coding-agent",
+              regex: "platform/git",
               message:
-                "Import Pi API types from extensions/pi-claude-marketplace/platform/pi-api.ts instead.",
+                "NFR-5: network-free modules must not import a platform/git module, type-only imports included. Reach git through orchestrators/plugin/clone-cache.ts by entrypoint name.",
             },
           ],
         },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        ...OUTPUT_DISCIPLINE_SELECTORS,
+        ...NETWORK_FREE_SYNTAX_SELECTORS,
       ],
     },
   },

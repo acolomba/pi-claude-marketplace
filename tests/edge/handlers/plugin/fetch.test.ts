@@ -57,8 +57,8 @@
 // tokenizer diagnostics owned by tests/edge/args.test.ts, none re-proves the
 // reference split owned by tests/edge/handlers/plugin/shared.test.ts, and no
 // case adds an offline guard -- `orchestrators/plugin/fetch.ts` is a named
-// member of the forbidden-targets set in
-// tests/architecture/no-orchestrator-network.test.ts.
+// member of `NETWORK_FREE_TARGETS` in `eslint.config.js`, which BLOCK F
+// lints.
 
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";

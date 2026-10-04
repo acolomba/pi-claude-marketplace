@@ -1,15 +1,15 @@
 /**
  * Shared source-scanning mechanic for the architecture gates.
  *
- * Two gates assert that a named set of repository files carries none of a named
- * set of forbidden textual surfaces: the NFR-5 orchestrator-network gate
- * (`tests/architecture/no-orchestrator-network.test.ts`) and the COMPAT-01
- * no-expansion gate (`tests/architecture/compat-01-no-expansion.test.ts`). The
- * mechanic lives here so the two share ONE implementation instead of
- * duplicating it, and so one gate can DELEGATE a clause to the other without
- * importing a `*.test.ts` module -- under `node:test`, importing a module that
- * registers cases at its top level registers those cases a SECOND time in the
- * importing file's run, doubling the work and misreporting the count (D-98-09).
+ * Several gates assert that a named set of repository files carries none of a
+ * named set of forbidden textual surfaces, for example
+ * `tests/architecture/no-test-only-production-surface.test.ts` and
+ * `tests/architecture/no-lifecycle-default-enabled-read.test.ts`. The mechanic
+ * lives here so they share ONE implementation instead of duplicating it, and
+ * so a gate can reuse it without importing a `*.test.ts` module -- under
+ * `node:test`, importing a module that registers cases at its top level
+ * registers those cases a SECOND time in the importing file's run, doubling the
+ * work and misreporting the count (D-98-09).
  *
  * A third gate needs the opposite question -- which files DO carry a surface --
  * and `filesMatching` answers it from the same read-and-strip mechanic, so a

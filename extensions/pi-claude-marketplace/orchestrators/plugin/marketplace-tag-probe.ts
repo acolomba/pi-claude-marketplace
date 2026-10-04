@@ -10,7 +10,7 @@
 // `refs/tags/` namespace instead of a remote's advertised refs.
 //
 // Gate placement. This module is deliberately ABSENT from
-// `tests/architecture/gate-targets.ts`'s `NETWORK_FREE_TARGETS` for the same
+// `eslint.config.js`'s `NETWORK_FREE_TARGETS` for the same
 // reason `dependency-tag-probe.ts` is: a path source has no remote repository
 // to query at all, so this is the one place resolving a path-source
 // constraint reads tags from -- and it reads the local clone the marketplace

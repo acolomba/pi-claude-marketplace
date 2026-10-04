@@ -49,8 +49,8 @@
 // Architectural constraints (NFR-5 / PI-2 / PL-3):
 //   - No withStateGuard (no mutation, no state file write).
 //   - No `platform/git` import, no `DEFAULT_GIT_OPS`, no `gitOps` reference.
-//   - `tests/architecture/no-orchestrator-network.test.ts` greps this source
-//     after stripComments and asserts zero gitOps surface.
+//   - BLOCK F in `eslint.config.js` lints this source and rejects any
+//     gitOps surface.
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";

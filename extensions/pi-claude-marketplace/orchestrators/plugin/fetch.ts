@@ -9,9 +9,9 @@
 //   - git materialize: the `clone-cache.ts` entrypoints (via the injected
 //     FetchCloneCacheSeam), reached ONLY by name -- fetch.ts names zero git
 //     surface (no git-ops handle, no default-git-ops constant, no clone-refresh
-//     helper, no platform-git import), a gate enforced by
-//     tests/architecture/no-orchestrator-network.test.ts's forbidden-targets
-//     set.
+//     helper, no platform-git import). BLOCK F in `eslint.config.js` enforces
+//     that, because its `NETWORK_FREE_TARGETS` list
+//     names this file.
 //   - auth: `auth-host.ts`'s `buildCloneAuth` with a single sweep-wide
 //     `authMemo` so a bulk sweep triggers each host's device flow at most once
 //     (FTCH-06).

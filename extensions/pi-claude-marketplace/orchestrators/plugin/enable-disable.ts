@@ -24,9 +24,9 @@
 // on every abort/no-op -- exactly what the catalog's CFG-03 states claim.
 //
 // NFR-5 (no network): this file MUST NOT import platform/git or DEFAULT_GIT_OPS.
-// The architecture gate at
-// `tests/architecture/no-orchestrator-network.test.ts` (FORBIDDEN_TARGETS) is
-// armed for this file -- adding any forbidden surface fails the gate.
+// `eslint.config.js` lists this file in `NETWORK_FREE_TARGETS`, and BLOCK F
+// of that config rejects any forbidden surface here -- adding one fails
+// `npm run lint`.
 //
 // A6: `loadConfig(targetConfigPath)` runs INSIDE the locked transaction so
 // a concurrent flip from another process either fails fast at lock

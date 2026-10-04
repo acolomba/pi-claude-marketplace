@@ -4,8 +4,8 @@
 // pending` (D-53-01).
 //
 // MUST NOT touch the network (NFR-5) -- no `platform/git`, no
-// `DEFAULT_GIT_OPS`, no `refreshGitHubClone`. The architecture grep-gate
-// test in `tests/architecture/no-orchestrator-network.test.ts` enforces this
+// `DEFAULT_GIT_OPS`, no `refreshGitHubClone`. The network-free ESLint
+// block (BLOCK F in `eslint.config.js`) enforces this
 // structurally.
 //
 // NEVER writes any file (NFR-5 read-surface discipline). Idempotency

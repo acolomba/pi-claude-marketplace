@@ -2,11 +2,11 @@
 //
 // PURL-02 / PURL-04 / D-77-03..06: the plugin clone-cache seam.
 //
-// install-outcome.ts is forbidden the git surface by the `no-orchestrator-network`
-// architecture gate (NFR-5). The clone lives HERE, in a sibling seam install
+// install-outcome.ts is forbidden the git surface by BLOCK F in
+// `eslint.config.js` (NFR-5). The clone lives HERE, in a sibling seam install
 // calls by name; this file imports DEFAULT_GIT_OPS from marketplace/shared.ts
 // (the same re-export update.ts uses) and is legally allowed the git surface
-// (NOT in the gate's forbidden list).
+// (NOT in that config's `NETWORK_FREE_TARGETS`).
 //
 // `materializePluginClone` clones a git plugin source at its pinned/resolved
 // sha into the shared source-addressed cache `plugin-clones/<key>/`, deduped

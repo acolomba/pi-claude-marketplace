@@ -25,7 +25,7 @@
  * name `gitOps` / `DEFAULT_GIT_OPS` or import `platform/git.ts` as a VALUE --
  * only `import type` from platform/git.ts and its auth-callback sibling is
  * permitted -- so consumers (install-outcome.ts) that import it stay clean
- * under the no-orchestrator-network gate. It imports the provider registry
+ * under BLOCK F in `eslint.config.js`. It imports the provider registry
  * (domain), the Device Flow engine (domain), the raw notify seam (shared), the
  * auth-callback seam types (platform/git-auth-callbacks.ts), and the credential
  * surface (platform/git-credential.ts).
@@ -47,8 +47,8 @@ import type { GitAuthBundle } from "./marketplace/shared.ts";
 
 // Re-export the auth/credential types the network-gated plugin orchestrators
 // (install-outcome.ts / reinstall.ts) need. Those files MUST NOT import from
-// `platform/git.ts` or `platform/git-credential.ts` directly -- the
-// no-orchestrator-network gate greps for any `platform/git` import, even
+// `platform/git.ts` or `platform/git-credential.ts` directly -- BLOCK F in
+// `eslint.config.js` rejects any `platform/git` import, even
 // type-only -- so this gate-clean module is their single sanctioned source for
 // the auth bundle inputs (T-79-10).
 export type { AuthAttemptResult, CredentialOps, DeviceFlowHttp };

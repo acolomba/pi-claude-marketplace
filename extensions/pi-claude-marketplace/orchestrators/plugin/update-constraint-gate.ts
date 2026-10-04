@@ -5,7 +5,7 @@
 // so a plugin's version never moves outside what its own dependents allow
 // (UPDT-01, UPDT-02).
 //
-// Deliberately ABSENT from `tests/architecture/gate-targets.ts`'s
+// Deliberately ABSENT from `eslint.config.js`'s
 // `NETWORK_FREE_TARGETS`, for the same reason its tag-probe callees are
 // (D-10-19): stage one's tag query reaches the network from inside this
 // leaf, and `update-preflight.ts` composes and invokes it through the

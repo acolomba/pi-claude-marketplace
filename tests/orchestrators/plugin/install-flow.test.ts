@@ -260,8 +260,8 @@ function retryStagingMkdirPrefix(stagingDir: string): string {
 // Test taxonomy (PRD §5.2.1 PI-1..15 + AS-6 + AS-7):
 //   PI-1: orchestrator takes already-parsed `(plugin, marketplace)` -- covered
 //         by every test that calls installPlugin with concrete strings.
-//   PI-2: no network -- covered architecturally by tests/architecture/
-//         no-orchestrator-network.test.ts. End-to-end: installPlugin has no
+//   PI-2: no network -- covered architecturally by BLOCK F in
+//         `eslint.config.js`. End-to-end: installPlugin has no
 //         gitOps seam so by construction never calls the network.
 //   PI-3: plugin not found in manifest -> notifyError "not found in marketplace".
 //   PI-4: not installable (non-path source) -> notifyError "is not installable".

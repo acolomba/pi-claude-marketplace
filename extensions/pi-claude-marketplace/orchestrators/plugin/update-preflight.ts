@@ -126,7 +126,7 @@ export interface PreparePluginUpdateOptions {
   /**
    * D-10-02 / D-10-19: the constraint gate is composed through this field,
    * defaulted to the real `evaluateUpdateConstraint`. The field name is not
-   * one `tests/architecture/gate-targets.ts`'s network-free gate matches, and
+   * one the network-free ESLint block in `eslint.config.js` bans, and
    * production omits it.
    */
   readonly constraintGate?: typeof evaluateUpdateConstraint;

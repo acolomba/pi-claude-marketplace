@@ -56,9 +56,9 @@
 // standalone/orchestrated asymmetry is INTENTIONAL.
 //
 // NFR-5 / PI-2 architectural guard: this owner MUST NOT import platform-git
-// or the default git ops, and MUST NOT carry a gitOps field; the architectural
-// test under tests/architecture/no-orchestrator-network.test.ts strips comments
-// and greps this file's source for the forbidden surface tokens.
+// or the default git ops, and MUST NOT carry a gitOps field; BLOCK F in
+// `eslint.config.js` lints this file's code for that surface, so a comment
+// may still name it.
 //
 // D-11 import boundaries: orchestrators/plugin/ may import from bridges/,
 // domain/, transaction/, persistence/, shared/, AND from
