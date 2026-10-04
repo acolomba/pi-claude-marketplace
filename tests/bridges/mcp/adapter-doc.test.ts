@@ -373,6 +373,7 @@ describe("partitionServers", () => {
         mine: { command: "mine" },
         other: { command: "other", _piClaudeMarketplace: OTHER_MARKER },
       },
+      keptOverrides: {},
     });
     assert.deepStrictEqual(Object.keys(partition.ours), ["shared", "old"]);
   });
@@ -407,6 +408,7 @@ describe("partitionServers", () => {
       ) as unknown,
       overlays: {},
       theirs: JSON.parse('{"__proto__":{"command":"foreign"}}') as unknown,
+      keptOverrides: {},
     });
   });
 
@@ -423,7 +425,7 @@ describe("partitionServers", () => {
     const partition = partitionServers(config, "acme", "catalog");
 
     // assert
-    assert.deepStrictEqual(partition, { ours: {}, overlays: {}, theirs: {} });
+    assert.deepStrictEqual(partition, { ours: {}, overlays: {}, theirs: {}, keptOverrides: {} });
   });
 
   test("AFILE-05: splits marker-less overrides from full definitions and foreign marked entries", () => {
@@ -457,6 +459,7 @@ describe("partitionServers", () => {
         otherStub: { disabled: true, _piClaudeMarketplace: OTHER_MARKER },
         scalar: 5,
       },
+      keptOverrides: {},
     });
   });
 });
@@ -487,6 +490,57 @@ describe("isFullDefinition", () => {
       assert.strictEqual(reportedIsFull, expectedIsFull);
     });
   }
+
+  test("AFILE-06: lists the override kept by the plugin's entries under the selected key only", () => {
+    // arrange
+    const kept = { disabled: true, env: { TOKEN: "stub-secret" } };
+    const selected = {
+      server: { command: "server", _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: kept } },
+      plain: { command: "plain", _piClaudeMarketplace: ACME_MARKER },
+      full: {
+        command: "full",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { command: "user" } },
+      },
+      nested: {
+        command: "nested",
+        _piClaudeMarketplace: {
+          ...ACME_MARKER,
+          keptOverride: { disabled: true, _piClaudeMarketplace: OTHER_MARKER },
+        },
+      },
+      listed: {
+        command: "listed",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: [{ disabled: true }] },
+      },
+      foreign: {
+        command: "foreign",
+        _piClaudeMarketplace: { ...OTHER_MARKER, keptOverride: { disabled: true } },
+      },
+    };
+    const legacy = {
+      old: {
+        command: "old",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { disabled: true } },
+      },
+    };
+    const config = {
+      doc: { mcpServers: selected, "mcp-servers": legacy },
+      serverKey: "mcpServers",
+      serverMaps: new Map<McpServerKey, Readonly<Record<string, unknown>>>([
+        ["mcpServers", selected],
+        ["mcp-servers", legacy],
+      ]),
+      hadComments: false,
+    } satisfies McpConfigDoc;
+
+    // act
+    const partition = partitionServers(config, "acme", "catalog");
+
+    // assert
+    assert.deepStrictEqual(partition.keptOverrides, {
+      server: { disabled: true, env: { TOKEN: "stub-secret" } },
+    });
+  });
 });
 
 describe("withPluginServers", () => {
@@ -672,5 +726,96 @@ describe("withPluginServers", () => {
 
     // assert
     assert.strictEqual(JSON.stringify(next), '{"mcpServers":{"__proto__":{"command":"server"}}}');
+  });
+  test("AFILE-01: an unstage writes each kept override back in its entry's position and removes the rest", () => {
+    // arrange
+    const servers = {
+      first: { command: "first" },
+      kept: {
+        command: "kept",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { disabled: true } },
+      },
+      plain: { command: "plain", _piClaudeMarketplace: ACME_MARKER },
+      invalid: {
+        command: "invalid",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { url: "https://user.example" } },
+      },
+      last: { command: "last" },
+    };
+    const config = {
+      doc: { mcpServers: servers },
+      serverKey: "mcpServers",
+      serverMaps: new Map([["mcpServers", servers]]),
+      hadComments: false,
+    } satisfies McpConfigDoc;
+
+    // act
+    const next = withPluginServers(config, "acme", "catalog", {});
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      '{"mcpServers":{"first":{"command":"first"},"kept":{"disabled":true},"last":{"command":"last"}}}',
+    );
+  });
+
+  test("AFILE-06: a restage drops a restaged entry and writes back the override of each entry not restaged in its map", () => {
+    // arrange
+    const selected = {
+      server: {
+        command: "old-server",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { disabled: true } },
+      },
+      gone: {
+        command: "gone",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { debug: true } },
+      },
+    };
+    const legacy = {
+      moved: {
+        command: "moved",
+        _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { lifecycle: "eager" } },
+      },
+    };
+    const config = {
+      doc: { mcpServers: selected, "mcp-servers": legacy },
+      serverKey: "mcpServers",
+      serverMaps: new Map<McpServerKey, Readonly<Record<string, unknown>>>([
+        ["mcpServers", selected],
+        ["mcp-servers", legacy],
+      ]),
+      hadComments: false,
+    } satisfies McpConfigDoc;
+
+    // act
+    const next = withPluginServers(config, "acme", "catalog", {
+      server: { command: "server" },
+      moved: { command: "moved-new" },
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      '{"mcpServers":{"gone":{"debug":true},"server":{"command":"server"},"moved":{"command":"moved-new"}},"mcp-servers":{"moved":{"lifecycle":"eager"}}}',
+    );
+  });
+
+  test("WR-01: writes back the kept override of a server named __proto__ as an own entry", () => {
+    // arrange
+    const servers = JSON.parse(
+      '{"__proto__":{"command":"owned","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true}}}}',
+    ) as Record<string, unknown>;
+    const config = {
+      doc: { mcpServers: servers },
+      serverKey: "mcpServers",
+      serverMaps: new Map([["mcpServers", servers]]),
+      hadComments: false,
+    } satisfies McpConfigDoc;
+
+    // act
+    const next = withPluginServers(config, "acme", "catalog", {});
+
+    // assert
+    assert.strictEqual(JSON.stringify(next), '{"mcpServers":{"__proto__":{"disabled":true}}}');
   });
 });

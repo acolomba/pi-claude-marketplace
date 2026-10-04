@@ -5,6 +5,7 @@ import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
   buildMarker,
   isOwnedBy,
+  keptOverrideOf,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/marker.ts";
 
 describe("CLAUDE_MARKETPLACE_MARKER_KEY", () => {
@@ -36,6 +37,95 @@ describe("buildMarker", () => {
     // assert
     assert.deepStrictEqual(marker, expectedMarker);
   });
+
+  test("MC-5: appends a kept override as the marker's last member", () => {
+    // arrange
+    const keptOverride = { disabled: true, env: { TOKEN: "stub-secret" } };
+
+    // act
+    const marker = buildMarker("deploy-tools", "team-marketplace", keptOverride);
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(marker),
+      '{"plugin":"deploy-tools","marketplace":"team-marketplace","keptOverride":{"disabled":true,"env":{"TOKEN":"stub-secret"}}}',
+    );
+    assert.strictEqual(marker.keptOverride, keptOverride);
+  });
+
+  test("MC-5: writes no keptOverride member when no override is given", () => {
+    // arrange
+    const expectedKeys = ["plugin", "marketplace"];
+
+    // act
+    const marker = buildMarker("deploy-tools", "team-marketplace", undefined);
+
+    // assert
+    assert.deepStrictEqual(Object.keys(marker), expectedKeys);
+  });
+});
+
+describe("keptOverrideOf", () => {
+  test("AFILE-06: returns the override an owned entry's marker keeps", () => {
+    // arrange
+    const keptOverride = { disabled: true, env: { TOKEN: "stub-secret" } };
+    const server = {
+      command: "node",
+      _piClaudeMarketplace: { plugin: "search-tools", marketplace: "official", keptOverride },
+    };
+
+    // act
+    const override = keptOverrideOf(server);
+
+    // assert
+    assert.strictEqual(override, keptOverride);
+    assert.deepStrictEqual(override, { disabled: true, env: { TOKEN: "stub-secret" } });
+  });
+
+  for (const { description, marker } of [
+    {
+      description: "no keptOverride member",
+      marker: { plugin: "search-tools", marketplace: "official" },
+    },
+    {
+      description: "a null keptOverride",
+      marker: { plugin: "search-tools", marketplace: "official", keptOverride: null },
+    },
+    {
+      description: "an array keptOverride",
+      marker: {
+        plugin: "search-tools",
+        marketplace: "official",
+        keptOverride: [{ disabled: true }],
+      },
+    },
+    {
+      description: "a string keptOverride",
+      marker: { plugin: "search-tools", marketplace: "official", keptOverride: "disabled" },
+    },
+    {
+      description: "an inherited keptOverride",
+      marker: Object.assign(Object.create({ keptOverride: { disabled: true } }), {
+        plugin: "search-tools",
+        marketplace: "official",
+      }) as unknown,
+    },
+    {
+      description: "a marker without plugin",
+      marker: { marketplace: "official", keptOverride: { disabled: true } },
+    },
+  ] satisfies ReadonlyArray<{ description: string; marker: unknown }>) {
+    test(`AFILE-06: returns undefined for ${description}`, () => {
+      // arrange
+      const server = { command: "node", _piClaudeMarketplace: marker };
+
+      // act
+      const override = keptOverrideOf(server);
+
+      // assert
+      assert.strictEqual(override, undefined);
+    });
+  }
 });
 
 describe("isOwnedBy", () => {
@@ -104,6 +194,32 @@ describe("isOwnedBy", () => {
 
       // assert
       assert.strictEqual(owned, expectedOwnership);
+    });
+  }
+
+  for (const { description, keptOverride } of [
+    { description: "an object", keptOverride: { disabled: true } },
+    { description: "a string", keptOverride: "disabled" },
+  ] satisfies ReadonlyArray<{ description: string; keptOverride: unknown }>) {
+    test(`MC-5: a keptOverride member holding ${description} leaves ownership unchanged`, () => {
+      // arrange
+      const server = {
+        command: "node",
+        _piClaudeMarketplace: {
+          plugin: "search-tools",
+          marketplace: "official-marketplace",
+          keptOverride,
+        },
+      };
+
+      // act
+      const ownership = {
+        owner: isOwnedBy(server, "search-tools", "official-marketplace"),
+        otherPlugin: isOwnedBy(server, "deploy-tools", "official-marketplace"),
+      };
+
+      // assert
+      assert.deepStrictEqual(ownership, { owner: true, otherPlugin: false });
     });
   }
 

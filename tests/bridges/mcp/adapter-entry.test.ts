@@ -97,6 +97,7 @@ test("translates the plugin entry and appends the marker when no previous entry 
     marketplaceName: "catalog",
     substitution: PROJECT_CONTEXT,
     previous: {},
+    keptOverrides: {},
   });
 
   // assert
@@ -125,6 +126,7 @@ test("AFILE-06: a previous entry holding no carried field adds nothing", () => {
     marketplaceName: "catalog",
     substitution: PROJECT_CONTEXT,
     previous,
+    keptOverrides: {},
   });
 
   // assert
@@ -146,6 +148,7 @@ test("AFILE-06: the previous disabled and lifecycle override the plugin's values
     marketplaceName: "catalog",
     substitution: PROJECT_CONTEXT,
     previous,
+    keptOverrides: {},
   });
 
   // assert
@@ -170,6 +173,7 @@ test("AFILE-06: an explicit disabled false is carried like true", () => {
     marketplaceName: "catalog",
     substitution: PROJECT_CONTEXT,
     previous,
+    keptOverrides: {},
   });
 
   // assert
@@ -192,6 +196,7 @@ test("AFILE-06: a field the previous entry only inherits is not carried", () => 
     marketplaceName: "catalog",
     substitution: PROJECT_CONTEXT,
     previous: { server: inherited },
+    keptOverrides: {},
   });
 
   // assert
@@ -213,6 +218,7 @@ test("AFILE-06: orders the translated fields, then the carried fields in set ord
     marketplaceName: "catalog",
     substitution: PROJECT_CONTEXT,
     previous,
+    keptOverrides: {},
   });
 
   // assert
@@ -246,6 +252,7 @@ test("reports a non-object entry and a malformed stdio env as ordered warnings",
     marketplaceName: "catalog",
     substitution: PROJECT_CONTEXT,
     previous: {},
+    keptOverrides: {},
   });
 
   // assert
@@ -281,6 +288,7 @@ test("omits project substitution and injection when the context has no project d
     marketplaceName: "catalog",
     substitution,
     previous: {},
+    keptOverrides: {},
   });
 
   // assert
@@ -311,6 +319,7 @@ test("AFILE-06: of every ServerEntry key, only the carried keys keep their previ
     marketplaceName: "catalog",
     substitution: PROJECT_CONTEXT,
     previous: { server: fullEntry("previous") },
+    keptOverrides: {},
   });
 
   // assert
@@ -328,6 +337,7 @@ test("AFILE-06: a previous entry's credentials, env and owned fields never reach
     marketplaceName: "catalog",
     substitution: PROJECT_CONTEXT,
     previous: { server: fullEntry("previous") },
+    keptOverrides: {},
   });
 
   // assert
@@ -353,6 +363,136 @@ test("AFILE-06: a previous entry's credentials, env and owned fields never reach
   });
 });
 
+test("AFILE-06: the marker keeps the server's override as its last member", () => {
+  // arrange
+  const keptOverride = { disabled: true, env: { STUB_TOKEN: "stub-secret" } };
+
+  // act
+  const stamping = stampServers({
+    servers: { server: { url: "https://acme.example/mcp" } },
+    pluginName: "acme",
+    marketplaceName: "catalog",
+    substitution: PROJECT_CONTEXT,
+    previous: {},
+    keptOverrides: { server: keptOverride },
+  });
+
+  // assert
+  assert.strictEqual(
+    JSON.stringify(stamping.stamped),
+    '{"server":{"url":"https://acme.example/mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}}',
+  );
+});
+
+test("AFILE-06: an absorbed override's credentials stay inside the marker and only carried fields become active", () => {
+  // arrange
+  const override = {
+    disabled: true,
+    env: { STUB_TOKEN: "stub-secret" },
+    headers: { Authorization: "stub-header" },
+    bearerToken: "!echo stub",
+    bearerTokenEnv: "STUB_ENV",
+    bearerTokenStore: "stub-store",
+    oauth: { clientId: "stub-client" },
+    auth: "bearer",
+    requestHeadersCommand: "stub-headers",
+    caFile: "/stub/ca.pem",
+  };
+
+  // act
+  const stamping = stampServers({
+    servers: { server: { command: "plugin-command" } },
+    pluginName: "acme",
+    marketplaceName: "catalog",
+    substitution: PROJECT_CONTEXT,
+    previous: { server: override },
+    keptOverrides: { server: override },
+  });
+
+  // assert
+  assert.deepStrictEqual(stamping.stamped, {
+    server: {
+      command: "plugin-command",
+      env: INJECTED_ENV,
+      disabled: true,
+      _piClaudeMarketplace: {
+        plugin: "acme",
+        marketplace: "catalog",
+        keptOverride: {
+          disabled: true,
+          env: { STUB_TOKEN: "stub-secret" },
+          headers: { Authorization: "stub-header" },
+          bearerToken: "!echo stub",
+          bearerTokenEnv: "STUB_ENV",
+          bearerTokenStore: "stub-store",
+          oauth: { clientId: "stub-client" },
+          auth: "bearer",
+          requestHeadersCommand: "stub-headers",
+          caFile: "/stub/ca.pem",
+        },
+      },
+    },
+  });
+});
+
+test("WR-01: a server named __proto__ without an own kept override gets a marker without one", () => {
+  // arrange
+  const servers = JSON.parse('{"__proto__":{"command":"plugin-command"}}') as Record<
+    string,
+    unknown
+  >;
+
+  // act
+  const stamping = stampServers({
+    servers,
+    pluginName: "acme",
+    marketplaceName: "catalog",
+    substitution: { pluginRoot: "/plugin/root", pluginData: "/plugin/data", projectDir: undefined },
+    previous: {},
+    keptOverrides: {},
+  });
+
+  // assert
+  assert.strictEqual(
+    JSON.stringify(stamping.stamped),
+    '{"__proto__":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}',
+  );
+});
+
+test("AFILE-06: a kept value that is not a plain object adds no keptOverride member", () => {
+  // arrange
+  const keptOverrides = { server: [{ disabled: true }] };
+
+  // act
+  const stamping = stampServers({
+    servers: { server: { url: "https://acme.example/mcp" } },
+    pluginName: "acme",
+    marketplaceName: "catalog",
+    substitution: PROJECT_CONTEXT,
+    previous: {},
+    keptOverrides,
+  });
+
+  // assert
+  assert.deepStrictEqual(stamping.stamped, {
+    server: { url: "https://acme.example/mcp", _piClaudeMarketplace: MARKER },
+  });
+});
+
+// pi-mcp-adapter@5.0.0 (dist.shasum 6c20461d658ec7d7b7e303b067e2ff13a7846d00)
+// applies nothing under `_piClaudeMarketplace`; re-check each fact when the
+// floor moves:
+//   - config.ts:1335-1360 `toServerEntries` keeps each entry object verbatim
+//     and validates no unknown key.
+//   - config.ts:902-962 `mergeServerMaps` and agent-plugin-provenance.ts:27-35
+//     merge entries with a shallow spread, so the marker is one opaque value.
+//   - Every field consumer names its field (`definition.env`,
+//     `definition.bearerToken`, `definition.headers`, `definition.oauth`;
+//     metadata-cache.ts:109 `computeServerHash` lists named fields).
+//   - config.ts:1715 `writeProjectServerDisabledOverride` and config.ts:1961
+//     `writeDirectToolsConfig` spread the entry, so the marker survives.
+//   - project-server-trust.ts:68-79 `hashProjectServerDefinition` hashes the
+//     whole entry, marker included: an identity read only.
 test("AFILE-06: the vendored ServerEntry keys match the pi-mcp-adapter floor", async () => {
   // arrange
   const packageJsonPath = new URL("../../../package.json", import.meta.url);
@@ -367,6 +507,7 @@ test("AFILE-06: the vendored ServerEntry keys match the pi-mcp-adapter floor", a
     packageJson.peerDependencies["pi-mcp-adapter"],
     ">=5.0.0",
     "the pi-mcp-adapter floor moved: refresh SERVER_ENTRY_KEYS from the new floor's types.ts " +
-      "(ServerEntry) and revisit the carried set in adapter-entry.ts",
+      "(ServerEntry), revisit the carried set in adapter-entry.ts, " +
+      "and re-prove that the adapter applies nothing under _piClaudeMarketplace (keptOverride)",
   );
 });

@@ -8,6 +8,9 @@
 // them and a user's `mcp-servers` map is never shadowed by a new `mcpServers`
 // key (AFILE-03). `isFullDefinition` is the adapter's own transport test, which
 // decides whether an entry declares a server or only overrides one (AFILE-05).
+// A user override the plugin's entry replaces is kept in that entry's marker;
+// when the entry leaves the file, the override is written back in its place
+// (AFILE-06, AFILE-01).
 
 import { readFile } from "node:fs/promises";
 
@@ -15,7 +18,7 @@ import stripJsonComments from "strip-json-comments";
 
 import { McpConfigFileError } from "../../shared/errors-bridges.ts";
 
-import { CLAUDE_MARKETPLACE_MARKER_KEY, isOwnedBy } from "./marker.ts";
+import { CLAUDE_MARKETPLACE_MARKER_KEY, isOwnedBy, keptOverrideOf } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
 import type { RawMcpDoc } from "./types.ts";
@@ -58,7 +61,9 @@ export interface McpServerPartition {
   readonly ours: Readonly<Record<string, unknown>>;
   /**
    * Marker-less entries under the selected key that define no transport: user
-   * overrides such as a `/mcp-adapter disable` stub. A staged entry replaces one.
+   * overrides such as a `/mcp-adapter disable` stub. A staged entry absorbs
+   * one: its carried fields become active and the whole override is kept in
+   * the new entry's marker (AFILE-06).
    */
   readonly overlays: Readonly<Record<string, unknown>>;
   /**
@@ -66,6 +71,12 @@ export interface McpServerPartition {
    * marker-less full definitions and entries marked for another plugin.
    */
   readonly theirs: Readonly<Record<string, unknown>>;
+  /**
+   * For each of the plugin's own entries under the selected key, the override
+   * its marker keeps, while that is still an override. The restaged entry
+   * carries it (AFILE-06).
+   */
+  readonly keptOverrides: Readonly<Record<string, unknown>>;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -93,6 +104,16 @@ function isOverlay(entry: unknown): boolean {
     !Object.hasOwn(entry, CLAUDE_MARKETPLACE_MARKER_KEY) &&
     !isFullDefinition(entry)
   );
+}
+
+/**
+ * The override an entry's marker keeps, when it is still an override. A
+ * written-back override is therefore always a partial entry, never a full
+ * definition or a marked entry (AFILE-05).
+ */
+function restorableOverride(entry: unknown): Readonly<Record<string, unknown>> | undefined {
+  const kept = keptOverrideOf(entry);
+  return isOverlay(kept) ? kept : undefined;
 }
 
 function emptyConfig(serverKey: McpServerKey, hadComments: boolean): McpConfigDoc {
@@ -202,6 +223,25 @@ function ownedServers(
   return ours;
 }
 
+/** The restorable override of each of the plugin's entries under the selected key. */
+function keptOverridesOf(
+  selected: Readonly<Record<string, unknown>>,
+  pluginName: string,
+  marketplaceName: string,
+): Record<string, unknown> {
+  const keptOverrides: Record<string, unknown> = {};
+  for (const [name, entry] of Object.entries(selected)) {
+    const override = isOwnedBy(entry, pluginName, marketplaceName)
+      ? restorableOverride(entry)
+      : undefined;
+    if (override !== undefined) {
+      safeSet(keptOverrides, name, override);
+    }
+  }
+
+  return keptOverrides;
+}
+
 /**
  * Splits a config's servers by the `(plugin, marketplace)` marker (MC-5).
  * Every copy goes through `safeSet`, so a server named `__proto__` stays an
@@ -221,12 +261,39 @@ export function partitionServers(
     }
   }
 
-  return { ours: ownedServers(config, pluginName, marketplaceName), overlays, theirs };
+  return {
+    ours: ownedServers(config, pluginName, marketplaceName),
+    overlays,
+    theirs,
+    keptOverrides: keptOverridesOf(selected, pluginName, marketplaceName),
+  };
 }
 
 /**
- * Keeps the entries the plugin does not own. An overlay under a name in
- * `replaced` is dropped too, so the staged entry takes its place.
+ * What one existing entry leaves in its place: itself, the override its
+ * marker keeps, or nothing. A name in `replaced` is restaged in this map, so
+ * the new entry carries the plugin's kept override and absorbs an overlay.
+ */
+function survivingEntry(
+  name: string,
+  entry: unknown,
+  owner: { readonly pluginName: string; readonly marketplaceName: string },
+  replaced: Readonly<Record<string, unknown>>,
+): unknown {
+  const restaged = Object.hasOwn(replaced, name);
+  if (isOwnedBy(entry, owner.pluginName, owner.marketplaceName)) {
+    return restaged ? undefined : restorableOverride(entry);
+  }
+
+  return restaged && isOverlay(entry) ? undefined : entry;
+}
+
+/**
+ * Keeps the entries the plugin does not own, in order. The plugin's entry
+ * under a name not in `replaced` is written back in place as the override
+ * its marker keeps, or dropped when it keeps none (AFILE-01, AFILE-06). An
+ * overlay under a name in `replaced` is dropped, so the staged entry takes
+ * its place.
  */
 function keptServers(
   servers: Readonly<Record<string, unknown>>,
@@ -236,11 +303,9 @@ function keptServers(
 ): Record<string, unknown> {
   const kept: Record<string, unknown> = {};
   for (const [name, entry] of Object.entries(servers)) {
-    const dropped =
-      isOwnedBy(entry, pluginName, marketplaceName) ||
-      (Object.hasOwn(replaced, name) && isOverlay(entry));
-    if (!dropped) {
-      safeSet(kept, name, entry);
+    const surviving = survivingEntry(name, entry, { pluginName, marketplaceName }, replaced);
+    if (surviving !== undefined) {
+      safeSet(kept, name, surviving);
     }
   }
 
@@ -250,8 +315,11 @@ function keptServers(
 /**
  * Composes the next document: the plugin's marked entries leave every server
  * map, and `entries` follow the kept entries of the selected key, in their
- * own order. An overlay under the selected key that shares a name with an
- * entry is dropped, so the entry replaces it (AFILE-05). Every existing
+ * own order. A marked entry whose name is not restaged in its map writes back
+ * the override its marker keeps, in the entry's position; one that keeps none
+ * is removed (AFILE-01, AFILE-06). An overlay under the selected key that
+ * shares a name with an entry is dropped, so the entry replaces it and keeps
+ * it in its marker (AFILE-05, AFILE-06). Every existing
  * top-level key keeps its position. The selected key is added only when it is
  * absent and `entries` is non-empty, so no empty server map is introduced
  * (AFILE-01, AFILE-03).

@@ -953,7 +953,10 @@ describe("prepareStageMcpServers", () => {
       "disabled": true,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "keptOverride": {
+          "disabled": true
+        }
       }
     }
   }
@@ -968,7 +971,7 @@ describe("prepareStageMcpServers", () => {
     assert.strictEqual(storedBytes, expectedBytes);
   });
 
-  test("AFILE-06: absorbs a disable stub's carried fields and none of its credentials", async (t) => {
+  test("AFILE-06: absorbs a disable stub's carried fields, keeps the whole stub in the marker, and activates none of its credentials", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-absorb-");
     await writeSource(
@@ -999,7 +1002,17 @@ describe("prepareStageMcpServers", () => {
       "disabled": true,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "keptOverride": {
+          "disabled": true,
+          "env": {
+            "STUB_TOKEN": "stub-env"
+          },
+          "headers": {
+            "Authorization": "stub-header"
+          },
+          "bearerToken": "t"
+        }
       }
     }
   }
@@ -1035,7 +1048,10 @@ describe("prepareStageMcpServers", () => {
       "disabled": true,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "keptOverride": {
+          "disabled": true
+        }
       }
     }
   }
@@ -1051,6 +1067,168 @@ describe("prepareStageMcpServers", () => {
     // assert
     assert.strictEqual(firstBytes, expectedBytes);
     assert.strictEqual(secondBytes, expectedBytes);
+  });
+
+  test("AFILE-06: restaging an entry that keeps an override carries the override forward unchanged", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-kept-restage-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"server":{"url":"https://old.example/mcp","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}}}',
+    );
+    const expectedBytes = `{
+  "mcpServers": {
+    "server": {
+      "url": "https://acme.example/mcp",
+      "disabled": true,
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog",
+        "keptOverride": {
+          "disabled": true,
+          "env": {
+            "STUB_TOKEN": "stub-secret"
+          }
+        }
+      }
+    }
+  }
+}
+`;
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const firstBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const secondBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(firstBytes, expectedBytes);
+    assert.strictEqual(secondBytes, expectedBytes);
+  });
+
+  test("AFILE-01: a stage that drops a server writes its kept override back marker-less in place", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-kept-dropped-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"mine":{"command":"mine"},"old":{"url":"https://old.example/mcp","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true}}},"last":{"command":"last"}}}',
+    );
+    const expectedBytes = `{
+  "mcpServers": {
+    "mine": {
+      "command": "mine"
+    },
+    "old": {
+      "disabled": true
+    },
+    "last": {
+      "command": "last"
+    },
+    "server": {
+      "url": "https://acme.example/mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, expectedBytes);
+  });
+
+  test("AFILE-03: an entry keeping an override under mcp-servers writes it back there when the new entry goes under mcpServers", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-kept-moved-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"mine":{"command":"mine"}},"mcp-servers":{"server":{"url":"https://old.example/mcp","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true}}}}}',
+    );
+    const expectedBytes = `{
+  "mcpServers": {
+    "mine": {
+      "command": "mine"
+    },
+    "server": {
+      "url": "https://acme.example/mcp",
+      "disabled": true,
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  },
+  "mcp-servers": {
+    "server": {
+      "disabled": true
+    }
+  }
+}
+`;
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, expectedBytes);
+  });
+
+  test("AFILE-03: with an mcp-servers-only file the override is kept and written back under mcp-servers", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-kept-legacy-key-");
+    await writeSource(locations.mcpAdapterJsonPath, '{"mcp-servers":{"server":{"disabled":true}}}');
+    const expectedStagedBytes = `{
+  "mcp-servers": {
+    "server": {
+      "url": "https://acme.example/mcp",
+      "disabled": true,
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog",
+        "keptOverride": {
+          "disabled": true
+        }
+      }
+    }
+  }
+}
+`;
+    const expectedRestoredBytes = `{
+  "mcp-servers": {
+    "server": {
+      "disabled": true
+    }
+  }
+}
+`;
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const stagedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+    await commitPreparedMcp(
+      await prepareStageMcpServers({
+        locations,
+        cwd,
+        marketplaceName: "catalog",
+        pluginName: "acme",
+        pluginRoot: path.join(cwd, "plugins", "acme"),
+        pluginData: path.join(cwd, "data", "acme"),
+        servers: {},
+      }),
+    );
+    const restoredBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(stagedBytes, expectedStagedBytes);
+    assert.strictEqual(restoredBytes, expectedRestoredBytes);
   });
 
   test("omits project substitution and injection in a user scope", async (t) => {

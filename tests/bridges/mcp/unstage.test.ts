@@ -499,6 +499,49 @@ test("AFILE-01: removes owned entries under both server keys and keeps a marker-
   assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), expectedBytes);
 });
 
+test("AFILE-01: writes an owned entry's kept override back marker-less in place", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-kept-override-");
+  const storedBytes =
+    '{"mcpServers":{"first":{"command":"first"},"server":{"command":"owned-server","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}},"last":{"command":"last"}}}\n';
+  const expectedBytes = `{
+  "mcpServers": {
+    "first": {
+      "command": "first"
+    },
+    "server": {
+      "disabled": true,
+      "env": {
+        "STUB_TOKEN": "stub-secret"
+      }
+    },
+    "last": {
+      "command": "last"
+    }
+  }
+}
+`;
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, storedBytes, "utf8");
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+  const rewrittenBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(unstage, {
+    removedNames: ["server"],
+    warnings: [],
+    notices: [],
+    written: [{ path: locations.mcpAdapterJsonPath, bytes: Buffer.from(expectedBytes) }],
+  });
+  assert.strictEqual(rewrittenBytes, expectedBytes);
+});
+
 test("removes owned prototype-named servers and keeps foreign inherited names", async (t) => {
   // arrange
   const { locations } = await createScope(t, "mcp-unstage-prototype-names-");

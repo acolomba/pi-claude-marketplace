@@ -3,7 +3,9 @@
 // Builds the entry this extension writes for each plugin MCP server. The
 // plugin's entry is substituted and gains the injected env (MENV-01/02), the
 // user's own fields carry over from the entry it replaces (AFILE-06), and the
-// MC-5 marker goes last. Every change to entry content belongs in this module.
+// MC-5 marker goes last. The marker may keep the user override the entry
+// replaced, verbatim and inert (AFILE-06). Every change to entry content
+// belongs in this module.
 
 import { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
@@ -38,6 +40,8 @@ export interface StampServersInput {
    * stub or the plugin's previous marked entry. A name without one is absent.
    */
   readonly previous: Readonly<Record<string, unknown>>;
+  /** For each server name, the user override the new entry keeps in its marker. */
+  readonly keptOverrides: Readonly<Record<string, unknown>>;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -94,16 +98,29 @@ function carriedFields(previous: unknown): Record<string, unknown> {
 }
 
 /**
+ * The override a server's new entry keeps. `Object.hasOwn` keeps a server
+ * named `__proto__` from picking up `Object.prototype` (WR-01).
+ */
+function keptOverrideFor(
+  keptOverrides: Readonly<Record<string, unknown>>,
+  name: string,
+): Readonly<Record<string, unknown>> | undefined {
+  const override = Object.hasOwn(keptOverrides, name) ? keptOverrides[name] : undefined;
+  return isPlainObject(override) ? override : undefined;
+}
+
+/**
  * Builds the entry for each plugin server: the translated plugin entry, then
- * the fields carried from the entry it replaces, then the MC-5 marker. A
- * carried value overrides the plugin's value; a carried field the plugin also
- * sets keeps the plugin's key position.
+ * the fields carried from the entry it replaces, then the MC-5 marker, which
+ * keeps the server's user override when there is one. A carried value
+ * overrides the plugin's value; a carried field the plugin also sets keeps the
+ * plugin's key position. Carried fields come from `previous` alone, so a
+ * credential-bearing field of an override stays inside the marker (AFILE-06).
  */
 export function stampServers(input: StampServersInput): {
   readonly stamped: Record<string, unknown>;
   readonly warnings: string[];
 } {
-  const marker = buildMarker(input.pluginName, input.marketplaceName);
   const stamped: Record<string, unknown> = {};
   const warnings: string[] = [];
   for (const [name, entry] of Object.entries(input.servers)) {
@@ -114,7 +131,11 @@ export function stampServers(input: StampServersInput): {
     safeSet(stamped, name, {
       ...translated,
       ...carriedFields(input.previous[name]),
-      [CLAUDE_MARKETPLACE_MARKER_KEY]: marker,
+      [CLAUDE_MARKETPLACE_MARKER_KEY]: buildMarker(
+        input.pluginName,
+        input.marketplaceName,
+        keptOverrideFor(input.keptOverrides, name),
+      ),
     });
   }
 

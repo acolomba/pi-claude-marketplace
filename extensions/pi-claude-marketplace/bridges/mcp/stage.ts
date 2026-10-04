@@ -166,7 +166,9 @@ async function readTargetConfig(
  * sources (AFILE-05, MC-4; the plugin's own marked entries are exempt in every
  * source), stamps every new entry (AFILE-06 carry-forward, MC-5 marker), and
  * builds the next doc. A staged entry replaces a marker-less override under
- * its name and absorbs its carried fields. AS-8 noop short-circuits when
+ * its name, makes its carried fields active and keeps the whole override in
+ * its marker. A plugin entry the stage drops writes its kept override back
+ * (AFILE-01, AFILE-06). AS-8 noop short-circuits when
  * there is nothing new AND nothing previously-ours -- in that case
  * `commitPreparedMcp` writes no file (PRD success criterion: AS-8 noop
  * produces no `mcp-adapter.json`).
@@ -189,7 +191,11 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   }
 
   // Partition existing into ours-vs-theirs by marker (MC-5).
-  const { ours, overlays, theirs } = partitionServers(config, pluginName, marketplaceName);
+  const { ours, overlays, theirs, keptOverrides } = partitionServers(
+    config,
+    pluginName,
+    marketplaceName,
+  );
 
   // AFILE-05 / MC-4: any other full definition of a new name refuses.
   await assertNoMcpCollisions({
@@ -218,14 +224,18 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   };
   // AFILE-06: each new entry carries the user's fields from the entry it
   // replaces. A marker-less override stub under the selected key wins over the
-  // plugin's previous marked entry. Object spread defines own data properties,
-  // so a server named `__proto__` stays an own key (WR-01).
+  // plugin's previous marked entry. The new entry keeps the absorbed stub, or
+  // the override the plugin's previous entry kept, in its marker. Overlays and
+  // the plugin's entries under the selected key never share a name. Object
+  // spread defines own data properties, so a server named `__proto__` stays an
+  // own key (WR-01).
   const { stamped, warnings: stampWarnings } = stampServers({
     servers,
     pluginName,
     marketplaceName,
     substitution,
     previous: { ...ours, ...overlays },
+    keptOverrides: { ...keptOverrides, ...overlays },
   });
 
   // Keep theirs verbatim; replace ours with stamped (or drop ours when
