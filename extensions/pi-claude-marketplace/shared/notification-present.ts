@@ -41,7 +41,8 @@ import type { Scope } from "./types.ts";
  *
  * PMOD-04 / D-07: the free-text fields resolve does not reach are redacted
  * here, so neither strategy reads a credential: a url-source marketplace
- * `url`, advisory lines, and plugin-info `notes`.
+ * `url`, advisory lines, plugin-info `notes`, and the marketplace-not-added
+ * `name`, the marketplace name the user typed.
  */
 
 /** A resolved cascade: its envelope, its blocks, and its advisory lines. */
@@ -169,7 +170,7 @@ export function presentNotification(
       return {
         kind: "marketplace-not-added",
         envelope: resolveEnvelope(message),
-        message,
+        message: { ...message, name: redactCredentials(message.name) },
         reason,
       };
     }

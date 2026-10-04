@@ -861,6 +861,35 @@ describe("presentNotification", () => {
     });
   }
 
+  test("PMOD-04 / D-07 redacts the userinfo of a marketplace-not-added name", () => {
+    // arrange
+    const message = {
+      kind: "marketplace-not-added",
+      name: "https://alice:s3cret@github.com/o/r.git",
+      scope: "user",
+    } satisfies MarketplaceNotAddedMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "marketplace-not-added",
+      envelope: {
+        severity: "error",
+        summary: "A marketplace operation has failed.",
+        needsReload: false,
+        noOp: false,
+      },
+      message: {
+        kind: "marketplace-not-added",
+        name: "https://***@github.com/o/r.git",
+        scope: "user",
+      },
+      reason: "marketplace not added",
+    });
+  });
+
   test("serializes the prune cause over its redacted chain with no live error", () => {
     // arrange
     const message = {

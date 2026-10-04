@@ -861,6 +861,25 @@ describe("resolveRows", () => {
     });
   }
 
+  test("PMOD-04 / D-07 redacts the userinfo of a plugin row name", () => {
+    // arrange
+    const marketplaces = marketplaceWith([
+      { status: "will install", name: "https://alice:s3cret@github.com/o/r.git" },
+    ]);
+
+    // act
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
+
+    // assert
+    assert.deepStrictEqual(resolved, [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [{ status: "will install", name: "https://***@github.com/o/r.git", reasons: [] }],
+      },
+    ] satisfies readonly ResolvedMarketplace[]);
+  });
+
   test("resolves a manual-recovery row with its leaks and no rollback phases", () => {
     // arrange
     const marketplaces = marketplaceWith([

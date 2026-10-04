@@ -343,6 +343,8 @@ type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMes
  *
  * PMOD-04 / D-07: every block name is redacted, because a failed `marketplace
  * add` names its block after the source the user typed, URL userinfo included.
+ * Every plugin row name is redacted too, because a hand-edited `enabledPlugins`
+ * key names a pending or failed row after whatever precedes its last `@`.
  */
 export function resolveRows(
   marketplaces: readonly MarketplaceNotificationMessage[],
@@ -365,7 +367,10 @@ export function resolveRows(
           snapshot,
         ),
       );
-      return policy === undefined ? { ...resolved, missingPolicy: true } : resolved;
+      // An out-of-band row can arrive without a `name`; it keeps that shape.
+      const redacted =
+        "name" in resolved ? { ...resolved, name: redactCredentials(resolved.name) } : resolved;
+      return policy === undefined ? { ...redacted, missingPolicy: true } : redacted;
     }),
   }));
 }

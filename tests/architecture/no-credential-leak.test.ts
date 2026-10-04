@@ -9,6 +9,7 @@ import {
   composeReconcileAppliedBody,
   formatEnvelopeArguments,
   formatRawSurface,
+  renderMarketplaceNotAdded,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { toWirePayload } from "../../extensions/pi-claude-marketplace/shared/notification-json.ts";
 import { presentNotification } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
@@ -808,6 +809,18 @@ function probeCascadeSubject(message: NotificationMessage): LeakProbe {
   return probeComposedText(presentation, composeReconcileAppliedBody(presentation.marketplaces));
 }
 
+function probeNotAddedSubject(message: NotificationMessage): LeakProbe {
+  const presentation = presentNotification(runWithAllLoaded(), message);
+  assert.ok(
+    presentation.kind === "marketplace-not-added",
+    "AUTH-09 / PMOD-04: the message presents a marketplace-not-added",
+  );
+  return probeComposedText(
+    presentation,
+    renderMarketplaceNotAdded(presentation.message, presentation.reason),
+  );
+}
+
 function rowCascade(row: PluginNotificationMessage): NotificationMessage {
   return { marketplaces: [{ name: "mp", scope: "user", plugins: [row] }] };
 }
@@ -1037,6 +1050,17 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
           },
         ],
       }),
+  },
+  {
+    site: "a plugin row name",
+    planted: USERINFO,
+    probe: () => probeCascadeSubject(rowCascade({ status: "will install", name: USERINFO_URL })),
+  },
+  {
+    site: "the marketplace-not-added name",
+    planted: USERINFO,
+    probe: () =>
+      probeNotAddedSubject({ kind: "marketplace-not-added", name: USERINFO_URL, scope: "user" }),
   },
 ];
 
