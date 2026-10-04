@@ -871,6 +871,56 @@ test("AFILE-04: cascadeUnstagePlugin carries the notice for a commented mcp-adap
   assert.deepStrictEqual(outcome, expected);
 });
 
+test("AFILE-01: cascadeUnstagePlugin writes a kept override back and reports the write-back", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-mcp-kept-override");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '{"mcpServers":{"sample-server":{"command":"node","disabled":true,"_piClaudeMarketplace":{"plugin":"sample","marketplace":"official","keptOverride":{"disabled":true}}}}}\n',
+  );
+  const record = pluginRecord({ mcpServers: ["sample-server"] });
+  const expected: UnstageOutcome = {
+    ok: true,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["sample-server"],
+      workflows: [],
+    },
+    mcpConfigNotices: [
+      {
+        kind: "override-restored",
+        scope: "project",
+        file: "mcp-adapter.json",
+        server: "sample-server",
+      },
+    ],
+    writtenMcpFiles: [
+      {
+        path: locations.mcpAdapterJsonPath,
+        bytes: Buffer.from(
+          '{\n  "mcpServers": {\n    "sample-server": {\n      "disabled": true\n    }\n  }\n}\n',
+        ),
+      },
+    ],
+  };
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(
+    { outcome, file: await readFile(locations.mcpAdapterJsonPath, "utf8") },
+    {
+      outcome: expected,
+      file: '{\n  "mcpServers": {\n    "sample-server": {\n      "disabled": true\n    }\n  }\n}\n',
+    },
+  );
+});
+
 test("AFILE-04: cascadeUnstagePlugin keeps the notice when a later slot fails", async (t) => {
   // arrange
   const { locations } = await createProjectScope(t, "cascade-mcp-comments-failure");

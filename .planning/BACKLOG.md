@@ -3761,3 +3761,12 @@ Scope when picked up: keeping the choices needs persisted state, because the
 MC-5 marker is a byte-stable contract and cannot hold them. Decide where the
 carried fields live while the plugin is disabled (the install record is the
 natural candidate) and how enable reads them back.
+
+Changed by D-02-21 (2026-10-04): a marker-less override that a plugin's entry
+absorbed at install now survives disable then enable. Disable writes it back
+from `_piClaudeMarketplace.keptOverride`, and enable keeps it again. A choice
+the user writes into the plugin's own entry while the plugin owns the name
+(for example `/mcp-adapter disable` after install) still does not survive.
+The `keptOverride` member shows that the marker can carry an additive member,
+so "the marker cannot hold them" no longer holds as written. Whether those
+choices belong in the marker or in persisted state is still open.

@@ -6990,6 +6990,71 @@ test("AFILE-04: enable over a commented mcp-adapter.json shows the comments-remo
   });
 });
 
+test("AFILE-06: disable writes a kept override back and enable keeps it again with the override notice", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+      mcpServers: { server1: { command: "node" } },
+    });
+    const overrideBytes = `{
+  "mcpServers": {
+    "server1": {
+      "disabled": true,
+      "env": {
+        "STUB_TOKEN": "stub-secret"
+      }
+    }
+  }
+}
+`;
+    await mkdir(path.dirname(userAdapterPath(home)), { recursive: true });
+    await writeFile(userAdapterPath(home), overrideBytes);
+    const setEnabled = async (enable: boolean): Promise<NotifyRecord[]> => {
+      const { ctx, notifications } = makeCtx(cwd);
+      await setPluginEnabled({
+        ctx,
+        pi: makePi([], [adapterCommand()]),
+        cwd,
+        marketplace: "mp",
+        plugin: "foo",
+        enable,
+        scope: "user",
+      });
+      return notifications;
+    };
+
+    // act
+    const enabled = await setEnabled(true);
+    const disabled = await setEnabled(false);
+    const disabledBytes = await readFile(userAdapterPath(home), "utf8");
+    const enabledAgain = await setEnabled(true);
+
+    // assert
+    const overrideNotice: NotifyRecord = {
+      severity: "warning",
+      message:
+        'MCP server override kept.\n\nfoo now provides "server1" in the user-scope mcp-adapter.json. Your override for "server1" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable foo.',
+    };
+    const enabledRow: NotifyRecord = {
+      message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes",
+    };
+    assert.deepStrictEqual(
+      { enabled, disabled, disabledBytes, enabledAgain },
+      {
+        enabled: [enabledRow, overrideNotice],
+        disabled: [
+          { message: "● mp [user]\n  ◍ foo v1.2.3 (disabled)\n\n/reload to pick up changes" },
+        ],
+        disabledBytes: overrideBytes,
+        enabledAgain: [enabledRow, overrideNotice],
+      },
+    );
+  });
+});
+
 test("AFILE-04: an enable cascade reports the notice once for the root and its re-enabled dependencies", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange -- the dependency stages first and removes the comments, so the

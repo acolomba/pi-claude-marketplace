@@ -6770,20 +6770,23 @@ const COMMENTS_REMOVED_NOTICE: NotifyRecord = {
   severity: "warning",
 };
 
-test("AFILE-04: uninstall over a commented mcp-adapter.json shows the comments-removed notice", async () => {
-  await withHermeticHome(async () => {
+/**
+ * AFILE-04: uninstalls a full `hello@mp` at project scope over an
+ * mcp-adapter.json holding `adapterBytes`, and returns the standalone outcome,
+ * the notifications and the file as uninstall left it.
+ */
+async function uninstallOverAdapterFile(adapterBytes: string): Promise<{
+  readonly outcome: unknown;
+  readonly notifications: NotifyRecord[];
+  readonly adapter: string;
+}> {
+  return withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-afile04-"));
     try {
-      // arrange
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
-      await writeFile(
-        locations.mcpAdapterJsonPath,
-        '// user note\n{"mcpServers":{"uni-server":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n',
-      );
+      await writeFile(locations.mcpAdapterJsonPath, adapterBytes);
       const { ctx, pi, notifications } = makeCtx();
-
-      // act
       const outcome = await uninstallWithFreshOwner({
         ctx,
         pi,
@@ -6792,24 +6795,57 @@ test("AFILE-04: uninstall over a commented mcp-adapter.json shows the comments-r
         marketplace: "mp",
         plugin: "hello",
       });
-
-      // assert
-      assert.equal(outcome, undefined);
-      assert.deepStrictEqual(notifications, [
-        {
-          message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
-          severity: "warning",
-        },
-        COMMENTS_REMOVED_NOTICE,
-      ]);
-      assert.equal(
-        await readFile(locations.mcpAdapterJsonPath, "utf8"),
-        '{\n  "mcpServers": {}\n}\n',
-      );
+      const adapter = await readFile(locations.mcpAdapterJsonPath, "utf8");
+      return { outcome, notifications, adapter };
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
+  });
+}
+
+/** AFILE-04: the uninstalled row a full `hello@mp` shows at project scope. */
+const HELLO_UNINSTALLED_ROW: NotifyRecord = {
+  message:
+    "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
+  severity: "warning",
+};
+
+test("AFILE-04: uninstall over a commented mcp-adapter.json shows the comments-removed notice", async () => {
+  // arrange
+  const adapterBytes =
+    '// user note\n{"mcpServers":{"uni-server":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n';
+
+  // act
+  const result = await uninstallOverAdapterFile(adapterBytes);
+
+  // assert
+  assert.deepStrictEqual(result, {
+    outcome: undefined,
+    notifications: [HELLO_UNINSTALLED_ROW, COMMENTS_REMOVED_NOTICE],
+    adapter: '{\n  "mcpServers": {}\n}\n',
+  });
+});
+
+test("AFILE-04: uninstall over a commented mcp-adapter.json writes the kept override back and shows only the comments notice", async () => {
+  // arrange
+  const adapterBytes =
+    '// user note\n{"mcpServers":{"uni-server":{"command":"node","disabled":true,"_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp","keptOverride":{"disabled":true}}}}}\n';
+
+  // act
+  const result = await uninstallOverAdapterFile(adapterBytes);
+
+  // assert
+  assert.deepStrictEqual(result, {
+    outcome: undefined,
+    notifications: [HELLO_UNINSTALLED_ROW, COMMENTS_REMOVED_NOTICE],
+    adapter: `{
+  "mcpServers": {
+    "uni-server": {
+      "disabled": true
+    }
+  }
+}
+`,
   });
 });
 

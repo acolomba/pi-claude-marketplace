@@ -11,13 +11,16 @@ import {
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   createInstallOperation,
+  createReinstallOperation,
   createUninstallOperation,
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
+import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // The user override under a plugin server name survives install and
@@ -25,16 +28,32 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 // entry's marker, and uninstall writes it back as the entry it was (AFILE-06,
 // AFILE-01).
 
-function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI } {
-  const ctx = {
-    ui: { notify: (_message: string, _severity?: string): void => undefined },
-  } as ExtensionContext;
-  const pi = { getAllTools: (): unknown[] => [] } as ExtensionAPI;
-  return { ctx, pi };
+interface NotifyRecord {
+  readonly message: string;
+  readonly severity: string | undefined;
 }
 
-/** Seeds path marketplace `mp` with plugin `hello` 1.0.0 declaring MCP server `srv`. */
-async function seedMcpPlugin(cwd: string): Promise<string> {
+function makeCtx(): {
+  session: { ctx: ExtensionContext; pi: ExtensionAPI };
+  notifications: NotifyRecord[];
+} {
+  const notifications: NotifyRecord[] = [];
+  const ctx = {
+    ui: {
+      notify: (message: string, severity?: string): void => {
+        notifications.push({ message, severity });
+      },
+    },
+  } as ExtensionContext;
+  const pi = { getAllTools: (): unknown[] => [] } as ExtensionAPI;
+  return { session: { ctx, pi }, notifications };
+}
+
+/**
+ * Seeds path marketplace `mp` with plugin `hello` 1.0.0 declaring MCP server
+ * `srv`, and registers `mp` at each of `scopes`.
+ */
+async function seedMcpPlugin(cwd: string, scopes: readonly Scope[]): Promise<string> {
   const marketplaceRoot = path.join(cwd, "mp-src");
   const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
@@ -55,22 +74,25 @@ async function seedMcpPlugin(cwd: string): Promise<string> {
       plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
     }),
   );
-  const locations = locationsFor("project", cwd);
-  await mkdir(locations.extensionRoot, { recursive: true });
-  await saveState(locations.extensionRoot, {
-    schemaVersion: 1,
-    marketplaces: {
-      mp: {
-        name: "mp",
-        scope: "project",
-        source: pathSource("./mp-src"),
-        addedFromCwd: cwd,
-        manifestPath,
-        marketplaceRoot,
-        plugins: {},
+  for (const scope of scopes) {
+    const locations = locationsFor(scope, cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope,
+          source: pathSource("./mp-src"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {},
+        },
       },
-    },
-  });
+    });
+  }
+
   return pluginRoot;
 }
 
@@ -90,7 +112,7 @@ async function pathExists(filePath: string): Promise<boolean> {
 test("AFILE-06: a project install keeps the user's override in its entry and uninstall writes it back", async () => {
   await withHermeticEnvironment("mcp-override-lifecycle-", async ({ cwd }) => {
     // arrange
-    const pluginRoot = await seedMcpPlugin(cwd);
+    const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
     const locations = locationsFor("project", cwd);
     const overrideBytes = `{
   "mcpServers": {
@@ -115,9 +137,15 @@ test("AFILE-06: a project install keeps the user's override in its entry and uni
     const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
 
     // act
-    await createInstallOperation(hooksRouting, completionCache)({ ...installed, ...request });
+    await createInstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...installed.session, ...request });
     const installedText = await readFile(locations.mcpAdapterJsonPath, "utf8");
-    await createUninstallOperation(hooksRouting, completionCache)({ ...uninstalled, ...request });
+    await createUninstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...uninstalled.session, ...request });
     const uninstalledBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
 
     // assert
@@ -144,5 +172,203 @@ test("AFILE-06: a project install keeps the user's override in its entry and uni
     assert.strictEqual(installedText.split("stub-secret").length - 1, 1);
     assert.strictEqual(uninstalledBytes, overrideBytes);
     assert.strictEqual(await pathExists(path.join(cwd, ".pi", "mcp.json")), false);
+  });
+});
+
+test("AFILE-06: a user-scope plugin disabled in the project keeps that disable through a project install, update, reinstall and uninstall", async () => {
+  await withHermeticEnvironment("mcp-override-cross-scope-", async ({ agentDir, cwd }) => {
+    // arrange
+    const pluginRoot = await seedMcpPlugin(cwd, ["user", "project"]);
+    const user = locationsFor("user", cwd);
+    const project = locationsFor("project", cwd);
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const completionCache = createCompletionCache();
+    const install = createInstallOperation(hooksRouting, completionCache);
+    const { updatePlugins } = createPluginUpdateOperations(hooksRouting, completionCache);
+    const reinstall = createReinstallOperation(hooksRouting, completionCache);
+    const uninstall = createUninstallOperation(hooksRouting, completionCache);
+    const atUser = { scope: "user", cwd, marketplace: "mp", plugin: "hello" } as const;
+    const atProject = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+    const overrideBytes = `{
+  "mcpServers": {
+    "srv": {
+      "disabled": true,
+      "env": {
+        "STUB_TOKEN": "stub-secret"
+      }
+    }
+  }
+}
+`;
+    const userInstall = makeCtx();
+    const projectInstall = makeCtx();
+    const projectUpdate = makeCtx();
+    const projectReinstall = makeCtx();
+    const projectUninstall = makeCtx();
+    const userUninstall = makeCtx();
+    const userInstallAgain = makeCtx();
+
+    // act
+    await install({ ...userInstall.session, ...atUser });
+    const userBytes = await readFile(user.mcpAdapterJsonPath, "utf8");
+    await mkdir(path.dirname(project.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(project.mcpAdapterJsonPath, overrideBytes);
+    await install({ ...projectInstall.session, ...atProject });
+    const installedProject: unknown = JSON.parse(
+      await readFile(project.mcpAdapterJsonPath, "utf8"),
+    );
+    const userAfterInstall = await readFile(user.mcpAdapterJsonPath, "utf8");
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "hello", version: "1.1.0" }),
+    );
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: { srv: { command: "node", args: ["v2.js"] } } }),
+    );
+    await writeFile(
+      path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"),
+      JSON.stringify({
+        name: "mp",
+        plugins: [{ name: "hello", source: "./plugins/hello", version: "1.1.0" }],
+      }),
+    );
+    await updatePlugins({
+      ...projectUpdate.session,
+      scope: "project",
+      cwd,
+      target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+    });
+    const updatedText = await readFile(project.mcpAdapterJsonPath, "utf8");
+    const userAfterUpdate = await readFile(user.mcpAdapterJsonPath, "utf8");
+    await reinstall({ ...projectReinstall.session, ...atProject });
+    const reinstalledText = await readFile(project.mcpAdapterJsonPath, "utf8");
+    const userAfterReinstall = await readFile(user.mcpAdapterJsonPath, "utf8");
+    await uninstall({ ...projectUninstall.session, ...atProject });
+    const uninstalledBytes = await readFile(project.mcpAdapterJsonPath, "utf8");
+    const userAfterUninstall = await readFile(user.mcpAdapterJsonPath, "utf8");
+    await uninstall({ ...userUninstall.session, ...atUser });
+    await install({ ...userInstallAgain.session, ...atUser });
+    const userFinal: unknown = JSON.parse(await readFile(user.mcpAdapterJsonPath, "utf8"));
+
+    // assert
+    const projectEnv = {
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+      CLAUDE_PLUGIN_DATA: path.join(project.dataRoot, "mp", "hello"),
+      CLAUDE_PROJECT_DIR: cwd,
+    };
+    const userEnv = {
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+      CLAUDE_PLUGIN_DATA: path.join(user.dataRoot, "mp", "hello"),
+    };
+    const keptMarker = {
+      plugin: "hello",
+      marketplace: "mp",
+      keptOverride: { disabled: true, env: { STUB_TOKEN: "stub-secret" } },
+    };
+    const installedRow = (scope: Scope, version: string): NotifyRecord => ({
+      message: `A plugin operation needs attention.\n\n● mp [${scope}]\n  ● hello v${version} (installed) {requires pi-mcp-adapter}\n\n/reload to pick up changes`,
+      severity: "warning",
+    });
+    const uninstalledRow = (scope: Scope, version: string): NotifyRecord => ({
+      message: `● mp [${scope}]\n  ○ hello v${version} (uninstalled)\n\n/reload to pick up changes`,
+      severity: undefined,
+    });
+    assert.deepStrictEqual(
+      {
+        userInstall: userInstall.notifications,
+        projectInstall: projectInstall.notifications,
+        projectUpdate: projectUpdate.notifications,
+        projectReinstall: projectReinstall.notifications,
+        projectUninstall: projectUninstall.notifications,
+        userUninstall: userUninstall.notifications,
+        userInstallAgain: userInstallAgain.notifications,
+      },
+      {
+        userInstall: [installedRow("user", "1.0.0")],
+        projectInstall: [
+          installedRow("project", "1.0.0"),
+          {
+            message:
+              'MCP server override kept.\n\nhello now provides "srv" in the project-scope mcp-adapter.json. Your override for "srv" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable hello.',
+            severity: "warning",
+          },
+        ],
+        projectUpdate: [
+          {
+            message:
+              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 → v1.1.0 (updated) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            severity: "warning",
+          },
+        ],
+        projectReinstall: [
+          {
+            message:
+              "● mp [project]\n  ● hello v1.1.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            severity: undefined,
+          },
+        ],
+        projectUninstall: [uninstalledRow("project", "1.1.0")],
+        userUninstall: [uninstalledRow("user", "1.0.0")],
+        userInstallAgain: [installedRow("user", "1.1.0")],
+      },
+    );
+    assert.deepStrictEqual(installedProject, {
+      mcpServers: {
+        srv: {
+          command: "node",
+          args: ["v1.js"],
+          env: projectEnv,
+          disabled: true,
+          _piClaudeMarketplace: keptMarker,
+        },
+      },
+    });
+    assert.deepStrictEqual(JSON.parse(updatedText), {
+      mcpServers: {
+        srv: {
+          command: "node",
+          args: ["v2.js"],
+          env: projectEnv,
+          disabled: true,
+          _piClaudeMarketplace: keptMarker,
+        },
+      },
+    });
+    assert.deepStrictEqual(
+      {
+        reinstalledText,
+        uninstalledBytes,
+        userAfterInstall,
+        userAfterUpdate,
+        userAfterReinstall,
+        userAfterUninstall,
+      },
+      {
+        reinstalledText: updatedText,
+        uninstalledBytes: overrideBytes,
+        userAfterInstall: userBytes,
+        userAfterUpdate: userBytes,
+        userAfterReinstall: userBytes,
+        userAfterUninstall: userBytes,
+      },
+    );
+    assert.deepStrictEqual(userFinal, {
+      mcpServers: {
+        srv: {
+          command: "node",
+          args: ["v2.js"],
+          env: userEnv,
+          _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+        },
+      },
+    });
+    assert.deepStrictEqual(
+      [
+        await pathExists(path.join(cwd, ".pi", "mcp.json")),
+        await pathExists(path.join(agentDir, "mcp.json")),
+      ],
+      [false, false],
+    );
   });
 });

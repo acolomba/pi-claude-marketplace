@@ -26,6 +26,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
 
 import type { UninstallTransaction } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -1521,48 +1522,60 @@ test("AFILE-04: a rolled-back prune restores the commented original, keeps it in
   });
 });
 
-test("NFR-3: a rolled-back prune restores its own mcp-adapter.json rewrite byte-for-byte", async () => {
-  await withHermeticEnvironment("prune-owner-mcp-own-write-", async ({ cwd }) => {
-    // arrange
-    const locations = locationsFor("project", cwd);
-    const fixture = await seedScope("project", cwd, {
-      mp: { orphan: { provenance: "dependency" } },
-    });
-    await rm(path.dirname(fixture.skills["orphan@mp"] ?? ""), { recursive: true });
-    const seeded = await loadState(locations.extensionRoot, { persistMigration: false });
-    const marketplace = seeded.marketplaces["mp"];
-    const orphan = marketplace?.plugins["orphan"];
-    assert.ok(marketplace && orphan);
-    await saveState(locations.extensionRoot, {
-      ...seeded,
-      marketplaces: {
-        mp: {
-          ...marketplace,
-          plugins: {
-            orphan: {
-              ...orphan,
-              resources: { ...orphan.resources, skills: [], mcpServers: ["orphan-server"] },
-            },
+/**
+ * Seeds dependency orphan `orphan@mp` at project scope whose only recorded
+ * resource is MCP server `orphan-server`, with `adapter` as the project
+ * mcp-adapter.json bytes.
+ */
+async function seedMcpOrphan(cwd: string, adapter: string | Buffer): Promise<ScopedLocations> {
+  const locations = locationsFor("project", cwd);
+  const fixture = await seedScope("project", cwd, {
+    mp: { orphan: { provenance: "dependency" } },
+  });
+  await rm(path.dirname(fixture.skills["orphan@mp"] ?? ""), { recursive: true });
+  const seeded = await loadState(locations.extensionRoot, { persistMigration: false });
+  const marketplace = seeded.marketplaces["mp"];
+  const orphan = marketplace?.plugins["orphan"];
+  assert.ok(marketplace && orphan);
+  await saveState(locations.extensionRoot, {
+    ...seeded,
+    marketplaces: {
+      mp: {
+        ...marketplace,
+        plugins: {
+          orphan: {
+            ...orphan,
+            resources: { ...orphan.resources, skills: [], mcpServers: ["orphan-server"] },
           },
         },
       },
-    });
+    },
+  });
+  await writeFile(locations.mcpAdapterJsonPath, adapter);
+  return locations;
+}
+
+/** The real uninstall transaction with its state save refused. */
+const REFUSED_SAVE_TRANSACTION: UninstallTransaction = {
+  ...REAL_UNINSTALL_TRANSACTION,
+  withLockedStateTransaction: (target, run) =>
+    withLockedStateTransaction(target, run, {
+      saveState: () => Promise.reject(new Error("state save failed")),
+    }),
+};
+
+test("NFR-3: a rolled-back prune restores its own mcp-adapter.json rewrite byte-for-byte", async () => {
+  await withHermeticEnvironment("prune-owner-mcp-own-write-", async ({ cwd }) => {
+    // arrange
     const originalAdapter = Buffer.from(
       '// user note\n{"mcpServers":{"orphan-server":{"command":"orphan","_piClaudeMarketplace":{"plugin":"orphan","marketplace":"mp"}},"user-server":{"command":"user"}}}\n',
     );
-    await writeFile(locations.mcpAdapterJsonPath, originalAdapter);
+    const locations = await seedMcpOrphan(cwd, originalAdapter);
     const originalState = await readFile(locations.stateJsonPath);
-    const transaction: UninstallTransaction = {
-      ...REAL_UNINSTALL_TRANSACTION,
-      withLockedStateTransaction: (target, run) =>
-        withLockedStateTransaction(target, run, {
-          saveState: () => Promise.reject(new Error("state save failed")),
-        }),
-    };
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(REFUSED_SAVE_TRANSACTION)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(
@@ -1591,5 +1604,108 @@ test("NFR-3: a rolled-back prune restores its own mcp-adapter.json rewrite byte-
         severity: "error",
       },
     ]);
+  });
+});
+
+// NFR-3 / AFILE-01: an orphan entry that keeps a user override.
+const KEPT_OVERRIDE_ORPHAN_SERVER = {
+  command: "orphan",
+  disabled: true,
+  _piClaudeMarketplace: {
+    plugin: "orphan",
+    marketplace: "mp",
+    keptOverride: { disabled: true, env: { STUB_TOKEN: "stub-secret" } },
+  },
+};
+
+/** Serializes `config` in the two-space form the writer produces. */
+function writerBytes(config: object): string {
+  return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+test("NFR-3: a rolled-back prune restores the plugin entry that keeps a user override byte-for-byte", async () => {
+  await withHermeticEnvironment("prune-owner-mcp-kept-override-", async ({ cwd }) => {
+    // arrange
+    const originalAdapter = writerBytes({
+      mcpServers: {
+        "orphan-server": KEPT_OVERRIDE_ORPHAN_SERVER,
+        "user-server": { command: "user" },
+      },
+    });
+    const locations = await seedMcpOrphan(cwd, originalAdapter);
+    const originalState = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(REFUSED_SAVE_TRANSACTION)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        adapter: await readFile(locations.mcpAdapterJsonPath, "utf8"),
+        state: await readFile(locations.stateJsonPath, "utf8"),
+        backups: (await readdir(locations.extensionRoot)).filter((name) =>
+          name.startsWith("prune-backup-"),
+        ),
+        recordedServers: (await loadState(locations.extensionRoot, { persistMigration: false }))
+          .marketplaces["mp"]?.plugins["orphan"]?.resources.mcpServers,
+      },
+      {
+        adapter: originalAdapter,
+        state: originalState,
+        backups: [],
+        recordedServers: ["orphan-server"],
+      },
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {unreadable}\n" +
+          "    cause: state save failed",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("AFILE-01: a committed prune writes the pruned plugin's kept override back", async () => {
+  await withHermeticEnvironment("prune-owner-mcp-kept-commit-", async ({ cwd }) => {
+    // arrange
+    const locations = await seedMcpOrphan(
+      cwd,
+      writerBytes({ mcpServers: { "orphan-server": KEPT_OVERRIDE_ORPHAN_SERVER } }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        adapter: await readFile(locations.mcpAdapterJsonPath, "utf8"),
+        notifications,
+      },
+      {
+        adapter: `{
+  "mcpServers": {
+    "orphan-server": {
+      "disabled": true,
+      "env": {
+        "STUB_TOKEN": "stub-secret"
+      }
+    }
+  }
+}
+`,
+        notifications: [
+          {
+            message:
+              "● mp [project]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+          },
+        ],
+      },
+    );
   });
 });
