@@ -128,6 +128,18 @@ D-01/WIRE-04's absent-never-null rule; they are not new user decisions.
   alone. Research measured zero redaction diffs over the 3134 corpus entries
   and the catalog, so D-08's ledger is expected to be empty.
 
+### Corpus exception (approved after code review)
+
+- **D-13:** On 2026-10-03 the user approved ("Approve with ledger") adding
+  exactly 9 test-only corpus entries emitted by
+  `tests/architecture/no-credential-leak.test.ts` once review fix WR-05 routed
+  the gate's text leg through the production `notify` path. All 9 show the
+  redacted form. Record them in `04-CORPUS-CHANGES.json` (Phase 3 D-17 format:
+  exact entries, owner file, multiplicity, preserved behavior) and splice them
+  into the baseline in a separate, mechanically verified commit. No existing
+  entry changes or goes missing; production bytes and the catalog are
+  unchanged.
+
 ### Claude's Discretion
 
 - Exact typebox type names, converter function names, and generator script
