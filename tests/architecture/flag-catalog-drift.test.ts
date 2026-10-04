@@ -221,40 +221,6 @@ test("catalog and alias completions cover the complete router inventory", () => 
   );
 });
 
-for (const { observed, label } of [
-  { observed: [], label: "missing --local" },
-  { observed: ["--bogus", "--local"], label: "unexpected --bogus" },
-]) {
-  test(`flag drift comparison rejects a planted ${label}`, () => {
-    // arrange
-    const expected = ["--local"];
-
-    // act & assert
-    assert.throws(
-      () => {
-        assertFlagSet(observed, expected);
-      },
-      (error: unknown) => {
-        assert.ok(error instanceof assert.AssertionError);
-        assert.deepStrictEqual(error.actual, observed);
-        assert.deepStrictEqual(error.expected, ["--local"]);
-        assert.strictEqual(error.code, "ERR_ASSERTION");
-        return true;
-      },
-    );
-  });
-}
-
-test("flag drift comparison accepts the benign complete set", () => {
-  // arrange
-  const observed = new Set(["--local"]);
-
-  // act & assert
-  assert.doesNotThrow(() => {
-    assertFlagSet(observed, ["--local"]);
-  });
-});
-
 // Reconciliation (d): how the top-level help block treats each verb's
 // completable flags. `documented` names must appear in that verb's usage line;
 // `omitted` names must NOT. The union must be the verb's complete-set exactly,

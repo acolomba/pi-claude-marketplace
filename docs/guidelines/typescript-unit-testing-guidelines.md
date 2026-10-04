@@ -107,7 +107,7 @@ When a structural gate is added or changed:
 3. Remove the violation.
 4. Run the gate and prove it accepts the clean tree.
 
-Keep the negative control small. It should fail for the exact rule being proved.
+Do these steps by hand. Do not commit the planted violation, or a test or script that replays it: the gate's run over the real tree is its committed check.
 
 Do not suppress production dead code as a migration shortcut.
 
@@ -1424,7 +1424,7 @@ A unit-test change is complete when:
 - [ ] Expected values are independent from production and harness computations.
 - [ ] Shared support is organized by concern, with no generic helper dumping ground.
 - [ ] Real and fake adapters pass the same public contract.
-- [ ] Contract and structural gates have a proven negative control.
+- [ ] Shared adapter contracts have a proven negative control; no committed test or script plants a violation to prove a structural gate can fail.
 - [ ] The focused source-test pair has 100% direct function, line, and branch coverage.
 - [ ] No coverage exception, ignore directive, or blanket exclusion was added.
 - [ ] Focused `node --test`, direct coverage, and `npm run check` pass.

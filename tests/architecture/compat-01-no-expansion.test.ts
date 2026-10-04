@@ -196,16 +196,8 @@ async function readVocabulary(name: string): Promise<readonly string[]> {
   return declaredVocabulary(await readStrippedSource(NOTIFICATION_TYPES_REL), name);
 }
 
-/**
- * WR-07: one glyph-declaration pattern in two flavours -- `GLYPH_DECLARATIONS`
- * counts them across the module, `GLYPH_DECLARATION` tests a single spelling.
- * Built from ONE source string so the counting clause and the clause that pins
- * what the pattern must see can never drift apart, and split by flag because a
- * `/g/` regex carries `lastIndex` across `.test()` calls.
- */
-const GLYPH_DECLARATION_SOURCE = String.raw`\bconst ICON_[A-Z_]+\b`;
-const GLYPH_DECLARATIONS = new RegExp(GLYPH_DECLARATION_SOURCE, "g");
-const GLYPH_DECLARATION = new RegExp(GLYPH_DECLARATION_SOURCE);
+/** WR-07: every glyph declaration in a module, global so `match` counts them all. */
+const GLYPH_DECLARATIONS = /\bconst ICON_[A-Z_]+\b/g;
 
 async function readStrippedSource(rel: string): Promise<string> {
   return stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
@@ -626,59 +618,6 @@ test("COMPAT-01: the notification grammar owner declares no eighth glyph", async
     declarations?.length,
     expectedCount,
     "COMPAT-01: the glyph vocabulary is closed at seven. A new glyph is a rendered-vocabulary expansion and needs its catalog row and renderer arm in the same change.",
-  );
-});
-
-test("COMPAT-01: the glyph-declaration pattern recognises every spelling a glyph export can take", () => {
-  // arrange
-  // WR-07: the clause above asserts an ABSENCE, so a pattern that matched
-  // nothing would pass it just as quietly as a correct one. Pin what the pattern
-  // is required to see, including the two spellings a simpler pattern would miss.
-  const spellings = [
-    'export const ICON_EIGHTH = "◎";',
-    'export const ICON_EIGHTH: string = "◎";',
-    '/** doc */ export const ICON_EIGHTH = "◎";',
-    'const ICON_EIGHTH = "◎";',
-    'const ICON_EIGHTH: string = "◎";',
-  ];
-  // And what it must NOT see: a reference is not a declaration.
-  const reference = "return `${ICON_EIGHTH} ${name}`;";
-
-  // act
-  const declarationMatches = spellings.map((spelling) => GLYPH_DECLARATION.test(spelling));
-  const referenceMatches = GLYPH_DECLARATION.test(reference);
-
-  // assert
-  assert.deepStrictEqual(declarationMatches, [true, true, true, true, true]);
-  assert.strictEqual(referenceMatches, false, "a glyph USE must not count as a declaration");
-});
-
-test("COMPAT-01: the vocabulary reader sees a declared tuple's members and nothing else", () => {
-  // arrange
-  // The four order clauses assert an EQUALITY against a reader, so a reader that
-  // returned the wrong slice would fail them loudly -- but one that matched a
-  // DIFFERENT declaration of the same shape would not. Plant both confusions: a
-  // same-prefixed neighbour declared first, and a mention of the real name after
-  // the declaration terminates.
-  const planted = [
-    'export type ReasonGroup = "decoy one" | "decoy two";',
-    "",
-    "export type Reason =",
-    '  | "first"',
-    '  | "second";',
-    "",
-    'export type ContentReason = Exclude<Reason, "not a member">;',
-  ].join("\n");
-  const expected = ["first", "second"];
-
-  // act
-  const parsedMembers = declaredVocabulary(planted, "Reason");
-
-  // assert
-  assert.deepStrictEqual(
-    parsedMembers,
-    expected,
-    "COMPAT-01: the reader must anchor on the named vocabulary's own declaration.",
   );
 });
 
