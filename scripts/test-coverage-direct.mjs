@@ -208,7 +208,7 @@ function explicitBaseSelection(explicitBase, selectedProjectRoot) {
  * branch-scoped change set for a pull request, a commit-scoped one for a hook -- and it never falls
  * through to the chain.
  */
-export function selectBase(selectedProjectRoot = projectRoot, explicitBase = undefined) {
+function selectBase(selectedProjectRoot = projectRoot, explicitBase = undefined) {
   if (explicitBase !== undefined) {
     return explicitBaseSelection(explicitBase, selectedProjectRoot);
   }
@@ -255,7 +255,7 @@ export function selectBase(selectedProjectRoot = projectRoot, explicitBase = und
  * empty because base selection or a git invocation failed. Propagating the first failing invocation
  * rather than folding it into an empty list is what keeps those two apart.
  */
-export function changedPaths(selectedProjectRoot = projectRoot, explicitBase = undefined) {
+function changedPaths(selectedProjectRoot = projectRoot, explicitBase = undefined) {
   const base = selectBase(selectedProjectRoot, explicitBase);
 
   if (!base.ok) {
@@ -368,7 +368,7 @@ function isPairablePath(projectPath, selectedProjectRoot) {
  * The source-test pairs the selected change set names, carrying the base that produced it and the
  * paths it passed over so a zero-pair answer can still say what it looked at.
  */
-export function pairsForChangedPaths(selectedProjectRoot = projectRoot, explicitBase = undefined) {
+function pairsForChangedPaths(selectedProjectRoot = projectRoot, explicitBase = undefined) {
   const changed = changedPaths(selectedProjectRoot, explicitBase);
 
   if (!changed.ok) {
@@ -486,7 +486,7 @@ function recordProjectPath(selectedProjectRoot, inputPath) {
  * a trap: a caller passing a fixture root and a matching fixture LCOV would select no records and
  * fall through to the type-only escape, which is a wrong answer wearing the shape of a pass.
  */
-export function assertCompleteCoverage(sourcePath, lcovText, selectedProjectRoot = projectRoot) {
+function assertCompleteCoverage(sourcePath, lcovText, selectedProjectRoot = projectRoot) {
   const records = parseLcov(lcovText).filter(
     (record) => recordProjectPath(selectedProjectRoot, record.get("SF")) === sourcePath,
   );
@@ -715,8 +715,6 @@ export async function runPairs(pairs, run, options = {}) {
  *
  * A refused pair still answers a record of the same shape `runPair` returns, so the caller retaining
  * a report keeps one row per pair whatever the verdict was.
- *
- * `run` is the seam `enforcePairs` needs to be plantable; see that function's note.
  */
 async function measurePair(pair, observed, run) {
   const startedAt = process.hrtime.bigint();
@@ -757,11 +755,7 @@ async function measurePair(pair, observed, run) {
  * enforcement edge, and every arm reaches it.
  *
  * The extraction is the point. `measurePair` records a shortfall and continues, so no arm's loop
- * refuses anything by itself -- the comparison below is the only thing that does. Left inline at
- * each call site, that comparison was a line nothing could plant: deleting it left `npm run check`,
- * the hook and the CI job all green with enforcement gone. Exported, it can be driven with a stub
- * runner that answers a synthesized shortfall, so a control watches the arm refuse instead of
- * reading the call site and assuming.
+ * refuses anything by itself -- the comparison below is the only thing that does, for every arm.
  *
  * The two hooks exist so the all-pair arm keeps properties it had inline and nothing more:
  * `onRecord` writes its report row by row (an interrupted run still leaves a readable partial
@@ -769,7 +763,7 @@ async function measurePair(pair, observed, run) {
  * is load-bearing -- a run that skipped rows produces a short `observed` array too, and the pin
  * would name it as a stale row rather than as the skipped run it is.
  */
-export async function enforcePairs(pairs, pinRows, enumeratedModules, run = runPair, hooks = {}) {
+async function enforcePairs(pairs, pinRows, enumeratedModules, run = runPair, hooks = {}) {
   const observed = [];
   const records = await runPairs(pairs, (pair) => measurePair(pair, observed, run), hooks);
 

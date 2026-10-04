@@ -52,7 +52,7 @@ mismatch and they do not.
  * accepted shortfall from a new one. Compare the rows it emits against
  * `scripts/test-coverage-direct.pin.json`, which is the machine-readable record.
  */
-export function verdictFor(sourcePath, answer) {
+function verdictFor(sourcePath, answer) {
   if (typeof answer === "string") {
     return {
       verdict: answer === "type-only" ? "type-only" : "complete",

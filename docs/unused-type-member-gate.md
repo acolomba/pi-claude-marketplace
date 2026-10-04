@@ -8,16 +8,15 @@ The gate runs over the whole project in `npm run check` at completion and in CI.
 
 ## Invocation
 
-| Command                                             | What it runs                                            | Cost                                                         |
-| --------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
-| `npm run lint:type-members`                         | The gate over the whole project                         | one whole-program analysis, about 85 seconds                 |
-| `npm run lint:type-members:negative`                | The sensitivity controls around the gate                | five whole-program analyses, about seven minutes and 2.1 GiB |
-| `npm run lint:type-members:audit`                   | Reconciles the recorded population against the live one | one whole-program analysis                                   |
-| `node scripts/check-unused-type-members.mjs --help` | The claims the gate makes, printed                      | none                                                         |
+| Command                                             | What it runs                                            | Cost                                         |
+| --------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------- |
+| `npm run lint:type-members`                         | The gate over the whole project                         | one whole-program analysis, about 85 seconds |
+| `npm run lint:type-members:audit`                   | Reconciles the recorded population against the live one | one whole-program analysis                   |
+| `node scripts/check-unused-type-members.mjs --help` | The claims the gate makes, printed                      | none                                         |
 
-`npm run check` runs the gate at the end of its chain. `npm run check:controls` runs the sensitivity controls after the faster controls of the other checker scripts. Continuous integration runs `npm run check` on every run and adds `npm run check:controls` on pull requests, the path every change takes to main.
+`npm run check` runs the gate at the end of its chain. Continuous integration runs `npm run check` on every run, which includes every pull request, the path every change takes to main.
 
-Local commits run `npm run check:changed`. Ordinary source/test edits get focused checks. A change to the gate script, to one of its `scripts/check-unused-type-members.*.mjs` helper modules, or to its control runs the sensitivity controls. A change to the recorded decisions or contracts runs the gate when the commit's other changes keep the checks focused. Dependency and toolchain configuration changes select the broad check and add `npm run check:controls`, which runs the sensitivity controls. The broad check never runs the gate itself. The full member gate runs in `npm run check` at completion and in CI, where it can detect a removed reader in a different file.
+Local commits run `npm run check:changed`. Ordinary source/test edits get focused checks. A change to the gate script, or to a helper module with its own `tests/scripts` test, runs `npm run test:analyzers`. A change to any other helper module, or to dependency and toolchain configuration, selects the broad check. A change to the recorded decisions or contracts runs the gate when the commit's other changes keep the checks focused. The broad check never runs the gate itself. The full member gate runs in `npm run check` at completion and in CI, where it can detect a removed reader in a different file.
 
 ## Exit status
 
@@ -149,37 +148,6 @@ Work down this list. The first answer that is true is the one to take.
 
 What is not on the list: adding a read that exists only to satisfy the gate, adding a `fallow-ignore`, weakening a refusal marker so the prover accepts it, or excluding a file. Each of those trades a reported finding for an unreported one, which is the exact failure this gate exists to prevent.
 
-## The sensitivity controls
-
-A gate is only worth its exit status if it can still fail. `scripts/check-unused-type-members.negative.mjs` proves this one can, by planting a real offender into a real declaration and requiring the gate to report it.
-
-The plant procedure, which is what makes the proof mean something:
-
-1. The runner reads `extensions/pi-claude-marketplace/edge/types.ts` and resolves the real `EdgeDeps` interface **through the TypeScript parser**, not by matching source text, so the insertion point follows the declaration's structure rather than its formatting.
-2. It inserts `readonly neverReadAnywhere?: string;` after the interface's last member. A synthetic lookalike would prove the analyzer can see a fixture; only the real declaration proves it can see this tree.
-3. The expected declaration identity -- path, line and column -- is **counted out of the overlay text by string arithmetic**. Nothing in the expectation comes back from the analyzer, which is the difference between a control and an echo.
-4. The overlay is applied as a compiler *read override*. No project file is ever written, and the runner reads both overlay targets back after a pass and after a failure to prove it.
-
-Seven controls run against the real repository:
-
-| Control                        | What it proves                                                              |
-| ------------------------------ | --------------------------------------------------------------------------- |
-| `baseline`                     | The tree does not already report the planted member                         |
-| `offender-plant`               | The gate reports the plant by exact identity, over and above the baseline   |
-| `benign-receiver-read`         | A real read from a real receiver clears exactly that finding                |
-| `unrelated-same-spelling-read` | A same-spelling member on an unrelated type does **not** clear the offender |
-| `plant-removed`                | The report returns to the baseline once the overlay is gone                 |
-| `compiler-failure`             | Unparsable input exits 2 with no report, naming the file                    |
-| `option-failure`               | A bad option exits 2 with no report, naming the option                      |
-
-`offender-plant` is the control an always-passing gate fails.
-
-`--gate <path>` points the controls at any executable. `tests/scripts/check-unused-type-members.negative.test.ts` uses it to drive deliberately defective gates -- one that always reports a clean tree, one that always reports the same findings, one that describes a different member at the planted coordinates, one whose report cannot be parsed, one that answers a refusal where a member finding belongs, and the reverse -- and requires the runner to reject each of them. A runner that cannot fail proves nothing about the runner that can.
-
-Two things the controls cannot see from inside themselves are checked in `tests/architecture/unused-type-member-gate.test.ts`: that the planted key is absent from the real declaration (a plant that collides with a real member stops being a plant without any case going red), and that every capability the help text claims is bound to a named control (a claim whose control was renamed away is a promise nothing keeps).
-
-**A live run and concurrent editing do not mix.** The runner analyses the tree as it is on disk at the moment each child process starts, and it takes minutes. Editing `edge/types.ts` or `tests/edge/types.test.ts` while it is in flight fails the containment check.
-
 ## Files
 
 | Path                                                | Role                                                                          |
@@ -193,5 +161,4 @@ Two things the controls cannot see from inside themselves are checked in `tests/
 | `scripts/check-unused-type-members.contracts.json`  | The evidence-backed exceptions                                                |
 | `scripts/check-unused-type-members.exceptions.mjs`  | The recorded-decision loader and its refusals                                 |
 | `scripts/check-unused-type-members.exceptions.json` | The recorded decisions                                                        |
-| `scripts/check-unused-type-members.negative.mjs`    | The executable sensitivity controls                                           |
 | `scripts/check-unused-type-members.audit.mjs`       | Records and reconciles the live population                                    |

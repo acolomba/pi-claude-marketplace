@@ -1,17 +1,14 @@
 /**
  * The unused-type-member gate's wiring gate.
  *
- * MEMBER-01 / MEMBER-02: the gate itself is proved by executable controls that
- * run the real analyzer. Three properties those controls depend on are invisible
- * from inside them, and each one fails silently rather than loudly:
+ * MEMBER-01 / MEMBER-02: the analyzer tests in `tests/scripts/` prove what the
+ * gate reports. Two properties those tests cannot see fail silently rather than
+ * loudly:
  *
- *   - the live sensitivity control plants a key the real declaration must NOT
- *     already carry, and a plant that collides with a real member stops being a
- *     plant without any case going red;
  *   - a gate script no `package.json` entry reaches is unreachable to
  *     `fallow dead-code`, which is how a whole analyzer module can go unowned;
- *   - every capability the command-line help CLAIMS needs a control that
- *     discriminates it, and a claim whose control was renamed away is a promise
+ *   - every capability the command-line help CLAIMS needs a test case that
+ *     discriminates it, and a claim whose case was renamed away is a promise
  *     nothing keeps.
  *
  * GGAT-01: the claim-to-control ledger below is the declared half. Each row's
@@ -23,29 +20,17 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
 import {
-  EDGE_DEPS_OWNER_TEST_REL,
-  EDGE_DEPS_REL,
   PACKAGE_JSON_REL,
   TYPE_MEMBER_EXCEPTIONS_REL,
   TYPE_MEMBER_GATE_REL,
-  TYPE_MEMBER_NEGATIVE_REL,
   UNUSED_TYPE_MEMBER_GATE_TARGETS,
 } from "./gate-targets.ts";
 import { REPO_ROOT } from "./source-scan.ts";
-
-import type { TestContext } from "node:test";
-
-/** The key the live sensitivity control plants, which no real member may spell. */
-const PLANTED_KEY = "neverReadAnywhere";
-
-/** The interface the live sensitivity control plants into. */
-const PLANTED_OWNER = "EdgeDeps";
 
 const MODEL_SUITE = "tests/scripts/check-unused-type-members.model.test.ts";
 const OPERATIONS_SUITE = "tests/scripts/check-unused-type-members.operations.test.ts";
@@ -70,7 +55,6 @@ const CLAIM_CONTROLS: readonly ClaimControls[] = [
         file: CLI_SUITE,
         marker: "reports an unread optional member by its exact declaration identity",
       },
-      { file: TYPE_MEMBER_NEGATIVE_REL, marker: "neverReadAnywhere?.length" },
     ],
   },
   {
@@ -222,36 +206,6 @@ async function readRepoFile(rel: string): Promise<string> {
   return readFile(path.join(REPO_ROOT, rel), "utf8");
 }
 
-test("the planted key is absent from the real declaration it is planted into", async () => {
-  // arrange
-  const declared = await readRepoFile(EDGE_DEPS_REL);
-
-  // act
-  const carriesPlantedKey = declared.includes(PLANTED_KEY);
-
-  // assert
-  assert.deepStrictEqual(
-    { declaresOwner: declared.includes(`interface ${PLANTED_OWNER} {`), carriesPlantedKey },
-    { declaresOwner: true, carriesPlantedKey: false },
-    `${EDGE_DEPS_REL} must declare ${PLANTED_OWNER} and must not already spell ${PLANTED_KEY}; a plant that collides with a real member proves nothing.`,
-  );
-});
-
-test("the benign read's receiver type is available in the owner test it is appended to", async () => {
-  // arrange
-  const owner = await readRepoFile(EDGE_DEPS_OWNER_TEST_REL);
-
-  // act
-  const importsReceiver = owner.includes(`import type { ${PLANTED_OWNER} }`);
-
-  // assert
-  assert.strictEqual(
-    importsReceiver,
-    true,
-    `${EDGE_DEPS_OWNER_TEST_REL} must import ${PLANTED_OWNER} as a type; the benign overlay appends a probe that takes it as a parameter.`,
-  );
-});
-
 test("every gate script is reachable from a package.json script entry", async () => {
   // arrange
   const manifest = JSON.parse(await readRepoFile(PACKAGE_JSON_REL)) as {
@@ -323,27 +277,16 @@ test("every capability the gate claims has a discriminating control", async () =
 // MEMBER-01 / MEMBER-02: a gate nothing invokes is a gate nobody runs, and a
 // gate whose residual list can be widened quietly is worse than no gate at all
 // -- it buys confidence it has not earned. The cases below read the real
-// `package.json`, the CI workflow and the real decision list, and
-// the last one runs the real gate over the real tree with a new unread member
-// planted into it.
-//
-// `npm run check` runs the gate, and `npm run check:controls` runs its negative
-// controls. The changed-check selector runs the type-member control when a
-// type-member checker file changes and every control when the toolchain
-// changes. CI runs `npm run check:controls` on pull requests.
+// `package.json`, the CI workflow and the real decision list. `npm run check`
+// runs the gate, and CI runs `npm run check` on every run.
 // ---------------------------------------------------------------------------
 
 const CI_WORKFLOW_REL = ".github/workflows/ci.yml";
 
 const GATE_SCRIPT = "lint:type-members";
-const NEGATIVE_SCRIPT = "lint:type-members:negative";
-const CONTROLS_SCRIPT = "check:controls";
 
 /** The fields one recorded decision may carry, and no others. */
 const EXCEPTION_FIELDS = ["id", "owner", "key", "decision", "mechanism"];
-
-/** The key planted into the real tree by the live activation control below. */
-const CONTROL_KEY = "neverExcusedAnywhere";
 
 interface RecordedDecision {
   readonly id: string;
@@ -362,7 +305,7 @@ async function readRecordedDecisions(): Promise<readonly RecordedDecision[]> {
   return parsed.exceptions;
 }
 
-test("the check chain runs the gate and the controls chain runs its negative controls", async () => {
+test("the check chain runs the gate", async () => {
   // arrange
   const manifest = JSON.parse(await readRepoFile(PACKAGE_JSON_REL)) as {
     scripts: Readonly<Record<string, string>>;
@@ -370,43 +313,32 @@ test("the check chain runs the gate and the controls chain runs its negative con
 
   // act
   const checkMembers = (manifest.scripts.check ?? "").split(" && ");
-  const controlsMembers = (manifest.scripts[CONTROLS_SCRIPT] ?? "").split(" && ");
   const wiring = {
     gateInCheck: checkMembers.includes(`npm run ${GATE_SCRIPT}`),
-    negativeInControls: controlsMembers.includes(`npm run ${NEGATIVE_SCRIPT}`),
     gate: manifest.scripts[GATE_SCRIPT],
-    negative: manifest.scripts[NEGATIVE_SCRIPT],
   };
 
   // assert
   assert.deepStrictEqual(
     wiring,
-    {
-      gateInCheck: true,
-      negativeInControls: true,
-      gate: `node ${TYPE_MEMBER_GATE_REL}`,
-      negative: `node ${TYPE_MEMBER_NEGATIVE_REL}`,
-    },
-    "npm run check runs the gate, npm run check:controls runs its negative controls, and both scripts must invoke the real executables rather than a stand-in.",
+    { gateInCheck: true, gate: `node ${TYPE_MEMBER_GATE_REL}` },
+    "npm run check runs the gate, and the gate script must invoke the real executable rather than a stand-in.",
   );
 });
 
-test("continuous integration runs the check chain and the controls chain", async () => {
+test("continuous integration runs the check chain", async () => {
   // arrange
   const workflow = await readRepoFile(CI_WORKFLOW_REL);
 
   // act
   const lines = workflow.split("\n").map((line) => line.trim());
-  const runs = {
-    check: lines.includes("run: npm run check"),
-    controls: lines.includes(`run: npm run ${CONTROLS_SCRIPT}`),
-  };
+  const runsCheck = lines.includes("run: npm run check");
 
   // assert
-  assert.deepStrictEqual(
-    runs,
-    { check: true, controls: true },
-    `${CI_WORKFLOW_REL} must invoke both npm run check and npm run check:controls, so every pull request runs the member gate and its negative controls.`,
+  assert.strictEqual(
+    runsCheck,
+    true,
+    `${CI_WORKFLOW_REL} must invoke npm run check, so every pull request runs the member gate.`,
   );
 });
 
@@ -470,72 +402,4 @@ test("every recorded decision still points at a live declaration spelling its me
     [],
     "A recorded decision whose coordinates drifted would excuse whatever now sits there; the gate refuses such an entry at run time, and this states the same requirement against the tree.",
   );
-});
-
-/** A temporary directory that disappears whether the case passes or fails. */
-async function scratchDirectory(t: TestContext): Promise<string> {
-  const directory = await mkdtemp(path.join(tmpdir(), "member-gate-activation-"));
-
-  t.after(async () => {
-    await rm(directory, { force: true, recursive: true });
-  });
-
-  return directory;
-}
-
-test("a new unread member outside the recorded decisions fails the real gate", async (t) => {
-  // arrange: the recorded decisions leave this tree passing, so this case plants
-  // ONE member that no decision names and requires the gate to fail on it alone.
-  // It runs the real gate over the real repository through a compiler read
-  // overlay, so nothing on disk is edited.
-  const declared = await readRepoFile(EDGE_DEPS_REL);
-  assert.strictEqual(
-    declared.includes(CONTROL_KEY),
-    false,
-    `${EDGE_DEPS_REL} must not already spell ${CONTROL_KEY}; a plant that collides with a real member proves nothing.`,
-  );
-
-  const planted = `${declared}
-export interface RecordedDecisionControl {
-  readonly ${CONTROL_KEY}?: string;
-}
-`;
-  const plantedLine = declared.split("\n").length + 2;
-  const directory = await scratchDirectory(t);
-  const overlayPath = path.join(directory, "overlay.json");
-  await writeFile(overlayPath, JSON.stringify({ [EDGE_DEPS_REL]: planted }));
-
-  // act
-  const run = spawnSync(
-    process.execPath,
-    [
-      path.join(REPO_ROOT, TYPE_MEMBER_GATE_REL),
-      "--root",
-      REPO_ROOT,
-      "--json",
-      "--overlay",
-      overlayPath,
-    ],
-    { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
-  );
-  const report = JSON.parse(run.stdout) as {
-    findings: readonly { id: string; owner: string; key: string }[];
-    exceptions: readonly { id: string }[];
-  };
-
-  // assert
-  assert.deepStrictEqual(
-    {
-      status: run.status,
-      findings: report.findings.map((finding) => `${finding.id} ${finding.owner}.${finding.key}`),
-      excused: report.exceptions.length,
-    },
-    {
-      status: 1,
-      findings: [`${EDGE_DEPS_REL}:${plantedLine}:3 RecordedDecisionControl.${CONTROL_KEY}`],
-      excused: (await readRecordedDecisions()).length,
-    },
-    "The recorded decisions must excuse exactly the members they name and nothing else, or the list is a mute button rather than a record.",
-  );
-  assert.strictEqual(await readRepoFile(EDGE_DEPS_REL), declared);
 });

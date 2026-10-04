@@ -79,6 +79,7 @@ function shortfallLines({ coverage, unmet }) {
   });
 }
 
+// fallow-ignore-next-line unused-export -- `node --test --test-reporter` loads this default.
 export default async function* failureReporter(source) {
   const state = { counts: [], coverage: undefined, unmet: new Map() };
   yield* Readable.from(forwardedEvents(source, state)).pipe(new spec());

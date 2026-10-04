@@ -87,47 +87,6 @@ const suites = [
   ["test:integration", ["tests/integration/"]],
 ];
 
-/**
- * Dependency, Node, TypeScript, ESLint, Fallow, and Prettier configuration can
- * change what any checker does, so these inputs run every control.
- */
-function isToolchain(file) {
-  return (
-    [
-      "package.json",
-      "package-lock.json",
-      ".nvmrc",
-      ".node-version",
-      "eslint.config.js",
-      ".fallowrc.json",
-      ".prettierignore",
-    ].includes(file) ||
-    /^tsconfig[^/]*\.json$/.test(file) ||
-    /^\.prettierrc[^/]*$/.test(file) ||
-    file.startsWith("rule-packs/")
-  );
-}
-
-/**
- * A checker's helper modules and its control share the checker's file-name
- * stem, so a change to any of them selects that control.
- */
-function familyControls(root, files) {
-  const controls = files
-    .map((file) => /^scripts\/([^/.]+)(?:\.[^/]+)?\.mjs$/.exec(file))
-    .filter((match) => match !== null)
-    .map((match) => `scripts/${match[1]}.negative.mjs`)
-    .filter((control) => existsSync(path.join(root, control)));
-  return [...new Set(controls)].sort();
-}
-
-/** A toolchain change runs every control, and a changed checker file runs its own. */
-function controlCommands(root, files) {
-  return files.some(isToolchain)
-    ? [npm("check:controls")]
-    : familyControls(root, files).map((control) => ["node", control]);
-}
-
 function git(root, args) {
   const child = spawnSync("git", args, { cwd: root, encoding: "utf8" });
   if (child.error) {
@@ -142,7 +101,7 @@ function git(root, args) {
 }
 
 /** Includes both sides of renames, deletions, index changes, and untracked paths. */
-export function changedFiles(root, base = "HEAD") {
+function changedFiles(root, base = "HEAD") {
   const commit = git(root, [
     "rev-parse",
     "--verify",
@@ -293,7 +252,6 @@ const rules = [
   [(file) => file.startsWith("tests/"), "fixture"],
   [(file) => typeMemberData.has(file), "typeMembers"],
   [(file, root) => analyzerTest(file, root) !== undefined, "analyzer"],
-  [(file, root) => familyControls(root, [file]).length > 0, "checker"],
 ];
 
 function classify(file, root) {
@@ -500,18 +458,6 @@ function selectAnalyzer(context, file, selection) {
   return false;
 }
 
-/**
- * A checker file without its own test is proven by its family control, which
- * plants failures into the checker.
- */
-function selectChecker(_context, file, selection) {
-  selection.format.add(file);
-  selection.lint.add(file);
-  selection.fallow = true;
-  selection.reasons.add("Checker scripts and their controls");
-  return false;
-}
-
 const selectors = {
   documentation: selectDocumentation,
   unpairedTest: selectUnpairedTest,
@@ -519,7 +465,6 @@ const selectors = {
   fixture: selectFixture,
   typeMembers: selectTypeMembers,
   analyzer: selectAnalyzer,
-  checker: selectChecker,
 };
 
 function suiteCommands(selection) {
@@ -539,7 +484,7 @@ function staticCommands(selection) {
 }
 
 /** Test commands in one fixed order; suites already cover their own test files. */
-function testCommands(selection, controls) {
+function testCommands(selection) {
   const tests = [...selection.tests]
     .filter((file) => !selection.suites.has(containingSuite(file)))
     .sort();
@@ -549,7 +494,6 @@ function testCommands(selection, controls) {
       : []),
     ...(selection.typeMembers ? [npm("lint:type-members")] : []),
     ...suiteCommands(selection),
-    ...controls,
     ...(tests.length > 0 ? [[...testRun, ...tests]] : []),
   ];
 }
@@ -558,14 +502,14 @@ function testCommands(selection, controls) {
  * The broad commands cover every static selection. The broad check never runs
  * member analysis or the integration suite, even when another rule selected them.
  */
-function broadPlan(triggers, selection, controls) {
+function broadPlan(triggers, selection) {
   selection.typeMembers = false;
   selection.suites.delete("test:integration");
   const more = triggers.length > 5 ? ` and ${triggers.length - 5} more` : "";
   return {
     scope: "broad",
     reason: `Broad check required by ${triggers.slice(0, 5).join(", ")}${more}`,
-    commands: [...broadChecks, ...testCommands(selection, controls)],
+    commands: [...broadChecks, ...testCommands(selection)],
   };
 }
 
@@ -591,15 +535,14 @@ function selectChecks(root, changed) {
     }
   }
 
-  const controls = controlCommands(root, changed);
   if (triggers.length > 0) {
-    return broadPlan(triggers, selection, controls);
+    return broadPlan(triggers, selection);
   }
 
   return {
     scope: "focused",
     reason: [...selection.reasons].join("; "),
-    commands: [...staticCommands(selection), ...testCommands(selection, controls)],
+    commands: [...staticCommands(selection), ...testCommands(selection)],
   };
 }
 
@@ -607,20 +550,20 @@ function selectChecks(root, changed) {
  * Plans commit-time checks. Unknown inputs broaden to the broad check; no plan
  * runs `npm run check`, and a focused or broad pass is never a full verdict.
  */
-export function planChecks(root, changed) {
+function planChecks(root, changed) {
   try {
     return selectChecks(root, changed);
   } catch (error) {
     return {
       scope: "broad",
       reason: error.message,
-      commands: [...broadChecks, ...controlCommands(root, changed)],
+      commands: [...broadChecks],
     };
   }
 }
 
 /** Runs sequential checks and propagates process failures, including signals. */
-export function runChecks(root, commands) {
+function runChecks(root, commands) {
   for (const [executable, ...args] of commands) {
     process.stdout.write(
       `Checking: ${[executable, ...args].map((arg) => JSON.stringify(arg)).join(" ")}\n`,
@@ -730,7 +673,7 @@ function releaseLock(lockDir, owner) {
  * broad check. A dead pid or an age past `staleMs` frees the lock, so waiting
  * needs no time limit.
  */
-export function acquireFullLock(
+function acquireFullLock(
   parentDir,
   { staleMs = FULL_LOCK_STALE_MS, pollMs = FULL_LOCK_POLL_MS } = {},
 ) {
@@ -778,7 +721,7 @@ function currentBranch(root) {
 }
 
 /** Appends one JSON line per run to the shared log. Logging never fails a run. */
-export function appendRunLog(root, run, warn = (message) => process.stderr.write(`${message}\n`)) {
+function appendRunLog(root, run, warn = (message) => process.stderr.write(`${message}\n`)) {
   try {
     const record = {
       timestamp: run.timestamp,

@@ -17,17 +17,15 @@
  * whose reading changed -- better or worse -- fails. A pinned module that now reads complete fails
  * as a stale row. A row naming a module the tree no longer enumerates fails with no test run at
  * all. So any change to the tree's coverage surface has to be written down in the same commit that
- * causes it. Both directions are proved by planting them in
- * `scripts/test-coverage-direct.negative.mjs`, not assumed.
+ * causes it.
  *
  * The rows are sorted by `sourcePath`, and that order is part of the pin: the comparator sorts what
  * it measured the same way, so a reordering can never be mistaken for a change and a change can
  * never hide inside a reordering.
  *
  * The two halves are kept apart on purpose. `loadCoveragePin` is thin I/O and takes the repository
- * root as its last parameter, matching every other root-aware function in the gate, so a harness
- * can plant more than one pin in one process. `assertPinnedReadings` is pure: it reads no disk,
- * which is what lets every divergence class be planted as an in-memory array with no fixture tree.
+ * root as its last parameter, matching every other root-aware function in the gate.
+ * `assertPinnedReadings` is pure: it reads no disk.
  */
 
 import { readFileSync } from "node:fs";
@@ -116,8 +114,7 @@ function pinRefusal(pin) {
  * is not the one the comparator expects.
  *
  * The file is read and parsed rather than imported as a JSON module: a static import is hoisted and
- * module-cached, so it could not be pointed at an injected root and a second planted pin would read
- * the first.
+ * module-cached, so it could not be pointed at the selected root.
  */
 export function loadCoveragePin(selectedProjectRoot = projectRoot) {
   const pinPath = path.join(selectedProjectRoot, pinProjectPath);

@@ -132,7 +132,7 @@ function isStructuralSupplement(projectRoot, testPath) {
   return imports.includes(companions.fakePath) && imports.includes(companions.contractPath);
 }
 
-export function checkCorrespondingTests(projectRoot = defaultProjectRoot) {
+function checkCorrespondingTests(projectRoot = defaultProjectRoot) {
   const sourcePaths = filesBelow(projectRoot, productionRoot, (name) => name.endsWith(".ts"));
   const testPaths = filesBelow(projectRoot, testRoot, (name) => name.endsWith(".test.ts"));
   const sourceSet = new Set(sourcePaths);

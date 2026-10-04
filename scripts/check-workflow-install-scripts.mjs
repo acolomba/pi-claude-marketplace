@@ -8,8 +8,7 @@ import { fileURLToPath } from "node:url";
  * permissions and secrets that job holds.
  *
  * No off-the-shelf workflow linter carries this check, which is why this is a local script
- * rather than another hook. Its companion `.negative.mjs` plants a violation and proves the
- * gate flags it.
+ * rather than another hook.
  */
 
 const defaultProjectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -35,7 +34,7 @@ function workflowPaths(projectRoot) {
     .sort();
 }
 
-export function checkWorkflowInstallScripts(projectRoot = defaultProjectRoot) {
+function checkWorkflowInstallScripts(projectRoot = defaultProjectRoot) {
   const violations = [];
 
   for (const workflowPath of workflowPaths(projectRoot)) {
