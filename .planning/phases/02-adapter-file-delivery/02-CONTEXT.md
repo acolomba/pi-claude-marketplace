@@ -131,6 +131,18 @@ Raised by 02-REVIEW.md findings WR-04 and WR-06.
   window between that last compare and the atomic rename is accepted and
   documented; the `state.json` restore has the same window. (Resolves the
   iteration-3 review's WR-01 and WR-02, which the rename-aside restore caused.)
+- **D-02-21:** Amends D-02-10. Install still absorbs a marker-less stub under
+  one of our server names (carried fields become active in our entry), but it
+  also keeps the user's original stub verbatim, inert, inside our marker
+  subobject (`_piClaudeMarketplace`), so nothing the user wrote is lost.
+  Update and reinstall carry the kept stub forward. Uninstall, and every
+  unstage, writes it back as the marker-less stub it was, under the same server
+  key, so a project-level `/mcp-adapter disable` survives an install/uninstall
+  cycle. Install warns once, naming the stub fields that stop applying while
+  the plugin owns the name. Credential-bearing fields stay only inside the inert
+  kept stub; they are never copied into active fields. Planning must confirm
+  the adapter ignores everything under `_piClaudeMarketplace`. (Operator
+  decision at Phase 2 verification; resolves review IN-01.)
 
 ### Claude's Discretion
 - Module split: extract the JSONC document reader and the entry handling out of
