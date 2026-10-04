@@ -766,6 +766,11 @@ const GITHUB_TOKEN = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
 const USERINFO_URL = "https://alice:s3cret@github.com/o/r.git";
 const USERINFO = ["alice:s3cret@", "s3cret"];
 const FAILED_ADD_SOURCE = "https://alice:s3cret@gitlab.example.com/team/private-mp";
+// The reconcile planner splits the `enabledPlugins` key
+// `foo@https://alice:s3cret@github.com/o/r.git` at its last `@`. That `@` ends
+// the URL userinfo, so the plugin half keeps the password with no `@` after it.
+const SPLIT_KEY_PLUGIN = "foo@https://alice:s3cret";
+const SPLIT_KEY_MARKETPLACE = "github.com/o/r.git";
 
 function probePresentation(message: NotificationMessage): LeakProbe {
   const presentation = presentNotification(runWithAllLoaded(), message);
@@ -1055,6 +1060,31 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
     site: "a plugin row name",
     planted: USERINFO,
     probe: () => probeCascadeSubject(rowCascade({ status: "will install", name: USERINFO_URL })),
+  },
+  {
+    site: "a plugin row name split from an enabledPlugins key",
+    planted: USERINFO,
+    probe: () =>
+      probeCascadeSubject({
+        marketplaces: [
+          {
+            name: SPLIT_KEY_MARKETPLACE,
+            scope: "user",
+            status: "failed",
+            reasons: ["dangling reference"],
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                name: SPLIT_KEY_PLUGIN,
+                reasons: ["dangling reference"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      }),
   },
   {
     site: "the marketplace-not-added name",

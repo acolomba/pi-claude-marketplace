@@ -344,7 +344,8 @@ type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMes
  * PMOD-04 / D-07: every block name is redacted, because a failed `marketplace
  * add` names its block after the source the user typed, URL userinfo included.
  * Every plugin row name is redacted too, because a hand-edited `enabledPlugins`
- * key names a pending or failed row after whatever precedes its last `@`.
+ * key names a pending or failed row after whatever precedes its last `@` (see
+ * `redactRowName`).
  */
 export function resolveRows(
   marketplaces: readonly MarketplaceNotificationMessage[],
@@ -369,10 +370,22 @@ export function resolveRows(
       );
       // An out-of-band row can arrive without a `name`; it keeps that shape.
       const redacted =
-        "name" in resolved ? { ...resolved, name: redactCredentials(resolved.name) } : resolved;
+        "name" in resolved ? { ...resolved, name: redactRowName(resolved.name) } : resolved;
       return policy === undefined ? { ...redacted, missingPolicy: true } : redacted;
     }),
   }));
+}
+
+/**
+ * PMOD-04 / D-07: redacts a plugin row name with the `@` that follows it in
+ * its `plugin@marketplace` subject restored. A last-`@` split can consume the
+ * `@` that ends URL userinfo: the key
+ * `foo@https://alice:s3cret@github.com/o/r.git` names the row
+ * `foo@https://alice:s3cret`, which reads as `foo@https://***`. A trailing
+ * `scheme://host:port` has the same shape, so it is masked too.
+ */
+function redactRowName(name: string): string {
+  return redactCredentials(`${name}@`).slice(0, -1);
 }
 
 /**

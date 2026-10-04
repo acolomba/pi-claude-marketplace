@@ -880,6 +880,25 @@ describe("resolveRows", () => {
     ] satisfies readonly ResolvedMarketplace[]);
   });
 
+  test("PMOD-04 / D-07 redacts the userinfo a last-@ split leaves at the end of a row name", () => {
+    // arrange
+    const marketplaces = marketplaceWith([
+      { status: "will install", name: "foo@https://alice:s3cret" },
+    ]);
+
+    // act
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
+
+    // assert
+    assert.deepStrictEqual(resolved, [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [{ status: "will install", name: "foo@https://***", reasons: [] }],
+      },
+    ] satisfies readonly ResolvedMarketplace[]);
+  });
+
   test("resolves a manual-recovery row with its leaks and no rollback phases", () => {
     // arrange
     const marketplaces = marketplaceWith([
