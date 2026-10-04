@@ -21,8 +21,8 @@ export interface ClaudeMarketplaceMarker {
   /**
    * The marker-less override this entry replaced under the same server name,
    * kept verbatim (AFILE-06). pi-mcp-adapter never reads inside the marker, so
-   * the kept fields are inert. An unstage writes it back as the entry it was
-   * (AFILE-01).
+   * the kept fields are inert. An unstage writes it back marker-less, with the
+   * entry's current carried fields (AFILE-01, AFILE-06).
    */
   readonly keptOverride?: Readonly<Record<string, unknown>>;
 }

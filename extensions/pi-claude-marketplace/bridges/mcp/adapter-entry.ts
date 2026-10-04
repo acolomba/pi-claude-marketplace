@@ -112,6 +112,33 @@ export function inactiveOverrideFields(
 }
 
 /**
+ * AFILE-06: the override written back in place of the plugin's live entry.
+ * Each field outside the carried set comes back as kept, in the kept key order.
+ * Each carried field takes the live entry's value instead, so a `/mcp-adapter
+ * enable` or `disable` run while the plugin held the name wins over the kept
+ * value. A carried field the live entry lacks is left out, as a restage leaves
+ * it out, because pi-mcp-adapter's enable writer removes `disabled` from the
+ * entry. Only carried fields change, so the result is still an override and
+ * never a full definition (AFILE-05).
+ */
+export function restoredOverride(
+  kept: Readonly<Record<string, unknown>>,
+  live: unknown,
+): Record<string, unknown> {
+  const liveCarried = carriedFields(live);
+  const restored: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(kept)) {
+    if (!CARRIED_FIELD_SET.has(field)) {
+      safeSet(restored, field, value);
+    } else if (Object.hasOwn(liveCarried, field)) {
+      restored[field] = liveCarried[field];
+    }
+  }
+
+  return { ...restored, ...liveCarried };
+}
+
+/**
  * The override a server's new entry keeps. `Object.hasOwn` keeps a server
  * named `__proto__` from picking up `Object.prototype` (WR-01).
  */

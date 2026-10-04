@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 
 import {
   inactiveOverrideFields,
+  restoredOverride,
   stampServers,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts";
 
@@ -522,6 +523,81 @@ describe("inactiveOverrideFields", () => {
       assert.strictEqual(Object.isFrozen(inactive), true);
     });
   }
+});
+
+describe("restoredOverride", () => {
+  test("AFILE-06: the live entry's disabled false replaces the kept disabled true in its kept position", () => {
+    // arrange
+    const kept = { disabled: true, env: { STUB_TOKEN: "stub-secret" } };
+    const live = {
+      command: "plugin-command",
+      env: INJECTED_ENV,
+      disabled: false,
+      _piClaudeMarketplace: { ...MARKER, keptOverride: kept },
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(restored),
+      '{"disabled":false,"env":{"STUB_TOKEN":"stub-secret"}}',
+    );
+  });
+
+  test("AFILE-06: a kept carried field the live entry lacks is left out", () => {
+    // arrange
+    const kept = { disabled: true, headers: { Authorization: "Bearer stub" } };
+    const live = {
+      command: "plugin-command",
+      _piClaudeMarketplace: { ...MARKER, keptOverride: kept },
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.strictEqual(JSON.stringify(restored), '{"headers":{"Authorization":"Bearer stub"}}');
+  });
+
+  test("AFILE-06: carried fields only the live entry holds follow the kept fields in set order", () => {
+    // arrange
+    const kept = { env: { STUB_TOKEN: "stub-secret" } };
+    const live = {
+      command: "plugin-command",
+      lifecycle: "eager",
+      disabled: true,
+      _piClaudeMarketplace: { ...MARKER, keptOverride: kept },
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(restored),
+      '{"env":{"STUB_TOKEN":"stub-secret"},"disabled":true,"lifecycle":"eager"}',
+    );
+  });
+
+  test("AFILE-05: no field of the live entry outside the carried set reaches the override", () => {
+    // arrange
+    const kept = { env: { STUB_TOKEN: "stub-secret" } };
+    const live = {
+      ...fullEntry("live"),
+      _piClaudeMarketplace: { ...MARKER, keptOverride: kept },
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(restored),
+      '{"env":{"STUB_TOKEN":"stub-secret"},"disabled":"live-disabled","approveTools":"live-approveTools","includeTools":"live-includeTools","excludeTools":"live-excludeTools","lifecycle":"live-lifecycle","idleTimeout":"live-idleTimeout","requestTimeoutMs":"live-requestTimeoutMs","debug":"live-debug","searchKeywords":"live-searchKeywords"}',
+    );
+  });
 });
 
 // pi-mcp-adapter@5.0.0 (dist.shasum 6c20461d658ec7d7b7e303b067e2ff13a7846d00)

@@ -1012,12 +1012,12 @@ test("AFILE-06: each rewritten file reports its comments notice, then one overri
   await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
   await writeFile(
     locations.mcpAdapterJsonPath,
-    '// adapter\n{"mcpServers":{"first":{"command":"first","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"env":{"FIRST":"first-secret"}}}},"plain":{"command":"plain","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}},"second":{"command":"second","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"disabled":true}}}}}\n',
+    '// adapter\n{"mcpServers":{"first":{"command":"first","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"env":{"FIRST":"first-secret"}}}},"plain":{"command":"plain","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}},"second":{"command":"second","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"disabled":true}}}}}\n',
     "utf8",
   );
   await writeFile(
     locations.mcpJsonPath,
-    '{"mcpServers":{"legacy":{"command":"legacy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"debug":true}}}}}\n',
+    '{"mcpServers":{"legacy":{"command":"legacy","debug":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"debug":true}}}}}\n',
     "utf8",
   );
 
@@ -1061,14 +1061,14 @@ test("AFILE-06: a failed legacy write reports the override the adapter file alre
   await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
   await writeFile(
     locations.mcpAdapterJsonPath,
-    '{"mcpServers":{"server":{"command":"server","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"disabled":true}}}}}\n',
+    '{"mcpServers":{"server":{"command":"server","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"disabled":true}}}}}\n',
     "utf8",
   );
   const lockedDirectory = await lockedLink(
     t,
     cwd,
     locations.mcpJsonPath,
-    '{"mcpServers":{"legacy":{"command":"legacy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"debug":true}}}}}\n',
+    '{"mcpServers":{"legacy":{"command":"legacy","debug":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"debug":true}}}}}\n',
   );
 
   // act

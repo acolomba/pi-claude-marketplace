@@ -9,8 +9,8 @@
 // key (AFILE-03). `isFullDefinition` is the adapter's own transport test, which
 // decides whether an entry declares a server or only overrides one (AFILE-05).
 // A user override the plugin's entry replaces is kept in that entry's marker;
-// when the entry leaves the file, the override is written back in its place
-// (AFILE-06, AFILE-01).
+// when the entry leaves the file, the override is written back in its place,
+// with its carried fields taken from the entry (AFILE-06, AFILE-01).
 
 import { readFile } from "node:fs/promises";
 
@@ -18,6 +18,7 @@ import stripJsonComments from "strip-json-comments";
 
 import { McpConfigFileError } from "../../shared/errors-bridges.ts";
 
+import { restoredOverride } from "./adapter-entry.ts";
 import { CLAUDE_MARKETPLACE_MARKER_KEY, isOwnedBy, keptOverrideOf } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
@@ -299,8 +300,9 @@ export function restoredOverrideNames(
 
 /**
  * What one existing entry leaves in its place: itself, the override its
- * marker keeps, or nothing. A name in `replaced` is restaged in this map, so
- * the new entry carries the plugin's kept override and absorbs an overlay.
+ * marker keeps with the entry's carried fields (AFILE-06), or nothing. A name
+ * in `replaced` is restaged in this map, so the new entry carries the
+ * plugin's kept override and absorbs an overlay.
  */
 function survivingEntry(
   name: string,
@@ -310,7 +312,8 @@ function survivingEntry(
 ): unknown {
   const restaged = Object.hasOwn(replaced, name);
   if (isOwnedBy(entry, owner.pluginName, owner.marketplaceName)) {
-    return restaged ? undefined : restorableOverride(entry);
+    const kept = restaged ? undefined : restorableOverride(entry);
+    return kept === undefined ? undefined : restoredOverride(kept, entry);
   }
 
   return restaged && isOverlay(entry) ? undefined : entry;
@@ -344,8 +347,8 @@ function keptServers(
  * Composes the next document: the plugin's marked entries leave every server
  * map, and `entries` follow the kept entries of the selected key, in their
  * own order. A marked entry whose name is not restaged in its map writes back
- * the override its marker keeps, in the entry's position; one that keeps none
- * is removed (AFILE-01, AFILE-06). An overlay under the selected key that
+ * the override its marker keeps, with the entry's carried fields, in the
+ * entry's position; one that keeps none is removed (AFILE-01, AFILE-06). An overlay under the selected key that
  * shares a name with an entry is dropped, so the entry replaces it and keeps
  * it in its marker (AFILE-05, AFILE-06). Every existing
  * top-level key keeps its position. The selected key is added only when it is

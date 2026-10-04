@@ -734,6 +734,7 @@ describe("withPluginServers", () => {
       first: { command: "first" },
       kept: {
         command: "kept",
+        disabled: true,
         _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { disabled: true } },
       },
       plain: { command: "plain", _piClaudeMarketplace: ACME_MARKER },
@@ -769,12 +770,14 @@ describe("withPluginServers", () => {
       },
       gone: {
         command: "gone",
+        debug: true,
         _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { debug: true } },
       },
     };
     const legacy = {
       moved: {
         command: "moved",
+        lifecycle: "eager",
         _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { lifecycle: "eager" } },
       },
     };
@@ -804,7 +807,7 @@ describe("withPluginServers", () => {
   test("WR-01: writes back the kept override of a server named __proto__ as an own entry", () => {
     // arrange
     const servers = JSON.parse(
-      '{"__proto__":{"command":"owned","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true}}}}',
+      '{"__proto__":{"command":"owned","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true}}}}',
     ) as Record<string, unknown>;
     const config = {
       doc: { mcpServers: servers },
@@ -818,6 +821,43 @@ describe("withPluginServers", () => {
 
     // assert
     assert.strictEqual(JSON.stringify(next), '{"mcpServers":{"__proto__":{"disabled":true}}}');
+  });
+
+  test("AFILE-06: a written-back override takes each carried field from the live entry and keeps every other field", () => {
+    // arrange
+    const servers = {
+      enabled: {
+        command: "enabled",
+        env: { CLAUDE_PLUGIN_ROOT: "/plugin/root" },
+        disabled: false,
+        _piClaudeMarketplace: {
+          ...ACME_MARKER,
+          keptOverride: { disabled: true, env: { TOKEN: "token-1" } },
+        },
+      },
+      cleared: {
+        command: "cleared",
+        _piClaudeMarketplace: {
+          ...ACME_MARKER,
+          keptOverride: { disabled: true, headers: { Authorization: "Bearer user" } },
+        },
+      },
+    };
+    const config = {
+      doc: { mcpServers: servers },
+      serverKey: "mcpServers",
+      serverMaps: new Map([["mcpServers", servers]]),
+      hadComments: false,
+    } satisfies McpConfigDoc;
+
+    // act
+    const next = withPluginServers(config, "acme", "catalog", {});
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      '{"mcpServers":{"enabled":{"disabled":false,"env":{"TOKEN":"token-1"}},"cleared":{"headers":{"Authorization":"Bearer user"}}}}',
+    );
   });
 });
 

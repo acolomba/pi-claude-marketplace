@@ -10,6 +10,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  createEnableOperation,
   createInstallOperation,
   createReinstallOperation,
   createUninstallOperation,
@@ -25,8 +26,8 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 // The user override under a plugin server name survives install and
 // uninstall through the real operations: install keeps it in the plugin
-// entry's marker, and uninstall writes it back as the entry it was (AFILE-06,
-// AFILE-01).
+// entry's marker, and uninstall writes it back with the carried fields the
+// entry holds at that time (AFILE-06, AFILE-01).
 
 interface NotifyRecord {
   readonly message: string;
@@ -369,6 +370,85 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
         await pathExists(path.join(agentDir, "mcp.json")),
       ],
       [false, false],
+    );
+  });
+});
+
+test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survives plugin disable, enable and uninstall", async () => {
+  await withHermeticEnvironment("mcp-override-user-enable-", async ({ cwd }) => {
+    // arrange
+    const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
+    const locations = locationsFor("project", cwd);
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"srv":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}\n',
+    );
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const completionCache = createCompletionCache();
+    const setPluginEnabled = createEnableOperation(hooksRouting);
+    const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+    await createInstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...makeCtx().session, ...request });
+    // pi-mcp-adapter 5.0.0's `/mcp-adapter enable srv` removes `disabled` from
+    // the entry and keeps every other member, the marker included.
+    const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
+      mcpServers: { srv: Record<string, unknown> };
+    };
+    const { disabled: _disabled, ...userEnabledEntry } = installed.mcpServers.srv;
+    await writeFile(
+      locations.mcpAdapterJsonPath,
+      `${JSON.stringify({ mcpServers: { srv: userEnabledEntry } }, null, 2)}\n`,
+    );
+
+    // act
+    await setPluginEnabled({ ...makeCtx().session, ...request, enable: false });
+    const disabledBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+    await setPluginEnabled({ ...makeCtx().session, ...request, enable: true });
+    const enabledText = await readFile(locations.mcpAdapterJsonPath, "utf8");
+    await createUninstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...makeCtx().session, ...request });
+    const uninstalledBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    const restoredBytes = `{
+  "mcpServers": {
+    "srv": {
+      "env": {
+        "STUB_TOKEN": "stub-secret"
+      }
+    }
+  }
+}
+`;
+    assert.deepStrictEqual(
+      { disabledBytes, enabled: JSON.parse(enabledText) as unknown, uninstalledBytes },
+      {
+        disabledBytes: restoredBytes,
+        enabled: {
+          mcpServers: {
+            srv: {
+              command: "node",
+              args: ["v1.js"],
+              env: {
+                CLAUDE_PLUGIN_ROOT: pluginRoot,
+                CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
+                CLAUDE_PROJECT_DIR: cwd,
+              },
+              _piClaudeMarketplace: {
+                plugin: "hello",
+                marketplace: "mp",
+                keptOverride: { env: { STUB_TOKEN: "stub-secret" } },
+              },
+            },
+          },
+        },
+        uninstalledBytes: restoredBytes,
+      },
     );
   });
 });

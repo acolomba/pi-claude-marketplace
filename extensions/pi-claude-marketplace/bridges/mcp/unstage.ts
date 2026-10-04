@@ -6,8 +6,9 @@
 // tuple under either server key, atomic-writes the reduced doc, and returns
 // the names that were removed (AFILE-01). A marker-less entry under one of
 // the plugin's names stays: it is user-authored. An owned entry whose marker
-// keeps a user override is replaced by that override, marker-less, in place
-// (AFILE-01).
+// keeps a user override is replaced by that override, marker-less, in place.
+// Its carried fields come from the entry, so a later `/mcp-adapter enable` or
+// `disable` wins (AFILE-01, AFILE-06).
 //
 // The scope's legacy `mcp.json` holds entries written before the bridge moved
 // to `mcp-adapter.json`. Unstage removes the plugin's entries there too, by
