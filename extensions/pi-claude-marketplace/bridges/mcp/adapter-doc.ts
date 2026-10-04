@@ -348,10 +348,10 @@ function keptServers(
  * map, and `entries` follow the kept entries of the selected key, in their
  * own order. A marked entry whose name is not restaged in its map writes back
  * the override its marker keeps, with the entry's carried fields, in the
- * entry's position; one that keeps none is removed (AFILE-01, AFILE-06). An overlay under the selected key that
- * shares a name with an entry is dropped, so the entry replaces it and keeps
- * it in its marker (AFILE-05, AFILE-06). Every existing
- * top-level key keeps its position. The selected key is added only when it is
+ * entry's position; one that keeps none is removed (AFILE-01, AFILE-06). An
+ * overlay under the selected key that shares a name with an entry is dropped,
+ * so the entry replaces it and keeps it in its marker (AFILE-05, AFILE-06).
+ * Every existing top-level key keeps its position. The selected key is added only when it is
  * absent and `entries` is non-empty, so no empty server map is introduced
  * (AFILE-01, AFILE-03).
  */
