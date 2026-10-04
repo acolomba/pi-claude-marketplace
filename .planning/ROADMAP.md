@@ -225,6 +225,8 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 
 **Notes.** The migration is its own reconcile step with its own state lock, run per scope before the reconcile plan is applied. It must not hang on the backfill gate, which stamps unconditionally and so would never retry after a partial failure. The file an entry sits in tells whether it is translated, so no migration flag is persisted (COMPAT-01). Research flags: the one-reload lag, adapter panel copies of our entries, and the fault-injection design.
 
+**Carried from Phase 2 review (IN-02).** Update and reinstall rewrite only `mcp-adapter.json`, so a server the plugin dropped or renamed keeps its marked entry in the legacy `mcp.json`. The migration meets marked entries whose plugin IS installed but whose name the record no longer lists. Decide in discuss whether to delete those or handle them like AMIG-04's unowned entries.
+
 ### Phase 6: Live MCP status in info
 
 **Goal**: `/claude:plugin info` tells the user what state each plugin MCP server is in, as the adapter reports it, and says plainly when it does not know.
