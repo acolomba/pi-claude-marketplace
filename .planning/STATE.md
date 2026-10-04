@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-04T10:37:39.999Z"
+last_updated: "2026-10-04T13:23:39.769Z"
 last_activity: 2026-10-04
-last_activity_desc: Completed quick task 261003-w7b (faster commit-time checks)
-state_head: 5b5d06c763b54affc7e13139d183585f92722c2a
+last_activity_desc: Completed quick task 261004-az6 (checker controls on demand)
+state_head: 1d2cdd516e51f5f702a4cd6f776c0ab37d8fe142
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-04 — Completed quick task 261003-w7b: targeted commit-time checks, full-run lock and log, quiet passing output
+Last activity: 2026-10-04 — Completed quick task 261004-az6: checker controls run on demand; planning-data test readers removed
 
 ### workflows-replay closeout (merged from main)
 
@@ -600,6 +600,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261001-g4u | Resolve the 23 SonarCloud findings on PR 198 with real fixes and no-await-in-loop directives | 2026-10-01 | 4455c76f | [261001-g4u-resolve-the-23-sonarcloud-findings-on-pr](./quick/261001-g4u-resolve-the-23-sonarcloud-findings-on-pr/) |
 | 261003-w7b | Speed up commit-time checks: targeted check-changed rules, lock, log, quiet output, agent guidance | 2026-10-04 | 8cff1fc4 | [261003-w7b-speed-up-commit-time-checks-targeted-che](./quick/261003-w7b-speed-up-commit-time-checks-targeted-che/) |
 | 15 | check-changed: Markdown under .agents/ and .claude/ selects no checks | 2026-10-04 | 5b5d06c7 | — |
+| 261004-az6 | Run negative controls only when their checker changes; drop planning-data test readers | 2026-10-04 | 1d2cdd51 | [261004-az6-run-negative-controls-only-when-their-ch](./quick/261004-az6-run-negative-controls-only-when-their-ch/) |
 
 ## Deferred Items
 
