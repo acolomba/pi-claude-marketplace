@@ -26,8 +26,8 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 // The user override under a plugin server name survives install and
 // uninstall through the real operations: install keeps it in the plugin
-// entry's marker, and uninstall writes it back with the carried fields the
-// entry holds at that time (AFILE-06, AFILE-01).
+// entry's marker, and uninstall writes it back with each of its carried fields
+// taking the value the entry holds at that time (AFILE-06, AFILE-01).
 
 interface NotifyRecord {
   readonly message: string;
@@ -52,9 +52,13 @@ function makeCtx(): {
 
 /**
  * Seeds path marketplace `mp` with plugin `hello` 1.0.0 declaring MCP server
- * `srv`, and registers `mp` at each of `scopes`.
+ * `srv` as `server`, and registers `mp` at each of `scopes`.
  */
-async function seedMcpPlugin(cwd: string, scopes: readonly Scope[]): Promise<string> {
+async function seedMcpPlugin(
+  cwd: string,
+  scopes: readonly Scope[],
+  server: Readonly<Record<string, unknown>> = { command: "node", args: ["v1.js"] },
+): Promise<string> {
   const marketplaceRoot = path.join(cwd, "mp-src");
   const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
@@ -64,7 +68,7 @@ async function seedMcpPlugin(cwd: string, scopes: readonly Scope[]): Promise<str
   );
   await writeFile(
     path.join(pluginRoot, ".mcp.json"),
-    JSON.stringify({ mcpServers: { srv: { command: "node", args: ["v1.js"] } } }),
+    JSON.stringify({ mcpServers: { srv: server } }),
   );
   await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
@@ -448,6 +452,51 @@ test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survive
           },
         },
         uninstalledBytes: restoredBytes,
+      },
+    );
+  });
+});
+
+test("AFILE-06: uninstall writes back no carried field the plugin's entry declares and the user's override lacks", async () => {
+  await withHermeticEnvironment("mcp-override-plugin-carried-", async ({ cwd }) => {
+    // arrange
+    await seedMcpPlugin(cwd, ["project"], { command: "node", lifecycle: "eager", debug: true });
+    const locations = locationsFor("project", cwd);
+    const overrideBytes = `{
+  "mcpServers": {
+    "srv": {
+      "disabled": true
+    }
+  }
+}
+`;
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(locations.mcpAdapterJsonPath, overrideBytes);
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const completionCache = createCompletionCache();
+    const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+
+    // act
+    await createInstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...makeCtx().session, ...request });
+    const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
+      mcpServers: { srv: Record<string, unknown> };
+    };
+    await createUninstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...makeCtx().session, ...request });
+    const uninstalledBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    const { lifecycle, debug, disabled } = installed.mcpServers.srv;
+    assert.deepStrictEqual(
+      { installedCarried: { lifecycle, debug, disabled }, uninstalledBytes },
+      {
+        installedCarried: { lifecycle: "eager", debug: true, disabled: true },
+        uninstalledBytes: overrideBytes,
       },
     );
   });

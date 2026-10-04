@@ -9,8 +9,9 @@
 // key (AFILE-03). `isFullDefinition` is the adapter's own transport test, which
 // decides whether an entry declares a server or only overrides one (AFILE-05).
 // A user override the plugin's entry replaces is kept in that entry's marker;
-// when the entry leaves the file, the override is written back in its place,
-// with its carried fields taken from the entry (AFILE-06, AFILE-01).
+// when the entry leaves the file, the override is written back in its place.
+// Each carried field the override holds takes the entry's value, and no other
+// carried field is added (AFILE-06, AFILE-01).
 
 import { readFile } from "node:fs/promises";
 
@@ -300,9 +301,9 @@ export function restoredOverrideNames(
 
 /**
  * What one existing entry leaves in its place: itself, the override its
- * marker keeps with the entry's carried fields (AFILE-06), or nothing. A name
- * in `replaced` is restaged in this map, so the new entry carries the
- * plugin's kept override and absorbs an overlay.
+ * marker keeps with its own carried fields taking the entry's values
+ * (AFILE-06), or nothing. A name in `replaced` is restaged in this map, so the
+ * new entry carries the plugin's kept override and absorbs an overlay.
  */
 function survivingEntry(
   name: string,
@@ -347,13 +348,13 @@ function keptServers(
  * Composes the next document: the plugin's marked entries leave every server
  * map, and `entries` follow the kept entries of the selected key, in their
  * own order. A marked entry whose name is not restaged in its map writes back
- * the override its marker keeps, with the entry's carried fields, in the
- * entry's position; one that keeps none is removed (AFILE-01, AFILE-06). An
- * overlay under the selected key that shares a name with an entry is dropped,
- * so the entry replaces it and keeps it in its marker (AFILE-05, AFILE-06).
- * Every existing top-level key keeps its position. The selected key is added only when it is
- * absent and `entries` is non-empty, so no empty server map is introduced
- * (AFILE-01, AFILE-03).
+ * the override its marker keeps, with its own carried fields taking the
+ * entry's values, in the entry's position; one that keeps none is removed
+ * (AFILE-01, AFILE-06). An overlay under the selected key that shares a name
+ * with an entry is dropped, so the entry replaces it and keeps it in its
+ * marker (AFILE-05, AFILE-06). Every existing top-level key keeps its
+ * position. The selected key is added only when it is absent and `entries` is
+ * non-empty, so no empty server map is introduced (AFILE-01, AFILE-03).
  */
 export function withPluginServers(
   config: McpConfigDoc,

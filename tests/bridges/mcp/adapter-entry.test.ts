@@ -561,12 +561,13 @@ describe("restoredOverride", () => {
     assert.strictEqual(JSON.stringify(restored), '{"headers":{"Authorization":"Bearer stub"}}');
   });
 
-  test("AFILE-06: carried fields only the live entry holds follow the kept fields in set order", () => {
+  test("AFILE-06: a carried field the plugin's live entry declares and the kept override lacks is not added", () => {
     // arrange
-    const kept = { env: { STUB_TOKEN: "stub-secret" } };
+    const kept = { disabled: true };
     const live = {
       command: "plugin-command",
       lifecycle: "eager",
+      debug: true,
       disabled: true,
       _piClaudeMarketplace: { ...MARKER, keptOverride: kept },
     };
@@ -575,15 +576,15 @@ describe("restoredOverride", () => {
     const restored = restoredOverride(kept, live);
 
     // assert
-    assert.strictEqual(
-      JSON.stringify(restored),
-      '{"env":{"STUB_TOKEN":"stub-secret"},"disabled":true,"lifecycle":"eager"}',
-    );
+    assert.strictEqual(JSON.stringify(restored), '{"disabled":true}');
   });
 
-  test("AFILE-05: no field of the live entry outside the carried set reaches the override", () => {
+  test("AFILE-05: each kept carried field takes the live value and every other field comes from the kept override", () => {
     // arrange
-    const kept = { env: { STUB_TOKEN: "stub-secret" } };
+    const kept = {
+      env: { STUB_TOKEN: "stub-secret" },
+      ...Object.fromEntries(CARRIED_KEYS.map((key) => [key, `kept-${key}`])),
+    };
     const live = {
       ...fullEntry("live"),
       _piClaudeMarketplace: { ...MARKER, keptOverride: kept },

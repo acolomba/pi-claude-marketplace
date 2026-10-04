@@ -7,8 +7,10 @@
 // the names that were removed (AFILE-01). A marker-less entry under one of
 // the plugin's names stays: it is user-authored. An owned entry whose marker
 // keeps a user override is replaced by that override, marker-less, in place.
-// Its carried fields come from the entry, so a later `/mcp-adapter enable` or
-// `disable` wins (AFILE-01, AFILE-06).
+// Each carried field the override holds takes the entry's value, so a later
+// `/mcp-adapter enable` or `disable` wins. A carried field the override lacks
+// is not added, so a value the plugin's entry declares stays out of it
+// (AFILE-01, AFILE-06).
 //
 // The scope's legacy `mcp.json` holds entries written before the bridge moved
 // to `mcp-adapter.json`. Unstage removes the plugin's entries there too, by

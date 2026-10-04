@@ -114,12 +114,15 @@ export function inactiveOverrideFields(
 /**
  * AFILE-06: the override written back in place of the plugin's live entry.
  * Each field outside the carried set comes back as kept, in the kept key order.
- * Each carried field takes the live entry's value instead, so a `/mcp-adapter
- * enable` or `disable` run while the plugin held the name wins over the kept
- * value. A carried field the live entry lacks is left out, as a restage leaves
- * it out, because pi-mcp-adapter's enable writer removes `disabled` from the
- * entry. Only carried fields change, so the result is still an override and
- * never a full definition (AFILE-05).
+ * Each carried field the kept override holds takes the live entry's value
+ * instead, so a `/mcp-adapter enable` or `disable` run while the plugin held
+ * the name wins over the kept value. Such a field is left out when the live
+ * entry lacks it, as a restage leaves it out, because pi-mcp-adapter's enable
+ * writer removes `disabled` from the entry. A carried field the kept override
+ * lacks is never added, so a value the plugin's entry declares (such as
+ * `lifecycle`) stays out of the user's override. Only the kept override's own
+ * fields come back, so the result is still an override and never a full
+ * definition (AFILE-05).
  */
 export function restoredOverride(
   kept: Readonly<Record<string, unknown>>,
@@ -135,7 +138,7 @@ export function restoredOverride(
     }
   }
 
-  return { ...restored, ...liveCarried };
+  return restored;
 }
 
 /**
