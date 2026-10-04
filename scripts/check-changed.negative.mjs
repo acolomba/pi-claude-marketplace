@@ -1,14 +1,41 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { changedFiles, planChecks, runChecks } from "./check-changed.mjs";
+import { changedFiles, DATA_READERS, planChecks, runChecks } from "./check-changed.mjs";
 
 const root = mkdtempSync(path.join(tmpdir(), "pi-cm-changed-"));
 const source = (name) => `extensions/pi-claude-marketplace/${name}.ts`;
 const test = (name) => `tests/${name}.test.ts`;
+const repository = fileURLToPath(new URL("..", import.meta.url));
+const typeMemberData = [
+  "scripts/check-unused-type-members.contracts.json",
+  "scripts/check-unused-type-members.exceptions.json",
+];
+const run = (script) => ["npm", "run", script];
+const testRun = (...files) => ["node", "--test", "--test-concurrency=4", ...files];
+const eslint = (...files) => ["node", "node_modules/eslint/bin/eslint.js", ...files];
+const prettier = (...files) => [
+  "node",
+  "node_modules/prettier/bin/prettier.cjs",
+  "--check",
+  "--cache",
+  "--cache-strategy",
+  "content",
+  ...files,
+];
+const commandsFor = (files) => planChecks(root, files).commands;
 
 function write(file, contents) {
   const absolute = path.join(root, file);
@@ -38,16 +65,54 @@ try {
     write(test(name), "export {};");
   }
 
+  for (const file of [
+    "tests/architecture/arch.test.ts",
+    "tests/orphan.ts",
+    "tests/scripts/gate.test.ts",
+    "tests/scripts/gate.negative.test.ts",
+    ...[...DATA_READERS.values()].flat(),
+  ]) {
+    write(file, "export {};");
+  }
+
+  write("tests/shared/fake.ts", "export const fake = 1;");
+  write("tests/shared/chain.ts", 'export * from "./fake.ts";');
+  write("tests/shared/consumer.test.ts", 'import { fake } from "./chain.ts"; void fake;');
+  write("tests/e2e/flow.test.ts", 'import { fake } from "../shared/fake.ts"; void fake;');
+  write("tests/integration/worker.ts", "export {};");
+  write("tests/integration/spawner.test.ts", 'export const child = "worker.ts";');
+  write("tests/integration/lonely.ts", "export {};");
+  write("tests/domain/fixture.json", "{}");
+  write("tests/fixtures/shared.json", "{}");
+  write("tests/live-uat/canary.mjs", "export {};");
+  for (const file of [
+    "scripts/gate.mjs",
+    "scripts/gate.negative.mjs",
+    "scripts/tool.mjs",
+    "scripts/check-changed.mjs",
+    "eslint.config.js",
+  ]) {
+    write(file, "export {};");
+  }
+
+  for (const file of [
+    ...typeMemberData,
+    "package.json",
+    "package-lock.json",
+    ".fallowrc.json",
+    ".prettierrc.json",
+    "rule-packs/architecture.json",
+  ]) {
+    write(file, "{}");
+  }
+
+  write(".github/workflows/ci.yml", "on: push\n");
+  write("unclassified.txt", "unclassified");
+
   // Re-exports, type-only consumers, and cycles must reach their owner tests.
   const focused = planChecks(root, [source("leaf")]);
   assert.equal(focused.scope, "focused");
-  assert.deepEqual(focused.commands.at(-1), [
-    "node",
-    "--test",
-    "--test-concurrency=4",
-    test("middle"),
-    test("top"),
-  ]);
+  assert.deepEqual(focused.commands.at(-1), testRun(test("middle"), test("top")));
   assert.deepEqual(
     focused.commands.find((command) => command[1] === "node_modules/eslint/bin/eslint.js"),
     [
@@ -74,36 +139,158 @@ try {
   const paired = planChecks(root, [source("leaf"), test("leaf")]);
   assert.deepEqual(paired.commands.slice(1), focused.commands.slice(1));
 
-  for (const file of [
-    "tests/shared/fake.ts",
-    "tests/domain/fixture.json",
-    "tests/scripts/gate.test.ts",
-    "package-lock.json",
-    "tsconfig.json",
-    "scripts/check-changed.mjs",
-    "docs/output-catalog.md",
-    "unclassified.txt",
-    source("removed"),
-  ]) {
-    const broad = planChecks(root, [file]);
-    assert.equal(broad.scope, "full", file);
-    assert.deepEqual(broad.commands, [
-      ["npm", "run", "check"],
-      ["npm", "run", "test:coverage:direct:all"],
-    ]);
+  // `.planning` data and skill or instruction Markdown select no checks.
+  const exempt = planChecks(root, [
+    ".planning/state.json",
+    ".planning/HANDOFF.json",
+    ".planning/notify-corpus/run.jsonl",
+    ".planning/STATE.md",
+    "skills/local-verification/SKILL.md",
+    "AGENTS.md",
+  ]);
+  assert.equal(exempt.scope, "none");
+  assert.deepEqual(exempt.commands, []);
+
+  // Files that tests read run exactly their readers, and broaden once a reader is gone.
+  for (const [file, readers] of DATA_READERS) {
+    assert.deepEqual(commandsFor([file]), [testRun(...readers)], file);
   }
 
-  assert.deepEqual(
-    planChecks(root, [".planning/STATE.md", "skills/local-verification/SKILL.md"]).commands,
-    [],
-  );
+  const configReader = DATA_READERS.get(".planning/config.json")[0];
+  rmSync(path.join(root, configReader));
   assert.equal(planChecks(root, [".planning/config.json"]).scope, "full");
-  assert.deepEqual(planChecks(root, ["tests/e2e/changed.test.ts"]).commands.at(-1), [
-    "npm",
-    "run",
-    "test:e2e",
+  assert.deepEqual(commandsFor([".planning/config.json"]), [run("check")]);
+  write(configReader, "export {};");
+
+  for (const file of [
+    "docs/output-catalog.md",
+    "docs/prd/spec.md",
+    "README.md",
+    "README.es.md",
+    "CHANGELOG.md",
+  ]) {
+    assert.deepEqual(commandsFor([file]), [run("test:architecture")], file);
+  }
+
+  for (const file of typeMemberData) {
+    assert.deepEqual(commandsFor([file]), [prettier(file), run("lint:type-members")], file);
+  }
+
+  const arch = "tests/architecture/arch.test.ts";
+  assert.deepEqual(commandsFor([arch]), [
+    prettier(arch),
+    run("typecheck"),
+    eslint(arch),
+    run("fallow"),
+    run("test:corresponding"),
+    testRun(arch),
   ]);
+  // Re-exports reach consumer tests; e2e consumers are dropped.
+  assert.deepEqual(commandsFor(["tests/shared/fake.ts"]), [
+    prettier("tests/shared/fake.ts"),
+    run("typecheck"),
+    eslint("tests/shared/chain.ts", "tests/shared/consumer.test.ts", "tests/shared/fake.ts"),
+    run("fallow"),
+    run("test:corresponding"),
+    testRun("tests/shared/consumer.test.ts"),
+  ]);
+  // A helper named only by file name, as a spawned child is, reaches its spawner.
+  assert.deepEqual(
+    commandsFor(["tests/integration/worker.ts"]).at(-1),
+    testRun("tests/integration/spawner.test.ts"),
+  );
+  assert.deepEqual(commandsFor(["tests/integration/lonely.ts"]), [
+    prettier("tests/integration/lonely.ts"),
+    run("typecheck"),
+    eslint("tests/integration/lonely.ts"),
+    run("fallow"),
+    run("test:corresponding"),
+    run("test:integration"),
+  ]);
+  assert.deepEqual(commandsFor(["tests/domain/fixture.json"]), [
+    prettier("tests/domain/fixture.json"),
+    run("typecheck"),
+    run("test:architecture"),
+    run("test:modules"),
+  ]);
+  assert.deepEqual(commandsFor(["scripts/gate.mjs"]), [
+    prettier("scripts/gate.mjs"),
+    eslint("scripts/gate.mjs", "tests/scripts/gate.test.ts"),
+    run("fallow"),
+    run("test:analyzers"),
+    ["node", "scripts/gate.negative.mjs"],
+  ]);
+  assert.deepEqual(commandsFor(["scripts/gate.negative.mjs"]), [
+    prettier("scripts/gate.negative.mjs"),
+    eslint("scripts/gate.negative.mjs", "tests/scripts/gate.negative.test.ts"),
+    run("fallow"),
+    run("test:analyzers"),
+    ["node", "scripts/gate.negative.mjs"],
+  ]);
+
+  // Rules union in fixed order; a test that a selected suite covers runs once, in the suite.
+  const withArch = (command, prefix) => [
+    ...command.slice(0, prefix),
+    ...[...command.slice(prefix), arch].sort(),
+  ];
+  assert.deepEqual(commandsFor([source("leaf"), "docs/output-catalog.md", arch]), [
+    withArch(focused.commands[0], 6),
+    focused.commands[1],
+    withArch(focused.commands[2], 2),
+    ...focused.commands.slice(3, -1),
+    run("test:architecture"),
+    focused.commands.at(-1),
+  ]);
+
+  const broadInputs = [
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+    "eslint.config.js",
+    ".fallowrc.json",
+    ".prettierrc.json",
+    "rule-packs/architecture.json",
+    ".github/workflows/ci.yml",
+    "scripts/check-changed.mjs",
+    "scripts/tool.mjs",
+    "unclassified.txt",
+    source("removed"),
+    "tests/shared/removed.ts",
+    "tests/orphan.ts",
+    "tests/live-uat/canary.mjs",
+    "tests/fixtures/shared.json",
+  ];
+  for (const file of broadInputs) {
+    const broad = planChecks(root, [file]);
+    assert.equal(broad.scope, "full", file);
+    assert.deepEqual(broad.commands, [run("check")], file);
+  }
+
+  assert.match(
+    planChecks(root, broadInputs).reason,
+    /package\.json.*, \.fallowrc\.json and 9 more$/,
+  );
+  assert.deepEqual(commandsFor(["docs/output-catalog.md", "unclassified.txt"]), [run("check")]);
+  assert.deepEqual(commandsFor(["tests/e2e/changed.test.ts"]), [run("check"), run("test:e2e")]);
   assert.equal(planChecks(root, [source("leaf"), "package.json"]).scope, "full");
+
+  // A test that names a `.planning` path makes it data, which DATA_READERS must list.
+  const planningLiterals = readdirSync(path.join(repository, "tests"), {
+    recursive: true,
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+    .flatMap((entry) =>
+      [
+        ...readFileSync(path.join(entry.parentPath, entry.name), "utf8").matchAll(
+          /(["'`])(\.planning[^"'`\n]*)\1/g,
+        ),
+      ].map((match) => match[2]),
+    );
+  assert.ok(planningLiterals.length > 0, "the real-tree scan found no .planning literal");
+  for (const literal of planningLiterals) {
+    assert.ok(DATA_READERS.has(literal), `${literal} is read by a test but not in DATA_READERS`);
+  }
 
   write(source("other"), 'export const other = import("./missing.ts");');
   assert.equal(planChecks(root, [source("leaf")]).scope, "full");
@@ -173,7 +360,7 @@ try {
     /signal SIGTERM/,
   );
   process.stdout.write(
-    "Changed-check controls passed: dependency selection, broad fallbacks, git paths, and child failures.\n",
+    "Changed-check controls passed: dependency selection, targeted rules and their union, broad fallbacks, git paths, and child failures.\n",
   );
 } finally {
   rmSync(root, { recursive: true, force: true });
