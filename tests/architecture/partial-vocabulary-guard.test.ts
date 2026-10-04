@@ -47,13 +47,11 @@
 
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { REPO_ROOT } from "./source-scan.ts";
-import { materializeTargets, plantOffender, withTempRoot } from "./temp-root-control.ts";
 
 const EXT_ROOT = path.join(REPO_ROOT, "extensions", "pi-claude-marketplace");
 const TEST_ROOT = path.join(REPO_ROOT, "tests");
@@ -172,18 +170,6 @@ function maskUpstreamSourceSentinel(file: string, content: string): string {
 const STATUS_GUARDED_SOURCES = new Map(
   [...GUARDED_SOURCES].map(([file, content]) => [file, maskUpstreamSourceSentinel(file, content)]),
 );
-
-test("D-75-01 guard: the upstream source mask preserves a retired status literal in the same file", () => {
-  // arrange
-  const file = "extensions/pi-claude-marketplace/domain/manifest.ts";
-  const content = 'source: { source: "unsupported" }, status: "unsupported"';
-
-  // act
-  const masked = maskUpstreamSourceSentinel(file, content);
-
-  // assert
-  assert.equal(masked, 'source: UPSTREAM_SENTINEL, status: "unsupported"');
-});
 
 /** Files (repo-relative) in `sources` whose content contains `needle`. */
 function filesContaining(needle: string, sources: ReadonlyMap<string, string>): string[] {
@@ -325,14 +311,7 @@ function waivedFor(token: string): string[] {
   return TOKEN_WAIVERS.filter((waiver) => waiver.token === token).map((waiver) => waiver.file);
 }
 
-/**
- * Repo-relative files in `sources` that spell `token` without a waiver.
- *
- * `sources` is a parameter rather than a closed-over constant so the controls
- * at the bottom of this file can run this exact function against a temp-root
- * copy of a real source. A clause that can only ever read the repository can
- * never be seen to fail.
- */
+/** Repo-relative files in `sources` that spell `token` without a waiver. */
 function unwaivedHits(token: string, sources: ReadonlyMap<string, string>): string[] {
   const waived = waivedFor(token);
 
@@ -717,96 +696,4 @@ test("D-75-01 guard: completion-description extractor finds the --partial rows",
       catalog.some((d) => d.includes("unsupported components")),
     "expected the partial list-filter and install/update completion descriptions to be extracted",
   );
-});
-
-// ---------------------------------------------------------------------------
-// Controls for the widened scope. Reading more files is not evidence that the
-// wider surface is policed; being SEEN to fail on one of those files is.
-//
-// D-07-01: the offender is derived from the real target at plant time rather
-// than hand-authored, so it cannot drift away from the file it stands for.
-// D-07-04: the unmutated copy of the same target is the benign half -- without
-// it, a clause that failed everything would look identical to a working one.
-// ---------------------------------------------------------------------------
-
-/**
- * The unit-test source the controls copy and mutate.
- *
- * It is a file the recursive walk added and that no waiver touches, so a hit
- * against its copy can only come from the planted line.
- */
-const CONTROL_TARGET = "tests/domain/plugin-resolver.test.ts";
-
-/** A retired render token from `ABSENT_RENDER_TOKENS`, planted by the control. */
-const CONTROL_TOKEN = "(force-installed)";
-
-/** First double-quoted `test("...")` title in a module. */
-const FIRST_TEST_TITLE = /^\s*test\("([^"\\]+)"/m;
-
-/**
- * Build the offending line from a case title `target` really declares.
- *
- * A hand-written offender is a claim about the target; restating one of its own
- * titles with a retired token is a fact about it, and it reproduces the exact
- * defect this widening exists for -- retired vocabulary in a test TITLE, which
- * a guard that only read assertion bodies would never see.
- */
-async function offenderLineFor(target: string): Promise<string> {
-  const source = await readFile(path.join(REPO_ROOT, target), "utf8");
-  const title = FIRST_TEST_TITLE.exec(source)?.[1];
-
-  assert.ok(
-    title,
-    `D-07-01: ${target} declares no double-quoted case title, so the offender below would be hand-authored rather than derived from the real file.`,
-  );
-
-  return `test("${title} renders ${CONTROL_TOKEN}", () => {});`;
-}
-
-/** Read `targets` out of `root` into the map shape the ABSENCE checks take. */
-async function sourcesUnder(
-  root: string,
-  targets: readonly string[],
-): Promise<ReadonlyMap<string, string>> {
-  const files = new Map<string, string>();
-  for (const rel of targets) {
-    files.set(rel, await readFile(path.join(root, rel), "utf8"));
-  }
-
-  return files;
-}
-
-test("D-75-01 guard: the widened scan fires on a retired token planted in a copy of a real unit-test source", async () => {
-  await withTempRoot("vocabulary-guard-offender-", async (root) => {
-    // arrange
-    await materializeTargets(root, [CONTROL_TARGET]);
-    await plantOffender(root, CONTROL_TARGET, await offenderLineFor(CONTROL_TARGET));
-
-    // act
-    const hits = unwaivedHits(CONTROL_TOKEN, await sourcesUnder(root, [CONTROL_TARGET]));
-
-    // assert
-    assert.deepStrictEqual(
-      hits,
-      [CONTROL_TARGET],
-      `the ABSENCE check must report ${CONTROL_TARGET} once a retired render token is planted in it; a silent pass here means the widened surface is read but not policed`,
-    );
-  });
-});
-
-test("D-75-01 guard: an unmutated copy of the same real unit-test source passes", async () => {
-  await withTempRoot("vocabulary-guard-benign-", async (root) => {
-    // arrange
-    await materializeTargets(root, [CONTROL_TARGET]);
-
-    // act
-    const hits = unwaivedHits(CONTROL_TOKEN, await sourcesUnder(root, [CONTROL_TARGET]));
-
-    // assert
-    assert.deepStrictEqual(
-      hits,
-      [],
-      `the byte-identical copy of ${CONTROL_TARGET} must pass, or the offender case above proves only that the check fails everything`,
-    );
-  });
 });

@@ -22,15 +22,11 @@
  * it never actually inspected; `readFile(..., "utf8")` either yields the text or
  * throws, so no target can be silently skipped.
  *
- * The scan names its base through `opts.root`, which defaults to the repository
- * (D-07-01), and reports the repository-relative paths it actually opened in
- * `ScanReport.visited` (D-07-03). Both halves of the answer come from that one
- * root: a report whose paths were resolved against a different base than the
- * read would be a wrong answer wearing the shape of a pass. A target waived
- * through `allowMissing` is deliberately absent from `visited` and appears in
- * `waived` instead, so a gate that deep-compares `visited` against its declared
- * target list sees a target drop out the moment it stops resolving -- which is
- * what WR-06 alone cannot report, since a waived target raises nothing.
+ * The scan reads from the repository root and reports the repository-relative
+ * paths it actually opened in `ScanReport.visited` (D-07-03). A target that does
+ * not exist fails the scan (WR-06), so a gate that deep-compares `visited`
+ * against its declared target list never reports success over a list it did
+ * not read.
  *
  * This file registers no case of its own.
  */
@@ -64,8 +60,6 @@ export function stripComments(src: string): string {
 export interface ScanReport {
   /** Repository-relative paths really opened, in declared target order. */
   readonly visited: ReadonlyArray<string>;
-  /** Repository-relative targets absent from disk and waived by `allowMissing`. */
-  readonly waived: ReadonlyArray<string>;
 }
 
 /**
@@ -82,42 +76,30 @@ export interface ScanReport {
  * renaming, moving, or deleting a guarded file turned the gate green over zero
  * inspected files -- the same "greened on a file it never read" failure mode the
  * `readFile`-over-`grep` choice above exists to prevent, arriving by a different
- * door. A gate authored ahead of the file it will guard names that file in
- * `opts.allowMissing`, which makes the wait explicit and temporary instead of
- * implicit and permanent.
+ * door.
  *
  * D-07-03: the returned `ScanReport` is the visitation half of the answer. A
  * gate deep-compares `report.visited` against its own declared target list, so a
- * shortened, reordered, or waived-away list fails instead of greening.
+ * shortened or reordered list fails instead of greening.
  */
 export async function assertNoForbiddenSurface(
   targets: ReadonlyArray<string>,
   patterns: ReadonlyArray<{ readonly name: string; readonly pattern: RegExp }>,
   describeViolation: (offenders: ReadonlyArray<string>) => string,
-  opts: {
-    readonly allowMissing?: ReadonlyArray<string>;
-    /** Scan root. Defaults to the repository; a temp-root control injects its own. */
-    readonly root?: string;
-  } = {},
 ): Promise<ScanReport> {
   const offenders: string[] = [];
   const visited: string[] = [];
-  const waived: string[] = [];
-  const scanRoot = opts.root ?? REPO_ROOT;
 
   for (const rel of targets) {
     let src: string;
     try {
-      src = await readFile(path.join(scanRoot, rel), "utf8");
+      src = await readFile(path.join(REPO_ROOT, rel), "utf8");
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "ENOENT") {
-        assert.ok(
-          opts.allowMissing?.includes(rel),
-          `source-scan: target ${rel} does not exist, so this gate inspected nothing for it. A renamed or deleted target silently uncovers the gate; add it to allowMissing only while it is genuinely unwritten.`,
+        assert.fail(
+          `source-scan: target ${rel} does not exist, so this gate inspected nothing for it. A renamed or deleted target silently uncovers the gate.`,
         );
-        waived.push(rel);
-        continue;
       }
 
       throw err;
@@ -135,7 +117,7 @@ export async function assertNoForbiddenSurface(
 
   assert.deepEqual(offenders, [], describeViolation(offenders));
 
-  return { visited, waived };
+  return { visited };
 }
 
 /**
@@ -152,20 +134,12 @@ export async function assertNoForbiddenSurface(
  * `pattern` must not carry the `g` flag: `RegExp.prototype.test` on a global
  * regex advances `lastIndex` between calls and would skip files.
  */
-export async function filesMatching(
-  dirRel: string,
-  pattern: RegExp,
-  opts: {
-    /** Scan root. Defaults to the repository; a temp-root control injects its own. */
-    readonly root?: string;
-  } = {},
-): Promise<string[]> {
+export async function filesMatching(dirRel: string, pattern: RegExp): Promise<string[]> {
   assert.ok(
     !pattern.global,
     `filesMatching: ${String(pattern)} is global; test() would be stateful`,
   );
-  const scanRoot = opts.root ?? REPO_ROOT;
-  const names = await readdir(path.join(scanRoot, dirRel), { recursive: true });
+  const names = await readdir(path.join(REPO_ROOT, dirRel), { recursive: true });
   const matched: string[] = [];
 
   for (const name of names) {
@@ -174,7 +148,7 @@ export async function filesMatching(
     }
 
     const rel = path.posix.join(dirRel, name.split(path.sep).join("/"));
-    const src = await readFile(path.join(scanRoot, rel), "utf8");
+    const src = await readFile(path.join(REPO_ROOT, rel), "utf8");
     if (pattern.test(stripComments(src))) {
       matched.push(rel);
     }

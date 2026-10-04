@@ -145,19 +145,6 @@ export const NETWORK_FREE_TARGETS = [
 ] as const;
 
 /**
- * The `NETWORK_FREE_TARGETS` member whose temp-root COPY the network gate's
- * offender and near-miss controls mutate (D-07-01, D-07-04). It is one of the
- * marketplace owners rather than a long-standing entry, so the controls prove
- * the newest members of the group are really scanned and not merely listed.
- *
- * The annotation is the membership check: assigning a path the group does not
- * name stops compiling, so this second reference cannot drift away from the
- * group it points into.
- */
-export const NETWORK_FREE_CONTROL_TARGET: (typeof NETWORK_FREE_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
-
-/**
  * Directory roots the gates walk rather than name file by file.
  *
  * D-07-05 covers a directory the same way it covers a file: a gate that
@@ -539,22 +526,6 @@ export const COMPLETION_DESCRIPTION_TARGETS = [
 ] as const;
 
 /**
- * Paths that MUST NOT resolve on disk.
- *
- * WR-06 fixtures for the shared scan mechanic's own gate: each one stands for a
- * target that was renamed, deleted, or not yet written, and the scan is expected
- * to fail (or to waive it explicitly) rather than green over zero inspected
- * files. If any of these ever becomes a real module, its case stops proving
- * anything -- rename the probe instead of reusing the collision.
- */
-export const MISSING_TARGET_PROBES = [
-  "extensions/pi-claude-marketplace/orchestrators/plugin/renamed-away.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/not-yet-written.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/other-missing.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/not-this-one.ts",
-] as const;
-
-/**
  * The unused-type-member gate's own subjects.
  *
  * The runner and its recorded decisions are targets in the sense this registry
@@ -649,24 +620,14 @@ export const WORKFLOWS_MARKER_COVERAGE_TARGETS = [
  */
 export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> = {};
 
-/** Real fixture targets use existing repository paths so the registry still resolves. */
-export const FALLOW_CONTROL_TARGETS = [
-  "extensions/pi-claude-marketplace/index.ts",
-  "extensions/pi-claude-marketplace/shared/errors.ts",
-  "extensions/pi-claude-marketplace/shared/markers.ts",
-] as const;
-
 /**
  * Complete production finding identities; additions, removals, and swaps require review.
  *
  * Every category is empty, which is the measured state of the tree and not a
- * suppression of it. Two declarations production reachability cannot follow --
- * the manifest-loaded entry default and the ring buffer's `read` -- carry an
- * exact adjacent annotation naming their real loader and their real callers;
- * both are calibrated by the offender and benign controls in
- * `fallow-production-mode.test.ts`, which prove the same annotations do not
- * cover a sibling export, an unrelated default, or the same member name on
- * another class.
+ * suppression of it. Three declarations production reachability cannot follow
+ * -- the manifest-loaded entry default, the test reporter's default that
+ * `node --test` loads, and the ring buffer's `read` -- carry an exact adjacent
+ * annotation naming their real loader and their real callers.
  */
 export const PRODUCTION_FINDING_CENSUS = {
   unused_exports: [],

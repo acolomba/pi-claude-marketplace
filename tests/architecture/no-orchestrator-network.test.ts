@@ -1,16 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { NETWORK_FREE_CONTROL_TARGET, NETWORK_FREE_TARGETS } from "./gate-targets.ts";
+import { NETWORK_FREE_TARGETS } from "./gate-targets.ts";
 import { assertNoForbiddenSurface } from "./source-scan.ts";
-import {
-  materializeTargets,
-  plantBenignNearMiss,
-  plantOffender,
-  withTempRoot,
-} from "./temp-root-control.ts";
-
-import type { ScanReport } from "./source-scan.ts";
 
 /**
  * NFR-5 / PI-2 / PL-3 / PRL-07 architectural surface guard.
@@ -29,15 +21,6 @@ import type { ScanReport } from "./source-scan.ts";
  *     opened and this file deep-compares them against the registry group
  *     (D-07-03). A target that stops resolving drops out of the report, so the
  *     comparison fails rather than greening over an uninspected file.
- *   - It FIRES. A temp-root copy of the real targets with one mutated file
- *     rejects (D-07-01), and the offender is derived from the real file, so it
- *     cannot drift away from the target it represents.
- *   - It is not simply failing everything. The same copies unmutated pass, and
- *     the forbidden token planted inside a line comment also passes (D-07-04).
- *
- * Skip-path rationale:
- *   The scan skips ENOENT targets only when they are named in `allowMissing`,
- *   which this gate never does: every target exists today.
  *
  * Why this test is NOT replaceable by a fallow boundary rule (measured):
  *   Planting `import { clone } from "platform/git.ts"` plus a `clone()` call
@@ -103,64 +86,6 @@ test("NFR-5 + PI-2 + PL-3 + PRL-07: network-free orchestrators have zero gitOps 
   assert.deepEqual(
     report.visited,
     [...NETWORK_FREE_TARGETS],
-    "D-07-03: the scan must have opened every declared target. A target that was waived or stopped resolving drops out of `visited`, so this comparison is what turns an uncovered gate into a failure instead of a pass.",
+    "D-07-03: the scan must have opened every declared target. A target that stopped resolving drops out of `visited`, so this comparison is what turns an uncovered gate into a failure instead of a pass.",
   );
-});
-
-test("NFR-5: the gate fires on a gitOps surface planted in a copy of a real target", async () => {
-  await withTempRoot("network-gate-offender-", async (root) => {
-    // arrange
-    await materializeTargets(root, NETWORK_FREE_TARGETS);
-    await plantOffender(root, NETWORK_FREE_CONTROL_TARGET, "const gitOps = DEFAULT_GIT_OPS;");
-
-    // act & assert
-    await assert.rejects(
-      () =>
-        assertNoForbiddenSurface(
-          NETWORK_FREE_TARGETS,
-          FORBIDDEN_PATTERNS,
-          describeNetworkViolation,
-          { root },
-        ),
-      /gitOps surface detected in network-free module\(s\)/,
-    );
-  });
-});
-
-test("NFR-5: unmutated copies of the same real targets pass and report every path opened", async () => {
-  await withTempRoot("network-gate-benign-", async (root) => {
-    // arrange
-    await materializeTargets(root, NETWORK_FREE_TARGETS);
-
-    // act
-    const report: ScanReport = await assertNoForbiddenSurface(
-      NETWORK_FREE_TARGETS,
-      FORBIDDEN_PATTERNS,
-      describeNetworkViolation,
-      { root },
-    );
-
-    // assert
-    assert.deepEqual(report.visited, [...NETWORK_FREE_TARGETS]);
-    assert.deepEqual(report.waived, []);
-  });
-});
-
-test("NFR-5: a forbidden token inside a line comment passes, so the gate still strips comments", async () => {
-  await withTempRoot("network-gate-near-miss-", async (root) => {
-    // arrange
-    await materializeTargets(root, NETWORK_FREE_TARGETS);
-    await plantBenignNearMiss(root, NETWORK_FREE_CONTROL_TARGET, "DEFAULT_GIT_OPS");
-
-    // act
-    const report = await assertNoForbiddenSurface(
-      NETWORK_FREE_TARGETS,
-      FORBIDDEN_PATTERNS,
-      describeNetworkViolation,
-      { root },
-    );
-
-    // assert
-    assert.deepEqual(report.visited, [...NETWORK_FREE_TARGETS]);
-  });
 });

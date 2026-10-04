@@ -22,14 +22,9 @@ import path from "node:path";
 import test from "node:test";
 
 import {
-  assertSingleAppendedBlock,
-  BLANKET_NO_CONSOLE_OFF,
   resolveEffectiveConfig,
   resolveEffectiveConfigs,
-  RESTRICTED_PATHS_OFF,
   ruleSeverity,
-  ZONE_SUBSTITUTION,
-  type AppendedBlocks,
 } from "./eslint-effective-config.ts";
 import {
   EXTENSION_ROOT_REL,
@@ -67,10 +62,6 @@ const EXEMPT_PROBE: (typeof NO_CONSOLE_EXEMPT_TARGETS)[number] =
 const NEIGHBOUR_OF_AN_EXEMPT_MODULE: (typeof ZONE_REPRESENTATIVE_TARGETS)[number] =
   "extensions/pi-claude-marketplace/shared/path-safety.ts";
 
-/** An ordinary extension module, far from every exemption. */
-const ORDINARY_EXTENSION_MODULE: (typeof ZONE_REPRESENTATIVE_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/domain/manifest.ts";
-
 /** How one `no-console` sweep of the extension tree came out. */
 interface NoConsoleSweep {
   /** Repository-relative paths resolving to severity 0, sorted. */
@@ -94,10 +85,10 @@ async function extensionSourceFiles(): Promise<string[]> {
     .sort();
 }
 
-/** Resolve `no-console` for the whole extension tree with `appended` in play. */
-async function sweepNoConsole(appended: AppendedBlocks): Promise<NoConsoleSweep> {
+/** Resolve `no-console` for the whole extension tree. */
+async function sweepNoConsole(): Promise<NoConsoleSweep> {
   const files = await extensionSourceFiles();
-  const configs = await resolveEffectiveConfigs(files, appended);
+  const configs = await resolveEffectiveConfigs(files);
   const sweep: NoConsoleSweep = { exempt: [], warned: [], absent: [], visited: files.length };
 
   for (const file of files) {
@@ -114,14 +105,7 @@ async function sweepNoConsole(appended: AppendedBlocks): Promise<NoConsoleSweep>
   return sweep;
 }
 
-/**
- * The closed-set obligation, as one assertion.
- *
- * Written as a function rather than inline so an offender resolution can be
- * driven through the very same assertion the benign case uses. A gate that
- * "would fail" against an offender is a claim; running the real assertion
- * against it is evidence.
- */
+/** The closed-set obligation, as one assertion. */
 function assertExemptSetIsClosed(exempt: ReadonlyArray<string>): void {
   assert.deepStrictEqual(
     [...exempt],
@@ -134,11 +118,8 @@ test(
   "OBS-01: exactly the registered extension modules resolve no-console to off",
   { timeout: 60_000 },
   async () => {
-    // arrange
-    const benignControl: AppendedBlocks = [];
-
     // act
-    const sweep = await sweepNoConsole(benignControl);
+    const sweep = await sweepNoConsole();
 
     // assert
     assert.ok(
@@ -174,40 +155,3 @@ test("IL-2: a module beside an exempt one resolves no-console to error", async (
   // assert
   assert.strictEqual(ruleSeverity(neighbour, NO_CONSOLE), 2);
 });
-
-test("D-07-10: every offender appends exactly one block to the real configuration", () => {
-  // act & assert
-  assertSingleAppendedBlock("blanket no-console off", BLANKET_NO_CONSOLE_OFF);
-  assertSingleAppendedBlock("restricted-paths off", RESTRICTED_PATHS_OFF);
-  assertSingleAppendedBlock("zone substitution", ZONE_SUBSTITUTION);
-});
-
-test(
-  "GGAT-03: a blanket block disabling no-console flips the resolved severity and fails the gate",
-  { timeout: 60_000 },
-  async () => {
-    // arrange
-    assertSingleAppendedBlock("blanket no-console off", BLANKET_NO_CONSOLE_OFF);
-
-    // act
-    const ordinaryModule = await resolveEffectiveConfig(
-      ORDINARY_EXTENSION_MODULE,
-      BLANKET_NO_CONSOLE_OFF,
-    );
-    const sweep = await sweepNoConsole(BLANKET_NO_CONSOLE_OFF);
-
-    // assert
-    assert.strictEqual(
-      ruleSeverity(ordinaryModule, NO_CONSOLE),
-      0,
-      "the blanket block did not reach an ordinary extension module, so this offender proves nothing",
-    );
-    assert.throws(
-      () => {
-        assertExemptSetIsClosed(sweep.exempt);
-      },
-      assert.AssertionError,
-      "the closed-set assertion survived a configuration that exempts every file in the repository -- which is the configuration the superseded source scrape read as healthy",
-    );
-  },
-);

@@ -1,4 +1,4 @@
-/** The real analyzer instrument shared by the production census and its controls. */
+/** The real analyzer instrument the production census reads. */
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";

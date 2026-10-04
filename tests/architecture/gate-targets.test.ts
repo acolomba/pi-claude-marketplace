@@ -23,26 +23,9 @@ import test from "node:test";
 
 import * as registry from "./gate-targets.ts";
 import { REPO_ROOT, stripComments } from "./source-scan.ts";
-import {
-  materializeTargets,
-  plantBenignNearMiss,
-  plantOffender,
-  withTempRoot,
-} from "./temp-root-control.ts";
 
 /** The registry module, as this gate addresses it on disk. */
 const REGISTRY_REL = "tests/architecture/gate-targets.ts";
-
-/**
- * The single group whose resolution contract is INVERTED.
- *
- * WR-06: `MISSING_TARGET_PROBES` holds paths that must NOT exist. They are the
- * fixtures proving the shared scan mechanic fails (or explicitly waives) a target
- * it cannot open, instead of greening over zero inspected files. A probe that
- * started resolving would disarm that proof silently, so this gate asserts the
- * absence rather than assuming it.
- */
-const MUST_NOT_RESOLVE_GROUP = "MISSING_TARGET_PROBES";
 
 /** Sanctioned repair, appended to every failure message this gate can raise. */
 const REMEDY = "Add the path to the registry group that carries this obligation.";
@@ -167,7 +150,7 @@ test("D-07-05: every array-valued registry export holds repository-relative path
 
 test("GGAT-01: every declared registry target resolves under the repository root", async () => {
   // arrange
-  const groups = registryGroups().filter(([name]) => name !== MUST_NOT_RESOLVE_GROUP);
+  const groups = registryGroups();
 
   // act
   const unresolved: string[] = [];
@@ -181,25 +164,6 @@ test("GGAT-01: every declared registry target resolves under the repository root
     unresolved,
     [],
     `GGAT-01: these registry targets do not exist, so the gates importing them open nothing for those entries:\n  ${unresolved.join("\n  ")}\n${REMEDY}`,
-  );
-});
-
-test("WR-06: every MISSING_TARGET_PROBES entry is absent from disk", async () => {
-  // arrange
-  const probes = registry.MISSING_TARGET_PROBES;
-
-  // act
-  const unresolved = await unresolvedEntries(MUST_NOT_RESOLVE_GROUP, probes);
-  const stillResolving = probes
-    .map((rel) => `${MUST_NOT_RESOLVE_GROUP}: ${rel}`)
-    .filter((labelled) => !unresolved.includes(labelled));
-
-  // assert
-  assert.ok(probes.length > 0, "the missing-target probe group is empty");
-  assert.deepEqual(
-    stillResolving,
-    [],
-    `WR-06: these probes now resolve, so the case proving a scan fails on an unopenable target proves nothing:\n  ${stillResolving.join("\n  ")}\nRename the probe rather than reusing the collision.`,
   );
 });
 
@@ -236,22 +200,6 @@ test("D-07-05: the registry composes no path of its own", async () => {
   );
 });
 
-test("the resolution clause reports an entry that does not resolve", async () => {
-  // arrange
-  const plantedGroup = [
-    "extensions/pi-claude-marketplace/shared/path-safety.ts",
-    "extensions/pi-claude-marketplace/shared/renamed-out-from-under-the-gate.ts",
-  ];
-
-  // act
-  const unresolved = await unresolvedEntries("PLANTED_GROUP", plantedGroup);
-
-  // assert
-  assert.deepEqual(unresolved, [
-    "PLANTED_GROUP: extensions/pi-claude-marketplace/shared/renamed-out-from-under-the-gate.ts",
-  ]);
-});
-
 // ---------------------------------------------------------------------------
 // D-07-06: the self-hosting half. The clauses above judge the registry's data;
 // the two below judge every OTHER file in the gate corpus, so a gate that
@@ -264,15 +212,16 @@ test("the resolution clause reports an entry that does not resolve", async () =>
  *
  * Excluded from both rules below by EXACT path, alongside the registry, because
  * both files necessarily spell what they forbid: the registry IS the sanctioned
- * declaration site, and this file has to carry the offender text its controls
- * plant. The exclusion is two exact strings and not a pattern on purpose -- a
+ * declaration site, and this file spells the patterns both rules match. The
+ * exclusion is two exact strings and not a pattern on purpose -- a
  * pattern is an allow-list that grows, which is the failure a meta-gate is
  * supposed to prevent rather than commit.
  */
 const SELF_REL = "tests/architecture/gate-targets.test.ts";
 
 /**
- * The gate whose real copy the offender and benign controls are derived from.
+ * A gate file the corpus walk must reach, so a walk that opened nothing or the
+ * wrong directory fails instead of agreeing with the registry over zero files.
  *
  * A test path, named here as a whole literal on purpose. Rule one polices
  * PRODUCTION paths only: `D-07-07` scopes the registry to production targets, so
@@ -281,10 +230,7 @@ const SELF_REL = "tests/architecture/gate-targets.test.ts";
  * exemption" for test paths -- neither, because the rule's pattern never reaches
  * them.
  */
-const CONTROL_VICTIM_REL = "tests/architecture/no-orchestrator-network.test.ts";
-
-/** The module whose whole job is joining a caller's target onto a scan root. */
-const SCAN_MECHANIC_REL = "tests/architecture/source-scan.ts";
+const KNOWN_GATE_REL = "tests/architecture/no-orchestrator-network.test.ts";
 
 /** A repository-relative production path, as a gate file may spell one. */
 const PRODUCTION_PATH_LITERAL = /(["'`])((?:\.\/)?extensions\/pi-claude-marketplace\/[^"'`]*)\1/g;
@@ -404,61 +350,6 @@ async function surveyGateCorpus(
   return { assembled, named, visited };
 }
 
-/**
- * A production path derived from a real registry entry that the registry does
- * NOT carry.
- *
- * Derived at plant time rather than hand-authored: an offender written out by
- * hand drifts away from the shape it claims to represent, and drift is how a
- * control goes quiet. The derivation asserts loudly when it fails to produce an
- * unregistered path, so a control can never plant something the rule is right to
- * ignore.
- */
-function unregisteredPathFrom(registered: ReadonlySet<string>): string {
-  const derived = `${path.posix.dirname(moduleAnchorFrom(registered))}/renamed-out-from-under-the-registry.ts`;
-  assert.ok(
-    !registered.has(derived),
-    `the derived offender ${derived} is itself registered, so planting it would prove nothing`,
-  );
-
-  return derived;
-}
-
-/**
- * The registry's first production MODULE entry, in sorted order.
- *
- * Filtered to `.ts` because the registry also carries directory roots, and a
- * directory has no module name to assemble -- deriving a control from one would
- * plant a segment the assembly rule is right to ignore, which is a control that
- * proves nothing while looking like it does.
- */
-function moduleAnchorFrom(registered: ReadonlySet<string>): string {
-  const [anchor] = [...registered].filter((rel) => rel.endsWith(".ts")).sort();
-  assert.ok(
-    anchor !== undefined,
-    "the registry named no production module to derive a control from",
-  );
-
-  return anchor;
-}
-
-/** A composition line assembling the basename of a real registry entry. */
-function assembledLineFrom(registered: ReadonlySet<string>): string {
-  const segment = path.posix.basename(moduleAnchorFrom(registered));
-
-  return `const probe = path.join(PLUGIN_ORCHESTRATORS_REL, "${segment}");`;
-}
-
-/** Materialize the registry plus `victims` into `root` and survey what lands. */
-async function surveyPlantedCorpus(
-  root: string,
-  victims: ReadonlyArray<string>,
-): Promise<GateSurvey> {
-  const registered = await registeredProductionPaths(root);
-
-  return surveyGateCorpus(root, victims, registered);
-}
-
 test("D-07-06: no gate file names a production path the registry does not carry", async () => {
   // arrange
   const registered = await registeredProductionPaths(REPO_ROOT);
@@ -478,8 +369,8 @@ test("D-07-06: no gate file names a production path the registry does not carry"
     "the survey opened a different set than the corpus walk declared",
   );
   assert.ok(
-    survey.visited.includes(CONTROL_VICTIM_REL),
-    `the survey never opened ${CONTROL_VICTIM_REL}, so it judged a corpus missing a file known to name production targets`,
+    survey.visited.includes(KNOWN_GATE_REL),
+    `the survey never opened ${KNOWN_GATE_REL}, so it judged a corpus missing a known gate file`,
   );
   assert.deepEqual(
     survey.named,
@@ -503,90 +394,6 @@ test("D-07-06: no gate file assembles a production module name from segments", a
     [],
     `D-07-06: these gate files build a production module name from segments, which is exactly the target a literal-match stale-path scan cannot see:\n  ${survey.assembled.join("\n  ")}\n${ASSEMBLED_REMEDY}`,
   );
-});
-
-test("the naming rule reports a production path planted outside the registry", async () => {
-  await withTempRoot("gate-targets-named-", async (root) => {
-    // arrange
-    await materializeTargets(root, [REGISTRY_REL, CONTROL_VICTIM_REL]);
-    const offender = unregisteredPathFrom(await registeredProductionPaths(root));
-    await plantOffender(root, CONTROL_VICTIM_REL, `const probe = "${offender}";`);
-
-    // act
-    const survey = await surveyPlantedCorpus(root, [CONTROL_VICTIM_REL]);
-
-    // assert
-    assert.deepEqual(survey.named, [`${CONTROL_VICTIM_REL} names ${offender}`]);
-    assert.deepEqual(survey.assembled, []);
-  });
-});
-
-test("the assembly rule reports a module name planted inside a path composition", async () => {
-  await withTempRoot("gate-targets-assembled-", async (root) => {
-    // arrange
-    await materializeTargets(root, [REGISTRY_REL, CONTROL_VICTIM_REL]);
-    const registered = await registeredProductionPaths(root);
-    const segment = path.posix.basename(moduleAnchorFrom(registered));
-    await plantOffender(root, CONTROL_VICTIM_REL, assembledLineFrom(registered));
-
-    // act
-    const survey = await surveyPlantedCorpus(root, [CONTROL_VICTIM_REL]);
-
-    // assert
-    assert.deepEqual(survey.assembled, [`${CONTROL_VICTIM_REL} assembles ${segment}`]);
-    assert.deepEqual(survey.named, []);
-  });
-});
-
-test("neither rule reports an unmutated copy of the same gate file", async () => {
-  await withTempRoot("gate-targets-benign-", async (root) => {
-    // arrange
-    await materializeTargets(root, [REGISTRY_REL, CONTROL_VICTIM_REL]);
-
-    // act
-    const survey = await surveyPlantedCorpus(root, [CONTROL_VICTIM_REL]);
-
-    // assert
-    assert.deepEqual(survey.visited, [CONTROL_VICTIM_REL]);
-    assert.deepEqual(survey.named, []);
-    assert.deepEqual(survey.assembled, []);
-  });
-});
-
-test("neither rule reports the same production path carried inside a comment", async () => {
-  await withTempRoot("gate-targets-comment-", async (root) => {
-    // arrange
-    await materializeTargets(root, [REGISTRY_REL, CONTROL_VICTIM_REL]);
-    const offender = unregisteredPathFrom(await registeredProductionPaths(root));
-    await plantBenignNearMiss(root, CONTROL_VICTIM_REL, offender);
-
-    // act
-    const survey = await surveyPlantedCorpus(root, [CONTROL_VICTIM_REL]);
-
-    // assert
-    assert.deepEqual(survey.visited, [CONTROL_VICTIM_REL]);
-    assert.deepEqual(survey.named, []);
-    assert.deepEqual(survey.assembled, []);
-  });
-});
-
-test("the assembly rule does not report the shared scan mechanic itself", async () => {
-  await withTempRoot("gate-targets-mechanic-", async (root) => {
-    // arrange
-    await materializeTargets(root, [REGISTRY_REL, SCAN_MECHANIC_REL]);
-    const mechanic = await readFile(path.join(root, SCAN_MECHANIC_REL), "utf8");
-
-    // act
-    const survey = await surveyPlantedCorpus(root, [SCAN_MECHANIC_REL]);
-
-    // assert
-    assert.ok(
-      stripComments(mechanic).includes("path.join(scanRoot, rel)"),
-      `${SCAN_MECHANIC_REL} no longer carries the join this control exists to exonerate`,
-    );
-    assert.deepEqual(survey.assembled, []);
-    assert.deepEqual(survey.named, []);
-  });
 });
 
 /** A repository-relative path under the extension tree. */

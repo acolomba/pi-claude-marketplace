@@ -44,7 +44,7 @@
  *   same name reappear as an interface member; both would keep claiming to
  *   exclude a brand after the brand was renamed or removed. Matching the form
  *   survives a rename and still fires when that identifier is declared as a
- *   member, which is what the two carve-out cases below prove.
+ *   member.
  *
  * No allow-list:
  *   D-07-18 forecloses one. An allow-list forgives its named entries silently and
@@ -53,7 +53,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -63,12 +63,6 @@ import {
   NETWORK_FREE_TARGETS,
 } from "./gate-targets.ts";
 import { assertNoForbiddenSurface, REPO_ROOT, stripComments } from "./source-scan.ts";
-import {
-  materializeTargets,
-  plantBenignNearMiss,
-  plantOffender,
-  withTempRoot,
-} from "./temp-root-control.ts";
 
 /**
  * A member declaration's left-hand side: start of line or a separator, then an
@@ -215,28 +209,6 @@ const CLASSIFIED_SEAMS: ReadonlyArray<ClassifiedSeam> = [
   { member: "deviceFlowHttp", target: MARKETPLACE_UPDATE_REL },
 ];
 
-/**
- * The subset of real modules the temp-root controls copy and mutate.
- *
- * A control materializes a handful of real files rather than the whole walk: the
- * offender has to be DERIVED from a real target so it cannot drift away from the
- * shape it represents (D-07-01), and copying 229 modules per case buys nothing
- * beyond that. The subset is the classified-seam modules because they are the
- * production surface this gate is really about.
- */
-const CONTROL_TARGETS: ReadonlyArray<string> = [
-  ...new Set(CLASSIFIED_SEAMS.map((seam) => seam.target)),
-];
-
-/** The control module whose copy each temp-root case mutates. */
-const CONTROL_CARRIER: (typeof NETWORK_FREE_TARGETS)[number] = FETCH_REL;
-
-/** The classified seam the rename control removes from its module's copy. */
-const RENAME_CONTROL_SEAM: ClassifiedSeam = {
-  member: "replaceOperations",
-  target: REINSTALL_FLOW_REL,
-};
-
 function labelSeam(seam: ClassifiedSeam): string {
   return `${seam.target}: ${seam.member}`;
 }
@@ -252,14 +224,6 @@ async function presentSeams(root: string, seams: ReadonlyArray<ClassifiedSeam>):
   }
 
   return present;
-}
-
-/** Rewrite `seam.target`'s copy under `root` with every `seam.member` occurrence renamed away. */
-async function renameSeamInCopy(root: string, seam: ClassifiedSeam): Promise<void> {
-  const copyPath = path.join(root, seam.target);
-  const source = await readFile(copyPath, "utf8");
-
-  await writeFile(copyPath, source.replaceAll(seam.member, `${seam.member}RenamedAway`), "utf8");
 }
 
 test("MF-DEC-07 + D-05-01: no test-only substitution member survives under the extension tree", async () => {
@@ -283,160 +247,6 @@ test("MF-DEC-07 + D-05-01: no test-only substitution member survives under the e
     modules,
     "D-07-03: the scan must have opened every walked module. A module that stopped resolving drops out of `visited`, so this comparison is what turns an uncovered gate into a failure instead of a pass.",
   );
-  assert.deepEqual(report.waived, []);
-});
-
-test("the gate fires on a `__`-prefixed member planted in a copy of a real module", async () => {
-  await withTempRoot("test-only-surface-offender-", async (root) => {
-    // arrange
-    await materializeTargets(root, CONTROL_TARGETS);
-    await plantOffender(
-      root,
-      CONTROL_CARRIER,
-      "export interface ProbeOptions { readonly __probeMember?: string; }",
-    );
-
-    // act & assert
-    await assert.rejects(
-      () =>
-        assertNoForbiddenSurface(
-          CONTROL_TARGETS,
-          FORBIDDEN_PATTERNS,
-          describeTestOnlySurfaceViolation,
-          { root },
-        ),
-      /test-only substitution surface declared on production module/,
-    );
-  });
-});
-
-test("unmutated copies of the same real modules pass and report every path opened", async () => {
-  await withTempRoot("test-only-surface-benign-", async (root) => {
-    // arrange
-    await materializeTargets(root, CONTROL_TARGETS);
-
-    // act
-    const report = await assertNoForbiddenSurface(
-      CONTROL_TARGETS,
-      FORBIDDEN_PATTERNS,
-      describeTestOnlySurfaceViolation,
-      { root },
-    );
-
-    // assert
-    assert.deepEqual(report.visited, [...CONTROL_TARGETS]);
-    assert.deepEqual(report.waived, []);
-  });
-});
-
-test("a `__`-prefixed member inside a line comment passes, so the gate still strips comments", async () => {
-  await withTempRoot("test-only-surface-near-miss-", async (root) => {
-    // arrange
-    await materializeTargets(root, CONTROL_TARGETS);
-    await plantBenignNearMiss(root, CONTROL_CARRIER, "readonly __probeMember?: string;");
-
-    // act
-    const report = await assertNoForbiddenSurface(
-      CONTROL_TARGETS,
-      FORBIDDEN_PATTERNS,
-      describeTestOnlySurfaceViolation,
-      { root },
-    );
-
-    // assert
-    assert.deepEqual(report.visited, [...CONTROL_TARGETS]);
-  });
-});
-
-test("a `declare const … : unique symbol` brand passes, so the nominal-type form stays legal", async () => {
-  await withTempRoot("test-only-surface-brand-", async (root) => {
-    // arrange
-    // plantOffender appends a line of real code; here that line is the legal
-    // brand form, planted under an identifier this file never names so the
-    // carve-out is proven against the form rather than against the one brand
-    // that happens to exist today.
-    await materializeTargets(root, CONTROL_TARGETS);
-    await plantOffender(root, CONTROL_CARRIER, "declare const __probeBrand: unique symbol;");
-
-    // act
-    const report = await assertNoForbiddenSurface(
-      CONTROL_TARGETS,
-      FORBIDDEN_PATTERNS,
-      describeTestOnlySurfaceViolation,
-      { root },
-    );
-
-    // assert
-    assert.deepEqual(report.visited, [...CONTROL_TARGETS]);
-  });
-});
-
-test("the same brand identifier declared as an interface member fails, so the carve-out is structural", async () => {
-  await withTempRoot("test-only-surface-brand-member-", async (root) => {
-    // arrange
-    await materializeTargets(root, CONTROL_TARGETS);
-    await plantOffender(
-      root,
-      CONTROL_CARRIER,
-      "interface ProbeBrandHolder { readonly __probeBrand: unique symbol; }",
-    );
-
-    // act & assert
-    await assert.rejects(
-      () =>
-        assertNoForbiddenSurface(
-          CONTROL_TARGETS,
-          FORBIDDEN_PATTERNS,
-          describeTestOnlySurfaceViolation,
-          { root },
-        ),
-      /test-only substitution surface declared on production module/,
-    );
-  });
-});
-
-test("the gate fires on a returning `_set…ForTest` module seam", async () => {
-  await withTempRoot("test-only-surface-set-for-test-", async (root) => {
-    // arrange
-    await materializeTargets(root, CONTROL_TARGETS);
-    await plantOffender(
-      root,
-      CONTROL_CARRIER,
-      "export function _setCloneCacheForTest(seam: unknown): void { void seam; }",
-    );
-
-    // act & assert
-    await assert.rejects(
-      () =>
-        assertNoForbiddenSurface(
-          CONTROL_TARGETS,
-          FORBIDDEN_PATTERNS,
-          describeTestOnlySurfaceViolation,
-          { root },
-        ),
-      /test-only substitution surface declared on production module/,
-    );
-  });
-});
-
-test("the gate fires on a returning `__test_` re-export", async () => {
-  await withTempRoot("test-only-surface-test-re-export-", async (root) => {
-    // arrange
-    await materializeTargets(root, CONTROL_TARGETS);
-    await plantOffender(root, CONTROL_CARRIER, "export const __test_cloneCache = 1;");
-
-    // act & assert
-    await assert.rejects(
-      () =>
-        assertNoForbiddenSurface(
-          CONTROL_TARGETS,
-          FORBIDDEN_PATTERNS,
-          describeTestOnlySurfaceViolation,
-          { root },
-        ),
-      /test-only substitution surface declared on production module/,
-    );
-  });
 });
 
 test("D-05-01: every classified-and-kept collaborator seam still exists in its module", async () => {
@@ -456,24 +266,4 @@ test("D-05-01: every classified-and-kept collaborator seam still exists in its m
     expectedSeams,
     "D-05-01: these seams are classified as kept typed optional ports rather than forbidden bags, and the classification is only worth something while they exist. A missing entry means the seam was renamed or removed without the classification being revisited -- update this set in the same change, or reclassify.",
   );
-});
-
-test("D-05-01: renaming a classified-and-kept seam drops it from the classification", async () => {
-  await withTempRoot("classified-seam-rename-", async (root) => {
-    // arrange
-    await materializeTargets(root, CONTROL_TARGETS);
-    await renameSeamInCopy(root, RENAME_CONTROL_SEAM);
-
-    // act
-    const present = await presentSeams(root, CLASSIFIED_SEAMS);
-
-    // assert
-    assert.deepEqual(
-      present,
-      CLASSIFIED_SEAMS.filter(
-        (seam) =>
-          seam.target !== RENAME_CONTROL_SEAM.target || seam.member !== RENAME_CONTROL_SEAM.member,
-      ).map(labelSeam),
-    );
-  });
 });

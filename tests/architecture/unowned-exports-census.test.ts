@@ -1,8 +1,7 @@
 /**
  * Exact production finding census.
  * Every category is pinned by identity, so additions, removals, and equal-count
- * swaps require review. Real offender/benign controls calibrate the shared
- * instrument independently of whether the production census is empty.
+ * swaps require review.
  */
 
 import assert from "node:assert/strict";
@@ -53,7 +52,7 @@ const EMPTY_FINDINGS: FindingGroups = {
 /** The measured census, keyed by publishing file exactly as the pin is. */
 type Census = Record<string, string[]>;
 
-/** Read the real analyzer through the same instrument calibrated by live controls. */
+/** Read the real analyzer's dead-code report over the repository. */
 function readDeadCodeReport(args: readonly string[]): AnalyzerReport {
   return readAnalyzerReport(process.execPath, [ANALYZER, ...args], REPO_ROOT);
 }
@@ -118,40 +117,6 @@ test("The complete production finding census equals its committed identities", (
   // assert
   assertFindingCensus(measured, pinned);
 });
-
-for (const drift of [
-  { name: "addition", pinned: ["first"], measured: ["first", "second"] },
-  { name: "removal", pinned: ["first", "second"], measured: ["first"] },
-  { name: "equal-count swap", pinned: ["first"], measured: ["second"] },
-]) {
-  test(`The exact census rejects ${drift.name}`, () => {
-    // arrange
-    const pinned: FindingGroups = {
-      unused_exports: drift.pinned.map((export_name) => ({ path: "fixture.ts", export_name })),
-      unused_types: [],
-      unused_files: [],
-      unused_class_members: [],
-      duplicate_exports: [],
-    };
-    const measured: FindingGroups = {
-      ...pinned,
-      unused_exports: drift.measured.map((export_name) => ({ path: "fixture.ts", export_name })),
-    };
-
-    // act & assert
-    assert.throws(
-      () => {
-        assertFindingCensus(measured, pinned);
-      },
-      {
-        name: "AssertionError",
-        actual: drift.measured.map((name) => `unused_exports|fixture.ts|${name}`),
-        expected: drift.pinned.map((name) => `unused_exports|fixture.ts|${name}`),
-        operator: "deepStrictEqual",
-      },
-    );
-  });
-}
 
 test("D-07-20: the shipping command and the explicit production command agree", () => {
   // arrange

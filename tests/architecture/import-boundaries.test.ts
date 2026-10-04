@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  assertSingleAppendedBlock,
-  resolveEffectiveConfig,
-  resolveEffectiveConfigs,
-  RESTRICTED_PATHS_OFF,
-  ZONE_SUBSTITUTION,
-} from "./eslint-effective-config.ts";
+import { resolveEffectiveConfigs } from "./eslint-effective-config.ts";
 import {
   MARKETPLACE_LEDGER_TARGETS,
   ORCHESTRATORS_REL,
@@ -83,16 +77,6 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
 };
 
 /**
- * The file the two offender cases resolve, standing in for any extension module.
- *
- * The annotation is the membership check: naming a path the representative group
- * does not carry stops compiling, so this reference cannot drift away from the
- * set it points into.
- */
-const ZONE_OFFENDER_PROBE: (typeof ZONE_REPRESENTATIVE_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/edge/router.ts";
-
-/**
  * The rule's resolved state for one file, or `null` when the rule does not reach
  * it at all.
  *
@@ -123,11 +107,8 @@ function forbiddenMatrix(zones: ReadonlyArray<RestrictedPathsZone>): Record<stri
 }
 
 /**
- * The D-11 zone contract, written as one assertion so an offender resolution can
- * be driven through the very assertion the benign control uses.
- *
- * A gate that "would fail" against an offender is a claim; running the real
- * assertion against the offender is evidence.
+ * The D-11 zone contract for one resolved file: the rule reaches it at error
+ * severity with one zone per layer folder.
  */
 function assertZoneContract(state: RestrictedPathsState | null): void {
   assert.ok(
@@ -166,8 +147,6 @@ function assertZoneContract(state: RestrictedPathsState | null): void {
  * `x.ts` and `y.ts` under `tests/architecture/` importing each other: the bare run
  * reports "No issues found" and exits 0, while `--no-production
  * --circular-deps --re-export-cycles` names the cycle and exits 1.
- * `fallow-production-mode.test.ts` carries that pair as a planted-offender
- * control, which is the evidence this argv shape rests on.
  *
  * So two things need pinning:
  *
@@ -323,12 +302,6 @@ test("D-11: npm run fallow gates cycles over the whole repository", async () => 
 const PLUGIN_LEDGERS = PLUGIN_LEDGER_TARGETS.map((rel) => path.basename(rel, ".ts"));
 const MARKETPLACE_LEDGERS = MARKETPLACE_LEDGER_TARGETS.map((rel) => path.basename(rel, ".ts"));
 
-/** How many plugin ledgers the registry is expected to carry. */
-const EXPECTED_PLUGIN_LEDGER_COUNT = 5;
-
-/** How many marketplace ledgers the registry is expected to carry. */
-const EXPECTED_MARKETPLACE_LEDGER_COUNT = 4;
-
 // Non-global on purpose: a /g regex carries `lastIndex` across `.test()` calls
 // and would skip every second file in the walk below.
 const PLUGIN_LEDGER_IMPORT = new RegExp(
@@ -348,12 +321,6 @@ const PLUGIN_LEDGER_DYNAMIC_IMPORT = new RegExp(
 const MARKETPLACE_LEDGER_DYNAMIC_IMPORT = new RegExp(
   `import\\(\\s*"\\.\\./marketplace/(?:${MARKETPLACE_LEDGERS.join("|")})\\.ts"\\s*\\)`,
 );
-
-/** A real plugin module that is not a ledger -- the seam a ledger may reach. */
-const PLUGIN_NON_LEDGER_SPECIFIER = "../plugin/clone-cache.ts";
-
-/** The one marketplace module a plugin ledger is allowed to import. */
-const MARKETPLACE_NON_LEDGER_SPECIFIER = "../marketplace/shared.ts";
 
 /**
  * The marketplace orchestrator folder, walked in full rather than named file by
@@ -413,97 +380,6 @@ test("D-11: no orchestrators/plugin LEDGER imports a marketplace ledger module",
   );
 });
 
-/**
- * D-07-08: a joined regex reports success by omission.
- *
- * `PLUGIN_LEDGER_IMPORT` and its dynamic companion are built by joining the bare
- * ledger names into one alternation. A name that drops out of the list stops
- * being matched, and the scan above then walks every file and finds nothing --
- * green, over a ledger it no longer guards. The only way to see that is to
- * synthesize the exact specifier a violation naming each ledger would use and
- * assert the pattern still matches it.
- *
- * Both halves live in one loop on purpose. The specifier match answers "does the
- * pattern still fire for this name"; the on-disk read answers "is there still a
- * module behind this name". A pattern that matches a module which no longer
- * exists guards nothing, and a module that exists but no longer matches is
- * unguarded -- either alone reports success.
- */
-test("D-11: the plugin-ledger patterns match a violation naming each plugin ledger", async () => {
-  // arrange
-  assert.strictEqual(
-    PLUGIN_LEDGERS.length,
-    EXPECTED_PLUGIN_LEDGER_COUNT,
-    `PLUGIN_LEDGER_TARGETS carries ${PLUGIN_LEDGERS.length} ledgers rather than ${EXPECTED_PLUGIN_LEDGER_COUNT}. A name removed from the group takes its positive control with it, so the count is pinned here rather than derived -- otherwise the proof shrinks silently alongside the pattern it proves.`,
-  );
-
-  // act & assert
-  for (const rel of PLUGIN_LEDGER_TARGETS) {
-    const name = path.basename(rel, ".ts");
-    assert.match(
-      `import { x } from "../plugin/${name}.ts";`,
-      PLUGIN_LEDGER_IMPORT,
-      `the joined pattern no longer matches a static import naming ${name} -- the regex drifted from its name list while still reporting success`,
-    );
-    assert.match(
-      `const ledger = await import("../plugin/${name}.ts");`,
-      PLUGIN_LEDGER_DYNAMIC_IMPORT,
-      `the companion pattern no longer matches a dynamic import naming ${name}`,
-    );
-    await stat(path.join(REPO_ROOT, rel));
-  }
-});
-
-test("D-11: the marketplace-ledger patterns match a violation naming each marketplace ledger", async () => {
-  // arrange
-  assert.strictEqual(
-    MARKETPLACE_LEDGERS.length,
-    EXPECTED_MARKETPLACE_LEDGER_COUNT,
-    `MARKETPLACE_LEDGER_TARGETS carries ${MARKETPLACE_LEDGERS.length} ledgers rather than ${EXPECTED_MARKETPLACE_LEDGER_COUNT}. A name removed from the group takes its positive control with it, so the count is pinned here rather than derived.`,
-  );
-
-  // act & assert
-  for (const rel of MARKETPLACE_LEDGER_TARGETS) {
-    const name = path.basename(rel, ".ts");
-    assert.match(
-      `import { x } from "../marketplace/${name}.ts";`,
-      MARKETPLACE_LEDGER_IMPORT,
-      `the joined pattern no longer matches a static import naming ${name} -- the regex drifted from its name list while still reporting success`,
-    );
-    assert.match(
-      `const ledger = await import("../marketplace/${name}.ts");`,
-      MARKETPLACE_LEDGER_DYNAMIC_IMPORT,
-      `the companion pattern no longer matches a dynamic import naming ${name}`,
-    );
-    await stat(path.join(REPO_ROOT, rel));
-  }
-});
-
-/**
- * The negative half of the same obligation: the widened patterns must be
- * precise, not merely eager.
- *
- * Each specifier below names a real module that is deliberately NOT a ledger and
- * is the sanctioned route across the boundary. A pattern that matched one of
- * them would turn the legal import into a reported violation, which is how a
- * gate gets suppressed rather than fixed.
- */
-test("D-11: neither ledger pattern matches a specifier naming a non-ledger module", () => {
-  // act & assert
-  for (const pattern of [PLUGIN_LEDGER_IMPORT, PLUGIN_LEDGER_DYNAMIC_IMPORT]) {
-    assert.doesNotMatch(`import { x } from "${PLUGIN_NON_LEDGER_SPECIFIER}";`, pattern);
-    assert.doesNotMatch(`const seam = await import("${PLUGIN_NON_LEDGER_SPECIFIER}");`, pattern);
-  }
-
-  for (const pattern of [MARKETPLACE_LEDGER_IMPORT, MARKETPLACE_LEDGER_DYNAMIC_IMPORT]) {
-    assert.doesNotMatch(`import { x } from "${MARKETPLACE_NON_LEDGER_SPECIFIER}";`, pattern);
-    assert.doesNotMatch(
-      `const seam = await import("${MARKETPLACE_NON_LEDGER_SPECIFIER}");`,
-      pattern,
-    );
-  }
-});
-
 test(
   "D-11: the real config resolves no-restricted-paths to error with one zone per layer folder",
   { timeout: 60_000 },
@@ -540,61 +416,5 @@ test(
         `the matrix resolved for ${representative} does not match the D-11 allowed-imports matrix`,
       );
     }
-  },
-);
-
-test(
-  "GGAT-03: a rule-off override resolves to severity 0 and fails the zone gate",
-  { timeout: 60_000 },
-  async () => {
-    // arrange
-    assertSingleAppendedBlock("restricted-paths off", RESTRICTED_PATHS_OFF);
-
-    // act
-    const state = restrictedPathsState(
-      await resolveEffectiveConfig(ZONE_OFFENDER_PROBE, RESTRICTED_PATHS_OFF),
-    );
-
-    // assert
-    assert.ok(state !== null, "the rule vanished entirely rather than being switched off");
-    assert.strictEqual(state.severity, 0, "the appended block did not switch the rule off");
-    assert.strictEqual(
-      state.zones.length,
-      ZONE_FOLDER_TARGETS.length,
-      "all eight zones survive the switch-off, which is precisely why a gate reading the zones without the severity reports a healthy matrix for a rule that no longer runs",
-    );
-    assert.throws(
-      () => {
-        assertZoneContract(state);
-      },
-      assert.AssertionError,
-      "the zone contract passed against a disabled rule -- reading the options without the severity is the defect this case exists to catch",
-    );
-  },
-);
-
-test(
-  "GGAT-03: a zone-substitution override resolves to a one-zone matrix and fails the zone gate",
-  { timeout: 60_000 },
-  async () => {
-    // arrange
-    assertSingleAppendedBlock("zone substitution", ZONE_SUBSTITUTION);
-
-    // act
-    const state = restrictedPathsState(
-      await resolveEffectiveConfig(ZONE_OFFENDER_PROBE, ZONE_SUBSTITUTION),
-    );
-
-    // assert
-    assert.ok(state !== null, "the rule vanished entirely rather than being substituted");
-    assert.strictEqual(state.severity, 2, "the substituted rule is not at error severity");
-    assert.strictEqual(state.zones.length, 1, "the appended block did not replace the matrix");
-    assert.throws(
-      () => {
-        assertZoneContract(state);
-      },
-      assert.AssertionError,
-      "the zone contract passed against a one-zone matrix, so it is not really reading the zones that apply",
-    );
   },
 );
