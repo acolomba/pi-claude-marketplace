@@ -143,6 +143,14 @@ Raised by 02-REVIEW.md findings WR-04 and WR-06.
   kept stub; they are never copied into active fields. Planning must confirm
   the adapter ignores everything under `_piClaudeMarketplace`. (Operator
   decision at Phase 2 verification; resolves review IN-01.)
+- **D-02-22:** Amends D-02-21. When a kept override is written back
+  (uninstall, plugin disable, prune, every unstage), the live entry's carried
+  fields (the D-02-06 set, such as `disabled`) replace the kept override's
+  carried fields, so a choice the user made while the plugin was installed
+  (`/mcp-adapter enable`/`disable`) wins; a carried field the live entry no
+  longer has (the adapter's enable deletes `disabled`) is left out. Every
+  other field comes back exactly as kept.
+  (Operator decision at the gap-closure code review; resolves its WR-01.)
 
 ### Claude's Discretion
 - Module split: extract the JSONC document reader and the entry handling out of

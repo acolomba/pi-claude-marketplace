@@ -198,6 +198,8 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 
 **Notes.** Measure first: the length limit is unknown on Pi 1.0, because the features/mcp spike measured only Pi's built-in MCP, which hashes names at 64 characters. Confirm the Claude plugin tool form with `skills/claude-code-compat-research` before the name builder is written. Every requirement here changes the entry shape, so the shape must be final before Phase 5; a second rename costs users a second round of sign-ins and approvals. ANAME-07 writes `requestTimeoutMs` from the manifest, but AFILE-06 carries that field forward from the previous entry, so this phase must decide how a translated value and a carried user value interact; without that decision a plugin's later timeout change never takes effect (02-RESEARCH.md Pitfall 5).
 
+**Carried from Phase 2 (D-02-22).** A kept user override is written back with the live entry's carried fields (`disabled`, `approveTools`, `includeTools`, `excludeTools`, `lifecycle`, `idleTimeout`, ...) overlaid, on the premise that those fields hold user choices. If this phase's translation makes the plugin write any carried field (for example a translated timeout or a lifecycle), decide in discuss how write-back tells a plugin-written value from a user one.
+
 ### Phase 4: Variable expansion at Claude Code parity
 
 **Goal**: Plugin MCP entries expand variables by Claude Code's rules, write no environment value to disk, and cannot be turned into an unintended shell command or a credential leak by the adapter's own second expansion.

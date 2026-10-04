@@ -1,153 +1,75 @@
 ---
 phase: 02-adapter-file-delivery
-fixed_at: 2026-10-04T00:35:51Z
+fixed_at: 2026-10-04T10:04:51Z
 review_path: .planning/phases/02-adapter-file-delivery/02-REVIEW.md
-iteration: 3
-findings_in_scope: 2
-fixed: 2
+iteration: 1
+findings_in_scope: 1
+fixed: 1
 skipped: 0
 status: all_fixed
 ---
 
-# Phase 2: Code Review Fix Report
+# Phase 2: Code Review Fix Report (gap closure)
 
-**Fixed at:** 2026-10-04T00:35:51Z
+**Fixed at:** 2026-10-04T10:04:51Z
 **Source review:** .planning/phases/02-adapter-file-delivery/02-REVIEW.md
-**Iteration:** 3
+**Iteration:** 1
 
 **Summary:**
 
-- Findings in scope: 2 (WR-01 and WR-02 of the iteration-3 review). The seven
-  Info findings are out of scope.
-- Fixed: 2, both by one commit that follows operator decision D-02-20
+- Findings in scope: 1 (WR-01; IN-01..IN-03 are out of scope)
+- Fixed: 1
 - Skipped: 0
-
-Both Warnings came from the rename-aside restore that `f692a2c7` added. D-02-20
-removes that mechanism, so one restructure fixes both findings. I did not
-apply either finding's suggested patch. Each patch kept the staging directory,
-and D-02-20 forbids it.
 
 ## Fixed Issues
 
-### WR-01: The kept `.prune-restore-*` directory sits outside NFR-10 containment, and nothing points the user to it
+### WR-01: A kept override overrides the user's later choice: uninstall and plugin disable/enable bring back a stale `disabled: true`
 
-### WR-02: Any non-`EEXIST` failure after the rename leaves the live MCP config file deleted
+**Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts`, `extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts`, `extensions/pi-claude-marketplace/bridges/mcp/marker.ts` (comment), `extensions/pi-claude-marketplace/bridges/mcp/unstage.ts` (comment), `docs/prd/pi-claude-marketplace-prd.md` (MC-5), `docs/output-catalog.md` (mcp-override-kept prose), `tests/bridges/mcp/adapter-entry.test.ts`, `tests/bridges/mcp/adapter-doc.test.ts`, `tests/bridges/mcp/unstage.test.ts`, `tests/integration/mcp-override-lifecycle.test.ts`
+**Commit:** 4a206e4a
+**Status:** fixed: requires human verification (a semantic change to the write-back rule, D-02-22)
 
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts`, `tests/orchestrators/plugin/prune-rollback.test.ts`
-**Commit:** 4658eb59
-**Status:** fixed: requires human verification (the restore condition and its ordering changed)
-**Applied fix (D-02-20):**
+**Applied fix (D-02-22, review option a):**
 
-- I removed `restoreOverOwnWrite`, `OwnWriteVerdict`, and the `rename` import.
-  The metadata restore no longer creates a `.prune-restore-*` directory and
-  never renames, unlinks, or moves the live file. This fixes WR-01, because
-  there is no staging directory left to hide or keep. It also fixes WR-02,
-  because no step removes the target.
-- `publishBackupCopy` existed only so the metadata restore could share it.
-  I inlined it back into `restoreArtifact`, which now has the same shape it
-  had before `f692a2c7`. Artifact-restore behavior did not change.
-- The verdict carries the recorded write and the backup bytes again
-  (`{ kind: "own-write", ownWrite, original }`). The restore runs in this
-  order:
-  1. `metadataVerdict` reads the live bytes and compares them with the
-     recorded write.
-  2. The `afterMetadataRead` seam runs.
-  3. `holdsBytes` checks the live file again. It must still exist, still be
-     a regular file, and still hold the recorded bytes (a `Buffer.equals`
-     check).
-  4. `writeFileAtomic(target, original)` runs.
+- New export `restoredOverride(kept, live)` in `adapter-entry.ts`. It reuses the one carried-field list (`CARRIED_FIELDS` / `CARRIED_FIELD_SET`, through the existing private `carriedFields`). Each kept field outside the carried set comes back verbatim, in kept key order, through `safeSet`. Each kept carried field takes the live entry's value in its kept position. A carried field that only the live entry holds is appended in carried-set order.
+- `survivingEntry` in `adapter-doc.ts` now returns `restoredOverride(kept, entry)` for an owned, non-restaged entry whose `restorableOverride` is defined. The single write-back table still decides every unstage: uninstall, plugin disable, prune, marketplace remove, reconcile and cascade undo, plus a stage that drops the server. `restoredOverrideNames` and the restage carry path are unchanged.
+- Credentials and other non-carried fields come only from the kept override and never from the live entry. The overlay changes only carried fields, so the result is still an override (AFILE-05). `restorableOverride` already rejects a kept full definition before the overlay runs.
 
-  If either compare fails, the restore gives the "Prune rollback found an
-  occupied metadata path at …" refusal and keeps the backup. A file that is
-  removed between the two compares gives the same refusal, not a raw
-  `ENOENT`.
-- A comment at the write names D-02-20 and the accepted window: an edit that
-  lands between the last compare and the atomic rename is overwritten. The
-  `state.json` restore has the same window.
-- `PruneRestoreOps` gained an optional `writeMetadata?: (target, bytes) =>
-  Promise<void>` fault seam. Production passes nothing, so it uses
-  `writeFileAtomic`. The module had no existing seam that could make the
-  metadata write fail. `npm run lint:type-members` passed, and no pin needed
-  changes.
+**Absent carried field: left out of the written-back override.** This matches the stage path: `carriedFields(previous)` copies only the carried fields the replaced entry holds as own properties, so a restage leaves out a field the live entry lacks. It is also required for the real adapter flow. pi-mcp-adapter 5.0.0's `writeProjectServerDisabledOverride(..., false)` (`dist/config.js:1555-1576`, checked in `/tmp/pmaverify/package`) removes `disabled` from the entry. It writes `disabled: false` only when a lower config source disables the server. If an absent field kept its kept value instead, the usual `/mcp-adapter enable` would still bring back `disabled: true`, and WR-01 would not be fixed. One consequence: a kept override of only `{ "disabled": true }` comes back as `{}` after the user enables the server. The fix writes `{}` and does not delete the entry. `{}` is a valid inert override, and an original `{}` stub already round-trips the same way. The adapter's own writer deletes an emptied entry, so deleting it here would also be defensible. That is a possible follow-up, not part of this fix.
 
-**Tests (`tests/orchestrators/plugin/prune-rollback.test.ts`):**
+**Residual consequence (flagged for the operator):** the live entry's carried fields are not always user choices. A plugin's own entry can set a carried field, for example `lifecycle` today, or the `requestTimeoutMs` that ANAME-07 will translate in Phase 3. D-02-22 overlays all of the live entry's carried fields, so such a plugin-set value is written back into the user's override on unstage. This is the same user-versus-plugin ambiguity as the Phase 3 hand-off note in 02-CONTEXT.md "Deferred Ideas". It is the documented decision, so the fix follows it.
 
-- Removed: "D-02-19: an edit that cannot be linked back stays in the restore
-  staging directory". It tested the mechanism that this fix removes.
-- Added: "D-02-20: a failed restore write leaves the adapter file in place and
-  keeps its backup". The test makes both write primitives fail for the adapter
-  path: `ops.link` and the new `ops.writeMetadata`. It checks four things:
-  - The failure is the write error.
-  - `mcp-adapter.json` still exists with the bytes the prune wrote.
-  - The backup holds the original.
-  - The scope root has no `.prune-restore-*` entry, both while the write runs
-    and after it. The entries are recorded from inside the `writeMetadata`
-    fault.
-- Added: "D-02-20: an adapter removed after the rollback reads the recorded
-  unstage write stays absent with its backup". It covers the `pathExists`
-  branch of the second compare: the result is the refusal, no file is created,
-  and the backup is kept.
-- These cases still pass: "D-02-19: an adapter edit after the rollback reads
-  the recorded unstage write stays current with its backup" (it still asserts
-  that no `.prune-restore-*` entry exists) and "MCP edit during rollback
-  observation remains current with recovery backup". The pinned `prune.test.ts`
-  cases also pass: "an MCP edit after a cascade with no MCP resources survives
-  failed persistence" and "D-02-19: a rolled-back prune restores its own
-  mcp-adapter.json rewrite byte-for-byte". Results: `prune-rollback.test.ts`
-  43/43, `prune.test.ts` 34/34.
+**Reproduction (before the fix, against the real modules):**
 
-**Negative control:** I copied `prune-rollback.ts` from `HEAD` (`d018b6a5`,
-which has the `f692a2c7` code) over my version. Then I ran the two D-02-20
-cases, and both failed (exit 1):
+- `node tmp/review-gap/repro1.ts`: after uninstall, `srv` was `{"disabled": true, "env": {...}}`. After the fix it is `{"disabled": false, "env": {...}}`.
+- `node tmp/review-gap/repro2.ts`: "active disabled after plugin disable+enable: true". After the fix it prints `false`.
 
-- The failed-write case gave the `adapter link refused` failure. This is the
-  link fault, which reaches the restore only after `rename` has moved the live
-  file aside. That is the WR-02 path, where the review found `ENOENT` on the
-  live file.
-- The removed-file case gave a raw `ENOENT … rename … .prune-restore-*/aside`.
+**Tests added or changed:**
 
-I then restored my version, and `cmp` confirmed it matched. Note: the
-`writeMetadata` seam does not exist in the old code. The old code fails this
-test through the `link` fault, which is its write primitive.
+- `tests/bridges/mcp/adapter-entry.test.ts`, new `describe("restoredOverride")`, 4 cases. They cover: a live `disabled: false` that replaces a kept `true` in its kept position, an absent carried field that is left out, carried fields that only the live entry holds and are appended in set order, and no non-carried field of a full live `ServerEntry` that reaches the override. Each case compares the whole value through `JSON.stringify`, so key order is part of the assertion.
+- `tests/bridges/mcp/adapter-doc.test.ts`, new `withPluginServers` case: "a written-back override takes each carried field from the live entry and keeps every other field". It covers both the `disabled: false` path and the absent `disabled` path.
+- `tests/integration/mcp-override-lifecycle.test.ts`, new case: "a /mcp-adapter enable made while the plugin is installed survives plugin disable, enable and uninstall". The case runs the real install. It then removes `disabled` the way the adapter 5.0.0 writer does. Then it runs the real `createEnableOperation` disable and enable, and the real uninstall. It asserts the exact bytes after disable and after uninstall, and the whole re-enabled entry with no `disabled`.
+- Fixture update in 5 existing cases (3 in adapter-doc, 2 in unstage; one unstage fixture string occurs in both). Their synthetic live entries kept `{disabled|debug|lifecycle}` in the marker but did not hold the field as an active field. A real absorb always makes it active, so these fixtures now carry it. The asserted outputs are unchanged.
+
+**Negative control:** I temporarily changed `survivingEntry` back to returning the kept override verbatim. The new adapter-doc case and the new integration case failed (2 fail / 90 pass across adapter-doc, unstage and the integration file). With the fix restored, they passed. The `restoredOverride` unit cases cannot run without the export.
 
 ## Verification
 
-- Where it ran: directly in the main checkout on `features/mcp-4`, with no
-  worktree (operator instruction). The results can be reproduced from this
-  checkout.
-- Focused checks before the hook run:
-  - `tsc --noEmit`: exit 0.
-  - ESLint on both files: 0 errors. The only warnings are the three
-    `no-await-in-loop` directives that were already unused.
-  - Prettier: ran.
-  - `npx fallow health`: exit 0, 0 above threshold.
-  - `npm run test:coverage:direct -- tests/orchestrators/plugin/prune-rollback.test.ts`:
-    passed. Coverage of `prune-rollback.ts` was branches 119/119, functions
-    21/21, lines 450/450.
-  - `npm run lint:type-members`: passed.
-- Hook run: `SKIP=trufflehog pre-commit run --files <2 changed paths>` gave
-  `PRECOMMIT_EXIT=0` on the first run, including "npm changed checks". The
-  hooks rewrote nothing: `git diff --stat` was the same before and after.
-- `npx fallow audit --format json --quiet --explain --gate-marker agent`: verdict
-  `warn`, not `fail`. The only "introduced" clone groups are in
-  `tests/architecture/catalog-uat/fixtures/plugin-info.ts`, as in earlier
-  iterations. This change does not touch that file.
-- Node v26.10.0.
-- Scope: focused task verification passed. Full phase and PR verification is
-  still pending.
+All gates ran in the **main checkout** (`/home/acolomba/src/pi-claude-marketplace-mcp-4`, branch `features/mcp-4`, `workflow.use_worktrees=false` path; no worktree). Node v26.10.0.
+
+- `npm run typecheck`: exit 0. ESLint over the 8 changed `.ts` files: exit 0.
+- Owner and related suites (`tests/bridges/mcp/*`, integration lifecycle, enable-disable, uninstall, prune, prune-rollback, install-flow, marketplace shared): green after the fixture update.
+- `npm run test:coverage:direct`: adapter-entry.ts 31/31 branches, 8/8 functions, 184/184 lines. adapter-doc.ts 90/90, 20/20, 386/386.
+- `npx fallow health`: exit 0.
+- `SKIP=trufflehog pre-commit run --files <10 committed files>` (`tmp/gapfix-precommit.log`): **PRECOMMIT_EXIT=0** on the first complete run. `npm changed checks` passed, and the hooks rewrote no file. An earlier attempt was stopped by the agent's 10-minute background limit while `npm changed checks` was still running. It was not a hook failure.
+- `npx fallow audit --format json --quiet --explain --gate-marker agent`: verdict **warn** (dead code 0, complexity 0, 14 clone groups, the known pre-existing set). Not `fail`.
+- No `!` or `as` was added under `extensions/`. No type member moved, and `scripts/check-unused-type-members.contracts.json` has no pins in the changed modules.
+- focused task verification passed; full phase/PR verification pending
+
+**Commit-title note:** the committed title is 74 characters, above the 72-character limit in AGENTS.md. No commit-msg hook is installed, so gitlint did not run. History is never rewritten, so the commit stays as it is. The squash-merge title at PR time replaces it.
 
 ---
 
-_Fixed: 2026-10-04T00:35:51Z_
+_Fixed: 2026-10-04T10:04:51Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 3_
-
-## Post-cap test fix: WR-03 (narrow review)
-
-The narrow review of `4658eb59` found that no test held the `isFile()` guard
-in `holdsBytes` (`prune-rollback.ts`). The orchestrator added the review's
-proposed case in `25ea04c6`: "D-02-20: a symlink swapped in after the rollback
-reads the recorded unstage write is refused". It passes on the real module and
-fails when `.isFile()` is removed (mutation run, module restored and clean).
-Hooks: `PRECOMMIT_EXIT=0` (`tmp/wr03-precommit.log`). fallow audit: `warn`,
-from clone groups that were already there, not `fail`. The final review status is `clean`.
+_Iteration: 1_
