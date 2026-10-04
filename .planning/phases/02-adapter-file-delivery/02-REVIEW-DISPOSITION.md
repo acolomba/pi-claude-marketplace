@@ -6,27 +6,27 @@ findings:
   - id: IN-01
     severity: info
     disposition: deferred
-    title: "Stub absorption drops the stub's other fields without notice, and uninstall then loses the user's override (carried forward)"
+    title: "The fold's \"a later keep replaces the earlier one, in first-set position\" rule has no test that fails without it"
   - id: IN-02
     severity: info
     disposition: deferred
-    title: "Update and reinstall leave the plugin's stale legacy `mcp.json` entries live until Phase 5 (carried forward)"
+    title: "Stage write-backs emit no `override-restored` fact, so the fact model is asymmetric"
   - id: IN-03
     severity: info
     disposition: deferred
-    title: "Duplicated helpers with diverging policies (carried forward)"
+    title: "`marker.ts` adds a fifth private `isPlainObject` copy next to an inline copy of the same check"
   - id: IN-04
     severity: info
     disposition: deferred
-    title: "A non-object `mcp-servers` blocks every install and uninstall even when the adapter ignores it (carried forward)"
+    title: "A plugin's own carried fields are written into the user's override at unstage and stay there after the plugin is gone"
   - id: IN-05
     severity: info
     disposition: deferred
-    title: "Bulk-update abort arms show comments-dropped notices for plugins whose updated rows are never shown (carried forward, was IN-06)"
+    title: "An override that the overlay empties is written back as `{}`, where pi-mcp-adapter would delete the entry"
   - id: IN-06
     severity: info
     disposition: deferred
-    title: "`MarketplaceRemoveFailureError` lives in an orchestrator file, not with the typed errors (carried forward, was IN-07)"
+    title: "The rewrapped `withPluginServers` doc comment has a 112-column line"
   - id: IN-08
     severity: info
     disposition: deferred
@@ -38,7 +38,7 @@ findings:
   - id: WR-01
     severity: warning
     disposition: fixed
-    title: "The kept `.prune-restore-*` directory sits outside NFR-10 containment, and nothing points the user to it"
+    title: "A kept override overrides the user's later choice: uninstall and plugin disable/enable bring back a stale `disabled: true`"
   - id: WR-02
     severity: warning
     disposition: fixed
@@ -69,7 +69,7 @@ findings:
     title: "A failed multi-member install or enable cascade does not restore mcp-adapter.json bytes, which departs from D-02-11's wording"
 open: 0
 total: 16
-recorded: 2026-10-04T00:46:09.959Z
+recorded: 2026-10-04T10:18:04.891Z
 ---
 
 # Phase 02: Code Review Disposition
@@ -77,13 +77,13 @@ recorded: 2026-10-04T00:46:09.959Z
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
 | IN-01 | info | deferred | Info, outside the critical_warning fix scope |
-| IN-02 | info | deferred | Info, outside the critical_warning fix scope; carried to Phase 5 (automatic migration removes stale legacy mcp.json entries) |
+| IN-02 | info | deferred | Info, outside the critical_warning fix scope |
 | IN-03 | info | deferred | Info, outside the critical_warning fix scope |
-| IN-04 | info | deferred | Info, outside the critical_warning fix scope |
+| IN-04 | info | deferred | Info; carried to ROADMAP Phase 3 notes (plugin-written carried fields, D-02-22) |
 | IN-05 | info | deferred | Info, outside the critical_warning fix scope |
 | IN-06 | info | deferred | Info, outside the critical_warning fix scope |
-| IN-08 | info | deferred | Info, outside the critical_warning fix scope |
-| IN-09 | info | deferred | Info, outside the critical_warning fix scope |
+| IN-08 | info | deferred | Info, outside the critical_warning fix scope (not in the current review) |
+| IN-09 | info | deferred | Info, outside the critical_warning fix scope (not in the current review) |
 | WR-01 | warning | fixed | 02-REVIEW-FIX.md (not in the current review) |
 | WR-02 | warning | fixed | 02-REVIEW-FIX.md (not in the current review) |
 | WR-04 | warning | fixed | 02-REVIEW-FIX.iter2.md (not in the current review) |
@@ -93,10 +93,9 @@ recorded: 2026-10-04T00:46:09.959Z
 | WR-03 | warning | fixed | 02-REVIEW-FIX.iter2.md (not in the current review) |
 | WR-06 | warning | skipped | 02-REVIEW-FIX.iter2.md (not in the current review) |
 
-Finding IDs WR-01..WR-03 were reused across review iterations, so the
-rows above keep only one entry per ID. Every Critical and Warning raised in
-any iteration is fixed (see 02-REVIEW-FIX.md and its iteration backups);
-WR-06 is settled by D-02-18 with no code change.
+Finding IDs were reused across the full-phase review (5bfa6baf) and the
+gap-closure review, so earlier Info rows were replaced; the earlier ledger
+is in git at 7fd15b22.
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
