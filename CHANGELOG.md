@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Internal: pre-commit now runs only incremental checks, and the full `npm run check` runs at GSD checkpoints, at PR handoff, and in CI. (#236)
+
 - Internal: local checks now select changed modules and their consumers. GSD uses focused checks during tasks and full checks before PR handoff. CI reuses unit coverage for SonarCloud, removes duplicate checks, and runs isolated coverage pairs concurrently.
 
 - A private marketplace or plugin source on any git host now clones with a credential that is already in your git credential helper. Before, only `github.com` and `gitlab.com` authenticated. Thanks to @jstillwa, who found this defect and the next two in #153. (#221)
