@@ -12,6 +12,7 @@ Before editing any file, read it first. Before modifying a function, trace its c
 - Branch names: `main`, `features/*`, `releases/*`. New feature branches use `features/<name>`.
 - Git commit messages and PR titles: Follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/#specification). Titles must be at least 5 characters and no more than 72 characters. Body lines must be no more than 80 characters. Avoid GSD milestone/phases mentions.
 - Run `pre-commit run --all-files` (or `pre-commit run --files <changed files>`) **before** attempting `git commit`. Fix any failures, restage, and re-run until clean. Do not commit and recover from hook failures after the fact -- a failed pre-commit hook means the commit did NOT happen, so iterating with `--amend` is wrong (it would alter the previous commit).
+- Run `pre-commit run --files <changed files>` in the foreground with the longest tool timeout available; a full-scope run can take many minutes. Never background it and poll with sleep/grep loops. If a run can outlast the tool's foreground limit, background it once and wait for the completion notification. Do not run ESLint, type checking, or tests just before committing: the hook already runs the checks the change needs.
 - NEVER use `--no-verify` to skip the hooks.
 - NEVER rebase, never rewrite history. Update branches by merging.
 - When committing from inside a worktree, prefix the commit with `SKIP=trufflehog`.

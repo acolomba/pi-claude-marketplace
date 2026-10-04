@@ -1,5 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { isBuiltin } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -580,20 +589,204 @@ export function runChecks(root, commands) {
   }
 }
 
+const FULL_LOCK_STALE_MS = 60 * 60 * 1000;
+const FULL_LOCK_POLL_MS = 2000;
+
+function gitCommonDir(root) {
+  return path.resolve(root, git(root, ["rev-parse", "--git-common-dir"]).trim());
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code !== "ESRCH";
+  }
+}
+
+/** Returns the new owner record, or undefined when another process holds the lock. */
+function tryCreateLock(lockDir) {
+  try {
+    mkdirSync(lockDir);
+  } catch (error) {
+    if (error.code === "EEXIST") {
+      return undefined;
+    }
+
+    throw error;
+  }
+
+  const owner = { pid: process.pid, startedAt: Date.now(), worktree: path.resolve(projectRoot) };
+  writeFileSync(path.join(lockDir, "owner.json"), JSON.stringify(owner));
+  return owner;
+}
+
+function readOwner(lockDir) {
+  try {
+    const owner = JSON.parse(readFileSync(path.join(lockDir, "owner.json"), "utf8"));
+    return typeof owner.startedAt === "number" ? owner : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A holder without a readable owner ages from the lock directory's mtime, so a
+ * lock whose owner is still being written is never stolen. Returns undefined
+ * when the lock vanished.
+ */
+function readHolder(lockDir) {
+  const owner = readOwner(lockDir);
+  if (owner !== undefined) {
+    return owner;
+  }
+
+  try {
+    return {
+      pid: undefined,
+      startedAt: statSync(lockDir).mtimeMs,
+      worktree: "an unknown worktree",
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function isStale(holder, staleMs) {
+  return (
+    Date.now() - holder.startedAt > staleMs ||
+    (typeof holder.pid === "number" && !isAlive(holder.pid))
+  );
+}
+
+function releaseLock(lockDir, owner) {
+  const current = readOwner(lockDir);
+  if (current?.pid === owner.pid && current.startedAt === owner.startedAt) {
+    rmSync(lockDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Serializes full runs across worktrees with an mkdir lock on `node:fs`.
+ * proper-lockfile has no dead-pid recovery, and it refreshes staleness from
+ * timers that cannot fire while spawnSync blocks the event loop for a whole
+ * full check. A dead pid or an age past `staleMs` frees the lock, so waiting
+ * needs no time limit.
+ */
+export function acquireFullLock(
+  parentDir,
+  { staleMs = FULL_LOCK_STALE_MS, pollMs = FULL_LOCK_POLL_MS } = {},
+) {
+  const lockDir = path.join(parentDir, "check-changed-full.lock");
+  const started = Date.now();
+  let announced = false;
+  for (;;) {
+    const owner = tryCreateLock(lockDir);
+    if (owner !== undefined) {
+      return {
+        waitedMs: Date.now() - started,
+        release: () => {
+          try {
+            releaseLock(lockDir, owner);
+          } catch {
+            // Releasing must never fail a run; a leftover lock goes stale.
+          }
+        },
+      };
+    }
+
+    const holder = readHolder(lockDir);
+    if (holder === undefined || isStale(holder, staleMs)) {
+      rmSync(lockDir, { recursive: true, force: true });
+      continue;
+    }
+
+    if (!announced) {
+      process.stdout.write(
+        `Waiting for the full check running in ${holder.worktree} (pid ${holder.pid ?? "unknown"})\n`,
+      );
+      announced = true;
+    }
+
+    sleepSync(pollMs);
+  }
+}
+
+function currentBranch(root) {
+  try {
+    return git(root, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  } catch {
+    return null;
+  }
+}
+
+/** Appends one JSON line per run to the shared log. Logging never fails a run. */
+export function appendRunLog(root, run, warn = (message) => process.stderr.write(`${message}\n`)) {
+  try {
+    const record = {
+      timestamp: run.timestamp,
+      worktree: path.resolve(root),
+      branch: currentBranch(root),
+      scope: run.scope,
+      reason: run.reason,
+      fileCount: run.fileCount,
+      durationMs: run.durationMs,
+      exitStatus: run.exitStatus,
+      lockWaitMs: run.lockWaitMs,
+    };
+    appendFileSync(
+      path.join(gitCommonDir(root), "check-changed.log"),
+      `${JSON.stringify(record)}\n`,
+    );
+  } catch (error) {
+    warn(
+      `check-changed: run log not written: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 function main() {
+  const startedAt = Date.now();
   const { values } = parseArgs({
     options: { base: { type: "string", default: "HEAD" }, list: { type: "boolean" } },
   });
   const files = changedFiles(projectRoot, values.base);
   const plan = planChecks(projectRoot, files);
   process.stdout.write(`${JSON.stringify({ base: values.base, files, ...plan }, null, 2)}\n`);
-  if (!values.list) {
+  if (values.list) {
+    return;
+  }
+
+  let exitStatus = 1;
+  let lock;
+  try {
+    if (plan.scope === "full") {
+      lock = acquireFullLock(gitCommonDir(projectRoot));
+    }
+
     runChecks(projectRoot, plan.commands);
+    exitStatus = 0;
     process.stdout.write(
       plan.scope === "focused"
         ? "Focused checks passed; full completion verification is still required.\n"
         : "Checks passed.\n",
     );
+  } finally {
+    lock?.release();
+    appendRunLog(projectRoot, {
+      timestamp: new Date(startedAt).toISOString(),
+      scope: plan.scope,
+      reason: plan.reason,
+      fileCount: files.length,
+      durationMs: Date.now() - startedAt,
+      exitStatus,
+      lockWaitMs: lock?.waitedMs ?? 0,
+    });
   }
 }
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import {
   existsSync,
   mkdirSync,
@@ -7,15 +8,24 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { changedFiles, DATA_READERS, planChecks, runChecks } from "./check-changed.mjs";
+import {
+  acquireFullLock,
+  appendRunLog,
+  changedFiles,
+  DATA_READERS,
+  planChecks,
+  runChecks,
+} from "./check-changed.mjs";
 
 const root = mkdtempSync(path.join(tmpdir(), "pi-cm-changed-"));
+const lockRoot = mkdtempSync(path.join(tmpdir(), "pi-cm-changed-lock-"));
 const source = (name) => `extensions/pi-claude-marketplace/${name}.ts`;
 const test = (name) => `tests/${name}.test.ts`;
 const repository = fileURLToPath(new URL("..", import.meta.url));
@@ -317,6 +327,53 @@ try {
   git("commit", "-m", "test: seed fixture");
   const base = git("rev-parse", "HEAD");
   assert.deepEqual(changedFiles(root), []);
+  // Each run appends one ordered nine-key record; a failed write only warns.
+  const warnings = [];
+  const warn = (message) => warnings.push(message);
+  const record = {
+    timestamp: new Date().toISOString(),
+    scope: "focused",
+    reason: "Unpaired tests",
+    fileCount: 1,
+    durationMs: 5,
+    exitStatus: 0,
+    lockWaitMs: 0,
+  };
+  appendRunLog(root, record, warn);
+  appendRunLog(root, record, warn);
+  const logFile = path.join(root, ".git", "check-changed.log");
+  const logLines = readFileSync(logFile, "utf8").trimEnd().split("\n");
+  assert.equal(logLines.length, 2);
+  for (const line of logLines) {
+    const entry = JSON.parse(line);
+    assert.deepEqual(Object.keys(entry), [
+      "timestamp",
+      "worktree",
+      "branch",
+      "scope",
+      "reason",
+      "fileCount",
+      "durationMs",
+      "exitStatus",
+      "lockWaitMs",
+    ]);
+    assert.equal(entry.branch, "features/fixture");
+    assert.equal(entry.worktree, path.resolve(root));
+  }
+
+  assert.deepEqual(warnings, []);
+  rmSync(logFile);
+  mkdirSync(logFile);
+  appendRunLog(root, record, warn);
+  assert.equal(warnings.length, 1);
+  appendRunLog(lockRoot, record, warn);
+  assert.equal(warnings.length, 2);
+  for (const warning of warnings) {
+    assert.match(warning, /^check-changed: run log not written/);
+  }
+
+  rmSync(logFile, { recursive: true });
+
   write(source("leaf"), 'export type Mode = "a" | "b";');
   git("add", source("leaf"));
   // Include the index even if the worktree restores the old bytes.
@@ -344,6 +401,69 @@ try {
   assert.throws(() => changedFiles(root, "missing-ref"), /git rev-parse failed/);
   assert.throws(() => changedFiles(root, "--help"), /git rev-parse failed/);
 
+  // The full-run lock: fresh acquire, recovery from dead, expired, and ownerless
+  // holders, waiting on a live holder, and release that never frees another owner.
+  const lockDir = path.join(lockRoot, "check-changed-full.lock");
+  const ownerFile = path.join(lockDir, "owner.json");
+  const readLockOwner = () => JSON.parse(readFileSync(ownerFile, "utf8"));
+  const plantOwner = (owner) => {
+    mkdirSync(lockDir, { recursive: true });
+    writeFileSync(ownerFile, JSON.stringify({ worktree: "planted", ...owner }));
+  };
+
+  const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+
+  const fresh = acquireFullLock(lockRoot);
+  assert.equal(readLockOwner().pid, process.pid);
+  fresh.release();
+  assert.equal(existsSync(lockDir), false);
+
+  const deadPid = spawnSync(process.execPath, ["-e", ""]).pid;
+  assert.throws(() => process.kill(deadPid, 0));
+  plantOwner({ pid: deadPid, startedAt: Date.now() });
+  const afterDead = acquireFullLock(lockRoot);
+  assert.equal(readLockOwner().pid, process.pid);
+  afterDead.release();
+
+  plantOwner({ pid: process.pid, startedAt: twoHoursAgo });
+  const afterExpired = acquireFullLock(lockRoot);
+  assert.equal(readLockOwner().pid, process.pid);
+  afterExpired.release();
+
+  mkdirSync(lockDir);
+  utimesSync(lockDir, new Date(twoHoursAgo), new Date(twoHoursAgo));
+  const afterOwnerless = acquireFullLock(lockRoot);
+  assert.equal(readLockOwner().pid, process.pid);
+  afterOwnerless.release();
+  assert.equal(existsSync(lockDir), false);
+
+  const holderCode = [
+    `import { acquireFullLock } from ${JSON.stringify(new URL("./check-changed.mjs", import.meta.url).href)};`,
+    "const lock = acquireFullLock(process.argv[1]);",
+    "setTimeout(() => lock.release(), 1500);",
+  ].join("\n");
+  const holder = spawn(process.execPath, ["--input-type=module", "-e", holderCode, lockRoot], {
+    stdio: "ignore",
+  });
+  const holderExit = once(holder, "exit");
+  const deadline = Date.now() + 10_000;
+  while (!existsSync(ownerFile)) {
+    assert.ok(Date.now() < deadline, "the live holder never took the lock");
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+  }
+
+  const waiter = acquireFullLock(lockRoot, { pollMs: 20 });
+  assert.ok(waiter.waitedMs >= 500, `waited only ${waiter.waitedMs} ms`);
+  assert.equal(readLockOwner().pid, process.pid);
+  waiter.release();
+  await holderExit;
+
+  const replaced = acquireFullLock(lockRoot);
+  plantOwner({ pid: process.pid, startedAt: 0 });
+  replaced.release();
+  assert.equal(existsSync(lockDir), true);
+  rmSync(lockDir, { recursive: true, force: true });
+
   runChecks(root, [["node", "-e", 'require("node:fs").writeFileSync("passed", "yes")']]);
   assert.equal(readFileSync(path.join(root, "passed"), "utf8"), "yes");
   assert.throws(
@@ -360,8 +480,9 @@ try {
     /signal SIGTERM/,
   );
   process.stdout.write(
-    "Changed-check controls passed: dependency selection, targeted rules and their union, broad fallbacks, git paths, and child failures.\n",
+    "Changed-check controls passed: dependency selection, targeted rules and their union, broad fallbacks, git paths, child failures, the full-run lock, and the run log.\n",
   );
 } finally {
   rmSync(root, { recursive: true, force: true });
+  rmSync(lockRoot, { recursive: true, force: true });
 }
