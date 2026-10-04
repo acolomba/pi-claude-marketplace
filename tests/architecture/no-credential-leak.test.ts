@@ -32,6 +32,7 @@ import {
 import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationPresentation } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import type {
+  MarketplaceNotificationMessage,
   NotificationMessage,
   PluginNotificationMessage,
   RawSurface,
@@ -752,9 +753,11 @@ test("AUTH-09 / D-11: a token-valued onDeviceCode call inside a line comment pas
  * surface reaches its text through `formatRawSurface`.
  *
  * The subject-name rows compose their text with `formatEnvelopeArguments` over
- * the grammar function the text strategy uses for that presentation. They make
- * no notify call, because D-13 approves exactly the nine gate emissions and the
- * corpus lock rejects any further one.
+ * the grammar function the text strategy uses for that presentation kind. The
+ * block and row subjects sit in a reconcile-applied cascade, whose text body is
+ * `composeReconcileAppliedBody`. They make no notify call, because D-13
+ * approves exactly the nine gate emissions and the corpus lock rejects any
+ * further one.
  */
 interface LeakProbe {
   readonly presentation: string;
@@ -808,9 +811,17 @@ function probeComposedText(presentation: NotificationPresentation, body: string)
   };
 }
 
-function probeCascadeSubject(message: NotificationMessage): LeakProbe {
-  const presentation = presentNotification(runWithAllLoaded(), message);
-  assert.ok(presentation.kind === "cascade", "AUTH-09 / PMOD-04: the message presents a cascade");
+function probeReconcileAppliedSubject(
+  marketplaces: readonly MarketplaceNotificationMessage[],
+): LeakProbe {
+  const presentation = presentNotification(runWithAllLoaded(), {
+    kind: "reconcile-applied-cascade",
+    marketplaces,
+  });
+  assert.ok(
+    presentation.kind === "reconcile-applied-cascade",
+    "AUTH-09 / PMOD-04: the message presents a reconcile-applied cascade",
+  );
   return probeComposedText(presentation, composeReconcileAppliedBody(presentation.marketplaces));
 }
 
@@ -1043,48 +1054,47 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
     site: "the block name of a failed marketplace add",
     planted: USERINFO,
     probe: () =>
-      probeCascadeSubject({
-        marketplaces: [
-          {
-            name: FAILED_ADD_SOURCE,
-            scope: "project",
-            status: "failed",
-            reasons: ["authentication required"],
-            severity: "error",
-            plugins: [],
-          },
-        ],
-      }),
+      probeReconcileAppliedSubject([
+        {
+          name: FAILED_ADD_SOURCE,
+          scope: "project",
+          status: "failed",
+          reasons: ["authentication required"],
+          severity: "error",
+          plugins: [],
+        },
+      ]),
   },
   {
     site: "a plugin row name",
     planted: USERINFO,
-    probe: () => probeCascadeSubject(rowCascade({ status: "will install", name: USERINFO_URL })),
+    probe: () =>
+      probeReconcileAppliedSubject([
+        { name: "mp", scope: "user", plugins: [{ status: "will install", name: USERINFO_URL }] },
+      ]),
   },
   {
     site: "a plugin row name split from an enabledPlugins key",
     planted: USERINFO,
     probe: () =>
-      probeCascadeSubject({
-        marketplaces: [
-          {
-            name: SPLIT_KEY_MARKETPLACE,
-            scope: "user",
-            status: "failed",
-            reasons: ["dangling reference"],
-            severity: "error",
-            plugins: [
-              {
-                status: "failed",
-                name: SPLIT_KEY_PLUGIN,
-                reasons: ["dangling reference"],
-                severity: "error",
-                needsReload: false,
-              },
-            ],
-          },
-        ],
-      }),
+      probeReconcileAppliedSubject([
+        {
+          name: SPLIT_KEY_MARKETPLACE,
+          scope: "user",
+          status: "failed",
+          reasons: ["dangling reference"],
+          severity: "error",
+          plugins: [
+            {
+              status: "failed",
+              name: SPLIT_KEY_PLUGIN,
+              reasons: ["dangling reference"],
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ]),
   },
   {
     site: "the marketplace-not-added name",
