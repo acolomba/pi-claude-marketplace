@@ -1,262 +1,201 @@
 ---
 phase: 04-wire-schema-and-json-strategy
-reviewed: 2026-10-03T21:30:00Z
+reviewed: 2026-10-04T12:00:00Z
 depth: standard
-files_reviewed: 39
+files_reviewed: 6
 files_reviewed_list:
-  - extensions/pi-claude-marketplace/edge/handlers/tools.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/list.messaging.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts
-  - extensions/pi-claude-marketplace/shared/errors.ts
-  - extensions/pi-claude-marketplace/shared/notification-dispatch.ts
-  - extensions/pi-claude-marketplace/shared/notification-grammar.ts
-  - extensions/pi-claude-marketplace/shared/notification-json.ts
   - extensions/pi-claude-marketplace/shared/notification-present.ts
   - extensions/pi-claude-marketplace/shared/notification-resolve.ts
-  - extensions/pi-claude-marketplace/shared/notification-summary.ts
-  - extensions/pi-claude-marketplace/shared/notification-wire.ts
   - extensions/pi-claude-marketplace/shared/redact-credentials.ts
-  - package.json
-  - schema/claude-plugin.schema.json
-  - scripts/check-unused-type-members.contracts.json
-  - scripts/generate-wire-schema.mjs
-  - scripts/wire-schema.mjs
-  - tests/architecture/catalog-uat/catalog-contract.test.ts
-  - tests/architecture/catalog-uat/catalog-wire.test.ts
-  - tests/architecture/catalog-uat/fixture-maps.ts
-  - tests/architecture/catalog-uat/fixture-types.ts
-  - tests/architecture/catalog-uat/fixtures/plugin-list.ts
-  - tests/architecture/catalog-uat/fixtures/plugin-update.ts
   - tests/architecture/no-credential-leak.test.ts
-  - tests/architecture/soft-dep-marker-policy.test.ts
-  - tests/edge/handlers/tools.test.ts
-  - tests/orchestrators/marketplace/list.messaging.test.ts
-  - tests/orchestrators/marketplace/list.test.ts
-  - tests/scripts/generate-wire-schema.test.ts
-  - tests/shared/errors.test.ts
-  - tests/shared/notification-dispatch.test.ts
-  - tests/shared/notification-grammar.test.ts
-  - tests/shared/notification-json.test.ts
   - tests/shared/notification-present.test.ts
   - tests/shared/notification-resolve.test.ts
-  - tests/shared/notification-summary.test.ts
-  - tests/shared/notification-wire.test.ts
-  - tests/shared/redact-credentials.test.ts
 findings:
-  critical: 0
-  warning: 0
-  info: 9
-  total: 9
-status: clean
+  critical: 1
+  warning: 2
+  info: 1
+  total: 4
+status: issues_found
 ---
 
 # Phase 4: Code Review Report
 
-**Reviewed:** 2026-10-03T21:30:00Z
+**Reviewed:** 2026-10-04T12:00:00Z
 **Depth:** standard
-**Files Reviewed:** 39
-**Status:** clean
+**Files Reviewed:** 6
+**Status:** issues_found
 
 ## Summary
 
-This is the second review pass. I checked the fixes in `45449a48^..2d3e6ba9`
-against the iteration-1 findings, looked for regressions they introduced, and
-re-read the full file scope.
+Scope: the gap-closure diff `42f80dec..HEAD` (commits c8a45a9b, 5d988d7d). It
+redacts marketplace block names and plugin row names in `resolveRows` and the
+marketplace-not-added name in `presentNotification`, and it adds three AUTH-09
+subject-name rows.
 
-All six fixes resolve their findings:
+What holds:
 
-- **CR-01:** The userinfo class now admits `@`, and greedy backtracking stops
-  at the last `@` before `/ ? #` or whitespace. A probe of
-  `https://user:p@ss@host/x` returns `https://***@host/x`. The AUTH-09 gate
-  plants `alice:p@ss@` and `@ss@`.
-- **WR-01:** The Bearer prefix is `[ \t]+`, so it no longer crosses a line
-  break. Prose (`Bearer token required`, `Bearer realm="GitHub"`,
-  `Bearer error="invalid_token"`) stays intact.
-- **WR-02:** `xghp_…`, `ghp_…_suffix`, `remote_https://u:tok@host`, and
-  `1https://…` are all redacted. The run-start lookbehind
-  `(?<![a-z0-9+.-])` keeps the userinfo scan linear. I timed 8 adversarial
-  shapes at 10^4 to 2x10^5 characters, and none took more than 50 ms.
-- **WR-03:** `loadMarketplaceListEntries` returns `{scope, record, block}`
-  from one pass. The tool's content and details come from the same entries.
-  The extra merged-config read on the empty path cannot throw, because
-  `loadConfig` turns every read or parse failure into `invalid`.
-- **WR-04:** `CatalogFixture = SeamFixture | DispatchFixture` makes `emit`
-  without `present` a type error. The `@ts-expect-error` control proves it.
-  The seam helpers build `emit` and `present` from the same rows.
-- **WR-05:** `probePresentation` drives the text leg through production
-  `notify` with a recording context. It asserts one delivery, and
-  `assertNoPlantedCredential` requires the `***` marker in the text, so the
-  leg is not vacuous.
+- Block names, row names, and the not-added name are redacted at the model
+  chokepoints. Every presentation reaches them: cascade, update no-op,
+  reconcile-applied, and the tools `details` path through `presentCascade`.
+- The wire `id` is built from the redacted names.
+- The three new gate rows are not vacuous. `assertNoPlantedCredential` requires
+  the `***` marker in both the payload and the text.
+- The byte locks hold. I re-ran `node scripts/notify-corpus.mjs check`: 3143
+  baseline entries present, 0 extra, exit 0. `git diff --exit-code 4e6c568a --
+  docs/output-catalog.md` exits 0. The three suites pass (153/153).
+- Comments cite only requirement and decision IDs. They contain no phase, plan,
+  or wave numbers.
 
-**Verification:**
+What fails:
 
-- The five targeted suites pass: 138 tests in `redact-credentials`,
-  `no-credential-leak`, `catalog-wire`, marketplace `list`, and `tools`.
-- `fallow audit --base 45449a48^` passes, with 0 dead-code findings, 0
-  complexity findings, and no introduced clones.
-- The comments in the fixes carry no phase, plan, or wave references.
+- One reachable subject-name path still leaks a password into both strategies.
+  The cause is the last-`@` split in the reconcile key parser: it cuts URL
+  userinfo apart before the redactor sees it. The new `resolveRows` JSDoc names
+  this exact scenario as its motivation (CR-01).
+- The `"name" in resolved` guard admits a row whose `name` key holds a
+  non-string value, and `redactCredentials` then throws inside the
+  diagnostic-row arm (WR-01).
+- The cascade gate rows read their text through the reconcile-applied
+  composer, not the cascade text path. Their doc comment says otherwise (WR-02).
 
-No Critical or Warning findings remain. The Info items below are the
-redactor's residual edges, which I confirmed with probes, plus two stale
-comments and one dead fixture field from the fixes. The iteration-1 Info items
-that are still open are carried forward unchanged.
+## Critical Issues
 
-I did not re-report these dispositioned items: WR-06 (Phase 5 SC-6), T-04-06,
-the plugin-tool `Failed to load plugin list:` text, the `Bearer re-auth`
-judgment call, and the D-13 corpus additions. I see no reason to challenge any
-of those dispositions.
+### CR-01: A hand-edited `enabledPlugins` key leaks its URL password through the plugin row name in text and JSON
 
-## Narrative Findings (AI reviewer)
+**File:** `extensions/pi-claude-marketplace/shared/notification-resolve.ts:344-347, 370-372` (producer: `extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts:86-95`, `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:211-220`, `:796-806`)
+
+**Issue:** The new JSDoc gives this as the reason for redacting row names: "a
+hand-edited `enabledPlugins` key names a pending or failed row after whatever
+precedes its last `@`". `parsePluginKey` splits the key at `lastIndexOf("@")`.
+When the user puts a credentialed URL in the marketplace slot, which is the
+natural place for one, the split falls inside the URL:
+
+- key `foo@https://alice:s3cret@github.com/o/r.git`
+- plugin `foo@https://alice:s3cret`
+- marketplace `github.com/o/r.git`
+
+That marketplace is undeclared, so `applySourceMismatch` (and the matching
+apply-outcome arm) emits a dangling-reference block with a failed child row
+named `foo@https://alice:s3cret`. The userinfo pattern in `redactCredentials`
+needs the `@` that ends userinfo, and the split consumed it, so the name passes
+through unchanged:
+
+```
+⊘ github.com/o/r.git [user] (failed) {dangling reference}
+  ⊘ foo@https://alice:s3cret (failed) {dangling reference}
+```
+
+I reproduced this through `presentNotification`. `JSON.stringify(toWirePayload(p)).includes("s3cret")`
+returns `true`: the password appears in the row `name` and in the wire `id`.
+This is the same SC3 / PMOD-04 failure class as the verifier's gap: a credential
+the user typed reaches both strategies. The new tests plant the URL only in the
+plugin slot (`https://alice:s3cret@github.com/o/r.git@mp`), where the last `@`
+falls after the URL. That ordering is the one the redactor already handles.
+`redactCredentials` alone cannot fix this. A bare `https://alice:s3cret` tail
+looks the same as `https://host:8080`.
+
+**Fix:** Redact the whole key before it is split for display, so the userinfo
+boundary is still present. For example, in the reconcile producer (or wherever
+the dangling or pending row's subject is derived from the raw key):
+
+```ts
+// Redact before splitting: the last-@ split can cut URL userinfo apart.
+const shown = redactCredentials(key);            // "foo@https://***@github.com/o/r.git"
+const at = shown.lastIndexOf("@");
+const displayPlugin = shown.slice(0, at);        // "foo@https://***"
+const displayMarketplace = shown.slice(at + 1);  // "github.com/o/r.git"
+```
+
+Keep the raw `parsePluginKey` result for lookups. Use the redacted split only
+for the row and block subjects. Then add an AUTH-09 row that plants
+`foo@https://alice:s3cret@github.com/o/r.git` through the dangling-reference
+shape, so the gate can see this ordering.
+
+## Warnings
+
+### WR-01: The `"name" in resolved` guard admits a non-string `name`, and `redactCredentials` throws in the diagnostic-row arm
+
+**File:** `extensions/pi-claude-marketplace/shared/notification-resolve.ts:370-373`
+
+**Issue:** The guard checks only that the key exists. An out-of-band row is the
+reason the guard exists, and the reason the `missingPolicy` arm renders a
+diagnostic instead of throwing. Such a row can carry `name: undefined` (for
+example, from a spread of an optional value) or a non-string value. Before this
+change, that row rendered `undefined (failed) {internal: no render arm for ...}`
+through the grammar's `"name" in row ? row.name : "?"` idiom, which the summary
+says this guard mirrors. Now `redactCredentials(undefined)` throws
+`TypeError: Cannot read properties of undefined (reading 'replace')` from
+`resolveRows`. I reproduced it with `presentNotification(run, { marketplaces:
+[{ name: "mp", scope: "user", plugins: [{ status: "unknown", name: undefined }] }] })`.
+The arm that exists to turn a producer bug into a visible diagnostic now turns
+it into an uncaught exception at the notify call.
+
+**Fix:** Guard on the value's type, not on the key:
+
+```ts
+// An out-of-band row can arrive without a string `name`; it keeps that shape.
+const redacted =
+  typeof (resolved as { name?: unknown }).name === "string"
+    ? { ...resolved, name: redactCredentials(resolved.name) }
+    : resolved;
+```
+
+Then add a resolve test for a `missingPolicy` row whose `name` is `undefined`.
+It asserts that the row resolves and keeps its shape.
+
+### WR-02: The cascade subject-name gate rows do not read the production cascade text path, and their doc comment says they do
+
+**File:** `tests/architecture/no-credential-leak.test.ts:754-757, 806-810, 1037-1058`
+
+**Issue:** The block comment says the subject-name rows compose text "over the
+grammar function the text strategy uses for that presentation".
+`probeCascadeSubject` asserts `presentation.kind === "cascade"` and then
+composes the body with `composeReconcileAppliedBody`. The text strategy does
+not use that function for a cascade. It uses the dispatch-private
+`formatCascadePresentation`, which calls `composeContextBlocks` and then
+`foldAdvisories` (`notification-dispatch.ts:280-304`). `composeContextBlocks`
+is a hand-maintained duplicate of `composeMarketplaceBlock` ("It writes the same
+lines as grammar's `composeMarketplaceBlock`"). The bytes match for these
+fixtures, but nothing in the gate checks the code that actually renders a
+cascade's block and row names. If that duplicate drifts, it could reintroduce a
+subject string, and these rows would stay green.
+
+**Fix:** Plant the two cascade-subject sites in a `reconcile-applied-cascade`
+message. `composeReconcileAppliedBody` is the production body for that kind, so
+the probe becomes exact:
+
+```ts
+function probeReconcileAppliedSubject(message: NotificationMessage): LeakProbe {
+  const presentation = presentNotification(runWithAllLoaded(), message);
+  assert.ok(presentation.kind === "reconcile-applied-cascade");
+  return probeComposedText(presentation, composeReconcileAppliedBody(presentation.marketplaces));
+}
+// ...probe: () => probeReconcileAppliedSubject({ kind: "reconcile-applied-cascade", marketplaces: [...] })
+```
+
+Alternatively, correct the comment to say that the cascade rows read the
+reconcile-applied composer as a stand-in for the cascade text path.
 
 ## Info
 
-### IN-01: The `x-access-token:` arm keeps the boundary and first-`@` limits that WR-02 and CR-01 removed elsewhere
+### IN-01: An `ssh://git@host/...` subject is now masked to `ssh://***@host/...`
 
-**File:** `extensions/pi-claude-marketplace/shared/redact-credentials.ts:33`
+**File:** `extensions/pi-claude-marketplace/shared/notification-resolve.ts:356`, `extensions/pi-claude-marketplace/shared/redact-credentials.ts:28-29`
 
-**Issue:** `accessToken = /\b(x-access-token:)[^\s@/]+/gi` still has a leading
-`\b`, and its secret class still stops at the first `@`. Probe results:
+**Issue:** Block names now pass through the userinfo pattern. A failed
+`marketplace add ssh://git@github.com/o/r.git` will now display
+`ssh://***@github.com/o/r.git`. The `git` user name is not a secret. The
+redactor JSDoc and the new test (`keeps an scp-style marketplace block name
+unchanged`) protect only the scp form `git@host:owner/repo`. The corpus does not
+cover the `ssh://` form, so the lock cannot catch this text change.
 
-- `foo_x-access-token:supersecretvalue` is unchanged.
-- `ax-access-token:supersecretvalue` is unchanged.
-- `x-access-token:p@ss@host` becomes `x-access-token:***@ss@host`.
-
-The module doc (lines 18-22) says "a secret glued to a word character … is
-still replaced". This arm does not meet that claim.
-
-The real-world exposure is small. Inside a `scheme://` URL, the userinfo arm
-runs first and covers the token. The only `x-access-token` producer
-(`domain/auth-registry.ts:59`) passes a GitHub token, which the unanchored
-`githubToken` arm catches anyway.
-
-**Fix:** Use the same run-start lookbehind
-(`(?<![a-z0-9_-])x-access-token:`). Alternatively, scope the doc sentence to
-the GitHub-token and userinfo arms.
-
-### IN-02: The Bearer secret span backtracks off trailing `+ / - . ~`, so `isTokenShaped` judges a truncated token
-
-**File:** `extensions/pi-claude-marketplace/shared/redact-credentials.ts:34-39,49-51`
-
-**Issue:** `([\w.~+/-]*\w=*)` must end on a word character or `=`, so it gives
-back any trailing run of `+ / - . ~`. This keeps a sentence period intact
-(the intent). It also has two side effects:
-
-1. A base64 token whose last data character is `+` or `/` leaks its tail.
-   `Bearer dGVzdHRva2Vu+/==` becomes `Bearer ***+/==`. Only a few bits leak.
-2. `isTokenShaped` runs on the truncated span, not on the whole token. A short
-   token with a letters-only head is therefore not redacted at all:
-   `Bearer abc/==` and `Bearer abc-` are unchanged, although `/==` makes the
-   original obviously token-shaped.
-
-Before WR-01, both cases were redacted in full.
-
-**Fix:** Decide the token shape on the full run, and trim only a trailing
-`.`, which is the punctuation the fix meant to keep. For example, match
-`([\w~+/-]+(?:\.[\w~+/-]+)*=*)` and test `isTokenShaped` on that capture. Add
-rows for `Bearer abc/==` and a `+/==` tail.
-
-### IN-03: Greedy userinfo can swallow a credential-free host when later text in the same authority segment holds an `@`
-
-**File:** `extensions/pi-claude-marketplace/shared/redact-credentials.ts:32`
-
-**Issue:** `[^\s/?#]+@` now runs to the last `@` before `/ ? #` or
-whitespace. Text glued to a URL that has no credentials loses the host:
-
-- `https://example.com,alice@example.com` becomes `https://***@example.com`.
-- `'https://github.com'@x` becomes `'https://***@x`.
-
-The old first-`@` pattern over-matched the same inputs up to the first `@`.
-This is not a new failure class, and it fails safe (it hides more, never
-less). It still contradicts "Only the secret span changes". No current
-producer emits such a string.
-
-**Fix:** Optional. Also exclude `,`, `'`, `"`, `<`, and `>` from the
-userinfo class, since none of them appears unencoded in a git-accepted
-userinfo. Or record this as accepted over-redaction in the module doc.
-
-### IN-04: Comments left stale by the WR-03 loader change
-
-**File:** `extensions/pi-claude-marketplace/edge/handlers/tools.ts:15-19`, `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:646-648`
-
-**Issue:** The `tools.ts` header still names `loadVisibleMarketplaces` and
-`loadPluginListPayload` as "the structured loaders" behind the tools. It says
-they "were added … in this plan", which is a planning-artifact reference that
-the comment policy forbids. The `loadVisibleMarketplaces` doc still says it
-feeds `pi_claude_marketplace_list`. After WR-03, the marketplace tool reads
-`loadMarketplaceListEntries`, and `loadVisibleMarketplaces` serves only the
-plugin tool's `marketplaceExists` probe.
-
-**Fix:** Name `loadMarketplaceListEntries` in the `tools.ts` header and drop
-"in this plan". Narrow the `loadVisibleMarketplaces` doc to the plugin tool's
-existence check (and `browse.ts`).
-
-### IN-05: A seam fixture's `message` field is dead data that restates its rows
-
-**File:** `tests/architecture/catalog-uat/fixture-types.ts:7-11`, `tests/architecture/catalog-uat/fixtures/plugin-list.ts:540-543`, `tests/architecture/catalog-uat/fixtures/plugin-update.ts:174-181`
-
-**Issue:** `SeamFixture` inherits a required `message`, but neither harness
-reads it once `emit` or `present` is set:
-
-- `catalog-contract.test.ts:175` calls `emit`.
-- `catalog-wire.test.ts:139` calls `present`.
-
-Each seam fixture restates the same rows twice: in `message` and in the
-`listSurfaceSeam(...)` or `updateNoOpSeam(...)` argument. The two copies can
-drift with no test going red. This is the same "stated once" concern WR-04
-fixed for `emit` and `present`.
-
-**Fix:** Have the seam helpers return `message` too (built from the same
-rows). Or make `message` `never` on `SeamFixture` and derive it where a
-harness needs it.
-
-### IN-06: Redaction scope leaves common credential forms unhandled (carried from iteration 1, unchanged)
-
-**File:** `extensions/pi-claude-marketplace/shared/redact-credentials.ts:31-43`
-
-**Issue:** These forms still pass through unchanged (re-probed):
-
-- `Authorization: Basic <base64>`
-- `Authorization: token <hex>`
-- `x-access-token: <secret>` with a space
-- `?access_token=…`
-
-**Fix:** Record them as accepted residual risk, or extend D-05.
-
-### IN-07: `wireScope` and `wireVersion` sit at the cyclomatic ceiling (carried from iteration 1, unchanged)
-
-**File:** `extensions/pi-claude-marketplace/shared/notification-json.ts:396-423,434-463`
-
-**Issue:** Each function is a 19-arm switch with cyclomatic complexity 20,
-equal to `maxCyclomatic: 20`. The next `PluginStatus` member turns
-`fallow health` red here.
-
-**Fix:** Use `as const satisfies Record<PluginStatus, …>` tables.
-
-### IN-08: The wire `description` differs from what the text form shows (carried from iteration 1, unchanged)
-
-**File:** `extensions/pi-claude-marketplace/shared/notification-json.ts:277`
-
-**Issue:** The wire `description` is not truncated, and an empty
-`description: ""` is emitted. The text form truncates the description and
-omits it when empty.
-
-**Fix:** Omit an empty description, or record the untruncated choice as a
-decision.
-
-### IN-09: The shipped schema has no `$id` and cannot express the WIRE-05 summary rule (carried from iteration 1, unchanged)
-
-**File:** `scripts/wire-schema.mjs:26-34`, `schema/claude-plugin.schema.json:1-4`
-
-**Issue:** The document has no `$id`; a grep of the schema file finds 0
-matches. `summary` is plain optional on every kind, so a consumer cannot
-learn from the schema that `summary` rides only warning and error payloads.
-
-**Fix:** Add a versioned `$id`. Document the summary rule in the schema
-`description`, or express it per kind with `if`/`then` on `severity`.
+**Fix:** If the ssh user should stay visible (as it does in the scp form), leave
+userinfo without a `:` unredacted for `ssh://` and `git+ssh://` schemes. If not,
+record the masking as intended in the redactor JSDoc and add a test that pins
+the `ssh://` form.
 
 ---
 
-_Reviewed: 2026-10-03T21:30:00Z_
+_Reviewed: 2026-10-04T12:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
