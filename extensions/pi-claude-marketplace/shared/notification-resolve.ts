@@ -338,7 +338,12 @@ export type ResolvedMarketplace = WithPlugins<MarketplaceNotificationMessage, Re
  */
 type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMessage[K] };
 
-/** Resolves ordered row facts; an absent own policy marks a diagnostic and floors input severity. */
+/**
+ * Resolves ordered row facts; an absent own policy marks a diagnostic and floors input severity.
+ *
+ * PMOD-04 / D-07: every block name is redacted, because a failed `marketplace
+ * add` names its block after the source the user typed, URL userinfo included.
+ */
 export function resolveRows(
   marketplaces: readonly MarketplaceNotificationMessage[],
   snapshot: SoftDepStatus,
@@ -346,6 +351,7 @@ export function resolveRows(
 ): readonly ResolvedMarketplace[] {
   return marketplaces.map((mp) => ({
     ...mp,
+    name: redactCredentials(mp.name),
     plugins: mp.plugins.map((row) => {
       const policy = Object.hasOwn(rowPolicies, row.status) ? rowPolicies[row.status] : undefined;
       if (policy === undefined) {

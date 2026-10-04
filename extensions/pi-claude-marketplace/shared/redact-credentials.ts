@@ -1,11 +1,13 @@
 /**
- * PMOD-04 / D-05 / D-06: replaces the credentials a thrown message can carry,
- * and nothing else. URL userinfo becomes `***@`. The secret after
- * `x-access-token:` or `Bearer` becomes `***`. A GitHub token with a `ghp_`,
- * `gho_`, `ghu_`, `ghs_`, `ghr_`, or `github_pat_` prefix becomes `***`.
+ * PMOD-04 / D-05 / D-06: replaces the credentials a thrown message or a
+ * user-typed subject name can carry, and nothing else. URL userinfo becomes
+ * `***@`. The secret after `x-access-token:` or `Bearer` becomes `***`. A
+ * GitHub token with a `ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, or `github_pat_`
+ * prefix becomes `***`.
  *
  * D-07: the model calls this at every site that can carry a thrown message,
- * so the text and JSON strategies both read the redacted string.
+ * and on the subject names the user typed, so the text and JSON strategies
+ * both read the redacted string.
  *
  * - Userinfo runs first, so a token inside userinfo collapses with it into
  *   one `***@`.

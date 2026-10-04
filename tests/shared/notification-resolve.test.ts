@@ -819,6 +819,48 @@ describe("resolveRows", () => {
     ]);
   });
 
+  for (const { title, name, expectedName } of [
+    {
+      title: "PMOD-04 / D-07 redacts the userinfo of a marketplace block name",
+      name: "https://alice:s3cret@gitlab.example.com/team/private-mp",
+      expectedName: "https://***@gitlab.example.com/team/private-mp",
+    },
+    {
+      title: "keeps an scp-style marketplace block name unchanged",
+      name: "git@github.com:foo/bar.git",
+      expectedName: "git@github.com:foo/bar.git",
+    },
+  ]) {
+    test(title, () => {
+      // arrange
+      const marketplaces: readonly MarketplaceNotificationMessage[] = [
+        {
+          name,
+          scope: "project",
+          status: "failed",
+          severity: "error",
+          reasons: ["authentication required"],
+          plugins: [],
+        },
+      ];
+
+      // act
+      const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
+
+      // assert
+      assert.deepStrictEqual(resolved, [
+        {
+          name: expectedName,
+          scope: "project",
+          status: "failed",
+          severity: "error",
+          reasons: ["authentication required"],
+          plugins: [],
+        },
+      ] satisfies readonly ResolvedMarketplace[]);
+    });
+  }
+
   test("resolves a manual-recovery row with its leaks and no rollback phases", () => {
     // arrange
     const marketplaces = marketplaceWith([

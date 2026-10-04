@@ -5,7 +5,11 @@ import test from "node:test";
 
 import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
-import { formatRawSurface } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import {
+  composeReconcileAppliedBody,
+  formatEnvelopeArguments,
+  formatRawSurface,
+} from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { toWirePayload } from "../../extensions/pi-claude-marketplace/shared/notification-json.ts";
 import { presentNotification } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import { resolveRawSurface } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -25,6 +29,7 @@ import {
 } from "./temp-root-control.ts";
 
 import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationPresentation } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import type {
   NotificationMessage,
   PluginNotificationMessage,
@@ -744,6 +749,11 @@ test("AUTH-09 / D-11: a token-valued onDeviceCode call inside a line comment pas
  * reaches its text through `notify`, the production text strategy, so a
  * credential that the dispatch formatter re-introduces fails the row. A raw
  * surface reaches its text through `formatRawSurface`.
+ *
+ * The subject-name rows compose their text with `formatEnvelopeArguments` over
+ * the grammar function the text strategy uses for that presentation. They make
+ * no notify call, because D-13 approves exactly the nine gate emissions and the
+ * corpus lock rejects any further one.
  */
 interface LeakProbe {
   readonly presentation: string;
@@ -754,6 +764,7 @@ interface LeakProbe {
 const GITHUB_TOKEN = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
 const USERINFO_URL = "https://alice:s3cret@github.com/o/r.git";
 const USERINFO = ["alice:s3cret@", "s3cret"];
+const FAILED_ADD_SOURCE = "https://alice:s3cret@gitlab.example.com/team/private-mp";
 
 function probePresentation(message: NotificationMessage): LeakProbe {
   const presentation = presentNotification(runWithAllLoaded(), message);
@@ -781,6 +792,20 @@ function probeRawSurface(surface: RawSurface): LeakProbe {
     payload: JSON.stringify(toWirePayload(resolved)),
     text: formatRawSurface(resolved)?.[0] ?? "",
   };
+}
+
+function probeComposedText(presentation: NotificationPresentation, body: string): LeakProbe {
+  return {
+    presentation: JSON.stringify(presentation),
+    payload: JSON.stringify(toWirePayload(presentation)),
+    text: formatEnvelopeArguments(presentation.envelope, body)[0],
+  };
+}
+
+function probeCascadeSubject(message: NotificationMessage): LeakProbe {
+  const presentation = presentNotification(runWithAllLoaded(), message);
+  assert.ok(presentation.kind === "cascade", "AUTH-09 / PMOD-04: the message presents a cascade");
+  return probeComposedText(presentation, composeReconcileAppliedBody(presentation.marketplaces));
 }
 
 function rowCascade(row: PluginNotificationMessage): NotificationMessage {
@@ -994,6 +1019,23 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
           componentsResolved: false,
           notes: ["workflow wf: x-access-token:tok123secret rejected"],
         },
+      }),
+  },
+  {
+    site: "the block name of a failed marketplace add",
+    planted: USERINFO,
+    probe: () =>
+      probeCascadeSubject({
+        marketplaces: [
+          {
+            name: FAILED_ADD_SOURCE,
+            scope: "project",
+            status: "failed",
+            reasons: ["authentication required"],
+            severity: "error",
+            plugins: [],
+          },
+        ],
       }),
   },
 ];
