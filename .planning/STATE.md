@@ -3,18 +3,17 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 04
 current_phase_name: Wire Schema and JSON Strategy
-status: verifying
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-10-03T20:58:21.438Z"
-last_activity: 2026-10-03
-last_activity_desc: Completed 04-05 (catalog-wide wire validation and payload walk)
-state_head: d8d213a03c7653c75278a335d29920e02a2011db
+status: executing
+stopped_at: Phase 4 gap closure planned (04-06)
+last_updated: "2026-10-04T03:30:19.000Z"
+last_activity: 2026-10-04
+last_activity_desc: Planned 04-06 (gap closure for SC3 / PMOD-04 subject names)
+state_head: 42f80dec9b3fb56235f80bd88c44fef32efe8668
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 27
+  total_plans: 28
   completed_plans: 27
-  percent: 43
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,12 +30,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 04 (Wire Schema and JSON Strategy) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-10-03 — Completed 04-05 (catalog-wide wire validation and payload walk)
+Phase: 04 (Wire Schema and JSON Strategy) — EXECUTING (gap closure)
+Plan: 6 of 6
+Status: Gap closure planned — ready to execute 04-06
+Last activity: 2026-10-04 — Planned 04-06 (gap closure for SC3 / PMOD-04 subject names)
 
-Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 27 plans complete)
+Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 27 of 28 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -170,8 +169,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-03T20:58:04.844Z
-**Stopped at:** Completed 04-05-PLAN.md
+**Last session:** 2026-10-04T03:30:19.000Z
+**Stopped at:** Phase 4 gap closure planned (04-06)
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -183,7 +182,12 @@ plans complete and is verified (11/11). Its review-fix loop converged clean
 after three iterations (three gate warnings fixed in 95237f7c, 16f507cd,
 13729cd8; four Info items open in 03-REVIEW-DISPOSITION.md). The full
 `npm run check` passed at `13729cd8`; corpus 3134 present / 0 extra per the
-D-17 ledger; catalog unchanged. Phase 4 (Wire Schema and JSON Strategy) is next.
+D-17 ledger; catalog unchanged. Phase 4 (Wire Schema and JSON Strategy) has
+all 5 plans executed; its review-fix loop converged clean at iteration 2 (CR-01
+and WR-01..WR-05 fixed, WR-06 deferred to Phase 5 criterion 6, nine Info items
+open in 04-REVIEW-DISPOSITION.md), and the full check passed on `ad5348ab`.
+Verification found one gap (SC3 / PMOD-04: marketplace block names and other
+subject names are not redacted); gap-closure plan 04-06 is planned and checked.
 
 **Corpus determinism (resolved by quick task 261002-dys):** prune rollback
 now receives its backup-directory creator through `PruneRestoreOps`, so tests
@@ -206,7 +210,7 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Discuss and plan Phase 4 (Wire Schema and JSON Strategy) under the autonomous run.
+- Execute gap-closure plan 04-06 (`/gsd-execute-phase 4 --gaps-only`), then re-verify Phase 4.
 
 ## Performance Metrics
 
