@@ -1,0 +1,115 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-10-04T13:33:20.404Z",
+  "phase": "4",
+  "phase_name": "Wire Schema and JSON Strategy",
+  "phase_dir": ".planning/phases/04-wire-schema-and-json-strategy",
+  "plan": 6,
+  "task": 2,
+  "total_tasks": 2,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "Review loop for 04-01..04-05 converged clean at iteration 2; review docs and disposition committed",
+      "status": "done",
+      "commit": "42f80dec"
+    },
+    {
+      "id": 2,
+      "name": "Verification: gaps_found 4/5 (SC3 / PMOD-04, unredacted subject names); report committed with gap plan",
+      "status": "done",
+      "commit": "8f766751"
+    },
+    {
+      "id": 3,
+      "name": "Committed the user's check-changed edit (HANDOFF.json is an instruction file)",
+      "status": "done",
+      "commit": "5d9d1ed9"
+    },
+    {
+      "id": 4,
+      "name": "Gap plan 04-06 executed (block, row, not-added names redacted; 3 AUTH-09 rows)",
+      "status": "done",
+      "commit": "49b0da00"
+    },
+    {
+      "id": 5,
+      "name": "Review of 04-06: 1 critical, 2 warnings, 1 info",
+      "status": "done",
+      "commit": "db6ce33a"
+    },
+    {
+      "id": 6,
+      "name": "Fix loop iteration 1: CR-01, WR-01, WR-02 fixed; full check passed on tree of cb18acb2",
+      "status": "done",
+      "commit": "cb18acb2"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 7,
+      "name": "Fix loop iteration 2: back up 04-REVIEW.md/04-REVIEW-FIX.md as .iter2.md, re-review files_reviewed_list of 04-REVIEW.md (diff_base db6ce33a), fix again if Critical/Warning remain (cap 3 iterations)",
+      "status": "not_started"
+    },
+    {
+      "id": 8,
+      "name": "Commit converged REVIEW.md + REVIEW-FIX.md; reconcile 04-REVIEW-DISPOSITION.md (run block 2 of execute-phase/steps/code-review-disposition.md, then fill Source cells with SHAs)",
+      "status": "not_started"
+    },
+    {
+      "id": 9,
+      "name": "Re-verify Phase 4 (gsd-verifier, re-verification of the SC3 gap) and route on status",
+      "status": "not_started"
+    },
+    {
+      "id": 10,
+      "name": "Phase 4 close: transition, phase.complete (restore STATE narrative after), PROJECT.md evolution, validate-phase 4, secure-phase 4",
+      "status": "not_started"
+    },
+    {
+      "id": 11,
+      "name": "Autonomous run continues: Phases 5, 6, 7, then milestone lifecycle",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Confirm the CR-01 redaction rule: resolveRows redacts row names via redactRowName (redactor on name + '@', trailing '@' dropped), so a row name ending in scheme://host:port with no path is masked too",
+      "context": "Fixer chose the chokepoint over the reviewer's producer-side suggestion; commit fbbacb2f",
+      "blocking": false
+    },
+    {
+      "action": "Judge WR-01's Bearer token-shape rule (hyphenated prose after Bearer is redacted)",
+      "context": "Carried from the first review loop",
+      "blocking": false
+    },
+    {
+      "action": "Decide whether to schedule Phase 4 follow-ups: T-04-06 (marketplace LLM tool content line can echo URL userinfo), deferred-items.md (plugin tool error line outside redaction), WINDOWS.md entry 88, nine open Info items in 04-REVIEW-DISPOSITION.md",
+      "context": "Non-blocking",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Close the SC3 gap by redacting, not by an accepted-risk override; T-04-06 stays out of scope (SC5 locks tool content bytes)",
+      "rationale": "User choice at the verification gate",
+      "phase": "4"
+    },
+    {
+      "decision": "Commit the user's check-changed edit so docs-only commits skip the full check",
+      "rationale": "User choice; every commit was escalating to the ~30 min check",
+      "phase": "4"
+    },
+    {
+      "decision": "WR-06 deferred to Phase 5 success criterion 6",
+      "rationale": "JSON keeps the text strategy's empty no-ops there",
+      "phase": "4"
+    }
+  ],
+  "uncommitted_files": [],
+  "next_action": "Run /gsd-resume-work, then continue the Phase 4 code-review fix loop at iteration 2 (re-review), then re-verify Phase 4, then /gsd-autonomous --from 4",
+  "context_notes": "Sequential execution only in this checkout (no worktrees; force 'dispatch-isolation --force-isolation none' right before each executor dispatch and never verify with a bare call). Commit with explicit pathspecs (git commit -F msg -- paths). Docs-only commits are now cheap; any change under extensions/, tests/architecture or scripts/ escalates pre-commit to the ~30 min full check. Do not run 'gsd-tools config-set workflow._auto_chain_active false' — it writes .planning/config.json and escalates every pre-commit. The disposition step script auto-commits via the GSD commit verb without pre-commit; run pre-commit on the file afterwards. Executor rules for subagents live in /tmp/claude-1000/json-resume/executor-rules.md and root-pin.sh (session-scoped; recreate from the old session's copy if gone). Corpus lock: 3143 present, 0 extra; catalog diff vs 4e6c568a empty."
+}
