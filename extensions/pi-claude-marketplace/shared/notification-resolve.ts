@@ -368,9 +368,10 @@ export function resolveRows(
           snapshot,
         ),
       );
-      // An out-of-band row can arrive without a `name`; it keeps that shape.
+      // An out-of-band row can arrive without a string `name`; it keeps that shape.
+      const name: unknown = resolved.name;
       const redacted =
-        "name" in resolved ? { ...resolved, name: redactRowName(resolved.name) } : resolved;
+        typeof name === "string" ? { ...resolved, name: redactRowName(name) } : resolved;
       return policy === undefined ? { ...redacted, missingPolicy: true } : redacted;
     }),
   }));

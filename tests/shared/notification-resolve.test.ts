@@ -1020,6 +1020,19 @@ describe("resolveRows", () => {
     ]);
   });
 
+  test("keeps the shape of a diagnostic row whose name is undefined", () => {
+    // arrange
+    const row = { status: "unknown", severity: "error", name: undefined };
+
+    // act
+    const resolved = resolveRows(marketplaceWith([row as never]), allLoaded(), {});
+
+    // assert
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      { status: "unknown", severity: "error", name: undefined, reasons: [], missingPolicy: true },
+    ]);
+  });
+
   for (const { row, expectedRow } of [
     {
       row: { status: "unavailable", name: "alpha", reasons: ["lsp"], partialHint: true },
