@@ -1278,28 +1278,27 @@ test("D-02-19: an adapter edit after the rollback reads the recorded unstage wri
   });
 });
 
-test("D-02-19: an edit that cannot be linked back stays in the restore staging directory", async () => {
-  await withHermeticEnvironment("prune-rollback-own-write-put-back-race-", async ({ cwd }) => {
+test("D-02-20: a failed restore write leaves the adapter file in place and keeps its backup", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-failed-write-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
     await writeFile(locations.mcpAdapterJsonPath, original);
-    const independent = Buffer.from('{\n  "mcpServers": { "independent": 2 }\n}\n');
-    const later = Buffer.from('{\n  "mcpServers": { "later": 3 }\n}\n');
+    const configDirectory = path.dirname(locations.mcpAdapterJsonPath);
+    let entriesAtWrite: readonly string[] = [];
     const rollback = await preparePruneRollback(locations, [fixture.member], {
       removeBackup: rm,
-      afterMetadataRead: async (target: string): Promise<void> => {
-        if (target === locations.mcpAdapterJsonPath) {
-          await writeFile(target, independent);
-        }
-      },
       link: async (from, to) => {
         if (to === locations.mcpAdapterJsonPath) {
-          await writeFile(to, later, { flag: "wx" });
+          throw new Error("adapter link refused");
         }
 
         await link(from, to);
+      },
+      writeMetadata: async (target) => {
+        entriesAtWrite = await readdir(configDirectory);
+        throw new Error(`write refused at ${target}`);
       },
     });
     const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
@@ -1310,26 +1309,65 @@ test("D-02-19: an edit that cannot be linked back stays in the restore staging d
     const failures = await rollback.rollback();
 
     // assert
-    const configDirectory = path.dirname(locations.mcpAdapterJsonPath);
-    const staging = (await readdir(configDirectory)).filter((name) =>
-      name.startsWith(".prune-restore-"),
-    );
     assert.deepStrictEqual(
-      failures.map(({ phase, cause }) => ({
-        phase,
-        code: (cause as NodeJS.ErrnoException).code,
-      })),
-      [{ phase: "mcp adapter", code: "EEXIST" }],
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [{ phase: "mcp adapter", message: `write refused at ${locations.mcpAdapterJsonPath}` }],
     );
     assert.deepStrictEqual(
       {
         live: await readFile(locations.mcpAdapterJsonPath),
-        staged: await Promise.all(
-          staging.map((name) => readFile(path.join(configDirectory, name, "aside"))),
-        ),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+        entriesAtWrite: [...entriesAtWrite].sort(),
+        entriesAfter: (await readdir(configDirectory)).sort(),
+      },
+      {
+        live: ownBytes,
+        backup: original,
+        entriesAtWrite: ["agents", "mcp-adapter.json", "mcp.json", "pi-claude-marketplace"],
+        entriesAfter: ["agents", "mcp-adapter.json", "mcp.json", "pi-claude-marketplace"],
+      },
+    );
+  });
+});
+
+test("D-02-20: an adapter removed after the rollback reads the recorded unstage write stays absent with its backup", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-removed-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      afterMetadataRead: async (target: string): Promise<void> => {
+        if (target === locations.mcpAdapterJsonPath) {
+          await rm(target);
+        }
+      },
+    });
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [
+        {
+          phase: "mcp adapter",
+          message: `Prune rollback found an occupied metadata path at ${locations.mcpAdapterJsonPath}.`,
+        },
+      ],
+    );
+    assert.deepStrictEqual(
+      {
+        entries: (await readdir(path.dirname(locations.mcpAdapterJsonPath))).sort(),
         backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
       },
-      { live: later, staged: [independent], backup: original },
+      { entries: ["agents", "mcp.json", "pi-claude-marketplace"], backup: original },
     );
   });
 });
