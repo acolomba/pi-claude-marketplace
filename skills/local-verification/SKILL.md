@@ -13,7 +13,7 @@ Each check runs at the scope that its moment needs:
 - CI on `main` repeats the pull request checks, in case a pull request merged without them.
 - The nightly e2e run tests against the newest upstream `main` to catch upstream drift.
 
-A build input is a file that a build or a CI job reads. The build inputs are the files that the hook's `files` pattern in `.pre-commit-config.yaml` matches. Both `paths` lists in `.github/workflows/ci.yml` name the same files. Change the three lists together.
+A build input is a file that a build or a CI job reads. The build inputs are the files that the hook's `files` pattern in `.pre-commit-config.yaml` matches. The `paths` list of the `push` trigger in `.github/workflows/ci.yml` names the same files, and the `pull_request` trigger reuses it through a YAML anchor. Change the two lists together.
 
 ## What the commands run
 
