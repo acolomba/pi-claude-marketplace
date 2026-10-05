@@ -15,9 +15,7 @@ if ! command -v pre-commit >/dev/null 2>&1; then
     PATH="$PATH:$(pipx environment --value PIPX_BIN_DIR)"
 fi
 
-# pre-commit refuses to install while core.hooksPath is set.
-git config --local --unset core.hooksPath || true
-pre-commit install
+pre-commit install || true
 
 # npm
 npm install
