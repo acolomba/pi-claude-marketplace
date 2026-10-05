@@ -246,7 +246,7 @@ const buildConfigFiles = new Set([
 function isBuildInput(file) {
   return (
     buildConfigFiles.has(file) ||
-    /^(extensions|tests|rule-packs|\.github\/workflows)\//.test(file) ||
+    /^(extensions|tests|\.github\/workflows)\//.test(file) ||
     /^scripts\/.*\.(json|mjs)$/.test(file) ||
     /^demos\/.*\.ts$/.test(file) ||
     isDocumentation(file)

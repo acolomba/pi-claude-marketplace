@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Internal: commits run only incremental checks, `npm run check` runs at GSD checkpoints and PR handoff, and CI runs only when build inputs change. (#236)
+- Internal: commits run only incremental checks, `npm run check` runs at GSD checkpoints and PR handoff, CI runs only on build-input changes, and ESLint alone bans stdio calls. (#236)
 
 - Internal: local checks now select changed modules and their consumers. GSD uses focused checks during tasks and full checks before PR handoff. CI reuses unit coverage for SonarCloud, removes duplicate checks, and runs isolated coverage pairs concurrently.
 

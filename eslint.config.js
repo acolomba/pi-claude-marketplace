@@ -33,15 +33,9 @@ const MARKETPLACE_LEDGERS = [
 const OUTPUT_DISCIPLINE_SELECTORS = [
   {
     selector:
-      "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdout'][callee.property.name='write']",
+      "CallExpression[callee.object.object.name='process'][callee.object.property.name=/^(stdout|stderr)$/]",
     message:
-      "Direct process.stdout.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-  },
-  {
-    selector:
-      "CallExpression[callee.object.object.name='process'][callee.object.property.name='stderr'][callee.property.name='write']",
-    message:
-      "Direct process.stderr.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
+      "Direct process.stdout.* and process.stderr.* calls are forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
   },
   {
     selector: "CallExpression[callee.object.name='console'][callee.property.name='log']",
@@ -324,7 +318,7 @@ export default tseslint.config(
   },
   {
     // BLOCK A (D-06 / IL-2 / IL-3): Output discipline scoped to the extension.
-    // Direct stdout/stderr writes and console.* calls are forbidden in the
+    // Direct stdout/stderr and console.* calls are forbidden in the
     // extension. Sanctioned exception: load-time migrate-record save failure
     // in `migrateLegacyMarketplaceRecords` (IL-3) -- allowed via the
     // block-level files-override for `persistence/migrate.ts` below (BLOCK
