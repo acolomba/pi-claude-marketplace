@@ -208,16 +208,19 @@ function affectedSources(root, changed) {
   return [...affected].map((file) => path.relative(root, file).split(path.sep).join("/")).sort();
 }
 
-/**
- * Architecture tests read both READMEs and every document under `docs/` except
- * the dated records in `adr/`, `plans/`, and `research/`.
- */
+/** The documents architecture tests read by name. ci.yml lists the same files. */
+const documentationFiles = new Set([
+  "README.es.md",
+  "README.md",
+  "docs/dependency-resolution.md",
+  "docs/messaging-style-guide.md",
+  "docs/output-catalog.md",
+  "docs/prd/pi-claude-marketplace-prd.md",
+  "docs/workflows-compatibility.md",
+]);
+
 function isDocumentation(file) {
-  return (
-    (file.startsWith("docs/") && !/^docs\/(adr|plans|research)\//.test(file)) ||
-    file === "README.md" ||
-    file === "README.es.md"
-  );
+  return documentationFiles.has(file);
 }
 
 /** Root files a build reads: tool configuration, the SonarCloud settings, and git's rules. */
