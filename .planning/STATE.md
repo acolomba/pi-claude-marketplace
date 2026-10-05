@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-05T15:11:29.100Z"
+last_updated: "2026-10-05T17:48:51.573Z"
 last_activity: 2026-10-05
 last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
-state_head: 1b636217390f94a4d1abefa890dc6793fca4b367
+state_head: e9d9c5df04f497c55b7fedb62362d9ad376e0e26
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-05 — TruffleHog hook switched to filesystem mode; worktree SKIP rule removed
+Last activity: 2026-10-05 - Completed quick task 261005-hpr: Restructure verification checks by granularity
 
 ### workflows-replay closeout (merged from main)
 
@@ -620,6 +620,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 33 | Restore the worktree CodeGraph sync before each query | 2026-10-05 | eb9c1460 | — |
 | 261005-e23 | Keep worktree CodeGraph indexes current with a per-worktree daemon | 2026-10-05 | 7c2c3ccd | [261005-e23-keep-worktree-codegraph-indexes-current-](./quick/261005-e23-keep-worktree-codegraph-indexes-current-/) |
 | 35 | Switch the TruffleHog hook to filesystem mode (v3.97.9) and drop SKIP=trufflehog | 2026-10-05 | 1b636217 | — |
+| 261005-hpr | Restructure verification checks by granularity: staged pairs on commit, full tree at gates, split CI jobs | 2026-10-05 | e9d9c5df | [261005-hpr-restructure-verification-checks-by-granu](./quick/261005-hpr-restructure-verification-checks-by-granu/) |
 
 ## Deferred Items
 
