@@ -208,20 +208,45 @@ function affectedSources(root, changed) {
   return [...affected].map((file) => path.relative(root, file).split(path.sep).join("/")).sort();
 }
 
-/** Planning records and agent instruction Markdown select no checks: no test reads them. */
-function isInstruction(file) {
+/**
+ * Architecture tests read both READMEs and every document under `docs/` except
+ * the dated records in `adr/`, `plans/`, and `research/`.
+ */
+function isDocumentation(file) {
   return (
-    file.startsWith(".planning/") ||
-    (/^(skills|\.agents|\.claude)\//.test(file) && file.endsWith(".md")) ||
-    ["AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md"].includes(file)
+    (file.startsWith("docs/") && !/^docs\/(adr|plans|research)\//.test(file)) ||
+    file === "README.md" ||
+    file === "README.es.md"
   );
 }
 
-function isDocumentation(file) {
+/** Root files a build reads: tool configuration, the SonarCloud settings, and git's rules. */
+const buildConfigFiles = new Set([
+  ".editorconfig",
+  ".fallowrc.json",
+  ".gitattributes",
+  ".gitignore",
+  ".prettierignore",
+  ".prettierrc.json",
+  "eslint.config.js",
+  "package-lock.json",
+  "package.json",
+  "sonar-project.properties",
+  "tsconfig.json",
+]);
+
+/**
+ * The files an npm build or a CI job reads. The `paths` filters in
+ * `.github/workflows/ci.yml` name the same files; change both together.
+ * Fallow analyzes the TypeScript under `demos/`.
+ */
+function isBuildInput(file) {
   return (
-    (file.startsWith("docs/") && file.endsWith(".md")) ||
-    /^README(\.[a-z]{2,3}(-[A-Za-z0-9]+)*)?\.md$/.test(file) ||
-    file === "CHANGELOG.md"
+    buildConfigFiles.has(file) ||
+    /^(extensions|tests|rule-packs|\.github\/workflows)\//.test(file) ||
+    /^scripts\/.*\.(json|mjs)$/.test(file) ||
+    /^demos\/.*\.ts$/.test(file) ||
+    isDocumentation(file)
   );
 }
 
@@ -240,9 +265,12 @@ function analyzerTest(file, root) {
   return test && existsSync(path.join(root, test)) ? test : undefined;
 }
 
-/** First match wins; `broad` is also the fallback for unrecognized inputs. */
+/**
+ * First match wins. A file outside the build inputs selects nothing, and a
+ * build input that no rule claims falls back to `broad`.
+ */
 const rules = [
-  [isInstruction, "none"],
+  [(file) => !isBuildInput(file), "none"],
   [isDocumentation, "documentation"],
   [(file, root) => !existsSync(path.join(root, file)), "broad"],
   [isPair, "pair"],
@@ -518,7 +546,7 @@ function selectChecks(root, changed) {
     .map((file) => [file, classify(file, root)])
     .filter(([, kind]) => kind !== "none");
   if (inputs.length === 0) {
-    return { scope: "none", reason: "No executable inputs changed", commands: [] };
+    return { scope: "none", reason: "No build inputs changed", commands: [] };
   }
 
   const triggers = inputs.filter(([, kind]) => kind === "broad").map(([file]) => file);
@@ -547,8 +575,9 @@ function selectChecks(root, changed) {
 }
 
 /**
- * Plans commit-time checks. Unknown inputs broaden to the broad check; no plan
- * runs `npm run check`, and a focused or broad pass is never a full verdict.
+ * Plans commit-time checks. A build input that no rule recognizes broadens to
+ * the broad check; no plan runs `npm run check`, and a focused or broad pass is
+ * never a full verdict.
  */
 function planChecks(root, changed) {
   try {

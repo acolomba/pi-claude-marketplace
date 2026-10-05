@@ -10,33 +10,63 @@ on:
   push:
     branches:
       - main
-    # Denylist, not an allowlist: package.json, the lockfile, tsconfig and
-    # the lint config live outside extensions/ + tests/ and MUST still
-    # trigger CI.
-    #
-    # `**/*.md` and `docs/**` were removed from this list. They rested on
-    # "no test reads repo markdown", which is false:
-    # tests/architecture/catalog-uat.test.ts reads `docs/output-catalog.md`
-    # and byte-compares 166 annotated examples against notify() output. A
-    # docs-only edit that broke that contract skipped the only gate that
-    # would catch it. `paths-ignore` cannot negate a single path, so the
-    # whole markdown ignore goes: over-running CI costs minutes, while
-    # under-running it is indistinguishable from a pass.
-    paths-ignore:
-      - "images/**"
-      - "demos/**"
-      - ".planning/**"
-      - "COPYING"
+    # Build inputs only: the files that an npm build or a CI job reads. A
+    # change to any other file skips CI. scripts/check-changed.mjs keeps the
+    # same list for commit-time checks; change both together.
+    paths:
+      - "extensions/**"
+      - "tests/**"
+      - "scripts/**/*.mjs"
+      - "scripts/**/*.json"
+      - "rule-packs/**"
+      - "demos/**/*.ts"
+      - "docs/**"
+      - "!docs/adr/**"
+      - "!docs/plans/**"
+      - "!docs/research/**"
+      - "README.md"
+      - "README.es.md"
+      - ".github/workflows/**"
+      - ".editorconfig"
+      - ".fallowrc.json"
+      - ".gitattributes"
+      - ".gitignore"
+      - ".prettierignore"
+      - ".prettierrc.json"
+      - "eslint.config.js"
+      - "package-lock.json"
+      - "package.json"
+      - "sonar-project.properties"
+      - "tsconfig.json"
   pull_request:
     branches:
       - main
-    # Same reasoning as the push trigger above: docs/output-catalog.md is
-    # test-examined, so markdown cannot be ignored wholesale.
-    paths-ignore:
-      - "images/**"
-      - "demos/**"
-      - ".planning/**"
-      - "COPYING"
+    # Same list as the push trigger.
+    paths:
+      - "extensions/**"
+      - "tests/**"
+      - "scripts/**/*.mjs"
+      - "scripts/**/*.json"
+      - "rule-packs/**"
+      - "demos/**/*.ts"
+      - "docs/**"
+      - "!docs/adr/**"
+      - "!docs/plans/**"
+      - "!docs/research/**"
+      - "README.md"
+      - "README.es.md"
+      - ".github/workflows/**"
+      - ".editorconfig"
+      - ".fallowrc.json"
+      - ".gitattributes"
+      - ".gitignore"
+      - ".prettierignore"
+      - ".prettierrc.json"
+      - "eslint.config.js"
+      - "package-lock.json"
+      - "package.json"
+      - "sonar-project.properties"
+      - "tsconfig.json"
   workflow_dispatch:
 
 permissions:
