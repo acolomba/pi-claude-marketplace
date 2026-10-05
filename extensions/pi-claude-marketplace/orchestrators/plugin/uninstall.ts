@@ -42,7 +42,7 @@
 // orchestrators/marketplace/shared.ts ONLY (NOT from add.ts/remove.ts/etc).
 //
 // NFR-5 (no network): this file MUST NOT import platform/git or DEFAULT_GIT_OPS.
-// The architectural source-grep test gates this file by name: the D-06-06
+// BLOCK F in `eslint.config.js` gates this file by name: the D-06-06
 // declarer read composes an offline manifest read through `dependency-index.ts`
 // (memoized manifest cache + warm clone cache only, D-05-06), and that leaf is
 // gated beside it.

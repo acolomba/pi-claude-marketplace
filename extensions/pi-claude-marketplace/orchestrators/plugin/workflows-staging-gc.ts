@@ -25,9 +25,9 @@
 // in `NETWORK_FREE_TARGETS` in `eslint.config.js` -- can import this module
 // without introducing a git token. The bridge import is the only non-leaf one,
 // and it is safe on the terms BLOCK F uses: it lints the listed files for git
-// imports and identifiers, and `install.ts` is both gated and already imports
-// the same bridge module directly. It needs no state load either, which is one
-// import fewer than `clone-gc.ts`, its structural model.
+// imports and identifiers, and `install-outcome.ts` is gated and already
+// imports the workflows bridge directly. It needs no state load either, which
+// is one import fewer than `clone-gc.ts`, its structural model.
 
 import { lstat, readdir, rm } from "node:fs/promises";
 import path from "node:path";
