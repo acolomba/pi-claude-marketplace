@@ -1,6 +1,10 @@
+---
+last_mapped_commit: 5960d1c02ed242faa6accd4c1ff5da8c84f2accd
+last_mapped_at: 2026-10-05
+---
 # Coding Conventions
 
-**Analysis Date:** 2026-08-18
+**Analysis Date:** 2026-10-05
 
 ## Naming Patterns
 
@@ -42,7 +46,7 @@
   - `@typescript-eslint/no-unused-vars`: error, with `^_` ignore pattern for args/vars/caught errors
   - `@typescript-eslint/explicit-module-boundary-types: "error"` — all exported functions must declare return types
   - `@typescript-eslint/array-type: "off"` and `restrict-template-expressions: "off"` — deliberately not enforced (either `T[]` or `Array<T>` is fine; numeric template interpolation is fine)
-  - `sonarjs/cognitive-complexity: ["error", 15]` (`eslint.config.js:77`) — turned `"off"` only for a narrow set of blocks (e.g. line 317)
+  - `sonarjs/cognitive-complexity: ["error", 15]` in the production block of `eslint.config.js` — turned `"off"` only for a narrow set of blocks
   - `sonarjs/no-identical-functions`, `no-inverted-boolean-check`, `no-nested-conditional`, `no-nested-template-literals`: all error
   - `curly: ["error", "all"]` — braces always required
   - `@stylistic/padding-line-between-statements`: blank line required after every block-like statement
@@ -53,14 +57,14 @@
 
 **Fallow (whole-graph static analysis) — a second, independent complexity/duplication/dead-code gate:**
 
-- `.fallowrc.json` at repo root; entry point `extensions/pi-claude-marketplace/index.ts`; `production: false`
+- `.fallowrc.json` at repo root; entry point `extensions/pi-claude-marketplace/index.ts`; `production: { deadCode: true, health: false, dupes: false }`
 - `npm run fallow` first runs `fallow rule-pack test` and fails on a rule-pack `WARN` (see the `rulePacks` bullet), then runs four sub-gates in sequence, each `--fail-on-issues`: `fallow dead-code`, `fallow dead-code --no-production --circular-deps --re-export-cycles`, `fallow health`, `fallow dupes`. The second dead-code run exists because `production.deadCode` scopes the first one to the production entry graph, which leaves a cycle under `tests/` or `scripts/` reported by nothing; it stays filtered to the two cycle classes because a bare `--no-production` run also re-reads the production-mode suppressions as stale
 - `npm run check` is `check:static` (`typecheck`, `lint`, `lint:workflows`, `fallow`, `format:check`, and `test:corresponding`, run in parallel by `scripts/run-parallel.mjs`), then `test:unpaired`, `test:integration`, and `test:coverage:direct:all` — **fallow is a mandatory member of the check chain, not an optional extra.** Always mention it when describing "the gate." The pre-commit hook runs `check:commit`: `check:static`, `test:unpaired`, and direct coverage for the staged pairs only.
 - `health` thresholds: `maxCyclomatic: 20`, `maxCognitive: 15`, `maxCrap: 0`. **`maxCrap: 0` means CRAP is OFF, not maximally strict** -- delete the line and fallow falls back to its own default of 30, scores CRAP from a `static_estimated` coverage model, and reports 950 findings on a clean tree (measured on fallow 3.27.0). It must stay. **This is a second, independently-computed cognitive-complexity ceiling layered on top of ESLint's `sonarjs/cognitive-complexity: 15`** — the two tools use different algorithms and do not agree on a given function's score. A function can pass one and fail the other; both gates must be satisfied. Currently there are **zero** `health.thresholdOverrides` entries in `.fallowrc.json` — no function has an approved exception.
 - `boundaries.zones` (14 zones: entry, edge, orchestrators, bridges-agents, bridges-commands, bridges-mcp, bridges-skills, bridges-hooks, bridges-workflows, domain, transaction, persistence, platform, shared) is a **finer-grained** architecture-boundary gate than ESLint's `import-x/no-restricted-paths` (which only distinguishes the coarser `bridges` as one zone). It is the only mechanism that forbids one bridge kind from importing a sibling bridge kind (e.g. `bridges-skills` importing `bridges-agents`).
 - `rulePacks` loads `rule-packs/architecture.json`. Its rules cover `extensions/pi-claude-marketplace/**` only and report as `policy-violation`, an error, in the first `fallow dead-code` run: `no-stdio` (IL-2, no exemption); `no-console` (IL-2), which leaves out `persistence/migrate.ts` and `shared/debug-log.ts`, whose companion rules `migrate-console-warn-only` (IL-3) and `debug-log-console-error-only` (OBS-01) ban every other console method there; `notify-chokepoint` (IL-2, all but `shared/notification-dispatch.ts`); `pi-peer-chokepoint` (NFR-11, all but `platform/pi-api.ts`); `isomorphic-git-chokepoint` (D-13, all but `platform/git.ts`); `proper-lockfile-chokepoint` (D-06, all but `transaction/with-state-guard.ts`); `write-file-atomic-chokepoint` (NFR-1, all but `shared/atomic-json.ts` and three rollback paths that restore saved bytes: `bridges/agents/stage.ts`, `bridges/mcp/stage.ts`, `orchestrators/plugin/prune-rollback.ts`); `no-network-modules` (IL-4 / NFR-5, no exemption); and `fetch-chokepoint` (IL-4 / NFR-5, `fetch` and `globalThis.fetch`, all but `domain/github-auth.ts`). Measured on fallow 3.27.0: `banned-import` sees static imports, re-exports, and `import("x").T` type references, but not a dynamic `import()`. `banned-call` sees call sites only, follows import aliases, and reports one finding per callee per file. A rule whose `files` globs match no analyzed file only logs a `WARN` and passes, so `npm run fallow` first runs `fallow rule-pack test` and fails on any `WARN` line that names a rule pack. That check reads fallow's message text: after a fallow upgrade, point one companion rule at a missing file and confirm that `npm run fallow` fails.
 - `duplicates.threshold: 3`; `duplicates.ignoredClones` currently holds exactly one entry (`dup:cc950b18:2`) — the retained clone lives in `tests/live-uat/manifest-absence-canary.mjs` and `tests/live-uat/stop-canary.mjs`, and it is justified with an inline comment header in **both** files (fallow's `ignoredClones` is typed `string[]`, so the per-clone justification cannot live in the JSON and lives in the source instead). **Fingerprint keys are content-addressed (`dup:<hash>`) and stable; do not use the index-suffixed `dup:<hash>-NN` form anywhere — it is not stable across runs.**
-- Suppressions: exactly **11** `fallow-ignore` markers exist repo-wide as of this analysis (verify with `rg -n "fallow-ignore" extensions tests scripts`). Ten are scoped to `unused-type`/`unused-export`/`private-type-leak`/`unused-file`: two standalone operator-run UAT drivers, seven compile-time proof/pin types, and one published compatibility type. The remaining marker is a temporary, function-scoped complexity exception on `validateScopeChangeStructure` in `scripts/revalidation.mjs`; its inline comment records the removal target. No duplication finding is suppressed.
+- Suppressions: exactly **10** `fallow-ignore` markers exist repo-wide as of this analysis (verify with `rg -n "fallow-ignore" extensions tests scripts`). Four are `fallow-ignore-file unused-file` on the standalone operator-run drivers `tests/live-uat/{stop-canary,manifest-absence-canary,workflow-storage-canary,workflow-agent-failure-canary}.mjs`. Two are `unused-export` on default exports that a loader reads by name (`scripts/test-reporter.mjs`, loaded by `node --test --test-reporter`; `extensions/pi-claude-marketplace/index.ts`, loaded via `pi.extensions`). Two are `private-type-leak` (`domain/resolver-types.ts`, `orchestrators/plugin/reinstall-replace.ts`), one is `unused-type` (`bridges/hooks/async-rewake/registry.ts`, a published compatibility type), and one is `unused-class-member` (`bridges/hooks/async-rewake/ring-buffer.ts`). No complexity or duplication finding is suppressed. Every marker carries a `--` justification.
 - The Lint workflow's `fallow-audit` job gates pull requests on newly introduced findings only. It installs the npm dependencies first, and it fails on a `warn` verdict (a clone group the change adds) or a degraded analysis as well as on `fail`. It is distinct from the full `npm run fallow` gate.
 - **A gate's run over the real tree is its only committed proof.** Do not commit negative controls or planted-violation tests for a gate; `npm run check` is the only full verdict. The D-11 ledger-import rule and the NFR-5 network-free rule are ESLint rules that report at the offending line: BLOCK C in `eslint.config.js` carries the layer and ledger zones (`PLUGIN_LEDGERS`, `MARKETPLACE_LEDGERS`), and BLOCK F carries the default-deny network-free rules over every `orchestrators/` and `domain/` module outside `NETWORK_SEAMS`.
 
@@ -137,7 +141,7 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 **When to Comment:**
 
-- Non-obvious "why", not "what" — see `.claude/rules/typescript-comments.md`
+- Non-obvious "why", not "what" — see `skills/typescript-comments/SKILL.md` and `.claude/rules/typescript-style.md`
 - Comments and test titles cite durable spec IDs (`D-NN`, `NFR-N`, `PRL-NN`, `MA-N`, `ATTR-NN`, etc.) as traceability anchors, not GSD process artifacts (no `Phase NN`, `Plan NN`, `Wave N`, `Pitfall N` references — these rot as planning docs are archived)
 - File-level or class-level JSDoc-style block comments explain rationale, cross-references to sibling files, and behavior contracts (see `tests/platform/git-ops-fake.ts`, and `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts` describing why the module exists where it does and the import invariant that keeps a cycle from reforming)
 
@@ -166,4 +170,4 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 ---
 
-_Convention analysis: 2026-08-18_
+_Convention analysis: 2026-10-05_
