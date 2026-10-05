@@ -478,9 +478,14 @@ function recordProjectPath(selectedProjectRoot, inputPath) {
  * fall through to the type-only escape, which is a wrong answer wearing the shape of a pass.
  */
 function assertCompleteCoverage(sourcePath, lcovText, selectedProjectRoot = projectRoot) {
-  const records = parseLcov(lcovText).filter(
-    (record) => recordProjectPath(selectedProjectRoot, record.get("SF")) === sourcePath,
+  const records = parseLcov(lcovText);
+  const foreign = records.find(
+    (record) => recordProjectPath(selectedProjectRoot, record.get("SF")) !== sourcePath,
   );
+
+  if (foreign !== undefined) {
+    throw new Error(`Unexpected LCOV record for ${foreign.get("SF")} in the run for ${sourcePath}`);
+  }
 
   if (records.length === 0 && isTypeOnlyModule(sourcePath, selectedProjectRoot)) {
     return "type-only";
@@ -614,6 +619,7 @@ async function runPair({ sourcePath, testPath }) {
         [
           "--test",
           "--experimental-test-coverage",
+          `--test-coverage-include=${sourcePath}`,
           `--test-reporter=${reporterPath}`,
           "--test-reporter-destination=stdout",
           "--test-reporter=lcov",
@@ -634,7 +640,8 @@ async function runPair({ sourcePath, testPath }) {
       throw new Error(`Focused test failed: ${testPath}`);
     }
 
-    const summary = assertCompleteCoverage(sourcePath, readFileSync(lcovPath, "utf8"));
+    const lcov = readFileSync(lcovPath, "utf8");
+    const summary = assertCompleteCoverage(sourcePath, lcov);
     process.stdout.write(`Direct coverage passed: ${sourcePath} (${summary})\n`);
 
     return {
@@ -644,6 +651,7 @@ async function runPair({ sourcePath, testPath }) {
       typeOnly: summary === "type-only",
       runtime: process.version,
       elapsedMs: Number((process.hrtime.bigint() - startedAt) / 1000000n),
+      lcov,
     };
   } finally {
     await rm(coverageDirectory, { force: true, recursive: true });
@@ -768,7 +776,7 @@ async function enforcePairs(pairs, run = runPair, hooks = {}) {
   return records;
 }
 
-async function runAllPairs(reportPath) {
+async function runAllPairs({ reportPath, lcovPath } = {}) {
   const modulePaths = productionPaths();
   const pairs = modulePaths.map((modulePath) => pairForPath(modulePath));
   const startedAt = process.hrtime.bigint();
@@ -782,7 +790,8 @@ async function runAllPairs(reportPath) {
   const records = await enforcePairs(pairs, runPair, {
     onRecord: (record) => {
       if (reportPath !== undefined) {
-        appendFileSync(reportPath, `${JSON.stringify(record)}\n`);
+        const { lcov: _lcov, ...row } = record;
+        appendFileSync(reportPath, `${JSON.stringify(row)}\n`);
       }
     },
     // Read the retained report back instead of trusting the array the loop just appended to, so the
@@ -809,6 +818,16 @@ async function runAllPairs(reportPath) {
   process.stdout.write(
     `All-pair run complete: ${records.length} pairs in ${elapsedSeconds}s (${elapsedMs}ms) on ${process.version}\n`,
   );
+
+  if (lcovPath !== undefined) {
+    writeMergedLcov(lcovPath, records);
+  }
+}
+
+function writeMergedLcov(lcovPath, records) {
+  const measured = records.filter((record) => !record.typeOnly);
+  writeFileSync(lcovPath, measured.map((record) => record.lcov).join(""));
+  process.stdout.write(`Merged LCOV: ${lcovPath} (${measured.length} records)\n`);
 }
 
 function skippedReport(skipped) {
@@ -876,7 +895,7 @@ async function runStagedPairs() {
 
   if (escalation !== undefined) {
     process.stdout.write(`Staged ${escalation} affects every pair. Running all pairs.\n`);
-    await runAllPairs(undefined);
+    await runAllPairs();
     return;
   }
 
@@ -885,21 +904,41 @@ async function runStagedPairs() {
   await enforceSelectedPairs(selected);
 }
 
+const usage =
+  "Pass source or test paths, --all [--report <path>] [--lcov <path>], --base <ref>, --staged, or no arguments";
+
+const allPairOptionKeys = new Map([
+  ["--report", "reportPath"],
+  ["--lcov", "lcovPath"],
+]);
+
+function parseAllPairOptions(options) {
+  const parsed = {};
+
+  for (let index = 0; index < options.length; index += 2) {
+    const key = allPairOptionKeys.get(options[index]);
+    const value = options[index + 1];
+
+    if (key === undefined || value === undefined || Object.hasOwn(parsed, key)) {
+      throw new Error(usage);
+    }
+
+    parsed[key] = value;
+  }
+
+  return parsed;
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
-  if (args.length === 1 && args[0] === "--all") {
-    await runAllPairs(undefined);
+  if (args[0] === "--all") {
+    await runAllPairs(parseAllPairOptions(args.slice(1)));
     return;
   }
 
   if (args.length === 1 && args[0] === "--staged") {
     await runStagedPairs();
-    return;
-  }
-
-  if (args.length === 3 && args[0] === "--all" && args[1] === "--report") {
-    await runAllPairs(args[2]);
     return;
   }
 
@@ -927,9 +966,7 @@ async function main() {
   }
 
   if (args.length !== 0) {
-    throw new Error(
-      "Pass source or test paths, --all, --all --report <path>, --base <ref>, --staged, or no arguments",
-    );
+    throw new Error(usage);
   }
 
   await runChangedPairs(undefined);
