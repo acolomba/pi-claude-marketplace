@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-05T02:31:39.799Z"
+last_updated: "2026-10-05T02:45:51.481Z"
 last_activity: 2026-10-04
-last_activity_desc: Completed quick task 261004-u3o (unread type members)
-state_head: 90291781a6fd040cf17319ab746734faa68c7301
+last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
+state_head: 53a86f3d04d6412fe3535abf9feb6976bb7a0661
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-04 — Completed quick task 261004-u3o: three unread type members removed
+Last activity: 2026-10-04 — Completed quick task 261004-u7n: type member gate and coverage pin removed
 
 ### workflows-replay closeout (merged from main)
 
@@ -612,6 +612,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261004-tbe | Remove doc-agreement tests; keep only output-catalog as a docs build input | 2026-10-05 | b1094171 | [261004-tbe-remove-doc-agreement-tests-keep-only-out](./quick/261004-tbe-remove-doc-agreement-tests-keep-only-out/) |
 | 261004-u3o | Remove three unread type members | 2026-10-05 | 90291781 | [261004-u3o-remove-three-unread-type-members-and-the](./quick/261004-u3o-remove-three-unread-type-members-and-the/) |
 | 27 | init.sh: leave core.hooksPath alone; tolerate a refused pre-commit install | 2026-10-05 | 90291781 | — |
+| 261004-u7n | Remove the unused type member gate and the coverage pin | 2026-10-05 | 53a86f3d | [261004-u7n-remove-the-unused-type-member-gate](./quick/261004-u7n-remove-the-unused-type-member-gate/) |
 
 ## Deferred Items
 
