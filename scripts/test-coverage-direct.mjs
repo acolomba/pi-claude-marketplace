@@ -241,8 +241,7 @@ function selectBase(selectedProjectRoot = projectRoot, explicitBase = undefined)
 }
 
 /**
- * Every path the working tree reports as changed against the selected base, plus the ones that
- * carry no source-test pair and the reason each was passed over.
+ * Every path the working tree reports as changed against the selected base.
  *
  * The result is discriminated because zero pairs has two causes that `D-07-14` requires the gate to
  * tell apart: a change set that resolved and simply held nothing pairable, and a change set that is
@@ -275,15 +274,7 @@ function changedPaths(selectedProjectRoot = projectRoot, explicitBase = undefine
     }
   }
 
-  const sorted = [...paths].sort();
-  const skipped = sorted
-    .map((projectPath) => ({
-      path: projectPath,
-      reason: pairabilityRefusal(projectPath, selectedProjectRoot),
-    }))
-    .filter((entry) => entry.reason !== undefined);
-
-  return { ok: true, paths: sorted, skipped, base: base.candidate };
+  return { ok: true, paths: [...paths].sort(), base: base.candidate };
 }
 
 // The test roots that hold no corresponding tests, mirroring the correspondence gate's set of the
@@ -358,6 +349,26 @@ function isPairablePath(projectPath, selectedProjectRoot) {
   return pairabilityRefusal(projectPath, selectedProjectRoot) === undefined;
 }
 
+function pairsForPaths(projectPaths, selectedProjectRoot) {
+  const pairs = new Map();
+
+  for (const projectPath of projectPaths.filter((changedPath) =>
+    isPairablePath(changedPath, selectedProjectRoot),
+  )) {
+    const pair = pairForPath(projectPath, selectedProjectRoot);
+    pairs.set(pair.sourcePath, pair);
+  }
+
+  const skipped = projectPaths
+    .map((projectPath) => ({
+      path: projectPath,
+      reason: pairabilityRefusal(projectPath, selectedProjectRoot),
+    }))
+    .filter((entry) => entry.reason !== undefined);
+
+  return { pairs: [...pairs.values()], skipped };
+}
+
 /**
  * The source-test pairs the selected change set names, carrying the base that produced it and the
  * paths it passed over so a zero-pair answer can still say what it looked at.
@@ -369,21 +380,7 @@ function pairsForChangedPaths(selectedProjectRoot = projectRoot, explicitBase = 
     return changed;
   }
 
-  const pairs = new Map();
-
-  for (const projectPath of changed.paths.filter((changedPath) =>
-    isPairablePath(changedPath, selectedProjectRoot),
-  )) {
-    const pair = pairForPath(projectPath, selectedProjectRoot);
-    pairs.set(pair.sourcePath, pair);
-  }
-
-  return {
-    ok: true,
-    base: changed.base,
-    pairs: [...pairs.values()],
-    skipped: changed.skipped,
-  };
+  return { ok: true, base: changed.base, ...pairsForPaths(changed.paths, selectedProjectRoot) };
 }
 
 function parseLcov(lcovText) {
@@ -660,7 +657,7 @@ async function runPair({ sourcePath, testPath }) {
  */
 async function runPairs(pairs, run, options = {}) {
   const concurrency =
-    options.concurrency ?? (process.env.TEST_CONCURRENCY || Math.min(4, availableParallelism()));
+    options.concurrency ?? (process.env.TEST_CONCURRENCY || availableParallelism());
   const limit = Number(concurrency);
 
   if (!/^[1-9][0-9]*$/.test(String(concurrency)) || !Number.isSafeInteger(limit)) {
@@ -837,12 +834,55 @@ async function runChangedPairs(explicitBase) {
   }
 
   process.stdout.write(`Changed-pair base: ${selected.base}\n`);
+  await enforceSelectedPairs(selected);
+}
 
-  if (selected.pairs.length === 0) {
-    process.stdout.write(skippedReport(selected.skipped));
+async function enforceSelectedPairs({ pairs, skipped }) {
+  if (pairs.length === 0) {
+    process.stdout.write(skippedReport(skipped));
   }
 
-  await enforcePairs(selected.pairs);
+  await enforcePairs(pairs);
+}
+
+// A pair test can import support files from any `tests/` root, the two scripts run every pair, and
+// the three remaining files decide the dependencies and compiler settings.
+const everyPairInputs = new Set([
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
+  "scripts/test-coverage-direct.mjs",
+  "scripts/test-reporter.mjs",
+]);
+
+function affectsEveryPair(projectPath) {
+  return (
+    everyPairInputs.has(projectPath) ||
+    (projectPath.startsWith(`${testRoot}/`) && !projectPath.endsWith(".test.ts"))
+  );
+}
+
+async function runStagedPairs() {
+  const staged = gitLines(["diff", "--cached", "--name-only", "--diff-filter=ACMR"]);
+
+  if (!staged.ok) {
+    process.stderr.write(`Staged-pair selection failed: ${staged.reason}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const stagedPaths = [...staged.lines].sort();
+  const escalation = stagedPaths.find(affectsEveryPair);
+
+  if (escalation !== undefined) {
+    process.stdout.write(`Staged ${escalation} affects every pair. Running all pairs.\n`);
+    await runAllPairs(undefined);
+    return;
+  }
+
+  const selected = pairsForPaths(stagedPaths, projectRoot);
+  process.stdout.write(`Staged pairs: ${selected.pairs.length}\n`);
+  await enforceSelectedPairs(selected);
 }
 
 async function main() {
@@ -850,6 +890,11 @@ async function main() {
 
   if (args.length === 1 && args[0] === "--all") {
     await runAllPairs(undefined);
+    return;
+  }
+
+  if (args.length === 1 && args[0] === "--staged") {
+    await runStagedPairs();
     return;
   }
 
@@ -883,7 +928,7 @@ async function main() {
 
   if (args.length !== 0) {
     throw new Error(
-      "Pass source or test paths, --all, --all --report <path>, --base <ref>, or no arguments",
+      "Pass source or test paths, --all, --all --report <path>, --base <ref>, --staged, or no arguments",
     );
   }
 
