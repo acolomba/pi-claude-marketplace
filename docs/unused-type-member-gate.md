@@ -14,7 +14,7 @@ The gate runs over the whole project in `npm run check` at completion and in CI.
 | `npm run lint:type-members:audit`                   | Reconciles the recorded population against the live one | one whole-program analysis                   |
 | `node scripts/check-unused-type-members.mjs --help` | The claims the gate makes, printed                      | none                                         |
 
-`npm run check` runs the gate at the end of its chain. Continuous integration runs `npm run check` on every run, which includes every pull request, the path every change takes to main.
+`npm run check` runs the gate at the end of its chain. Continuous integration runs `npm run check` on every pull request that changes a build input, the path every such change takes to main. Every file the gate reads is a build input.
 
 Local commits run `npm run check:changed`. Ordinary source/test edits get focused checks. A change to the gate script, or to a helper module with its own `tests/scripts` test, runs `npm run test:analyzers`. A change to any other helper module, or to dependency and toolchain configuration, selects the broad check. A change to the recorded decisions or contracts runs the gate when the commit's other changes keep the checks focused. The broad check never runs the gate itself. The full member gate runs in `npm run check` at completion and in CI, where it can detect a removed reader in a different file.
 
