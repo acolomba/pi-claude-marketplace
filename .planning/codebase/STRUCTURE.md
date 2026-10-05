@@ -90,7 +90,7 @@ pi-claude-marketplace/
 **Configuration:**
 - `.fallowrc.json`: fallow entry point, health thresholds (`maxCyclomatic: 20`, `maxCognitive: 15`, and `maxCrap: 0`, which switches CRAP off), 14-zone boundary rules, and `rulePacks`, which loads `rule-packs/architecture.json`
 - `rule-packs/architecture.json`: the fallow rule pack, the call and import bans scoped to `extensions/pi-claude-marketplace/**` (see CONVENTIONS.md)
-- `eslint.config.js`: flat ESLint config, incl. `import-x/no-restricted-paths` (BLOCK C: the 8-folder boundary matrix plus the D-11 ledger zones over `PLUGIN_LEDGERS`/`MARKETPLACE_LEDGERS`), and BLOCK F's NFR-5 network-free rules over `NETWORK_FREE_TARGETS`
+- `eslint.config.js`: flat ESLint config, incl. `import-x/no-restricted-paths` (BLOCK C: the 8-folder boundary matrix plus the D-11 ledger zones over `PLUGIN_LEDGERS`/`MARKETPLACE_LEDGERS`), and BLOCK F's NFR-5 network-free rules over every `orchestrators/` and `domain/` module outside `NETWORK_SEAMS`
 - `tsconfig.json`: strict compiler options, includes `extensions/**/*.ts` and `tests/**/*.ts`
 
 **Core Logic:**

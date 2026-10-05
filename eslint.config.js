@@ -28,135 +28,54 @@ const MARKETPLACE_LEDGERS = [
 ];
 
 /**
- * NFR-5 / PI-2 / PL-3 / PRL-07: every module that must name no git surface of
- * its own. BLOCK F applies to exactly these files. That is a narrower claim
- * than "performs no network operation", and the membership splits two ways.
- * Most targets are network-free by contract -- the read surfaces (`list`,
- * plugin `info`, marketplace `info`), the reconcile pending/planner/projection
- * family, both reinstall owners (cached manifests only), and the resolver, one
- * file OUTSIDE the orchestrator layer. The resolver inherits its obligation
- * from the two read surfaces it answers for. The others are MUTATING verbs
- * that do reach git -- `install-flow.ts` and `fetch.ts` materialize a clone on
- * a cache miss, and `enable-disable.ts` re-materializes through the install
- * ledger -- and they qualify because they reach it ONLY through the
- * `clone-cache.ts` seam, by entrypoint name.
+ * NFR-5 / PI-2 / PL-3 / PRL-07: the orchestrators/ and domain/ modules that
+ * BLOCK F skips, because each one must name the git surface itself. BLOCK F
+ * is default-deny, so a new module in either directory is gated from its
+ * first commit. A module stays off this list when it reaches git through
+ * orchestrators/plugin/clone-cache.ts by entrypoint name, or through an
+ * injected field whose name the gate does not match. Add a file here only
+ * when neither works, with a one-line reason.
  *
- * The rule is per file, which a fallow boundary zone cannot express:
- * `orchestrators` -> `platform` is a legal edge for `update-flow.ts`,
- * `clone-cache.ts`, and `auth-host.ts`, and fallow zones are directory-scoped.
- *
- * Exempt files (do NOT add):
- *   - `orchestrators/plugin/update-flow.ts` and `update-preflight.ts`: PUP-2
- *     `syncClone` REQUIRES gitOps; they legitimately name the `GitOps` surface
- *     via the `orchestrators/marketplace/shared.ts` re-export (Pattern S-9).
+ * The rule lives in ESLint because fallow cannot express it: a rule pack's
+ * banned-import rule matches whole raw specifiers without globs, no
+ * rule-pack kind bans an identifier or a string, and fallow's boundary zones
+ * are directory-scoped.
  */
-const NETWORK_FREE_TARGETS = [
-  // The update flow owns refresh enumeration and its injected Git seam, so it
-  // remains the exact update exemption documented above and is not gated here.
-  // NFR-5 (amended): both install owners carry ZERO git surface of their own. A
-  // git-source (url / git-subdir / github) clone is delegated to the
-  // install-clone-probe.ts leaf, which reaches the clone-cache.ts sibling seam
-  // where the git surface legally lives. The flow composes the leaf and the
-  // ledger invokes that injected operation; neither owner names `gitOps`.
-  // The ledger reads the cached manifest with no
-  // network sync of its own; the only network touch is the cache-miss clone
-  // inside the seam. Keep both targets so splitting composition from the
-  // ledger cannot weaken the original gate. operations.ts is the third install
-  // owner: it binds the concrete runPhases and withLockedStateTransaction
-  // wrappers around the semantic factory, so it is exactly where a direct git
-  // import would land once composition moved out of the flow.
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts",
-  // PL-3 + NFR-5: list is read-only against state + manifest; no network.
-  // Every list owner is gated, not just the flow: candidate-row owns the
-  // cold/warm `(remote)` vs `(available)` classification and installed-row
-  // drives the upgrade probe, so both are the sites where a "refresh the
-  // mirror" edit would land. Keep all four so splitting row composition and
-  // orphan folding out of the flow cannot weaken the original gate.
-  "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-row.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/list-orphan-fold.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts",
-  // PUP-2 + NFR-5: the update family splits its Git seam across exactly two
-  // owners, so the other four are gated. update-swap.ts matters most: it
-  // performs the physical replace inside the window where the old tree is
-  // already gone, which is where a stray fetch would do the most damage.
-  "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts",
-  // PRL-07: the public reinstall flow uses cached manifests only -- which is
-  // also why refreshGitHubClone is one of the gated patterns. The flow owner
-  // contains the complete sequencing body, so this one target guards the full
-  // operation without a retired compatibility path.
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
-  // INFO-02 + NFR-5: info is a read-only seam over the local state + on-disk
-  // marketplace manifests; no network.
-  "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
-  // INFO-01 + NFR-5: marketplace info is read-only against local state +
-  // marketplace.json; no network.
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
-  // ML-1..4 + NFR-5: marketplace list is read-only against state.json alone --
-  // it reads no manifest and holds no clone. A future need to show a remote
-  // freshness column must route through orchestrators/plugin/clone-cache.ts,
-  // the seam where the git surface legally lives, never through a git import
-  // here.
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts",
-  // MAU-1..5 + NFR-5: autoupdate rewrites config entries and state records; the
-  // refresh it schedules is performed by the update verb, not by autoupdate
-  // itself, so this owner is network-free by contract. A future need to probe a
-  // remote before scheduling must route through
-  // orchestrators/plugin/clone-cache.ts.
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts",
-  // MR-1..8 + NFR-5: remove unstages local artifacts and collects orphaned
-  // clones through orchestrators/plugin/clone-gc.ts, which deletes directories
-  // and never fetches. The file carries no NFR-5 header of its own, so this
-  // entry is where the network-free-by-contract claim is recorded: a future
-  // need to consult a remote before deleting must route through
-  // orchestrators/plugin/clone-cache.ts.
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts",
-  // DIFF-01 SC #2: the reconcile pending/planner/projection
-  // family is read-only and pure. pending.ts is the user-facing orchestrator;
-  // plan.ts + notify.ts are belt-and-braces (plan.ts also has the stricter
-  // reconcile-planner-purity gate -- this is cheap defensive cover).
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
-  // LOAD-01 / NFR-5 / WR-06: the satisfaction walk composes dependency-index.ts
-  // -- already gated one group below -- and reads the memoized manifest cache
-  // and the warm clone cache only. It sits on the load path, where a stray
-  // fetch would make every session start wait on a remote, so the file that
-  // claims the walk is offline carries the gate that pins it. A future need to
-  // refresh a clone before deciding must route through
-  // orchestrators/plugin/clone-cache.ts.
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts",
-  // ENBL-03: the enable/disable orchestrator re-materializes from cache
-  // -- NO network.
-  "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
-  // NFR-5 / D-05-06 / PRUNE-05: uninstall composes an offline manifest read
-  // through the declaration-index leaf before it decides anything -- the
-  // dependents guard reads what every other record in the scope declares from
-  // the memoized manifest cache and the warm clone cache only. Neither owner
-  // names a git surface; a future need to refresh a clone before deciding must
-  // route through orchestrators/plugin/clone-cache.ts.
-  "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts",
-  // FTCH-01: fetch reaches git ONLY through the clone-cache.ts seam (by
-  // entrypoint name), install-style. It names zero gitOps surface, so it is
-  // locked here permanently. It is NOT exempt: among the gated orchestrator
-  // candidates, update-flow.ts is the only file allowed the gitOps surface (seam
-  // files such as clone-cache.ts sit outside this gate's candidate set).
-  "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts",
-  // NFR-5 / OUT-05: the resolver now answers a question for `list` and `info`,
-  // two surfaces that are network-free by contract, so the file that answers it
-  // inherits their obligation. It carries no git surface today, which is exactly
-  // why the gate is cheap here -- it is defense in depth, and it is the
-  // STRUCTURAL half of the network-free guarantee. The behavioral half can only
-  // show that no call happened on the paths a test exercises; it can never show
-  // the surface is absent.
-  "extensions/pi-claude-marketplace/domain/plugin-resolver.ts",
+const NETWORK_SEAMS = [
+  // D-79-04: a provider maps a token to the type-only GitCredentials shape.
+  "extensions/pi-claude-marketplace/domain/auth-registry.ts",
+  // D-32-01: the Device Flow engine types its credentials from platform/git.
+  "extensions/pi-claude-marketplace/domain/github-auth.ts",
+  // D-79-05: builds the host-keyed credential bundle from platform/git-credential.ts.
+  "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
+  // Passes the injected gitOps seam to the marketplace adds an import performs.
+  "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
+  // NFR-5: adding a git-source marketplace clones it.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
+  // D-12 / D-13: owns GitOps, DEFAULT_GIT_OPS, and refreshGitHubClone.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts",
+  // NFR-5: updating a git-source marketplace refreshes its clone.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
+  // A composer that hands gitOps to the marketplace add it calls.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts",
+  // PURL-02 / PURL-04: clones a git-source plugin on a cache miss.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts",
+  // D-03-03: lists a constrained dependency's remote tags.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts",
+  // RESV-01: the type-only RemoteTag that the cascade's tag probe returns.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts",
+  // TAGS-01: reads the marketplace clone's local tags with listTags and resolveTagOid.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts",
+  // D-10-19: the type-only RemoteTag of the constraint gate's tag query.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts",
+  // PUP-2: syncClone needs gitOps.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
+  // PUP-2: the preflight threads gitOps and the type-only RemoteTag.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
+  // RECON-01: passes the injected gitOps seam to the marketplace adds reconcile performs.
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+  // DIFF-01: declares the optional gitOps seam that apply.ts passes on.
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts",
 ];
 
 const NETWORK_FREE_SYNTAX_SELECTORS = [
@@ -172,7 +91,7 @@ const NETWORK_FREE_SYNTAX_SELECTORS = [
     selector:
       ":matches(Identifier, PrivateIdentifier)[name=/^(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)$/]",
     message:
-      "NFR-5: network-free modules must not name gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone. Only update-flow.ts and update-preflight.ts may name the git seam.",
+      "NFR-5: network-free modules must not name gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone. Only the NETWORK_SEAMS files in eslint.config.js may name the git seam.",
   },
   {
     selector: "Literal[value=/\\b(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)\\b/]",
@@ -411,13 +330,18 @@ export default tseslint.config(
     },
   },
   {
-    // BLOCK F (NFR-5 / PI-2 / PL-3 / PRL-07): the modules in NETWORK_FREE_TARGETS
-    // name no git surface: no platform/git import of any kind (type-only and
-    // dynamic included) and no gitOps / DEFAULT_GIT_OPS / refreshGitHubClone
-    // identifier, key, or string. No other block sets either rule for extension
-    // files. A block that did would replace these options for every file that
-    // both blocks match.
-    files: NETWORK_FREE_TARGETS,
+    // BLOCK F (NFR-5 / PI-2 / PL-3 / PRL-07): default-deny. Every orchestrators/
+    // and domain/ module outside NETWORK_SEAMS names no git surface: no
+    // platform/git import of any kind (type-only and dynamic included) and no
+    // gitOps / DEFAULT_GIT_OPS / refreshGitHubClone identifier, key, or string.
+    // edge/ and index.ts are outside the rule. No other block sets either rule
+    // for extension files. A block that did would replace these options for
+    // every file that both blocks match.
+    files: [
+      "extensions/pi-claude-marketplace/orchestrators/**/*.ts",
+      "extensions/pi-claude-marketplace/domain/**/*.ts",
+    ],
+    ignores: NETWORK_SEAMS,
     rules: {
       "no-restricted-imports": [
         "error",

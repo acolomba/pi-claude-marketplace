@@ -56,9 +56,8 @@
 // of direct process output (fallow owns that), none restates the
 // tokenizer diagnostics owned by tests/edge/args.test.ts, none re-proves the
 // reference split owned by tests/edge/handlers/plugin/shared.test.ts, and no
-// case adds an offline guard -- `orchestrators/plugin/fetch.ts` is a named
-// member of `NETWORK_FREE_TARGETS` in `eslint.config.js`, which BLOCK F
-// lints.
+// case adds an offline guard -- `orchestrators/plugin/fetch.ts` is outside
+// `NETWORK_SEAMS` in `eslint.config.js`, so BLOCK F lints it.
 
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";

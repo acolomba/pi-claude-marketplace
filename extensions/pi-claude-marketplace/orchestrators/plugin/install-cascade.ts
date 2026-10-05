@@ -157,10 +157,10 @@ const DEFAULT_INSTALL_CASCADE_TRANSACTION: InstallLedgerTransaction = Object.fre
  * The tag-resolving operation, injected so a cascade test never lists a real
  * remote.
  *
- * The injection point is named for what it DOES. `install-cascade.ts` is not
- * itself a `NETWORK_FREE_TARGETS` member, but both of its callers are and that
- * gate matches bare identifiers, so nothing reachable from them may be spelled
- * with one of the tokens it looks for.
+ * The injection point is named for what it DOES. `install-cascade.ts` is
+ * itself in `NETWORK_SEAMS`, but both of its callers are gated and that gate
+ * matches bare identifiers, so nothing reachable from them may be spelled with
+ * one of the tokens it looks for.
  */
 export type CascadeTagProbe = typeof probeDependencyTags;
 
