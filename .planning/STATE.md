@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-05T00:51:11.287Z"
+last_updated: "2026-10-05T01:19:06.382Z"
 last_activity: 2026-10-04
-last_activity_desc: Completed quick task 261004-rpt (build-input allowlist)
-state_head: ac2abb3ce824cbef60729c299a86a35c316d0191
+last_activity_desc: Completed quick task 261004-t4g (rule pack removed)
+state_head: 1da67a83c6ac9ae08782164d151b02a6b2bb1a55
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-04 — Completed quick task 261004-rpt: CI and commit-time checks run only on build-input changes
+Last activity: 2026-10-04 — Completed quick task 261004-t4g: Fallow rule pack removed; stdio ban lives in ESLint
 
 ### workflows-replay closeout (merged from main)
 
@@ -607,6 +607,8 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261004-re9 | Fix stale doc references to removed modules and tests | 2026-10-05 | 67ba13cb | [261004-re9-fix-stale-doc-references-to-removed-modu](./quick/261004-re9-fix-stale-doc-references-to-removed-modu/) |
 | 21 | Drop planted-violation steps from the unit testing guidelines | 2026-10-05 | 227513d5 | — |
 | 261004-rpt | Allowlist build inputs for CI and local checks | 2026-10-05 | ac2abb3c | [261004-rpt-allowlist-build-inputs-for-ci-and-local-](./quick/261004-rpt-allowlist-build-inputs-for-ci-and-local-/) |
+| 23 | List only the docs tests read as build inputs | 2026-10-05 | c53df4d7 | — |
+| 261004-t4g | Remove the Fallow rule pack and fold its stdio ban into ESLint | 2026-10-05 | 1da67a83 | [261004-t4g-remove-the-fallow-rule-pack-and-fold-its](./quick/261004-t4g-remove-the-fallow-rule-pack-and-fold-its/) |
 
 ## Deferred Items
 
