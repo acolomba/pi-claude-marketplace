@@ -940,6 +940,11 @@ a different cause with a different fix.
 
 ## ~~FLOW-10: duplication is gated by one repo-wide percentage and nothing else~~ -- CLOSED
 
+Closed again 2026-10-05 by quick task 261005-la5. Failing the Lint
+workflow's `fallow-audit` job on a `warn` verdict is the intended policy,
+because a warning must fail every check. A pull request that introduces a
+clone group fails CI on purpose, so nothing is left to track.
+
 Reopened 2026-10-05 by quick task 261005-jdx: a warning now fails every
 check. The Lint workflow's `fallow-audit` job fails on a `warn` verdict, so
 a pull request that introduces a clone group fails CI. The 3% threshold in
