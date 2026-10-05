@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-05T01:19:06.382Z"
+last_updated: "2026-10-05T01:29:02.062Z"
 last_activity: 2026-10-04
-last_activity_desc: Completed quick task 261004-t4g (rule pack removed)
-state_head: 1da67a83c6ac9ae08782164d151b02a6b2bb1a55
+last_activity_desc: Completed quick task 261004-tbe (doc-agreement tests removed)
+state_head: b10941711bab5eaa2e4ed3a697430d2b3229370e
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-04 — Completed quick task 261004-t4g: Fallow rule pack removed; stdio ban lives in ESLint
+Last activity: 2026-10-04 — Completed quick task 261004-tbe: doc-agreement tests removed; output catalog is the only docs build input
 
 ### workflows-replay closeout (merged from main)
 
@@ -609,6 +609,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261004-rpt | Allowlist build inputs for CI and local checks | 2026-10-05 | ac2abb3c | [261004-rpt-allowlist-build-inputs-for-ci-and-local-](./quick/261004-rpt-allowlist-build-inputs-for-ci-and-local-/) |
 | 23 | List only the docs tests read as build inputs | 2026-10-05 | c53df4d7 | — |
 | 261004-t4g | Remove the Fallow rule pack and fold its stdio ban into ESLint | 2026-10-05 | 1da67a83 | [261004-t4g-remove-the-fallow-rule-pack-and-fold-its](./quick/261004-t4g-remove-the-fallow-rule-pack-and-fold-its/) |
+| 261004-tbe | Remove doc-agreement tests; keep only output-catalog as a docs build input | 2026-10-05 | b1094171 | [261004-tbe-remove-doc-agreement-tests-keep-only-out](./quick/261004-tbe-remove-doc-agreement-tests-keep-only-out/) |
 
 ## Deferred Items
 
