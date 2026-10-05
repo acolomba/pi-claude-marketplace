@@ -34,6 +34,16 @@
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/stop-worktree-daemon.sh"
+          }
+        ]
+      }
     ]
   }
 }
