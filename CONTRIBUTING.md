@@ -42,10 +42,11 @@ scripts/pi.sh --home tmp/pi-home
 ## Checks
 
 ```bash
-npm run check          # typecheck, lint, fallow, format check, gate scripts, unit + integration tests
+npm run check          # full local gate: static checks, unit tests, direct coverage for every pair, integration tests
+npm run check:static   # typecheck, lint, fallow, format check, and gate scripts, in parallel
 npm run lint:fix       # ESLint with autofixes
 npm run format         # Prettier autoformat
-pre-commit run --all-files
+SKIP=npm-check pre-commit run --all-files
 ```
 
-The pre-commit hook runs `npm run check` when a commit changes a file that the build or CI reads. A merge does not run the hook, so run `npm run check` yourself after a merge.
+When a commit stages a file that the build or CI reads, the pre-commit hook runs `npm run check:commit`. It runs the static checks, the unit tests that have no source pair, and direct coverage for the staged source-test pairs only, so it is not a full check. Run `npm run check` before you open a pull request and after a merge, because a merge does not run the hook.

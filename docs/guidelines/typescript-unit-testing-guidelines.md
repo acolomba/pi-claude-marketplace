@@ -80,7 +80,7 @@ npm run test:coverage:direct:all
 
 - Use the path form for one focused pair.
 - Use `npm run test:coverage:direct` to select changed pairs automatically.
-- Use `npm run test:coverage:direct:all` after shared contract, fake, harness, or coverage-infrastructure changes.
+- Use `npm run test:coverage:direct:all` to measure every pair. `npm run check` runs it, and the pre-commit hook runs all pairs when a commit stages shared test support or the coverage tooling.
 
 During development, run the focused pair directly:
 

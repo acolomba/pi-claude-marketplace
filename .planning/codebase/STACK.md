@@ -32,7 +32,7 @@
 **Testing:**
 - `node:test` (Node's built-in test runner) - suites under `tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,scripts,shared,transaction}/**/*.test.ts` plus `tests/index.test.ts` (`npm test`), plus a separate `tests/integration/**/*.test.ts` suite (`npm run test:integration`) and `tests/e2e/**/*.test.ts` (`npm run test:e2e`, pinned ref; `npm run test:e2e:nightly` runs against floating `main`)
 - Real temporary directories (`mkdtemp`, plus a `withHermeticHome` helper) for filesystem isolation -- no in-memory filesystem layer is used
-- Coverage via `node --test --experimental-test-coverage` with `lcov` reporters, split into `unit`/`integration`/`e2e` reports (`npm run test:coverage`) feeding SonarCloud (`sonar.javascript.lcov.reportPaths=coverage/unit.lcov,coverage/integration.lcov,coverage/e2e.lcov` in `sonar-project.properties`)
+- Coverage via `node --test --experimental-test-coverage` with `lcov` reporters. `npm run test:coverage:direct:all` runs each source-test pair alone and merges each pair's record for its own source into `coverage/direct.lcov`, the only report SonarCloud reads (`sonar.javascript.lcov.reportPaths=coverage/direct.lcov` in `sonar-project.properties`). `npm run test:coverage` also writes the partial-surface `coverage/integration.lcov` and `coverage/e2e.lcov`, which stay out of Sonar
 
 **Build/Dev:**
 - No bundler/build step -- TypeScript is type-checked only (`tsc --noEmit`); Node runs `.ts` sources natively
@@ -45,7 +45,7 @@
   - `fallow dupes` (`threshold: 3`, with one ignored-clone ID pre-approved in `duplicates.ignoredClones`)
   - `.fallowrc.json`'s `boundaries` block defines 14 architecture zones (`entry`, `edge`, `orchestrators`, `bridges-agents`, `bridges-commands`, `bridges-mcp`, `bridges-skills`, `bridges-hooks`, `bridges-workflows`, `domain`, `transaction`, `persistence`, `platform`, `shared`) with an explicit allow-list of legal import edges between zones -- finer-grained than the ESLint `no-restricted-paths` gate and the only mechanism enforcing that cross-bridge imports (e.g. `bridges-agents` -> `bridges-commands`) are forbidden. Fallow bans no calls: the `process.stdout.*`/`process.stderr.*` call ban lives only in ESLint BLOCK A
   - CI runs a separate `fallow-audit` job (`.github/workflows/lint.yml`) using the vendor action `fallow-rs/fallow@v3` with `command: audit`, `format: github-annotations` -- this gates PRs on newly-introduced findings only, distinct from the full `npm run fallow` gate that `npm run check` runs
-- `pre-commit` framework (`.pre-commit-config.yaml`) runs trufflehog, gitlint, yamllint, yamlfmt, mdformat, markdownlint-cli2, texthooks (smartquotes/dashes/ligatures/bidi-control fixers), plus local hooks `npm-lint`, `npm-format-check`, `npm-typecheck`, and `npm-fallow` (each `pass_filenames: false` and gated by its own `files:` pattern over `extensions/`, `tests/`, `scripts/`, and the config/lockfile set, so a docs-only commit skips all four)
+- `pre-commit` framework (`.pre-commit-config.yaml`) runs trufflehog, gitlint, yamllint, yamlfmt, mdformat, markdownlint-cli2, zizmor, texthooks (smartquotes/dashes/ligatures/bidi-control fixers), plus two local hooks: `prettier` (formats staged files) and `npm-check` (`pass_filenames: false`), which runs `npm run check:commit` when a staged file is a build input. Its `files:` pattern names the same build inputs as both `paths` lists in `ci.yml`, so a docs-only commit skips it
 
 ## Key Dependencies
 
@@ -89,9 +89,9 @@
 ## CI Workflows
 
 Five workflow files in `.github/workflows/`:
-- `ci.yml` - `workflow_call` (invoked by `publish.yml`), plus `push`/`pull_request` on `main` (paths-ignore for docs/planning), plus `workflow_dispatch`. Jobs: `check` (`npm run check`), `integration-tests`, `e2e-tests` (pinned ref), `package` (`npm pack --dry-run`, depends on the other three). All run on Node 24. There is deliberately no `push` trigger on `features/**` branches
-- `lint.yml` - `pull_request` on `main` + `workflow_dispatch`. Two jobs: `pre-commit` (runs the full `.pre-commit-config.yaml` pipeline via `pre-commit/action@v3.0.1`) and `fallow-audit` (the vendor `fallow-rs/fallow@v3` action, `command: audit`, `format: github-annotations`, `fetch-depth: 0`) -- separate from and additional to the `npm run fallow` gate embedded in `npm run check`
-- `sonarcloud.yml` - `push`/`pull_request` on `main`, skipped for Dependabot and fork PRs (no secrets access); runs `npm run test:coverage` then `SonarSource/sonarqube-scan-action@v8`
+- `ci.yml` - `workflow_call` (invoked by `publish.yml`), plus `push`/`pull_request` on `main` (a `paths` allowlist of build inputs), plus `workflow_dispatch`. Jobs: `static` (`npm run check:static`, then `npm run test:unpaired`), `integration` (`npm run test:integration`), `direct-coverage` (`npm run test:coverage:direct:all` on every event, uploads `coverage/direct.lcov`), `e2e-tests` (pinned ref), `sonarcloud` (calls `sonarcloud.yml` after `direct-coverage`), and `package` (`npm pack --dry-run`, after the four test jobs). All run on Node 24. There is deliberately no `push` trigger on `features/**` branches
+- `lint.yml` - `push` and `pull_request` on `main` + `workflow_dispatch`. Two jobs: `pre-commit` (runs the full `.pre-commit-config.yaml` pipeline via `pre-commit/action@v3.0.1`, skipping `prettier` and `npm-check`) and `fallow-audit` (pull requests only; the vendor `fallow-rs/fallow@v3` action, `command: audit`, `format: github-annotations`, `fetch-depth: 0`) -- separate from and additional to the `npm run fallow` gate embedded in `npm run check`
+- `sonarcloud.yml` - reusable workflow that `ci.yml` calls after `direct-coverage`; skipped for release tags, Dependabot, and fork PRs (no secrets access); downloads `coverage/direct.lcov` from the same run, then runs `SonarSource/sonarqube-scan-action@v8`
 - `e2e-nightly.yml` - `schedule` (`17 6 * * *`) + `workflow_dispatch`; runs `npm run test:e2e:nightly` (`PI_CM_E2E_REF=main`) against floating upstream `main`
 - `publish.yml` - `push` on `v*` tags only; calls `ci.yml` via `workflow_call`, then publishes to npm with `--provenance` on success
 

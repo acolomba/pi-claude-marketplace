@@ -2,8 +2,10 @@
 
 ## [Unreleased]
 
-- Internal: commits that add or edit a build input run `npm run check`, CI runs only on build-input changes, and ESLint alone bans stdio calls. (#236)
+- Internal: commits run quick checks on their staged files, CI runs only on build-input changes, and ESLint alone bans stdio calls. (#236)
 
+  - Pull requests, pushes to `main`, and `npm run check` measure direct coverage for every source-test pair, and SonarCloud reads that per-pair coverage.
+  - The `check:static` and `check:commit` scripts are new, and the `test:coverage:unit` script no longer exists.
   - The `check:changed` script no longer exists.
   - The TruffleHog hook scans the staged files instead of git history. It now finds secrets in every commit and works in worktrees, so worktree commits no longer skip it.
   - Tests no longer compare the READMEs or other documents with the code, so `docs/output-catalog.md` is the only document that is a build input.

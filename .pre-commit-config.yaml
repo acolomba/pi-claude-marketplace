@@ -101,8 +101,8 @@ repos:
         language: system
         files: '^((extensions|tests)/.*\.(js|json|ts)|scripts/.*\.mjs|demos/.*\.ts|\.fallowrc\.json|\.prettierrc\.json|eslint\.config\.js|package(-lock)?\.json|tsconfig\.json)$'
       - id: npm-check
-        name: npm check
-        entry: npm run check
+        name: npm run check:commit
+        entry: npm run check:commit
         language: system
         pass_filenames: false
         files: '^(\.editorconfig|\.fallowrc\.json|\.gitattributes|\.gitignore|\.prettierignore|\.prettierrc\.json|eslint\.config\.js|package-lock\.json|package\.json|sonar-project\.properties|tsconfig\.json|(extensions|tests|\.github/workflows)/.*|scripts/.*\.mjs|demos/.*\.ts|docs/output-catalog\.md)$'

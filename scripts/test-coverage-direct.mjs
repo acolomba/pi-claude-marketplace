@@ -241,8 +241,7 @@ function selectBase(selectedProjectRoot = projectRoot, explicitBase = undefined)
 }
 
 /**
- * Every path the working tree reports as changed against the selected base, plus the ones that
- * carry no source-test pair and the reason each was passed over.
+ * Every path the working tree reports as changed against the selected base.
  *
  * The result is discriminated because zero pairs has two causes that `D-07-14` requires the gate to
  * tell apart: a change set that resolved and simply held nothing pairable, and a change set that is
@@ -275,15 +274,7 @@ function changedPaths(selectedProjectRoot = projectRoot, explicitBase = undefine
     }
   }
 
-  const sorted = [...paths].sort();
-  const skipped = sorted
-    .map((projectPath) => ({
-      path: projectPath,
-      reason: pairabilityRefusal(projectPath, selectedProjectRoot),
-    }))
-    .filter((entry) => entry.reason !== undefined);
-
-  return { ok: true, paths: sorted, skipped, base: base.candidate };
+  return { ok: true, paths: [...paths].sort(), base: base.candidate };
 }
 
 // The test roots that hold no corresponding tests, mirroring the correspondence gate's set of the
@@ -358,6 +349,26 @@ function isPairablePath(projectPath, selectedProjectRoot) {
   return pairabilityRefusal(projectPath, selectedProjectRoot) === undefined;
 }
 
+function pairsForPaths(projectPaths, selectedProjectRoot) {
+  const pairs = new Map();
+
+  for (const projectPath of projectPaths.filter((changedPath) =>
+    isPairablePath(changedPath, selectedProjectRoot),
+  )) {
+    const pair = pairForPath(projectPath, selectedProjectRoot);
+    pairs.set(pair.sourcePath, pair);
+  }
+
+  const skipped = projectPaths
+    .map((projectPath) => ({
+      path: projectPath,
+      reason: pairabilityRefusal(projectPath, selectedProjectRoot),
+    }))
+    .filter((entry) => entry.reason !== undefined);
+
+  return { pairs: [...pairs.values()], skipped };
+}
+
 /**
  * The source-test pairs the selected change set names, carrying the base that produced it and the
  * paths it passed over so a zero-pair answer can still say what it looked at.
@@ -369,21 +380,7 @@ function pairsForChangedPaths(selectedProjectRoot = projectRoot, explicitBase = 
     return changed;
   }
 
-  const pairs = new Map();
-
-  for (const projectPath of changed.paths.filter((changedPath) =>
-    isPairablePath(changedPath, selectedProjectRoot),
-  )) {
-    const pair = pairForPath(projectPath, selectedProjectRoot);
-    pairs.set(pair.sourcePath, pair);
-  }
-
-  return {
-    ok: true,
-    base: changed.base,
-    pairs: [...pairs.values()],
-    skipped: changed.skipped,
-  };
+  return { ok: true, base: changed.base, ...pairsForPaths(changed.paths, selectedProjectRoot) };
 }
 
 function parseLcov(lcovText) {
@@ -481,9 +478,14 @@ function recordProjectPath(selectedProjectRoot, inputPath) {
  * fall through to the type-only escape, which is a wrong answer wearing the shape of a pass.
  */
 function assertCompleteCoverage(sourcePath, lcovText, selectedProjectRoot = projectRoot) {
-  const records = parseLcov(lcovText).filter(
-    (record) => recordProjectPath(selectedProjectRoot, record.get("SF")) === sourcePath,
+  const records = parseLcov(lcovText);
+  const foreign = records.find(
+    (record) => recordProjectPath(selectedProjectRoot, record.get("SF")) !== sourcePath,
   );
+
+  if (foreign !== undefined) {
+    throw new Error(`Unexpected LCOV record for ${foreign.get("SF")} in the run for ${sourcePath}`);
+  }
 
   if (records.length === 0 && isTypeOnlyModule(sourcePath, selectedProjectRoot)) {
     return "type-only";
@@ -617,6 +619,7 @@ async function runPair({ sourcePath, testPath }) {
         [
           "--test",
           "--experimental-test-coverage",
+          `--test-coverage-include=${sourcePath}`,
           `--test-reporter=${reporterPath}`,
           "--test-reporter-destination=stdout",
           "--test-reporter=lcov",
@@ -637,7 +640,8 @@ async function runPair({ sourcePath, testPath }) {
       throw new Error(`Focused test failed: ${testPath}`);
     }
 
-    const summary = assertCompleteCoverage(sourcePath, readFileSync(lcovPath, "utf8"));
+    const lcov = readFileSync(lcovPath, "utf8");
+    const summary = assertCompleteCoverage(sourcePath, lcov);
     process.stdout.write(`Direct coverage passed: ${sourcePath} (${summary})\n`);
 
     return {
@@ -647,6 +651,7 @@ async function runPair({ sourcePath, testPath }) {
       typeOnly: summary === "type-only",
       runtime: process.version,
       elapsedMs: Number((process.hrtime.bigint() - startedAt) / 1000000n),
+      lcov,
     };
   } finally {
     await rm(coverageDirectory, { force: true, recursive: true });
@@ -660,7 +665,7 @@ async function runPair({ sourcePath, testPath }) {
  */
 async function runPairs(pairs, run, options = {}) {
   const concurrency =
-    options.concurrency ?? (process.env.TEST_CONCURRENCY || Math.min(4, availableParallelism()));
+    options.concurrency ?? (process.env.TEST_CONCURRENCY || availableParallelism());
   const limit = Number(concurrency);
 
   if (!/^[1-9][0-9]*$/.test(String(concurrency)) || !Number.isSafeInteger(limit)) {
@@ -771,7 +776,7 @@ async function enforcePairs(pairs, run = runPair, hooks = {}) {
   return records;
 }
 
-async function runAllPairs(reportPath) {
+async function runAllPairs({ reportPath, lcovPath } = {}) {
   const modulePaths = productionPaths();
   const pairs = modulePaths.map((modulePath) => pairForPath(modulePath));
   const startedAt = process.hrtime.bigint();
@@ -785,7 +790,8 @@ async function runAllPairs(reportPath) {
   const records = await enforcePairs(pairs, runPair, {
     onRecord: (record) => {
       if (reportPath !== undefined) {
-        appendFileSync(reportPath, `${JSON.stringify(record)}\n`);
+        const { lcov: _lcov, ...row } = record;
+        appendFileSync(reportPath, `${JSON.stringify(row)}\n`);
       }
     },
     // Read the retained report back instead of trusting the array the loop just appended to, so the
@@ -812,6 +818,16 @@ async function runAllPairs(reportPath) {
   process.stdout.write(
     `All-pair run complete: ${records.length} pairs in ${elapsedSeconds}s (${elapsedMs}ms) on ${process.version}\n`,
   );
+
+  if (lcovPath !== undefined) {
+    writeMergedLcov(lcovPath, records);
+  }
+}
+
+function writeMergedLcov(lcovPath, records) {
+  const measured = records.filter((record) => !record.typeOnly);
+  writeFileSync(lcovPath, measured.map((record) => record.lcov).join(""));
+  process.stdout.write(`Merged LCOV: ${lcovPath} (${measured.length} records)\n`);
 }
 
 function skippedReport(skipped) {
@@ -837,24 +853,92 @@ async function runChangedPairs(explicitBase) {
   }
 
   process.stdout.write(`Changed-pair base: ${selected.base}\n`);
+  await enforceSelectedPairs(selected);
+}
 
-  if (selected.pairs.length === 0) {
-    process.stdout.write(skippedReport(selected.skipped));
+async function enforceSelectedPairs({ pairs, skipped }) {
+  if (pairs.length === 0) {
+    process.stdout.write(skippedReport(skipped));
   }
 
-  await enforcePairs(selected.pairs);
+  await enforcePairs(pairs);
+}
+
+// A pair test can import support files from any `tests/` root, the two scripts run every pair, and
+// the three remaining files decide the dependencies and compiler settings.
+const everyPairInputs = new Set([
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
+  "scripts/test-coverage-direct.mjs",
+  "scripts/test-reporter.mjs",
+]);
+
+function affectsEveryPair(projectPath) {
+  return (
+    everyPairInputs.has(projectPath) ||
+    (projectPath.startsWith(`${testRoot}/`) && !projectPath.endsWith(".test.ts"))
+  );
+}
+
+async function runStagedPairs() {
+  const staged = gitLines(["diff", "--cached", "--name-only", "--diff-filter=ACMR"]);
+
+  if (!staged.ok) {
+    process.stderr.write(`Staged-pair selection failed: ${staged.reason}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const stagedPaths = [...staged.lines].sort();
+  const escalation = stagedPaths.find(affectsEveryPair);
+
+  if (escalation !== undefined) {
+    process.stdout.write(`Staged ${escalation} affects every pair. Running all pairs.\n`);
+    await runAllPairs();
+    return;
+  }
+
+  const selected = pairsForPaths(stagedPaths, projectRoot);
+  process.stdout.write(`Staged pairs: ${selected.pairs.length}\n`);
+  await enforceSelectedPairs(selected);
+}
+
+const usage =
+  "Pass source or test paths, --all [--report <path>] [--lcov <path>], --base <ref>, --staged, or no arguments";
+
+const allPairOptionKeys = new Map([
+  ["--report", "reportPath"],
+  ["--lcov", "lcovPath"],
+]);
+
+function parseAllPairOptions(options) {
+  const parsed = {};
+
+  for (let index = 0; index < options.length; index += 2) {
+    const key = allPairOptionKeys.get(options[index]);
+    const value = options[index + 1];
+
+    if (key === undefined || value === undefined || Object.hasOwn(parsed, key)) {
+      throw new Error(usage);
+    }
+
+    parsed[key] = value;
+  }
+
+  return parsed;
 }
 
 async function main() {
   const args = process.argv.slice(2);
 
-  if (args.length === 1 && args[0] === "--all") {
-    await runAllPairs(undefined);
+  if (args[0] === "--all") {
+    await runAllPairs(parseAllPairOptions(args.slice(1)));
     return;
   }
 
-  if (args.length === 3 && args[0] === "--all" && args[1] === "--report") {
-    await runAllPairs(args[2]);
+  if (args.length === 1 && args[0] === "--staged") {
+    await runStagedPairs();
     return;
   }
 
@@ -882,9 +966,7 @@ async function main() {
   }
 
   if (args.length !== 0) {
-    throw new Error(
-      "Pass source or test paths, --all, --all --report <path>, --base <ref>, or no arguments",
-    );
+    throw new Error(usage);
   }
 
   await runChangedPairs(undefined);

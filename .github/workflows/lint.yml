@@ -1,6 +1,9 @@
 name: Lint
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -38,11 +41,14 @@ jobs:
       - name: Run pre-commit
         uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
         env:
-          # CI/check runs the full npm gate. CI/direct-coverage owns pair coverage.
-          # These hooks remain enabled for local commits.
+          # The CI workflow's static, integration, and direct-coverage jobs run
+          # the npm checks. These hooks remain enabled for local commits.
           SKIP: prettier,npm-check
 
   fallow-audit:
+    # The audit reports only the findings that a change adds against main, so
+    # a push to main has nothing to compare.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

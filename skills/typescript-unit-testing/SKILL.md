@@ -29,7 +29,7 @@ Do not add another runner, assertion library, or mocking library. Do not import 
 - Test modules and test support (fakes, seeds, contracts) need no meta-tests; a fake is verified through its shared contract.
 - Each source-test pair reaches 100% function, line, and branch coverage when run alone. Aggregate coverage does not count.
 - Do not add coverage exceptions or `/* node:coverage ignore */` directives. Remove dead code or cover it through a public-behavior case.
-- Run `node --test <test-path>` while developing. Follow `skills/local-verification/SKILL.md` for task and full-project gates. The required pre-commit hook runs `npm run check`, which runs the whole unit suite under 100% coverage thresholds. Use `npm run test:coverage:direct -- <path>` for a pair's direct coverage. CI runs per-pair direct coverage: changed pairs on pull requests and all pairs on main. Shared contract, fake, or harness changes require all-pair coverage, so run `npm run test:coverage:direct:all` for them. Combined GSD merge/phase and final PR/release gates need the full check.
+- Run `node --test <test-path>` while developing. Follow `skills/local-verification/SKILL.md` for task and full-project gates. Use `npm run test:coverage:direct -- <path>` for a pair's direct coverage. The pre-commit hook measures direct coverage for the staged pairs, and for all pairs when a commit stages shared test support such as a contract, fake, fixture, or harness. `npm run check` and CI measure all pairs. Combined GSD merge/phase and final PR/release gates need the full check.
 
 ## Case structure
 
