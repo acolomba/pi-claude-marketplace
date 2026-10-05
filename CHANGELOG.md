@@ -2,10 +2,10 @@
 
 ## [Unreleased]
 
-- Node.js 22.22.2 or later is now required. Pi and the `write-file-atomic` dependency already need Node 22. (#236)
+- Node.js 22.22.2 or later is now required, because Pi and the `write-file-atomic` dependency already need Node 22. (#236)
 
-- Internal: commits run quick checks on their staged files, CI runs only on build-input changes, and ESLint alone bans stdio calls. (#236)
-
+  - Internal: commits run quick checks on their staged files, and CI runs only on build-input changes.
+  - A Fallow rule pack now bans stdio, console, and network calls in the extension, and ESLint keeps the import-direction and git-surface rules.
   - Pull requests, pushes to `main`, and `npm run check` measure direct coverage for every source-test pair, and SonarCloud reads that per-pair coverage.
   - The `check:static` and `check:commit` scripts are new, and the `test:coverage:unit` script no longer exists.
   - The `check:changed` script no longer exists.
@@ -14,7 +14,7 @@
   - `npm run check` no longer runs the unused type member gate, and the `lint:type-members` and `test:analyzers` scripts no longer exist.
   - Direct coverage no longer reads a pin file, so any shortfall fails, and the `test:coverage:direct:report` script no longer exists.
   - A Claude Code subagent in its own worktree gets the npm dependencies and a CodeGraph index of that worktree. Its CodeGraph queries use that index.
-  - Every local and CI check now fails on a warning, and a passing check prints at most one summary line.
+  - Every check now fails on a warning, a passing local check prints one summary line at most, and CI prints the full output.
   - `scripts/init.sh` no longer lets Fallow rewrite `AGENTS.md`, so the Fallow task map there no longer changes on a Fallow upgrade.
   - Four unrelated decisions that comments, lint messages, and codebase notes cited by one shared ID now each have their own ID.
 
