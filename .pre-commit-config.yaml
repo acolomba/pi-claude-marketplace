@@ -44,9 +44,11 @@ repos:
       - id: forbid-bidi-controls
 
   - repo: https://github.com/trufflesecurity/trufflehog
-    rev: v3.92.4
+    rev: v3.97.9
     hooks:
       - id: trufflehog
+        entry: trufflehog filesystem --results=verified --fail --no-update
+        pass_filenames: true
 
   - repo: https://github.com/jorisroovers/gitlint
     rev: v0.19.1

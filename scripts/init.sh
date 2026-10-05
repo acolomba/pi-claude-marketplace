@@ -49,4 +49,4 @@ npx fallow agent install --harness claude --harness codex --without hooks --appr
 rm -f CLAUDE.md
 
 # normalize AGENTS.md
-SKIP=trufflehog pre-commit run --files AGENTS.md || true
+pre-commit run --files AGENTS.md || true
