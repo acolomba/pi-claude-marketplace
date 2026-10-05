@@ -47,7 +47,7 @@
 //
 // No exhaustiveness claim: the module holds no switch and no closed-union
 // dispatch, so a missing-arm plant has no target here. No case asserts the
-// absence of direct process output (ESLint and fallow own that), none restates
+// absence of direct process output (fallow owns that), none restates
 // the tokenizer rules owned by tests/edge/args.test.ts, and none re-derives the
 // import workflow's outcome.
 

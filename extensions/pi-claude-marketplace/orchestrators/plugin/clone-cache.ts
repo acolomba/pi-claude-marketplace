@@ -6,7 +6,7 @@
 // `eslint.config.js` (NFR-5). The clone lives HERE, in a sibling seam install
 // calls by name; this file imports DEFAULT_GIT_OPS from marketplace/shared.ts
 // (the same re-export update-flow.ts uses) and is legally allowed the git
-// surface (NOT in that config's `NETWORK_FREE_TARGETS`).
+// surface (listed in that config's `NETWORK_SEAMS`).
 //
 // `materializePluginClone` clones a git plugin source at its pinned/resolved
 // sha into the shared source-addressed cache `plugin-clones/<key>/`, deduped

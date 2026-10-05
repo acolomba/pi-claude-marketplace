@@ -1,0 +1,159 @@
+{
+  "version": 1,
+  "name": "architecture",
+  "description": "Call and import bans for extensions/pi-claude-marketplace/. A rule applies by file glob, so its exemption can name one file where a boundary zone could only name a directory.",
+  "rules": [
+    {
+      "id": "no-stdio",
+      "kind": "banned-call",
+      "callees": ["process.stdout.*", "process.stderr.*"],
+      "files": ["extensions/pi-claude-marketplace/**"],
+      "message": "IL-2: the extension never writes to stdout or stderr. Route user-visible output through the shared/notification-dispatch.ts wrappers."
+    },
+    {
+      "id": "no-console",
+      "kind": "banned-call",
+      "callees": ["console.*"],
+      "files": ["extensions/pi-claude-marketplace/**"],
+      "exclude": [
+        "extensions/pi-claude-marketplace/persistence/migrate.ts",
+        "extensions/pi-claude-marketplace/shared/debug-log.ts"
+      ],
+      "message": "IL-2: the extension never calls console. Route user-visible output through the shared/notification-dispatch.ts wrappers and debug output through hookDebugLog in shared/debug-log.ts."
+    },
+    {
+      "id": "migrate-console-warn-only",
+      "kind": "banned-call",
+      "callees": [
+        "console.assert",
+        "console.clear",
+        "console.context",
+        "console.count",
+        "console.countReset",
+        "console.createTask",
+        "console.debug",
+        "console.dir",
+        "console.dirxml",
+        "console.error",
+        "console.group",
+        "console.groupCollapsed",
+        "console.groupEnd",
+        "console.info",
+        "console.log",
+        "console.profile",
+        "console.profileEnd",
+        "console.table",
+        "console.time",
+        "console.timeEnd",
+        "console.timeLog",
+        "console.timeStamp",
+        "console.trace"
+      ],
+      "files": ["extensions/pi-claude-marketplace/persistence/migrate.ts"],
+      "message": "IL-3: persistence/migrate.ts may call only console.warn, for the legacy-migration save failure."
+    },
+    {
+      "id": "debug-log-console-error-only",
+      "kind": "banned-call",
+      "callees": [
+        "console.assert",
+        "console.clear",
+        "console.context",
+        "console.count",
+        "console.countReset",
+        "console.createTask",
+        "console.debug",
+        "console.dir",
+        "console.dirxml",
+        "console.group",
+        "console.groupCollapsed",
+        "console.groupEnd",
+        "console.info",
+        "console.log",
+        "console.profile",
+        "console.profileEnd",
+        "console.table",
+        "console.time",
+        "console.timeEnd",
+        "console.timeLog",
+        "console.timeStamp",
+        "console.trace",
+        "console.warn"
+      ],
+      "files": ["extensions/pi-claude-marketplace/shared/debug-log.ts"],
+      "message": "OBS-01: shared/debug-log.ts may call only console.error, behind PI_CLAUDE_MARKETPLACE_DEBUG=1."
+    },
+    {
+      "id": "notify-chokepoint",
+      "kind": "banned-call",
+      "callees": ["*.ui.notify"],
+      "files": ["extensions/pi-claude-marketplace/**"],
+      "exclude": ["extensions/pi-claude-marketplace/shared/notification-dispatch.ts"],
+      "message": "IL-2: only shared/notification-dispatch.ts calls ctx.ui.notify. Use notify, notifyUsageError, or another wrapper it exports."
+    },
+    {
+      "id": "pi-peer-chokepoint",
+      "kind": "banned-import",
+      "specifiers": ["@earendil-works/pi-coding-agent"],
+      "files": ["extensions/pi-claude-marketplace/**"],
+      "exclude": ["extensions/pi-claude-marketplace/platform/pi-api.ts"],
+      "message": "NFR-11: import the Pi API through platform/pi-api.ts, the single audit point for peer-version bumps."
+    },
+    {
+      "id": "isomorphic-git-chokepoint",
+      "kind": "banned-import",
+      "specifiers": ["isomorphic-git"],
+      "files": ["extensions/pi-claude-marketplace/**"],
+      "exclude": ["extensions/pi-claude-marketplace/platform/git.ts"],
+      "message": "D-13: only platform/git.ts imports isomorphic-git. Reach git through its wrappers and the GitOps seam in orchestrators/marketplace/shared.ts."
+    },
+    {
+      "id": "proper-lockfile-chokepoint",
+      "kind": "banned-import",
+      "specifiers": ["proper-lockfile"],
+      "files": ["extensions/pi-claude-marketplace/**"],
+      "exclude": ["extensions/pi-claude-marketplace/transaction/with-state-guard.ts"],
+      "message": "D-06: only transaction/with-state-guard.ts takes the state lock. Use withStateGuard or withLockedStateTransaction."
+    },
+    {
+      "id": "write-file-atomic-chokepoint",
+      "kind": "banned-import",
+      "specifiers": ["write-file-atomic"],
+      "files": ["extensions/pi-claude-marketplace/**"],
+      "exclude": [
+        "extensions/pi-claude-marketplace/shared/atomic-json.ts",
+        "extensions/pi-claude-marketplace/bridges/agents/stage.ts",
+        "extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
+        "extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts"
+      ],
+      "message": "NFR-1: write JSON through atomicWriteJson in shared/atomic-json.ts. The other excluded files restore saved bytes on rollback."
+    },
+    {
+      "id": "no-network-modules",
+      "kind": "banned-import",
+      "specifiers": [
+        "node:http",
+        "node:https",
+        "http",
+        "https",
+        "node:net",
+        "net",
+        "node:tls",
+        "tls",
+        "node:dgram",
+        "dgram",
+        "undici"
+      ],
+      "files": ["extensions/pi-claude-marketplace/**"],
+      "message": "IL-4 / NFR-5: the extension opens no network connection of its own. Git traffic goes through platform/git.ts and Device Flow through domain/github-auth.ts."
+    },
+    {
+      "id": "fetch-chokepoint",
+      "kind": "banned-call",
+      "callees": ["fetch", "globalThis.fetch"],
+      "files": ["extensions/pi-claude-marketplace/**"],
+      "exclude": ["extensions/pi-claude-marketplace/domain/github-auth.ts"],
+      "message": "IL-4 / NFR-5: only domain/github-auth.ts calls fetch, for the Device Flow endpoints."
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 {
   "entry": ["extensions/pi-claude-marketplace/index.ts"],
+  "rulePacks": ["rule-packs/architecture.json"],
   "ignorePatterns": [".pi/**", ".planning/**"],
   "production": {
     "deadCode": true,

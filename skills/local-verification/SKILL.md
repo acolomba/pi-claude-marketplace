@@ -17,7 +17,7 @@ A build input is a file that a build or a CI job reads. The build inputs are the
 
 ## What the commands run
 
-`npm run check:static` runs type checking, ESLint, the workflow install-script check, Fallow, the Prettier check, and source/test pairing at the same time. Locally it prints one line for each passing step and the full output of each failing step. A warning fails its step: ESLint runs with `--max-warnings 0`, and Prettier, Fallow, and the gate scripts fail on every finding.
+`npm run check:static` runs type checking, ESLint, the workflow install-script check, Fallow, the Prettier check, and source/test pairing at the same time. Locally it prints one line for each passing step and the full output of each failing step. A warning fails its step: ESLint runs with `--max-warnings 0`, and Prettier, Fallow, and the gate scripts fail on every finding. Fallow also fails when a rule-pack rule matches no file.
 
 `npm run check:commit` runs `check:static`, then the unit tests that have no source pair (`tests/architecture/` and the four fake contract suites), then direct coverage for the staged source-test pairs. It reads only the staged files. Unstaged edits and untracked files do not count. It runs all pairs when a staged file can change the coverage of any pair: a file under `tests/` that is not a `.test.ts` file (a fake, contract, fixture, or harness), `scripts/test-coverage-direct.mjs`, `scripts/test-reporter.mjs`, `package.json`, `package-lock.json`, or `tsconfig.json`.
 

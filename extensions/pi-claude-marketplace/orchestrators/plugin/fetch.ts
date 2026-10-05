@@ -10,8 +10,7 @@
 //     FetchCloneCacheSeam), reached ONLY by name -- fetch.ts names zero git
 //     surface (no git-ops handle, no default-git-ops constant, no clone-refresh
 //     helper, no platform-git import). BLOCK F in `eslint.config.js` enforces
-//     that, because its `NETWORK_FREE_TARGETS` list
-//     names this file.
+//     that, because this file is not in its `NETWORK_SEAMS` list.
 //   - auth: `auth-host.ts`'s `buildCloneAuth` with a single sweep-wide
 //     `authMemo` so a bulk sweep triggers each host's device flow at most once
 //     (FTCH-06).

@@ -14,7 +14,7 @@
 // --scope <scope>` arg string, so arg-parsing, usage errors, and notify
 // surfaces stay byte-identical with the typed subcommands.
 //
-// BLOCK A: no direct `ctx.ui.notify` -- the action handlers route through
+// IL-2: no direct `ctx.ui.notify` -- the action handlers route through
 // shared/notify.ts themselves. BLOCK C: imports from picker/ (sibling),
 // orchestrators/, domain/, shared/ (types), platform/ (types).
 

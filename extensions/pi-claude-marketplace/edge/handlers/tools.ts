@@ -17,7 +17,7 @@
 // to their respective orchestrators in this plan precisely to keep the tool
 // execute bodies on the right side of the import boundary.
 //
-// BLOCK A: tools do NOT call ctx.ui.notify. LLM tools return
+// IL-2: tools do NOT call ctx.ui.notify. LLM tools return
 // `AgentToolResult` -- the agent surfaces results via its own UI channel,
 // not the slash-command notify channel.
 //

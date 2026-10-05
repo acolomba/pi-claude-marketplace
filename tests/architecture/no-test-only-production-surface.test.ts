@@ -164,7 +164,7 @@ interface ClassifiedSeam {
  * The modules the classified seams live on. The two marketplace ledgers carry
  * the `MARKETPLACE_LEDGER_TARGETS` annotation, so naming a path that group does
  * not hold stops compiling (D-07-05). The four plugin owners are spelled here:
- * the network-free list in `eslint.config.js` is not a module this file can
+ * `eslint.config.js` gates them by glob, so there is no list this file could
  * read a type from.
  */
 const INSTALL_FLOW_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";

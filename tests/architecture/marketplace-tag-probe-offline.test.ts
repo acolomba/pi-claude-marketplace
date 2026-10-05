@@ -4,7 +4,7 @@
  * and `resolveTagOid`.
  *
  * BLOCK F in `eslint.config.js` proves the ABSENCE of named forbidden tokens in
- * the files it lists; this gate instead pins the exact set of named imports to
+ * the files it gates; this gate instead pins the exact set of named imports to
  * equality, so a future edit that adds `listRemoteTags`, `clone`, `fetch`, or
  * `resolveRemoteRef` to THAT import clause fails on set inequality without
  * this gate having had to enumerate what is forbidden in advance.

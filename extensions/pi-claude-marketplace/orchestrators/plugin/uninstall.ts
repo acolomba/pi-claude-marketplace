@@ -42,10 +42,10 @@
 // orchestrators/marketplace/shared.ts ONLY (NOT from add.ts/remove.ts/etc).
 //
 // NFR-5 (no network): this file MUST NOT import platform/git or DEFAULT_GIT_OPS.
-// BLOCK F in `eslint.config.js` gates this file by name: the D-06-06
-// declarer read composes an offline manifest read through `dependency-index.ts`
-// (memoized manifest cache + warm clone cache only, D-05-06), and that leaf is
-// gated beside it.
+// BLOCK F in `eslint.config.js` gates this file, which is not in
+// `NETWORK_SEAMS`: the D-06-06 declarer read composes an offline manifest read
+// through `dependency-index.ts` (memoized manifest cache + warm clone cache
+// only, D-05-06), and that leaf is gated beside it.
 //
 // PU-6 (legacy state migration): handled by persistence/migrate.ts at load
 // time (ST-4/ST-5). No new code needed here -- a state record missing

@@ -162,7 +162,7 @@ export interface PluginInfoReader {
 
 /**
  * FTCH-04 / NFR-5: injected clone-cache seam for the `info --fetch` hook. info.ts
- * is in `NETWORK_FREE_TARGETS` (BLOCK F in `eslint.config.js`), so
+ * is not in `NETWORK_SEAMS`, so BLOCK F in `eslint.config.js` gates it, and
  * the fetch-materialize flows through the sibling `clone-cache.ts` seam by name
  * -- info NEVER references the git ops directly. Mirrors
  * `install-clone-probe.ts::InstallCloneCacheSeam`. Production leaves it undefined and info
@@ -485,8 +485,8 @@ const OWN_MANIFEST_NOT_READABLE: OwnManifestRead = { kind: "not-readable" };
  * `missing-subdir` each mean there is no local tree this surface may read. The
  * materializing fetch probe is NEVER reached from here, not even when
  * `--fetch` was passed -- "readable" never means fetching (D-01-32), NFR-5
- * forbids `info` touching the network, and `eslint.config.js` pins this file BY
- * NAME in `NETWORK_FREE_TARGETS`. The consequence is deliberate and worth
+ * forbids `info` touching the network, and BLOCK F in `eslint.config.js` gates
+ * this file, which is not in `NETWORK_SEAMS`. The consequence is deliberate and worth
  * stating: on a cold `--fetch` run the dependency list comes from the entry
  * even though the row builders materialize a clone moments later.
  *

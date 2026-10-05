@@ -21,11 +21,11 @@
 // what keeps the retention predicate here and the displacement in the commit
 // from drifting apart.
 //
-// None of them reaches the git surface, so any orchestrator -- even one listed
-// in `NETWORK_FREE_TARGETS` in `eslint.config.js` -- can import this module
-// without introducing a git token. The bridge import is the only non-leaf one,
-// and it is safe on the terms BLOCK F uses: it lints the listed files for git
-// imports and identifiers, and `install-outcome.ts` is gated and already
+// None of them reaches the git surface, so any orchestrator -- even one that
+// BLOCK F in `eslint.config.js` gates -- can import this module without
+// introducing a git token. The bridge import is the only non-leaf one, and it
+// is safe on the terms BLOCK F uses: it lints each gated file's own source for
+// git imports and identifiers, and `install-outcome.ts` is gated and already
 // imports the workflows bridge directly. It needs no state load either, which
 // is one import fewer than `clone-gc.ts`, its structural model.
 
