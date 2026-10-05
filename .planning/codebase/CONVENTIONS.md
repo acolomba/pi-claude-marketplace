@@ -34,7 +34,7 @@
 
 **Linting:**
 
-- ESLint 10 flat config: `eslint.config.js` at repo root (`npm run lint` runs `eslint extensions tests eslint.config.js`)
+- ESLint 10 flat config: `eslint.config.js` at repo root (`npm run lint` runs `eslint extensions tests scripts eslint.config.js --max-warnings 0` with a content cache, so any warning fails it)
 - Extends `tseslint.configs.strictTypeChecked` + `stylisticTypeChecked` (full type-aware strict linting)
 - Plugins: `@stylistic`, `import-x`, `sonarjs`
 - Key rules:
@@ -61,7 +61,7 @@
 - Fallow loads no rule pack and bans no calls. The `process.stdout.*`/`process.stderr.*` call ban lives only in ESLint BLOCK A (`OUTPUT_DISCIPLINE_SELECTORS` in `eslint.config.js`), which BLOCK F restates for the network-free files.
 - `duplicates.threshold: 3`; `duplicates.ignoredClones` currently holds exactly one entry (`dup:cc950b18:2`) — the retained clone lives in `tests/live-uat/manifest-absence-canary.mjs` and `tests/live-uat/stop-canary.mjs`, and it is justified with an inline comment header in **both** files (fallow's `ignoredClones` is typed `string[]`, so the per-clone justification cannot live in the JSON and lives in the source instead). **Fingerprint keys are content-addressed (`dup:<hash>`) and stable; do not use the index-suffixed `dup:<hash>-NN` form anywhere — it is not stable across runs.**
 - Suppressions: exactly **11** `fallow-ignore` markers exist repo-wide as of this analysis (verify with `rg -n "fallow-ignore" extensions tests scripts`). Ten are scoped to `unused-type`/`unused-export`/`private-type-leak`/`unused-file`: two standalone operator-run UAT drivers, seven compile-time proof/pin types, and one published compatibility type. The remaining marker is a temporary, function-scoped complexity exception on `validateScopeChangeStructure` in `scripts/revalidation.mjs`; its inline comment records the removal target. No duplication finding is suppressed.
-- `npm run fallow:audit` gates PRs on newly-introduced findings only (delta mode), distinct from the full `npm run fallow` gate used locally and in `npm run check`.
+- The Lint workflow's `fallow-audit` job gates pull requests on newly introduced findings only. It installs the npm dependencies first, and it fails on a `warn` verdict (a clone group the change adds) or a degraded analysis as well as on `fail`. It is distinct from the full `npm run fallow` gate.
 - **A gate's run over the real tree is its only committed proof.** Do not commit negative controls or planted-violation tests for a gate; `npm run check` is the only full verdict. The D-11 ledger-import rule and the NFR-5 network-free rule are ESLint rules that report at the offending line: BLOCK C in `eslint.config.js` carries the layer and ledger zones (`PLUGIN_LEDGERS`, `MARKETPLACE_LEDGERS`), and BLOCK F carries the network-free rules over `NETWORK_FREE_TARGETS`.
 
 ## Import Organization
@@ -129,7 +129,7 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 ## Logging
 
-**Framework:** No logging library. `console.warn` is the single sanctioned exception (load-time legacy-migration save failure per project constraint IL-3); `no-console` is `"warn"` at lint level everywhere else.
+**Framework:** No logging library. `console.warn` is the single sanctioned exception (load-time legacy-migration save failure per project constraint IL-3); `no-console` is `"warn"` at lint level everywhere else, and a `no-console` warning fails `npm run lint`.
 
 **User-visible output:** All output goes through `ctx.ui.notify(message, severity)` inside `extensions/pi-claude-marketplace/shared/notification-dispatch.ts` — the sole sanctioned call site — fed by `notification-types.ts`, `notification-grammar.ts`, `notification-summary.ts`, `notify-context.ts`, and `notify-reasons.ts`. Direct `process.stdout`/`process.stderr` calls are forbidden inside `extensions/pi-claude-marketplace/**` by one gate, the ESLint `no-restricted-syntax` rule (BLOCK A, restated by BLOCK F). The three files that turn that rule off (`shared/notification-dispatch.ts`, `shared/debug-log.ts`, `persistence/migrate.ts`) are outside the ban.
 

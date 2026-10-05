@@ -940,6 +940,11 @@ a different cause with a different fix.
 
 ## ~~FLOW-10: duplication is gated by one repo-wide percentage and nothing else~~ -- CLOSED
 
+Reopened 2026-10-05 by quick task 261005-jdx: a warning now fails every
+check. The Lint workflow's `fallow-audit` job fails on a `warn` verdict, so
+a pull request that introduces a clone group fails CI. The 3% threshold in
+`npm run fallow` is unchanged.
+
 Closed 2026-08-17 as accepted, same day it was filed. Up to 3% duplication
 is the deliberate posture: `duplicates.threshold` is the gate, one
 whole-repo percentage, and the headroom between the current 2.1% and
