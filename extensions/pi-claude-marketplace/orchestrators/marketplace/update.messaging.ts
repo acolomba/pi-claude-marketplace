@@ -86,7 +86,7 @@ export const UPDATE_CONTEXT = {
       ]),
     // SEV-03 / D-69-01: an autoupdate cascade candidate that re-resolved
     // `partially-available` degraded via the partial path. Reuse `partiallyInstalledRow` --
-    // the SOLE composition site (D-11 "call, never duplicate") -- so the
+    // the SOLE composition site (D-notification-refactor-01-11 "call, never duplicate") -- so the
     // `◉ <name> v<version> (partially-installed) {dropped kinds[, requires pi-...]}`
     // bytes stay identical to the install / update success surfaces.
     "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),

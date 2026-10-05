@@ -41,7 +41,7 @@ import type { Scope } from "./types.ts";
 /**
  * Grammar icon literals.
  *
- * D-11: the shared presentation vocabulary stays central in this file;
+ * D-notification-refactor-01-11: the shared presentation vocabulary stays central in this file;
  * `export` only widens visibility so sibling command modules can CALL these
  * glyphs from their own render maps without redeclaring them.
  */
@@ -345,9 +345,9 @@ export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDe
  * optional tokens (e.g. an undefined scope-bracket on `available` rows)
  * never produce a double-space. Single canonical implementation.
  */
-// D-11: the row-composition primitives below (joinTokens, renderScopeBracket,
-// renderVersion, composeVersionArrow, composeReasons, pluginRow) stay declared
-// HERE as the single source of the byte-stable presentation vocabulary; the
+// D-notification-refactor-01-11: the row-composition primitives below (joinTokens,
+// renderScopeBracket, renderVersion, composeVersionArrow, composeReasons, pluginRow)
+// stay declared HERE as the single source of the byte-stable presentation vocabulary; the
 // `export` keyword only widens their visibility so sibling command render maps
 // can CALL them without duplicating the brace/space/join logic.
 export function joinTokens(parts: readonly string[]): string {
@@ -557,8 +557,8 @@ export function pluginRow(
 /**
  * WR-03: SOLE composition site for the `(partially-installed)` row -- shared by the
  * central `renderPluginRow` switch AND the install / update command-local
- * render maps, so the bytes stay identical across surfaces (D-11 "call, never
- * duplicate"). Uses the dedicated `ICON_PARTIALLY_INSTALLED` (`◉`) glyph; the
+ * render maps, so the bytes stay identical across surfaces (D-notification-refactor-01-11
+ * "call, never duplicate"). Uses the dedicated `ICON_PARTIALLY_INSTALLED` (`◉`) glyph; the
  * reasons brace carries the dropped-component detail. Unlike `pluginRow` it
  * threads the optional `dependencies` so the `{requires pi-subagents}` /
  * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` soft-dep markers
@@ -609,7 +609,7 @@ export function partiallyInstalledRow(
  * p.to)`), their parenthesized `label`, and whether they thread `p.reasons` or
  * `undefined`. Those three remain caller-supplied so the byte form is verbatim;
  * the `dependencies.includes(...)` soft-dep gate + `composeReasons`
- * composition is owned here (D-11 "call, never duplicate"), keeping every
+ * composition is owned here (D-notification-refactor-01-11 "call, never duplicate"), keeping every
  * soft-dep arm byte-identical to one another and to the central
  * `renderPluginRow` `installed` arm.
  *
@@ -662,7 +662,7 @@ export function installedLikeRow(
 /**
  * The not-installed and realized-removal row renderers, exported so the
  * per-command render maps in `orchestrators/*.messaging.ts` CALL the central
- * presentation vocabulary (D-11) instead of re-inlining byte-identical arm
+ * presentation vocabulary (D-notification-refactor-01-11) instead of re-inlining byte-identical arm
  * bodies. `renderPluginRow` dispatches to exactly these, so the central switch
  * and every command map cannot drift.
  */

@@ -18,7 +18,7 @@ last_mapped_at: 2026-10-05
 ## Runtime
 
 **Environment:**
-- Node.js `>=20.19.0` declared in `package.json` `engines`; CI pins and runs the pipeline on Node 24 only (`.github/workflows/ci.yml`, D-01: single-Node-version matrix, justified there by `write-file-atomic@^8`'s `^22.22.2 || ^24.15.0 || >=26.0.0` engine floor and native TS-strip support)
+- Node.js `>=22.22.2` declared in `package.json` `engines`; CI pins and runs the pipeline on Node 24 only (`.github/workflows/ci.yml`, D-01: single-Node-version matrix, justified there by `write-file-atomic@^8`'s `^22.22.2 || ^24.15.0 || >=26.0.0` engine floor and native TS-strip support)
 - ESM-only (`"type": "module"` in `package.json`)
 - `tsconfig.json` targets `ES2022`, `module`/`moduleResolution: NodeNext`, `noEmit: true` (type-checking only; no build/transpile step -- Node's native TS stripping runs `.ts` files directly)
 
@@ -82,7 +82,7 @@ last_mapped_at: 2026-10-05
 ## Platform Requirements
 
 **Development:**
-- Node `>=20.19.0` (engines floor); CI and local `.pre-commit-config.yaml` Node setup both use Node 24
+- Node `>=22.22.2` (engines floor); CI and local `.pre-commit-config.yaml` Node setup both use Node 24
 - npm for dependency install
 - `pre-commit` (Python-based framework, Python 3.12 in CI) for the git hook pipeline
 

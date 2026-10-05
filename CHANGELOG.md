@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Node.js 22.22.2 or later is now required. Pi and the `write-file-atomic` dependency already need Node 22. (#236)
+
 - Internal: commits run quick checks on their staged files, CI runs only on build-input changes, and ESLint alone bans stdio calls. (#236)
 
   - Pull requests, pushes to `main`, and `npm run check` measure direct coverage for every source-test pair, and SonarCloud reads that per-pair coverage.
@@ -14,6 +16,7 @@
   - A Claude Code subagent in its own worktree gets the npm dependencies and a CodeGraph index of that worktree. Its CodeGraph queries use that index.
   - Every local and CI check now fails on a warning, and a passing check prints at most one summary line.
   - `scripts/init.sh` no longer lets Fallow rewrite `AGENTS.md`, so the Fallow task map there no longer changes on a Fallow upgrade.
+  - Four unrelated decisions that comments, lint messages, and codebase notes cited by one shared ID now each have their own ID.
 
 - Internal: local checks now select changed modules and their consumers. GSD uses focused checks during tasks and full checks before PR handoff. CI reuses unit coverage for SonarCloud, removes duplicate checks, and runs isolated coverage pairs concurrently.
 

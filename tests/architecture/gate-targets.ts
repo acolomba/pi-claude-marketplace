@@ -33,7 +33,7 @@ export const PACKAGE_JSON_REL = "package.json";
 export const PACKAGE_LOCK_REL = "package-lock.json";
 
 /**
- * D-11: the four marketplace ledger entry points. BLOCK C in `eslint.config.js`
+ * D-v1.0-01-11: the four marketplace ledger entry points. BLOCK C in `eslint.config.js`
  * keeps the ledgers from importing each other; a plugin ledger reaches
  * marketplace code only through `orchestrators/marketplace/shared.ts`.
  */

@@ -43,7 +43,7 @@ last_mapped_at: 2026-10-05
 - Impact: layering description and reality disagree; the file is a network surface living in the "pure" layer.
 - Fix approach: keep the injectable HTTP seam; consider moving the module to `platform/` or documenting the exception in ARCHITECTURE.md.
 
-**D-11 ledger path lists in `eslint.config.js` are literal and fail open on rename:**
+**D-v1.0-01-11 ledger path lists in `eslint.config.js` are literal and fail open on rename:**
 - Issue: `PLUGIN_LEDGERS` and `MARKETPLACE_LEDGERS` (`eslint.config.js`, BLOCK C) are hand-written file paths feeding `import-x/no-restricted-paths` zones. Renaming or splitting a ledger leaves a stale entry and the zone stops covering it, with no error.
 - Files: `eslint.config.js`
 - Impact: the plugin/marketplace ledger separation silently stops being enforced for the renamed file.

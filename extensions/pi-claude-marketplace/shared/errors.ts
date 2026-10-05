@@ -144,7 +144,7 @@ export function cleanupFailuresFromError(err: unknown): readonly CleanupFailure[
  * `renderIndentedCauseChain` so the trailer lands automatically below every
  * failed / manual-recovery plugin row.
  *
- * Single canonical implementation in `shared/errors.ts` (D-11 layering).
+ * Single canonical implementation in `shared/errors.ts` (D-v1.0-01-11 layering).
  */
 export function causeChainTrailer(err: unknown): string {
   if (err === undefined || err === null) {
