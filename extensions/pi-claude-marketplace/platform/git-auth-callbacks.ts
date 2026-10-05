@@ -22,12 +22,7 @@ import type { CredentialOps } from "./git-credential.ts";
 import type { GitCredentials } from "./git.ts";
 
 /**
- * Discriminated result returned by an `onAuthRequired`
- * closure. Both arms carry `authAttempted: true` as a reference-only /
- * future-proofing marker (CP-9): `onAuthFailure(url, cred)` never receives
- * this value -- it is called with only the credential -- and the current
- * implementation does not branch on the flag; onAuthFailure always returns
- * `{ cancel: true }` regardless.
+ * Discriminated result returned by an `onAuthRequired` closure.
  *
  * Structurally identical to `domain/github-auth.ts::DeviceFlowResult`.
  * Declared LOCALLY in the platform tier so this module honors the
@@ -37,9 +32,7 @@ import type { GitCredentials } from "./git.ts";
  * `onAuthRequired`; TypeScript's structural typing accepts the assignment
  * with no adapter -- no shared type declaration is needed across tiers.
  */
-export type AuthAttemptResult =
-  | { ok: true; cred: GitCredentials; authAttempted: true }
-  | { ok: false; reason: string; authAttempted: true };
+export type AuthAttemptResult = { ok: true; cred: GitCredentials } | { ok: false; reason: string };
 
 /**
  * Caller-supplied closure invoked by `buildAuthCallbacks` when

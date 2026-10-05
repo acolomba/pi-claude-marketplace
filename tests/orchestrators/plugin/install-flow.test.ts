@@ -9517,12 +9517,10 @@ test("plugin install authentication: memoizes one Device Flow result across same
         [firstAuthResult, secondAuthResult],
         [
           {
-            authAttempted: true,
             cred: { password: "token", username: "x-access-token" },
             ok: true,
           },
           {
-            authAttempted: true,
             cred: { password: "token", username: "x-access-token" },
             ok: true,
           },
