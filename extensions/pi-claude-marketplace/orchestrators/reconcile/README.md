@@ -1,6 +1,6 @@
 # orchestrators/reconcile/
 
-Reconcile family: the declarative-config bridge. Each `applyReconcile` (load-time) and `previewReconcile` (read-only `/claude:plugin preview`) invocation diffs the merged user-authored config (`claude-plugins.json` + `claude-plugins.local.json`) against the recorded extension state (`state.json`) and either renders a dry-run cascade (preview) or drives the mutating orchestrators back to convergence (apply).
+Reconcile family: the declarative-config bridge. Each `applyReconcile` (load-time) and `pendingReconcile` (read-only `/claude:plugin pending`, D-53-01) invocation diffs the merged user-authored config (`claude-plugins.json` + `claude-plugins.local.json`) against the recorded extension state (`state.json`) and either renders the read-only pending diff (pending) or drives the mutating orchestrators back to convergence (apply).
 
 The family follows the same shape as `orchestrators/import/` and `orchestrators/marketplace/`: typed result records, a pure planner, a pure notify projection, and a wrapping orchestrator that does the I/O.
 
@@ -8,20 +8,23 @@ The family follows the same shape as `orchestrators/import/` and `orchestrators/
 
 ```text
 orchestrators/reconcile/
-├── README.md            # this file
-├── types.ts             # ReconcilePlan + per-bucket record types
-├── apply-outcomes.ts    # PerEntryOutcome union consumed by the apply cascade
-├── plan.ts              # planReconcile(merged, state, scope, verdict) -- the pure planner
-├── notify.ts            # pure plan-to-message + outcomes-to-message projections
-├── preview.ts           # /claude:plugin preview orchestrator (read-only)
-└── apply.ts             # load-time apply orchestrator (drives the mutators)
+├── README.md                # this file
+├── types.ts                 # ReconcilePlan + per-bucket record types
+├── apply-outcomes.ts        # PerEntryOutcome union consumed by the apply cascade
+├── plan.ts                  # planReconcile(merged, state, scope, verdict) -- the pure planner
+├── dependency-verdict.ts    # buildScopeSatisfactionVerdict -- the offline LOAD-01 verdict the planner takes
+├── notify.ts                # pure plan-to-rows + outcomes-to-message projections
+├── reconcile.messaging.ts   # PENDING_CONTEXT + RECONCILE_APPLIED_CONTEXT row render maps
+├── pending.ts               # /claude:plugin pending orchestrator (read-only)
+├── backfill.ts              # load-time backfill pass (BFILL-01..03) + runScopeIsolated
+└── apply.ts                 # load-time apply orchestrator (drives the mutators)
 ```
 
 ## Purity discipline
 
 `plan.ts` exports `planReconcile(MergedConfig, ExtensionState, Scope, ScopeSatisfactionVerdict) -> ReconcilePlan`. It is a pure bidirectional 9-bucket diff: no `node:fs`, no `platform/git`, no `notify`, no `saveState` / `saveConfig` / `atomicWriteJson` / `withStateGuard` / `withLockedStateTransaction`. The architecture grep-gate at `tests/architecture/reconcile-planner-purity.test.ts` enforces this structurally; the gate operates on the comment-stripped source so the header docstring may legally mention forbidden symbols without self-invalidation.
 
-`notify.ts` exports two pure projections: `buildReconcilePreviewNotification(plans) -> CascadeNotificationMessage` for the preview surface and `buildReconcileAppliedCascade(outcomes) -> ReconcileAppliedCascadeMessage` for the apply surface. Neither projection calls `ctx.ui.notify`; `preview.ts` and `apply.ts` own the single sanctioned `notify()` call per invocation (IL-2).
+`notify.ts` exports two pure projections: `buildReconcilePendingNotification(plans, forceInstallKeys) -> { marketplaces }` for the pending surface, whose rows are typed `MarketplaceRows<PendingMsg>`, and `buildReconcileAppliedCascade(outcomes) -> ReconcileAppliedCascadeMessage` for the apply surface. Neither projection calls `ctx.ui.notify`; `pending.ts` and `apply.ts` own the single sanctioned `notify()` call per invocation (IL-2).
 
 ## The 9-bucket model
 
@@ -84,10 +87,10 @@ The planner and the apply path coordinate via one structural sentinel, plus two 
 
 3. **Single notify emission per invocation** (IL-2 / RECON-04). Empty-and- clean reconciles are SILENT (NFR-2). Post-commit hygiene warnings (data-dir mkdir deferred, completion-cache refresh deferred, etc.) surface through a sanctioned second `notifyDiagnostic` call (the only exception to RECON-04's single-emit rule), mirroring the import cascade's `pushDiagnostic` channel.
 
-## Preview path
+## Pending path
 
-`preview.ts::previewReconcile` is the read-only mirror: NEVER writes (no `tx.save()`, no `saveConfig`), NEVER touches the network (BLOCK F in `eslint.config.js` lints the reconcile `pending.ts`, `plan.ts`, and `notify.ts` for git surface). It runs `loadMergedScopeConfig` per scope, surfaces CFG-03 and state-load throws as structured `(failed)` basename rows, and otherwise calls `planReconcile` against a synthetic post-migration merged view (`mergedViewForPlanning`) so a pre-migration window (base config absent, populated state) is not misrendered as a mass-uninstall plan. The single `notify()` call dispatches the `CascadeNotificationMessage` from the projection, or the dedicated `ReconcilePreviewEmptyMessage` for the empty-steady-state path.
+`pending.ts::pendingReconcile` is the read-only mirror: NEVER writes (no `tx.save()`, no `saveConfig`), NEVER touches the network (BLOCK F in `eslint.config.js` lints the reconcile `pending.ts`, `plan.ts`, and `notify.ts` for git surface). It runs `loadMergedScopeConfig` per scope, surfaces CFG-03 and state-load throws as structured `(failed)` basename rows, and otherwise calls `planReconcile` against a synthetic post-migration merged view (`mergedViewForPlanning`) so a pre-migration window (base config absent, populated state) is not misrendered as a mass-uninstall plan. Each invocation dispatches once: `notify()` with the dedicated `ReconcilePendingEmptyMessage` for the empty-steady-state path, otherwise `notifyWithContext` with `PENDING_CONTEXT` over the projection's rows merged with the `(failed)` rows and sorted by `compareByNameThenScope`.
 
 ## Analog modules
 
-`orchestrators/import/execute.ts` is the closest cascade analog -- its `buildImportNotificationMarketplaces` is the byte-stable template the reconcile notify projection mirrors (same accumulate-blocks-then-sort structure, same `compareByNameThenScope` final sort). `orchestrators/marketplace/info.ts` is the closest read-only orchestrator analog -- its IL-2 single-notify discipline and NFR-5 no-network grep-gate annotation are the template `preview.ts` mirrors.
+`orchestrators/import/execute.ts` is the closest cascade analog -- its `buildImportNotificationMarketplaces` is the byte-stable template the reconcile notify projection mirrors (same accumulate-blocks-then-sort structure, same `compareByNameThenScope` final sort). `orchestrators/marketplace/info.ts` is the closest read-only orchestrator analog -- its IL-2 single-notify discipline and NFR-5 no-network header annotation are the template `pending.ts` mirrors.
