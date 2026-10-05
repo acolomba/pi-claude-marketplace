@@ -393,7 +393,6 @@ async function hydrateInstalledHooks(args: {
 
   for (const { member, hooksJsonPath } of withHooks) {
     try {
-      // eslint-disable-next-line no-await-in-loop -- hydrates one member at a time, as /reload does
       await args.hooksRouting.readAndCachePluginHooks({
         scope: args.scope,
         marketplace: member.marketplace,

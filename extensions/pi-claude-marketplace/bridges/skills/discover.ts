@@ -232,7 +232,6 @@ export async function discoverPluginSkills(input: {
       ? skillsRel
       : path.join(input.resolved.pluginRoot, skillsRel);
 
-    // eslint-disable-next-line no-await-in-loop -- first-seen dir wins the shared dedup sets
     const handledAsSelf = await collectSelfSkillDir(
       input.pluginName,
       skillsDir,
@@ -242,7 +241,6 @@ export async function discoverPluginSkills(input: {
     );
 
     if (!handledAsSelf) {
-      // eslint-disable-next-line no-await-in-loop -- first-seen dir wins the shared dedup sets
       await collectSkillSubdirs(input.pluginName, skillsDir, seenByGenerated, seenByDir, warnings);
     }
   }
