@@ -142,6 +142,8 @@
         "tls",
         "node:dgram",
         "dgram",
+        "node:http2",
+        "http2",
         "undici"
       ],
       "files": ["extensions/pi-claude-marketplace/**"],

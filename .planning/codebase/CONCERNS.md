@@ -21,10 +21,10 @@ last_mapped_at: 2026-10-05
 - Fix approach: none; documented trade-off. Re-read `.fallowrc.json` `production` before relying on this.
 
 **Rule pack `rule-packs/architecture.json` has known gaps:**
-- Issue: the pack enforces output discipline (`no-stdio`, `no-console`, `migrate-console-warn-only`, `debug-log-console-error-only`) and import chokepoints (`write-file-atomic-chokepoint`, `no-network-modules`, `fetch-chokepoint`). It does not catch a dynamic `import()` of a banned module, an aliased `fetch` (`const f = fetch; f(...)`), or `node:http2`/`http2` (absent from the `no-network-modules` specifier list).
+- Issue: the pack enforces output discipline (`no-stdio`, `no-console`, `migrate-console-warn-only`, `debug-log-console-error-only`) and import chokepoints (`write-file-atomic-chokepoint`, `no-network-modules`, `fetch-chokepoint`). It does not catch a dynamic `import()` of a banned module or an aliased `fetch` (`const f = fetch; f(...)`).
 - Files: `rule-packs/architecture.json`
-- Impact: a new network or atomic-write path can bypass the pack by one of those three routes with no gate reporting it.
-- Fix approach: add `node:http2`/`http2` to `no-network-modules`; the other two need a fallow capability or an ESLint selector.
+- Impact: a new network or atomic-write path can bypass the pack by either route with no gate reporting it.
+- Fix approach: both need a fallow capability or an ESLint selector.
 
 **`npm run fallow` empty-glob check depends on fallow's WARN text:**
 - Issue: the `fallow` script in `package.json` runs `fallow rule-pack test --quiet 2>&1 | grep 'WARN.*rule pack'` and fails when it matches, to catch a rule whose `files` glob matches nothing. It relies on the exact warning wording.
