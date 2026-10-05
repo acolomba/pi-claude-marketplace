@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-05T13:46:00.222Z"
+last_updated: "2026-10-05T13:58:57.556Z"
 last_activity: 2026-10-05
 last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
-state_head: 53a0adf8174936602186138d1a763bc6fac92af8
+state_head: eb9c146018551f13ba80cc29bcf3ceded2cca4ab
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -617,6 +617,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261005-c2w | Set up worktree subagents with node_modules and their own CodeGraph index | 2026-10-05 | 732ba0d1 | [261005-c2w-set-up-worktree-subagents-with-node-modu](./quick/261005-c2w-set-up-worktree-subagents-with-node-modu/) |
 | 31 | Route worktree CodeGraph queries without a per-call sync; pi.sh says npm install | 2026-10-05 | 53a0adf8 | — |
 | 32 | Trim CONTRIBUTING.md to setup, running Pi, and checks; changelog for worktree hooks | 2026-10-05 | 53a0adf8 | — |
+| 33 | Restore the worktree CodeGraph sync before each query | 2026-10-05 | eb9c1460 | — |
 
 ## Deferred Items
 
