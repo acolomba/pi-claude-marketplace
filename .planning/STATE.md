@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-05T02:45:51.481Z"
+last_updated: "2026-10-05T11:41:17.694Z"
 last_activity: 2026-10-04
 last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
-state_head: 53a86f3d04d6412fe3535abf9feb6976bb7a0661
+state_head: ce686548e24ccfcd8c28d9e41e1b7d835b4b89d5
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-04 — Completed quick task 261004-u7n: type member gate and coverage pin removed
+Last activity: 2026-10-05 — Completed quick task 261005-9me: check-changed selector replaced by an npm run check pre-commit hook
 
 ### workflows-replay closeout (merged from main)
 
@@ -613,6 +613,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261004-u3o | Remove three unread type members | 2026-10-05 | 90291781 | [261004-u3o-remove-three-unread-type-members-and-the](./quick/261004-u3o-remove-three-unread-type-members-and-the/) |
 | 27 | init.sh: leave core.hooksPath alone; tolerate a refused pre-commit install | 2026-10-05 | 90291781 | — |
 | 261004-u7n | Remove the unused type member gate and the coverage pin | 2026-10-05 | 53a86f3d | [261004-u7n-remove-the-unused-type-member-gate](./quick/261004-u7n-remove-the-unused-type-member-gate/) |
+| 261005-9me | Replace the check-changed selector with an npm run check pre-commit hook | 2026-10-05 | ce686548 | [261005-9me-replace-the-check-changed-selector-with-](./quick/261005-9me-replace-the-check-changed-selector-with-/) |
 
 ## Deferred Items
 
