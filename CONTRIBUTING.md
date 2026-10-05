@@ -27,10 +27,12 @@ Run this command to set up development tools and dependencies in a fresh clone o
 
 It installs:
 
-- The npm dependencies (`npm ci`). They include the Pi version that `package-lock.json` pins. The tests and `scripts/pi.sh` run that Pi, so you do not need a `pi` on `PATH`, and they do not use one.
+- The npm dependencies (`npm install`). They include the Pi version that `package-lock.json` pins. The tests and `scripts/pi.sh` run that Pi, so you do not need a `pi` on `PATH`, and they do not use one.
 - [pre-commit](https://pre-commit.com/#installation)
 - [gsd-core](https://github.com/open-gsd/gsd-core)
 - [codegraph](https://github.com/colbymchenry/codegraph)
+
+Claude Code subagents that run in their own worktree do not need this script. Hooks in `.claude/settings.json` install the npm dependencies, build a CodeGraph index in each new worktree, and send the subagent's CodeGraph queries to that index.
 
 ## Running Pi against the checkout
 
