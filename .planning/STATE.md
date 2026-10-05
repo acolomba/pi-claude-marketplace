@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-05T21:55:24.293Z"
+last_updated: "2026-10-05T22:05:34.962Z"
 last_activity: 2026-10-05
 last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
-state_head: 89c0e3563d5c0ee07cd1ce81430ddfb4d3c35173
+state_head: da3f41ad80aa4f42af8a10a2e04d266eda6933be
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -624,6 +624,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261005-jdx | Fail checks on warnings, keep passing output quiet, stop fallow rewriting AGENTS.md | 2026-10-05 | f1f634e2 | [261005-jdx-fail-checks-on-warnings-and-keep-passing](./quick/261005-jdx-fail-checks-on-warnings-and-keep-passing/) |
 | 261005-la5 | Clean up review leftovers and show full CI output | 2026-10-05 | cf8399b4 | [261005-la5-clean-up-review-leftovers-and-show-full-](./quick/261005-la5-clean-up-review-leftovers-and-show-full-/) |
 | 261005-n1k | Move output discipline to a fallow rule pack and default-deny NFR-5 | 2026-10-05 | 89c0e356 | [261005-n1k-move-output-discipline-to-a-fallow-rule-](./quick/261005-n1k-move-output-discipline-to-a-fallow-rule-/) |
+| 40 | Ban http2 imports in the fallow network chokepoint | 2026-10-05 | da3f41ad | — |
 
 ## Deferred Items
 
