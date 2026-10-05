@@ -235,7 +235,7 @@ function isBuildInput(file) {
   return (
     buildConfigFiles.has(file) ||
     /^(extensions|tests|\.github\/workflows)\//.test(file) ||
-    /^scripts\/.*\.(json|mjs)$/.test(file) ||
+    /^scripts\/.*\.mjs$/.test(file) ||
     /^demos\/.*\.ts$/.test(file) ||
     isDocumentation(file)
   );

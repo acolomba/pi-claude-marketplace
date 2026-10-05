@@ -14,7 +14,6 @@ on:
       - "extensions/**"
       - "tests/**"
       - "scripts/**/*.mjs"
-      - "scripts/**/*.json"
       - "demos/**/*.ts"
       - "docs/output-catalog.md"
       - ".github/workflows/**"
@@ -36,7 +35,6 @@ on:
       - "extensions/**"
       - "tests/**"
       - "scripts/**/*.mjs"
-      - "scripts/**/*.json"
       - "demos/**/*.ts"
       - "docs/output-catalog.md"
       - ".github/workflows/**"
@@ -106,7 +104,7 @@ jobs:
 
       - name: Run full check pipeline
         # NFR-6: typecheck + ESLint + fallow + Prettier + the unit suite at
-        # 100% coverage + integration tests + the member gates
+        # 100% coverage + integration tests
         run: npm run check
 
       - name: Save accepted unit coverage
@@ -167,13 +165,13 @@ jobs:
   #   push: main                 -- EMPTY. origin/main IS HEAD.
   #   workflow_call (v* tag)     -- EMPTY. The tag sits on main.
   #
-  # On the two non-PR events a changed-pair run would select nothing, measure
-  # only the pinned pairs and exit 0, having said nothing about the commit that
-  # triggered it -- while `package` depended on it as though it had. Both
-  # in-job base assertions are blind to that: they check which base resolved,
-  # never how large a change set it held. So those two events take the third
-  # scope, the whole tree, which is the honest change set for a commit that is
-  # already on main and the strongest one for a release.
+  # On the two non-PR events a changed-pair run would select nothing and exit 0,
+  # having said nothing about the commit that triggered it -- while `package`
+  # depended on it as though it had. Both in-job base assertions are blind to
+  # that: they check which base resolved, never how large a change set it held.
+  # So those two events take the third scope, the whole tree, which is the
+  # honest change set for a commit that is already on main and the strongest one
+  # for a release.
   direct-coverage:
     name: direct coverage (Node 24)
     runs-on: ubuntu-latest
@@ -231,7 +229,7 @@ jobs:
 
       # push: main and the v*-tag workflow_call. There is no change set to
       # select against origin/main here, so the gate measures the whole tree
-      # and compares every reading against the pin.
+      # and fails on any shortfall.
       #
       # This arm carries no assertion step of its own, and deliberately. The
       # three steps above exist because a changed-pair run cannot tell whether

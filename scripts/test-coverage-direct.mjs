@@ -8,12 +8,6 @@ import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
 
-import {
-  assertPinnedReadings,
-  loadCoveragePin,
-  pinProjectPath,
-} from "./test-coverage-direct.pin.mjs";
-
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const reporterPath = fileURLToPath(new URL("./test-reporter.mjs", import.meta.url));
 const productionRoot = "extensions/pi-claude-marketplace";
@@ -61,7 +55,7 @@ function testToSource(testPath) {
  * of the two would report a pair that exists in the selected repository as missing, which is a wrong
  * answer shaped like a refusal.
  */
-export function pairForPath(inputPath, selectedProjectRoot = projectRoot) {
+function pairForPath(inputPath, selectedProjectRoot = projectRoot) {
   const projectPath = toProjectPath(inputPath, selectedProjectRoot);
   let sourcePath;
   let testPath;
@@ -85,7 +79,7 @@ export function pairForPath(inputPath, selectedProjectRoot = projectRoot) {
   return { sourcePath, testPath };
 }
 
-export function productionPaths() {
+function productionPaths() {
   const absoluteRoot = path.join(projectRoot, productionRoot);
 
   const productionModules = readdirSync(absoluteRoot, { recursive: true, withFileTypes: true })
@@ -516,21 +510,20 @@ function assertCompleteCoverage(sourcePath, lcovText, selectedProjectRoot = proj
     .join(", ");
 }
 
-// How the gate states a shortfall. One declaration, read by the arms that record a refused pair and
-// by the report that files it as a row, so the two can never drift on what a reading is.
+// How the gate states a shortfall. `assertCompleteCoverage` and `enforcePairs` write it, and
+// `shortfallReadingOf` reads it back.
 const shortfallPattern = /^Incomplete direct coverage for (?<sourcePath>[^:]+): (?<counts>.+)$/;
 
 /**
  * The reading inside a shortfall refusal for THIS pair, or `undefined` for anything else.
  *
  * The answer is `undefined` rather than a throw for every other error, because the caller is what
- * decides whether a non-coverage failure is fatal. Both gate arms and the report rethrow on
- * `undefined` for the same reason: a focused test that failed, or an LCOV that could not be read, is
- * not a coverage verdict, and recording it as one would answer for a pair nothing measured. The
- * message has to name this pair's source for the same reason -- one module's reading filed against
- * another still looks right.
+ * decides whether a non-coverage failure is fatal. `measurePair` rethrows on `undefined`: a focused
+ * test that failed, or an LCOV that could not be read, is not a coverage verdict, and recording it as
+ * one would answer for a pair nothing measured. The message has to name this pair's source for the
+ * same reason -- one module's reading filed against another still looks right.
  */
-export function shortfallReadingOf(error, sourcePath) {
+function shortfallReadingOf(error, sourcePath) {
   const message = error instanceof Error ? error.message : String(error);
   const match = shortfallPattern.exec(message);
 
@@ -566,17 +559,17 @@ function repeatedValues(records, field) {
 // enumerated module by construction -- so a report-less run degrades this to a structural invariant
 // over the loop's own output rather than a guard over the run.
 //
-// A row is recorded for a refused pair too, rather than the refusal ending the loop: what refuses an
-// unrecorded shortfall is the comparison against the pin, not the abort. The check below therefore
-// still sees one row per enumerated module on a run that measured a shortfall, and the reading that
-// shortfall produced is in the retained report where a later reader can diff it.
+// A row is recorded for a refused pair too, rather than the refusal ending the loop: `enforcePairs`
+// fails the run only after every pair is measured. The check below therefore still sees one row per
+// enumerated module on a run that measured a shortfall, and the reading that shortfall produced is in
+// the retained report where a later reader can diff it.
 //
 // The round-trip check is also the honest answer to COV-02's remaining half. Path-level ambiguity --
 // two production modules claiming one test, or one test claiming two modules -- is UNREACHABLE under
 // the current one-to-one name mapping, so a check written to catch it could never fire and would
 // prove nothing. What is assertable is the invariant that makes it unreachable: every row maps to its
 // test and back to itself, and no two rows share either member.
-export function assertReportComplete(records, modulePaths) {
+function assertReportComplete(records, modulePaths) {
   for (const field of ["sourcePath", "testPath"]) {
     const repeated = repeatedValues(records, field);
 
@@ -608,7 +601,7 @@ export function assertReportComplete(records, modulePaths) {
   }
 }
 
-export async function runPair({ sourcePath, testPath }) {
+async function runPair({ sourcePath, testPath }) {
   const coverageDirectory = await mkdtemp(path.join(tmpdir(), "pi-claude-direct-"));
   const lcovPath = path.join(coverageDirectory, "pair.lcov");
   const startedAt = process.hrtime.bigint();
@@ -665,7 +658,7 @@ export async function runPair({ sourcePath, testPath }) {
  * onRecord sees completion order so interrupted reports keep every finished pair.
  * A failed worker stops new work. Started workers drain before the failure escapes.
  */
-export async function runPairs(pairs, run, options = {}) {
+async function runPairs(pairs, run, options = {}) {
   const concurrency =
     options.concurrency ?? (process.env.TEST_CONCURRENCY || Math.min(4, availableParallelism()));
   const limit = Number(concurrency);
@@ -710,8 +703,7 @@ export async function runPairs(pairs, run, options = {}) {
  *
  * Only a coverage verdict is recorded. `shortfallReadingOf` answers `undefined` for every other
  * failure and this rethrows it, because a focused test that failed or an LCOV that could not be read
- * says nothing about coverage, and an arm that swallowed it would compare an incomplete measurement
- * against the pin and call the difference a drift.
+ * says nothing about coverage.
  *
  * A refused pair still answers a record of the same shape `runPair` returns, so the caller retaining
  * a report keeps one row per pair whatever the verdict was.
@@ -729,10 +721,8 @@ async function measurePair(pair, observed, run) {
     }
 
     observed.push({ sourcePath: pair.sourcePath, reading });
-    // `runPair` prints a line for every pair it passes. Without this one, a run that forgave two
-    // pinned shortfalls and a run in which those two pairs read complete print the same thing, and
-    // the CI log the release path retains cannot tell them apart. A gate that forgives something
-    // says what it forgave.
+    // `runPair` prints a line for every pair it passes; this line shows a shortfall as soon as it
+    // lands, before the run fails.
     process.stdout.write(`Direct coverage shortfall recorded: ${pair.sourcePath} (${reading})\n`);
 
     return {
@@ -741,7 +731,7 @@ async function measurePair(pair, observed, run) {
       coverage: reading,
       // The retained artifact says which rows were refused. Without it a shortfall row and a
       // complete row differ only by `hit !== found` inside a formatted string, which a later reader
-      // has to notice rather than read. The reporter already emits a `verdict` for the same data.
+      // has to notice rather than read.
       verdict: "shortfall",
       typeOnly: false,
       runtime: process.version,
@@ -751,28 +741,30 @@ async function measurePair(pair, observed, run) {
 }
 
 /**
- * Measure every pair, then compare what fell short against the pin. This is the gate's entire
- * enforcement edge, and every arm reaches it.
+ * Measure every pair, then fail on any shortfall. This is the gate's entire enforcement edge, and
+ * every arm reaches it.
  *
- * The extraction is the point. `measurePair` records a shortfall and continues, so no arm's loop
- * refuses anything by itself -- the comparison below is the only thing that does, for every arm.
+ * `measurePair` records a shortfall and continues, so every selected pair runs and the all-pair
+ * report holds a row for each pair before the run fails.
  *
- * The two hooks exist so the all-pair arm keeps properties it had inline and nothing more:
- * `onRecord` writes its report row by row (an interrupted run still leaves a readable partial
- * result), and `beforeCompare` keeps its completeness check AHEAD of the pin comparison. That order
- * is load-bearing -- a run that skipped rows produces a short `observed` array too, and the pin
- * would name it as a stale row rather than as the skipped run it is.
+ * The two hooks serve the all-pair arm: `onRecord` writes its report row by row (an interrupted run
+ * still leaves a readable partial result), and `beforeVerdict` runs its completeness check first,
+ * because a run that skipped rows can hold no shortfall and would pass otherwise.
  */
-async function enforcePairs(pairs, pinRows, enumeratedModules, run = runPair, hooks = {}) {
+async function enforcePairs(pairs, run = runPair, hooks = {}) {
   const observed = [];
   const records = await runPairs(pairs, (pair) => measurePair(pair, observed, run), hooks);
 
-  hooks.beforeCompare?.(records);
-  assertPinnedReadings(observed, pinRows, enumeratedModules);
+  hooks.beforeVerdict?.(records);
 
   if (observed.length > 0) {
-    process.stdout.write(
-      `${observed.length.toString()} pinned shortfall(s) matched ${pinProjectPath} exactly.\n`,
+    throw new Error(
+      observed
+        .map(
+          ({ sourcePath, reading }) => `Incomplete direct coverage for ${sourcePath}: ${reading}`,
+        )
+        .sort()
+        .join("\n"),
     );
   }
 
@@ -790,7 +782,7 @@ async function runAllPairs(reportPath) {
     writeFileSync(reportPath, "");
   }
 
-  const records = await enforcePairs(pairs, loadCoveragePin(), modulePaths, runPair, {
+  const records = await enforcePairs(pairs, runPair, {
     onRecord: (record) => {
       if (reportPath !== undefined) {
         appendFileSync(reportPath, `${JSON.stringify(record)}\n`);
@@ -801,7 +793,7 @@ async function runAllPairs(reportPath) {
     // `assertReportComplete` for why the report-less arm cannot fail.
     //
     // Unconditional: a report is how the result is retained, not what makes the run a gate.
-    beforeCompare: (measured) => {
+    beforeVerdict: (measured) => {
       assertReportComplete(
         reportPath === undefined
           ? measured
@@ -831,38 +823,10 @@ function skippedReport(skipped) {
   return `No changed source-test pairs. Passed over ${skipped.length} changed path(s):\n${rows}\n`;
 }
 
-/**
- * The selected pairs, plus every pinned pair the selection did not already name.
- *
- * The stale direction of the pin can only fire on a pair the run measured, and a change set need not
- * touch a pinned module at all -- so without the union, every commit that happens to miss the pinned
- * files would treat the pin as an allow-list. The cost is one focused run per pin row.
- *
- * A row naming a module the tree no longer enumerates is passed over here rather than paired, so the
- * comparison after the loop refuses it as the structural failure it is instead of `pairForPath`
- * refusing it as a missing pair member.
- */
-function pairsWithPinned(selectedPairs, pinRows, enumeratedModules) {
-  const enumerated = new Set(enumeratedModules);
-  const pairs = new Map(selectedPairs.map((pair) => [pair.sourcePath, pair]));
-
-  for (const row of pinRows) {
-    if (!pairs.has(row.sourcePath) && enumerated.has(row.sourcePath)) {
-      pairs.set(row.sourcePath, pairForPath(row.sourcePath));
-    }
-  }
-
-  return [...pairs.values()];
-}
-
 // Zero pairs is reported as a pass only once the change set is known to have resolved; a selection
 // that failed sets a non-zero exit code and names the git invocation that failed (`D-07-14`). The
 // selected base candidate is written before either outcome, because it is what makes the answer
 // auditable (`D-07-13`).
-//
-// A zero-pair CHANGED selection still reports what it passed over and then continues into the pinned
-// pairs, because the pin is measured on every run rather than only on the runs whose change set
-// happens to name a pinned module.
 async function runChangedPairs(explicitBase) {
   const selected = pairsForChangedPaths(projectRoot, explicitBase);
 
@@ -878,14 +842,7 @@ async function runChangedPairs(explicitBase) {
     process.stdout.write(skippedReport(selected.skipped));
   }
 
-  const enumeratedModules = productionPaths();
-  const pinRows = loadCoveragePin();
-
-  await enforcePairs(
-    pairsWithPinned(selected.pairs, pinRows, enumeratedModules),
-    pinRows,
-    enumeratedModules,
-  );
+  await enforcePairs(selected.pairs);
 }
 
 async function main() {
@@ -912,16 +869,15 @@ async function main() {
   }
 
   if (args.length > 0 && args.every((arg) => !arg.startsWith("--"))) {
-    // Explicit paths compare only the pins they measure, with the same strictness as other arms.
+    // Explicit paths get the same verdict as the other arms.
     const pairs = new Map(
       args.map((arg) => {
         const pair = pairForPath(arg);
         return [pair.sourcePath, pair];
       }),
     );
-    const rowsForPairs = loadCoveragePin().filter((row) => pairs.has(row.sourcePath));
 
-    await enforcePairs([...pairs.values()], rowsForPairs, productionPaths());
+    await enforcePairs([...pairs.values()]);
     return;
   }
 
