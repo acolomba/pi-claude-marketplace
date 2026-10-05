@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-05T14:56:54.689Z"
+last_updated: "2026-10-05T15:11:29.100Z"
 last_activity: 2026-10-05
 last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
-state_head: 7c2c3ccd659657ef8d3552d5ba8ec4125416ac4d
+state_head: 1b636217390f94a4d1abefa890dc6793fca4b367
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-05 — Completed quick task 261005-e23: a per-worktree CodeGraph daemon keeps worktree indexes current
+Last activity: 2026-10-05 — TruffleHog hook switched to filesystem mode; worktree SKIP rule removed
 
 ### workflows-replay closeout (merged from main)
 
@@ -619,6 +619,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 32 | Trim CONTRIBUTING.md to setup, running Pi, and checks; changelog for worktree hooks | 2026-10-05 | 53a0adf8 | — |
 | 33 | Restore the worktree CodeGraph sync before each query | 2026-10-05 | eb9c1460 | — |
 | 261005-e23 | Keep worktree CodeGraph indexes current with a per-worktree daemon | 2026-10-05 | 7c2c3ccd | [261005-e23-keep-worktree-codegraph-indexes-current-](./quick/261005-e23-keep-worktree-codegraph-indexes-current-/) |
+| 35 | Switch the TruffleHog hook to filesystem mode (v3.97.9) and drop SKIP=trufflehog | 2026-10-05 | 1b636217 | — |
 
 ## Deferred Items
 
