@@ -51,4 +51,4 @@ SKIP=npm-check pre-commit run --all-files
 
 When a commit stages a file that the build or CI reads, the pre-commit hook runs `npm run check:commit`. It runs the static checks, the unit tests that have no source pair, and direct coverage for the staged source-test pairs only, so it is not a full check. Run `npm run check` before you open a pull request and after a merge, because a merge does not run the hook.
 
-Every check fails on a warning, so a passing check prints little. `npm run check:static` prints one line for each step. `npm run check` adds one `Merged LCOV` line that names the merged coverage report. The other commands print nothing when they pass. A failing step prints its full output.
+Every check fails on a warning, so a passing check prints little. `npm run check:static` prints one line for each step. `npm run check` adds one `Merged LCOV` line that names the merged coverage report. The other commands print nothing when they pass. A failing step prints its full output. In CI, where GitHub Actions sets the `CI` variable, every check prints its full output, including each passing test.

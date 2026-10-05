@@ -3,13 +3,17 @@ import { Readable } from "node:stream";
 import { spec } from "node:test/reporters";
 
 /**
- * A node:test reporter that prints nothing for a passing run beyond what the
- * tests themselves write and Node's diagnostics. The built-in reporters either
- * print every test (`spec`, `tap`, `junit`) or drop the summary and the
- * coverage-threshold message (`dot`). Failures still go through Node's `spec`
- * reporter, so they keep Node's own diffs, causes, and locations. The count
- * line follows a failed or cancelled test or an unmet coverage threshold.
- * Skipped and todo counts alone print nothing: they track the environment.
+ * A node:test reporter with a quiet local mode and a full CI mode. Locally, a
+ * passing run prints nothing beyond what the tests themselves write and Node's
+ * diagnostics. The built-in reporters either print every test (`spec`, `tap`,
+ * `junit`) or drop the summary and the coverage-threshold message (`dot`).
+ * Failures still go through Node's `spec` reporter, so they keep Node's own
+ * diffs, causes, and locations. The count line follows a failed or cancelled
+ * test or an unmet coverage threshold. Skipped and todo counts alone print
+ * nothing locally: they track the environment. In CI, when the `CI`
+ * environment variable is not empty (GitHub Actions sets it), every event goes
+ * to `spec`, so passes, skips, todo tests, coverage tables, and the counts all
+ * print.
  */
 
 const countPrefixes = [
@@ -88,6 +92,11 @@ function runFailed(state) {
 
 // fallow-ignore-next-line unused-export -- `node --test --test-reporter` loads this default.
 export default async function* failureReporter(source) {
+  if (process.env.CI) {
+    yield* Readable.from(source).pipe(new spec());
+    return;
+  }
+
   const state = { counts: [], coverage: undefined, unmet: new Map() };
   yield* Readable.from(forwardedEvents(source, state)).pipe(new spec());
   yield* shortfallLines(state);

@@ -631,6 +631,10 @@ async function runPair({ sourcePath, testPath }) {
     const lcov = readFileSync(lcovPath, "utf8");
     const summary = assertCompleteCoverage(sourcePath, lcov);
 
+    if (process.env.CI) {
+      process.stdout.write(`Direct coverage passed: ${sourcePath} (${summary})\n`);
+    }
+
     return {
       sourcePath,
       testPath,
@@ -765,6 +769,7 @@ async function enforcePairs(pairs, run = runPair, hooks = {}) {
 async function runAllPairs({ reportPath, lcovPath } = {}) {
   const modulePaths = productionPaths();
   const pairs = modulePaths.map((modulePath) => pairForPath(modulePath));
+  const startedAt = process.hrtime.bigint();
 
   // Line-oriented and written as each pair lands, so an interrupted run still leaves a readable
   // partial result and a later reader can diff two runs line by line.
@@ -797,6 +802,13 @@ async function runAllPairs({ reportPath, lcovPath } = {}) {
     },
   });
 
+  if (process.env.CI) {
+    const elapsedMs = Number((process.hrtime.bigint() - startedAt) / 1000000n);
+    process.stdout.write(
+      `All-pair run complete: ${records.length} pairs in ${(elapsedMs / 1000).toFixed(1)}s (${elapsedMs}ms) on ${process.version}\n`,
+    );
+  }
+
   if (lcovPath !== undefined) {
     writeMergedLcov(lcovPath, records);
   }
@@ -808,9 +820,10 @@ function writeMergedLcov(lcovPath, records) {
   process.stdout.write(`Merged LCOV: ${lcovPath} (${measured.length} records)\n`);
 }
 
-// A passing run prints nothing. A failing run writes the selected base candidate to stderr, which
-// keeps a failing answer auditable (`D-07-13`). A selection that failed still sets a non-zero exit
-// code and names the git invocation that failed (`D-07-14`).
+// Locally, a passing run prints nothing, and in CI each pair prints its result line. A failing run
+// writes the selected base candidate to stderr, which keeps a failing answer auditable (`D-07-13`).
+// A selection that failed still sets a non-zero exit code and names the git invocation that failed
+// (`D-07-14`).
 async function runChangedPairs(explicitBase) {
   const selected = pairsForChangedPaths(projectRoot, explicitBase);
 

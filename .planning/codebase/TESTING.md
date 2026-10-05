@@ -20,7 +20,7 @@ npm run test:coverage    # direct coverage for every pair, then integration and 
 npm run check            # check:static (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, in parallel) && test:unpaired && test:integration && test:coverage:direct:all (no e2e)
 ```
 
-Every `node --test` script and each direct-coverage pair run use `scripts/test-reporter.mjs`. A passing run prints nothing. A failing run prints Node's `spec` report, any coverage shortfall, and the count line.
+Every `node --test` script and each direct-coverage pair run use `scripts/test-reporter.mjs`. A passing run prints nothing. A failing run prints Node's `spec` report, any coverage shortfall, and the count line. When `CI` is not empty, as on GitHub Actions, the reporter passes every event to Node's `spec` reporter, so passing and skipped tests, coverage tables, and counts print too.
 
 `TEST_CONCURRENCY` env var, when set, is threaded into every `node --test` invocation as `--test-concurrency=$TEST_CONCURRENCY`.
 

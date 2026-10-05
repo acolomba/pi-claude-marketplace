@@ -1,4 +1,5 @@
 // The static checks are independent, so running them at once takes about as long as the slowest one.
+// A passing step prints only its status line, except in CI (`CI` not empty), where its output follows.
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 
@@ -33,8 +34,11 @@ async function main() {
     const status = result.passed ? "passed" : "failed";
     process.stdout.write(`${status} ${result.script} (${result.seconds.toFixed(1)} s)\n`);
 
-    if (!result.passed) {
+    if (!result.passed || (process.env.CI && result.output !== "")) {
       process.stdout.write(result.output.endsWith("\n") ? result.output : `${result.output}\n`);
+    }
+
+    if (!result.passed) {
       process.exitCode = 1;
     }
   }
