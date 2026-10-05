@@ -14,6 +14,7 @@ on:
     paths: &build_inputs
       - "extensions/**"
       - "tests/**"
+      - "rule-packs/**"
       - "scripts/**/*.mjs"
       - "demos/**/*.ts"
       - "docs/output-catalog.md"

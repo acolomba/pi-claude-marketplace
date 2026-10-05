@@ -39,6 +39,7 @@ pi-claude-marketplace/
 ├── scripts/pi.sh                       # dev-loop launcher script
 ├── .planning/                          # GSD planning artifacts (codebase docs, milestones, seeds)
 ├── .fallowrc.json                      # fallow zone/boundary/health config
+├── rule-packs/architecture.json        # fallow rule pack: call and import bans for the extension
 ├── eslint.config.js                    # flat ESLint config incl. architecture-boundary rules
 ├── tsconfig.json                       # strict TypeScript compiler options
 └── package.json                        # scripts, deps, engines
@@ -87,7 +88,8 @@ pi-claude-marketplace/
 - `extensions/pi-claude-marketplace/index.ts`: extension factory — registers `resources_discover`, `session_start`, `/claude:plugin` command, MCP tools
 
 **Configuration:**
-- `.fallowrc.json`: fallow entry point, health thresholds (`maxCyclomatic: 20`, `maxCognitive: 15`, and `maxCrap: 0`, which switches CRAP off), 14-zone boundary rules
+- `.fallowrc.json`: fallow entry point, health thresholds (`maxCyclomatic: 20`, `maxCognitive: 15`, and `maxCrap: 0`, which switches CRAP off), 14-zone boundary rules, and `rulePacks`, which loads `rule-packs/architecture.json`
+- `rule-packs/architecture.json`: the fallow rule pack, the call and import bans scoped to `extensions/pi-claude-marketplace/**` (see CONVENTIONS.md)
 - `eslint.config.js`: flat ESLint config, incl. `import-x/no-restricted-paths` (BLOCK C: the 8-folder boundary matrix plus the D-11 ledger zones over `PLUGIN_LEDGERS`/`MARKETPLACE_LEDGERS`), extension-scoped `no-restricted-syntax` (forbids `process.stdout`/`stderr` writes), and BLOCK F's NFR-5 network-free rules over `NETWORK_FREE_TARGETS`
 - `tsconfig.json`: strict compiler options, includes `extensions/**/*.ts` and `tests/**/*.ts`
 
