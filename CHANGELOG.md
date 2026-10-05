@@ -12,6 +12,8 @@
   - `npm run check` no longer runs the unused type member gate, and the `lint:type-members` and `test:analyzers` scripts no longer exist.
   - Direct coverage no longer reads a pin file, so any shortfall fails, and the `test:coverage:direct:report` script no longer exists.
   - A Claude Code subagent in its own worktree gets the npm dependencies and a CodeGraph index of that worktree. Its CodeGraph queries use that index.
+  - Every local and CI check now fails on a warning, and a passing check prints at most one summary line.
+  - `scripts/init.sh` no longer lets Fallow rewrite `AGENTS.md`, so the Fallow task map there no longer changes on a Fallow upgrade.
 
 - Internal: local checks now select changed modules and their consumers. GSD uses focused checks during tasks and full checks before PR handoff. CI reuses unit coverage for SonarCloud, removes duplicate checks, and runs isolated coverage pairs concurrently.
 

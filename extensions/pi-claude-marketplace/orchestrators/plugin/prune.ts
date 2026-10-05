@@ -144,7 +144,6 @@ async function finalizeCommittedMembers(
   const failures: { readonly member: PrunedMember; readonly cause: unknown }[] = [];
   for (const member of args.members) {
     try {
-      // eslint-disable-next-line no-await-in-loop -- each finalize sweeps the shared clone cache
       await finalizePrunedMembers({ ...args, members: [member] });
     } catch (error: unknown) {
       failures.push({ member, cause: error });

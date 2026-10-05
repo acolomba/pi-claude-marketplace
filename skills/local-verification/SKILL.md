@@ -17,15 +17,17 @@ A build input is a file that a build or a CI job reads. The build inputs are the
 
 ## What the commands run
 
-`npm run check:static` runs type checking, ESLint, the workflow install-script check, Fallow, the Prettier check, and source/test pairing at the same time. It prints one line for each passing step and the full output of each failing step.
+`npm run check:static` runs type checking, ESLint, the workflow install-script check, Fallow, the Prettier check, and source/test pairing at the same time. It prints one line for each passing step and the full output of each failing step. A warning fails its step: ESLint runs with `--max-warnings 0`, and Prettier, Fallow, and the gate scripts fail on every finding.
 
 `npm run check:commit` runs `check:static`, then the unit tests that have no source pair (`tests/architecture/` and the four fake contract suites), then direct coverage for the staged source-test pairs. It reads only the staged files. Unstaged edits and untracked files do not count. It runs all pairs when a staged file can change the coverage of any pair: a file under `tests/` that is not a `.test.ts` file (a fake, contract, fixture, or harness), `scripts/test-coverage-direct.mjs`, `scripts/test-reporter.mjs`, `package.json`, `package-lock.json`, or `tsconfig.json`.
 
 `npm run check` runs `check:static`, the unit tests that have no source pair, the integration suite, and direct coverage for all pairs. Direct coverage runs the test of each pair alone and requires 100% line, function, and branch coverage of its source. Every source has exactly one paired test, so this also covers the whole unit suite.
 
+The test and direct coverage steps print nothing when they pass. The all-pair run also prints one `Merged LCOV` line. A failing test prints Node's report and the count line, and a coverage shortfall names the source and its coverage.
+
 ## Committing
 
-Run `SKIP=npm-check pre-commit run --files <changed files>` first. It runs only the fixers and linters and takes seconds. If a fixer changes a file, restage the file and run the command again until it is clean.
+Run `SKIP=npm-check pre-commit run --files <changed files>` first. It runs only the fixers and linters and takes seconds. A linter warning fails it too, because yamllint runs with `--strict`. If a fixer changes a file, restage the file and run the command again until it is clean.
 
 Then run `git commit` in the foreground with the longest tool timeout available. Never background it and poll with sleep/grep loops. If a run can outlast the tool's foreground limit, background it once and wait for the completion notification. If a hook fails, the commit did not happen. Fix the cause, restage, and commit again. Never use `--amend` for this.
 

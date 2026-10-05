@@ -3,11 +3,13 @@ import { Readable } from "node:stream";
 import { spec } from "node:test/reporters";
 
 /**
- * A node:test reporter that keeps passing runs to one summary line. The
- * built-in reporters either print every test (`spec`, `tap`, `junit`) or drop
- * the summary and the coverage-threshold message (`dot`). Failures, test
- * output, and diagnostics still go through Node's `spec` reporter, so they keep
- * Node's own diffs, causes, and locations.
+ * A node:test reporter that prints nothing for a passing run beyond what the
+ * tests themselves write and Node's diagnostics. The built-in reporters either
+ * print every test (`spec`, `tap`, `junit`) or drop the summary and the
+ * coverage-threshold message (`dot`). Failures still go through Node's `spec`
+ * reporter, so they keep Node's own diffs, causes, and locations. The count
+ * line follows a failed or cancelled test or an unmet coverage threshold.
+ * Skipped and todo counts alone print nothing: they track the environment.
  */
 
 const countPrefixes = [
@@ -21,6 +23,7 @@ const countPrefixes = [
   "duration_ms ",
 ];
 const thresholdPattern = /(line|branch|function) coverage does not meet threshold of ([\d.]+)%/;
+const failedCountPattern = /^(?:fail|cancelled) [1-9]/;
 const percentKeys = {
   line: "coveredLinePercent",
   branch: "coveredBranchPercent",
@@ -79,12 +82,16 @@ function shortfallLines({ coverage, unmet }) {
   });
 }
 
+function runFailed(state) {
+  return state.unmet.size > 0 || state.counts.some((count) => failedCountPattern.test(count));
+}
+
 // fallow-ignore-next-line unused-export -- `node --test --test-reporter` loads this default.
 export default async function* failureReporter(source) {
   const state = { counts: [], coverage: undefined, unmet: new Map() };
   yield* Readable.from(forwardedEvents(source, state)).pipe(new spec());
   yield* shortfallLines(state);
-  if (state.counts.length > 0) {
+  if (state.counts.length > 0 && runFailed(state)) {
     yield `${state.counts.join(", ")}\n`;
   }
 }

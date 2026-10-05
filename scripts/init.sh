@@ -41,12 +41,11 @@ codegraph install --target claude,codex --location local --no-permissions --init
 # removes the generated per-tool copy, which would shadow the root file
 rm -f .claude/CLAUDE.md
 
-# fallow: AGENTS.md task map, skill pointers, MCP registration (no commit gate;
-# pre-commit already runs the full `npm run fallow`)
-npx fallow agent install --harness claude --harness codex --without hooks --approve
-
-# removes the generated `@AGENTS.md` import shim; AGENTS.md is the canonical file
-rm -f CLAUDE.md
+# fallow: skill pointers and MCP registration. No commit gate: the commit hook
+# already runs `npm run fallow`. No guide: it rewrites AGENTS.md and adds a
+# CLAUDE.md import shim. The Fallow task map in AGENTS.md is kept by hand and
+# no longer refreshes on fallow upgrades.
+npx fallow agent install --harness claude --harness codex --without hooks --without guide --approve
 
 # normalize AGENTS.md
 pre-commit run --files AGENTS.md || true

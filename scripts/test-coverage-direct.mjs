@@ -192,9 +192,9 @@ function explicitBaseSelection(explicitBase, selectedProjectRoot) {
  * The base commit the changed-pair selection diffs against: the one the caller named, or the first
  * that resolves from an ordered candidate chain.
  *
- * The returned candidate is the auditable artifact, not a debug aid (`D-07-13`): a reader of a gate
- * run has to be able to tell which of `origin/main`, `main`, the upstream tracking ref, or `HEAD~1`
- * the answer rests on, because the four disagree about what counts as changed. `attempted` carries
+ * The returned candidate is what a failing run names (`D-07-13`): a reader of a failed gate run has
+ * to be able to tell which of `origin/main`, `main`, the upstream tracking ref, or `HEAD~1` the
+ * answer rests on, because the four disagree about what counts as changed. `attempted` carries
  * the reason every earlier candidate was rejected and is present on both outcomes, so a selection
  * that succeeded still records what it passed over rather than reporting only its winner.
  *
@@ -314,10 +314,6 @@ function isStructuralSupplement(projectPath, selectedProjectRoot) {
  * a changed README or JSON fixture under the production root is passed over instead of refused. On
  * the test side it means excluding the non-corresponding roots and the structural supplements, so
  * the suites that have no pair by design do not compose a module path that does not exist.
- *
- * The reason is a return value rather than a discarded intermediate because `D-07-14` makes a
- * zero-pair run report which paths it passed over and why. A run that reports nothing cannot be told
- * from a run that resolved nothing.
  */
 function pairabilityRefusal(projectPath, selectedProjectRoot) {
   if (projectPath.startsWith(`${productionRoot}/`)) {
@@ -359,19 +355,11 @@ function pairsForPaths(projectPaths, selectedProjectRoot) {
     pairs.set(pair.sourcePath, pair);
   }
 
-  const skipped = projectPaths
-    .map((projectPath) => ({
-      path: projectPath,
-      reason: pairabilityRefusal(projectPath, selectedProjectRoot),
-    }))
-    .filter((entry) => entry.reason !== undefined);
-
-  return { pairs: [...pairs.values()], skipped };
+  return { pairs: [...pairs.values()] };
 }
 
 /**
- * The source-test pairs the selected change set names, carrying the base that produced it and the
- * paths it passed over so a zero-pair answer can still say what it looked at.
+ * The source-test pairs the selected change set names, carrying the base that produced it.
  */
 function pairsForChangedPaths(selectedProjectRoot = projectRoot, explicitBase = undefined) {
   const changed = changedPaths(selectedProjectRoot, explicitBase);
@@ -642,7 +630,6 @@ async function runPair({ sourcePath, testPath }) {
 
     const lcov = readFileSync(lcovPath, "utf8");
     const summary = assertCompleteCoverage(sourcePath, lcov);
-    process.stdout.write(`Direct coverage passed: ${sourcePath} (${summary})\n`);
 
     return {
       sourcePath,
@@ -726,8 +713,7 @@ async function measurePair(pair, observed, run) {
     }
 
     observed.push({ sourcePath: pair.sourcePath, reading });
-    // `runPair` prints a line for every pair it passes; this line shows a shortfall as soon as it
-    // lands, before the run fails.
+    // This line shows a shortfall as soon as it lands, before the run fails.
     process.stdout.write(`Direct coverage shortfall recorded: ${pair.sourcePath} (${reading})\n`);
 
     return {
@@ -779,7 +765,6 @@ async function enforcePairs(pairs, run = runPair, hooks = {}) {
 async function runAllPairs({ reportPath, lcovPath } = {}) {
   const modulePaths = productionPaths();
   const pairs = modulePaths.map((modulePath) => pairForPath(modulePath));
-  const startedAt = process.hrtime.bigint();
 
   // Line-oriented and written as each pair lands, so an interrupted run still leaves a readable
   // partial result and a later reader can diff two runs line by line.
@@ -812,13 +797,6 @@ async function runAllPairs({ reportPath, lcovPath } = {}) {
     },
   });
 
-  const elapsedMs = Number((process.hrtime.bigint() - startedAt) / 1000000n);
-  const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
-
-  process.stdout.write(
-    `All-pair run complete: ${records.length} pairs in ${elapsedSeconds}s (${elapsedMs}ms) on ${process.version}\n`,
-  );
-
   if (lcovPath !== undefined) {
     writeMergedLcov(lcovPath, records);
   }
@@ -830,19 +808,9 @@ function writeMergedLcov(lcovPath, records) {
   process.stdout.write(`Merged LCOV: ${lcovPath} (${measured.length} records)\n`);
 }
 
-function skippedReport(skipped) {
-  if (skipped.length === 0) {
-    return "No changed source-test pairs. No changed path was passed over.\n";
-  }
-
-  const rows = skipped.map((entry) => `  ${entry.path} -- ${entry.reason}`).join("\n");
-  return `No changed source-test pairs. Passed over ${skipped.length} changed path(s):\n${rows}\n`;
-}
-
-// Zero pairs is reported as a pass only once the change set is known to have resolved; a selection
-// that failed sets a non-zero exit code and names the git invocation that failed (`D-07-14`). The
-// selected base candidate is written before either outcome, because it is what makes the answer
-// auditable (`D-07-13`).
+// A passing run prints nothing. A failing run writes the selected base candidate to stderr, which
+// keeps a failing answer auditable (`D-07-13`). A selection that failed still sets a non-zero exit
+// code and names the git invocation that failed (`D-07-14`).
 async function runChangedPairs(explicitBase) {
   const selected = pairsForChangedPaths(projectRoot, explicitBase);
 
@@ -852,16 +820,12 @@ async function runChangedPairs(explicitBase) {
     return;
   }
 
-  process.stdout.write(`Changed-pair base: ${selected.base}\n`);
-  await enforceSelectedPairs(selected);
-}
-
-async function enforceSelectedPairs({ pairs, skipped }) {
-  if (pairs.length === 0) {
-    process.stdout.write(skippedReport(skipped));
+  try {
+    await enforcePairs(selected.pairs);
+  } catch (error) {
+    process.stderr.write(`Changed-pair base: ${selected.base}\n`);
+    throw error;
   }
-
-  await enforcePairs(pairs);
 }
 
 // A pair test can import support files from any `tests/` root, the two scripts run every pair, and
@@ -894,14 +858,18 @@ async function runStagedPairs() {
   const escalation = stagedPaths.find(affectsEveryPair);
 
   if (escalation !== undefined) {
-    process.stdout.write(`Staged ${escalation} affects every pair. Running all pairs.\n`);
-    await runAllPairs();
+    try {
+      await runAllPairs();
+    } catch (error) {
+      process.stderr.write(`Staged ${escalation} affects every pair, so every pair ran.\n`);
+      throw error;
+    }
+
     return;
   }
 
   const selected = pairsForPaths(stagedPaths, projectRoot);
-  process.stdout.write(`Staged pairs: ${selected.pairs.length}\n`);
-  await enforceSelectedPairs(selected);
+  await enforcePairs(selected.pairs);
 }
 
 const usage =
