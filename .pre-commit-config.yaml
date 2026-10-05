@@ -93,11 +93,13 @@ repos:
 
   - repo: local
     hooks:
+      # Same files as `npm run format`: the JavaScript, JSON, and TypeScript
+      # build inputs.
       - id: prettier
         name: prettier
         entry: node_modules/.bin/prettier --write --cache --cache-strategy content
         language: system
-        files: '\.(js|json|ts)$|^scripts/.*\.mjs$'
+        files: '^((extensions|rule-packs|tests)/.*\.(js|json|ts)|scripts/.*\.(json|mjs)|demos/.*\.ts|\.fallowrc\.json|\.prettierrc\.json|eslint\.config\.js|package(-lock)?\.json|tsconfig\.json)$'
       # Includes deletions and shared inputs. Commits run incremental checks
       # only: tool and config changes select the cached broad check, and the
       # full `npm run check` runs at completion and in CI.

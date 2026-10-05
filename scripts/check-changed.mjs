@@ -250,8 +250,9 @@ function isBuildInput(file) {
   );
 }
 
+/** The build inputs Prettier checks: JavaScript, JSON, and TypeScript files, and the scripts. */
 function isFormatted(file) {
-  return /\.(js|json|ts)$/.test(file) || /^scripts\/.*\.mjs$/.test(file);
+  return isBuildInput(file) && (/\.(js|json|ts)$/.test(file) || /^scripts\/.*\.mjs$/.test(file));
 }
 
 function containingSuite(file) {
