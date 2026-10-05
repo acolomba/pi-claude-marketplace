@@ -16,8 +16,8 @@
 npm test                 # unit-ish suite: tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts plus tests/index.test.ts
 npm run test:integration # tests/integration/**/*.test.ts
 npm run test:e2e         # tests/e2e/**/*.test.ts (PI_CM_E2E_REF=pinned)
-npm run test:coverage    # runs unit + integration + e2e each with --experimental-test-coverage, emits coverage/{unit,integration,e2e}.lcov
-npm run check            # typecheck && lint && lint:workflows && fallow && format:check && test:corresponding && test:coverage:unit && test:integration (the unit suite runs under test:coverage:unit; no e2e)
+npm run test:coverage    # direct coverage for every pair, then integration and e2e under --experimental-test-coverage, emits coverage/{direct,integration,e2e}.lcov
+npm run check            # check:static (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, in parallel) && test:unpaired && test:integration && test:coverage:direct:all (no e2e)
 ```
 
 `TEST_CONCURRENCY` env var, when set, is threaded into every `node --test` invocation as `--test-concurrency=$TEST_CONCURRENCY`.
@@ -145,12 +145,12 @@ export interface CredentialOpsFake {
 
 ## Coverage
 
-**Requirements:** Not gated in `npm run check` — `test:coverage` is a separate script, not part of the `check` chain. Coverage feeds SonarCloud (`sonar-project.properties`) rather than acting as a local pass/fail gate.
+**Requirements:** Gated in `npm run check` by `test:coverage:direct:all`: each source-test pair runs alone and must reach 100% lines, functions, and branches of its own source. The pre-commit hook measures only the staged pairs. The merged per-pair report `coverage/direct.lcov` feeds SonarCloud (`sonar-project.properties`).
 
 **View Coverage:**
 ```bash
 npm run test:coverage
-# emits coverage/unit.lcov, coverage/integration.lcov, coverage/e2e.lcov
+# emits coverage/direct.lcov, coverage/integration.lcov, coverage/e2e.lcov
 ```
 
 **Caveat — CRAP is switched off, and `maxCrap: 0` is what switches it off.** CRAP scoring needs Istanbul-format JSON coverage; fallow rejects `lcov` input, and Node's `c8`-style output emits `-1` columns that clamp to zero and zero out coverage for many files. So a CRAP score here would be meaningless. In fallow 3.27.0 a `maxCrap` of `0` disables the check, and **deleting the line does not remove an inert setting — it restores fallow's own default of 30**, which then scores CRAP from a `static_estimated` model and reports 950 findings (148 critical) on a clean tree, turning `npm run fallow` red inside `npm run check`. Measured both ways. Leave the line alone. `maxCyclomatic`/`maxCognitive`/`maxUnitSize` are the load-bearing fallow health thresholds (see CONVENTIONS.md).
