@@ -100,15 +100,6 @@ The direct-coverage gate must fail when a source path, test path, mapping, or LC
 
 A structural gate must reject invalid input. Missing, ambiguous, or unmapped input is a failure, not a pass.
 
-When a structural gate is added or changed:
-
-1. Plant one clear violation.
-2. Run the gate and prove it rejects that violation.
-3. Remove the violation.
-4. Run the gate and prove it accepts the clean tree.
-
-Do these steps by hand. Do not commit the planted violation, or a test or script that replays it: the gate's run over the real tree is its committed check.
-
 Do not suppress production dead code as a migration shortcut.
 
 Configure production-mode Fallow as follows:
@@ -1424,7 +1415,7 @@ A unit-test change is complete when:
 - [ ] Expected values are independent from production and harness computations.
 - [ ] Shared support is organized by concern, with no generic helper dumping ground.
 - [ ] Real and fake adapters pass the same public contract.
-- [ ] Shared adapter contracts have a proven negative control; no committed test or script plants a violation to prove a structural gate can fail.
+- [ ] Shared adapter contracts have a proven negative control.
 - [ ] The focused source-test pair has 100% direct function, line, and branch coverage.
 - [ ] No coverage exception, ignore directive, or blanket exclusion was added.
 - [ ] Focused `node --test`, direct coverage, and `npm run check` pass.
