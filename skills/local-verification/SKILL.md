@@ -13,17 +13,19 @@ Each check runs at the scope that its moment needs:
 - CI on `main` repeats the pull request checks, in case a pull request merged without them.
 - The nightly e2e run tests against the newest upstream `main` to catch upstream drift.
 
-A build input is a file that a build or a CI job reads. The build inputs are the files that the hook's `files` pattern in `.pre-commit-config.yaml` matches. Both `paths` lists in `.github/workflows/ci.yml` name the same files. Change the three lists together.
+A build input is a file that a build or a CI job reads. The build inputs are the files that the hook's `files` pattern in `.pre-commit-config.yaml` matches. The `paths` list of the `push` trigger in `.github/workflows/ci.yml` names the same files, and the `pull_request` trigger reuses it through a YAML anchor. Change the two lists together.
 
 ## What the commands run
 
-`npm run check:static` runs type checking, ESLint, the workflow install-script check, Fallow, the Prettier check, and source/test pairing at the same time. It prints one line for each passing step and the full output of each failing step. A warning fails its step: ESLint runs with `--max-warnings 0`, and Prettier, Fallow, and the gate scripts fail on every finding.
+`npm run check:static` runs type checking, ESLint, the workflow install-script check, Fallow, the Prettier check, and source/test pairing at the same time. Locally it prints one line for each passing step and the full output of each failing step. A warning fails its step: ESLint runs with `--max-warnings 0`, and Prettier, Fallow, and the gate scripts fail on every finding.
 
 `npm run check:commit` runs `check:static`, then the unit tests that have no source pair (`tests/architecture/` and the four fake contract suites), then direct coverage for the staged source-test pairs. It reads only the staged files. Unstaged edits and untracked files do not count. It runs all pairs when a staged file can change the coverage of any pair: a file under `tests/` that is not a `.test.ts` file (a fake, contract, fixture, or harness), `scripts/test-coverage-direct.mjs`, `scripts/test-reporter.mjs`, `package.json`, `package-lock.json`, or `tsconfig.json`.
 
 `npm run check` runs `check:static`, the unit tests that have no source pair, the integration suite, and direct coverage for all pairs. Direct coverage runs the test of each pair alone and requires 100% line, function, and branch coverage of its source. Every source has exactly one paired test, so this also covers the whole unit suite.
 
-The test and direct coverage steps print nothing when they pass. The all-pair run also prints one `Merged LCOV` line. A failing test prints Node's report and the count line, and a coverage shortfall names the source and its coverage.
+Locally, the test and direct coverage steps print nothing when they pass. The all-pair run also prints one `Merged LCOV` line. A failing test prints Node's report and the count line, and a coverage shortfall names the source and its coverage.
+
+In CI, every check prints at info level. GitHub Actions sets the `CI` variable, and the checks print everything when it is not empty. Tests print each result and the skip and todo counts. `check:static` also prints the output of passing steps. Fallow prints its progress lines and the full duplication report. Direct coverage adds one line for each pair and a run summary. A warning still fails its check.
 
 ## Committing
 

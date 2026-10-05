@@ -20,7 +20,7 @@ npm run test:coverage    # direct coverage for every pair, then integration and 
 npm run check            # check:static (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, in parallel) && test:unpaired && test:integration && test:coverage:direct:all (no e2e)
 ```
 
-Every `node --test` script and each direct-coverage pair run use `scripts/test-reporter.mjs`. A passing run prints nothing. A failing run prints Node's `spec` report, any coverage shortfall, and the count line.
+Every `node --test` script and each direct-coverage pair run use `scripts/test-reporter.mjs`. A passing run prints nothing. A failing run prints Node's `spec` report, any coverage shortfall, and the count line. When `CI` is not empty, as on GitHub Actions, the reporter passes every event to Node's `spec` reporter, so passing and skipped tests, coverage tables, and counts print too.
 
 `TEST_CONCURRENCY` env var, when set, is threaded into every `node --test` invocation as `--test-concurrency=$TEST_CONCURRENCY`.
 
@@ -155,7 +155,7 @@ npm run test:coverage
 # emits coverage/direct.lcov, coverage/integration.lcov, coverage/e2e.lcov
 ```
 
-**Caveat — CRAP is switched off, and `maxCrap: 0` is what switches it off.** CRAP scoring needs Istanbul-format JSON coverage; fallow rejects `lcov` input, and Node's `c8`-style output emits `-1` columns that clamp to zero and zero out coverage for many files. So a CRAP score here would be meaningless. In fallow 3.27.0 a `maxCrap` of `0` disables the check, and **deleting the line does not remove an inert setting — it restores fallow's own default of 30**, which then scores CRAP from a `static_estimated` model and reports 950 findings (148 critical) on a clean tree, turning `npm run fallow` red inside `npm run check`. Measured both ways. Leave the line alone. `maxCyclomatic`/`maxCognitive`/`maxUnitSize` are the load-bearing fallow health thresholds (see CONVENTIONS.md).
+**Caveat — CRAP is switched off, and `maxCrap: 0` is what switches it off.** CRAP scoring needs Istanbul-format JSON coverage; fallow rejects `lcov` input, and Node's `c8`-style output emits `-1` columns that clamp to zero and zero out coverage for many files. So a CRAP score here would be meaningless. In fallow 3.27.0 a `maxCrap` of `0` disables the check, and **deleting the line does not remove an inert setting — it restores fallow's own default of 30**, which then scores CRAP from a `static_estimated` model and reports 950 findings (148 critical) on a clean tree, turning `npm run fallow` red inside `npm run check`. Measured both ways. Leave the line alone. `maxCyclomatic`/`maxCognitive` are the load-bearing fallow health thresholds (see CONVENTIONS.md).
 
 ## Test Types
 

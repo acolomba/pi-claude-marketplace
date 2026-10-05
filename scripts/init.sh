@@ -15,7 +15,7 @@ if ! command -v pre-commit >/dev/null 2>&1; then
     PATH="$PATH:$(pipx environment --value PIPX_BIN_DIR)"
 fi
 
-pre-commit install || true
+pre-commit install
 
 # npm
 npm install

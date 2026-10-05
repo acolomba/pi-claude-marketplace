@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, open, rm } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
 import path from "node:path";
@@ -13,9 +13,9 @@ const reporterPath = fileURLToPath(new URL("./test-reporter.mjs", import.meta.ur
 const productionRoot = "extensions/pi-claude-marketplace";
 const testRoot = "tests";
 
-function toProjectPath(inputPath, selectedProjectRoot = projectRoot) {
-  const absolutePath = path.resolve(selectedProjectRoot, inputPath);
-  const projectPath = path.relative(selectedProjectRoot, absolutePath);
+function toProjectPath(inputPath) {
+  const absolutePath = path.resolve(projectRoot, inputPath);
+  const projectPath = path.relative(projectRoot, absolutePath);
 
   if (projectPath.startsWith("..") || path.isAbsolute(projectPath)) {
     throw new Error(`Path is outside the project: ${inputPath}`);
@@ -48,15 +48,10 @@ function testToSource(testPath) {
 }
 
 /**
- * The source-test pair a path names, resolved inside the selected repository.
- *
- * `selectedProjectRoot` governs BOTH halves of the answer: the path is made repository-relative
- * against it and both pair members are checked for existence under it. A root that reached only one
- * of the two would report a pair that exists in the selected repository as missing, which is a wrong
- * answer shaped like a refusal.
+ * The source-test pair a path names, resolved inside the repository.
  */
-function pairForPath(inputPath, selectedProjectRoot = projectRoot) {
-  const projectPath = toProjectPath(inputPath, selectedProjectRoot);
+function pairForPath(inputPath) {
+  const projectPath = toProjectPath(inputPath);
   let sourcePath;
   let testPath;
 
@@ -71,7 +66,7 @@ function pairForPath(inputPath, selectedProjectRoot = projectRoot) {
   }
 
   for (const pairPath of [sourcePath, testPath]) {
-    if (!existsSync(path.join(selectedProjectRoot, pairPath))) {
+    if (!existsSync(path.join(projectRoot, pairPath))) {
       throw new Error(`Missing source-test pair member: ${pairPath}`);
     }
   }
@@ -102,9 +97,9 @@ function productionPaths() {
  * docs-only commit are byte-identical outcomes. The exit status and stderr are therefore both read
  * and carried, and `args` is always an argument array so no ref name is ever word-split by a shell.
  */
-function gitLines(args, selectedProjectRoot = projectRoot) {
+function gitLines(args) {
   const run = spawnSync("git", args, {
-    cwd: selectedProjectRoot,
+    cwd: projectRoot,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -127,129 +122,51 @@ function gitLines(args, selectedProjectRoot = projectRoot) {
   };
 }
 
-// The one base candidate whose name comes from git output rather than from a literal. Anything
-// outside this character set is refused rather than passed to a later invocation, so a ref name is
-// never able to become an argument the selector did not intend.
+// The value of `--base`. Anything outside this character set is refused rather than passed to git,
+// so a ref name is never able to become an argument the selector did not intend.
 // A leading `-` is excluded so a value like `--git-dir=x` cannot reach `git rev-parse` as an
 // option-shaped argument. There is no shell and no injection here -- `spawnSync` takes an argument
 // array and the value comes from a developer's command line or from package.json -- so this closes a
 // confusing refusal, not a vulnerability.
 const baseCandidateName = /^[A-Za-z0-9._/][A-Za-z0-9._/-]*$/;
 
-function upstreamCandidate(selectedProjectRoot) {
-  const resolved = gitLines(["rev-parse", "--abbrev-ref", "@{upstream}"], selectedProjectRoot);
-
-  if (!resolved.ok) {
-    return { label: "@{upstream}", reason: resolved.reason };
-  }
-
-  const name = resolved.lines[0];
-
-  if (name === undefined) {
-    return { label: "@{upstream}", reason: "git named no upstream ref" };
-  }
-
-  if (!baseCandidateName.test(name)) {
-    return { label: "@{upstream}", reason: `upstream ref name is not a plain ref name: ${name}` };
-  }
-
-  return { label: "@{upstream}", name };
-}
-
 /**
  * The base a caller named, resolved exactly or refused.
  *
- * An explicitly named base is never replaced by a fallback (`D-08-A07`). The candidate chain answers
- * "what is the newest thing this checkout can diff against"; a caller that names a ref is asking a
- * different question, so falling through to the chain would report a verdict over a change set
- * nobody asked for. The name is tested against `baseCandidateName` before it reaches git, so a value
- * carrying whitespace or a shell metacharacter is refused without git being invoked on it at all.
+ * A named base that does not resolve is refused, with nothing in its place (`D-08-A07`): a verdict
+ * over another change set would answer a question nobody asked. The name is tested against
+ * `baseCandidateName` before it reaches git, so a value carrying whitespace or a shell metacharacter
+ * is refused without git being invoked on it at all.
  */
-function explicitBaseSelection(explicitBase, selectedProjectRoot) {
+function explicitBaseSelection(explicitBase) {
   const refuse = (reason) => ({
     ok: false,
-    attempted: [{ candidate: explicitBase, reason }],
-    reason: `Explicit base ${explicitBase} did not resolve: ${reason}. An explicitly named base is never replaced by a fallback.`,
+    reason: `Explicit base ${explicitBase} did not resolve: ${reason}.`,
   });
 
   if (!baseCandidateName.test(explicitBase)) {
     return refuse("the value is not a plain ref name");
   }
 
-  const resolved = gitLines(
-    ["rev-parse", "--verify", `${explicitBase}^{commit}`],
-    selectedProjectRoot,
-  );
+  const resolved = gitLines(["rev-parse", "--verify", `${explicitBase}^{commit}`]);
 
   if (resolved.ok && resolved.lines[0] !== undefined) {
-    return { ok: true, candidate: explicitBase, commit: resolved.lines[0], attempted: [] };
+    return { ok: true, candidate: explicitBase, commit: resolved.lines[0] };
   }
 
   return refuse(resolved.ok ? "resolved to no commit" : resolved.reason);
 }
 
 /**
- * The base commit the changed-pair selection diffs against: the one the caller named, or the first
- * that resolves from an ordered candidate chain.
- *
- * The returned candidate is what a failing run names (`D-07-13`): a reader of a failed gate run has
- * to be able to tell which of `origin/main`, `main`, the upstream tracking ref, or `HEAD~1` the
- * answer rests on, because the four disagree about what counts as changed. `attempted` carries
- * the reason every earlier candidate was rejected and is present on both outcomes, so a selection
- * that succeeded still records what it passed over rather than reporting only its winner.
- *
- * `explicitBase` is what lets one implementation serve two named scopes at one strictness -- a
- * branch-scoped change set for a pull request, a commit-scoped one for a hook -- and it never falls
- * through to the chain.
- */
-function selectBase(selectedProjectRoot = projectRoot, explicitBase = undefined) {
-  if (explicitBase !== undefined) {
-    return explicitBaseSelection(explicitBase, selectedProjectRoot);
-  }
-
-  const attempted = [];
-  const candidates = [
-    { label: "origin/main", name: "origin/main" },
-    { label: "main", name: "main" },
-    upstreamCandidate(selectedProjectRoot),
-    { label: "HEAD~1", name: "HEAD~1" },
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate.name === undefined) {
-      attempted.push({ candidate: candidate.label, reason: candidate.reason });
-      continue;
-    }
-
-    const resolved = gitLines(
-      ["rev-parse", "--verify", `${candidate.name}^{commit}`],
-      selectedProjectRoot,
-    );
-
-    if (resolved.ok && resolved.lines[0] !== undefined) {
-      return { ok: true, candidate: candidate.name, commit: resolved.lines[0], attempted };
-    }
-
-    attempted.push({
-      candidate: candidate.label,
-      reason: resolved.ok ? "resolved to no commit" : resolved.reason,
-    });
-  }
-
-  const detail = attempted.map((entry) => `${entry.candidate}: ${entry.reason}`).join("; ");
-  return { ok: false, attempted, reason: `No base candidate resolved -- ${detail}` };
-}
-
-/**
- * Every path the working tree reports as changed against the selected base.
+ * Every path the working tree reports as changed against the named base.
  *
  * The result is discriminated because zero pairs has two causes that `D-07-14` requires the gate to
  * tell apart: a change set that resolved and simply held nothing pairable, and a change set that is
- * empty because base selection or a git invocation failed. Propagating the first failing invocation
+ * empty because the base did not resolve or a git invocation failed. Propagating the first failing invocation
  * rather than folding it into an empty list is what keeps those two apart.
  */
-function changedPaths(selectedProjectRoot = projectRoot, explicitBase = undefined) {
-  const base = selectBase(selectedProjectRoot, explicitBase);
+function changedPaths(explicitBase) {
+  const base = explicitBaseSelection(explicitBase);
 
   if (!base.ok) {
     return { ok: false, reason: base.reason };
@@ -263,7 +180,7 @@ function changedPaths(selectedProjectRoot = projectRoot, explicitBase = undefine
     ["diff", "--cached", "--name-only", "--diff-filter=ACMR"],
     ["ls-files", "--others", "--exclude-standard"],
   ]) {
-    const run = gitLines(args, selectedProjectRoot);
+    const run = gitLines(args);
 
     if (!run.ok) {
       return { ok: false, reason: run.reason };
@@ -287,12 +204,8 @@ const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration"]);
  * a production module -- mirroring the exemption of the same name in the correspondence gate. Both
  * companions have to be present, so a suite that merely happens to be named `*-fake.test.ts` is
  * still treated as a pair member and still has to map.
- *
- * Both companions are looked for under `selectedProjectRoot`, because the classification has to be
- * made in the repository the change set came from: judged against another tree, a supplement reads
- * as a pair member and the run aborts on a module that was never meant to exist.
  */
-function isStructuralSupplement(projectPath, selectedProjectRoot) {
+function isStructuralSupplement(projectPath) {
   const match = /^tests\/(?:domain|platform)\/(?<name>.+)-fake\.test\.ts$/.exec(projectPath);
 
   if (match === null) {
@@ -301,13 +214,13 @@ function isStructuralSupplement(projectPath, selectedProjectRoot) {
 
   const prefix = projectPath.slice(0, -".test.ts".length);
   return (
-    existsSync(path.join(selectedProjectRoot, `${prefix}.ts`)) &&
-    existsSync(path.join(selectedProjectRoot, `${prefix.slice(0, -"-fake".length)}-contract.ts`))
+    existsSync(path.join(projectRoot, `${prefix}.ts`)) &&
+    existsSync(path.join(projectRoot, `${prefix.slice(0, -"-fake".length)}-contract.ts`))
   );
 }
 
 /**
- * Why a changed path names no member of a source-test pair, or `undefined` when it names one.
+ * Whether a changed path names a member of a source-test pair.
  *
  * Both halves have to be tight, because `pairForPath` throws rather than skips: a path admitted here
  * that cannot be mapped aborts the whole run. On the production side that means requiring `.ts`, so
@@ -315,43 +228,25 @@ function isStructuralSupplement(projectPath, selectedProjectRoot) {
  * the test side it means excluding the non-corresponding roots and the structural supplements, so
  * the suites that have no pair by design do not compose a module path that does not exist.
  */
-function pairabilityRefusal(projectPath, selectedProjectRoot) {
+function isPairablePath(projectPath) {
   if (projectPath.startsWith(`${productionRoot}/`)) {
-    return projectPath.endsWith(".ts")
-      ? undefined
-      : "under the production root but not a TypeScript module";
+    return projectPath.endsWith(".ts");
   }
 
-  if (!projectPath.startsWith(`${testRoot}/`)) {
-    return "outside both the production root and the test root";
-  }
-
-  if (!projectPath.endsWith(".test.ts")) {
-    return "under the test root but not a corresponding test path";
+  if (!projectPath.startsWith(`${testRoot}/`) || !projectPath.endsWith(".test.ts")) {
+    return false;
   }
 
   const firstSegment = projectPath.slice(`${testRoot}/`.length).split("/", 1)[0];
 
-  if (nonCorrespondingRoots.has(firstSegment)) {
-    return `under the non-corresponding test root ${firstSegment}`;
-  }
-
-  return isStructuralSupplement(projectPath, selectedProjectRoot)
-    ? "a structural supplement suite"
-    : undefined;
+  return !nonCorrespondingRoots.has(firstSegment) && !isStructuralSupplement(projectPath);
 }
 
-function isPairablePath(projectPath, selectedProjectRoot) {
-  return pairabilityRefusal(projectPath, selectedProjectRoot) === undefined;
-}
-
-function pairsForPaths(projectPaths, selectedProjectRoot) {
+function pairsForPaths(projectPaths) {
   const pairs = new Map();
 
-  for (const projectPath of projectPaths.filter((changedPath) =>
-    isPairablePath(changedPath, selectedProjectRoot),
-  )) {
-    const pair = pairForPath(projectPath, selectedProjectRoot);
+  for (const projectPath of projectPaths.filter((changedPath) => isPairablePath(changedPath))) {
+    const pair = pairForPath(projectPath);
     pairs.set(pair.sourcePath, pair);
   }
 
@@ -361,14 +256,14 @@ function pairsForPaths(projectPaths, selectedProjectRoot) {
 /**
  * The source-test pairs the selected change set names, carrying the base that produced it.
  */
-function pairsForChangedPaths(selectedProjectRoot = projectRoot, explicitBase = undefined) {
-  const changed = changedPaths(selectedProjectRoot, explicitBase);
+function pairsForChangedPaths(explicitBase) {
+  const changed = changedPaths(explicitBase);
 
   if (!changed.ok) {
     return changed;
   }
 
-  return { ok: true, base: changed.base, ...pairsForPaths(changed.paths, selectedProjectRoot) };
+  return { ok: true, base: changed.base, ...pairsForPaths(changed.paths) };
 }
 
 function parseLcov(lcovText) {
@@ -402,8 +297,8 @@ function isEmptyExport(statement) {
   );
 }
 
-function isTypeOnlyModule(sourcePath, selectedProjectRoot = projectRoot) {
-  const sourceText = readFileSync(path.join(selectedProjectRoot, sourcePath), "utf8");
+function isTypeOnlyModule(sourcePath) {
+  const sourceText = readFileSync(path.join(projectRoot, sourcePath), "utf8");
   const outputText = ts.transpileModule(sourceText, {
     compilerOptions: {
       module: ts.ModuleKind.ESNext,
@@ -434,7 +329,7 @@ function coverageCounts(record) {
 }
 
 /**
- * Resolve one LCOV record's source field against the given root, or answer `undefined` when it
+ * Resolve one LCOV record's source field against the project root, or answer `undefined` when it
  * lands outside that root.
  *
  * Deliberately separate from `toProjectPath`, which throws. A path the user typed on the command
@@ -444,11 +339,8 @@ function coverageCounts(record) {
  * one question about one record, so a non-match has to answer "not this one" rather than take the
  * whole gate down.
  */
-function recordProjectPath(selectedProjectRoot, inputPath) {
-  const projectPath = path.relative(
-    selectedProjectRoot,
-    path.resolve(selectedProjectRoot, inputPath),
-  );
+function recordProjectPath(inputPath) {
+  const projectPath = path.relative(projectRoot, path.resolve(projectRoot, inputPath));
 
   if (projectPath.startsWith("..") || path.isAbsolute(projectPath)) {
     return undefined;
@@ -459,23 +351,16 @@ function recordProjectPath(selectedProjectRoot, inputPath) {
 
 /**
  * The verdict for one source-test pair's coverage, read out of the LCOV the focused run wrote.
- *
- * `selectedProjectRoot` governs BOTH halves of the answer -- which records belong to the module and
- * where the type-only probe reads the module from. A root that reached only one of the two would be
- * a trap: a caller passing a fixture root and a matching fixture LCOV would select no records and
- * fall through to the type-only escape, which is a wrong answer wearing the shape of a pass.
  */
-function assertCompleteCoverage(sourcePath, lcovText, selectedProjectRoot = projectRoot) {
+function assertCompleteCoverage(sourcePath, lcovText) {
   const records = parseLcov(lcovText);
-  const foreign = records.find(
-    (record) => recordProjectPath(selectedProjectRoot, record.get("SF")) !== sourcePath,
-  );
+  const foreign = records.find((record) => recordProjectPath(record.get("SF")) !== sourcePath);
 
   if (foreign !== undefined) {
     throw new Error(`Unexpected LCOV record for ${foreign.get("SF")} in the run for ${sourcePath}`);
   }
 
-  if (records.length === 0 && isTypeOnlyModule(sourcePath, selectedProjectRoot)) {
+  if (records.length === 0 && isTypeOnlyModule(sourcePath)) {
     return "type-only";
   }
 
@@ -542,17 +427,11 @@ function repeatedValues(records, field) {
 // The all-pair run is only a gate if it can say it visited every row. A run that quietly skipped one
 // module would otherwise report the same success as a run that covered all of them.
 //
-// The caller decides what "the run's rows" means, and only one of the two answers can catch a
-// skipped row. `runAllPairs` reads the rows back OUT of the retained report, so a lost append, a
-// truncated write or a report another process clobbered mid-run fails here. Handed the in-memory
-// array the same loop just built, the check cannot fail at all -- that array has one entry per
-// enumerated module by construction -- so a report-less run degrades this to a structural invariant
-// over the loop's own output rather than a guard over the run.
-//
-// A row is recorded for a refused pair too, rather than the refusal ending the loop: `enforcePairs`
-// fails the run only after every pair is measured. The check below therefore still sees one row per
-// enumerated module on a run that measured a shortfall, and the reading that shortfall produced is in
-// the retained report where a later reader can diff it.
+// The rows are the records the loop built, so this checks a structural invariant of that output: one
+// record per enumerated module, each mapping to its test and back. A record is built for a refused
+// pair too, rather than the refusal ending the loop: `enforcePairs` fails the run only after every
+// pair is measured, so the check still sees one record per enumerated module on a run that measured
+// a shortfall.
 //
 // The round-trip check is also the honest answer to COV-02's remaining half. Path-level ambiguity --
 // two production modules claiming one test, or one test claiming two modules -- is UNREACHABLE under
@@ -594,7 +473,6 @@ function assertReportComplete(records, modulePaths) {
 async function runPair({ sourcePath, testPath }) {
   const coverageDirectory = await mkdtemp(path.join(tmpdir(), "pi-claude-direct-"));
   const lcovPath = path.join(coverageDirectory, "pair.lcov");
-  const startedAt = process.hrtime.bigint();
 
   try {
     const outputPath = path.join(coverageDirectory, "test.log");
@@ -631,28 +509,22 @@ async function runPair({ sourcePath, testPath }) {
     const lcov = readFileSync(lcovPath, "utf8");
     const summary = assertCompleteCoverage(sourcePath, lcov);
 
-    return {
-      sourcePath,
-      testPath,
-      coverage: summary,
-      typeOnly: summary === "type-only",
-      runtime: process.version,
-      elapsedMs: Number((process.hrtime.bigint() - startedAt) / 1000000n),
-      lcov,
-    };
+    if (process.env.CI) {
+      process.stdout.write(`Direct coverage passed: ${sourcePath} (${summary})\n`);
+    }
+
+    return { sourcePath, testPath, typeOnly: summary === "type-only", lcov };
   } finally {
     await rm(coverageDirectory, { force: true, recursive: true });
   }
 }
 
 /**
- * Measures independent pairs with bounded concurrency. Results retain input order;
- * onRecord sees completion order so interrupted reports keep every finished pair.
+ * Measures independent pairs with bounded concurrency. Results retain input order.
  * A failed worker stops new work. Started workers drain before the failure escapes.
  */
-async function runPairs(pairs, run, options = {}) {
-  const concurrency =
-    options.concurrency ?? (process.env.TEST_CONCURRENCY || availableParallelism());
+async function runPairs(pairs, run) {
+  const concurrency = process.env.TEST_CONCURRENCY || availableParallelism();
   const limit = Number(concurrency);
 
   if (!/^[1-9][0-9]*$/.test(String(concurrency)) || !Number.isSafeInteger(limit)) {
@@ -668,9 +540,7 @@ async function runPairs(pairs, run, options = {}) {
       const index = next++;
 
       try {
-        const record = await run(pairs[index]);
-        records[index] = record;
-        options.onRecord?.(record);
+        records[index] = await run(pairs[index]);
       } catch (error) {
         stopped = true;
         throw error;
@@ -697,14 +567,12 @@ async function runPairs(pairs, run, options = {}) {
  * failure and this rethrows it, because a focused test that failed or an LCOV that could not be read
  * says nothing about coverage.
  *
- * A refused pair still answers a record of the same shape `runPair` returns, so the caller retaining
- * a report keeps one row per pair whatever the verdict was.
+ * A refused pair still answers a record with its source and test, so the all-pair completeness check
+ * sees one record per pair whatever the verdict was.
  */
-async function measurePair(pair, observed, run) {
-  const startedAt = process.hrtime.bigint();
-
+async function measurePair(pair, observed) {
   try {
-    return await run(pair);
+    return await runPair(pair);
   } catch (error) {
     const reading = shortfallReadingOf(error, pair.sourcePath);
 
@@ -716,18 +584,7 @@ async function measurePair(pair, observed, run) {
     // This line shows a shortfall as soon as it lands, before the run fails.
     process.stdout.write(`Direct coverage shortfall recorded: ${pair.sourcePath} (${reading})\n`);
 
-    return {
-      sourcePath: pair.sourcePath,
-      testPath: pair.testPath,
-      coverage: reading,
-      // The retained artifact says which rows were refused. Without it a shortfall row and a
-      // complete row differ only by `hit !== found` inside a formatted string, which a later reader
-      // has to notice rather than read.
-      verdict: "shortfall",
-      typeOnly: false,
-      runtime: process.version,
-      elapsedMs: Number((process.hrtime.bigint() - startedAt) / 1000000n),
-    };
+    return { sourcePath: pair.sourcePath, testPath: pair.testPath };
   }
 }
 
@@ -735,16 +592,15 @@ async function measurePair(pair, observed, run) {
  * Measure every pair, then fail on any shortfall. This is the gate's entire enforcement edge, and
  * every arm reaches it.
  *
- * `measurePair` records a shortfall and continues, so every selected pair runs and the all-pair
- * report holds a row for each pair before the run fails.
+ * `measurePair` records a shortfall and continues, so every selected pair runs and has a record
+ * before the run fails.
  *
- * The two hooks serve the all-pair arm: `onRecord` writes its report row by row (an interrupted run
- * still leaves a readable partial result), and `beforeVerdict` runs its completeness check first,
- * because a run that skipped rows can hold no shortfall and would pass otherwise.
+ * The `beforeVerdict` hook serves the all-pair arm: it runs the completeness check first, because a
+ * run that skipped rows can hold no shortfall and would pass otherwise.
  */
-async function enforcePairs(pairs, run = runPair, hooks = {}) {
+async function enforcePairs(pairs, hooks = {}) {
   const observed = [];
-  const records = await runPairs(pairs, (pair) => measurePair(pair, observed, run), hooks);
+  const records = await runPairs(pairs, (pair) => measurePair(pair, observed));
 
   hooks.beforeVerdict?.(records);
 
@@ -762,40 +618,21 @@ async function enforcePairs(pairs, run = runPair, hooks = {}) {
   return records;
 }
 
-async function runAllPairs({ reportPath, lcovPath } = {}) {
+async function runAllPairs({ lcovPath } = {}) {
   const modulePaths = productionPaths();
   const pairs = modulePaths.map((modulePath) => pairForPath(modulePath));
+  const startedAt = process.hrtime.bigint();
 
-  // Line-oriented and written as each pair lands, so an interrupted run still leaves a readable
-  // partial result and a later reader can diff two runs line by line.
-  if (reportPath !== undefined) {
-    writeFileSync(reportPath, "");
-  }
-
-  const records = await enforcePairs(pairs, runPair, {
-    onRecord: (record) => {
-      if (reportPath !== undefined) {
-        const { lcov: _lcov, ...row } = record;
-        appendFileSync(reportPath, `${JSON.stringify(row)}\n`);
-      }
-    },
-    // Read the retained report back instead of trusting the array the loop just appended to, so the
-    // completeness check has a witness the loop did not produce. See the note on
-    // `assertReportComplete` for why the report-less arm cannot fail.
-    //
-    // Unconditional: a report is how the result is retained, not what makes the run a gate.
-    beforeVerdict: (measured) => {
-      assertReportComplete(
-        reportPath === undefined
-          ? measured
-          : readFileSync(reportPath, "utf8")
-              .split("\n")
-              .filter(Boolean)
-              .map((line) => JSON.parse(line)),
-        modulePaths,
-      );
-    },
+  const records = await enforcePairs(pairs, {
+    beforeVerdict: (measured) => assertReportComplete(measured, modulePaths),
   });
+
+  if (process.env.CI) {
+    const elapsedMs = Number((process.hrtime.bigint() - startedAt) / 1000000n);
+    process.stdout.write(
+      `All-pair run complete: ${records.length} pairs in ${(elapsedMs / 1000).toFixed(1)}s (${elapsedMs}ms) on ${process.version}\n`,
+    );
+  }
 
   if (lcovPath !== undefined) {
     writeMergedLcov(lcovPath, records);
@@ -808,11 +645,12 @@ function writeMergedLcov(lcovPath, records) {
   process.stdout.write(`Merged LCOV: ${lcovPath} (${measured.length} records)\n`);
 }
 
-// A passing run prints nothing. A failing run writes the selected base candidate to stderr, which
-// keeps a failing answer auditable (`D-07-13`). A selection that failed still sets a non-zero exit
-// code and names the git invocation that failed (`D-07-14`).
+// Locally, a passing run prints nothing, and in CI each pair prints its result line. A failing run
+// writes the named base to stderr, which keeps a failing answer auditable (`D-07-13`).
+// A selection that failed still sets a non-zero exit code and names the git invocation that failed
+// (`D-07-14`).
 async function runChangedPairs(explicitBase) {
-  const selected = pairsForChangedPaths(projectRoot, explicitBase);
+  const selected = pairsForChangedPaths(explicitBase);
 
   if (!selected.ok) {
     process.stderr.write(`Changed-pair selection failed: ${selected.reason}\n`);
@@ -868,33 +706,22 @@ async function runStagedPairs() {
     return;
   }
 
-  const selected = pairsForPaths(stagedPaths, projectRoot);
+  const selected = pairsForPaths(stagedPaths);
   await enforcePairs(selected.pairs);
 }
 
-const usage =
-  "Pass source or test paths, --all [--report <path>] [--lcov <path>], --base <ref>, --staged, or no arguments";
-
-const allPairOptionKeys = new Map([
-  ["--report", "reportPath"],
-  ["--lcov", "lcovPath"],
-]);
+const usage = "Pass source or test paths, --all [--lcov <path>], --base <ref>, or --staged";
 
 function parseAllPairOptions(options) {
-  const parsed = {};
-
-  for (let index = 0; index < options.length; index += 2) {
-    const key = allPairOptionKeys.get(options[index]);
-    const value = options[index + 1];
-
-    if (key === undefined || value === undefined || Object.hasOwn(parsed, key)) {
-      throw new Error(usage);
-    }
-
-    parsed[key] = value;
+  if (options.length === 0) {
+    return {};
   }
 
-  return parsed;
+  if (options.length === 2 && options[0] === "--lcov") {
+    return { lcovPath: options[1] };
+  }
+
+  throw new Error(usage);
 }
 
 async function main() {
@@ -933,11 +760,7 @@ async function main() {
     return;
   }
 
-  if (args.length !== 0) {
-    throw new Error(usage);
-  }
-
-  await runChangedPairs(undefined);
+  throw new Error(usage);
 }
 
 const invokedPath = process.argv[1] === undefined ? undefined : path.resolve(process.argv[1]);

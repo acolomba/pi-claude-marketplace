@@ -10,7 +10,8 @@ on:
   push:
     branches:
       - main
-    paths:
+    # Build inputs. The npm-check hook in .pre-commit-config.yaml lists the same files.
+    paths: &build_inputs
       - "extensions/**"
       - "tests/**"
       - "scripts/**/*.mjs"
@@ -31,24 +32,7 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - "extensions/**"
-      - "tests/**"
-      - "scripts/**/*.mjs"
-      - "demos/**/*.ts"
-      - "docs/output-catalog.md"
-      - ".github/workflows/**"
-      - ".editorconfig"
-      - ".fallowrc.json"
-      - ".gitattributes"
-      - ".gitignore"
-      - ".prettierignore"
-      - ".prettierrc.json"
-      - "eslint.config.js"
-      - "package-lock.json"
-      - "package.json"
-      - "sonar-project.properties"
-      - "tsconfig.json"
+    paths: *build_inputs
   workflow_dispatch:
 
 permissions:

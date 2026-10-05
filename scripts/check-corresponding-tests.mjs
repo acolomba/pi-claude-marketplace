@@ -190,6 +190,10 @@ function main() {
   const violations = checkCorrespondingTests(projectRoot);
 
   if (violations.length === 0) {
+    if (process.env.CI) {
+      process.stdout.write("Corresponding-test gate passed.\n");
+    }
+
     return;
   }
 
