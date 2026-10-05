@@ -90,7 +90,7 @@
     "test:corresponding": "node scripts/check-corresponding-tests.mjs",
     "test:coverage": "rm -rf coverage && mkdir -p coverage && npm run --silent test:coverage:direct:all && npm run --silent test:coverage:integration && npm run --silent test:coverage:e2e",
     "test:coverage:direct": "node scripts/test-coverage-direct.mjs",
-    "test:coverage:direct:all": "mkdir -p coverage && node scripts/test-coverage-direct.mjs --all --report coverage/all-pairs.jsonl --lcov coverage/direct.lcov",
+    "test:coverage:direct:all": "mkdir -p coverage && node scripts/test-coverage-direct.mjs --all --lcov coverage/direct.lcov",
     "test:coverage:direct:commit": "node scripts/test-coverage-direct.mjs --staged",
     "test:coverage:e2e": "PI_CM_E2E_REF=pinned node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} --experimental-test-coverage --test-reporter=./scripts/test-reporter.mjs --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/e2e.lcov \"tests/e2e/**/*.test.ts\"",
     "test:coverage:integration": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} --experimental-test-coverage --test-reporter=./scripts/test-reporter.mjs --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/integration.lcov \"tests/integration/**/*.test.ts\"",
