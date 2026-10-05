@@ -40,7 +40,7 @@ Rules for TypeScript live under `skills/` and are not registered with any runtim
 
 ### Build verification
 
-Read `skills/local-verification/SKILL.md` when planning or running checks. The pre-commit hooks run incremental checks only. Their `check:changed` hook never runs the full `npm run check`, even for configuration, tooling, or unknown inputs. Ordinary quick tasks, individual plan tasks, and review fixes may complete with task-wide evidence from those hooks. Do not routinely run `check:changed` separately before them. The larger checkpoints run the whole suite: combined GSD merge/phase gates and final PR/release handoff require `npm run check`, with unchanged-input reuse as defined in the skill. CI runs it on pull requests. This project scheduling policy governs the TypeScript and GSD skill instructions; a focused or broad result is not full-project verification.
+Read `skills/local-verification/SKILL.md` when planning or running checks. A build input is a file that a build or a CI job reads. The pre-commit hook runs `npm run check` when a staged file is a build input, and skips otherwise. A passing hook is the full verdict for its commit, so no task waits for a later full run. Do not run `npm run check` separately before a commit, because the hook runs it. A merge does not run the hook. GSD merge and phase gates, and the final PR or release handoff, need a passing `npm run check` on the combined tree. They can reuse a passing result for the same inputs, as the skill defines. CI runs `npm run check` on pull requests. This project policy governs the TypeScript and GSD skill instructions.
 
 ### Versioning
 
