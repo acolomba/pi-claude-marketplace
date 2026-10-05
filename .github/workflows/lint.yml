@@ -40,7 +40,7 @@ jobs:
         env:
           # CI/check runs the full npm gate. CI/direct-coverage owns pair coverage.
           # These hooks remain enabled for local commits.
-          SKIP: prettier,npm-check-changed
+          SKIP: prettier,npm-check
 
   fallow-audit:
     runs-on: ubuntu-latest
