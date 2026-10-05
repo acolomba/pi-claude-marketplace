@@ -208,16 +208,11 @@ function affectedSources(root, changed) {
   return [...affected].map((file) => path.relative(root, file).split(path.sep).join("/")).sort();
 }
 
-/** The documents architecture tests read by name. ci.yml lists the same files. */
-const documentationFiles = new Set([
-  "README.es.md",
-  "README.md",
-  "docs/dependency-resolution.md",
-  "docs/messaging-style-guide.md",
-  "docs/output-catalog.md",
-  "docs/prd/pi-claude-marketplace-prd.md",
-  "docs/workflows-compatibility.md",
-]);
+/**
+ * The one document tests read: they compare it with real `notify()` output.
+ * ci.yml lists it too.
+ */
+const documentationFiles = new Set(["docs/output-catalog.md"]);
 
 function isDocumentation(file) {
   return documentationFiles.has(file);
@@ -418,7 +413,7 @@ function walkSupport(tree, start) {
   return [...reached].sort();
 }
 
-/** Documentation pins live in architecture tests only. */
+/** Every test that reads the output catalog is an architecture test. */
 function selectDocumentation(_context, _file, selection) {
   selection.suites.add("test:architecture");
   selection.reasons.add("Documentation");

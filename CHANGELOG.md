@@ -4,6 +4,8 @@
 
 - Internal: commits run only incremental checks, `npm run check` runs at GSD checkpoints and PR handoff, CI runs only on build-input changes, and ESLint alone bans stdio calls. (#236)
 
+  - Tests no longer compare the READMEs or other documents with the code, so `docs/output-catalog.md` is the only document that is a build input.
+
 - Internal: local checks now select changed modules and their consumers. GSD uses focused checks during tasks and full checks before PR handoff. CI reuses unit coverage for SonarCloud, removes duplicate checks, and runs isolated coverage pairs concurrently.
 
 - A private marketplace or plugin source on any git host now clones with a credential that is already in your git credential helper. Before, only `github.com` and `gitlab.com` authenticated. Thanks to @jstillwa, who found this defect and the next two in #153. (#221)
