@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Node.js 22.22.2 or later is now required. Pi and the `write-file-atomic` dependency already need Node 22. (#236)
+
 - Internal: commits run quick checks on their staged files, CI runs only on build-input changes, and ESLint alone bans stdio calls. (#236)
 
   - Pull requests, pushes to `main`, and `npm run check` measure direct coverage for every source-test pair, and SonarCloud reads that per-pair coverage.

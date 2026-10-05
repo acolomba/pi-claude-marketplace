@@ -110,7 +110,7 @@ function collectTreeSources(
       continue;
     }
 
-    // `entry.parentPath` is the absolute directory (Node >= 20.12).
+    // `entry.parentPath` is the absolute directory.
     const abs = path.join(entry.parentPath, entry.name);
     if (include(path.relative(REPO_ROOT, abs))) {
       readInto(files, [abs]);
