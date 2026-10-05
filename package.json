@@ -82,7 +82,7 @@
     "fallow": "fallow dead-code --fail-on-issues --format human --quiet && fallow dead-code --no-production --circular-deps --re-export-cycles --fail-on-issues --format human --quiet --no-cache && fallow health --fail-on-issues --format human --quiet --complexity && (fallow dupes --fail-on-issues --format human --quiet > /dev/null || fallow dupes --fail-on-issues --format human --quiet)",
     "format": "prettier --write \"{extensions,tests}/**/*.{js,json,ts}\" \"scripts/**/*.mjs\" \"demos/**/*.ts\" .fallowrc.json .prettierrc.json eslint.config.js package-lock.json package.json tsconfig.json --cache --cache-strategy content",
     "format:check": "prettier --check \"{extensions,tests}/**/*.{js,json,ts}\" \"scripts/**/*.mjs\" \"demos/**/*.ts\" .fallowrc.json .prettierrc.json eslint.config.js package-lock.json package.json tsconfig.json --cache --cache-strategy content",
-    "lint": "eslint extensions tests scripts eslint.config.js --cache --cache-strategy content --cache-location node_modules/.cache/eslint/",
+    "lint": "eslint extensions tests scripts eslint.config.js --max-warnings 0 --cache --cache-strategy content --cache-location node_modules/.cache/eslint/",
     "lint:fix": "eslint extensions tests scripts eslint.config.js --fix",
     "lint:workflows": "node scripts/check-workflow-install-scripts.mjs",
     "test": "node --test --test-reporter=./scripts/test-reporter.mjs ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts\" \"tests/index.test.ts\"",
