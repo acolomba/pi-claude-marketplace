@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-05T00:23:02.906Z"
+last_updated: "2026-10-05T00:39:15.032Z"
 last_activity: 2026-10-04
 last_activity_desc: Completed quick task 261004-re9 (stale doc references)
-state_head: 67ba13cb90faf3f6268c1a3ae294a3556f6c2dca
+state_head: 227513d5620f5d3ad8ce62a5fee9fee2c4e1f157
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -605,6 +605,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261004-f34 | Remove negative controls and planted-violation tests | 2026-10-04 | f07734d1 | [261004-f34-remove-negative-controls-and-planted-vio](./quick/261004-f34-remove-negative-controls-and-planted-vio/) |
 | 261004-kwl | Remove tooling self-tests; replace network and ledger gates with ESLint rules | 2026-10-04 | babd67cc | [261004-kwl-remove-tooling-self-tests-replace-networ](./quick/261004-kwl-remove-tooling-self-tests-replace-networ/) |
 | 261004-re9 | Fix stale doc references to removed modules and tests | 2026-10-05 | 67ba13cb | [261004-re9-fix-stale-doc-references-to-removed-modu](./quick/261004-re9-fix-stale-doc-references-to-removed-modu/) |
+| 21 | Drop planted-violation steps from the unit testing guidelines | 2026-10-05 | 227513d5 | — |
 
 ## Deferred Items
 
