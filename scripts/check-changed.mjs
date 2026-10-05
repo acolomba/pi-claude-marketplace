@@ -21,8 +21,8 @@ const productionRoot = "extensions/pi-claude-marketplace/";
 const npm = (script) => ["npm", "run", script];
 /**
  * The broad check runs whole-repository static checks, each cached or
- * incremental; unit coverage, the integration suite, member analysis, and e2e
- * tests wait for `npm run check`.
+ * incremental; unit coverage, the integration suite, and e2e tests wait for
+ * `npm run check`.
  */
 const broadChecks = [
   npm("format:check"),
@@ -60,16 +60,9 @@ const eslintCheck = [
   "node_modules/.cache/eslint/",
 ];
 
-/** Only `npm run lint:type-members` reads these; the analyzer tests build their own copies. */
-const typeMemberData = new Set([
-  "scripts/check-unused-type-members.contracts.json",
-  "scripts/check-unused-type-members.exceptions.json",
-]);
-
 /** Suite scripts in command order, with the test paths their package.json globs cover. */
 const suites = [
   ["test:architecture", ["tests/architecture/"]],
-  ["test:analyzers", ["tests/scripts/"]],
   [
     "test:modules",
     [
@@ -257,13 +250,6 @@ function containingSuite(file) {
   return suites.find(([, prefixes]) => prefixes.some((prefix) => file.startsWith(prefix)))?.[0];
 }
 
-/** Returns the `tests/scripts` test that owns an analyzer script, if one exists. */
-function analyzerTest(file, root) {
-  const match = /^scripts\/([^/]+)\.mjs$/.exec(file);
-  const test = match && `tests/scripts/${match[1]}.test.ts`;
-  return test && existsSync(path.join(root, test)) ? test : undefined;
-}
-
 /**
  * First match wins. A file outside the build inputs selects nothing, and a
  * build input that no rule claims falls back to `broad`.
@@ -277,8 +263,6 @@ const rules = [
   [(file) => file.startsWith("tests/") && file.endsWith(".test.ts"), "unpairedTest"],
   [(file) => file.startsWith("tests/") && file.endsWith(".ts"), "support"],
   [(file) => file.startsWith("tests/"), "fixture"],
-  [(file) => typeMemberData.has(file), "typeMembers"],
-  [(file, root) => analyzerTest(file, root) !== undefined, "analyzer"],
 ];
 
 function classify(file, root) {
@@ -293,7 +277,6 @@ function emptySelection() {
     fallow: false,
     corresponding: false,
     coverage: new Set(),
-    typeMembers: false,
     suites: new Set(),
     tests: new Set(),
     reasons: new Set(),
@@ -464,34 +447,11 @@ function selectFixture(_context, file, selection) {
   return false;
 }
 
-function selectTypeMembers(_context, file, selection) {
-  selection.format.add(file);
-  selection.typeMembers = true;
-  selection.reasons.add("Type-member contract data");
-  return false;
-}
-
-/**
- * The analyzer tests load scripts through computed imports, so no static graph
- * names a script's other consumers; the whole analyzer suite runs instead.
- */
-function selectAnalyzer(context, file, selection) {
-  selection.format.add(file);
-  selection.lint.add(file);
-  selection.lint.add(analyzerTest(file, context.root));
-  selection.fallow = true;
-  selection.suites.add("test:analyzers");
-  selection.reasons.add("Analyzer scripts and their tests");
-  return false;
-}
-
 const selectors = {
   documentation: selectDocumentation,
   unpairedTest: selectUnpairedTest,
   support: selectSupport,
   fixture: selectFixture,
-  typeMembers: selectTypeMembers,
-  analyzer: selectAnalyzer,
 };
 
 function suiteCommands(selection) {
@@ -519,7 +479,6 @@ function testCommands(selection) {
     ...(selection.coverage.size > 0
       ? [["node", "scripts/test-coverage-direct.mjs", ...[...selection.coverage].sort()]]
       : []),
-    ...(selection.typeMembers ? [npm("lint:type-members")] : []),
     ...suiteCommands(selection),
     ...(tests.length > 0 ? [[...testRun, ...tests]] : []),
   ];
@@ -527,10 +486,9 @@ function testCommands(selection) {
 
 /**
  * The broad commands cover every static selection. The broad check never runs
- * member analysis or the integration suite, even when another rule selected them.
+ * the integration suite, even when another rule selected it.
  */
 function broadPlan(triggers, selection) {
-  selection.typeMembers = false;
   selection.suites.delete("test:integration");
   const more = triggers.length > 5 ? ` and ${triggers.length - 5} more` : "";
   return {
