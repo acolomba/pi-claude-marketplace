@@ -17,7 +17,7 @@ pi-claude-marketplace/
 │   ├── platform/                       # Pi API + git wrappers
 │   └── shared/                         # leaf utilities: notify, errors, path-safety, atomic-json
 ├── tests/                              # 230 *.test.ts files, mirrors extensions/ layout
-│   ├── architecture/                   # 39 tests — import boundaries, cycle gate, network gate, catalog UAT
+│   ├── architecture/                   # 39 tests — source-scan gates, catalog UAT
 │   ├── bridges/                        # 47 tests + _fixtures/ (fixture plugin trees, no .test.ts inside)
 │   ├── domain/                         # 13 tests
 │   ├── e2e/                            # 6 tests — exercises upstream refs (PI_CM_E2E_REF)
@@ -88,7 +88,7 @@ pi-claude-marketplace/
 
 **Configuration:**
 - `.fallowrc.json`: fallow entry point, health thresholds (`maxCyclomatic: 20`, `maxCognitive: 15`, `maxUnitSize: 60`, and `maxCrap: 0`, which switches CRAP off), 14-zone boundary rules
-- `eslint.config.js`: flat ESLint config, incl. `import-x/no-restricted-paths` (8-folder boundary matrix) and extension-scoped `no-restricted-syntax` (forbids `process.stdout`/`stderr` writes)
+- `eslint.config.js`: flat ESLint config, incl. `import-x/no-restricted-paths` (BLOCK C: the 8-folder boundary matrix plus the D-11 ledger zones over `PLUGIN_LEDGERS`/`MARKETPLACE_LEDGERS`), extension-scoped `no-restricted-syntax` (forbids `process.stdout`/`stderr` writes), and BLOCK F's NFR-5 network-free rules over `NETWORK_FREE_TARGETS`
 - `tsconfig.json`: strict compiler options, includes `extensions/**/*.ts` and `tests/**/*.ts`
 
 **Core Logic:**
@@ -97,8 +97,6 @@ pi-claude-marketplace/
 - `extensions/pi-claude-marketplace/domain/resolver.ts`: discriminated-union plugin resolver
 
 **Testing:**
-- `tests/architecture/import-boundaries.test.ts`: ESLint-zone assertion + directed-edge grep cycle gate
-- `tests/architecture/no-orchestrator-network.test.ts`: NFR-5 network-boundary source-grep gate
 - `tests/architecture/source-scan.ts`: shared grep/comment-stripping helpers used by architecture tests
 
 ## Naming Conventions

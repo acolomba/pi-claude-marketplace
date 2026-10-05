@@ -17,7 +17,7 @@ npm test                 # unit-ish suite: tests/{architecture,bridges,domain,ed
 npm run test:integration # tests/integration/**/*.test.ts
 npm run test:e2e         # tests/e2e/**/*.test.ts (PI_CM_E2E_REF=pinned)
 npm run test:coverage    # runs unit + integration + e2e each with --experimental-test-coverage, emits coverage/{unit,integration,e2e}.lcov
-npm run check            # typecheck && lint && fallow && format:check && test:corresponding && test:corresponding:negative && test:coverage:direct:negative && test && test:integration (npm test does NOT include e2e)
+npm run check            # typecheck && lint && lint:workflows && fallow && format:check && test:corresponding && test:coverage:unit && test:integration && lint:type-members (the unit suite runs under test:coverage:unit; no e2e)
 ```
 
 `TEST_CONCURRENCY` env var, when set, is threaded into every `node --test` invocation as `--test-concurrency=$TEST_CONCURRENCY`.
@@ -56,7 +56,7 @@ There is **no `tests/docs` directory** — do not reference one. `tests/fixtures
 284 + 13 + 6 = 303, so the three scripts partition the suite with nothing left over.
 
 **Naming:**
-- `<subject>.test.ts`, e.g. `atomic-json.test.ts` for `shared/atomic-json.ts`, `import-boundaries.test.ts` for the architecture gate it enforces
+- `<subject>.test.ts`, e.g. `atomic-json.test.ts` for `shared/atomic-json.ts`, `reconcile-planner-purity.test.ts` for the architecture gate it enforces
 - Test titles cite durable spec IDs inline (`NFR-1`, `AS-1`, `D-03`, `PI-2`) as traceability anchors — never GSD process artifacts like "Phase 12" or "Wave 3"
 
 ## Test Structure
@@ -142,7 +142,7 @@ export interface CredentialOpsFake {
 - Programmatic seed helpers, e.g. `tests/edge/handlers/marketplace-seed.ts`, build in-memory or on-disk marketplace/plugin structures for a test to install/reconcile against
 
 **Location:**
-- `tests/fixtures/` for static data. There is **no single shared helper directory** — support modules sit beside the concern they serve: `tests/edge/handlers/marketplace-seed.ts`, `tests/architecture/source-scan.ts` (with its own `tests/architecture/source-scan.test.ts` covering `stripComments`/`assertNoForbiddenSurface`, the scan mechanics the architecture gates run on), `tests/platform/hermetic-environment.ts`, and the `*-fake.ts`/`*-contract.ts` pairs listed under Mocking. A support module that needs its own tests gets them in the same directory.
+- `tests/fixtures/` for static data. There is **no single shared helper directory** — support modules sit beside the concern they serve: `tests/edge/handlers/marketplace-seed.ts`, `tests/architecture/source-scan.ts` (`stripComments`/`assertNoForbiddenSurface`, the scan mechanics the architecture gates run on), `tests/platform/hermetic-environment.ts`, and the `*-fake.ts`/`*-contract.ts` pairs listed under Mocking. A support module that needs its own tests gets them in the same directory.
 
 ## Coverage
 
@@ -162,7 +162,7 @@ npm run test:coverage
 - The bulk of `tests/{bridges,domain,edge,orchestrators,persistence,platform,scripts,shared,transaction}/` — exercise a single module's exported functions against real temp-directory filesystem state, with external boundaries supplied either as `strong-mock` doubles or as the concern-owned `*-fake.ts` ports
 
 **Architecture Tests:**
-- `tests/architecture/` — a distinct category from unit tests: source-tree grep/AST scans (`tests/architecture/source-scan.ts`'s `assertNoForbiddenSurface`, `stripComments`) or programmatic config introspection (loading `eslint.config.js` at test time) that assert structural invariants hold across the whole codebase, e.g. `tests/architecture/no-orchestrator-network.test.ts` (NFR-5: no orchestrator file may import `gitOps`/`platform/git` except the exempted `clone-cache.ts` seam) and `tests/architecture/import-boundaries.test.ts` (D-11/D-21-02: the layered import matrix, the ledger-to-ledger directed-edge ban, and an ALLOWLIST over the `fallow dead-code` invocation's tokens -- the `import-x/no-cycle` rule it used to pin was removed after being measured inert, and cycles are now gated by that bare fallow run)
+- `tests/architecture/` — a distinct category from unit tests: source-tree grep/AST scans (`tests/architecture/source-scan.ts`'s `assertNoForbiddenSurface`, `stripComments`) that assert structural invariants hold across the whole codebase, e.g. `tests/architecture/reconcile-planner-purity.test.ts` (DIFF-01: the reconcile planner's comment-stripped source names no `node:fs`, `platform/git`, `gitOps`, `notify`, save, or lock surface) and `tests/architecture/no-shell-out.test.ts` (D-21 / MA-7: only the whitelisted files may import `node:child_process`). The D-11 ledger-import and NFR-5 network-free rules are not tests: they are ESLint rules (BLOCK C and BLOCK F in `eslint.config.js`) that `npm run lint` reports at the offending line.
 
 **Integration Tests:**
 - `tests/integration/` (13 files, `npm run test:integration`) — exercise multiple layers together (e.g. full install/uninstall ledgers against real temp-directory scope roots) without a live network dependency
