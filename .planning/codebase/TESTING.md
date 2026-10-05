@@ -13,11 +13,11 @@
 
 **Run Commands:**
 ```bash
-npm test                 # unit-ish suite: tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,scripts,shared,transaction}/**/*.test.ts plus tests/index.test.ts
+npm test                 # unit-ish suite: tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts plus tests/index.test.ts
 npm run test:integration # tests/integration/**/*.test.ts
 npm run test:e2e         # tests/e2e/**/*.test.ts (PI_CM_E2E_REF=pinned)
 npm run test:coverage    # runs unit + integration + e2e each with --experimental-test-coverage, emits coverage/{unit,integration,e2e}.lcov
-npm run check            # typecheck && lint && lint:workflows && fallow && format:check && test:corresponding && test:coverage:unit && test:integration && lint:type-members (the unit suite runs under test:coverage:unit; no e2e)
+npm run check            # typecheck && lint && lint:workflows && fallow && format:check && test:corresponding && test:coverage:unit && test:integration (the unit suite runs under test:coverage:unit; no e2e)
 ```
 
 `TEST_CONCURRENCY` env var, when set, is threaded into every `node --test` invocation as `--test-concurrency=$TEST_CONCURRENCY`.
@@ -40,7 +40,6 @@ tests/
 ├── orchestrators/
 ├── persistence/
 ├── platform/
-├── scripts/          # tests for the repo's own .mjs tooling under scripts/
 ├── shared/
 ├── transaction/
 └── index.test.ts     # top-level suite for the extension factory; named as its own glob argument
@@ -159,7 +158,7 @@ npm run test:coverage
 ## Test Types
 
 **Unit Tests:**
-- The bulk of `tests/{bridges,domain,edge,orchestrators,persistence,platform,scripts,shared,transaction}/` — exercise a single module's exported functions against real temp-directory filesystem state, with external boundaries supplied either as `strong-mock` doubles or as the concern-owned `*-fake.ts` ports
+- The bulk of `tests/{bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/` — exercise a single module's exported functions against real temp-directory filesystem state, with external boundaries supplied either as `strong-mock` doubles or as the concern-owned `*-fake.ts` ports
 
 **Architecture Tests:**
 - `tests/architecture/` — a distinct category from unit tests: source-tree grep/AST scans (`tests/architecture/source-scan.ts`'s `assertNoForbiddenSurface`, `stripComments`) that assert structural invariants hold across the whole codebase, e.g. `tests/architecture/reconcile-planner-purity.test.ts` (DIFF-01: the reconcile planner's comment-stripped source names no `node:fs`, `platform/git`, `gitOps`, `notify`, save, or lock surface) and `tests/architecture/no-shell-out.test.ts` (D-21 / MA-7: only the whitelisted files may import `node:child_process`). The D-11 ledger-import and NFR-5 network-free rules are not tests: they are ESLint rules (BLOCK C and BLOCK F in `eslint.config.js`) that `npm run lint` reports at the offending line.

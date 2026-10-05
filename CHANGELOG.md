@@ -5,6 +5,8 @@
 - Internal: commits run only incremental checks, `npm run check` runs at GSD checkpoints and PR handoff, CI runs only on build-input changes, and ESLint alone bans stdio calls. (#236)
 
   - Tests no longer compare the READMEs or other documents with the code, so `docs/output-catalog.md` is the only document that is a build input.
+  - `npm run check` no longer runs the unused type member gate, and the `lint:type-members` and `test:analyzers` scripts no longer exist.
+  - Direct coverage no longer reads a pin file, so any shortfall fails, and the `test:coverage:direct:report` script no longer exists.
 
 - Internal: local checks now select changed modules and their consumers. GSD uses focused checks during tasks and full checks before PR handoff. CI reuses unit coverage for SonarCloud, removes duplicate checks, and runs isolated coverage pairs concurrently.
 
