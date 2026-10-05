@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-05T20:34:42.218Z"
+last_updated: "2026-10-05T21:55:24.293Z"
 last_activity: 2026-10-05
 last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
-state_head: cf8399b4169a3b0f31e6f165d47000bbecfd7f94
+state_head: 89c0e3563d5c0ee07cd1ce81430ddfb4d3c35173
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-05 - Completed quick task 261005-la5: Clean up review leftovers and show full CI output
+Last activity: 2026-10-05 - Completed quick task 261005-n1k: Move output discipline to a fallow rule pack and default-deny NFR-5
 
 ### workflows-replay closeout (merged from main)
 
@@ -623,6 +623,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261005-hpr | Restructure verification checks by granularity: staged pairs on commit, full tree at gates, split CI jobs | 2026-10-05 | e9d9c5df | [261005-hpr-restructure-verification-checks-by-granu](./quick/261005-hpr-restructure-verification-checks-by-granu/) |
 | 261005-jdx | Fail checks on warnings, keep passing output quiet, stop fallow rewriting AGENTS.md | 2026-10-05 | f1f634e2 | [261005-jdx-fail-checks-on-warnings-and-keep-passing](./quick/261005-jdx-fail-checks-on-warnings-and-keep-passing/) |
 | 261005-la5 | Clean up review leftovers and show full CI output | 2026-10-05 | cf8399b4 | [261005-la5-clean-up-review-leftovers-and-show-full-](./quick/261005-la5-clean-up-review-leftovers-and-show-full-/) |
+| 261005-n1k | Move output discipline to a fallow rule pack and default-deny NFR-5 | 2026-10-05 | 89c0e356 | [261005-n1k-move-output-discipline-to-a-fallow-rule-](./quick/261005-n1k-move-output-discipline-to-a-fallow-rule-/) |
 
 ## Deferred Items
 
