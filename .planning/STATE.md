@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-05T13:58:57.556Z"
+last_updated: "2026-10-05T14:56:54.689Z"
 last_activity: 2026-10-05
 last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
-state_head: eb9c146018551f13ba80cc29bcf3ceded2cca4ab
+state_head: 7c2c3ccd659657ef8d3552d5ba8ec4125416ac4d
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-05 — Completed quick task 261005-c2w: worktree subagents get node_modules and their own CodeGraph index through Claude Code hooks
+Last activity: 2026-10-05 — Completed quick task 261005-e23: a per-worktree CodeGraph daemon keeps worktree indexes current
 
 ### workflows-replay closeout (merged from main)
 
@@ -618,6 +618,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 31 | Route worktree CodeGraph queries without a per-call sync; pi.sh says npm install | 2026-10-05 | 53a0adf8 | — |
 | 32 | Trim CONTRIBUTING.md to setup, running Pi, and checks; changelog for worktree hooks | 2026-10-05 | 53a0adf8 | — |
 | 33 | Restore the worktree CodeGraph sync before each query | 2026-10-05 | eb9c1460 | — |
+| 261005-e23 | Keep worktree CodeGraph indexes current with a per-worktree daemon | 2026-10-05 | 7c2c3ccd | [261005-e23-keep-worktree-codegraph-indexes-current-](./quick/261005-e23-keep-worktree-codegraph-indexes-current-/) |
 
 ## Deferred Items
 
