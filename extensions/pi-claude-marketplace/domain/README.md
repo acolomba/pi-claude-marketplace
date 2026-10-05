@@ -15,4 +15,4 @@ Pure logic with zero I/O. Source parsing (`pathSource`/`githubSource`), manifest
 - [ ] `resolver/{installable,unavailable}.ts` -- Phase 2
 - [ ] `naming/{skills,commands,agents,mcp}.ts` -- Phases 2-3
 
-Note: the `Scope` type is currently planned for `shared/types.ts` (Phase 2) so `edge/` can import it without crossing the D-11 boundary. See Phase 1 SUMMARY follow-up note.
+Note: the `Scope` type is currently planned for `shared/types.ts` (Phase 2) so `edge/` can import it without crossing the D-v1.0-01-11 boundary. See Phase 1 SUMMARY follow-up note.

@@ -22,7 +22,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * cascade row message shapes, and a render map total over update's OWN statuses
  * (D-10) lifting the matching `renderPluginRow` arm bodies VERBATIM. The shared
  * presentation vocabulary stays central in `shared/notification-grammar.ts`
- * (D-11) and is CALLED here, never duplicated.
+ * (D-notification-refactor-01-11) and is CALLED here, never duplicated.
  */
 
 /**

@@ -28,7 +28,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * header (`added` / `updated` / `failed`), cause-chains, rollback trailers, the
  * `(no marketplaces)` sentinel, the reload hint, and the severity/summary
  * surface all stay central in `notify.ts` and route byte-identically through
- * `emitContextCascade` (D-11).
+ * `emitContextCascade` (D-notification-refactor-01-11).
  *
  * D-10: `IMPORT_CONTEXT` is pinned via `as const satisfies
  * CommandContext<...>`, so omitting a render arm for any declared status is a

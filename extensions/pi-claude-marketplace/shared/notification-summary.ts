@@ -99,7 +99,7 @@ export function isInfoKind(
 // the resulting SoftDepStatus is threaded into every renderPluginRow(p,
 // probe) invocation. No per-row re-probing.
 //
-// D-11 layering: notify lives entirely in `shared/`; the reload-hint trailer
+// D-v1.0-01-11 layering: notify lives entirely in `shared/`; the reload-hint trailer
 // literal sits alongside the renderMpHeader / renderPluginRow grammar
 // literals.
 // ---------------------------------------------------------------------------

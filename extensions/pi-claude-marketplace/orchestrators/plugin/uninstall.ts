@@ -38,7 +38,7 @@
 // calls still run; there is no notification shape for "cleanup leak after a
 // successful state mutation".
 //
-// Cycle break (D-11): orchestrators/plugin/ may import named exports from
+// Cycle break (D-v1.0-01-11): orchestrators/plugin/ may import named exports from
 // orchestrators/marketplace/shared.ts ONLY (NOT from add.ts/remove.ts/etc).
 //
 // NFR-5 (no network): this file MUST NOT import platform/git or DEFAULT_GIT_OPS.

@@ -54,7 +54,7 @@
 // dropMarketplaceCache call still runs (correctness preserved), only the
 // standalone-mode user-visible warning surface is absent.
 //
-// D-11 import boundaries: orchestrators/plugin/ may import named exports
+// D-v1.0-01-11 import boundaries: orchestrators/plugin/ may import named exports
 // from orchestrators/marketplace/shared.ts (GitOps, DEFAULT_GIT_OPS,
 // resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.

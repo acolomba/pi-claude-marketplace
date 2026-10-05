@@ -9,7 +9,7 @@
 // orchestrator family. If a consumer emerges outside plugin orchestrators,
 // promote the helper to a wider orchestrators/shared surface.
 //
-// Per D-11 import boundaries, this file lives in `orchestrators/plugin/`
+// Per D-v1.0-01-11 import boundaries, this file lives in `orchestrators/plugin/`
 // and may import from `domain/`, `shared/`, and `persistence/` (type-only).
 // No imports from `bridges/` or `orchestrators/marketplace/*`.
 

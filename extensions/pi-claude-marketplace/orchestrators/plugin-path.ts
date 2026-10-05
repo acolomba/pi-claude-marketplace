@@ -4,7 +4,7 @@
  * Reads install state for both scopes and threads it through the pure ledger
  * core in `shared/session-env.ts` into `process.env.PATH` +
  * `PI_CLAUDE_MARKETPLACE_PATH`. Lives in `orchestrators/` (not `shared/`)
- * because it imports `persistence/` -- the D-11 import-direction rule forbids
+ * because it imports `persistence/` -- the D-v1.0-01-11 import-direction rule forbids
  * `shared/` from importing `persistence/`, so the state-reading half of the
  * feature sits here alongside the other load-time reconcile orchestration.
  */

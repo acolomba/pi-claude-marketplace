@@ -60,7 +60,7 @@
 // `eslint.config.js` lints this file's code for that surface, so a comment
 // may still name it.
 //
-// D-11 import boundaries: orchestrators/plugin/ may import from bridges/,
+// D-v1.0-01-11 import boundaries: orchestrators/plugin/ may import from bridges/,
 // domain/, transaction/, persistence/, shared/, AND from
 // orchestrators/marketplace/shared.ts (named exports only -- no add.ts /
 // remove.ts / update.ts cycle). User-visible output flows through
