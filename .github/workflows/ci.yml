@@ -10,9 +10,6 @@ on:
   push:
     branches:
       - main
-    # Build inputs only: the files that an npm build or a CI job reads. A
-    # change to any other file skips CI. scripts/check-changed.mjs keeps the
-    # same list for commit-time checks; change both together.
     paths:
       - "extensions/**"
       - "tests/**"
@@ -35,7 +32,6 @@ on:
   pull_request:
     branches:
       - main
-    # Same list as the push trigger.
     paths:
       - "extensions/**"
       - "tests/**"
