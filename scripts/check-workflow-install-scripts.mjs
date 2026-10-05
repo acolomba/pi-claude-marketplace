@@ -69,7 +69,6 @@ function main() {
   const violations = checkWorkflowInstallScripts(projectRoot);
 
   if (violations.length === 0) {
-    process.stdout.write("Workflow install-scripts gate passed.\n");
     return;
   }
 
