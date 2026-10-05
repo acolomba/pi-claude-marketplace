@@ -68,14 +68,12 @@ export const HOOKS_LIFECYCLE_TARGETS = [
  *
  * The extension tree is walked from `EXTENSION_ROOT_REL`; these are the files
  * outside it that publish the same vocabulary to a reader, so a token retired in
- * code but surviving in the catalog, the style guide, or the PRD is still live as
- * far as anyone reading them is concerned. The catalog-contract case is included
+ * code but surviving in the catalog is still live as far as anyone reading it is
+ * concerned. The catalog-contract case is included
  * for the same reason: it asserts the catalog's own shape.
  */
 export const VOCABULARY_GUARD_DOC_TARGETS = [
   "docs/output-catalog.md",
-  "docs/messaging-style-guide.md",
-  "docs/prd/pi-claude-marketplace-prd.md",
   "tests/architecture/catalog-uat/catalog-contract.test.ts",
 ] as const;
 

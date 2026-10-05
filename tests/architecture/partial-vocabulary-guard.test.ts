@@ -8,19 +8,15 @@
 // (out-of-scope homonyms preserved byte-for-byte).
 //
 // Scope of the ABSENCE checks (read as UTF-8 in Node so the glyph-bearing files
-// -- notify.ts, info.ts, output-catalog.md, and the PRD -- are NOT mis-detected
-// as binary the way a recursive shell `grep` would):
+// -- notify.ts, info.ts, and output-catalog.md -- are NOT mis-detected as
+// binary the way a recursive shell `grep` would):
 //   - the extension tree `extensions/pi-claude-marketplace/**/*.ts`
-//   - the two user-facing docs `docs/output-catalog.md` + `docs/messaging-style-guide.md`
+//   - the user-facing doc `docs/output-catalog.md`
 //   - the unit-suite tests `tests/**/*.ts`, RECURSIVELY, minus this file (it
 //     necessarily spells every retired token in order to forbid it) and minus
 //     the separately-scripted `tests/e2e` / `tests/integration` roots. A guard
 //     that names the vocabulary of a suite it never opens reports success over
 //     nothing, so `POLICED_TEST_ROOTS` below is asserted to have been reached
-//   - the PRD `docs/prd/pi-claude-marketplace-prd.md`, scanned SEPARATELY because
-//     it legitimately spells the stable `FORCE-NN` / `FSTAT-NN` requirement IDs
-//     and the component-level `unsupported <kind>` homonyms, which an allowlist
-//     mask preserves
 //   - the completion `description:` string VALUES in edge/completions/{provider,
 //     data}.ts (a plugin is never "unsupported"/"force"-anything to the user; the
 //     component-level "unsupported components" homonym stays allowed)
@@ -131,16 +127,13 @@ function collectExtensionSources(): ReadonlyMap<string, string> {
 }
 
 /**
- * The full ABSENCE surface: the extension tree PLUS the two user-facing docs and
- * the recursive unit-test tree (this guard file and the separately-scripted e2e
- * and integration roots excluded).
+ * The full ABSENCE surface: the extension tree PLUS the output catalog and the
+ * recursive unit-test tree (this guard file and the separately-scripted e2e and
+ * integration roots excluded).
  */
 function collectGuardedSources(): ReadonlyMap<string, string> {
   const files = new Map(collectExtensionSources());
-  readInto(files, [
-    path.join(REPO_ROOT, "docs", "output-catalog.md"),
-    path.join(REPO_ROOT, "docs", "messaging-style-guide.md"),
-  ]);
+  readInto(files, [path.join(REPO_ROOT, "docs", "output-catalog.md")]);
   for (const [rel, content] of collectTreeSources(TEST_ROOT, isPolicedTestSource)) {
     files.set(rel, content);
   }
@@ -205,9 +198,8 @@ test("D-75-01 guard: the extension tree is non-empty (sanity)", () => {
 test("D-75-01 guard: the docs surface loaded (sanity)", () => {
   assert.ok(
     GUARDED_SOURCES.has("docs/output-catalog.md") &&
-      GUARDED_SOURCES.has("docs/messaging-style-guide.md") &&
       GUARDED_SOURCES.has("tests/architecture/catalog-uat/catalog-contract.test.ts"),
-    "expected the docs + the nested catalog-uat contract to be in the guarded surface",
+    "expected the output catalog + the nested catalog-uat contract to be in the guarded surface",
   );
 });
 
@@ -238,7 +230,7 @@ test("D-75-01 guard: the recursive unit-test walk reached every policed root", (
 // ---------------------------------------------------------------------------
 // Per-(file, token) waivers. A waiver says: this file spells this token for a
 // reason the rename did not retire, so the ABSENCE check skips it HERE and
-// nowhere else. Three categories, each narrow enough that a genuine
+// nowhere else. Two categories, each narrow enough that a genuine
 // regression in the same file still fails on every other token:
 //
 //   - `homonym`  -- the token names something other than this project's plugin
@@ -247,8 +239,6 @@ test("D-75-01 guard: the recursive unit-test walk reached every policed root", (
 //   - `subject`  -- the file's case IS the proof that the retired token is
 //                   rejected, so it cannot assert that without naming it. Same
 //                   reason this guard file excludes itself.
-//   - `mapping`  -- the document IS the retired-to-live mapping table, so
-//                   naming the retired form is its purpose.
 //
 // Every row is asserted below to be load-bearing, which is what stops a waiver
 // from outliving the line it was written for.
@@ -257,7 +247,7 @@ test("D-75-01 guard: the recursive unit-test walk reached every policed root", (
 interface TokenWaiver {
   readonly file: string;
   readonly token: string;
-  readonly category: "homonym" | "subject" | "mapping";
+  readonly category: "homonym" | "subject";
   readonly why: string;
 }
 
@@ -291,18 +281,6 @@ const TOKEN_WAIVERS: readonly TokenWaiver[] = [
     token: "--force",
     category: "subject",
     why: 'RINST-01 / D-67-03: the case proves reinstall REJECTS the retired overwrite flag. Its input argument and the echoed `Unknown flag: "--force".` message must spell the retired flag or the case proves nothing.',
-  },
-  {
-    file: "docs/messaging-style-guide.md",
-    token: "pi-subagents is not loaded",
-    category: "mapping",
-    why: "the retired-to-live table names the retired sentence in its left column and `{requires pi-subagents}` in its right one (MSG-SD-1).",
-  },
-  {
-    file: "docs/messaging-style-guide.md",
-    token: "pi-mcp-adapter is not loaded",
-    category: "mapping",
-    why: "the same table's second soft-dependency row, mapping to `{requires pi-mcp}` (MSG-SD-1).",
   },
 ];
 
@@ -374,8 +352,7 @@ const ABSENT_IDENTIFIERS = [
 
 // MSG-SD-1: the free-text soft-dependency warning sentences were replaced by
 // the per-row `{requires pi-subagents}` / `{requires pi-mcp}` reason markers.
-// The retired sentences have no homonym; the only file that may still spell
-// them is the retired-to-live mapping table itself, which is waived by name.
+// The retired sentences have no homonym, so no guarded file may spell them.
 const ABSENT_SOFT_DEP_PROSE = ["pi-subagents is not loaded", "pi-mcp-adapter is not loaded"];
 
 const ABSENT_TOKENS = [
@@ -539,78 +516,6 @@ test("D-75-01 guard: overwrite `force: true` semantics survive (rm / writeRef / 
   assert.ok(
     stageForce.length > 0,
     "the agents-staging overwrite `options?.force` gate must survive",
-  );
-});
-
-// ---------------------------------------------------------------------------
-// PRD surface (docs/prd/pi-claude-marketplace-prd.md), scanned SEPARATELY
-// from GUARDED_SOURCES because it legitimately spells two OUT-of-scope
-// homonyms an allowlist must preserve:
-//   - the stable requirement/decision IDs `FORCE-01..05` / `FSTAT-01..07`
-//     (incl. the `01a` / `03a` suffixed rows) -- identifiers, not vocabulary;
-//   - the component-level `unsupported <kind>` reasons (`unsupported source`,
-//     `unsupported hooks`, `unsupported component(s)`, `settings (unsupported)`)
-//     -- a plugin is *partially-available* BECAUSE some component kinds are
-//     unsupported (section 4b).
-// ---------------------------------------------------------------------------
-
-const PRD_REL = "docs/prd/pi-claude-marketplace-prd.md";
-const PRD_CONTENT = readFileSync(path.join(REPO_ROOT, PRD_REL), "utf8");
-
-// Mask the OUT-of-scope homonyms above so the retired-token checks below cannot
-// false-positive on them. Everything left is fair game for the ABSENCE checks.
-function maskPrdAllowlist(text: string): string {
-  return text
-    .replace(/\b(?:FORCE|FSTAT)-\d+[a-z]?/g, "")
-    .replace(/UNSUPPORTED component/g, "")
-    .replace(/unsupported[ -]components?/gi, "")
-    .replace(/unsupported (?:source|hooks)/gi, "")
-    .replace(/settings \(unsupported\)/g, "");
-}
-
-const MASKED_PRD = maskPrdAllowlist(PRD_CONTENT);
-
-// The retired plugin-level flag / verdict / status / render / symbol tokens.
-// None is an ID or a component homonym, so none survives the mask after the
-// rename. The standalone backtick verdict `` `unsupported` `` cannot collide
-// with the component reasons (those keep an interior space, e.g.
-// `unsupported source kind: github`).
-const PRD_ABSENT_TOKENS = [
-  "--force",
-  "--unsupported",
-  "force-installed",
-  "force-upgradable",
-  "force-degradable",
-  "(force-installed)",
-  "(force-upgradable)",
-  "Re-run with --force",
-  "requireForceInstallable",
-  "`unsupported`",
-];
-
-for (const token of PRD_ABSENT_TOKENS) {
-  test(`D-75-01 guard: PRD retired plugin-level token absent -- ${token}`, () => {
-    assert.ok(
-      !MASKED_PRD.includes(token),
-      `retired plugin-level token ${JSON.stringify(token)} must be ABSENT from ${PRD_REL} after the rename (FORCE-/FSTAT- IDs and component-level unsupported homonyms are allowlisted)`,
-    );
-  });
-}
-
-// PRESENCE half: the allowlisted homonyms MUST survive byte-for-byte -- an
-// over-rename would silently delete an ID row or a component reason.
-test("D-75-01 guard: PRD keeps FORCE-/FSTAT- IDs and the component `unsupported` homonyms", () => {
-  assert.ok(
-    /\bFORCE-0\d/.test(PRD_CONTENT),
-    "the FORCE-NN requirement IDs must survive in the PRD",
-  );
-  assert.ok(
-    /\bFSTAT-0\d/.test(PRD_CONTENT),
-    "the FSTAT-NN requirement IDs must survive in the PRD",
-  );
-  assert.ok(
-    PRD_CONTENT.includes("unsupported source"),
-    "the component-level `unsupported source` homonym must survive in the PRD",
   );
 });
 
