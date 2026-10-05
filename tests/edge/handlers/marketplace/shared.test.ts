@@ -22,7 +22,7 @@
 //
 // No exhaustiveness claim: the module holds no switch and no closed-union
 // dispatch, so a missing-arm plant has no target here. No case asserts the
-// absence of direct process output -- ESLint and fallow own that -- and none
+// absence of direct process output -- fallow owns that -- and none
 // re-proves the positional schema (tests/edge/args-schema.test.ts) or the flag
 // scan itself (tests/edge/handlers/shared.test.ts).
 

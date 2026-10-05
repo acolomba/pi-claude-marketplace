@@ -79,7 +79,7 @@
 - A single cross-process advisory lock (`proper-lockfile`, `retries: 0`) guards the load→mutate→save critical section per scope (`transaction/with-state-guard.ts`); nesting two guards on the same lock file self-deadlocks, so guard-free "ledger body" functions (e.g. `runInstallLedger`, `runInstallLedgerBody`) are extracted for reuse by callers that already hold the lock.
 - Discriminated-union resolution (`installable | partially-available | unavailable`) means TypeScript enforces that non-installable plugins cannot have their `pluginRoot` read (NFR-7). `InstallLedgerContext` (the ledger's working context type in `install-outcome.ts`) is module-private; `runInstallLedger` returns only a readonly `InstallLedgerSummary` projection to callers — it never hands out its internal mutable context.
 - Orchestrators never touch the network directly for the read-only/no-network paths (NFR-5); ESLint BLOCK F in `eslint.config.js` lints every module in its `NETWORK_FREE_TARGETS` list (enumerated under **Network boundary** in Architectural Constraints) and rejects any `platform/git` import, type-only and dynamic `import()` included, and any `gitOps`/`DEFAULT_GIT_OPS`/`refreshGitHubClone` identifier, key, or string. `update-flow.ts` and `update-preflight.ts` are the documented exemptions (PUP-2 `syncClone` legitimately needs `gitOps` via the `marketplace/shared.ts` re-export).
-- All user-visible output flows through `shared/notification-dispatch.ts`'s `notify()` and `shared/notify-context.ts`'s `notifyWithContext()` — `notification-dispatch.ts` is the SOLE sanctioned `ctx.ui.notify` call site, and direct calls anywhere else are forbidden by the ESLint `no-restricted-syntax` selector at `eslint.config.js:130`, turned back off only for that one file (`eslint.config.js:143`).
+- All user-visible output flows through `shared/notification-dispatch.ts`'s `notify()` and `shared/notify-context.ts`'s `notifyWithContext()` — `notification-dispatch.ts` is the SOLE sanctioned `ctx.ui.notify` call site, and direct calls anywhere else are forbidden by the fallow rule `architecture/notify-chokepoint` (`rule-packs/architecture.json`), which excludes only that file.
 
 ## Layers
 
@@ -219,7 +219,7 @@
 ### Direct `ctx.ui.notify` calls outside `shared/notification-dispatch.ts`
 
 **What happens:** Code outside `shared/notification-dispatch.ts` calling `ctx.ui.notify(...)` directly instead of going through `notify()`/`notifyWithContext()`/`notifyUsageError()`.
-**Why it's wrong:** Bypasses the single point that computes severity, soft-dependency markers, and the reload-hint trailer (IL-2); trips the ESLint `no-restricted-syntax` selector that names `ctx.ui.notify` explicitly.
+**Why it's wrong:** Bypasses the single point that computes severity, soft-dependency markers, and the reload-hint trailer (IL-2); trips the fallow rule `architecture/notify-chokepoint`, which bans every `*.ui.notify` call outside that file.
 **Do this instead:** Import and call the exported helpers from `extensions/pi-claude-marketplace/shared/notification-dispatch.ts` (or `shared/notify-context.ts` for the `*WithContext` variants).
 
 ### Orchestrator files importing git/network surfaces

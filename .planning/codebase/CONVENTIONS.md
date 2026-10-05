@@ -38,7 +38,7 @@
 - Extends `tseslint.configs.strictTypeChecked` + `stylisticTypeChecked` (full type-aware strict linting)
 - Plugins: `@stylistic`, `import-x`, `sonarjs`
 - Key rules:
-  - `no-console: "warn"` (console output is discouraged; see IL-2/IL-3 in project constraints)
+  - `no-console: "warn"` (console output is discouraged; see IL-2/IL-3 in project constraints), and off for `extensions/pi-claude-marketplace/**`, where the fallow rule pack bans console calls
   - `@typescript-eslint/no-unused-vars`: error, with `^_` ignore pattern for args/vars/caught errors
   - `@typescript-eslint/explicit-module-boundary-types: "error"` — all exported functions must declare return types
   - `@typescript-eslint/array-type: "off"` and `restrict-template-expressions: "off"` — deliberately not enforced (either `T[]` or `Array<T>` is fine; numeric template interpolation is fine)
@@ -48,7 +48,7 @@
   - `@stylistic/padding-line-between-statements`: blank line required after every block-like statement
   - `prefer-object-has-own: "error"`
 - **Sonar rules have separate production and test policies.** The production block spreads `sonarjs.configs.recommended.rules` over `extensions/pi-claude-marketplace/**/*.ts`, then reasserts the cognitive-complexity ceiling of 15. Spread the rules rather than extending the preset: the preset redeclares the plugin and has no file scope. Tests additionally enable `assertions-in-tests`, `no-empty-test-file`, and `no-trivial-assertions` at error. Seven exact type-only owners are exempt only from `no-empty-test-file`; their compiler proofs remain required. Five explained call-site exceptions preserve strict-mock verification and dynamic contract assertions that Sonar cannot follow. The [measured test policy](../phases/02-sonar-rules-for-tests/02-SONAR-POLICY.md) records all remaining cluster dispositions; the full recommended preset is not enabled for tests.
-- **Extension-scoped output discipline** (`no-restricted-syntax`, `eslint.config.js:94`, scoped to `extensions/pi-claude-marketplace/**/*.ts`): forbids any direct `process.stdout.*`/`process.stderr.*` call — matches project constraint IL-2 (all user-visible output via `ctx.ui.notify`). Turned back `"off"` for a small set of exempted blocks (`eslint.config.js:145,158,172,315`), each with an inline comment explaining the exemption (e.g. the sanctioned `console.warn` selector).
+- **Extension-scoped output discipline** lives in the fallow rule pack (`rule-packs/architecture.json`, see the Fallow section): `no-stdio`, `no-console` with its two companion rules, and `notify-chokepoint` (IL-2/IL-3). Inside the extension, ESLint sets `no-restricted-syntax` and `no-restricted-imports` only in BLOCK F, the NFR-5 rule.
 - Ignored paths: `.claude/`, `.opencode/`, `.pi/`, `.planning/`, `build/`, `coverage/`, `dist/`, `node_modules/`, `tmp/`, `tests/live-uat/` (standalone `.mjs` UAT drivers excluded from typed tree)
 
 **Fallow (whole-graph static analysis) — a second, independent complexity/duplication/dead-code gate:**
@@ -129,9 +129,9 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 ## Logging
 
-**Framework:** No logging library. `console.warn` is the single sanctioned exception (load-time legacy-migration save failure per project constraint IL-3); `no-console` is `"warn"` at lint level everywhere else, and a `no-console` warning fails `npm run lint`.
+**Framework:** No logging library. Inside the extension, the fallow rule `architecture/no-console` bans every `console.*` call except two: the `console.warn` for a load-time legacy-migration save failure in `persistence/migrate.ts` (IL-3) and the env-gated `console.error` in `shared/debug-log.ts` (OBS-01). Companion rules hold each of those files to its one method. Elsewhere, `no-console` is `"warn"` for `scripts/` and `eslint.config.js` (tests turn it off), and a warning fails `npm run lint`.
 
-**User-visible output:** All output goes through `ctx.ui.notify(message, severity)` inside `extensions/pi-claude-marketplace/shared/notification-dispatch.ts` — the sole sanctioned call site — fed by `notification-types.ts`, `notification-grammar.ts`, `notification-summary.ts`, `notify-context.ts`, and `notify-reasons.ts`. Direct `process.stdout`/`process.stderr` calls are forbidden inside `extensions/pi-claude-marketplace/**` by one gate, the ESLint `no-restricted-syntax` rule (BLOCK A, restated by BLOCK F). The three files that turn that rule off (`shared/notification-dispatch.ts`, `shared/debug-log.ts`, `persistence/migrate.ts`) are outside the ban.
+**User-visible output:** All output goes through `ctx.ui.notify(message, severity)` inside `extensions/pi-claude-marketplace/shared/notification-dispatch.ts` — the sole sanctioned call site — fed by `notification-types.ts`, `notification-grammar.ts`, `notification-summary.ts`, `notify-context.ts`, and `notify-reasons.ts`. Direct `process.stdout`/`process.stderr` calls are forbidden inside `extensions/pi-claude-marketplace/**` by one gate, the fallow rule `architecture/no-stdio`, which has no exemption. A direct `ctx.ui.notify` call outside `shared/notification-dispatch.ts` trips `architecture/notify-chokepoint`.
 
 ## Comments
 

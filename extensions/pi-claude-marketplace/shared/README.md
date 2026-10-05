@@ -4,11 +4,11 @@
 
 Pure leaves. The 5 ES-5 user-contract marker constants (`shared/markers.ts`), closed notification types (`shared/notification-types.ts`), deterministic grammar and summary folding (`shared/notification-grammar.ts`, `shared/notification-summary.ts`), the sole Pi notification boundary (`shared/notification-dispatch.ts`), atomic JSON write (`shared/atomic-json.ts`), symlink-refusing path containment (`shared/path-safety.ts`), and Error.cause-chaining helpers (`shared/errors.ts`).
 
-`shared/notification-dispatch.ts` is the SOLE sanctioned `ctx.ui.notify(` call site -- the per-file ESLint override turns `no-restricted-syntax` off there.
+`shared/notification-dispatch.ts` is the SOLE sanctioned `ctx.ui.notify(` call site -- the fallow rule `architecture/notify-chokepoint` (`rule-packs/architecture.json`) excludes only that file.
 
 ## Allowed Imports
 
-`shared/` MUST NOT import from any other extension folder. Pure leaves only. External imports (`node:*`, `write-file-atomic`, `@earendil-works/pi-coding-agent`) are fine.
+`shared/` MUST NOT import from any other extension folder. Pure leaves only. External imports are limited by the fallow rule pack: `write-file-atomic` only in `atomic-json.ts`, the Pi API only through `platform/pi-api.ts`, and no network module.
 
 ## Planned Contents
 

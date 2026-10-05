@@ -36,7 +36,7 @@
 
 **Build/Dev:**
 - No bundler/build step -- TypeScript is type-checked only (`tsc --noEmit`); Node runs `.ts` sources natively
-- `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~400 lines), including custom architecture-boundary and output-discipline rules (`no-restricted-syntax` forbids any `process.stdout.*`/`process.stderr.*` call in `extensions/pi-claude-marketplace/**`)
+- `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~400 lines), including the architecture-boundary rules (BLOCK C) and the NFR-5 git-surface rules (BLOCK F); the output and import bans live in the fallow rule pack
 - `prettier` `^3.8.3` for formatting (`npm run format` / `format:check`)
 - `fallow` `^3.27.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` first fails on any rule-pack `WARN` that `fallow rule-pack test` prints, then chains four subcommands, each `--fail-on-issues --format human`:
   - `fallow dead-code` (entry point `extensions/pi-claude-marketplace/index.ts`), scoped to production reachability by `production.deadCode`

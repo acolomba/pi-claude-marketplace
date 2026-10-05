@@ -27,48 +27,6 @@ const MARKETPLACE_LEDGERS = [
   "./extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts",
 ];
 
-// Options BLOCK A and BLOCK E apply to the whole extension. BLOCK F restates
-// them for the network-free files, because a later block that sets a rule's
-// options replaces the earlier options for the files it matches.
-const OUTPUT_DISCIPLINE_SELECTORS = [
-  {
-    selector:
-      "CallExpression[callee.object.object.name='process'][callee.object.property.name=/^(stdout|stderr)$/]",
-    message:
-      "Direct process.stdout.* and process.stderr.* calls are forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-  },
-  {
-    selector: "CallExpression[callee.object.name='console'][callee.property.name='log']",
-    message:
-      "console.log is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-  },
-  {
-    selector: "CallExpression[callee.object.name='console'][callee.property.name='warn']",
-    message:
-      "console.warn is forbidden in the extension (IL-2) except at the single sanctioned migrateLegacyMarketplaceRecords callsite, which is allowed via a block-level files-override in this config.",
-  },
-  {
-    selector: "CallExpression[callee.object.name='console'][callee.property.name='error']",
-    message:
-      "console.error is forbidden in the extension (IL-2). Use notify(ctx, pi, NotificationMessage) (failed status carries cause via per-plugin cause?: Error) from shared/notification-dispatch.ts.",
-  },
-  {
-    selector: "CallExpression[callee.object.name='console'][callee.property.name='info']",
-    message:
-      "console.info is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-  },
-  {
-    selector: "CallExpression[callee.property.name='notify'][callee.object.property.name='ui']",
-    message:
-      "Direct ctx.ui.notify is forbidden -- use notify(ctx, pi, NotificationMessage) or notifyUsageError(ctx, UsageErrorMessage) from shared/notification-dispatch.ts.",
-  },
-];
-
-const PI_PEER_IMPORT_RESTRICTION = {
-  name: "@earendil-works/pi-coding-agent",
-  message: "Import Pi API types from extensions/pi-claude-marketplace/platform/pi-api.ts instead.",
-};
-
 /**
  * NFR-5 / PI-2 / PL-3 / PRL-07: every module that must name no git surface of
  * its own. BLOCK F applies to exactly these files. That is a narrower claim
@@ -317,54 +275,13 @@ export default tseslint.config(
     },
   },
   {
-    // BLOCK A (D-06 / IL-2 / IL-3): Output discipline scoped to the extension.
-    // Direct stdout/stderr and console.* calls are forbidden in the
-    // extension. Sanctioned exception: load-time migrate-record save failure
-    // in `migrateLegacyMarketplaceRecords` (IL-3) -- allowed via the
-    // block-level files-override for `persistence/migrate.ts` below (BLOCK
-    // B-2). No inline `eslint-disable-next-line` directive is required.
+    // IL-2 / IL-3 / OBS-01: the fallow rule pack (rule-packs/architecture.json)
+    // owns console discipline in the extension. It bans every console call
+    // except the console.warn in persistence/migrate.ts and the console.error
+    // in shared/debug-log.ts, and it holds each of those files to that one
+    // method. The base no-console warning would flag both sanctioned calls.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
-    rules: {
-      "no-restricted-syntax": ["error", ...OUTPUT_DISCIPLINE_SELECTORS],
-      // Catches console.debug / console.trace / console.dir which the AST
-      // selectors above don't enumerate.
-      "no-console": "error",
-    },
-  },
-  {
-    // BLOCK B: Per-file override -- shared/notification-dispatch.ts IS the sanctioned
-    // ctx.ui.notify call site, so its body must be allowed to call it.
-    files: ["extensions/pi-claude-marketplace/shared/notification-dispatch.ts"],
-    rules: {
-      "no-restricted-syntax": "off",
-      "no-console": "off",
-    },
-  },
-  {
-    // Per-file override (OBS-01 / D-59-05) -- shared/debug-log.ts IS the
-    // sole sanctioned runtime debug-output seam for the hooks dispatch
-    // path, so its env-gated `console.error` call must be allowed. Mirrors
-    // BLOCK B's authorization for shared/notification-dispatch.ts (sanctioned escape from
-    // IL-2 / IL-3). Scope is the single literal file path so a glob-widening
-    // drift surfaces in code review.
-    files: ["extensions/pi-claude-marketplace/shared/debug-log.ts"],
-    rules: {
-      "no-restricted-syntax": "off",
-      "no-console": "off",
-    },
-  },
-  {
-    // Per-file override -- migrate.ts emits the single sanctioned
-    // legacy-migration console.warn (IL-3). That one callsite trips BOTH
-    // rules: the explicit `console.warn` selector in `no-restricted-syntax`
-    // AND the catch-all `no-console: error`, so both must be disabled for
-    // this file (and only this file). No other console.warn is permitted in
-    // the extension.
-    files: ["extensions/pi-claude-marketplace/persistence/migrate.ts"],
-    rules: {
-      "no-console": "off",
-      "no-restricted-syntax": "off",
-    },
+    rules: { "no-console": "off" },
   },
   {
     // BLOCK C (D-11): Import-direction enforcement. The first eight zones map
@@ -494,35 +411,17 @@ export default tseslint.config(
     },
   },
   {
-    // BLOCK E (Phase 7 D-04): Pi peer-import chokepoint. Direct imports of
-    // `@earendil-works/pi-coding-agent` are allowed only in
-    // `extensions/pi-claude-marketplace/platform/pi-api.ts`. All other
-    // extension code imports Pi API types through the wrapper so
-    // peer-dependency version bumps have a single audit point.
-    files: ["extensions/pi-claude-marketplace/**/*.ts"],
-    ignores: ["extensions/pi-claude-marketplace/platform/pi-api.ts"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: [PI_PEER_IMPORT_RESTRICTION],
-        },
-      ],
-    },
-  },
-  {
     // BLOCK F (NFR-5 / PI-2 / PL-3 / PRL-07): the modules in NETWORK_FREE_TARGETS
     // name no git surface: no platform/git import of any kind (type-only and
     // dynamic included) and no gitOps / DEFAULT_GIT_OPS / refreshGitHubClone
-    // identifier, key, or string. Both rules restate the extension-wide options
-    // of BLOCK A and BLOCK E, because a later block that sets a rule's options
-    // replaces the earlier options for the files it matches.
+    // identifier, key, or string. No other block sets either rule for extension
+    // files. A block that did would replace these options for every file that
+    // both blocks match.
     files: NETWORK_FREE_TARGETS,
     rules: {
       "no-restricted-imports": [
         "error",
         {
-          paths: [PI_PEER_IMPORT_RESTRICTION],
           patterns: [
             {
               regex: "platform/git",
@@ -532,11 +431,7 @@ export default tseslint.config(
           ],
         },
       ],
-      "no-restricted-syntax": [
-        "error",
-        ...OUTPUT_DISCIPLINE_SELECTORS,
-        ...NETWORK_FREE_SYNTAX_SELECTORS,
-      ],
+      "no-restricted-syntax": ["error", ...NETWORK_FREE_SYNTAX_SELECTORS],
     },
   },
   {

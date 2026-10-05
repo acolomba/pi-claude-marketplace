@@ -53,7 +53,7 @@
 // This pair makes no exhaustiveness claim: the target form is selected by a
 // chain of `if` statements over string shapes, not by a switch over a closed
 // union, so a missing-arm plant has no target here. No case asserts the absence
-// of direct process output (ESLint and fallow own that), none restates the
+// of direct process output (fallow owns that), none restates the
 // tokenizer diagnostics owned by tests/edge/args.test.ts, none re-proves the
 // reference split owned by tests/edge/handlers/plugin/shared.test.ts, and no
 // case adds an offline guard -- `orchestrators/plugin/fetch.ts` is a named

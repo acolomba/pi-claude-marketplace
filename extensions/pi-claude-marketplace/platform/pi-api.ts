@@ -37,7 +37,7 @@ export { getAgentDir } from "@earendil-works/pi-coding-agent";
  * T-03-17 injection-safety property -- reading-to-validate is not evaluating).
  */
 export { parseFrontmatter } from "@earendil-works/pi-coding-agent";
-// BLOCK E chokepoint: DynamicBorder is a runtime class used by the
+// Pi peer chokepoint (NFR-11): DynamicBorder is a runtime class used by the
 // /claude:plugin browse SelectList browser. Re-exported here so edge/
 // never imports the peer dep directly.
 export { DynamicBorder } from "@earendil-works/pi-coding-agent";

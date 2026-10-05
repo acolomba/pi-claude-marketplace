@@ -10,12 +10,11 @@
  * (the session-env / plugin-PATH seams) pass their own tag (`"env"`) so a
  * user grepping debug output finds the failure filed under the right
  * subsystem. The console.error call is the SOLE sanctioned IL-2 / IL-3
- * deviation at this seam, authorized by the per-file ESLint override block in
- * eslint.config.js that mirrors BLOCK B's authorization for
- * shared/notification-dispatch.ts.
- * No inline `eslint-disable-next-line` directives live in this file: any
- * drift of the per-file override block surfaces as a red lint at this call
- * site rather than a silently-absorbed inline disable.
+ * deviation at this seam. The fallow rule pack (rule-packs/architecture.json)
+ * authorizes it: `architecture/no-console` leaves this file out, and
+ * `architecture/debug-log-console-error-only` bans every other console method
+ * here. No inline suppression lives in this file, so a drift in either rule
+ * fails `npm run fallow`.
  *
  * Pure leaf module: no imports, no module-level state. Consumers import the
  * named export by relative path; no re-export surface.
