@@ -354,7 +354,7 @@ async function prepareUpdateHandles(
  *
  * Its own function rather than a few lines inside the finalize window:
  * `prepareUpdateHandles` and that window already sit near the fallow
- * `maxCognitive: 15` and `maxUnitSize: 60` ceilings.
+ * `maxCognitive: 15` ceiling.
  */
 function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly string[] {
   const { discovery, bridge } = splitStagingWarnings({
