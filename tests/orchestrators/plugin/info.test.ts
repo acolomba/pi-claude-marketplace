@@ -2071,9 +2071,42 @@ test("plugin info manifest absent: INFO-10: a manifest-absent record with persis
 // INFO-11 / D-96-01: the four name-list kinds come from `resources.*` and
 // render the Pi-GENERATED installed names verbatim -- no reverse-mapping to
 // the plugin author's source names. MCP servers are the sole exception by data
-// shape: the record holds their raw source keys. Kind order is the renderer's
-// fixed `agents, commands, mcp, skills`; within a kind the orchestrator sorts.
+// shape: the record holds their declared names, which render as Claude Code's
+// `plugin:<plugin>:<server>` (ANAME-01). Kind order is the renderer's fixed
+// `agents, commands, mcp, skills`; within a kind the orchestrator sorts.
 // ---------------------------------------------------------------------------
+
+test("ANAME-01: the installation-record arm shows plugin MCP servers by their Claude names", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: { version: "1.0.0", resources: { skills: [], mcpServers: ["my.api", "db"] } },
+      },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:db, plugin:alpha:my.api",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
 
 test("plugin info manifest absent: INFO-11: the four name-list kinds render from `resources.*`, sorted, with generated names verbatim", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
@@ -2112,7 +2145,7 @@ test("plugin info manifest absent: INFO-11: the four name-list kinds render from
         "  ● alpha v1.0.0 (installed) {not in manifest}",
         "    agents: pi-claude-marketplace-alpha-review",
         "    commands: alpha:build",
-        "    mcp: alpha-srv, zeta-srv",
+        "    mcp: plugin:alpha:alpha-srv, plugin:alpha:zeta-srv",
         "    skills: Alpha-other, alpha-skill",
         "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
       ].join("\n"),
@@ -2610,7 +2643,7 @@ test("plugin info manifest absent: NFR-10: a traversal hooks slug is refused bef
         "  ● alpha v1.0.0 (installed) {not in manifest, unreadable}",
         "    agents: pi-claude-marketplace-alpha-review",
         "    commands: alpha:build",
-        "    mcp: alpha-srv",
+        "    mcp: plugin:alpha:alpha-srv",
         "    skills: alpha-skill",
         "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
       ].join("\n"),
@@ -3011,7 +3044,7 @@ test("plugin info manifest absent: ENBL-16 / ENBL-17: a disabled, manifest-absen
         "    hooks:",
         "      SessionStart",
         "      PostToolUse(Read)",
-        "    mcp: alpha-mcp",
+        "    mcp: plugin:alpha:alpha-mcp",
         "    skills: alpha-skill",
         "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
       ].join("\n"),
@@ -4192,7 +4225,7 @@ test("SURF-01 / D-63-04: installed plugin with hooks/hooks.json renders multi-li
         "      PreToolUse(Edit|Write)",
         "      PostToolUse(Edit)",
         "      SessionStart",
-        "    mcp: my-mcp",
+        "    mcp: plugin:h:my-mcp",
         "    requires: pi-mcp-adapter (missing)",
       ].join("\n"),
     );
@@ -6837,7 +6870,52 @@ test("resolved MCP inventory sorts two server names exactly", async () => {
         message: [
           "● mp [user] <no autoupdate>",
           "  ○ alpha v1.0.0 (available)",
-          "    mcp: alpha, zeta",
+          "    mcp: plugin:alpha:alpha, plugin:alpha:zeta",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("ANAME-07: info names each left-out MCP server with the feature that blocks it", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "db-tools", source: "./db-tools", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["db-tools"],
+    });
+    await mkdir(path.join(mpRoot, "db-tools", ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "db-tools", ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "db-tools",
+        mcpServers: {
+          live: { type: "ws", url: "wss://db.example.test/live" },
+          db: { command: "db-server" },
+        },
+      }),
+      "utf8",
+    );
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "db-tools", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊖ db-tools v1.0.0 (partially-available) {unsupported mcp}",
+          "    mcp: plugin:db-tools:db, plugin:db-tools:live (unsupported ws)",
           "    requires: pi-mcp-adapter (missing)",
         ].join("\n"),
       },
@@ -6903,7 +6981,7 @@ for (const { inventory, label, requiresLine } of [
           message: [
             "● mp [user] <no autoupdate>",
             "  ○ alpha v1.0.0 (available)",
-            "    mcp: srv",
+            "    mcp: plugin:alpha:srv",
             requiresLine,
           ].join("\n"),
         },

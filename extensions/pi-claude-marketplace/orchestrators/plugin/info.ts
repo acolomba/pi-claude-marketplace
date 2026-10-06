@@ -45,6 +45,8 @@ import {
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
+import { type DroppedMcpServer } from "../../domain/mcp-server-features.ts";
+import { mcpServerDisplayName } from "../../domain/name.ts";
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import {
   parsePluginSource,
@@ -64,6 +66,7 @@ import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceDetails,
+  type McpServerSummaryEntry,
   type NotificationMessage,
   type PluginInfoMessage,
   type PluginInfoRow,
@@ -928,7 +931,8 @@ function parseLenientHooksJson(raw: string): unknown {
 /**
  * Compose the resolved-components field of a `PluginInfoRow`. Walks
  * `resolved.componentPaths` to discover per-kind component names on
- * disk; for mcpServers, the `resolved.mcpServers` keys ARE the names.
+ * disk; for mcpServers, the `resolved.mcpServers` keys are the declared
+ * names, and the servers a partial install leaves out ride beside them.
  * For hooks, re-parses `<pluginRoot>/<resolved.hooksConfigPath>` and
  * projects the result to `HookSummaryEntry[]` (the resolver discards
  * the parsed value -- info.ts must re-open the file). Empty per-kind
@@ -966,6 +970,7 @@ async function composeResolvedComponents(
       readonly workflows: readonly string[];
     };
     readonly mcpServers: Record<string, unknown>;
+    readonly droppedMcpServers?: readonly DroppedMcpServer[];
     readonly hooksConfigPath?: string;
   },
   pluginName: string,
@@ -974,7 +979,7 @@ async function composeResolvedComponents(
     readonly agents?: readonly string[];
     readonly commands?: readonly string[];
     readonly hooks?: readonly HookSummaryEntry[];
-    readonly mcp?: readonly string[];
+    readonly mcp?: readonly McpServerSummaryEntry[];
     readonly skills?: readonly string[];
     readonly workflows?: readonly string[];
   };
@@ -998,8 +1003,10 @@ async function composeResolvedComponents(
     resolved.componentPaths.skills,
     "skills",
   );
-  const mcp = Object.keys(resolved.mcpServers).sort((a, b) =>
-    a.localeCompare(b, undefined, { sensitivity: "base" }),
+  const mcp = composeMcpEntries(
+    pluginName,
+    Object.keys(resolved.mcpServers),
+    resolved.droppedMcpServers,
   );
 
   // SURF-01 / D-63-07: hooks branch. Read-and-project happens ONCE at
@@ -1627,7 +1634,13 @@ async function buildStateOnlyInstalledRow(
   locations: ScopedLocations,
   cwd: string,
 ): Promise<PluginInfoRow> {
-  const { components, degraded } = await composeStateOnlyComponents(reader, record, locations, cwd);
+  const { components, degraded } = await composeStateOnlyComponents(
+    reader,
+    pluginName,
+    record,
+    locations,
+    cwd,
+  );
   return {
     status: derivePersistedInstalledStatus(record),
     name: pluginName,
@@ -1690,6 +1703,7 @@ function derivePersistedInstalledStatus(
  */
 async function composeStateOnlyComponents(
   reader: PluginInfoReader,
+  pluginName: string,
   record: MarketplaceRecord["plugins"][string],
   locations: ScopedLocations,
   cwd: string,
@@ -1699,7 +1713,7 @@ async function composeStateOnlyComponents(
 }> {
   const agents = sortComponentNames(record.resources.agents);
   const commands = sortComponentNames(record.resources.prompts);
-  const mcp = sortComponentNames(record.resources.mcpServers);
+  const mcp = composeMcpEntries(pluginName, record.resources.mcpServers);
   const skills = sortComponentNames(record.resources.skills);
   const workflows = sortComponentNames(record.resources.workflows);
   // D-100-03 / ENBL-12 read ladder: the record wins when it carries the key,
@@ -1738,7 +1752,34 @@ async function composeStateOnlyComponents(
 
 /** The `discoverComponentNames` ordering, applied to a persisted name list. */
 function sortComponentNames(names: readonly string[]): readonly string[] {
-  return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  return [...names].sort(compareComponentNames);
+}
+
+function compareComponentNames(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { sensitivity: "base" });
+}
+
+/**
+ * ANAME-01 / ANAME-07: the `mcp:` entries for both info arms. Every server is
+ * shown by the name Claude Code gives it, and a server a partial install
+ * leaves out also carries the feature that blocks it. The record arm passes
+ * no dropped servers: the record lists only the servers install wrote.
+ */
+function composeMcpEntries(
+  pluginName: string,
+  servers: readonly string[],
+  dropped: readonly DroppedMcpServer[] = [],
+): readonly McpServerSummaryEntry[] {
+  const declared: readonly ({ readonly server: string } | DroppedMcpServer)[] = [
+    ...servers.map((server) => ({ server })),
+    ...dropped,
+  ];
+  return declared
+    .map((entry) => ({
+      name: mcpServerDisplayName(pluginName, entry.server),
+      ...("feature" in entry && { unsupportedFeature: entry.feature }),
+    }))
+    .sort((a, b) => compareComponentNames(a.name, b.name));
 }
 
 /**

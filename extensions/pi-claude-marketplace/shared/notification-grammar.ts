@@ -1361,6 +1361,11 @@ function appendResolvedComponentLines(
       continue;
     }
 
+    if (kind === "mcp") {
+      appendMcpLine(lines, components.mcp);
+      continue;
+    }
+
     const names = components[kind];
     if (names !== undefined && names.length > 0) {
       lines.push(`    ${kind}: ${names.join(", ")}`);
@@ -1369,6 +1374,23 @@ function appendResolvedComponentLines(
 
   appendRequiresLine(lines, requires);
   appendDependenciesLine(lines, dependencies);
+}
+
+/**
+ * ANAME-07: appends the optional `    mcp: <list>` line. Each entry is the
+ * server's Claude name, followed by ` (unsupported <feature>)` when the info
+ * command tagged it as left out. The entries arrive stamped and sorted.
+ */
+function appendMcpLine(
+  lines: string[],
+  entries: PluginInfoComponentsResolved["components"]["mcp"],
+): void {
+  if (entries !== undefined && entries.length > 0) {
+    const names = entries.map(({ name, unsupportedFeature }) =>
+      unsupportedFeature === undefined ? name : `${name} (unsupported ${unsupportedFeature})`,
+    );
+    lines.push(`    mcp: ${names.join(", ")}`);
+  }
 }
 
 /**

@@ -3664,7 +3664,7 @@ test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` heade
       components: {
         agents: ["a"],
         commands: ["b"],
-        mcp: ["c"],
+        mcp: [{ name: "plugin:alpha:c" }],
         skills: ["d"],
       },
     },
@@ -3682,7 +3682,7 @@ test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` heade
       "  ● alpha v1.0.0 (installed)",
       "    agents: a",
       "    commands: b",
-      "    mcp: c",
+      "    mcp: plugin:alpha:c",
       "    skills: d",
     ].join("\n"),
   );

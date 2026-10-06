@@ -865,6 +865,17 @@ export interface PluginInfoRowBase {
 }
 
 /**
+ * ANAME-01 / ANAME-07: one plugin MCP server on the info surface, stamped by
+ * the info command. `name` is the name Claude Code gives the server,
+ * `plugin:<plugin>:<server>`. `unsupportedFeature` is present only on a server
+ * a partial install leaves out, and names the Claude feature that blocks it.
+ */
+export interface McpServerSummaryEntry {
+  readonly name: string;
+  readonly unsupportedFeature?: string;
+}
+
+/**
  * Component details sorted alphabetically, with dependencies pre-rendered as
  * plugin addresses and optional version/SHA constraints, sorted by dependency name.
  */
@@ -874,7 +885,7 @@ export interface PluginInfoComponentsResolved {
     readonly agents?: readonly string[];
     readonly commands?: readonly string[];
     readonly hooks?: readonly HookSummaryEntry[];
-    readonly mcp?: readonly string[];
+    readonly mcp?: readonly McpServerSummaryEntry[];
     readonly skills?: readonly string[];
     /**
      * WFLW-04: carries the generated `<plugin>:<name>` of every ADMITTED

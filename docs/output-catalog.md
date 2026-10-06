@@ -2699,7 +2699,7 @@ The plugin has agents and MCP servers, so it needs two companion extensions: pi-
   ● commit-commands v1.2.0 (installed)
     Helpful git commit commands for everyday use.
     agents: review-bot
-    mcp: github
+    mcp: plugin:commit-commands:github
     requires: pi-mcp-adapter (missing), pi-subagents
 ```
 
@@ -2714,14 +2714,14 @@ The plugin has agents, MCP servers and workflow scripts, so it needs all three c
   ● commit-commands v1.2.0 (installed)
     Helpful git commit commands for everyday use.
     agents: review-bot
-    mcp: github
+    mcp: plugin:commit-commands:github
     workflows: commit-commands:changelog
     requires: pi-dynamic-workflows (missing), pi-mcp-adapter, pi-subagents
 ```
 
 ### Success -- installed from the installation record (INFO-09)
 
-The marketplace manifest loads correctly, but it does not declare the plugin. An enabled installation record for the plugin exists, so the row shows the plugin as installed and states the absence as a reason. The version comes from the installation record, because there is no manifest entry to supply one. No description line and no dependencies line show: the manifest is the only source of both, and this state does not reconstruct them. The component names are the Pi-generated INSTALLED names -- `<plugin>-<skill>` for skills, `<plugin>:<command>` for commands, and `pi-claude-marketplace-<plugin>-<agent>` for agents. These names are different from the source names that the manifest-backed states above show (D-96-01). MCP servers are the one exception: the installation record keeps their raw source keys. This state replaces the `error`-severity `missing-plugin-not-in-manifest` outcome for this input, so the severity for an installed record changes from `error` to `info`. Severity `info`; no reload-hint (read-only surface).
+The marketplace manifest loads correctly, but it does not declare the plugin. An enabled installation record for the plugin exists, so the row shows the plugin as installed and states the absence as a reason. The version comes from the installation record, because there is no manifest entry to supply one. No description line and no dependencies line show: the manifest is the only source of both, and this state does not reconstruct them. The component names are the Pi-generated INSTALLED names -- `<plugin>-<skill>` for skills, `<plugin>:<command>` for commands, and `pi-claude-marketplace-<plugin>-<agent>` for agents. These names are different from the source names that the manifest-backed states above show (D-96-01). MCP servers are the one exception: the installation record keeps each server's declared name. From that name, `info` shows every plugin MCP server as `plugin:<plugin>:<server>`, the name Claude Code gives it. It does this on the manifest-backed states and on the installation-record states alike (ANAME-01). This state replaces the `error`-severity `missing-plugin-not-in-manifest` outcome for this input, so the severity for an installed record changes from `error` to `info`. Severity `info`; no reload-hint (read-only surface).
 
 <!-- catalog-state: state-only-installed-single-scope -->
 
@@ -2941,6 +2941,20 @@ Severity is `info` on this surface. Neither resolver state is a failed command. 
   ⊘ legacy-plugin v0.1.0 (unavailable) {unsupported hooks}
     Old plugin that declares hooks; not installable in Pi.
     components: not resolved
+```
+
+### Not installed -- an MCP server is left out (ANAME-07)
+
+The plugin declares two MCP servers. The `live` server uses the `ws` transport, a Claude Code MCP feature that pi-mcp-adapter cannot honor, so the plugin is `(partially-available)` with the `{unsupported mcp}` reason. The `mcp:` line shows every server by the name Claude Code gives it, `plugin:<plugin>:<server>`, sorted by name. A left-out server also names the feature that blocks it, as `(unsupported <feature>)`. An install with `--partial` installs the plugin without that server. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: partially-available-with-unsupported-mcp -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ⊖ db-tools v1.0.0 (partially-available) {unsupported mcp}
+    Database tools for everyday queries.
+    mcp: plugin:db-tools:db, plugin:db-tools:live (unsupported ws)
+    requires: pi-mcp-adapter
 ```
 
 ### Multi-scope fan-out -- both scopes hold the plugin

@@ -100,7 +100,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
           componentsResolved: true,
           components: {
             agents: ["review-bot"],
-            mcp: ["github"],
+            mcp: [{ name: "plugin:commit-commands:github" }],
           },
           requires: [
             { companion: "pi-mcp-adapter", missing: true },
@@ -127,7 +127,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
           componentsResolved: true,
           components: {
             agents: ["review-bot"],
-            mcp: ["github"],
+            mcp: [{ name: "plugin:commit-commands:github" }],
             workflows: ["commit-commands:changelog"],
           },
           requires: [
@@ -524,6 +524,33 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
           description: "Old plugin that declares hooks; not installable in Pi.",
           reasons: ["unsupported hooks"],
           componentsResolved: false,
+        },
+      },
+    },
+
+    // ANAME-07: a left-out server is named with the feature that blocks it,
+    // beside the supported server, all sorted by name.
+    "partially-available-with-unsupported-mcp": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "partially-available",
+          name: "db-tools",
+          version: "1.0.0",
+          description: "Database tools for everyday queries.",
+          reasons: ["unsupported mcp"],
+          componentsResolved: true,
+          components: {
+            mcp: [
+              { name: "plugin:db-tools:db" },
+              { name: "plugin:db-tools:live", unsupportedFeature: "ws" },
+            ],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
         },
       },
     },

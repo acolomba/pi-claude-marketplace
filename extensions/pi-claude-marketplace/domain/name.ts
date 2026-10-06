@@ -219,12 +219,22 @@ export function declaredAgentName(plugin: string, source: string): string {
 }
 
 /**
+ * ANAME-01: the name Claude Code registers a plugin MCP server under,
+ * `plugin:<plugin>:<server>`. The declared server name is kept verbatim;
+ * `generatedMcpServerKey` normalizes this same string, so the name `info`
+ * shows and the key install writes cannot drift apart.
+ */
+export function mcpServerDisplayName(plugin: string, server: string): string {
+  return `plugin:${plugin}:${server}`;
+}
+
+/**
  * MCP server key generator (ANAME-01).
  *
  * Format: `plugin_<plugin>_<server>_`. Claude Code names a plugin server
  * `plugin:<plugin>:<server>` and replaces every character outside
  * `[A-Za-z0-9_-]` with `_` when it builds a tool name. This builder applies
- * the same rule to the same string, then appends one `_`. pi-mcp-adapter
+ * the same rule to `mcpServerDisplayName`'s string, then appends one `_`. pi-mcp-adapter
  * names a tool `<toolPrefix>__<key>_<tool>`, so the trailing `_` and the
  * entry's `toolPrefix: "mcp"` give Claude Code's `mcp__plugin_<p>_<s>__<tool>`.
  *
@@ -237,7 +247,7 @@ export function declaredAgentName(plugin: string, source: string): string {
  */
 export function generatedMcpServerKey(plugin: string, server: string): string {
   assertSafeName(plugin);
-  const claudeServerName = `plugin:${plugin}:${server}`;
+  const claudeServerName = mcpServerDisplayName(plugin, server);
   return `${claudeServerName.replaceAll(/[^A-Za-z0-9_-]/g, "_")}_`;
 }
 

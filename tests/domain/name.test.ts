@@ -10,6 +10,7 @@ import {
   generatedMcpServerKey,
   generatedSkillName,
   generatedWorkflowName,
+  mcpServerDisplayName,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 import { UnsafeGeneratedNameError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { setCasePlatform } from "../platform/case-platform.ts";
@@ -597,6 +598,7 @@ describe("generatedMcpServerKey", () => {
       server: "database-tools",
       expectedKey: "plugin_my-plugin_database-tools_",
     },
+    { plugin: "acme", server: "my.api", expectedKey: "plugin_acme_my_api_" },
     { plugin: "acme", server: "a.b:c d/e", expectedKey: "plugin_acme_a_b_c_d_e_" },
     // Claude Code replaces UTF-16 code units, so the astral emoji's surrogate
     // pair becomes two underscores.
@@ -632,6 +634,25 @@ describe("generatedMcpServerKey", () => {
       return true;
     });
   });
+});
+
+describe("mcpServerDisplayName", () => {
+  for (const { plugin, server, expectedName } of [
+    { plugin: "acme", server: "my.api", expectedName: "plugin:acme:my.api" },
+    { plugin: "my-plugin", server: "a.b:c d/e", expectedName: "plugin:my-plugin:a.b:c d/e" },
+  ]) {
+    test(`ANAME-01: shows ${plugin} + ${JSON.stringify(server)} as ${expectedName}`, () => {
+      // arrange
+      const pluginName = plugin;
+      const serverName = server;
+
+      // act
+      const displayName = mcpServerDisplayName(pluginName, serverName);
+
+      // assert
+      assert.strictEqual(displayName, expectedName);
+    });
+  }
 });
 
 describe("foldedMcpServerKey", () => {

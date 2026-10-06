@@ -677,7 +677,7 @@ test("ADET-01: renders the stamped requires line after the components and before
       status: "installed",
       name: "alpha",
       componentsResolved: true,
-      components: { agents: ["a"], mcp: ["m"] },
+      components: { agents: ["a"], mcp: [{ name: "plugin:alpha:m" }] },
       requires: [
         { companion: "pi-mcp-adapter", missing: true },
         { companion: "pi-subagents", missing: false },
@@ -697,13 +697,50 @@ test("ADET-01: renders the stamped requires line after the components and before
       "● official [user] <no autoupdate>",
       "  ● alpha (installed)",
       "    agents: a",
-      "    mcp: m",
+      "    mcp: plugin:alpha:m",
       "    requires: pi-mcp-adapter (missing), pi-subagents",
       "    dependencies: dep@mp",
       "    note: a note",
     ].join("\n"),
   );
 });
+
+for (const { label, mcp, mcpLines } of [
+  {
+    label: "tags a left-out server with its blocking feature beside a plain one",
+    mcp: [{ name: "plugin:a:x" }, { name: "plugin:a:y", unsupportedFeature: "headersHelper" }],
+    mcpLines: ["    mcp: plugin:a:x, plugin:a:y (unsupported headersHelper)"],
+  },
+  { label: "prints no mcp line for an empty list", mcp: [], mcpLines: [] },
+  { label: "prints no mcp line for an absent list", mcp: undefined, mcpLines: [] },
+]) {
+  test(`ANAME-07: ${label}`, () => {
+    // arrange
+    const message: PluginInfoMessage = {
+      kind: "plugin-info",
+      marketplaceName: "official",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "installed",
+        name: "a",
+        componentsResolved: true,
+        components: { agents: ["b"], ...(mcp !== undefined && { mcp }) },
+      },
+    };
+
+    // act
+    const rendered = renderPluginInfo(message, bothLoadedProbe());
+
+    // assert
+    assert.equal(
+      rendered,
+      ["● official [user] <no autoupdate>", "  ● a (installed)", "    agents: b", ...mcpLines].join(
+        "\n",
+      ),
+    );
+  });
+}
 
 test("ADET-01: formats the requires entries as stamped, whatever the probe it is handed reports", () => {
   // arrange
@@ -782,7 +819,13 @@ test("renders resolved plugin components and wraps descriptions without ellipsis
       reasons: ["not in manifest"],
       description,
       componentsResolved: true,
-      components: { agents: ["a"], commands: ["c"], hooks: undefined, mcp: ["m"], skills: ["s"] },
+      components: {
+        agents: ["a"],
+        commands: ["c"],
+        hooks: undefined,
+        mcp: [{ name: "plugin:alpha:m" }],
+        skills: ["s"],
+      },
       dependencies: ["dep"],
     },
   };
@@ -801,7 +844,7 @@ test("renders resolved plugin components and wraps descriptions without ellipsis
       "    supercalifragilisticexpialidocious",
       "    agents: a",
       "    commands: c",
-      "    mcp: m",
+      "    mcp: plugin:alpha:m",
       "    skills: s",
       "    dependencies: dep",
     ].join("\n"),
