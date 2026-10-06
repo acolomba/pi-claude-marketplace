@@ -1222,6 +1222,70 @@ describe("composite dispatch closure partitions", () => {
     });
   }
 
+  for (const { toolName, firingPluginIds } of [
+    {
+      toolName: "mcp__plugin_acme_db__query",
+      firingPluginIds: ["server-prefix", "prefix-or-write"],
+    },
+    { toolName: "mcp__plugin_acme_db2__query", firingPluginIds: [] },
+    { toolName: "mcp", firingPluginIds: [] },
+    { toolName: "write", firingPluginIds: ["prefix-or-write"] },
+  ]) {
+    test(`ANAME-02: a server-prefix matcher fires on the delivered plugin tool and on nothing else (toolName "${toolName}")`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const context = createExtensionContext("/workspace/dispatch-server-prefix");
+      const entries = [
+        createRoutingEntry({
+          pluginId: "server-prefix",
+          claudeEvent: "PreToolUse",
+          rawMatcher: "mcp__plugin_acme_db__.*",
+          declarationIndex: 0,
+        }),
+        createRoutingEntry({
+          pluginId: "prefix-or-write",
+          claudeEvent: "PreToolUse",
+          rawMatcher: "mcp__plugin_acme_db__.*|Write",
+          declarationIndex: 1,
+        }),
+        createRoutingEntry({
+          pluginId: "case-mismatch",
+          claudeEvent: "PreToolUse",
+          rawMatcher: "mcp__Plugin_acme_db__.*",
+          declarationIndex: 2,
+        }),
+      ];
+      const executorCalls: RecordedCall[] = [];
+      const executor = createRecordingExecutor(
+        {
+          "server-prefix": { kind: "noop" },
+          "prefix-or-write": { kind: "noop" },
+          "case-mismatch": { kind: "noop" },
+        },
+        executorCalls,
+      );
+      runtime.setRoutingBucket("PreToolUse", entries);
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+      const expectedCalls: RecordedCall[] = firingPluginIds.map((pluginId) => ({
+        pluginId,
+        event: createToolCallEvent(toolName, { query: "hooks" }),
+      }));
+
+      // act
+      await handler(createToolCallEvent(toolName, { query: "hooks" }), context);
+
+      // assert
+      assert.deepStrictEqual(executorCalls, expectedCalls);
+    });
+  }
+
   test("does not dispatch any tool_call when every pipe-OR alternative is discarded (#217)", async () => {
     // arrange
     const runtime = createHooksRuntime();

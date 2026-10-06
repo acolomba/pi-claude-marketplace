@@ -811,6 +811,63 @@ test("evaluates MCP literal equality, server membership, and wrong servers", () 
   assert.deepStrictEqual(outcomes, expected);
 });
 
+test("ANAME-02: compiles the delivered plugin tool name as an MCP literal that fires on it", () => {
+  // arrange
+  const compileContext = {
+    homedir: "/home/plugin-user",
+    cwd: "/workspace/plugin",
+    projectRoot: "/workspace/plugin",
+  } satisfies CompileIfPredicateContext;
+  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const expectedOutcome = {
+    predicate: { kind: "mcp-literal", toolName: "mcp__plugin_acme_db__query" },
+    fires: true,
+  };
+
+  // act
+  const predicate = compileIfPredicate("mcp__plugin_acme_db__query", "PreToolUse", compileContext);
+  const fires = ifFires(
+    predicate,
+    { toolName: "mcp__plugin_acme_db__query", input: {} },
+    extensionContext,
+    "PreToolUse",
+  );
+
+  // assert
+  assert.deepStrictEqual({ predicate, fires }, expectedOutcome);
+});
+
+for (const declaration of ["mcp__plugin_acme_db", "mcp__plugin_acme_db__*"]) {
+  test(`ANAME-02: compiles ${declaration} to the delivered server prefix and fires only on its tools`, () => {
+    // arrange
+    const compileContext = {
+      homedir: "/home/plugin-user",
+      cwd: "/workspace/plugin",
+      projectRoot: "/workspace/plugin",
+    } satisfies CompileIfPredicateContext;
+    const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+    const toolNames = ["mcp__plugin_acme_db__query", "mcp__plugin_acme_db2__query", "mcp"];
+    const expectedOutcome = {
+      predicate: { kind: "mcp-server-prefix", serverPrefix: "mcp__plugin_acme_db__" },
+      outcomes: [
+        { toolName: "mcp__plugin_acme_db__query", fires: true },
+        { toolName: "mcp__plugin_acme_db2__query", fires: false },
+        { toolName: "mcp", fires: false },
+      ],
+    };
+
+    // act
+    const predicate = compileIfPredicate(declaration, "PreToolUse", compileContext);
+    const outcomes = toolNames.map((toolName) => ({
+      toolName,
+      fires: ifFires(predicate, { toolName, input: {} }, extensionContext, "PreToolUse"),
+    }));
+
+    // assert
+    assert.deepStrictEqual({ predicate, outcomes }, expectedOutcome);
+  });
+}
+
 test("dispatches all six predicate arms in stable row order", () => {
   // arrange
   const compileContext = {
