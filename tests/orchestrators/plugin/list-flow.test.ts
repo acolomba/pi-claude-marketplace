@@ -1202,6 +1202,42 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
 // unchanged.
 // ──────────────────────────────────────────────────────────────────────────
 
+test("list flags binaries on candidate and upgrade rows of an official marketplace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    const binaries = { tool: "https://example.com/tool" };
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "claude-plugins-official",
+      manifest: {
+        name: "claude-plugins-official",
+        plugins: [
+          { name: "fresh", source: "./fresh", version: "1.0.0", binaries },
+          { name: "older", source: "./older", version: "2.0.0", binaries },
+        ],
+      },
+      installed: { older: { version: "1.0.0" } },
+      installablePluginDirs: ["fresh", "older"],
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+
+    // assert
+    const out = notifications[0]!.message;
+    assert.match(out, /⊖ fresh v1\.0\.0 \(partially-available\) \{unsupported component\}/, out);
+    assert.match(out, /older v1\.0\.0 \(partially-upgradable\) \{unsupported component\}/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
 test("LIST-01 / D-67-01: a not-installed plugin resolving `partially-available` shows under --partial (the `(partially-available)` row token) and is ABSENT under --unavailable and --available", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange

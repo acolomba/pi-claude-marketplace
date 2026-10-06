@@ -92,7 +92,7 @@ test("both readers honor a manifest that lives only at the bare path", async (t)
   });
 
   // act
-  const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+  const resolved = await resolveStrict(ENTRY, { marketplaceRoot, marketplaceName: "third-party" });
   requireInstallable(resolved);
   const version = await resolvePluginVersion(ENTRY, resolved);
 
@@ -109,7 +109,7 @@ test("both readers prefer the wrapped manifest over a bare sibling", async (t) =
   });
 
   // act
-  const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+  const resolved = await resolveStrict(ENTRY, { marketplaceRoot, marketplaceName: "third-party" });
   requireInstallable(resolved);
   const version = await resolvePluginVersion(ENTRY, resolved);
 
@@ -123,7 +123,7 @@ test("both readers tolerate a plugin declaring no manifest at either path", asyn
   const marketplaceRoot = await plantPlugin(t, {});
 
   // act
-  const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+  const resolved = await resolveStrict(ENTRY, { marketplaceRoot, marketplaceName: "third-party" });
   requireInstallable(resolved);
   const version = await resolvePluginVersion(ENTRY, resolved);
 
@@ -190,7 +190,10 @@ for (const { label, prepare, resolution, notification } of [
     // arrange
     const { agentDir, cwd } = await createHermeticEnvironment(t, "manifest-read-agreement-");
     const marketplaceRoot = await seedScopedMarketplace(agentDir, cwd);
-    const previousResolution = await resolveStrict(ENTRY, { marketplaceRoot });
+    const previousResolution = await resolveStrict(ENTRY, {
+      marketplaceRoot,
+      marketplaceName: "third-party",
+    });
     requireInstallable(previousResolution);
     // A wrong dependency fallback must change info's result before the
     // resolver's unavailable row can suppress the selected dependencies.
@@ -202,7 +205,10 @@ for (const { label, prepare, resolution, notification } of [
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    const resolved = await resolveStrict(ENTRY, { marketplaceRoot }).then(
+    const resolved = await resolveStrict(ENTRY, {
+      marketplaceRoot,
+      marketplaceName: "third-party",
+    }).then(
       (resolution) => ({ state: resolution.state }),
       (error: unknown) => ({
         rejected: error instanceof Error && "code" in error ? error.code : error,
@@ -252,7 +258,10 @@ for (const { label, prepare } of [
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+    const resolved = await resolveStrict(ENTRY, {
+      marketplaceRoot,
+      marketplaceName: "third-party",
+    });
     requireInstallable(resolved);
     const version = await resolvePluginVersion(ENTRY, resolved);
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
@@ -345,7 +354,7 @@ test("all four readers locate one bare manifest, and two let it outrank the entr
   const { ctx, pi, notifications } = makeCtx();
 
   // act
-  const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+  const resolved = await resolveStrict(ENTRY, { marketplaceRoot, marketplaceName: "third-party" });
   requireInstallable(resolved);
   const version = await resolvePluginVersion(ENTRY, resolved);
   await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });

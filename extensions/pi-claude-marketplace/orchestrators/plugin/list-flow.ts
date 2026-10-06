@@ -335,6 +335,7 @@ async function enumerateMarketplacePlugins(args: {
       pluginScope,
       marketplaceScope,
       marketplaceRoot: mpRecord.marketplaceRoot,
+      marketplaceName: mpName,
       record,
       lookup: manifestLookupFor(scopedManifest, pluginName),
       cwd: opts.cwd,
@@ -374,7 +375,7 @@ async function enumerateMarketplacePlugins(args: {
     // eslint-disable-next-line no-await-in-loop -- bounded by the manifest's uninstalled entries, one row each
     const { message: row, bucket } = await availableRowMessage(
       manifestEntry,
-      mpRecord.marketplaceRoot,
+      { marketplaceRoot: mpRecord.marketplaceRoot, marketplaceName: mpName },
       locationsFor(pluginScope, opts.cwd),
       pluginScopeConfig.plugins[`${manifestEntry.name}@${mpName}`]?.entry.enabled,
     );

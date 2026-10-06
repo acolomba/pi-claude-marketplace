@@ -184,7 +184,14 @@ test("seeds a same-repository URL plugin mirror with one marketplace clone", asy
       [REPO_URL],
     );
     assert.strictEqual(await pathExists(mirror), true);
-    assert.strictEqual(await probeManifestEntry(entry, marketplaceRoot, locations), "available");
+    assert.strictEqual(
+      await probeManifestEntry(
+        entry,
+        { marketplaceRoot, marketplaceName: "third-party" },
+        locations,
+      ),
+      "available",
+    );
     assert.deepStrictEqual(boundary.notifications, [{ message: "● mp [project] (added)" }]);
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
@@ -229,7 +236,14 @@ test("seeds a matching path marketplace without network operations", async () =>
       resolveRemoteRef: [],
     });
     assert.strictEqual(await pathExists(mirror), true);
-    assert.strictEqual(await probeManifestEntry(entry, marketplaceRoot, locations), "available");
+    assert.strictEqual(
+      await probeManifestEntry(
+        entry,
+        { marketplaceRoot, marketplaceName: "third-party" },
+        locations,
+      ),
+      "available",
+    );
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -264,7 +278,14 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
     const otherMirror = await locations.pluginCloneDir(pluginMirrorKey(OTHER_URL));
     const { entry, marketplaceRoot } = await firstEntry(locations);
     assert.strictEqual(await pathExists(otherMirror), false);
-    assert.strictEqual(await probeManifestEntry(entry, marketplaceRoot, locations), "remote");
+    assert.strictEqual(
+      await probeManifestEntry(
+        entry,
+        { marketplaceRoot, marketplaceName: "third-party" },
+        locations,
+      ),
+      "remote",
+    );
     assert.deepStrictEqual(
       gitBoundary.state.calls.clone.map(({ url }) => url),
       [REPO_URL],

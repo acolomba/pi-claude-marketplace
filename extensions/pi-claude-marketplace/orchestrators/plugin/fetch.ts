@@ -57,6 +57,7 @@ import { FETCH_CONTEXT, type FetchMsg } from "./fetch.messaging.ts";
 
 import type { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
+import type { ResolveContext } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -338,7 +339,7 @@ interface FetchOneDeps {
  *       against the now-warm tree (never a pre-materialize probe).
  */
 async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<FetchMsg> {
-  const { entry, marketplaceRoot, locations } = target;
+  const { entry, locations } = target;
   const source = parsePluginSource(entry.source);
 
   const isGitSource =
@@ -366,7 +367,11 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
     await materializeThroughSeam(gitSource, deps, locations);
 
     // Derive the post-fetch row FRESH against the now-warm tree.
-    return await freshRow(entry, marketplaceRoot, locations, deps.status);
+    const marketplaceContext = {
+      marketplaceRoot: target.marketplaceRoot,
+      marketplaceName: target.marketplace,
+    };
+    return await freshRow(entry, marketplaceContext, locations, deps.status);
   } catch (err) {
     return failedRow(entry, err);
   }
@@ -445,12 +450,12 @@ function skippedUpToDate(entry: ManifestEntry): FetchMsg {
  */
 async function freshRow(
   entry: ManifestEntry,
-  marketplaceRoot: string,
+  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
   locations: ScopedLocations,
   status: FetchStatus,
 ): Promise<FetchMsg> {
   const meta = entryMeta(entry);
-  const classification = await status.probeManifestEntry(entry, marketplaceRoot, locations);
+  const classification = await status.probeManifestEntry(entry, marketplaceContext, locations);
   if (classification === "remote") {
     return { status: "remote", name: entry.name, ...meta };
   }
@@ -464,7 +469,7 @@ async function freshRow(
   // available) or the structural notes (unavailable), narrowed through the SAME
   // helpers `list` uses (byte-parity). A probe throw folds to `unavailable` with
   // the narrowed cause class.
-  return await reasonedRow(entry, marketplaceRoot, locations, meta, status);
+  return await reasonedRow(entry, marketplaceContext, locations, meta, status);
 }
 
 /**
@@ -476,7 +481,7 @@ async function freshRow(
  */
 async function reasonedRow(
   entry: ManifestEntry,
-  marketplaceRoot: string,
+  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
   locations: ScopedLocations,
   meta: { version?: string; description?: string },
   status: FetchStatus,
@@ -487,7 +492,7 @@ async function reasonedRow(
     // Non-git sources return from `fetchOne` before `freshRow`, so the presence
     // probe is the only reachable resolver policy here.
     const resolved = await resolveStrict(entry, {
-      marketplaceRoot,
+      ...marketplaceContext,
       resolveGitPluginRoot: status.makePresenceProbe(locations),
     });
 

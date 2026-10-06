@@ -130,12 +130,15 @@ interface SeedOptions {
    * `resolveGitPluginRoot` callback.
    */
   readonly gitSource?: unknown;
+  /** The marketplace's own name; defaults to `marketplace`. */
+  readonly marketplaceName?: string;
 }
 
 async function seedPlugin(
   cwd: string,
   options: SeedOptions = {},
 ): Promise<{ readonly pluginRoot: string; readonly state: ExtensionState }> {
+  const marketplaceName = options.marketplaceName ?? "marketplace";
   const marketplaceRoot = path.join(cwd, "marketplace");
   const pluginRoot =
     options.gitSource === undefined
@@ -151,7 +154,7 @@ async function seedPlugin(
   await writeFile(
     manifestPath,
     JSON.stringify({
-      name: "marketplace",
+      name: marketplaceName,
       plugins: [{ name: "empty", source: options.gitSource ?? "./plugins/empty" }],
     }),
   );
@@ -174,8 +177,8 @@ async function seedPlugin(
   const state: ExtensionState = {
     schemaVersion: 2,
     marketplaces: {
-      marketplace: {
-        name: "marketplace",
+      [marketplaceName]: {
+        name: marketplaceName,
         scope: options.marketplaceScope ?? "project",
         source: pathSource("./marketplace"),
         addedFromCwd: cwd,
@@ -863,6 +866,37 @@ test("CMP-3: a project-target install adopts a clone of the user-scope marketpla
   assert.equal(adopted.scope, "project");
   assert.equal(adopted.marketplaceRoot, path.join(environment.cwd, "marketplace"));
   assert.deepStrictEqual(Object.keys(adopted.plugins), ["empty"]);
+});
+
+test("flags binaries as unsupported when the marketplace is an official one", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-official-");
+  const seeded = await seedPlugin(environment.cwd, {
+    marketplaceName: "claude-plugins-official",
+    pluginJson: { binaries: { tool: "https://example.com/tool" } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "claude-plugins-official",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    partial: true,
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.resolved.state, "partially-available");
+  assert.deepStrictEqual(
+    ledgerOutcome.summary.resolved.state === "partially-available"
+      ? ledgerOutcome.summary.resolved.unsupported
+      : undefined,
+    ["binaries"],
+  );
 });
 
 test("--partial admits the partially-available arm the default gate refuses", async (t) => {

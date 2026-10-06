@@ -5336,6 +5336,180 @@ test("RSTA-04: installed git-source plugin with a WARM mirror resolves its compo
   });
 });
 
+test("info flags binaries on an uninstalled path plugin of an official marketplace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "claude-plugins-official",
+      manifest: {
+        name: "claude-plugins-official",
+        plugins: [
+          {
+            name: "bin",
+            source: "./bin",
+            version: "1.0.0",
+            binaries: { tool: "https://example.com/tool" },
+          },
+        ],
+      },
+      installablePluginDirs: ["bin"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    // act
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "claude-plugins-official",
+      plugin: "bin",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(
+      notifications[0]!.message,
+      /bin v1\.0\.0 \(partially-available\) \{unsupported component\}/,
+    );
+  });
+});
+
+test("info flags binaries on an installed path plugin of an official marketplace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "claude-plugins-official",
+      manifest: {
+        name: "claude-plugins-official",
+        plugins: [
+          {
+            name: "bin",
+            source: "./bin",
+            version: "1.0.0",
+            binaries: { tool: "https://example.com/tool" },
+          },
+        ],
+      },
+      installed: { bin: { version: "1.0.0" } },
+      installablePluginDirs: ["bin"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    // act
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "claude-plugins-official",
+      plugin: "bin",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(
+      notifications[0]!.message,
+      /bin v1\.0\.0 \(partially-installed\) \{unsupported component\}/,
+    );
+  });
+});
+
+test("info flags binaries on an uninstalled warm git plugin of an official marketplace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/official-binaries";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "claude-plugins-official",
+      manifest: {
+        name: "claude-plugins-official",
+        plugins: [
+          {
+            name: "bin",
+            source: cloneUrl,
+            version: "1.0.0",
+            binaries: { tool: "https://example.com/tool" },
+          },
+        ],
+      },
+    });
+    await seedWarmMirror({ scope: "user", cwd, cloneUrl, pluginJson: { name: "bin" } });
+
+    const { ctx, pi, notifications } = makeCtx();
+    // act
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "claude-plugins-official",
+      plugin: "bin",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(
+      notifications[0]!.message,
+      /bin v1\.0\.0 \(partially-available\) \{unsupported component\}/,
+    );
+  });
+});
+
+test("info keeps an installed warm git plugin with binaries unresolved for an official marketplace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/official-binaries";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "claude-plugins-official",
+      manifest: {
+        name: "claude-plugins-official",
+        plugins: [
+          {
+            name: "bin",
+            source: cloneUrl,
+            version: "1.0.0",
+            binaries: { tool: "https://example.com/tool" },
+          },
+        ],
+      },
+      installed: { bin: { version: "1.0.0" } },
+    });
+    await seedWarmMirror({ scope: "user", cwd, cloneUrl, pluginJson: { name: "bin" } });
+
+    const { ctx, pi, notifications } = makeCtx();
+    // act
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "claude-plugins-official",
+      plugin: "bin",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /bin v1\.0\.0 \(installed\)/);
+    assert.match(notifications[0]!.message, /components: not resolved/);
+  });
+});
+
 test("NFR-5: info renders an uninstalled git plugin `(remote)` with no plugin-clones dir on disk (no clone, no network)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange

@@ -754,6 +754,7 @@ async function runLockedReinstall(
   const installable = await resolveInstallable(owners, {
     entry,
     marketplaceRoot: mp.marketplaceRoot,
+    marketplaceName: marketplace,
     locations,
     recordedSha: oldSnapshot.resolvedSha,
     ...(opts.cloneCacheSeam !== undefined && {
@@ -927,6 +928,7 @@ async function resolveInstallable(
   input: {
     readonly entry: PluginEntry;
     readonly marketplaceRoot: string;
+    readonly marketplaceName: string;
     readonly locations: ScopedLocations;
     readonly recordedSha: string | undefined;
     readonly seam?: ReinstallCloneCacheSeam;
@@ -962,6 +964,7 @@ async function resolveInstallable(
 
   const resolved = await resolveStrict(input.entry, {
     marketplaceRoot: input.marketplaceRoot,
+    marketplaceName: input.marketplaceName,
     ...(resolveGitPluginRoot !== undefined && { resolveGitPluginRoot }),
   });
   requirePartialInstallable(resolved, "install");
