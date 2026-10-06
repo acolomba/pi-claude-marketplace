@@ -35,6 +35,7 @@ import { removeHookConfig } from "../../bridges/hooks/index.ts";
 import { unstageMcpServers } from "../../bridges/mcp/index.ts";
 import { unstagePluginSkills } from "../../bridges/skills/index.ts";
 import { unstagePluginWorkflows } from "../../bridges/workflows/index.ts";
+import { generatedMcpServerKey } from "../../domain/name.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
@@ -368,6 +369,24 @@ function writtenMcpFilesMember(files: readonly McpWrittenFile[]): {
 }
 
 /**
+ * TR-03 / ANAME-01: the record's declared server names whose entry the MCP
+ * unstage removed, in record order. An entry sits under
+ * `generatedMcpServerKey(plugin, name)`, or under the declared name itself
+ * when it was written under that name (the legacy mcp.json, or an adapter
+ * entry staged under its declared name).
+ */
+function droppedMcpServers(
+  plugin: string,
+  declaredNames: readonly string[],
+  removedNames: readonly string[],
+): string[] {
+  const removed = new Set(removedNames);
+  return declaredNames.filter(
+    (name) => removed.has(generatedMcpServerKey(plugin, name)) || removed.has(name),
+  );
+}
+
+/**
  * D-02: hand-rolled per-plugin cascade. PU-1 order (skills → commands →
  * agents → hooks → MCP → workflows). D-03 fail-fast: the FIRST bridge throw halts THIS
  * plugin and the plugin lands in failedPlugins[] in the caller; already
@@ -449,7 +468,11 @@ export async function cascadeUnstagePlugin(
       marketplaceName: marketplace,
       pluginName: plugin,
     });
-    dropped.mcpServers = [...mcpResult.removedNames];
+    dropped.mcpServers = droppedMcpServers(
+      plugin,
+      installedPlugin.resources.mcpServers,
+      mcpResult.removedNames,
+    );
     mcpConfigNotices = mcpResult.notices;
     writtenMcpFiles = mcpResult.written;
 
@@ -496,7 +519,11 @@ export async function cascadeUnstagePlugin(
     // failure is the plugin's cause.
     let failure: unknown = err;
     if (err instanceof McpUnstagePartialError) {
-      dropped.mcpServers = [...err.removedNames];
+      dropped.mcpServers = droppedMcpServers(
+        plugin,
+        installedPlugin.resources.mcpServers,
+        err.removedNames,
+      );
       mcpConfigNotices = err.notices;
       writtenMcpFiles = err.written;
       failure = err.cause;

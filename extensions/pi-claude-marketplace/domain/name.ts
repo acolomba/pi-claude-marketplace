@@ -219,6 +219,29 @@ export function declaredAgentName(plugin: string, source: string): string {
 }
 
 /**
+ * MCP server key generator (ANAME-01).
+ *
+ * Format: `plugin_<plugin>_<server>_`. Claude Code names a plugin server
+ * `plugin:<plugin>:<server>` and replaces every character outside
+ * `[A-Za-z0-9_-]` with `_` when it builds a tool name. This builder applies
+ * the same rule to the same string, then appends one `_`. pi-mcp-adapter
+ * names a tool `<toolPrefix>__<key>_<tool>`, so the trailing `_` and the
+ * entry's `toolPrefix: "mcp"` give Claude Code's `mcp__plugin_<p>_<s>__<tool>`.
+ *
+ * The pattern has no `u` flag, so it replaces each UTF-16 code unit as Claude
+ * Code does: an astral character becomes two `_`. This is the only copy of the
+ * pattern; every generated MCP server key comes from here.
+ *
+ * Only `plugin` is screened. A declared server name is a JSON key that may
+ * hold any character, and the replacement makes every key safe.
+ */
+export function generatedMcpServerKey(plugin: string, server: string): string {
+  assertSafeName(plugin);
+  const claudeServerName = `plugin:${plugin}:${server}`;
+  return `${claudeServerName.replaceAll(/[^A-Za-z0-9_-]/g, "_")}_`;
+}
+
+/**
  * Workflow name generator (RN-1 / WNAM-06).
  *
  * Format: `<plugin>:<workflow>` -- the same colon separator command names use.

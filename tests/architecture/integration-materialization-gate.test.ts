@@ -73,7 +73,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
   };
   const expectedBytes = `{
   "mcpServers": {
-    "local": {
+    "plugin_acme_local_": {
       "command": ${JSON.stringify(path.join(pluginRoot, "bin", "server"))},
       "args": [
         "--data",
@@ -84,6 +84,8 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
         "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)},
         "CLAUDE_PROJECT_DIR": ${JSON.stringify(scopeRoot)}
       },
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog"

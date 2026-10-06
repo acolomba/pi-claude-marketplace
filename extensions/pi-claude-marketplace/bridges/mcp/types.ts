@@ -39,11 +39,14 @@ export interface StageMcpInput {
 /**
  * One staged-server record for state.json population (W-05).
  * Callers read `StageMcpCommitResult.recorded` -- not the StageMcpInput --
- * because by commit time the per-server `targetPath` is final and the
- * generated server name is already stable.
+ * because by commit time the per-server `targetPath` is final.
  */
 export interface StagedMcpRecord {
-  /** Server name as it appears in mcp-adapter.json (== input key; no rename today). */
+  /**
+   * The server's declared name, which state.json records. Its entry in
+   * mcp-adapter.json sits under `generatedMcpServerKey(plugin, name)`
+   * (ANAME-01).
+   */
   readonly generatedName: string;
   /** Canonical source: "<pluginRoot>/.mcp.json" or "<pluginRoot>/<plugin>.json#mcpServers". */
   readonly sourcePath: string;
@@ -53,6 +56,10 @@ export interface StagedMcpRecord {
 
 /** Discriminated commit-result shape. `stagedNames` aliases `recorded.map(r=>r.generatedName)`. */
 export interface StageMcpCommitResult {
+  /**
+   * The staged servers' declared names. Each entry sits under
+   * `generatedMcpServerKey(plugin, name)` (ANAME-01).
+   */
   readonly stagedNames: readonly string[];
   // W-05: callers read `recorded` to populate state.json. Order matches
   // stagedNames.

@@ -7001,7 +7001,7 @@ test("AFILE-06: disable writes a kept override back and enable keeps it again wi
     });
     const overrideBytes = `{
   "mcpServers": {
-    "server1": {
+    "plugin_foo_server1_": {
       "disabled": true,
       "env": {
         "STUB_TOKEN": "stub-secret"
@@ -7036,7 +7036,7 @@ test("AFILE-06: disable writes a kept override back and enable keeps it again wi
     const overrideNotice: NotifyRecord = {
       severity: "warning",
       message:
-        'MCP server override kept.\n\nfoo now provides "server1" in the user-scope mcp-adapter.json. Your override for "server1" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable foo.',
+        'MCP server override kept.\n\nfoo now provides "plugin_foo_server1_" in the user-scope mcp-adapter.json. Your override for "plugin_foo_server1_" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable foo.',
     };
     const enabledRow: NotifyRecord = {
       message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes",

@@ -24,10 +24,12 @@ import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-// The user override under a plugin server name survives install and
+// The user override under a plugin server's key survives install and
 // uninstall through the real operations: install keeps it in the plugin
 // entry's marker, and uninstall writes it back with each of its carried fields
-// taking the value the entry holds at that time (AFILE-06, AFILE-01).
+// taking the value the entry holds at that time (AFILE-06, AFILE-01). A user
+// who disables the server in the adapter writes its key,
+// `plugin_hello_srv_` (ANAME-01).
 
 interface NotifyRecord {
   readonly message: string;
@@ -124,7 +126,7 @@ test("AFILE-06: a project install keeps the user's override in its entry and uni
     "mine": {
       "command": "my-server"
     },
-    "srv": {
+    "plugin_hello_srv_": {
       "disabled": true,
       "env": {
         "STUB_TOKEN": "stub-secret"
@@ -157,7 +159,7 @@ test("AFILE-06: a project install keeps the user's override in its entry and uni
     assert.deepStrictEqual(JSON.parse(installedText), {
       mcpServers: {
         mine: { command: "my-server" },
-        srv: {
+        plugin_hello_srv_: {
           command: "node",
           args: ["v1.js"],
           env: {
@@ -165,6 +167,8 @@ test("AFILE-06: a project install keeps the user's override in its entry and uni
             CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
             CLAUDE_PROJECT_DIR: cwd,
           },
+          directTools: "search",
+          toolPrefix: "mcp",
           disabled: true,
           _piClaudeMarketplace: {
             plugin: "hello",
@@ -196,7 +200,7 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
     const atProject = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
     const overrideBytes = `{
   "mcpServers": {
-    "srv": {
+    "plugin_hello_srv_": {
       "disabled": true,
       "env": {
         "STUB_TOKEN": "stub-secret"
@@ -295,7 +299,7 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
           installedRow("project", "1.0.0"),
           {
             message:
-              'MCP server override kept.\n\nhello now provides "srv" in the project-scope mcp-adapter.json. Your override for "srv" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable hello.',
+              'MCP server override kept.\n\nhello now provides "plugin_hello_srv_" in the project-scope mcp-adapter.json. Your override for "plugin_hello_srv_" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable hello.',
             severity: "warning",
           },
         ],
@@ -320,10 +324,12 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
     );
     assert.deepStrictEqual(installedProject, {
       mcpServers: {
-        srv: {
+        plugin_hello_srv_: {
           command: "node",
           args: ["v1.js"],
           env: projectEnv,
+          directTools: "search",
+          toolPrefix: "mcp",
           disabled: true,
           _piClaudeMarketplace: keptMarker,
         },
@@ -331,10 +337,12 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
     });
     assert.deepStrictEqual(JSON.parse(updatedText), {
       mcpServers: {
-        srv: {
+        plugin_hello_srv_: {
           command: "node",
           args: ["v2.js"],
           env: projectEnv,
+          directTools: "search",
+          toolPrefix: "mcp",
           disabled: true,
           _piClaudeMarketplace: keptMarker,
         },
@@ -360,10 +368,12 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
     );
     assert.deepStrictEqual(userFinal, {
       mcpServers: {
-        srv: {
+        plugin_hello_srv_: {
           command: "node",
           args: ["v2.js"],
           env: userEnv,
+          directTools: "search",
+          toolPrefix: "mcp",
           _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
         },
       },
@@ -386,7 +396,7 @@ test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survive
     await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
     await writeFile(
       locations.mcpAdapterJsonPath,
-      '{"mcpServers":{"srv":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}\n',
+      '{"mcpServers":{"plugin_hello_srv_":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}\n',
     );
     const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     const completionCache = createCompletionCache();
@@ -396,15 +406,15 @@ test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survive
       hooksRouting,
       completionCache,
     )({ ...makeCtx().session, ...request });
-    // pi-mcp-adapter 5.0.0's `/mcp-adapter enable srv` removes `disabled` from
-    // the entry and keeps every other member, the marker included.
+    // pi-mcp-adapter 5.0.0's `/mcp-adapter enable plugin_hello_srv_` removes
+    // `disabled` from the entry and keeps every other member, the marker included.
     const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
-      mcpServers: { srv: Record<string, unknown> };
+      mcpServers: { plugin_hello_srv_: Record<string, unknown> };
     };
-    const { disabled: _disabled, ...userEnabledEntry } = installed.mcpServers.srv;
+    const { disabled: _disabled, ...userEnabledEntry } = installed.mcpServers.plugin_hello_srv_;
     await writeFile(
       locations.mcpAdapterJsonPath,
-      `${JSON.stringify({ mcpServers: { srv: userEnabledEntry } }, null, 2)}\n`,
+      `${JSON.stringify({ mcpServers: { plugin_hello_srv_: userEnabledEntry } }, null, 2)}\n`,
     );
 
     // act
@@ -421,7 +431,7 @@ test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survive
     // assert
     const restoredBytes = `{
   "mcpServers": {
-    "srv": {
+    "plugin_hello_srv_": {
       "env": {
         "STUB_TOKEN": "stub-secret"
       }
@@ -435,7 +445,7 @@ test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survive
         disabledBytes: restoredBytes,
         enabled: {
           mcpServers: {
-            srv: {
+            plugin_hello_srv_: {
               command: "node",
               args: ["v1.js"],
               env: {
@@ -443,6 +453,8 @@ test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survive
                 CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
                 CLAUDE_PROJECT_DIR: cwd,
               },
+              directTools: "search",
+              toolPrefix: "mcp",
               _piClaudeMarketplace: {
                 plugin: "hello",
                 marketplace: "mp",
@@ -464,7 +476,7 @@ test("AFILE-06: uninstall writes back no carried field the plugin's entry declar
     const locations = locationsFor("project", cwd);
     const overrideBytes = `{
   "mcpServers": {
-    "srv": {
+    "plugin_hello_srv_": {
       "disabled": true
     }
   }
@@ -482,7 +494,7 @@ test("AFILE-06: uninstall writes back no carried field the plugin's entry declar
       completionCache,
     )({ ...makeCtx().session, ...request });
     const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
-      mcpServers: { srv: Record<string, unknown> };
+      mcpServers: { plugin_hello_srv_: Record<string, unknown> };
     };
     await createUninstallOperation(
       hooksRouting,
@@ -491,7 +503,7 @@ test("AFILE-06: uninstall writes back no carried field the plugin's entry declar
     const uninstalledBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
 
     // assert
-    const { lifecycle, debug, disabled } = installed.mcpServers.srv;
+    const { lifecycle, debug, disabled } = installed.mcpServers.plugin_hello_srv_;
     assert.deepStrictEqual(
       { installedCarried: { lifecycle, debug, disabled }, uninstalledBytes },
       {

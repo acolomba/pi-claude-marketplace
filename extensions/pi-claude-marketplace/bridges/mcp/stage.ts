@@ -3,9 +3,12 @@
 // MC-6 prepare/commit/abort for the MCP bridge, plus replacement
 // exports: replacePreparedMcp, rollbackMcpReplacement, finalizeMcpReplacement.
 // The prepare phase reads the scope's `mcp-adapter.json` with
-// pi-mcp-adapter's grammar and refuses a file it cannot read (AFILE-02). It
-// partitions existing entries into ours-vs-theirs by `_piClaudeMarketplace`
-// marker across both server keys, checks every new name against the full
+// pi-mcp-adapter's grammar and refuses a file it cannot read (AFILE-02). Each
+// plugin server goes under the key Claude Code's tool names use,
+// `generatedMcpServerKey(plugin, server)` (ANAME-01), while the record keeps
+// the declared name. It partitions existing entries into ours-vs-theirs by
+// `_piClaudeMarketplace` marker across both server keys, checks every new key
+// against the full
 // definitions in pi-mcp-adapter's nine config sources (AFILE-05, MC-4, RN-5),
 // short-circuits AS-8 noops, hands the new entries and the entries they
 // replace to adapter-entry.ts, which applies the AFILE-06 carry-forward and
@@ -27,6 +30,7 @@ import path from "node:path";
 
 import writeFileAtomic from "write-file-atomic";
 
+import { generatedMcpServerKey } from "../../domain/name.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { McpConfigFileError, McpServerCollisionError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -41,6 +45,7 @@ import {
 import { inactiveOverrideFields, stampServers } from "./adapter-entry.ts";
 import { walkMcpSources, type McpSourceWalk } from "./collision-slots.ts";
 import { isOwnedBy } from "./marker.ts";
+import { safeSet } from "./safe-set.ts";
 
 import type { McpSubstitutionContext } from "./substitute.ts";
 import type {
@@ -173,6 +178,22 @@ function overrideKeptNotices(
   return notices;
 }
 
+/**
+ * ANAME-01: the plugin's servers under their generated keys, in declared
+ * order. `safeSet` keeps every key an own property (WR-01).
+ */
+function keyedServers(
+  pluginName: string,
+  servers: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const keyed: Record<string, unknown> = {};
+  for (const [declared, entry] of Object.entries(servers)) {
+    safeSet(keyed, generatedMcpServerKey(pluginName, declared), entry);
+  }
+
+  return keyed;
+}
+
 function noopStaging(notices: readonly McpConfigNotice[]): PreparedMcpStaging {
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze<string[]>([]),
@@ -206,7 +227,7 @@ async function readTargetConfig(
 /**
  * MC-6 prepare: in-memory only. Reads the scope's `mcp-adapter.json`,
  * partitions existing entries by marker across both server keys, checks each
- * new name against the full definitions in pi-mcp-adapter's nine config
+ * new key against the full definitions in pi-mcp-adapter's nine config
  * sources (AFILE-05, MC-4; the plugin's own marked entries are exempt in every
  * source), stamps every new entry (AFILE-06 carry-forward, MC-5 marker), and
  * builds the next doc. A staged entry replaces a marker-less override under
@@ -219,13 +240,17 @@ async function readTargetConfig(
  *
  * Throws `McpConfigFileError` when the target cannot be read and there are
  * servers to stage (AFILE-02), and `McpServerCollisionError` when another
- * source defines a new name in full.
+ * source defines a new key in full.
  */
 export async function prepareStageMcpServers(input: StageMcpInput): Promise<PreparedMcpStaging> {
   const { locations, cwd, marketplaceName, pluginName, servers, pluginRoot, pluginData } = input;
-  const newNames = Object.keys(servers);
+  // ANAME-01: entries, collisions and notices use the generated keys; the
+  // record keeps the declared names.
+  const declaredNames = Object.keys(servers);
+  const keyed = keyedServers(pluginName, servers);
+  const newKeys = Object.keys(keyed);
 
-  const config = await readTargetConfig(locations.mcpAdapterJsonPath, newNames.length > 0);
+  const config = await readTargetConfig(locations.mcpAdapterJsonPath, newKeys.length > 0);
   if (config instanceof McpConfigFileError) {
     // AS-8 / AFILE-02: nothing is written, so the unreadable file keeps its
     // bytes, and the orchestrator tells the user it was left unchanged.
@@ -244,10 +269,10 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     marketplaceName,
   );
 
-  // AFILE-05 / MC-4: any other full definition of a new name refuses.
+  // AFILE-05 / MC-4: any other full definition of a new key refuses.
   await assertNoMcpCollisions({
     cwd,
-    names: newNames,
+    names: newKeys,
     ours,
     theirs,
     targetPath: locations.mcpAdapterJsonPath,
@@ -257,7 +282,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
 
   // AS-8 noop: nothing new AND nothing previously-ours. Don't materialize
   // the file; commit returns the noop result without touching disk.
-  if (newNames.length === 0 && Object.keys(ours).length === 0) {
+  if (newKeys.length === 0 && Object.keys(ours).length === 0) {
     return noopStaging([]);
   }
 
@@ -277,7 +302,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // spread defines own data properties, so a server named `__proto__` stays an
   // own key (WR-01).
   const { stamped, warnings: stampWarnings } = stampServers({
-    servers,
+    servers: keyed,
     pluginName,
     marketplaceName,
     substitution,
@@ -295,7 +320,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // when omitted we fall back to a synthetic `<plugin>#mcpServers` tag.
   const sourcePath = input.sourcePath ?? `${pluginName}#mcpServers`;
   const recorded: readonly StagedMcpRecord[] = Object.freeze(
-    newNames.map((generatedName) => ({
+    declaredNames.map((generatedName) => ({
       generatedName,
       sourcePath,
       targetPath: locations.mcpAdapterJsonPath,
@@ -308,10 +333,10 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // fields the new entry does not carry is reported after it.
   const notices = Object.freeze<McpConfigNotice[]>([
     ...commentsDroppedNotices(config.hadComments, locations.scope),
-    ...overrideKeptNotices(newNames, overlays, locations.scope, pluginName),
+    ...overrideKeptNotices(newKeys, overlays, locations.scope, pluginName),
   ]);
   const result: StageMcpCommitResult = {
-    stagedNames: Object.freeze([...newNames]),
+    stagedNames: Object.freeze([...declaredNames]),
     recorded,
     warnings: Object.freeze(stampWarnings),
     notices,

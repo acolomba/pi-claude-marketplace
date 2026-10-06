@@ -1042,6 +1042,112 @@ test("TR-03: cascadeUnstagePlugin keeps a server the unwritten legacy mcp.json s
   );
 });
 
+test("TR-03 / ANAME-01: cascadeUnstagePlugin reports the declared names of entries under their generated keys, in record order", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-mcp-keyed");
+  const ownedServer =
+    '{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}';
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    `{"mcpServers":{"plugin_sample_api_":${ownedServer},"plugin_sample_db_":${ownedServer}}}\n`,
+  );
+  const record = pluginRecord({ mcpServers: ["db", "api"] });
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: true,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["db", "api"],
+      workflows: [],
+    },
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  });
+});
+
+test("TR-03 / ANAME-01: cascadeUnstagePlugin reports the declared name of a legacy mcp.json entry under that name", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-mcp-legacy-raw");
+  await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpJsonPath,
+    '{"mcpServers":{"db":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
+  );
+  const record = pluginRecord({ mcpServers: ["db"] });
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: true,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["db"],
+      workflows: [],
+    },
+    writtenMcpFiles: [
+      { path: locations.mcpJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  });
+});
+
+test("TR-03 / ANAME-01: cascadeUnstagePlugin maps the keys a failed legacy write still removed to declared names", async (t) => {
+  // arrange
+  const { cwd, locations } = await createProjectScope(t, "cascade-mcp-keyed-partial");
+  const ownedServer =
+    '{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}';
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    `{"mcpServers":{"plugin_sample_db_":${ownedServer}}}\n`,
+  );
+  const lockedDirectory = await lockLegacyMcpJson(
+    t,
+    cwd,
+    locations,
+    `{"mcpServers":{"legacy":${ownedServer}}}\n`,
+  );
+  const record = pluginRecord({ mcpServers: ["db", "legacy"] });
+
+  // act
+  const { cause, ...outcome } = await cascadeUnstagePlugin("sample", "official", locations, record);
+  await chmod(lockedDirectory, 0o700);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: false,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["db"],
+      workflows: [],
+    },
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  });
+  const writeFailure = cause as NodeJS.ErrnoException | undefined;
+  assert.deepStrictEqual(
+    { code: writeFailure?.code, syscall: writeFailure?.syscall },
+    { code: "EACCES", syscall: "open" },
+  );
+});
+
 test("cascadeUnstagePlugin deletes the staged hooks subtree from the scope root", async (t) => {
   // arrange
   const { locations } = await createProjectScope(t, "cascade-hooks-subtree");

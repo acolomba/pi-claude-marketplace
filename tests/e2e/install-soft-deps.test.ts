@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
+import { generatedMcpServerKey } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   adapterCommand,
@@ -145,7 +146,7 @@ for (const { requirement, name, tools, commands, reasons } of MCP_STATES) {
         await readFile(locationsFor("project", env.cwd).mcpAdapterJsonPath, "utf8"),
       ) as { readonly mcpServers?: Record<string, unknown> };
       for (const serverName of record.resources.mcpServers) {
-        assert.ok(mcpJson.mcpServers?.[serverName]);
+        assert.ok(mcpJson.mcpServers?.[generatedMcpServerKey("context7", serverName)]);
       }
     });
   });

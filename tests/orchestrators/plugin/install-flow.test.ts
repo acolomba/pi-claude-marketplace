@@ -2841,7 +2841,7 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
         mcpServers?: Record<string, unknown>;
       };
       assert.ok(
-        "server1" in (mcp.mcpServers ?? {}),
+        "plugin_hello_server1_" in (mcp.mcpServers ?? {}),
         "the mcp bridge never ran, so its artifact must still be there",
       );
 
@@ -2922,7 +2922,10 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
         mcpServers?: Record<string, unknown>;
       };
       assert.ok(mcp.mcpServers !== undefined, "mcp-adapter.json must have mcpServers");
-      assert.ok("server1" in (mcp.mcpServers ?? {}), "server1 must be present");
+      assert.ok(
+        "plugin_hello_server1_" in (mcp.mcpServers ?? {}),
+        "plugin_hello_server1_ must be present",
+      );
 
       // State commit: plugin record has all four resource arrays populated.
       const after = await loadState(locations.extensionRoot);
@@ -2991,7 +2994,7 @@ test("AFILE-01: install writes the plugin's marked entries into project mcp-adap
     "mine": {
       "command": "my-server"
     },
-    "server1": {
+    "plugin_hello_server1_": {
       "command": "node",
       "args": [
         "server.js"
@@ -3001,6 +3004,8 @@ test("AFILE-01: install writes the plugin's marked entries into project mcp-adap
         "CLAUDE_PLUGIN_DATA": "${dataDir}",
         "CLAUDE_PROJECT_DIR": "${cwd}"
       },
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "_piClaudeMarketplace": {
         "plugin": "hello",
         "marketplace": "mp"
@@ -3011,6 +3016,94 @@ test("AFILE-01: install writes the plugin's marked entries into project mcp-adap
 `,
       );
       assert.equal(await pathExists(path.join(cwd, ".pi", "mcp.json")), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ANAME-01: install writes Claude Code server keys that the global toolPrefix cannot rename", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname01-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "my.plugin",
+        mcpServers: {
+          db: { command: "db-server" },
+          live: {
+            command: "live-server",
+            alwaysLoad: true,
+            directTools: false,
+            toolPrefix: "short",
+          },
+        },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await mkdir(path.dirname(adapterPath), { recursive: true });
+      await writeFile(adapterPath, '{"settings":{"toolPrefix":"short"}}\n');
+      const dataDir = path.join(locations.dataRoot, "mp", "my.plugin");
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "my.plugin",
+      });
+
+      // assert
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        `{
+  "settings": {
+    "toolPrefix": "short"
+  },
+  "mcpServers": {
+    "plugin_my_plugin_db_": {
+      "command": "db-server",
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
+        "CLAUDE_PLUGIN_DATA": "${dataDir}",
+        "CLAUDE_PROJECT_DIR": "${cwd}"
+      },
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "my.plugin",
+        "marketplace": "mp"
+      }
+    },
+    "plugin_my_plugin_live_": {
+      "command": "live-server",
+      "alwaysLoad": true,
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
+        "CLAUDE_PLUGIN_DATA": "${dataDir}",
+        "CLAUDE_PROJECT_DIR": "${cwd}"
+      },
+      "directTools": true,
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "my.plugin",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+      );
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "my.plugin"
+      ];
+      assert.deepStrictEqual([...(record?.resources.mcpServers ?? [])], ["db", "live"]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3123,11 +3216,14 @@ async function seedMcpDependencyCascade(cwd: string): Promise<void> {
   });
 }
 
-/** AFILE-04: `~/.agents/mcp.json` already defines `server1`, so hello's own mcp phase refuses. */
+/**
+ * AFILE-04: `~/.agents/mcp.json` already defines hello's `server1` key, so
+ * hello's own mcp phase refuses.
+ */
 async function seedForeignServer1(): Promise<string> {
   const agentsPath = path.join(homedir(), ".agents", "mcp.json");
   await mkdir(path.dirname(agentsPath), { recursive: true });
-  await writeFile(agentsPath, '{"mcpServers":{"server1":{"command":"user-server"}}}');
+  await writeFile(agentsPath, '{"mcpServers":{"plugin_hello_server1_":{"command":"user-server"}}}');
   return agentsPath;
 }
 
@@ -3184,7 +3280,7 @@ test("AFILE-04: a failed dependency cascade still reports the removed comments a
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: Refusing to stage MCP server "server1": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
       ]);
@@ -3484,12 +3580,12 @@ test("AFILE-04: an install that lands disabled reports the notices of both its s
   });
 });
 
-/** AFILE-06: the exact override-kept notice for hello's `server1` in the project adapter file. */
+/** AFILE-06: the exact override-kept notice for hello's `server1` key in the project adapter file. */
 const PROJECT_OVERRIDE_KEPT_NOTICE: NotifyRecord = {
   severity: "warning",
   message:
     "MCP server override kept.\n\n" +
-    'hello now provides "server1" in the project-scope mcp-adapter.json. Your override for "server1" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable hello.',
+    'hello now provides "plugin_hello_server1_" in the project-scope mcp-adapter.json. Your override for "plugin_hello_server1_" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable hello.',
 };
 
 /**
@@ -3530,7 +3626,7 @@ test("AFILE-06: install over a project override with an env field shows the over
         pluginName: "hello",
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
       });
-      await writeProjectOverrideFile(cwd, "server1");
+      await writeProjectOverrideFile(cwd, "plugin_hello_server1_");
       const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
 
       // act
@@ -3566,7 +3662,10 @@ test("AFILE-06: an install that lands disabled writes the override back and show
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
         entryDefaultEnabled: false,
       });
-      const { adapterPath, overrideBytes } = await writeProjectOverrideFile(cwd, "server1");
+      const { adapterPath, overrideBytes } = await writeProjectOverrideFile(
+        cwd,
+        "plugin_hello_server1_",
+      );
       const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
 
       // act
@@ -3602,7 +3701,10 @@ test("AFILE-06: a failed dependency cascade writes its dependency's override bac
     try {
       // arrange
       await seedMcpDependencyCascade(cwd);
-      const { adapterPath, overrideBytes } = await writeProjectOverrideFile(cwd, "server2");
+      const { adapterPath, overrideBytes } = await writeProjectOverrideFile(
+        cwd,
+        "plugin_some-other-plugin_server2_",
+      );
       const agentsPath = await seedForeignServer1();
       const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
 
@@ -3617,7 +3719,7 @@ test("AFILE-06: a failed dependency cascade writes its dependency's override bac
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: Refusing to stage MCP server "server1": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
         },
       ]);
       assert.equal(await readFile(adapterPath, "utf8"), overrideBytes);
@@ -3643,7 +3745,7 @@ test("AFILE-04: install over a commented file holding an override shows the comm
       await mkdir(path.dirname(adapterPath), { recursive: true });
       await writeFile(
         adapterPath,
-        '{\n  // mine\n  "mcpServers": { "server1": { "disabled": true, "env": { "STUB_TOKEN": "stub-secret" } } }\n}\n',
+        '{\n  // mine\n  "mcpServers": { "plugin_hello_server1_": { "disabled": true, "env": { "STUB_TOKEN": "stub-secret" } } }\n}\n',
       );
       const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
 
@@ -3889,9 +3991,7 @@ test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and 
         pluginName: "hello",
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
       });
-      const agentsPath = path.join(homedir(), ".agents", "mcp.json");
-      await mkdir(path.dirname(agentsPath), { recursive: true });
-      await writeFile(agentsPath, '{"mcpServers":{"server1":{"command":"user-server"}}}');
+      const agentsPath = await seedForeignServer1();
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
       const { ctx, pi, notifications } = makeCtx();
 
@@ -3904,7 +4004,7 @@ test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and 
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: Refusing to stage MCP server "server1": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
         },
       ]);
       assert.equal(await pathExists(adapterPath), false);

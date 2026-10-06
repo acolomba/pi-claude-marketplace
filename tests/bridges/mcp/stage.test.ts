@@ -81,8 +81,10 @@ function collisionFields(collision: McpServerCollisionError): Record<string, str
 
 const ACME_ONLY_BYTES = `{
   "mcpServers": {
-    "server": {
+    "plugin_acme_server_": {
       "url": "https://acme.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog"
@@ -127,7 +129,7 @@ describe("prepareStageMcpServers", () => {
     await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
     await writeFile(
       locations.mcpAdapterJsonPath,
-      '{"foreignTopLevel":{"enabled":true},"mcpServers":{"foreign":{"command":"foreign-command","env":{"TOKEN":"foreign-token"},"_piClaudeMarketplace":{"plugin":"other","marketplace":"catalog"}},"current":{"command":"old-command","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+      '{"foreignTopLevel":{"enabled":true},"mcpServers":{"foreign":{"command":"foreign-command","env":{"TOKEN":"foreign-token"},"_piClaudeMarketplace":{"plugin":"other","marketplace":"catalog"}},"plugin_acme_current_":{"command":"old-command","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
     );
     const expectedDoc = {
       foreignTopLevel: { enabled: true },
@@ -137,7 +139,7 @@ describe("prepareStageMcpServers", () => {
           env: { TOKEN: "foreign-token" },
           _piClaudeMarketplace: { plugin: "other", marketplace: "catalog" },
         },
-        current: {
+        plugin_acme_current_: {
           command: path.join(pluginRoot, "bin", "server"),
           args: ["--data", pluginData],
           env: {
@@ -146,6 +148,8 @@ describe("prepareStageMcpServers", () => {
             CLAUDE_PROJECT_DIR: cwd,
             CUSTOM: path.join(pluginData, "custom"),
           },
+          directTools: "search",
+          toolPrefix: "mcp",
           _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
         },
       },
@@ -393,8 +397,10 @@ describe("prepareStageMcpServers", () => {
         '    "mine": {',
         '      "command": "my-server"',
         "    },",
-        '    "server": {',
+        '    "plugin_acme_server_": {',
         '      "url": "https://mcp.example.test",',
+        '      "directTools": "search",',
+        '      "toolPrefix": "mcp",',
         '      "_piClaudeMarketplace": {',
         '        "plugin": "acme",',
         '        "marketplace": "catalog"',
@@ -541,8 +547,10 @@ describe("prepareStageMcpServers", () => {
     assert.deepStrictEqual(prepared._nextDoc, {
       "mcp-servers": {
         mine: { command: "my-server" },
-        server: {
+        plugin_acme_server_: {
           url: "https://mcp.example.test",
+          directTools: "search",
+          toolPrefix: "mcp",
           _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
         },
       },
@@ -558,7 +566,7 @@ describe("prepareStageMcpServers", () => {
       JSON.stringify({
         "mcp-servers": {
           legacy: { command: "legacy-server" },
-          server: {
+          plugin_acme_server_: {
             command: "stale",
             _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
           },
@@ -588,8 +596,10 @@ describe("prepareStageMcpServers", () => {
       "mcp-servers": { legacy: { command: "legacy-server" } },
       mcpServers: {
         mine: { command: "my-server" },
-        server: {
+        plugin_acme_server_: {
           url: "https://mcp.example.test",
+          directTools: "search",
+          toolPrefix: "mcp",
           _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
         },
       },
@@ -647,7 +657,9 @@ describe("prepareStageMcpServers", () => {
           targetPath: locations.mcpAdapterJsonPath,
         },
       ],
-      warnings: ['mcp server "scalar": entry is not an object; staged as an empty entry'],
+      warnings: [
+        'mcp server "plugin_acme_scalar_": entry is not an object; staged as an empty entry',
+      ],
       notices: [],
     });
   });
@@ -719,7 +731,7 @@ describe("prepareStageMcpServers", () => {
     const { cwd, home } = await createHermeticEnvironment(t, "mcp-stage-agents-collision-");
     const locations = locationsFor("user", cwd);
     const agentsPath = path.join(home, ".agents", "mcp.json");
-    await writeSource(agentsPath, '{"mcpServers":{"server":{"command":"user"}}}');
+    await writeSource(agentsPath, '{"mcpServers":{"plugin_acme_server_":{"command":"user"}}}');
 
     // act
     const collision = await rejectionOf(prepareAcme(locations, cwd));
@@ -728,8 +740,8 @@ describe("prepareStageMcpServers", () => {
     assert.ok(collision instanceof McpServerCollisionError);
     assert.deepStrictEqual(collisionFields(collision), {
       name: "McpServerCollisionError",
-      message: `Refusing to stage MCP server "server": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
-      serverName: "server",
+      message: `Refusing to stage MCP server "plugin_acme_server_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
+      serverName: "plugin_acme_server_",
       owningPath: agentsPath,
       winningPath: locations.mcpAdapterJsonPath,
     });
@@ -741,7 +753,10 @@ describe("prepareStageMcpServers", () => {
     const { cwd } = await createHermeticEnvironment(t, "mcp-stage-project-collision-");
     const locations = locationsFor("user", cwd);
     const projectPath = path.join(cwd, ".mcp.json");
-    await writeSource(projectPath, '{"mcpServers":{"server":{"url":"https://project.example"}}}');
+    await writeSource(
+      projectPath,
+      '{"mcpServers":{"plugin_acme_server_":{"url":"https://project.example"}}}',
+    );
 
     // act
     const collision = await rejectionOf(prepareAcme(locations, cwd));
@@ -750,8 +765,8 @@ describe("prepareStageMcpServers", () => {
     assert.ok(collision instanceof McpServerCollisionError);
     assert.deepStrictEqual(collisionFields(collision), {
       name: "McpServerCollisionError",
-      message: `Refusing to stage MCP server "server": ${projectPath} already defines it, and pi-mcp-adapter would load the definition in ${projectPath}.`,
-      serverName: "server",
+      message: `Refusing to stage MCP server "plugin_acme_server_": ${projectPath} already defines it, and pi-mcp-adapter would load the definition in ${projectPath}.`,
+      serverName: "plugin_acme_server_",
       owningPath: projectPath,
       winningPath: projectPath,
     });
@@ -760,7 +775,10 @@ describe("prepareStageMcpServers", () => {
   test("AFILE-05: a marker-less full definition in the target file refuses", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-target-collision-");
-    await writeSource(locations.mcpAdapterJsonPath, '{"mcpServers":{"server":{"command":"user"}}}');
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_acme_server_":{"command":"user"}}}',
+    );
 
     // act
     const collision = await rejectionOf(prepareAcme(locations, cwd));
@@ -769,8 +787,8 @@ describe("prepareStageMcpServers", () => {
     assert.ok(collision instanceof McpServerCollisionError);
     assert.deepStrictEqual(collisionFields(collision), {
       name: "McpServerCollisionError",
-      message: `Refusing to stage MCP server "server": ${locations.mcpAdapterJsonPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
-      serverName: "server",
+      message: `Refusing to stage MCP server "plugin_acme_server_": ${locations.mcpAdapterJsonPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
+      serverName: "plugin_acme_server_",
       owningPath: locations.mcpAdapterJsonPath,
       winningPath: locations.mcpAdapterJsonPath,
     });
@@ -780,8 +798,8 @@ describe("prepareStageMcpServers", () => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-shadowed-self-");
     const previousBytes =
-      '{"mcpServers":{"server":{"command":"user-own-server","env":{"TOKEN":"secret"}}},' +
-      '"mcp-servers":{"server":{"command":"plugin-old","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}';
+      '{"mcpServers":{"plugin_acme_server_":{"command":"user-own-server","env":{"TOKEN":"secret"}}},' +
+      '"mcp-servers":{"plugin_acme_server_":{"command":"plugin-old","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}';
     await writeSource(locations.mcpAdapterJsonPath, previousBytes);
 
     // act
@@ -791,8 +809,8 @@ describe("prepareStageMcpServers", () => {
     assert.ok(collision instanceof McpServerCollisionError);
     assert.deepStrictEqual(collisionFields(collision), {
       name: "McpServerCollisionError",
-      message: `Refusing to stage MCP server "server": ${locations.mcpAdapterJsonPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
-      serverName: "server",
+      message: `Refusing to stage MCP server "plugin_acme_server_": ${locations.mcpAdapterJsonPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
+      serverName: "plugin_acme_server_",
       owningPath: locations.mcpAdapterJsonPath,
       winningPath: locations.mcpAdapterJsonPath,
     });
@@ -804,7 +822,7 @@ describe("prepareStageMcpServers", () => {
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-foreign-partial-");
     await writeSource(
       locations.mcpAdapterJsonPath,
-      '{"mcpServers":{"server":{"disabled":true,"_piClaudeMarketplace":{"plugin":"other","marketplace":"catalog"}}}}',
+      '{"mcpServers":{"plugin_acme_server_":{"disabled":true,"_piClaudeMarketplace":{"plugin":"other","marketplace":"catalog"}}}}',
     );
 
     // act
@@ -814,8 +832,8 @@ describe("prepareStageMcpServers", () => {
     assert.ok(collision instanceof McpServerCollisionError);
     assert.deepStrictEqual(collisionFields(collision), {
       name: "McpServerCollisionError",
-      message: `Refusing to stage MCP server "server": ${locations.mcpAdapterJsonPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
-      serverName: "server",
+      message: `Refusing to stage MCP server "plugin_acme_server_": ${locations.mcpAdapterJsonPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
+      serverName: "plugin_acme_server_",
       owningPath: locations.mcpAdapterJsonPath,
       winningPath: locations.mcpAdapterJsonPath,
     });
@@ -828,10 +846,16 @@ describe("prepareStageMcpServers", () => {
     const piProjectPath = path.join(cwd, ".pi", "mcp.json");
     await writeSource(
       path.join(home, ".config", "mcp", "mcp.json"),
-      '{"mcpServers":{"server":{"command":"shared"}}}',
+      '{"mcpServers":{"plugin_acme_server_":{"command":"shared"}}}',
     );
-    await writeSource(piProjectPath, '{"mcpServers":{"server":{"command":"pi-project"}}}');
-    await writeSource(locations.mcpAdapterJsonPath, '{"mcpServers":{"server":{"command":"user"}}}');
+    await writeSource(
+      piProjectPath,
+      '{"mcpServers":{"plugin_acme_server_":{"command":"pi-project"}}}',
+    );
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_acme_server_":{"command":"user"}}}',
+    );
 
     // act
     const collision = await rejectionOf(prepareAcme(locations, cwd));
@@ -840,8 +864,8 @@ describe("prepareStageMcpServers", () => {
     assert.ok(collision instanceof McpServerCollisionError);
     assert.deepStrictEqual(collisionFields(collision), {
       name: "McpServerCollisionError",
-      message: `Refusing to stage MCP server "server": ${piProjectPath} already defines it, and pi-mcp-adapter would load the definition in ${piProjectPath}.`,
-      serverName: "server",
+      message: `Refusing to stage MCP server "plugin_acme_server_": ${piProjectPath} already defines it, and pi-mcp-adapter would load the definition in ${piProjectPath}.`,
+      serverName: "plugin_acme_server_",
       owningPath: piProjectPath,
       winningPath: piProjectPath,
     });
@@ -853,7 +877,7 @@ describe("prepareStageMcpServers", () => {
     const locations = locationsFor("user", cwd);
     await writeSource(
       path.join(cwd, ".pi", "mcp-adapter.json"),
-      '{"mcpServers":{"server":{"disabled":true}}}',
+      '{"mcpServers":{"plugin_acme_server_":{"disabled":true}}}',
     );
 
     // act
@@ -869,7 +893,7 @@ describe("prepareStageMcpServers", () => {
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-own-legacy-");
     await writeSource(
       locations.mcpJsonPath,
-      '{"mcpServers":{"server":{"command":"old","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+      '{"mcpServers":{"plugin_acme_server_":{"command":"old","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
     );
 
     // act
@@ -885,7 +909,7 @@ describe("prepareStageMcpServers", () => {
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-own-other-adapter-");
     await writeSource(
       locationsFor("user", cwd).mcpAdapterJsonPath,
-      '{"mcpServers":{"server":{"command":"user-copy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+      '{"mcpServers":{"plugin_acme_server_":{"command":"user-copy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
     );
 
     // act
@@ -902,7 +926,7 @@ describe("prepareStageMcpServers", () => {
     const locations = locationsFor("project", cwd);
     await writeSource(
       path.join(agentDir, "mcp.json"),
-      '{"mcpServers":{"server":{"command":"user-copy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+      '{"mcpServers":{"plugin_acme_server_":{"command":"user-copy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
     );
 
     // act
@@ -925,7 +949,7 @@ describe("prepareStageMcpServers", () => {
     );
     await writeSource(
       path.join(home, "work", ".pi", "mcp-adapter.json"),
-      '{"mcpServers":{"server":{"command":"ancestor-copy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+      '{"mcpServers":{"plugin_acme_server_":{"command":"ancestor-copy","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
     );
 
     // act
@@ -941,15 +965,17 @@ describe("prepareStageMcpServers", () => {
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-overlay-");
     await writeSource(
       locations.mcpAdapterJsonPath,
-      '{"mcpServers":{"server":{"disabled":true},"mine":{"command":"mine"}}}',
+      '{"mcpServers":{"plugin_acme_server_":{"disabled":true},"mine":{"command":"mine"}}}',
     );
     const expectedBytes = `{
   "mcpServers": {
     "mine": {
       "command": "mine"
     },
-    "server": {
+    "plugin_acme_server_": {
       "url": "https://acme.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "disabled": true,
       "_piClaudeMarketplace": {
         "plugin": "acme",
@@ -978,7 +1004,7 @@ describe("prepareStageMcpServers", () => {
       locations.mcpAdapterJsonPath,
       JSON.stringify({
         mcpServers: {
-          server: {
+          plugin_acme_server_: {
             disabled: true,
             env: { STUB_TOKEN: "stub-env" },
             headers: { Authorization: "stub-header" },
@@ -991,7 +1017,7 @@ describe("prepareStageMcpServers", () => {
     const pluginData = path.join(cwd, "data", "acme");
     const expectedBytes = `{
   "mcpServers": {
-    "server": {
+    "plugin_acme_server_": {
       "command": "acme",
       "env": {
         "CLAUDE_PLUGIN_ROOT": ${JSON.stringify(pluginRoot)},
@@ -999,6 +1025,8 @@ describe("prepareStageMcpServers", () => {
         "CLAUDE_PROJECT_DIR": ${JSON.stringify(cwd)},
         "PLUGIN_TOKEN": "plugin-env"
       },
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "disabled": true,
       "_piClaudeMarketplace": {
         "plugin": "acme",
@@ -1040,11 +1068,16 @@ describe("prepareStageMcpServers", () => {
   test("AFILE-06: staging the same plugin version twice writes identical bytes", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-idempotent-");
-    await writeSource(locations.mcpAdapterJsonPath, '{"mcpServers":{"server":{"disabled":true}}}');
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_acme_server_":{"disabled":true}}}',
+    );
     const expectedBytes = `{
   "mcpServers": {
-    "server": {
+    "plugin_acme_server_": {
       "url": "https://acme.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "disabled": true,
       "_piClaudeMarketplace": {
         "plugin": "acme",
@@ -1074,12 +1107,14 @@ describe("prepareStageMcpServers", () => {
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-kept-restage-");
     await writeSource(
       locations.mcpAdapterJsonPath,
-      '{"mcpServers":{"server":{"url":"https://old.example/mcp","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}}}',
+      '{"mcpServers":{"plugin_acme_server_":{"url":"https://old.example/mcp","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}}}',
     );
     const expectedBytes = `{
   "mcpServers": {
-    "server": {
+    "plugin_acme_server_": {
       "url": "https://acme.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "disabled": true,
       "_piClaudeMarketplace": {
         "plugin": "acme",
@@ -1112,7 +1147,7 @@ describe("prepareStageMcpServers", () => {
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-notice-");
     await writeSource(
       locations.mcpAdapterJsonPath,
-      '{"mcpServers":{"server":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"},"headers":{"Authorization":"stub-header"}}}}',
+      '{"mcpServers":{"plugin_acme_server_":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"},"headers":{"Authorization":"stub-header"}}}}',
     );
 
     // act
@@ -1135,7 +1170,7 @@ describe("prepareStageMcpServers", () => {
           scope: "project",
           file: "mcp-adapter.json",
           plugin: "acme",
-          server: "server",
+          server: "plugin_acme_server_",
           fields: ["env", "headers"],
         },
       ],
@@ -1147,7 +1182,7 @@ describe("prepareStageMcpServers", () => {
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-order-");
     await writeSource(
       locations.mcpAdapterJsonPath,
-      '{"mcpServers":{"alpha":{"env":{"ALPHA":"alpha-secret"}},"beta":{"debug":true,"cwd":"/beta"}}}',
+      '{"mcpServers":{"plugin_acme_alpha_":{"env":{"ALPHA":"alpha-secret"}},"plugin_acme_beta_":{"debug":true,"cwd":"/beta"}}}',
     );
 
     // act
@@ -1171,7 +1206,7 @@ describe("prepareStageMcpServers", () => {
         scope: "project",
         file: "mcp-adapter.json",
         plugin: "acme",
-        server: "beta",
+        server: "plugin_acme_beta_",
         fields: ["cwd"],
       },
       {
@@ -1179,7 +1214,7 @@ describe("prepareStageMcpServers", () => {
         scope: "project",
         file: "mcp-adapter.json",
         plugin: "acme",
-        server: "alpha",
+        server: "plugin_acme_alpha_",
         fields: ["env"],
       },
     ]);
@@ -1188,7 +1223,10 @@ describe("prepareStageMcpServers", () => {
   test("AFILE-06: staging over a disable-only stub reports no notice", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-carried-");
-    await writeSource(locations.mcpAdapterJsonPath, '{"mcpServers":{"server":{"disabled":true}}}');
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_acme_server_":{"disabled":true}}}',
+    );
 
     // act
     const prepared = await prepareAcme(locations, cwd);
@@ -1202,7 +1240,7 @@ describe("prepareStageMcpServers", () => {
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-restage-");
     await writeSource(
       locations.mcpAdapterJsonPath,
-      '{"mcpServers":{"server":{"url":"https://old.example/mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"env":{"STUB_TOKEN":"stub-secret"}}}}}}',
+      '{"mcpServers":{"plugin_acme_server_":{"url":"https://old.example/mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"env":{"STUB_TOKEN":"stub-secret"}}}}}}',
     );
 
     // act
@@ -1217,7 +1255,7 @@ describe("prepareStageMcpServers", () => {
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-comments-");
     await writeSource(
       locations.mcpAdapterJsonPath,
-      '{\n  // mine\n  "mcpServers": { "server": { "env": { "STUB_TOKEN": "stub-secret" } } }\n}\n',
+      '{\n  // mine\n  "mcpServers": { "plugin_acme_server_": { "env": { "STUB_TOKEN": "stub-secret" } } }\n}\n',
     );
 
     // act
@@ -1231,7 +1269,7 @@ describe("prepareStageMcpServers", () => {
         scope: "project",
         file: "mcp-adapter.json",
         plugin: "acme",
-        server: "server",
+        server: "plugin_acme_server_",
         fields: ["env"],
       },
     ]);
@@ -1255,8 +1293,10 @@ describe("prepareStageMcpServers", () => {
     "last": {
       "command": "last"
     },
-    "server": {
+    "plugin_acme_server_": {
       "url": "https://acme.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog"
@@ -1279,15 +1319,17 @@ describe("prepareStageMcpServers", () => {
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-kept-moved-");
     await writeSource(
       locations.mcpAdapterJsonPath,
-      '{"mcpServers":{"mine":{"command":"mine"}},"mcp-servers":{"server":{"url":"https://old.example/mcp","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true}}}}}',
+      '{"mcpServers":{"mine":{"command":"mine"}},"mcp-servers":{"plugin_acme_server_":{"url":"https://old.example/mcp","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true}}}}}',
     );
     const expectedBytes = `{
   "mcpServers": {
     "mine": {
       "command": "mine"
     },
-    "server": {
+    "plugin_acme_server_": {
       "url": "https://acme.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "disabled": true,
       "_piClaudeMarketplace": {
         "plugin": "acme",
@@ -1296,7 +1338,7 @@ describe("prepareStageMcpServers", () => {
     }
   },
   "mcp-servers": {
-    "server": {
+    "plugin_acme_server_": {
       "disabled": true
     }
   }
@@ -1314,11 +1356,16 @@ describe("prepareStageMcpServers", () => {
   test("AFILE-03: with an mcp-servers-only file the override is kept and written back under mcp-servers", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-kept-legacy-key-");
-    await writeSource(locations.mcpAdapterJsonPath, '{"mcp-servers":{"server":{"disabled":true}}}');
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcp-servers":{"plugin_acme_server_":{"disabled":true}}}',
+    );
     const expectedStagedBytes = `{
   "mcp-servers": {
-    "server": {
+    "plugin_acme_server_": {
       "url": "https://acme.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "disabled": true,
       "_piClaudeMarketplace": {
         "plugin": "acme",
@@ -1333,7 +1380,7 @@ describe("prepareStageMcpServers", () => {
 `;
     const expectedRestoredBytes = `{
   "mcp-servers": {
-    "server": {
+    "plugin_acme_server_": {
       "disabled": true
     }
   }
@@ -1387,16 +1434,167 @@ describe("prepareStageMcpServers", () => {
 
     assert.deepStrictEqual(prepared._nextDoc, {
       mcpServers: {
-        server: {
+        plugin_acme_server_: {
           command: "${CLAUDE_PROJECT_DIR}/server",
           env: {
             CLAUDE_PLUGIN_ROOT: pluginRoot,
             CLAUDE_PLUGIN_DATA: pluginData,
           },
+          directTools: "search",
+          toolPrefix: "mcp",
           _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
         },
       },
     });
+  });
+
+  test("ANAME-01: writes each server under its Claude Code key in declared order and records the declared names", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-keys-");
+    const expectedBytes = `{
+  "mcpServers": {
+    "plugin_acme_db_": {
+      "url": "https://db.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    },
+    "plugin_acme_my_api_": {
+      "url": "https://api.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
+    const stageAcme = (): Promise<PreparedMcpStaging> =>
+      prepareStageMcpServers({
+        locations,
+        cwd,
+        marketplaceName: "catalog",
+        pluginName: "acme",
+        pluginRoot: path.join(cwd, "plugins", "acme"),
+        pluginData: path.join(cwd, "data", "acme"),
+        servers: {
+          db: { url: "https://db.example/mcp" },
+          "my.api": { url: "https://api.example/mcp" },
+        },
+      });
+
+    // act
+    const commit = await commitPreparedMcp(await stageAcme());
+    const firstBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+    await commitPreparedMcp(await stageAcme());
+    const secondBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(commit, {
+      stagedNames: ["db", "my.api"],
+      recorded: [
+        {
+          generatedName: "db",
+          sourcePath: "acme#mcpServers",
+          targetPath: locations.mcpAdapterJsonPath,
+        },
+        {
+          generatedName: "my.api",
+          sourcePath: "acme#mcpServers",
+          targetPath: locations.mcpAdapterJsonPath,
+        },
+      ],
+      warnings: [],
+      notices: [],
+    });
+    assert.strictEqual(firstBytes, expectedBytes);
+    assert.strictEqual(secondBytes, expectedBytes);
+  });
+
+  test("ANAME-01: a full definition under the plugin's key in ~/.agents/mcp.json refuses and keeps the target bytes", async (t) => {
+    // arrange
+    const { cwd, home } = await createHermeticEnvironment(t, "mcp-stage-key-collision-");
+    const locations = locationsFor("user", cwd);
+    const agentsPath = path.join(home, ".agents", "mcp.json");
+    const targetBytes = '{"mcpServers":{"mine":{"command":"mine"}}}';
+    await writeSource(agentsPath, '{"mcpServers":{"plugin_acme_db_":{"command":"user"}}}');
+    await writeSource(locations.mcpAdapterJsonPath, targetBytes);
+
+    // act
+    const collision = await rejectionOf(
+      prepareStageMcpServers({
+        locations,
+        cwd,
+        marketplaceName: "catalog",
+        pluginName: "acme",
+        pluginRoot: path.join(cwd, "plugins", "acme"),
+        pluginData: path.join(cwd, "data", "acme"),
+        servers: { db: { url: "https://db.example/mcp" } },
+      }),
+    );
+
+    // assert
+    assert.ok(collision instanceof McpServerCollisionError);
+    assert.deepStrictEqual(collisionFields(collision), {
+      name: "McpServerCollisionError",
+      message: `Refusing to stage MCP server "plugin_acme_db_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
+      serverName: "plugin_acme_db_",
+      owningPath: agentsPath,
+      winningPath: locations.mcpAdapterJsonPath,
+    });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), targetBytes);
+  });
+
+  test("ANAME-01: another plugin's entry for a server of the same declared name does not refuse", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-key-side-by-side-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_other_db_":{"url":"https://other.example/mcp","_piClaudeMarketplace":{"plugin":"other","marketplace":"catalog"}}}}',
+    );
+    const expectedBytes = `{
+  "mcpServers": {
+    "plugin_other_db_": {
+      "url": "https://other.example/mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "other",
+        "marketplace": "catalog"
+      }
+    },
+    "plugin_acme_db_": {
+      "url": "https://db.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
+
+    // act
+    await commitPreparedMcp(
+      await prepareStageMcpServers({
+        locations,
+        cwd,
+        marketplaceName: "catalog",
+        pluginName: "acme",
+        pluginRoot: path.join(cwd, "plugins", "acme"),
+        pluginData: path.join(cwd, "data", "acme"),
+        servers: { db: { url: "https://db.example/mcp" } },
+      }),
+    );
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, expectedBytes);
   });
 });
 
@@ -1424,7 +1622,7 @@ describe("commitPreparedMcp", () => {
     });
     const expectedBytes = `{
   "mcpServers": {
-    "local": {
+    "plugin_acme_local_": {
       "command": ${JSON.stringify(path.join(pluginRoot, "bin", "server"))},
       "args": [
         "--store",
@@ -1435,6 +1633,8 @@ describe("commitPreparedMcp", () => {
         "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)},
         "CLAUDE_PROJECT_DIR": ${JSON.stringify(cwd)}
       },
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog"
@@ -1570,13 +1770,15 @@ describe("replacePreparedMcp", () => {
     "foreign": {
       "url": "https://foreign.example.test"
     },
-    "owned": {
+    "plugin_acme_owned_": {
       "command": "node",
       "env": {
         "CLAUDE_PLUGIN_ROOT": ${JSON.stringify(pluginRoot)},
         "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)},
         "CLAUDE_PROJECT_DIR": ${JSON.stringify(cwd)}
       },
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog"

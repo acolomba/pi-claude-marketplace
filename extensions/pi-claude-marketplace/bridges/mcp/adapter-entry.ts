@@ -1,11 +1,16 @@
 // bridges/mcp/adapter-entry.ts
 //
 // Builds the entry this extension writes for each plugin MCP server. The
-// plugin's entry is substituted and gains the injected env (MENV-01/02), the
-// user's own fields carry over from the entry it replaces (AFILE-06), and the
-// MC-5 marker goes last. The marker may keep the user override the entry
-// replaced, verbatim and inert (AFILE-06). Every change to entry content
-// belongs in this module.
+// plugin's entry is substituted and gains the injected env (MENV-01/02). The
+// owned fields follow: `toolPrefix: "mcp"` keeps the tool names Claude Code's
+// `mcp__plugin_<plugin>_<server>__<tool>` whatever the user's global
+// `settings.toolPrefix` says (ANAME-01), and `directTools: "search"` leaves the
+// tools to Pi's tool search unless the server sets `alwaysLoad: true`
+// (ANAME-04). A plugin's own value for either field never survives. The user's
+// own fields carry over from the entry it replaces (AFILE-06), and the MC-5
+// marker goes last. The marker may keep the user override the entry replaced,
+// verbatim and inert (AFILE-06). Every change to entry content belongs in this
+// module.
 
 import { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
@@ -30,9 +35,12 @@ const CARRIED_FIELDS = [
 
 const CARRIED_FIELD_SET: ReadonlySet<string> = new Set(CARRIED_FIELDS);
 
+// ANAME-01 / ANAME-04: the fields this extension writes on every entry.
+const OWNED_FIELD_SET: ReadonlySet<string> = new Set(["directTools", "toolPrefix"]);
+
 /** The servers one plugin stages, and the entries they replace. */
 export interface StampServersInput {
-  /** The plugin's server map, keyed by server name. */
+  /** The plugin's server map, keyed by the generated server key (ANAME-01). */
   readonly servers: Readonly<Record<string, unknown>>;
   readonly pluginName: string;
   readonly marketplaceName: string;
@@ -51,10 +59,33 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * The translated fields without the plugin's own `directTools` and
+ * `toolPrefix`, then the owned values: `directTools` is `true` only for a
+ * literal `alwaysLoad: true`, else `"search"`, and `toolPrefix` is `"mcp"`
+ * (ANAME-01, ANAME-04).
+ */
+function withOwnedFields(
+  translated: Readonly<Record<string, unknown>>,
+  alwaysLoad: unknown,
+): Record<string, unknown> {
+  const entry: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(translated)) {
+    if (!OWNED_FIELD_SET.has(field)) {
+      safeSet(entry, field, value);
+    }
+  }
+
+  entry.directTools = alwaysLoad === true ? true : "search";
+  entry.toolPrefix = "mcp";
+  return entry;
+}
+
+/**
  * Deep-substitutes and injects env BEFORE the marker is spread on, so the
- * marker never enters the walk (MENV-01/02). A non-object entry keeps the `{}`
- * tolerance with no substitution, and each normalization is reported as a
- * warning instead of reporting a dead entry as staged.
+ * marker never enters the walk (MENV-01/02), then appends the owned fields. A
+ * non-object entry keeps the `{}` tolerance with no substitution and still
+ * gets the owned fields, and each normalization is reported as a warning
+ * instead of reporting a dead entry as staged.
  */
 function translatedEntry(
   name: string,
@@ -64,7 +95,7 @@ function translatedEntry(
 ): Record<string, unknown> {
   if (!isPlainObject(entry)) {
     warnings.push(`mcp server "${name}": entry is not an object; staged as an empty entry`);
-    return {};
+    return withOwnedFields({}, undefined);
   }
 
   // The injection step discards a malformed declared env on a stdio entry
@@ -76,7 +107,7 @@ function translatedEntry(
     );
   }
 
-  return substituteAndInject(entry, substitution);
+  return withOwnedFields(substituteAndInject(entry, substitution), entry.alwaysLoad);
 }
 
 /**
@@ -155,7 +186,8 @@ function keptOverrideFor(
 
 /**
  * Builds the entry for each plugin server: the translated plugin entry, then
- * the fields carried from the entry it replaces, then the MC-5 marker, which
+ * the owned fields (ANAME-01, ANAME-04), then the fields carried from the
+ * entry it replaces in carried-set order, then the MC-5 marker, which
  * keeps the server's user override when there is one. A carried value
  * overrides the plugin's value; a carried field the plugin also sets keeps the
  * plugin's key position. Carried fields come from `previous` alone, so a

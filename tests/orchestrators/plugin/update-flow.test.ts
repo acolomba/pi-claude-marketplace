@@ -3462,12 +3462,12 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
   // The throw propagates to runThreePhaseUpdate -> updateSinglePlugin cascade
   // catch -> partition='failed'.
   //
-  // Setup: seed <cwd>/.pi/mcp-adapter.json with "rollback-server" owned by a DIFFERENT
-  // plugin. Then seed hello@mp with version 1.0.1 declaring the same server.
-  // discoverGeneratedNames does NOT check MCP collisions (it only discovers
-  // skills/commands/agents), so it succeeds. prepareStageMcpServers then reads
-  // the scoped mcp-adapter.json, finds "rollback-server" in `theirs`,
-  // and throws McpServerCollisionError.
+  // Setup: seed <cwd>/.pi/mcp-adapter.json with hello's "rollback-server" key
+  // (ANAME-01) owned by a DIFFERENT plugin. Then seed hello@mp with version
+  // 1.0.1 declaring "rollback-server". discoverGeneratedNames does NOT check
+  // MCP collisions (it only discovers skills/commands/agents), so it succeeds.
+  // prepareStageMcpServers then reads the scoped mcp-adapter.json, finds the
+  // key in `theirs`, and throws McpServerCollisionError.
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-prepare-mcp-fail-");
     try {
@@ -3488,8 +3488,8 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
         }),
       );
 
-      // Pre-populate the project-scope mcp-adapter.json with "rollback-server" owned by
-      // another plugin. This puts the server into `theirs` when
+      // Pre-populate the project-scope mcp-adapter.json with hello's key owned by
+      // another plugin. This puts the key into `theirs` when
       // prepareStageMcpServers calls partitionServers for the update.
       const locations = locationsFor("project", cwd);
       await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
@@ -3497,7 +3497,7 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
         locations.mcpAdapterJsonPath,
         JSON.stringify({
           mcpServers: {
-            "rollback-server": {
+            "plugin_hello_rollback-server_": {
               command: "node",
               args: ["other.js"],
               _piClaudeMarketplace: { plugin: "other-plugin", marketplace: "mp" },
@@ -10677,7 +10677,10 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through update", asy
       const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
         mcpServers: Record<string, Record<string, unknown>>;
       };
-      installed.mcpServers.server1 = { ...installed.mcpServers.server1, disabled: true };
+      installed.mcpServers.plugin_hello_server1_ = {
+        ...installed.mcpServers.plugin_hello_server1_,
+        disabled: true,
+      };
       await writeFile(locations.mcpAdapterJsonPath, `${JSON.stringify(installed, null, 2)}\n`);
       await writeFile(
         path.join(pluginRoot, ".mcp.json"),
@@ -10702,7 +10705,7 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through update", asy
       assert.strictEqual(record?.version, "1.0.1");
       assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
         mcpServers: {
-          server1: {
+          plugin_hello_server1_: {
             command: "deno",
             args: ["v2.js"],
             env: {
@@ -10710,6 +10713,8 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through update", asy
               CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
               CLAUDE_PROJECT_DIR: cwd,
             },
+            directTools: "search",
+            toolPrefix: "mcp",
             disabled: true,
             _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
           },

@@ -72,6 +72,9 @@ const PROJECT_CONTEXT: McpSubstitutionContext = {
   projectDir: "/project/root",
 };
 
+// ANAME-01 / ANAME-04: the fields every stamped entry carries by default.
+const OWNED = { directTools: "search", toolPrefix: "mcp" };
+
 const INJECTED_ENV = {
   CLAUDE_PLUGIN_ROOT: "/plugin/root",
   CLAUDE_PLUGIN_DATA: "/plugin/data",
@@ -113,6 +116,7 @@ describe("stampServers", () => {
           command: "/plugin/root/bin/server",
           args: ["/project/root"],
           env: INJECTED_ENV,
+          ...OWNED,
           _piClaudeMarketplace: MARKER,
         },
       }),
@@ -136,7 +140,7 @@ describe("stampServers", () => {
 
     // assert
     assert.deepStrictEqual(stamping.stamped, {
-      server: { url: "https://new.example/mcp", _piClaudeMarketplace: MARKER },
+      server: { url: "https://new.example/mcp", ...OWNED, _piClaudeMarketplace: MARKER },
     });
   });
 
@@ -162,6 +166,7 @@ describe("stampServers", () => {
         url: "https://new.example/mcp",
         lifecycle: "eager",
         disabled: true,
+        ...OWNED,
         _piClaudeMarketplace: MARKER,
       },
     });
@@ -183,7 +188,12 @@ describe("stampServers", () => {
 
     // assert
     assert.deepStrictEqual(stamping.stamped, {
-      server: { url: "https://new.example/mcp", disabled: false, _piClaudeMarketplace: MARKER },
+      server: {
+        url: "https://new.example/mcp",
+        disabled: false,
+        ...OWNED,
+        _piClaudeMarketplace: MARKER,
+      },
     });
   });
 
@@ -206,11 +216,11 @@ describe("stampServers", () => {
 
     // assert
     assert.deepStrictEqual(stamping.stamped, {
-      server: { url: "https://new.example/mcp", _piClaudeMarketplace: MARKER },
+      server: { url: "https://new.example/mcp", ...OWNED, _piClaudeMarketplace: MARKER },
     });
   });
 
-  test("AFILE-06: orders the translated fields, then the carried fields in set order, then the marker", () => {
+  test("AFILE-06: orders the translated fields, then the owned fields, then the carried fields in set order, then the marker", () => {
     // arrange
     const previous = {
       server: { searchKeywords: ["old"], lifecycle: "eager", disabled: true, cwd: "/old" },
@@ -233,6 +243,7 @@ describe("stampServers", () => {
         server: {
           url: "https://new.example/mcp",
           lifecycle: "eager",
+          ...OWNED,
           disabled: true,
           searchKeywords: ["old"],
           _piClaudeMarketplace: MARKER,
@@ -267,14 +278,20 @@ describe("stampServers", () => {
       'mcp server "nil": entry is not an object; staged as an empty entry',
     ]);
     assert.deepStrictEqual(stamping.stamped, {
-      malformedEnv: { command: "node", env: INJECTED_ENV, _piClaudeMarketplace: MARKER },
+      malformedEnv: {
+        command: "node",
+        env: INJECTED_ENV,
+        ...OWNED,
+        _piClaudeMarketplace: MARKER,
+      },
       urlWithScalarEnv: {
         url: "https://mcp.example.test",
         env: "opaque",
+        ...OWNED,
         _piClaudeMarketplace: MARKER,
       },
-      scalar: { _piClaudeMarketplace: MARKER },
-      nil: { _piClaudeMarketplace: MARKER },
+      scalar: { ...OWNED, _piClaudeMarketplace: MARKER },
+      nil: { ...OWNED, _piClaudeMarketplace: MARKER },
     });
   });
 
@@ -301,6 +318,7 @@ describe("stampServers", () => {
       server: {
         command: "${CLAUDE_PROJECT_DIR}/server",
         env: { CLAUDE_PLUGIN_ROOT: "/plugin/root", CLAUDE_PLUGIN_DATA: "/plugin/data" },
+        ...OWNED,
         _piClaudeMarketplace: MARKER,
       },
     });
@@ -308,13 +326,16 @@ describe("stampServers", () => {
 
   test("AFILE-06: of every ServerEntry key, only the carried keys keep their previous values", () => {
     // arrange
+    // ANAME-01 / ANAME-04: the owned directTools and toolPrefix leave their
+    // declared positions and follow the translated fields with owned values.
     const expectedEntry: Record<string, unknown> = Object.fromEntries(
-      SERVER_ENTRY_KEYS.map((key) => [
-        key,
-        CARRIED_KEYS.includes(key) ? `previous-${key}` : `plugin-${key}`,
-      ]),
+      SERVER_ENTRY_KEYS.filter((key) => key !== "directTools" && key !== "toolPrefix").map(
+        (key) => [key, CARRIED_KEYS.includes(key) ? `previous-${key}` : `plugin-${key}`],
+      ),
     );
     expectedEntry.env = { ...INJECTED_ENV, PLUGIN_ENV: "plugin-env" };
+    expectedEntry.directTools = "search";
+    expectedEntry.toolPrefix = "mcp";
     expectedEntry._piClaudeMarketplace = MARKER;
 
     // act
@@ -354,6 +375,7 @@ describe("stampServers", () => {
           CLAUDE_PLUGIN_DATA: "/plugin/data",
           CLAUDE_PROJECT_DIR: "/project/root",
         },
+        ...OWNED,
         disabled: "previous-disabled",
         approveTools: "previous-approveTools",
         includeTools: "previous-includeTools",
@@ -385,7 +407,7 @@ describe("stampServers", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(stamping.stamped),
-      '{"server":{"url":"https://acme.example/mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}}',
+      '{"server":{"url":"https://acme.example/mcp","directTools":"search","toolPrefix":"mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}}',
     );
   });
 
@@ -419,6 +441,7 @@ describe("stampServers", () => {
       server: {
         command: "plugin-command",
         env: INJECTED_ENV,
+        ...OWNED,
         disabled: true,
         _piClaudeMarketplace: {
           plugin: "acme",
@@ -464,7 +487,7 @@ describe("stampServers", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(stamping.stamped),
-      '{"__proto__":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}',
+      '{"__proto__":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}',
     );
   });
 
@@ -484,9 +507,104 @@ describe("stampServers", () => {
 
     // assert
     assert.deepStrictEqual(stamping.stamped, {
-      server: { url: "https://acme.example/mcp", _piClaudeMarketplace: MARKER },
+      server: { url: "https://acme.example/mcp", ...OWNED, _piClaudeMarketplace: MARKER },
     });
   });
+
+  test("ANAME-04: alwaysLoad true gets directTools true, and the plugin's directTools and toolPrefix never survive", () => {
+    // arrange
+    const servers = {
+      server: {
+        command: "plugin-command",
+        alwaysLoad: true,
+        directTools: false,
+        toolPrefix: "short",
+      },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers,
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: { disabled: true, directTools: "user", toolPrefix: "user" } },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
+        server: {
+          command: "plugin-command",
+          alwaysLoad: true,
+          env: INJECTED_ENV,
+          directTools: true,
+          toolPrefix: "mcp",
+          disabled: true,
+          _piClaudeMarketplace: MARKER,
+        },
+      }),
+    );
+  });
+
+  test("ANAME-01: a command-only entry gets toolPrefix mcp and directTools search", () => {
+    // arrange
+    const servers = { server: { command: "plugin-command" } };
+
+    // act
+    const stamping = stampServers({
+      servers,
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: {},
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
+        server: {
+          command: "plugin-command",
+          env: INJECTED_ENV,
+          directTools: "search",
+          toolPrefix: "mcp",
+          _piClaudeMarketplace: MARKER,
+        },
+      }),
+    );
+  });
+
+  for (const alwaysLoad of ["true", 1, false]) {
+    test(`ANAME-04: alwaysLoad ${JSON.stringify(alwaysLoad)} gets directTools search`, () => {
+      // arrange
+      const servers = { server: { url: "https://acme.example/mcp", alwaysLoad } };
+
+      // act
+      const stamping = stampServers({
+        servers,
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: PROJECT_CONTEXT,
+        previous: {},
+        keptOverrides: {},
+      });
+
+      // assert
+      assert.deepStrictEqual(stamping.stamped, {
+        server: {
+          url: "https://acme.example/mcp",
+          alwaysLoad,
+          directTools: "search",
+          toolPrefix: "mcp",
+          _piClaudeMarketplace: MARKER,
+        },
+      });
+    });
+  }
 });
 
 describe("inactiveOverrideFields", () => {

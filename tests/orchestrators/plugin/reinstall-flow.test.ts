@@ -2141,10 +2141,9 @@ test("GAP-04: errorWithManualRecovery empty-leaks path: saveState fails on empty
 });
 
 test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and wraps error", async () => {
-  // Two plugins in the same marketplace declare the same MCP server name.
-  // Reinstalling the first one after the second owns the server triggers
-  // McpServerCollisionError inside prepareStageMcpServers, which is caught
-  // by prepareAllHandles' try/catch. The error is wrapped by
+  // A foreign full definition sits under hello's own server key. Reinstalling
+  // hello triggers McpServerCollisionError inside prepareStageMcpServers,
+  // which is caught by prepareAllHandles' try/catch. The error is wrapped by
   // errorWithManualRecovery and surfaced as a failed outcome.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mcp-collision-"));
@@ -2158,9 +2157,10 @@ test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and 
         resources: { mcp: true },
         install: true,
       });
-      // Install "other" that also declares "server1" in a separate marketplace.
-      // We write its mcp-adapter.json entry directly into the project mcp-adapter.json so that
-      // prepareStageMcpServers sees a cross-slot collision when reinstalling hello.
+      // Write a foreign definition under hello's key directly into the project
+      // mcp-adapter.json so that prepareStageMcpServers sees a collision when
+      // reinstalling hello (ANAME-01: two plugins that declare the same server
+      // name get different keys, so only a definition of the key itself collides).
       const locations = locationsFor("project", cwd);
       const mcpPath = locations.mcpAdapterJsonPath;
       let mcpDoc: Record<string, unknown> = {};
@@ -2171,8 +2171,8 @@ test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and 
       }
 
       const mcpServers = (mcpDoc.mcpServers ?? {}) as Record<string, unknown>;
-      // Register server1 under a foreign plugin marker so it looks like another plugin owns it.
-      mcpServers["server1"] = {
+      // Register hello's key under a foreign plugin marker so it looks like another plugin owns it.
+      mcpServers["plugin_hello_server1_"] = {
         command: "node",
         args: ["other.js"],
         __claude_marketplace_plugin: "other@othermp",
@@ -9524,7 +9524,10 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through reinstall", 
       const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
         mcpServers: Record<string, Record<string, unknown>>;
       };
-      installed.mcpServers.server1 = { ...installed.mcpServers.server1, disabled: true };
+      installed.mcpServers.plugin_hello_server1_ = {
+        ...installed.mcpServers.plugin_hello_server1_,
+        disabled: true,
+      };
       await writeFile(locations.mcpAdapterJsonPath, `${JSON.stringify(installed, null, 2)}\n`);
       await writeFile(
         path.join(pluginRoot, ".mcp.json"),
@@ -9539,7 +9542,7 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through reinstall", 
       assert.strictEqual(outcome.partition, "reinstalled");
       assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
         mcpServers: {
-          server1: {
+          plugin_hello_server1_: {
             command: "deno",
             args: ["v2.js"],
             env: {
@@ -9547,6 +9550,8 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through reinstall", 
               CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
               CLAUDE_PROJECT_DIR: cwd,
             },
+            directTools: "search",
+            toolPrefix: "mcp",
             disabled: true,
             _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
           },
