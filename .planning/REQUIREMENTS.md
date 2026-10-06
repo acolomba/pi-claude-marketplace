@@ -78,9 +78,9 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 - [x] **ANAME-03**: Two servers whose normalized keys collide (including `-`/`_` folding) are
   refused at install with a clear reason. The tool-name length Pi 1.0 accepts was measured: Pi
   has no limit, so no length check exists (amended in Phase 3, D-03-12, D-03-13, D-03-17).
-- [ ] **ANAME-04**: Plugin MCP tools are loaded on demand through Pi's tool search
+- [x] **ANAME-04**: Plugin MCP tools are loaded on demand through Pi's tool search
   (`directTools: "search"`), and a server marked `alwaysLoad` gets `directTools: true`.
-- [ ] **ANAME-05**: Entries leave `lifecycle` unset (adapter default `lazy`); the divergence from
+- [x] **ANAME-05**: Entries leave `lifecycle` unset (adapter default `lazy`); the divergence from
   Claude Code's session-long connection is documented.
 - [x] **ANAME-06**: The server `description` from the plugin manifest is written to the entry.
 - [x] **ANAME-07**: Claude transport and option fields are translated to adapter fields (`sse` ->
@@ -178,8 +178,8 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | ANAME-01 | Phase 3 | Complete |
 | ANAME-02 | Phase 3 | Complete |
 | ANAME-03 | Phase 3 | Complete |
-| ANAME-04 | Phase 3 | Pending |
-| ANAME-05 | Phase 3 | Pending |
+| ANAME-04 | Phase 3 | Complete |
+| ANAME-05 | Phase 3 | Complete |
 | ANAME-06 | Phase 3 | Complete |
 | ANAME-07 | Phase 3 | Complete |
 | AVAR-01 | Phase 4 | Pending |

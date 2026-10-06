@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 3
 current_phase_name: Claude Code tool names and tool search
 status: executing
-stopped_at: Completed 03-08-PLAN.md
-last_updated: "2026-10-06T19:14:10.254Z"
+stopped_at: Completed 03-09-PLAN.md
+last_updated: "2026-10-06T19:24:00.000Z"
 last_activity: 2026-10-06
 last_activity_desc: Phase 3 execution started
-state_head: 946c85b2dc004095e2e96bfb61937a577b10f7e5
+state_head: 99dbaddaf5a8e7a16ed114de533964150b80cb7b
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 30
-  completed_plans: 29
+  completed_plans: 30
   percent: 29
 ---
 
@@ -36,7 +36,7 @@ sign-ins and approvals.
 
 Phase: 3 (Claude Code tool names and tool search) — EXECUTING
 Plan: 9 of 9
-Status: Ready to execute
+Status: All 9 plans executed, awaiting phase verification
 Last activity: 2026-10-06 — Phase 3 execution started
 
 Progress: [███░░░░░░░] 29%
@@ -275,6 +275,7 @@ still open with a comment explaining what landed.
 | Phase 03 P06 | 12min | 2 tasks | 12 files |
 | Phase 03 P07 | 16min | 3 tasks | 10 files |
 | Phase 03 P08 | 17min | 3 tasks | 12 files |
+| Phase 03 P09 | 7min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -628,6 +629,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: Plugin-set carried fields (only requestTimeoutMs today) belong to the plugin; carry-forward skips them and the marker lists their names as pluginSetFields
 - [Phase 03]: A field the previous marker lists as plugin-set comes from that marker's kept override, so the user's stub timeout applies again once the plugin drops its timeout
 - [Phase 03]: Write-back restores the kept override's own value for a field the live marker lists as plugin-set
+- [Phase 03]: docs/mcp-compatibility.md is the home of the MCP naming, tool search, length, lifecycle and divergence records; docs cite ANAME-0N, never D-03-NN
+- [Phase 03]: README.es.md carries the same MCP name table, partial-install text and agent MCP rule as README.md (.claude/rules/readme.md)
 
 ### Pending Todos
 
@@ -759,11 +762,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-08-PLAN.md
+**Stopped at:** Completed 03-09-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-06T19:14:10.016Z
+Last session: 2026-10-06T19:24:00.000Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
