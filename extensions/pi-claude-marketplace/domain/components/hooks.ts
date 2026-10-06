@@ -146,7 +146,7 @@ function isModuleWrapper(v: unknown): v is Record<string, unknown> {
     return false;
   }
 
-  const modules = (v as Record<string, unknown>).modules;
+  const modules: unknown = Reflect.get(v, "modules");
   return Array.isArray(modules) && modules.length > 0;
 }
 
@@ -161,7 +161,7 @@ function hooksCandidate(parsed: unknown): unknown {
     return Object.hasOwn(parsed, "hooks") ? parsed.hooks : {};
   }
 
-  return isPluginWrapper(parsed) ? (parsed as { hooks: unknown }).hooks : parsed;
+  return isPluginWrapper(parsed) ? parsed.hooks : parsed;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

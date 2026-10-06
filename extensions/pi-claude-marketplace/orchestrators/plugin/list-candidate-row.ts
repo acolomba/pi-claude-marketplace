@@ -78,7 +78,7 @@ async function resolveCandidateEntry(
   if (!isGitPluginSource(parsedSource)) {
     return {
       kind: "resolved",
-      resolved: await resolveStrict(manifestEntry, { ...marketplaceContext }),
+      resolved: await resolveStrict(manifestEntry, marketplaceContext),
     };
   }
 

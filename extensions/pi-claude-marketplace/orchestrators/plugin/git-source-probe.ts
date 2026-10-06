@@ -228,7 +228,7 @@ export async function probeManifestEntry(
   }
 
   try {
-    return classifyManifestEntry(await resolveStrict(entry, { ...marketplaceContext }));
+    return classifyManifestEntry(await resolveStrict(entry, marketplaceContext));
   } catch {
     return "unavailable";
   }
