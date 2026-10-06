@@ -66,11 +66,17 @@ function makeCtx(): {
  * that was just written. A caller reading `process.env.HOME` back needs a
  * `?? ""` to satisfy `strictNullChecks`, and that fallback turns a broken
  * precondition into a silent cwd-relative probe instead of a failure.
+ *
+ * WPTH-04: `PI_CODING_AGENT_DIR` is cleared for the same span, so the workflow
+ * root is `<home>/.pi/workflows/`. With the variable set, the cases would write
+ * into the developer's real workflow root.
  */
 async function withHermeticHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
   const hermeticHome = await mkdtemp(path.join(tmpdir(), "workflow-inversion-home-"));
   const prevHome = process.env.HOME;
+  const prevAgentDir = process.env.PI_CODING_AGENT_DIR;
   process.env.HOME = hermeticHome;
+  delete process.env.PI_CODING_AGENT_DIR;
   try {
     return await fn(hermeticHome);
   } finally {
@@ -78,6 +84,12 @@ async function withHermeticHome<T>(fn: (home: string) => Promise<T>): Promise<T>
       delete process.env.HOME;
     } else {
       process.env.HOME = prevHome;
+    }
+
+    if (prevAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = prevAgentDir;
     }
 
     await rm(hermeticHome, { recursive: true, force: true });

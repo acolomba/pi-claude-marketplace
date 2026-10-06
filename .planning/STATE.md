@@ -683,6 +683,8 @@ See [task summary](./milestones/any-git-host-quick/260917-hfp-clear-the-phase-5-
 
 | #          | Description                                                                                                 | Date       | Commit   | Directory                                                                                            |
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| 261006-cwq | Pin workflow engine 3.13.1 and update compatibility notes after upstream PRs #233/#234 shipped | 2026-10-06 | e0b0abac | [261006-cwq-update-workflow-engine-compatibility-doc](./quick/261006-cwq-update-workflow-engine-compatibility-doc/) |
+| 261006-kr1 | Adopt workflow engine 3.14.0: mirror PI_CODING_AGENT_DIR storage root and bump pins | 2026-10-06 | 6129e7bd | [261006-kr1-adopt-workflow-engine-3-14-0-mirror-pi-c](./quick/261006-kr1-adopt-workflow-engine-3-14-0-mirror-pi-c/) |
 
 ## Deferred Items
 
