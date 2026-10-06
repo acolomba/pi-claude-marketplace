@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-06T01:37:50.593Z"
+last_updated: "2026-10-06T03:19:28.601Z"
 last_activity: 2026-10-05
 last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
-state_head: 98b7c4f26e4d419070cf75ea7323a1060f621a0e
+state_head: caeb4a40596c9e52023ac987c94ef716af858020
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -629,6 +629,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261005-rmz | Suppress the reviewed render-arm clone groups in fallow | 2026-10-05 | e41d3e56 | [261005-rmz-ignore-the-reviewed-render-arm-clone-gro](./quick/261005-rmz-ignore-the-reviewed-render-arm-clone-gro/) |
 | 261005-rk5 | Register the worktree init hook for Codex: make scripts/init-worktree.sh host-agnostic and add a SessionStart hook to .codex/config.toml | 2026-10-05 | ce13f8aa | [261005-rk5-register-the-worktree-init-hook-for-code](./quick/261005-rk5-register-the-worktree-init-hook-for-code/) |
 | 261005-sx5 | Close the five pre-PR review findings: fold the #234 changelog entry, delete the stale per-layer READMEs, fix the ledger phase count, scope TruffleHog to the pre-commit stage, and mirror the write-file-atomic Node range in engines | 2026-10-05 | 98b7c4f2 | [261005-sx5-close-the-five-pre-pr-review-findings-fo](./quick/261005-sx5-close-the-five-pre-pr-review-findings-fo/) |
+| 45 | Cut the #236 CHANGELOG entry to the changelog rules | 2026-10-05 | caeb4a40 | — |
 
 ## Deferred Items
 
