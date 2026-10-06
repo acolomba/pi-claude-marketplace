@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 3
 current_phase_name: Claude Code tool names and tool search
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-10-06T16:51:23.472Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-10-06T17:12:39.267Z"
 last_activity: 2026-10-06
 last_activity_desc: Phase 3 execution started
-state_head: f3ad9b0156bf6c362981d5dfcf83e0b6700ecad7
+state_head: 07c96f65bdb6a07577d6ab21e140aa88bb51f109
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 30
-  completed_plans: 21
+  completed_plans: 22
   percent: 29
 ---
 
@@ -35,8 +35,8 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 3 (Claude Code tool names and tool search) — EXECUTING
-Plan: 1 of 9
-Status: Executing Phase 3
+Plan: 2 of 9
+Status: Ready to execute
 Last activity: 2026-10-06 — Phase 3 execution started
 
 Progress: [███░░░░░░░] 29%
@@ -267,6 +267,7 @@ still open with a comment explaining what landed.
 | Phase 02 P06 | about 55 min | 3 tasks | 14 files |
 | Phase 02 P07 | 25min | 3 tasks | 10 files |
 | Phase 02 P08 | 30min | 3 tasks | 12 files |
+| Phase 03 P01 | 18 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -605,6 +606,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: McpConfigNoticesCarrier.mcpConfigNotices is excepted in the unused-type-member gate until reconcile reads it (plan 02-08 drops the row)
 - [Phase 02]: Reconcile notices ride OutcomeBase.mcpConfigNotices; one surfaceMcpConfigNotices call follows surfacePostCommitWarnings, and the empty-reconcile return keeps RECON-05 silence
 - [Phase 02]: Import keeps its notice list module-private and strips it from ClaudeImportExecutionResult; the marketplace update cascade reads notices from updated and failed outcomes
+- [Phase 03]: Plugin MCP entries are keyed plugin_<plugin>_<server>_ by generatedMcpServerKey; state.json keeps declared names and cascade unstage maps keys back
+- [Phase 03]: Stamping warnings and override-kept notices name the generated server key
 
 ### Pending Todos
 
@@ -736,11 +739,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 3 context gathered
+**Stopped at:** Completed 03-01-PLAN.md
 
-**Resume file:** .planning/phases/03-claude-code-tool-names-and-tool-search/03-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-10-06T15:10:56.920Z
+Last session: 2026-10-06T17:12:39.048Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
