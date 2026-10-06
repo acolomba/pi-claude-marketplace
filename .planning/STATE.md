@@ -4,8 +4,8 @@ milestone: json-output
 current_phase: 04
 current_phase_name: Wire Schema and JSON Strategy
 status: executing
-stopped_at: Completed 04-06-PLAN.md (Phase 4 gap closure executed; ready for re-verification)
-last_updated: "2026-10-04T11:45:00.000Z"
+stopped_at: Session resumed; reviewing gap-closure fixes at iteration 2
+last_updated: "2026-10-06T14:36:15+00:00"
 last_activity: 2026-10-04
 last_activity_desc: Executed 04-06 (subject names redacted in the model; AUTH-09 gains three rows)
 state_head: 42f80dec9b3fb56235f80bd88c44fef32efe8668
@@ -169,9 +169,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-04T11:45:00.000Z
-**Stopped at:** Completed 04-06-PLAN.md (Phase 4 gap closure executed; ready for re-verification)
-**Resume file:** None
+**Last session:** 2026-10-06T14:36:15+00:00
+**Stopped at:** Session resumed; reviewing gap-closure fixes at iteration 2
+**Resume file:** .planning/phases/04-wire-schema-and-json-strategy/.continue-here.md
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
@@ -307,3 +307,5 @@ archived milestone artifacts.
 - [Phase 04]: WIRE-08: planted path, Error, and undefined offenders extend the prune committed-warning payload, the one catalog payload with a top-level cause chain
 - [Phase 04]: PMOD-04: block names and plugin row names are redacted in resolveRows, and the marketplace-not-added name in presentNotification; record-backed names and the scp subject pass through unchanged
 - [Phase 04]: PMOD-04: an out-of-band plugin row without a name keeps that shape; resolveRows redacts a row name only when the row carries one
+
+- [Phase 04]: On 2026-10-06 the user accepted both conservative masking rules: split row names ending in scheme://host:port and hyphenated text after Bearer. Resume the review loop, re-verification, and autonomous continuation.

@@ -3,6 +3,10 @@ phase: 04
 review: 04-REVIEW.md
 titles: json
 findings:
+  - id: IN-10
+    severity: info
+    disposition: open
+    title: "SSH URL subjects mask a non-secret username"
   - id: IN-01
     severity: info
     disposition: open
@@ -67,24 +71,37 @@ findings:
     severity: warning
     disposition: deferred
     title: "The JSON strategy emits payloads for raw surfaces that the text strategy suppresses"
-open: 9
-total: 16
-recorded: 2026-10-04T02:04:03.525Z
+  - id: CR-02
+    severity: critical
+    disposition: fixed
+    title: "A hand-edited `enabledPlugins` key leaks its URL password through the plugin row name in text and JSON"
+  - id: WR-07
+    severity: warning
+    disposition: fixed
+    title: "The `\"name\" in resolved` guard admits a non-string `name`, and `redactCredentials` throws in the diagnostic-row arm"
+  - id: WR-08
+    severity: warning
+    disposition: fixed
+    title: "The cascade subject-name gate rows do not read the production cascade text path, and their doc comment says they do"
+open: 10
+total: 20
+recorded: 2026-10-06T14:46:48.604Z
 ---
 
 # Phase 04: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| IN-01 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
-| IN-02 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
-| IN-03 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
-| IN-04 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
-| IN-05 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
-| IN-06 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
-| IN-07 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
-| IN-08 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
-| IN-09 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) |
+| IN-10 | info | open | 04-REVIEW.md gap-loop iteration 2; optional SSH masking documentation |
+| IN-01 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) (not in the current review) |
+| IN-02 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) (not in the current review) |
+| IN-03 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) (not in the current review) |
+| IN-04 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) (not in the current review) |
+| IN-05 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) (not in the current review) |
+| IN-06 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) (not in the current review) |
+| IN-07 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) (not in the current review) |
+| IN-08 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) (not in the current review) |
+| IN-09 | info | open | 04-REVIEW.md iteration 2 (outside the critical_warning fix scope) (not in the current review) |
 | CR-01 | critical | fixed | 04-REVIEW-FIX.md iteration 1, commit 45449a48 (not in the current review) |
 | WR-01 | warning | fixed | 04-REVIEW-FIX.md iteration 1, commit 6268a0be (not in the current review) |
 | WR-02 | warning | fixed | 04-REVIEW-FIX.md iteration 1, commit a2f32c6e (not in the current review) |
@@ -92,6 +109,9 @@ recorded: 2026-10-04T02:04:03.525Z
 | WR-04 | warning | fixed | 04-REVIEW-FIX.md iteration 1, commit 53cab366 (not in the current review) |
 | WR-05 | warning | fixed | 04-REVIEW-FIX.md iteration 1, commit 29ec1fc1 (not in the current review) |
 | WR-06 | warning | deferred | ROADMAP Phase 5 success criterion 6 (the JSON strategy keeps the text strategy's empty no-ops); 04-REVIEW-FIX.md iteration 1 (not in the current review) |
+| CR-02 | critical | fixed | 04-REVIEW-FIX.md iteration 1, commit fbbacb2f; confirmed by iteration 2 |
+| WR-07 | warning | fixed | 04-REVIEW-FIX.md iteration 1, commit a100e112; confirmed by iteration 2 |
+| WR-08 | warning | fixed | 04-REVIEW-FIX.md iteration 1, commit cb18acb2; confirmed by iteration 2 |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.

@@ -17,17 +17,17 @@ status: all_fixed
 
 **Summary:**
 
-- Findings in scope: 3 (CR-01, WR-01, WR-02; IN-01 is Info and out of scope)
+- Findings in scope: 3 (CR-02, WR-07, WR-08; IN-10 is Info and out of scope)
 - Fixed: 3
 - Skipped: 0
 
 ## Fixed Issues
 
-### CR-01: A hand-edited `enabledPlugins` key leaks its URL password through the plugin row name in text and JSON
+### CR-02: A hand-edited `enabledPlugins` key leaks its URL password through the plugin row name in text and JSON
 
 **Files modified:** `extensions/pi-claude-marketplace/shared/notification-resolve.ts`, `tests/shared/notification-resolve.test.ts`, `tests/architecture/no-credential-leak.test.ts`
 **Commit:** fbbacb2f
-**Status:** fixed: requires human verification (the fix chooses a redaction rule)
+**Status:** fixed; the user accepted the conservative redaction rule on 2026-10-06
 
 **Applied fix:** `resolveRows` now redacts each row name through a new private helper, `redactRowName(name)`. The helper computes `redactCredentials(`${name}@`).slice(0, -1)`. A row names the plugin half of a `plugin@marketplace` subject, so the helper puts back the `@` that a last-`@` split removed. The row `foo@https://alice:s3cret` now displays as `foo@https://***`.
 
@@ -50,13 +50,13 @@ Known trade-off, written in the helper's JSDoc: a row name that ends in `scheme:
 - `lint:type-members` exit 0. Corpus `3143 baseline entries present, 0 extra`. `git diff --exit-code 4e6c568a -- docs/output-catalog.md` empty.
 - `fallow audit` verdict `warn`, the same verdict as 04-06.
 
-### WR-01: The `"name" in resolved` guard admits a non-string `name`, and `redactCredentials` throws in the diagnostic-row arm
+### WR-07: The `"name" in resolved` guard admits a non-string `name`, and `redactCredentials` throws in the diagnostic-row arm
 
 **Files modified:** `extensions/pi-claude-marketplace/shared/notification-resolve.ts`, `tests/shared/notification-resolve.test.ts`
 **Commit:** a100e112
 **Applied fix:** The guard now reads `const name: unknown = resolved.name;` and then tests `typeof name === "string"`. A widening annotation replaces the review's `as` cast, because `as` is not available in `extensions/`. A row without a string name keeps its shape.
 
-**Evidence:** New owner test `keeps the shape of a diagnostic row whose name is undefined`. After CR-01 the old guard no longer threw. Instead it coerced the value to the string `'undefined'`, and the RED run caught that (`/tmp/claude-1000/rf04-wr01-red.log`). GREEN results:
+**Evidence:** New owner test `keeps the shape of a diagnostic row whose name is undefined`. After CR-02 the old guard no longer threw. Instead it coerced the value to the string `'undefined'`, and the RED run caught that (`/tmp/claude-1000/rf04-wr01-red.log`). GREEN results:
 
 - 156/156 across the resolve, present, and gate suites
 - direct coverage 108/108 branches, 629/629 lines
@@ -64,11 +64,11 @@ Known trade-off, written in the helper's JSDoc: a row name that ends in `scheme:
 - corpus 3143 present, 0 extra
 - catalog diff empty
 
-### WR-02: The cascade subject-name gate rows do not read the production cascade text path, and their doc comment says they do
+### WR-08: The cascade subject-name gate rows do not read the production cascade text path, and their doc comment says they do
 
 **Files modified:** `tests/architecture/no-credential-leak.test.ts`
 **Commit:** cb18acb2
-**Applied fix:** I took the faithful path. `probeCascadeSubject` became `probeReconcileAppliedSubject(marketplaces)`. It presents a `reconcile-applied-cascade` message, asserts that kind, and composes the text with `composeReconcileAppliedBody`, which is that kind's production text body (`formatPresentationBody`). The three subject rows moved to it: the block name of a failed add, the plugin row name, and the CR-01 split-key row. The doc comment now says what the probe does. The probe makes no notify call: the `\bnotify(` count stays at 4 and the corpus holds at 3143 present, 0 extra.
+**Applied fix:** I took the faithful path. `probeCascadeSubject` became `probeReconcileAppliedSubject(marketplaces)`. It presents a `reconcile-applied-cascade` message, asserts that kind, and composes the text with `composeReconcileAppliedBody`, which is that kind's production text body (`formatPresentationBody`). The three subject rows moved to it: the block name of a failed add, the plugin row name, and the CR-02 split-key row. The doc comment now says what the probe does. The probe makes no notify call: the `\bnotify(` count stays at 4 and the corpus holds at 3143 present, 0 extra.
 
 **Evidence:** Planted control: I temporarily replaced `notification-resolve.ts` with its pre-redaction version (`8f766751`). All three converted rows then failed for the intended reason (3 × `the presentation shows a planted credential`, `/tmp/claude-1000/rf04-wr02-control.log`). I restored the file with `git checkout --`. GREEN: 38/38.
 
@@ -91,3 +91,10 @@ The last run's `npm changed checks` hook (`check:changed`) used full scope: `npm
 _Fixed: 2026-10-04T13:35:00Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+## Re-review outcome
+
+Iteration 2 confirmed all three required fixes. One Info finding remains.
+The gap-loop IDs are now CR-02, WR-07, WR-08, and IN-10 (formerly
+CR-01, WR-01, WR-02, and IN-01) to preserve the earlier review ledger.
+The user accepted both conservative masking rules on 2026-10-06.
