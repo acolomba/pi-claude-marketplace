@@ -42,7 +42,7 @@
 // wrapper form; in-tree configs that happen to be bare-shaped continue to
 // validate via the unchanged arm.
 //
-// UKIND-01: a wrapper with a non-empty top-level `modules` array declares a
+// A wrapper with a non-empty top-level `modules` array declares a
 // hooks module. Such a wrapper may omit `hooks`, and then it parses as an
 // empty hooks set. The success arm reports the declaration as
 // `declaresModule`. The parser never resolves, reads, or imports the module.
@@ -137,7 +137,7 @@ function isPluginWrapper(v: unknown): v is { hooks: object } {
 }
 
 /**
- * UKIND-01: returns `true` when `v` is a plain non-null non-array object
+ * Returns `true` when `v` is a plain non-null non-array object
  * whose own `modules` property is an array with at least one element. The
  * elements are not validated: this only detects a hooks module.
  */
@@ -216,7 +216,7 @@ function ifPredicateMapKey(
  * supported subset and `dropped` enumerates the skipped events / groups /
  * handlers; degradable supportability failures do not fail the parse. The
  * failure arm is reserved for structural defects: invalid JSON and schema
- * validation failures. UKIND-01: `declaresModule` is `true` when the file
+ * validation failures. `declaresModule` is `true` when the file
  * declares a hooks module in a non-empty `modules` array.
  * Generic in `P` so the bridge layer's concrete `IfPredicate` discriminated
  * union flows out typed correctly.
@@ -249,7 +249,7 @@ export type HookConfigParseResult<P> =
  * consumer (resolver, info.ts projection, bridge stage-write) sees the
  * same bare-event-keys shape it already expected.
  *
- * UKIND-01: a wrapper with a non-empty `modules` array may omit `hooks`. It
+ * A wrapper with a non-empty `modules` array may omit `hooks`. It
  * then parses as an empty hooks set, and the success arm reports
  * `declaresModule: true`. The parser never reads the module.
  *
@@ -283,7 +283,7 @@ export function parseHooksConfig<P>(
     return { ok: false, reason };
   }
 
-  // HOOK-03 / LIFE-01 / UKIND-01: unwrap the upstream PLUGIN-format wrapper
+  // HOOK-03 / LIFE-01: unwrap the upstream PLUGIN-format wrapper
   // per Claude Code `plugin-dev/skills/hook-development/SKILL.md`. Bare-shape
   // inputs fall through to direct validation (backward-compat).
   const declaresModule = isModuleWrapper(parsed);

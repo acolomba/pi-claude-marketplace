@@ -4,7 +4,7 @@
 
 - More plugins that hold components Pi cannot install now show as partially available. Pass `--partial` to install the rest. (#246)
 
-  - A hooks module that `hooks.json` names in `modules` counts, and a `hooks.json` with only a module no longer makes its plugin unavailable.
+  - A hooks module that a hooks file declares in `modules` counts, and a `hooks.json` with only a module no longer makes its plugin unavailable.
   - `syntaxHighlighting` counts, and output styles and syntax highlighting under `experimental` count too.
   - A `binaries` map counts only in an official Anthropic marketplace, the only place Claude Code downloads those files.
 

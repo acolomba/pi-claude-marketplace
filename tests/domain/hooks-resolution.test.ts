@@ -115,7 +115,7 @@ test("records a supported hooks configuration and its relative path", async () =
   });
 });
 
-test("UKIND-01: records a module declared by a modules-only convention file", async () => {
+test("records a module declared by a modules-only convention file", async () => {
   // arrange
   const { resolveHooks } =
     await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
@@ -138,7 +138,7 @@ test("UKIND-01: records a module declared by a modules-only convention file", as
   });
 });
 
-test("UKIND-01: keeps command hooks supported beside a declared module", async () => {
+test("keeps command hooks supported beside a declared module", async () => {
   // arrange
   const { resolveHooks } =
     await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
@@ -380,7 +380,7 @@ test("parallel resolutions keep independent deterministic state", async () => {
   });
 });
 
-test("UKIND-01: records a module declared by a hooks file the manifest names", async () => {
+test("records a module declared by a hooks file the manifest names", async () => {
   // arrange
   const { resolveHooks } =
     await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
@@ -410,7 +410,7 @@ test("UKIND-01: records a module declared by a hooks file the manifest names", a
   assert.deepStrictEqual(files.reads, [extraPath]);
 });
 
-test("UKIND-01: adopts no command hooks from a hooks file the entry names", async () => {
+test("adopts no command hooks from a hooks file the entry names", async () => {
   // arrange
   const { resolveHooks } =
     await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
@@ -443,7 +443,7 @@ for (const { description, reference } of [
   { description: "an escaping", reference: "../outside.json" },
   { description: "an absolute", reference: "/plugins/outside.json" },
 ]) {
-  test(`UKIND-01: never reads ${description} hooks reference`, async () => {
+  test(`never reads ${description} hooks reference`, async () => {
     // arrange
     const { resolveHooks } =
       await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
@@ -463,7 +463,43 @@ for (const { description, reference } of [
   });
 }
 
-test("UKIND-01: reads the convention file once when the manifest names it", async () => {
+test("reads every file of a manifest hooks array until one declares a module", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const firstPath = path.join("/plugins/alpha", "hooks", "first.json");
+  const secondPath = path.join("/plugins/alpha", "hooks", "second.json");
+  const thirdPath = path.join("/plugins/alpha", "hooks", "third.json");
+  const files = fileTree({
+    [firstPath]: JSON.stringify({ hooks: {} }),
+    [secondPath]: JSON.stringify({ modules: [] }),
+    [thirdPath]: MODULE_HOOKS,
+  });
+
+  // act
+  const dirty = await resolveHooks(
+    {
+      pluginRoot: "/plugins/alpha",
+      entry: {},
+      manifest: { hooks: ["./hooks/first.json", "./hooks/second.json", "./hooks/third.json"] },
+      resolution,
+    },
+    files,
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, {
+    supported: [],
+    unsupported: [],
+    notes: [],
+    declaresHookModule: true,
+  });
+  assert.deepStrictEqual(files.reads, [firstPath, secondPath, thirdPath]);
+});
+
+test("reads the convention file once when the manifest names it", async () => {
   // arrange
   const { resolveHooks } =
     await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
@@ -496,7 +532,7 @@ test("UKIND-01: reads the convention file once when the manifest names it", asyn
   assert.deepStrictEqual(files.reads, [DEFAULT_HOOKS_PATH]);
 });
 
-test("UKIND-01: reads a hooks file once when the entry and the manifest both name it", async () => {
+test("reads a hooks file once when the entry and the manifest both name it", async () => {
   // arrange
   const { resolveHooks } =
     await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
@@ -532,7 +568,7 @@ for (const { description, nodes, expectedReads } of [
     expectedReads: [EXTRA_HOOKS_PATH],
   },
 ]) {
-  test(`UKIND-01: ignores ${description} hooks reference`, async () => {
+  test(`ignores ${description} hooks reference`, async () => {
     // arrange
     const { resolveHooks } =
       await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
@@ -557,7 +593,7 @@ for (const { description, nodes, expectedReads } of [
   });
 }
 
-test("UKIND-01: reads no referenced hooks file when the convention file declares a module", async () => {
+test("reads no referenced hooks file when the convention file declares a module", async () => {
   // arrange
   const { resolveHooks } =
     await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
@@ -584,7 +620,7 @@ test("UKIND-01: reads no referenced hooks file when the convention file declares
   assert.deepStrictEqual(files.reads, [DEFAULT_HOOKS_PATH]);
 });
 
-test("UKIND-01: propagates a referenced hooks file read failure unchanged", async () => {
+test("propagates a referenced hooks file read failure unchanged", async () => {
   // arrange
   const { resolveHooks } =
     await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");

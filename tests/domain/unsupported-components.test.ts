@@ -191,7 +191,7 @@ for (const { description, entry } of ignoredExperimentalCases) {
   });
 }
 
-test("UKIND-01: collectUnsupportedKinds reports mod from the declared hooks module", async () => {
+test("collectUnsupportedKinds reports mod from the declared hooks module", async () => {
   // arrange
   const { collectUnsupportedKinds } =
     await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
@@ -212,7 +212,7 @@ test("UKIND-01: collectUnsupportedKinds reports mod from the declared hooks modu
   assert.deepStrictEqual(kinds, ["mod"]);
 });
 
-test("UKIND-01: collectUnsupportedKinds ignores a plugin field named mod", async () => {
+test("collectUnsupportedKinds ignores a plugin field named mod", async () => {
   // arrange
   const { collectUnsupportedKinds } =
     await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
@@ -259,7 +259,7 @@ for (const { description, entry, manifest, expectedKinds } of [
     expectedKinds: ["syntaxHighlighting"],
   },
 ]) {
-  test(`UKIND-02: collectUnsupportedKinds reports ${description}`, async () => {
+  test(`collectUnsupportedKinds reports ${description}`, async () => {
     // arrange
     const { collectUnsupportedKinds } =
       await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
@@ -325,7 +325,7 @@ for (const { description, marketplaceName, entry, manifest, expectedKinds } of [
     expectedKinds: [],
   },
 ]) {
-  test(`UKIND-03: collectUnsupportedKinds reads ${description} as ${JSON.stringify(expectedKinds)}`, async () => {
+  test(`collectUnsupportedKinds reads ${description} as ${JSON.stringify(expectedKinds)}`, async () => {
     // arrange
     const { collectUnsupportedKinds } =
       await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");

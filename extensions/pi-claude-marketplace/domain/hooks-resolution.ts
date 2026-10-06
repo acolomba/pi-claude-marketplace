@@ -12,7 +12,7 @@ export interface HooksResolution extends Pick<ComponentPathResolution, "supporte
   hooksConfigPath?: string;
   orphanRewake?: boolean;
   droppedHooks?: DroppedHook[];
-  /** UKIND-01: set when a hooks file declares a hooks module. */
+  /** Set when a hooks file declares a hooks module. */
   declaresHookModule?: boolean;
 }
 
@@ -75,10 +75,10 @@ function hooksFieldPaths(field: unknown): readonly string[] {
 }
 
 /**
- * Reports whether one referenced hooks file declares a hooks module. Absolute,
- * escaping, and symlinked paths and paths in `probed` are never read. A
- * missing or unparsable file declares nothing, because a referenced file
- * carries no other resolver meaning.
+ * Reports whether one referenced hooks file declares a hooks module. A path
+ * that `resolveContainedComponentPath` rejects (absolute, or escaping the
+ * plugin root, symlinks included) and a path in `probed` are never read. A
+ * missing or unparsable file declares nothing.
  */
 async function referenceDeclaresModule(
   pluginRoot: string,
@@ -97,7 +97,7 @@ async function referenceDeclaresModule(
 }
 
 /**
- * UKIND-01: reads the hooks files that the entry and then the manifest
+ * Reads the hooks files that the entry and then the manifest
  * `hooks` field name, each at most once, for a hooks module. `defaultPath` is
  * never read again.
  */
@@ -158,7 +158,7 @@ function recordHooksConfig(resolution: HooksResolution, hooks: ResolvedHooksConf
 
 /**
  * Resolves convention hooks, supportability drops, orphan rewake metadata, and
- * the UKIND-01 hooks-module declaration. Only the convention file supplies
+ * the hooks-module declaration. Only the convention file supplies
  * command hooks. Hooks files that the `hooks` field names are read only for a
  * hooks module, and only when the convention file declares none.
  */

@@ -14,17 +14,17 @@ import type { StatKindReader } from "./resolver-types.ts";
  * component kinds. The last audit, on 2026-10-06, read the Claude Code 2.1.291
  * binary and https://code.claude.com/docs/en/plugins/mods/reference.
  *
- * UKIND-01: `mod` is a hooks module. A hooks file declares one with a
+ * `mod` is a hooks module. A hooks file declares one with a
  * non-empty top-level `modules` array. Hooks resolution checks
  * `hooks/hooks.json` and each hooks file that the `hooks` field names by a
  * path, and reports the result as `declaresHookModule`. No plugin field
  * selects this kind.
  *
- * UKIND-02: `syntaxHighlighting` adds highlight.js languages to the terminal
+ * `syntaxHighlighting` adds highlight.js languages to the terminal
  * UI, like `themes`. It and `outputStyles` also count when nested under
  * `experimental`, as `themes` and `monitors` do.
  *
- * UKIND-03: Claude Code downloads the files of a non-empty `binaries` map
+ * Claude Code downloads the files of a non-empty `binaries` map
  * into `bin/` only when the marketplace name, in lowercase, is in its
  * official set. So `binaries` counts only for those marketplaces, and the
  * field changes nothing for any other marketplace, as in Claude Code.
@@ -72,7 +72,7 @@ const EXPERIMENTAL_KINDS: ReadonlySet<UnsupportedComponentKind> = new Set([
 ]);
 
 /**
- * UKIND-03: the official marketplace names of Claude Code 2.1.291, copied
+ * The official marketplace names of Claude Code 2.1.291, copied
  * from the binary. Upstream lowercases a marketplace name before it checks
  * this set.
  */

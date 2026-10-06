@@ -326,7 +326,7 @@ test("HOOK-01: hooks/hooks.json present + parseable -> installable WITH hooks in
   }
 });
 
-test("UKIND-01: a modules-only hooks/hooks.json resolves partially available with contains mod", async () => {
+test("a modules-only hooks/hooks.json resolves partially available with contains mod", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -354,7 +354,7 @@ test("UKIND-01: a modules-only hooks/hooks.json resolves partially available wit
   });
 });
 
-test("UKIND-01: command hooks beside a hooks module stay supported on the partially available arm", async () => {
+test("command hooks beside a hooks module stay supported on the partially available arm", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -388,7 +388,7 @@ test("UKIND-01: command hooks beside a hooks module stay supported on the partia
   });
 });
 
-test("UKIND-01: a hooks module in a hooks file plugin.json names resolves partially available with contains mod", async () => {
+test("a hooks module in a hooks file plugin.json names resolves partially available with contains mod", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -419,7 +419,41 @@ test("UKIND-01: a hooks module in a hooks file plugin.json names resolves partia
   });
 });
 
-test("UKIND-03: a binaries map in an official marketplace resolves partially available with contains binaries", async () => {
+test("a hooks module in a hooks file the entry names resolves partially available with contains mod", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1" }),
+    },
+    [path.join(localRoot, "hooks", "extra.json")]: {
+      contents: JSON.stringify({ modules: ["./register.ts"] }),
+    },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", hooks: "./hooks/extra.json" }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["mod"],
+    notes: ["contains mod"],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
+});
+
+test("a binaries map in an official marketplace resolves partially available with contains binaries", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(
@@ -451,7 +485,7 @@ test("UKIND-03: a binaries map in an official marketplace resolves partially ava
   });
 });
 
-test("UKIND-03: a binaries map in a third-party marketplace resolves installable", async () => {
+test("a binaries map in a third-party marketplace resolves installable", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(

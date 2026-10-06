@@ -58,7 +58,7 @@ test("parseHooksConfig unwraps an empty plugin configuration", () => {
   });
 });
 
-test("UKIND-01: parseHooksConfig reads a modules-only wrapper as no hooks that declares a module", () => {
+test("parseHooksConfig reads a modules-only wrapper as no hooks that declares a module", () => {
   // arrange
   const raw = JSON.stringify({ modules: ["./register.ts"] });
 
@@ -75,7 +75,7 @@ test("UKIND-01: parseHooksConfig reads a modules-only wrapper as no hooks that d
   });
 });
 
-test("UKIND-01: parseHooksConfig keeps the command hooks beside a declared module", () => {
+test("parseHooksConfig keeps the command hooks beside a declared module", () => {
   // arrange
   const raw = JSON.stringify({
     hooks: {
@@ -130,7 +130,7 @@ test("parseHooksConfig rejects a modules value that is not an array", () => {
   });
 });
 
-test("UKIND-01: parseHooksConfig rejects a non-object hooks value beside a declared module", () => {
+test("parseHooksConfig rejects a non-object hooks value beside a declared module", () => {
   // arrange
   const raw = JSON.stringify({ hooks: [], modules: ["./register.ts"] });
 

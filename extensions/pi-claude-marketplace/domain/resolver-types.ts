@@ -151,8 +151,7 @@ export interface ResolveContext {
   readonly marketplaceRoot: string;
   /**
    * The registered name of the marketplace that lists the plugin: the
-   * `<marketplace>` in `<plugin>@<marketplace>`. Only the UKIND-03 binaries
-   * rule reads it.
+   * `<marketplace>` in `<plugin>@<marketplace>`.
    */
   readonly marketplaceName: string;
   readonly readFileText?: (path: string) => Promise<string>;
