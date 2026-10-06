@@ -1295,6 +1295,57 @@ test("derives partially available and unavailable git rows exactly", async () =>
   });
 });
 
+test("flags binaries on a fetched git row of an official marketplace", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/official";
+    const pin = "dddddddddddddddddddddddddddddddddddddddd";
+    const fixture = path.join(cwd, "fixture");
+    await writePluginTree(fixture, "fixture", "1.0.0");
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [
+        {
+          ...{ binaries: { tool: "https://example.com/tool" } },
+          name: "official",
+          source: { source: "url", url: cloneUrl, sha: pin },
+        },
+      ],
+      name: "claude-plugins-official",
+      scope: "project",
+    });
+    await saveMarketplaces(cwd, "project", [marketplace]);
+    const git = gitBoundary({ allowedRemoteUrls: [cloneUrl], fixtureSourceDir: fixture });
+    const cache = cacheBoundary(git.gitOps);
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const boundary = notificationBoundary("official binaries");
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: cache.seam,
+      credentialOps: credentials.credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      pi: boundary.pi,
+      scope: "project",
+      target: { kind: "marketplace", marketplace: "claude-plugins-official" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message: [
+          "● claude-plugins-official [project]",
+          "  ⊖ official (partially-available) {unsupported component}",
+          "",
+          "Plugin fetch: 1 success",
+        ].join("\n"),
+      },
+    ]);
+    verifyNotifications(boundary);
+  });
+});
+
 test("reports a successful seam with a still-cold cache as remote", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
@@ -1469,8 +1520,8 @@ test("renders fresh status after materialization through the required capability
           return presence;
         };
       },
-      async probeManifestEntry(entry, marketplaceRoot, statusLocations) {
-        const classification = await probeManifestEntry(entry, marketplaceRoot, statusLocations);
+      async probeManifestEntry(entry, marketplaceContext, statusLocations) {
+        const classification = await probeManifestEntry(entry, marketplaceContext, statusLocations);
         sequence.push(`manifest:${classification}`);
         return classification;
       },

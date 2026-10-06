@@ -560,7 +560,17 @@ async function addUnsupportedKindNotes(
   partial: PartialResolution,
 ): Promise<boolean> {
   let dirty = false;
-  for (const kind of await collectUnsupportedKinds(entry, manifest, pluginRoot, statKindOf(ctx))) {
+  const kinds = await collectUnsupportedKinds(
+    {
+      entry,
+      manifest,
+      pluginRoot,
+      declaresHookModule: partial.declaresHookModule === true,
+      marketplaceName: ctx.marketplaceName,
+    },
+    statKindOf(ctx),
+  );
+  for (const kind of kinds) {
     partial.notes.push(`contains ${kind}`);
     partial.unsupported.push(kind);
     dirty = true;
@@ -588,6 +598,7 @@ export async function resolveStrict(
 
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
   // Claude Code default locations (.lsp.json, monitors/monitors.json, etc.).
+  // `mod` comes from the hooks stage's `declaresHookModule` fact.
   // `hooks` is not in UNSUPPORTED_COMPONENT_KINDS -- HOOK-01 admission is
   // owned by step 8b. D-64-07: this signal does NOT feed `dirty` (it is
   // not a structural defect); it is read separately via `partial.unsupported`
@@ -628,10 +639,11 @@ async function runStructuralStages(args: {
     ),
     // Step 8b (HOOK-01 / D-57-04): probe `<pluginRoot>/hooks/hooks.json` and
     // either add `hooks` to supported (parse OK) or flip installable=false with
-    // the parse-failure detail. Mode-agnostic: entry-vs-manifest hooks-FIELD
-    // conflict semantics are deferred, so the convention file is the sole gate.
+    // the parse-failure detail. The convention file is the only source of
+    // command hooks. Hooks files that the entry or manifest `hooks`
+    // field names are read only for a hooks module.
     await resolveHooks(
-      { pluginRoot, resolution: partial },
+      { pluginRoot, entry, manifest, resolution: partial },
       { statKind: statKindOf(ctx), readFileText: readFileTextOf(ctx) },
     ),
   );
