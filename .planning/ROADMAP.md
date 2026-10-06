@@ -209,7 +209,29 @@ Plans:
 5. Every test fake of the notification or extension context carries an explicit `mode` that the type requires; no `as unknown as ExtensionContext` cast hides a missing one. An in-process capture helper records every `appendEntry` payload and fails the test on a schema-invalid payload.
 6. Carried from Phase 3 research: the JSON strategy keeps the text strategy's empty no-ops (empty diagnostic lines, empty rewake summary), and `bridges/hooks/settle.ts`'s Stop-cap notify gains the NFR-2 try/catch once the sink can throw.
 
-**Plans:** TBD
+**Plans:** 7 plans
+
+Plans:
+**Wave 1**
+- [ ] 05-01-PLAN.md — Registered-list tracer, required mode/sink contracts, and lint ownership
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 05-02-PLAN.md — Usage/help transport through every parser and command handler
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 05-03-PLAN.md — Diagnostic producers and exact empty-output behavior
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 05-04-PLAN.md — Device-flow prompts through all authentication carriers
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 05-05-PLAN.md — Guarded loading and session setup with independent recovery
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 05-06-PLAN.md — Async-rewake and Stop-cap failure containment
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 05-07-PLAN.md — Full catalog transport coverage and final combined-tree evidence
 
 ### Phase 6: Command-Run Contract
 

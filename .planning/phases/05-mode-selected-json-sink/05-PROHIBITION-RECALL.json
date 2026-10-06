@@ -1,0 +1,26 @@
+{
+  "spec_absent": true,
+  "prohib_absent": true,
+  "items": [
+    {
+      "requirement_id": "JOUT-01",
+      "category": "product-intent",
+      "status": "unresolved",
+      "verification": null,
+      "resolution": null,
+      "reason": null,
+      "flagged_assumption": "P-05-01: descriptorless autonomous recall; flagged and unverified pending downstream assessment.",
+      "statement": "Reporting plugin output must not turn the report into a model instruction or trigger a model turn solely to deliver that report; existing independent hook completion injection retains its contract."
+    },
+    {
+      "requirement_id": "JOUT-05",
+      "category": "transparency",
+      "status": "unresolved",
+      "verification": null,
+      "resolution": null,
+      "reason": null,
+      "flagged_assumption": "P-05-02: descriptorless autonomous recall; flagged and unverified pending downstream assessment.",
+      "statement": "Containing Stop-cap output failure must not deliberately conceal the cap decision from users by weakening the warning's meaning or severity; preserve the existing warning facts in text and JSON."
+    }
+  ]
+}

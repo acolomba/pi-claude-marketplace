@@ -34,16 +34,28 @@ created: "2026-10-06"
 
 ## Per-Task Verification Map
 
-The planner must replace provisional slice IDs with actual task IDs and
-threat references before the independent plan check.
+Task IDs are phase-qualified plan.task names. Each plan supplies the complete command and its observable fails_when predicate. Owner direct-coverage commands are required for all changed production pairs; the full gate also covers them.
 
-| Slice | Requirements | Automated verification | Status |
-| --- | --- | --- | --- |
-| Structured tracer | MODE-01, MODE-02, JOUT-01, TENB-01, TENB-02 | Dispatch, run, validator, register, and capture owner tests; typecheck | pending |
-| Raw command output | JOUT-01, TENB-02 | Router and raw-helper callers' owner tests | pending |
-| Auth and diagnostics | JOUT-01, TENB-01 | Auth-host, auth carriers, import/reconcile diagnostic owner tests | pending |
-| Lifecycle and hooks | MODE-02, JOUT-05 | Index, register, hook event-router, registry, and settle owner tests | pending |
-| Full transport proof | All six requirements | Full check; corpus; catalog; transient lint offender and removal | pending |
+| Task ID | Requirements | Threat Ref | Automated verification | Fails when | Status |
+|---|---|---|---|---|---|
+| 05-01.1 | MODE-01, MODE-02, JOUT-01, TENB-01, TENB-02 | T-05-01, 02, 04 | node --test tests/shared/errors.test.ts tests/platform/pi-api.test.ts tests/shared/notification-run.test.ts tests/shared/notification-dispatch.test.ts tests/edge/register.test.ts tests/edge/handlers/tools.test.ts tests/architecture/presentation-sink.test.ts | Root mutation, live selection, full payload, retained capture failure, or fake contract assertion fails | pending execution |
+| 05-01.2 | JOUT-01 | T-05-03 | 05-01.2 exact ESLint.lintText planting command; npm run lint | Any call form lacks JOUT-01 report; NFR-5 control fails; clean source reports ownership violation | pending execution |
+| 05-02.1 | JOUT-01, MODE-01, TENB-02 | T-05-05 | node --test tests/edge/router.test.ts tests/edge/handlers/shared.test.ts tests/edge/handlers/plugin/*.test.ts tests/edge/handlers/marketplace/*.test.ts tests/shared/notification-dispatch.test.ts | Any usage branch loses its run, emits text in machine mode, or changes an existing assertion | pending execution |
+| 05-02.2 | MODE-01, JOUT-01, TENB-02 | T-05-06 | node --test tests/shared/notification-dispatch.test.ts tests/edge/router.test.ts | Live mode, duplicate count/order, or snapshot-count assertion fails | pending execution |
+| 05-03.1 | JOUT-01, MODE-01, TENB-01 | T-05-07 | node --test tests/orchestrators/import/execute.test.ts tests/orchestrators/plugin/shared.test.ts tests/orchestrators/plugin/install-flow.test.ts tests/orchestrators/plugin/reinstall-flow.test.ts tests/orchestrators/plugin/update-flow.test.ts tests/orchestrators/reconcile/apply.test.ts tests/shared/notification-dispatch.test.ts | A diagnostic producer misses capture, bypasses redaction, or changes completed state | pending execution |
+| 05-03.2 | JOUT-01, TENB-01 | T-05-08 | node --test tests/shared/notification-dispatch.test.ts tests/orchestrators/reconcile/apply.test.ts | Empty/no-op, duplicate ordering, or retained invalid-middle assertion fails | pending execution |
+| 05-04.1 | JOUT-01, MODE-01, TENB-01 | T-05-09, 10 | node --test tests/orchestrators/auth-host.test.ts tests/orchestrators/plugin/install-clone-probe.test.ts tests/orchestrators/plugin/reinstall-clone-probe.test.ts tests/orchestrators/plugin/dependency-tag-probe.test.ts tests/orchestrators/plugin/update-preflight.test.ts tests/orchestrators/plugin/update-constraint-gate.test.ts tests/integration/auth-e2e.test.ts | Any auth carrier loses parent run or stored-only paths acquire a prompt | pending execution |
+| 05-04.2 | JOUT-01, MODE-01, TENB-01 | T-05-11 | node --test tests/orchestrators/auth-host.test.ts tests/shared/notification-dispatch.test.ts tests/architecture/no-credential-leak.test.ts tests/architecture/catalog-uat/catalog-wire.test.ts | Delayed mode read, exact two-field prompt, or whole-payload secret protection fails | pending execution |
+| 05-05.1 | MODE-02, JOUT-01, JOUT-05, TENB-01 | T-05-12, 13, 15 | node --test tests/index.test.ts tests/edge/register.test.ts tests/shared/notification-dispatch.test.ts tests/shared/debug-log.test.ts | Unknown-mode writes occur, stale callback rejects, or independent discovery/PATH work disappears | pending execution |
+| 05-05.2 | MODE-02, JOUT-05 | T-05-14 | node --test tests/bridges/hooks/event-router.test.ts tests/index.test.ts | Factory creates fresh directories, unsupported session dispatches, or cleanup is skipped | pending execution |
+| 05-06.1 | JOUT-01, JOUT-05, MODE-02, TENB-01 | T-05-16, 17 | node --test tests/bridges/hooks/async-rewake/registry.test.ts tests/shared/notification-dispatch.test.ts tests/architecture/hooks-async-rewake.test.ts | Stale callback escapes, terminal cleanup fails, old generation emits, or independent valid exit-2 handling stops | pending execution |
+| 05-06.2 | JOUT-01, JOUT-05, MODE-02, TENB-01 | T-05-18 | node --test tests/bridges/hooks/settle.test.ts tests/shared/notification-dispatch.test.ts tests/architecture/hooks-cap-notify.test.ts | Failure escapes, recorded cap resets/repeats, or existing reentry behavior changes | pending execution |
+| 05-07.1 | All six | T-05-19 | node --test tests/architecture/catalog-uat/catalog-wire.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts tests/architecture/notify-producer-wire-coverage.test.ts tests/architecture/no-credential-leak.test.ts | Tuple set is not bijective, raw kind missing, schema/UI proof fails, or pins drift | pending execution |
+| 05-07.2 | All six | T-05-20 | npm run check; strict corpus wrapper from PLAN; git diff --exit-code 26cb0056 -- docs/output-catalog.md; schema diff; repeat 05-01.2 planting | Any gate fails, corpus differs from exactly 3149/0, or evidence does not match the current combined inputs | pending execution |
+
+T-05-SC is reserved in every plan: no installs are planned. For all seven waves, npm run check is the combined-tree gate. A command exit, timeout, missing expected assertion/report, or altered corpus/catalog is a failure, never a partial passing verdict. The strict corpus wrapper in each PLAN checks both exit status and the exact 3149 present/0 extra result; the tool's exit alone is insufficient.
+
+A-05-01 and A-05-02 remain flagged unclassified assumptions. P-05-01 and P-05-02 remain descriptorless/unverified prohibitions. Their current statuses are recorded in 05-PROBES.md; passing tests do not automatically resolve them.
 
 Tests must prove live mode selection on the same run, exclusive JSON/RPC
 entry delivery, unsupported plain-string rejection before mutation, empty
@@ -67,7 +79,7 @@ the workflow obtains the required assessment; do not mark it passed here.
 
 ## Validation Sign-Off
 
-- [ ] Every final task has an automated check and requirement mapping.
+- [x] Every final task has an automated check, observable failure, requirement, and threat mapping.
 - [ ] New production modules have paired owner tests and direct coverage.
 - [ ] Each wave has a combined-tree full check.
 - [ ] Corpus and catalog remain unchanged.
@@ -75,4 +87,4 @@ the workflow obtains the required assessment; do not mark it passed here.
 - [ ] No watch commands or unverified persistent success markers.
 - [ ] Execution evidence supports `nyquist_compliant: true`.
 
-**Approval:** Pending execution and validation audit.
+**Approval:** Planning map complete; execution and validation audit pending. Frontmatter remains false until actual evidence satisfies the gates.

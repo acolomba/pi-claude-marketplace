@@ -3,18 +3,17 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 5
 current_phase_name: Mode-Selected JSON Sink
-status: planning
-stopped_at: Phase 4 complete, ready to plan Phase 5
-last_updated: "2026-10-06T15:09:13.545Z"
+status: executing
+stopped_at: Phase 5 plans verified, ready to execute 05-01
+last_updated: "2026-10-06T17:41:56.861Z"
 last_activity: 2026-10-06
-last_activity_desc: Phase 4 complete, transitioned to Phase 5
-state_head: fef74b4ff9ddfdb889f441fe9d087109dedc7472
+last_activity_desc: Phase 5 planning complete, seven plans independently verified
+state_head: fe3e0a399be7a5f29217fae9e737034831518eeb
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 28
+  total_plans: 35
   completed_plans: 28
-  percent: 57
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,12 +30,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 5 — Mode-Selected JSON Sink
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-10-06 — Phase 4 complete, transitioned to Phase 5
+Phase: 5 (Mode-Selected JSON Sink) — READY TO EXECUTE
+Plan: 0 of 7 complete
+Status: Ready to execute
+Last activity: 2026-10-06 — Phase 5 planning complete; seven plans independently verified
 
-Progress: [██████░░░░] 57% (4 of 7 phases fully verified; 28 of 28 plans complete)
+Progress: [██████░░░░] 57% (4 of 7 phases fully verified; 28 of 35 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -228,7 +227,7 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Gather Phase 5 context, then plan and execute the mode-selected JSON sink.
+- Execute Phase 5's seven verified plans, starting with the registered-list tracer.
 
 ## Performance Metrics
 
