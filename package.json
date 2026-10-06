@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "acorn": "^8.16.0",
-    "isomorphic-git": "^1.41.8",
+    "isomorphic-git": "^1.42.3",
     "proper-lockfile": "^4.1.2",
     "semver": "^7.8.5",
     "write-file-atomic": "^8.0.0"
