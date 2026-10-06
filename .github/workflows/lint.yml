@@ -70,7 +70,7 @@ jobs:
 
       - name: Run fallow audit
         id: fallow
-        uses: fallow-rs/fallow@bd8fca5af5df4ccfd94c7a835d17bd93c31a7cef # v3.28.0
+        uses: fallow-rs/fallow@2b0f0b7283637bd408ae54942452b7468cc68f79 # v3.30.0
         with:
           command: audit
           format: github-annotations

@@ -23,14 +23,14 @@
     "@types/write-file-atomic": "^4.0.3",
     "eslint": "^10.11.0",
     "eslint-plugin-import-x": "^4.16.2",
-    "eslint-plugin-sonarjs": "^4.0.3",
+    "eslint-plugin-sonarjs": "^4.2.2",
     "fallow": "^3.27.0",
     "globals": "^17.6.0",
-    "prettier": "^3.8.3",
+    "prettier": "^3.9.9",
     "strong-mock": "^9.2.2",
     "typebox": "^1.3.34",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.70.1"
+    "typescript-eslint": "^8.71.0"
   },
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
