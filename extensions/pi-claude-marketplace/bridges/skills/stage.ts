@@ -182,17 +182,21 @@ async function rewriteSupportingMarkdown(
 ): Promise<void> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const file = path.join(directory, entry.name);
+    // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
     const fileStat = await lstat(file);
     if (fileStat.isSymbolicLink()) {
       continue;
     }
 
     if (fileStat.isDirectory()) {
+      // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
       await rewriteSupportingMarkdown(file, pluginName, names);
     } else if (fileStat.isFile() && entry.name.endsWith(".md")) {
+      // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
       const content = await readFile(file, "utf8");
       const rewritten = rewriteMarkdownReferences(content, pluginName, names);
       if (rewritten !== content) {
+        // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
         await writeFile(file, rewritten, "utf8");
       }
     }
@@ -285,9 +289,11 @@ export async function prepareStageSkills(
       assertSafeName(skill.generatedName, "generated skill name");
 
       const stagedDir = path.join(stagingRoot, skill.generatedName);
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await assertPathInside(stagingRoot, stagedDir, "staged skill destination");
 
       const targetDir = path.join(locations.skillsTargetDir, skill.generatedName);
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await assertPathInside(locations.skillsTargetDir, targetDir, "skill target destination");
 
       // SUB-01: ${CLAUDE_SKILL_DIR} resolves to the skill's installed dir --
@@ -305,6 +311,7 @@ export async function prepareStageSkills(
       // symlink inside the source tree is preserved as a symlink rather than
       // resolved (which could escape the source tree). errorOnExist=true is a
       // belt-and-braces guard; randomUUID ensures the staging dir is fresh.
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await cp(skill.skillDir, stagedDir, {
         recursive: true,
         dereference: false,
@@ -321,6 +328,7 @@ export async function prepareStageSkills(
       // block in the body and drops its `description`. This same `content` is
       // what `writeFile` emits below, so one strip keeps the parse, the
       // rewrite, the augment and the staged bytes in agreement.
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       let content = stripBom(await readFile(skillMdPath, "utf8"));
 
       // PARSE-01: parse the SOURCE frontmatter BEFORE any rewrite/substitution
@@ -371,7 +379,9 @@ export async function prepareStageSkills(
       // backstop validates the final bytes.
       content = rewriteMarkdownReferences(content, pluginName, referenceNames);
       content = substituteClaudeVars(content, skillVars);
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await writeFile(skillMdPath, content, "utf8");
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await rewriteSupportingMarkdown(stagedDir, pluginName, referenceNames);
 
       // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
@@ -433,8 +443,10 @@ export async function commitPreparedSkills(
   for (const name of prepared._previousNames) {
     assertSafeName(name, "previous skill name");
     const dir = path.join(prepared.locations.skillsTargetDir, name);
+    // eslint-disable-next-line no-await-in-loop -- the first containment or removal failure stops the rest
     await assertPathInside(prepared.locations.skillsTargetDir, dir, "previous skill dir");
     try {
+      // eslint-disable-next-line no-await-in-loop -- the first containment or removal failure stops the rest
       await rm(dir, { recursive: true, force: true });
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -459,8 +471,10 @@ export async function commitPreparedSkills(
     // PI-6 cross-plugin conflict guard already ran before staging, so any
     // pre-existing directory here is an orphan safe to discard.
     try {
+      // eslint-disable-next-line no-await-in-loop -- the first failed pair stops the remaining renames
       const targetStat = await stat(pair.to);
       if (targetStat.isDirectory()) {
+        // eslint-disable-next-line no-await-in-loop -- the first failed pair stops the remaining renames
         await rm(pair.to, { recursive: true, force: true });
       }
     } catch (e) {
@@ -469,6 +483,7 @@ export async function commitPreparedSkills(
       }
     }
 
+    // eslint-disable-next-line no-await-in-loop -- the first failed pair stops the remaining renames
     await rename(pair.from, pair.to);
   }
 
@@ -517,13 +532,17 @@ export async function replacePreparedSkills(
     for (const name of prepared._previousNames) {
       assertSafeName(name, "previous skill name");
       const target = path.join(prepared.locations.skillsTargetDir, name);
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       await assertPathInside(prepared.locations.skillsTargetDir, target, "previous skill dir");
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       if (!(await pathExists(target))) {
         continue;
       }
 
       const backup = path.join(backupRoot, name);
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       await assertPathInside(backupRoot, backup, "skills backup dir");
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       await rename(target, backup);
       backups.push({ name, from: target, to: backup });
     }
@@ -540,11 +559,14 @@ export async function replacePreparedSkills(
     for (const pair of prepared._renamePairs) {
       const targetName = path.basename(pair.to);
       if (ownedNames.has(targetName)) {
+        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
         await removeOrphanIfPresent(pair.to, "tree");
+        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
       } else if (await pathExists(pair.to)) {
         throw new Error(`Cannot replace skill target with non-previous content at ${pair.to}`);
       }
 
+      // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
       await rename(pair.from, pair.to);
       renamed.push({ to: pair.to });
     }

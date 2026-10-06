@@ -1,6 +1,6 @@
 // persistence/migrate-config.ts
 //
-// MIG-01 / MIG-02 / D-04 / D-11 / D-13 / SPLIT-01 / SPLIT-02 / NFR-1 / NFR-10
+// MIG-01 / MIG-02 / D-04 / D-v1.12-51-11 / D-13 / SPLIT-01 / SPLIT-02 / NFR-1 / NFR-10
 //
 // Pure projection + thin ENOENT-gated orchestrator for first-run migration
 // from `state.json` to `claude-plugins.json`. Load-bearing contracts:
@@ -106,7 +106,7 @@ export type MigrateFirstRunResult =
  * `=== true` or `=== false` reaches the projection (defense-in-depth: any
  * forward-tampered non-boolean is silently dropped).
  *
- * Return shape includes `schemaVersion: 1` per D-11 (self-documenting).
+ * Return shape includes `schemaVersion: 1` per D-v1.12-51-11 (self-documenting).
  */
 export function buildConfigFromState(state: ExtensionState): ScopeConfig & {
   readonly schemaVersion: 1;

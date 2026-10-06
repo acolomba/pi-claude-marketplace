@@ -1,6 +1,10 @@
+---
+last_mapped_commit: 5960d1c02ed242faa6accd4c1ff5da8c84f2accd
+last_mapped_at: 2026-10-05
+---
 # External Integrations
 
-**Analysis Date:** 2026-08-18
+**Analysis Date:** 2026-10-05
 
 ## APIs & External Services
 
@@ -11,7 +15,7 @@
   - Both `clientId` values are public OAuth/Application client IDs (Device Flow has no client_secret, so committing them as literals is safe per RFC 8628 §3.1, documented as D-32-03)
 - Client: `isomorphic-git` (`extensions/pi-claude-marketplace/platform/git.ts`) performs clone/fetch/checkout over `isomorphic-git/http/node` as the HTTP transport -- no shell-out to a `git` binary for these operations
 - Auth: `extensions/pi-claude-marketplace/platform/git-credential.ts` additionally shells out to the OS `git credential` helper chain (osxkeychain, manager-core, libsecret) to reuse locally cached credentials; this is one of exactly three files in the extension tree permitted to import `node:child_process` (enforced by `tests/architecture/no-shell-out.test.ts`'s `ALLOWED_CHILD_PROCESS_FILES` whitelist and its "exactly three files" assertion). The other two are `extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts` (sync hook-command execution, EXEC-01..04) and `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts` (fire-and-forget async hook spawns with PID-table persistence, EXEC-05/HOOK-06)
-- Network policy: git-source `marketplace add`/`update` require network; `install`/`update`/`reinstall` of git-source plugins require network only on cache miss (warm sha-pinned cache stays offline). `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations never touch the network. An architectural test (`tests/architecture/no-orchestrator-network.test.ts`) greps `orchestrators/plugin/install.ts`, `list.ts`, and `uninstall.ts` for forbidden git-surface imports/fields to enforce this at the source level
+- Network policy: git-source `marketplace add`/`update` require network; `install`/`update`/`reinstall` of git-source plugins require network only on cache miss (warm sha-pinned cache stays offline). `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations never touch the network. ESLint BLOCK F in `eslint.config.js` enforces this at the source level: no `orchestrators/` or `domain/` module outside `NETWORK_SEAMS` (a default-deny list of the 17 modules that must name the git surface) may import `platform/git` or name `gitOps`, `DEFAULT_GIT_OPS`, or `refreshGitHubClone`, so the list, info, uninstall, and `marketplace remove` owners are all gated
 
 ## Data Storage
 
@@ -48,9 +52,9 @@
 - npm registry (`https://registry.npmjs.org`) -- package published as `pi-claude-marketplace`
 
 **CI Pipeline:**
-- GitHub Actions, four workflow files (`ci.yml`, `lint.yml`, `sonarcloud.yml`, `e2e-nightly.yml`) plus `publish.yml` -- see STACK.md "CI Workflows" for the full breakdown
+- GitHub Actions, five workflow files (`ci.yml`, `lint.yml`, `sonarcloud.yml`, `e2e-nightly.yml`, `publish.yml`) -- see STACK.md "CI Workflows" for the full breakdown
 - SonarCloud (`SonarSource/sonarqube-scan-action@v8`) -- static analysis + coverage gate, project key `acolomba_pi-claude-marketplace`, organization `acolomba`; secrets (`SONAR_TOKEN`, `GITHUB_TOKEN`) unavailable to Dependabot and fork-originated PRs, so `sonarcloud.yml` skips those
-- `fallow-rs/fallow@v3` GitHub Action (`lint.yml`'s `fallow-audit` job) -- runs `command: audit`, `format: github-annotations`, gating PRs on newly-introduced fallow findings only (distinct from the full local `npm run fallow` gate)
+- `fallow-rs/fallow@v3` GitHub Action (`lint.yml`'s `fallow-audit` job) -- runs `command: audit`, `format: github-annotations`, gating PRs on newly-introduced fallow findings only and failing on a `warn` verdict or degraded analysis (distinct from the full local `npm run fallow` gate)
 
 ## Environment Configuration
 
@@ -71,4 +75,4 @@
 
 ---
 
-*Integration audit: 2026-08-18*
+*Integration audit: 2026-10-05*

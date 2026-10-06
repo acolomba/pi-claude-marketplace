@@ -380,12 +380,10 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(firstAuthentication, {
       ok: true,
       cred: { username: "x-access-token", password: "github-secret-1" },
-      authAttempted: true,
     });
     assert.deepStrictEqual(secondAuthentication, {
       ok: true,
       cred: { username: "x-access-token", password: "github-secret-2" },
-      authAttempted: true,
     });
     assert.deepStrictEqual(credentials.storedCredential("github.com"), {
       username: "x-access-token",
@@ -467,7 +465,6 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(authentication, {
       ok: false,
       reason: "Device Flow initialization failed: provider unavailable",
-      authAttempted: true,
     });
     assert.deepStrictEqual(authMemo, new Map([["github.com", authentication]]));
     assert.deepStrictEqual(deviceFlow.calls, {
@@ -535,7 +532,6 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(firstAuthentication, {
       ok: true,
       cred: { username: "x-access-token", password: "memo-secret" },
-      authAttempted: true,
     });
     assert.strictEqual(secondAuthentication, firstAuthentication);
     assert.deepStrictEqual(authMemo, new Map([["github.com", firstAuthentication]]));
@@ -644,12 +640,10 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(githubAuthentication, {
       ok: true,
       cred: { username: "x-access-token", password: "github-secret" },
-      authAttempted: true,
     });
     assert.deepStrictEqual(gitlabAuthentication, {
       ok: true,
       cred: { username: "oauth2", password: "gitlab-secret" },
-      authAttempted: true,
     });
     assert.strictEqual(repeatedGithubAuthentication, githubAuthentication);
     assert.strictEqual(repeatedGitlabAuthentication, gitlabAuthentication);
@@ -780,7 +774,6 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(authentication, {
       ok: true,
       cred: { username: "x-access-token", password: "default-secret" },
-      authAttempted: true,
     });
     assert.deepStrictEqual(authMemo, new Map([["github.com", authentication]]));
     assert.deepStrictEqual(credentials.storedCredential("github.com"), {
@@ -902,7 +895,6 @@ describe("buildCloneAuth", () => {
     assert.deepStrictEqual(authentication, {
       ok: true,
       cred: { username: "x-access-token", password: "clone-secret" },
-      authAttempted: true,
     });
     assert.deepStrictEqual(authMemo, new Map([["github.com", authentication]]));
     assert.deepStrictEqual(credentials.storedCredential("github.com"), {
@@ -1000,7 +992,6 @@ describe("buildCloneAuth", () => {
     assert.deepStrictEqual(authentication, {
       ok: false,
       reason: "Device Flow initialization failed: provider unavailable",
-      authAttempted: true,
     });
     assert.deepStrictEqual(deviceFlow.calls, {
       requestCode: [

@@ -23,6 +23,7 @@ export async function aggregateDiscoveredResources(
   const failures: ResourcesDiscoverFailure[] = [];
 
   for (const locations of [userLocations, projectLocations]) {
+    // eslint-disable-next-line no-await-in-loop -- two scopes, one skills-dir read each
     await collectForKind(
       locations,
       "skills",
@@ -31,6 +32,7 @@ export async function aggregateDiscoveredResources(
       skillPaths,
       failures,
     );
+    // eslint-disable-next-line no-await-in-loop -- two scopes, one prompts-dir read each
     await collectForKind(
       locations,
       "prompts",
@@ -81,11 +83,13 @@ async function readSkillPaths(skillsDir: string): Promise<readonly string[]> {
     }
 
     const skillDir = path.join(skillsDir, entry.name);
+    // eslint-disable-next-line no-await-in-loop -- bounded by the installed skill dirs, one lstat and readdir each
     const stat = await lstat(skillDir);
     if (stat.isSymbolicLink() || !stat.isDirectory()) {
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- bounded by the installed skill dirs, one lstat and readdir each
     const skillFile = (await readSortedDir(skillDir)).find((skillEntry) => {
       return skillEntry.name === "SKILL.md";
     });
@@ -107,6 +111,7 @@ async function readPromptPaths(promptsDir: string): Promise<readonly string[]> {
     }
 
     const promptFile = path.join(promptsDir, entry.name);
+    // eslint-disable-next-line no-await-in-loop -- bounded by the installed prompt files, one lstat each
     const stat = await lstat(promptFile);
     if (!stat.isSymbolicLink() && stat.isFile()) {
       paths.push(promptFile);

@@ -18,7 +18,7 @@
 // to their respective orchestrators in this plan precisely to keep the tool
 // execute bodies on the right side of the import boundary.
 //
-// BLOCK A: the tools never notify. LLM tools return `AgentToolResult` -- the
+// IL-2: the tools never notify. LLM tools return `AgentToolResult` -- the
 // agent surfaces results via its own UI channel, not the slash-command notify
 // channel. Each tool opens one notification run per invocation on its
 // non-empty path, so the details equal what the matching slash command

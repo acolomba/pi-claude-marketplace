@@ -10,7 +10,6 @@
   "health": {
     "maxCyclomatic": 20,
     "maxCognitive": 15,
-    "maxUnitSize": 60,
     "maxCrap": 0
   },
   "boundaries": {

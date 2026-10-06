@@ -54,7 +54,6 @@ describe("buildAuthCallbacks", () => {
       return {
         ok: true,
         cred: { username: "x-access-token", password: "token" },
-        authAttempted: true,
       } satisfies AuthAttemptResult;
     };
 
@@ -135,7 +134,7 @@ describe("buildAuthCallbacks", () => {
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const onAuthRequired: OnAuthRequiredFn = async () => {
         await Promise.resolve();
-        return { ok: false, reason, authAttempted: true } satisfies AuthAttemptResult;
+        return { ok: false, reason } satisfies AuthAttemptResult;
       };
 
       const callbacks = buildAuthCallbacks({
@@ -412,7 +411,7 @@ describe("buildAuthCallbacks", () => {
       kind: "device-flow",
       onAuthRequired: async () => {
         await Promise.resolve();
-        return { ok: true, cred: credential, authAttempted: true };
+        return { ok: true, cred: credential };
       },
     });
     await callbacks.onAuth(REMOTE_URL);

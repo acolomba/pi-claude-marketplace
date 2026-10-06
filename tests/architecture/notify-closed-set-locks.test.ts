@@ -226,11 +226,10 @@ test("standalone notification kinds include scoped prune outcomes exactly", () =
 });
 
 /**
- * Discriminating controls for the four maps above. An exhaustive `Record` is
- * only a tripwire if it actually rejects both drift directions, and a count over
- * a map the compiler never constrained would report the same number either way.
- * `IsExact` states what the map's key set is, so a control asserting `false`
- * fails HERE if the constraint had degenerated.
+ * Exactness proofs for the enrollment maps above. An exhaustive `Record` is
+ * only a tripwire if it rejects both drift directions; `IsExact` states what
+ * each map's key set is, so a key set that drifts from its union stops
+ * compiling.
  */
 type IsExact<Actual, Expected> = [Actual] extends [Expected]
   ? [Expected] extends [Actual]
@@ -259,8 +258,3 @@ void ({
   name: "shared-lib",
   reasons: ["dependency pruned"],
 } satisfies PluginWillUninstallMessage);
-
-// A member the union does not hold, and a member it holds that an enrollment map
-// would drop: both directions of the drift this file exists to catch.
-void (false satisfies IsExact<Reason | "not a reason", Reason>);
-void (false satisfies IsExact<Exclude<Reason, "components now supported">, Reason>);

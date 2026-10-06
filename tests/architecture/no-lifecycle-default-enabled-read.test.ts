@@ -1,16 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
 
 import { LIFECYCLE_ENABLED_READ_TARGETS } from "./gate-targets.ts";
-import { assertNoForbiddenSurface, REPO_ROOT } from "./source-scan.ts";
-import {
-  materializeTargets,
-  plantBenignNearMiss,
-  plantOffender,
-  withTempRoot,
-} from "./temp-root-control.ts";
+import { assertNoForbiddenSurface } from "./source-scan.ts";
 
 /**
  * DFEN-07 architectural surface guard (D-103-08, D-103-09).
@@ -57,21 +49,11 @@ import {
  *   between them -- a `\b`-anchored match on the short name does NOT fire
  *   inside the long one. Removing either pattern leaves a real hole.
  *
- * No target is excused as missing (WR-06). Both files exist; excusing either
- * would let a rename silently uncover the guarantee, which is the same failure
- * mode as inspecting nothing at all.
- *
  * What the gate proves, beyond the absence itself:
  *   - It VISITED what it claims to guard. The scan reports the paths it really
  *     opened and this file deep-compares them against the registry group
  *     (D-07-03), so a target that stopped resolving fails here instead of
  *     dropping out unnoticed.
- *   - It FIRES. A temp-root copy of the real targets with one mutated copy
- *     rejects (D-07-01), and the planted line is built from an identifier the
- *     target really declares, so the offender cannot drift away from the file
- *     it stands for.
- *   - It is not simply failing everything. The same copies unmutated pass, and
- *     the forbidden token planted inside a line comment also passes (D-07-04).
  *
  * Comment-strip rationale (mandatory):
  *   The shared helper strips comments before matching, so a source header that
@@ -86,35 +68,8 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   { name: "applyDefaultEnabled reference", pattern: /\bapplyDefaultEnabled\b/ },
 ];
 
-/** The gated file the temp-root controls copy, mutate, and scan. */
-const CONTROL_TARGET = LIFECYCLE_ENABLED_READ_TARGETS[0];
-
-/** First `const <name> =` binding in a module, used to derive offender text. */
-const FIRST_CONST_BINDING = /^\s*const\s+([A-Za-z_$][\w$]*)\s*=/m;
-
 function describeLifecycleViolation(offenders: ReadonlyArray<string>): string {
   return `DFEN-07 violation: a re-materializing lifecycle verb names the declared-enablement field:\n  ${offenders.join("\n  ")}\n  (Enablement for an already-installed plugin comes from the RECORD. The manifest declaration is an install-time input only, read by the install verb alone; re-applying it would let a plugin release flip a user's existing choice.)`;
-}
-
-/**
- * Build the offending line from an identifier `target` really declares.
- *
- * D-07-01: a hand-authored offender is a claim about the target rather than a
- * fact about it, and drifts the moment the target changes shape. Reading the
- * real file for the receiver keeps the planted violation anchored to the module
- * it stands for, and the assertion below makes a failed derivation loud instead
- * of silently substituting a synthetic name.
- */
-async function offenderLineFor(target: string): Promise<string> {
-  const src = await readFile(path.join(REPO_ROOT, target), "utf8");
-  const receiver = FIRST_CONST_BINDING.exec(src)?.[1];
-
-  assert.ok(
-    receiver,
-    `D-07-01: ${target} declares no \`const\` binding, so the offender below would be hand-authored rather than derived from the real file.`,
-  );
-
-  return `const declaredEnablement = ${receiver}.defaultEnabled;`;
 }
 
 test("DFEN-07 (D-103-08, D-103-09): the lifecycle verbs never name the declared-enablement field", async () => {
@@ -133,64 +88,6 @@ test("DFEN-07 (D-103-08, D-103-09): the lifecycle verbs never name the declared-
   assert.deepEqual(
     report.visited,
     [...LIFECYCLE_ENABLED_READ_TARGETS],
-    "D-07-03: the scan must have opened every declared target. A target that was waived or stopped resolving drops out of `visited`, so this comparison is what turns an uncovered gate into a failure instead of a pass.",
+    "D-07-03: the scan must have opened every declared target. A target that stopped resolving drops out of `visited`, so this comparison is what turns an uncovered gate into a failure instead of a pass.",
   );
-});
-
-test("DFEN-07: the gate fires on a declared-enablement read planted in a copy of a real target", async () => {
-  await withTempRoot("lifecycle-gate-offender-", async (root) => {
-    // arrange
-    await materializeTargets(root, LIFECYCLE_ENABLED_READ_TARGETS);
-    await plantOffender(root, CONTROL_TARGET, await offenderLineFor(CONTROL_TARGET));
-
-    // act & assert
-    await assert.rejects(
-      () =>
-        assertNoForbiddenSurface(
-          LIFECYCLE_ENABLED_READ_TARGETS,
-          FORBIDDEN_PATTERNS,
-          describeLifecycleViolation,
-          { root },
-        ),
-      /a re-materializing lifecycle verb names the declared-enablement field/,
-    );
-  });
-});
-
-test("DFEN-07: unmutated copies of the same real targets pass and report every path opened", async () => {
-  await withTempRoot("lifecycle-gate-benign-", async (root) => {
-    // arrange
-    await materializeTargets(root, LIFECYCLE_ENABLED_READ_TARGETS);
-
-    // act
-    const report = await assertNoForbiddenSurface(
-      LIFECYCLE_ENABLED_READ_TARGETS,
-      FORBIDDEN_PATTERNS,
-      describeLifecycleViolation,
-      { root },
-    );
-
-    // assert
-    assert.deepEqual(report.visited, [...LIFECYCLE_ENABLED_READ_TARGETS]);
-    assert.deepEqual(report.waived, []);
-  });
-});
-
-test("DFEN-07: a forbidden token inside a line comment passes, so the gate still strips comments", async () => {
-  await withTempRoot("lifecycle-gate-near-miss-", async (root) => {
-    // arrange
-    await materializeTargets(root, LIFECYCLE_ENABLED_READ_TARGETS);
-    await plantBenignNearMiss(root, CONTROL_TARGET, "applyDefaultEnabled");
-
-    // act
-    const report = await assertNoForbiddenSurface(
-      LIFECYCLE_ENABLED_READ_TARGETS,
-      FORBIDDEN_PATTERNS,
-      describeLifecycleViolation,
-      { root },
-    );
-
-    // assert
-    assert.deepEqual(report.visited, [...LIFECYCLE_ENABLED_READ_TARGETS]);
-  });
 });

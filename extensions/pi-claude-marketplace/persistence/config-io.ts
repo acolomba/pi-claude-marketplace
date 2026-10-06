@@ -24,7 +24,7 @@
 // (`parsePluginSource`) runs at downstream consume time (planner / apply), not
 // inside this schema. D-09: schema is lenient by default -- typebox
 // `Type.Object` accepts unknown extra keys; we do NOT add the
-// extra-property-forbidding directive anywhere. D-11: `schemaVersion` is
+// extra-property-forbidding directive anywhere. D-v1.12-51-11: `schemaVersion` is
 // optional and locked to `Type.Literal(1)`.
 
 import { readFile } from "node:fs/promises";
@@ -57,8 +57,8 @@ const PLUGIN_CONFIG_ENTRY_SCHEMA = Type.Object({
 });
 
 /**
- * CFG-01 / D-05 / D-11: top-level config shape.
- *   - `schemaVersion`: Optional literal 1 (D-11; future versions land in a
+ * CFG-01 / D-05 / D-v1.12-51-11: top-level config shape.
+ *   - `schemaVersion`: Optional literal 1 (D-v1.12-51-11; future versions land in a
  *     successor file, not by bumping this literal).
  *   - `marketplaces` / `plugins`: both Optional Records (D-05); absent is
  *     legal (means "no declarations"), distinct from present-but-empty.

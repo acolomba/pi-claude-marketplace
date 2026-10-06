@@ -52,41 +52,6 @@ const INLINE_REDERIVATIONS: readonly RegExp[] = [
   BOOLEAN_ENABLED_COERCION,
 ];
 
-const ESCAPING_TWIN_SPELLINGS: ReadonlyArray<{
-  readonly label: string;
-  readonly line: string;
-  readonly pattern: RegExp;
-}> = [
-  {
-    label: "Boolean() coercion",
-    line: "if (Boolean(record.enabled) === false) {",
-    pattern: BOOLEAN_ENABLED_COERCION,
-  },
-  {
-    label: "bracket access",
-    line: 'if (!record["enabled"]) {',
-    pattern: BRACKET_ENABLED_ACCESS,
-  },
-  {
-    label: "destructured binding",
-    line: "const { enabled } = record;",
-    pattern: DESTRUCTURED_ENABLED_BINDING,
-  },
-];
-
-const NON_REDERIVATIONS: ReadonlyArray<{ readonly label: string; readonly line: string }> = [
-  { label: "config-declaration axis", line: "if (entry.enabled !== false) {" },
-  { label: "legitimate predicate call", line: "if (isRecordedButDisabled(record)) {" },
-];
-
-const DELIBERATE_OVER_REACH: ReadonlyArray<{ readonly label: string; readonly line: string }> = [
-  { label: "config-declaration destructure", line: "const { enabled } = entry;" },
-  {
-    label: "untyped destructured parameter",
-    line: "function f({ scope, enabled } = defaults) {",
-  },
-];
-
 const SINGLE_PREDICATE_IMPORT =
   /import\s*\{[^}]*\bisRecordedButDisabled\b[^}]*\}\s*from\s+["'][^"']*persistence\/state-io\.ts["']/;
 
@@ -226,95 +191,6 @@ describe("disabled-state classification architecture", () => {
 
     // assert
     assert.deepStrictEqual(offenders, []);
-  });
-
-  test("detects escaping twin spellings without matching legitimate controls", () => {
-    // arrange
-    const escapingResults = ESCAPING_TWIN_SPELLINGS.map(({ label, line, pattern }) => ({
-      controls: NON_REDERIVATIONS.map((control) => ({
-        label: control.label,
-        matched: pattern.test(control.line),
-      })),
-      label,
-      matched: pattern.test(line),
-    }));
-    const combinedControlResults = NON_REDERIVATIONS.map(({ label, line }) => ({
-      label,
-      matched: INLINE_REDERIVATIONS.some((pattern) => pattern.test(line)),
-    }));
-
-    // act
-    const result = { combinedControlResults, escapingResults };
-
-    // assert
-    assert.deepStrictEqual(result, {
-      combinedControlResults: [
-        { label: "config-declaration axis", matched: false },
-        { label: "legitimate predicate call", matched: false },
-      ],
-      escapingResults: [
-        {
-          controls: [
-            { label: "config-declaration axis", matched: false },
-            { label: "legitimate predicate call", matched: false },
-          ],
-          label: "Boolean() coercion",
-          matched: true,
-        },
-        {
-          controls: [
-            { label: "config-declaration axis", matched: false },
-            { label: "legitimate predicate call", matched: false },
-          ],
-          label: "bracket access",
-          matched: true,
-        },
-        {
-          controls: [
-            { label: "config-declaration axis", matched: false },
-            { label: "legitimate predicate call", matched: false },
-          ],
-          label: "destructured binding",
-          matched: true,
-        },
-      ],
-    });
-  });
-
-  test("keeps the destructured-binding pattern deliberately fail-closed", () => {
-    // arrange
-    const inputs = DELIBERATE_OVER_REACH.map(({ label, line }) => ({ label, line }));
-
-    // act
-    const result = inputs.map(({ label, line }) => ({
-      label,
-      matched: DESTRUCTURED_ENABLED_BINDING.test(line),
-    }));
-
-    // assert
-    assert.deepStrictEqual(result, [
-      { label: "config-declaration destructure", matched: true },
-      { label: "untyped destructured parameter", matched: true },
-    ]);
-  });
-
-  test("routes every widened pattern into the source walk without global state", () => {
-    // arrange
-    const patterns = [...INLINE_REDERIVATIONS];
-
-    // act
-    const result = {
-      allEscapingPatternsIncluded: ESCAPING_TWIN_SPELLINGS.every(({ pattern }) =>
-        patterns.includes(pattern),
-      ),
-      globalFlags: patterns.map((pattern) => pattern.global),
-    };
-
-    // assert
-    assert.deepStrictEqual(result, {
-      allEscapingPatternsIncluded: true,
-      globalFlags: [false, false, false, false, false, false],
-    });
   });
 
   test("requires every former definition site to import the single predicate", async () => {

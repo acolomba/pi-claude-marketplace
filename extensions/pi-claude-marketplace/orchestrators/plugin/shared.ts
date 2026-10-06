@@ -9,7 +9,7 @@
 // orchestrator family. If a consumer emerges outside plugin orchestrators,
 // promote the helper to a wider orchestrators/shared surface.
 //
-// Per D-11 import boundaries, this file lives in `orchestrators/plugin/`
+// Per D-v1.0-01-11 import boundaries, this file lives in `orchestrators/plugin/`
 // and may import from `domain/`, `shared/`, and `persistence/` (type-only).
 // No imports from `bridges/` or `orchestrators/marketplace/*`.
 
@@ -1035,12 +1035,14 @@ async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | u
   for (const candidate of MANIFEST_CANDIDATES) {
     const manifestPath = path.join(pluginRoot, candidate);
 
+    // eslint-disable-next-line no-await-in-loop -- D-01-07: the first existing manifest candidate wins
     if (!(await manifestCandidateExists(manifestPath))) {
       continue;
     }
 
     let parsed: unknown;
     try {
+      // eslint-disable-next-line no-await-in-loop -- D-01-07: only the first existing candidate is read
       parsed = JSON.parse(await readFile(manifestPath, "utf8"));
     } catch (err) {
       // Present and unusable: tier 2 / tier 3 cover it.

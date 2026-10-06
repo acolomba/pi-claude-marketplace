@@ -3,11 +3,9 @@
 // AP-3 dispatch + Usage emission.
 //
 // Direct Pi notify calls are replaced with notifyUsageError(ctx, message,
-// usageBlock) from shared/notification-dispatch.ts. ESLint BLOCK A (eslint.config.js)
-// forbids direct notify on the Pi context outside of shared/notification-dispatch.ts; the
-// notify-discipline grep gate further enforces zero direct calls in this
-// file by asserting the literal Pi-context notify expression does not
-// appear.
+// usageBlock) from shared/notification-dispatch.ts. The fallow rule
+// `architecture/notify-chokepoint` forbids direct notify on the Pi context
+// outside of shared/notification-dispatch.ts.
 //
 // `TOP_LEVEL_USAGE` and `MARKETPLACE_USAGE` are PRD-stable strings.
 //

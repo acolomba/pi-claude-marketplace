@@ -95,6 +95,7 @@ export async function loadQualifiedSkillAliases(
   for (const root of roots) {
     let state: SkillAliasState;
     try {
+      // eslint-disable-next-line no-await-in-loop -- two scope roots, one state read each
       state = await dependencies.loadState(path.join(root, "pi-claude-marketplace"));
     } catch {
       continue;

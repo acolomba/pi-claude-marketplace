@@ -64,9 +64,8 @@ import type { NotificationContext } from "../platform/pi-api.ts";
  *    `resolveRawSurface` serializes and `formatRawSurface` turns into text
  *    (D-13). Raw kinds carry no run, so no raw call site needs one (D-01, D-04).
  *
- * The eslint per-file override in eslint.config.js disables
- * `no-restricted-syntax` for this file, so inline `eslint-disable-next-line`
- * comments are unnecessary here.
+ * The fallow rule `architecture/notify-chokepoint` excludes this file, so it
+ * needs no inline suppression.
  *
  * Callers import vocabulary from `notification-types.ts` and rendering or
  * dispatch behavior directly from this file. No barrel re-exports.

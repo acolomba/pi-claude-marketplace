@@ -8,13 +8,12 @@
 // otherwise resolvable copy of that dependency already exists, because the
 // constraint can demand a different tag than the cached one.
 //
-// Gate placement. This module is deliberately ABSENT from
-// `tests/architecture/gate-targets.ts`'s `NETWORK_FREE_TARGETS` while both
-// install owners stay in it. That is the arrangement `install-clone-probe.ts`
-// already uses to let those gated owners reach git legally: the owner composes
-// the leaf and invokes it through an injected field whose name is not one the
-// gate matches, so neither owner gains a git surface and no gate edit or
-// exemption is needed.
+// Gate placement. This module is listed in `eslint.config.js`'s
+// `NETWORK_SEAMS`, while both install owners stay gated. That is the
+// arrangement `install-clone-probe.ts` already uses to let those gated owners
+// reach git legally: the owner composes the leaf and invokes it through an
+// injected field whose name is not one the gate matches, so neither owner
+// gains a git surface or needs a seam entry of its own.
 //
 // D-03-09 is a recorded divergence, not an omission below. A no-match is the
 // SAME failure whichever repository the query ran against -- the dependency's

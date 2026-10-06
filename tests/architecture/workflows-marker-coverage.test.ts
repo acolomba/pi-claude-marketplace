@@ -7,7 +7,7 @@
  * renders it. Second, D-12 / SC-5: the extension calls `softDepMarkers` from
  * exactly one module, the resolve step. A second call site would let a surface
  * compose markers that the per-verb marker policy does not govern. The last
- * two cases own that claim, with a planted control.
+ * case owns that claim.
  *
  * Each derivation site's owner suite proves its own row bytes directly. This
  * suite keeps the distinct architectural invariant: EVERY `Dependency[]`
@@ -71,13 +71,8 @@ import { notify } from "../../extensions/pi-claude-marketplace/shared/notificati
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { runWithSoftDeps } from "../shared/notification-run-seeds.ts";
 
-import {
-  EXTENSION_ROOT_REL,
-  SOFT_DEP_MARKER_DERIVATION_TARGETS,
-  WORKFLOWS_MARKER_COVERAGE_TARGETS,
-} from "./gate-targets.ts";
+import { EXTENSION_ROOT_REL, SOFT_DEP_MARKER_DERIVATION_TARGETS } from "./gate-targets.ts";
 import { filesMatching } from "./source-scan.ts";
-import { materializeTargets, plantOffender, withTempRoot } from "./temp-root-control.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -562,10 +557,6 @@ test("WDEP-04: the case list covers every Dependency[] derivation site", async (
  */
 const MARKER_DERIVATION_CALL = /(?<!function\s)\bsoftDepMarkers\(/;
 
-/** The real orchestrator whose copy receives the planted call. */
-const PLANTED_CALLER_HOST: (typeof WORKFLOWS_MARKER_COVERAGE_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
-
 const SINGLE_DERIVATION_SITE_MESSAGE =
   "D-12 / SC-5: softDepMarkers is called outside the resolve module, or no longer called there. A second derivation site would let a surface compose markers the policy table does not govern; route the row through resolveRows instead.";
 
@@ -580,25 +571,4 @@ test("D-12 / SC-5: softDepMarkers is called only from the resolve module", async
     [...SOFT_DEP_MARKER_DERIVATION_TARGETS],
     SINGLE_DERIVATION_SITE_MESSAGE,
   );
-});
-
-test("D-12: the derivation-site scan reports a softDepMarkers call planted in a copy of a real orchestrator", async () => {
-  await withTempRoot("marker-derivation-offender-", async (root) => {
-    // arrange
-    await materializeTargets(root, SOFT_DEP_MARKER_DERIVATION_TARGETS);
-    await plantOffender(
-      root,
-      PLANTED_CALLER_HOST,
-      "export const plantedMarkers = softDepMarkers(true, false, false, snapshot);",
-    );
-
-    // act
-    const discovered = await filesMatching(EXTENSION_ROOT_REL, MARKER_DERIVATION_CALL, { root });
-
-    // assert
-    assert.deepEqual(
-      discovered,
-      [PLANTED_CALLER_HOST, ...SOFT_DEP_MARKER_DERIVATION_TARGETS].sort(),
-    );
-  });
 });

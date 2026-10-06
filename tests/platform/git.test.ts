@@ -1158,7 +1158,6 @@ describe("resolveRemoteRef", () => {
       return {
         ok: false,
         reason: "no credential was obtained for git.example.invalid",
-        authAttempted: true,
       };
     };
 

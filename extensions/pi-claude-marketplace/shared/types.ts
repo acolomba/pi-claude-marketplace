@@ -1,7 +1,7 @@
 // shared/types.ts
 //
 // Cross-tier types shared across domain/, persistence/, transaction/, and
-// edge/. Lives in shared/ so edge/ can import without crossing the D-11
+// edge/. Lives in shared/ so edge/ can import without crossing the D-v1.0-01-11
 // import boundary (edge/ MUST NOT import from domain/).
 //
 // SC-1 (PRD §6.2): exactly two scopes -- `user` (Pi agent dir; defaults to

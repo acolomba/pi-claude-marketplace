@@ -13,8 +13,9 @@
 // disable handlers.
 //
 // BLOCK C: imports only from shared/ (types), platform/ (Theme + DynamicBorder
-// chokepoint), and the `@earendil-works/pi-tui` peer dep (unrestricted by
-// BLOCK E). No orchestrators/ or domain/ import -- this file is pure UI.
+// chokepoint), and the `@earendil-works/pi-tui` peer dep, which the Pi peer
+// chokepoint does not restrict. No orchestrators/ or domain/ import -- this
+// file is pure UI.
 
 import {
   Container,

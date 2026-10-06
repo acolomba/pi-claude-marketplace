@@ -5,12 +5,11 @@
 // so a plugin's version never moves outside what its own dependents allow
 // (UPDT-01, UPDT-02).
 //
-// Deliberately ABSENT from `tests/architecture/gate-targets.ts`'s
-// `NETWORK_FREE_TARGETS`, for the same reason its tag-probe callees are
-// (D-10-19): stage one's tag query reaches the network from inside this
-// leaf, and `update-preflight.ts` composes and invokes it through the
-// `constraintGate` injected field -- a name the network-free gate does not
-// match -- so neither owner gains a git surface and no gate edit is needed.
+// Listed in `eslint.config.js`'s `NETWORK_SEAMS` for the same reason its
+// tag-probe callees are (D-10-19): stage one's tag query reaches the network
+// from inside this leaf. `update-preflight.ts` composes and invokes it
+// through the `constraintGate` injected field, a name the network-free gate
+// does not match.
 //
 // AUTH-09: the credential bundle is threaded in through `options.auth` from
 // the caller, which builds it once and shares it with the clone probe; this

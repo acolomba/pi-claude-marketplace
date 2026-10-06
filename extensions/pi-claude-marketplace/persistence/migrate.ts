@@ -3,11 +3,12 @@
 // Legacy state.json record migration (ST-4, ST-5) and the SINGLE
 // sanctioned `console-warn` callsite (IL-3).
 //
-// The IL-3 console.warn callsite is permitted by a per-file override in
-// eslint.config.js that turns no-console + no-restricted-syntax off for this
-// single file (the callsite trips both rules). Any other use of
-// `console.warn` in the extension still trips the eslint rule by design,
-// since the extension-wide block scopes the prohibition everywhere else.
+// The IL-3 console.warn callsite is allowed because the fallow rule pack
+// (rule-packs/architecture.json) leaves this one file out of
+// `architecture/no-console`. Its companion rule
+// `architecture/migrate-console-warn-only` bans every other console method
+// here, and a `console.warn` anywhere else in the extension still trips
+// `architecture/no-console`.
 //
 // Per ST-4: missing manifestPath / marketplaceRoot are filled with
 // the default derivation. Per ST-5: missing resources.agents /
@@ -312,11 +313,11 @@ export function migrateLegacyMarketplaceRecords(
  * it manually if needed, but the in-memory state is still usable for the
  * remainder of this Pi process.
  *
- * Per D-21-04: the IL-3 callsite below is allowed by the
- * block-level files-override at `extensions/pi-claude-marketplace/persistence/migrate.ts`
- * in eslint.config.js (BLOCK B-2). No inline disable directive is
- * required. Any other `console.warn` in the extension trips BLOCK A by
- * design.
+ * Per D-21-04: the IL-3 callsite below is allowed because the fallow rule
+ * pack leaves this file out of `architecture/no-console` and holds it to
+ * `console.warn` with `architecture/migrate-console-warn-only`. No inline
+ * suppression is required. Any other `console.warn` in the extension trips
+ * `architecture/no-console`.
  */
 export async function persistMigratedState(
   stateJsonPath: string,

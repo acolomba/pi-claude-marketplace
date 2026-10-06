@@ -32,7 +32,7 @@
 // CompileIfPredicateContext (D-61-03 substitute-cwd rule + A1
 // projectRoot fallback): an alias of `ResolveHookIfContext`, the single
 // declaration of the anchor triple, republished here under the bridge's
-// own name (D-11 puts that declaration in domain/). The path-glob
+// own name (D-v1.0-01-11 puts that declaration in domain/). The path-glob
 // compiler consumes a homedir + cwd + projectRoot triple to anchor
 // `~`-prefixed patterns, bare relative globs (`src/**`), and absolute
 // project-root patterns (`/docs/**`). Pi's `ExtensionContext` v0.73.x
@@ -135,7 +135,7 @@ export const MATCH_ALL_IF: IfPredicate = { kind: "match-all" };
  * Anchor context consumed by `compileIfPredicate` (parse-time entry in
  * `domain/components/hooks.ts`) and the underlying `compilePathGlob`.
  * Published as an alias of `ResolveHookIfContext`, which is the one
- * declaration of the triple: D-11 allows a bridge to name a domain type
+ * declaration of the triple: D-v1.0-01-11 allows a bridge to name a domain type
  * and forbids the reverse, so the domain side owns the shape and this
  * name stays exported for the bridge's own consumers.
  * The three fields drive `~`-prefix substitution (homedir),

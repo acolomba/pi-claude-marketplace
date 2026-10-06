@@ -74,13 +74,13 @@ Use these commands:
 
 ```sh
 npm run test:coverage:direct -- <source-or-test-path>
-npm run test:coverage:direct
+npm run test:coverage:direct -- --base <ref>
 npm run test:coverage:direct:all
 ```
 
 - Use the path form for one focused pair.
-- Use `npm run test:coverage:direct` to select changed pairs automatically.
-- Use `npm run test:coverage:direct:all` after shared contract, fake, harness, or coverage-infrastructure changes.
+- Use the `--base <ref>` form to measure the pairs that changed since a named ref, such as `origin/main`, including uncommitted and untracked files.
+- Use `npm run test:coverage:direct:all` to measure every pair. `npm run check` runs it, and the pre-commit hook runs all pairs when a commit stages shared test support or the coverage tooling.
 
 During development, run the focused pair directly:
 
@@ -99,15 +99,6 @@ The direct-coverage gate must fail when a source path, test path, mapping, or LC
 ### Fail-closed enforcement
 
 A structural gate must reject invalid input. Missing, ambiguous, or unmapped input is a failure, not a pass.
-
-When a structural gate is added or changed:
-
-1. Plant one clear violation.
-2. Run the gate and prove it rejects that violation.
-3. Remove the violation.
-4. Run the gate and prove it accepts the clean tree.
-
-Keep the negative control small. It should fail for the exact rule being proved.
 
 Do not suppress production dead code as a migration shortcut.
 
@@ -1424,7 +1415,7 @@ A unit-test change is complete when:
 - [ ] Expected values are independent from production and harness computations.
 - [ ] Shared support is organized by concern, with no generic helper dumping ground.
 - [ ] Real and fake adapters pass the same public contract.
-- [ ] Contract and structural gates have a proven negative control.
+- [ ] Shared adapter contracts have a proven negative control.
 - [ ] The focused source-test pair has 100% direct function, line, and branch coverage.
 - [ ] No coverage exception, ignore directive, or blanket exclusion was added.
 - [ ] Focused `node --test`, direct coverage, and `npm run check` pass.

@@ -69,6 +69,7 @@ async function selectAllTargets(
     explicitScope === undefined ? ["project", "user"] : [explicitScope];
   const targets: SelectedReinstallTarget[] = [];
   for (const scope of scopes) {
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one state read each
     targets.push(...(await installedTargetsForScope(load, scope)));
   }
 

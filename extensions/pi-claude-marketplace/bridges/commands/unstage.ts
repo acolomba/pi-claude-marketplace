@@ -20,9 +20,11 @@ export async function unstagePluginCommands(
 
   for (const name of input.previousCommandNames) {
     const target = path.join(input.locations.promptsTargetDir, name + ".md");
+    // eslint-disable-next-line no-await-in-loop -- the first containment or unlink failure stops later unlinks
     await assertPathInside(input.locations.promptsTargetDir, target, "command to unstage");
 
     try {
+      // eslint-disable-next-line no-await-in-loop -- the first containment or unlink failure stops later unlinks
       await unlink(target);
       removed.push(name);
     } catch (err) {

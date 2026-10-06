@@ -41,8 +41,8 @@ import type { ExtensionState } from "../../extensions/pi-claude-marketplace/pers
 import type { ExtensionAPI } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // D-07-05: the four orchestrators this gate pins and the event-router where the
-// WR-01 prefix lives come from `HOOKS_LIFECYCLE_TARGETS`, so a literal-match
-// stale-path scan of the registry sees every one of them. The group is a tuple,
+// WR-01 prefix lives come from `HOOKS_LIFECYCLE_TARGETS`, so the registry
+// names every one of them. The group is a tuple,
 // so destructuring binds by POSITION -- which is why every read below states the
 // basename it expects and `readTargetSource` proves it.
 const [INSTALL_REL, UNINSTALL_REL, REINSTALL_REL, UPDATE_REL, EVENT_ROUTER_REL] =

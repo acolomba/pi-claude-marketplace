@@ -14,8 +14,8 @@
 //   - CMC-21 orphan-fold rule (rendered cross-scope, but the adoption
 //     round-trip lives in `tests/integration/fold-adoption.test.ts`)
 //
-// Plus the redundant in-test source grep for NFR-5 / PI-2 / PL-3
-// defense-in-depth (mirror of `tests/architecture/no-orchestrator-network`).
+// Plus a compile-time proof that the list options expose no Git transport
+// (NFR-5 / PI-2 / PL-3), defense in depth beside BLOCK F in `eslint.config.js`.
 //
 // Output-format notes (catalog form):
 //   - Plugin row icon + name + [<scope>] (for installed/upgradable) + v<ver>

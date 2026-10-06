@@ -11,7 +11,7 @@
 // The module is fs-only. It imports `pathExists` + `locations.pluginCloneDir`
 // plus the pure `pluginCloneKey` / `parsePluginSource` / `resolveStrict` domain
 // helpers -- it carries no clone-materializing git seam and never spawns git --
-// so `edge-deps.ts` can consume it while the no-orchestrator-network gate
+// so `edge-deps.ts` can consume it while BLOCK F in `eslint.config.js`
 // (NFR-5) stays green.
 
 import { readFile } from "node:fs/promises";

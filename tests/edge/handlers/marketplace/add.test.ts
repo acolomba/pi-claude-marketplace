@@ -61,7 +61,7 @@
 //
 // No exhaustiveness claim: the module holds no switch and no closed-union
 // dispatch, so a missing-arm plant has no target here. No case asserts the
-// absence of direct process output (ESLint and fallow own that). The rejection
+// absence of direct process output (fallow owns that). The rejection
 // cases do not restate the flag-scan rule owned by
 // tests/edge/handlers/shared.test.ts, the collapse comparison owned by
 // tests/edge/handlers/marketplace/shared.test.ts, or the tokenizer diagnostics

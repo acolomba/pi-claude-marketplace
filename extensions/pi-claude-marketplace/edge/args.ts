@@ -1,7 +1,7 @@
 // edge/args.ts
 //
 // AP-1 tokenizer + AP-2 / AP-4 --scope validator. `Scope` resolves from
-// `shared/types.ts` so `edge/` can consume it without violating the D-11
+// `shared/types.ts` so `edge/` can consume it without violating the D-v1.0-01-11
 // import boundary (edge MUST NOT import from `domain/`).
 //
 // PRD §6.6 AP-1: tokenize single (`'...'`) and double (`"..."`) quoted strings;

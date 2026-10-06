@@ -1010,6 +1010,7 @@ async function executeScopedPlan(
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- each add locks the scope (retries: 0)
     await addOnePlannedMarketplace(opts, result, blockedMarketplaces, scopePlan, marketplace);
   }
 
@@ -1476,6 +1477,7 @@ export async function importClaudeSettings(
   result.diagnostics.push(...plan.diagnostics);
 
   for (const scopePlan of plan.scopes) {
+    // eslint-disable-next-line no-await-in-loop -- each scope plan appends to the shared result arrays
     await executeScopedPlan(opts, result, scopePlan);
   }
 

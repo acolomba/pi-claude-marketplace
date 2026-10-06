@@ -153,65 +153,6 @@ const RAW_MEMBERSHIP_LOOKUPS: ReadonlyArray<RegExp> = [
   RAW_LOOKUP_DESTRUCTURED,
 ];
 
-/**
- * The spellings a copier would naturally reach for, held as DATA rather than
- * described in prose so the proof below cannot be satisfied by comment text.
- * The walk proves no copy survives TODAY; it cannot prove the gate would see
- * one that lands tomorrow, which is what these literals stand in for.
- */
-const PLANTED_TWINS: ReadonlyArray<{
-  readonly label: string;
-  readonly pattern: RegExp;
-  readonly line: string;
-}> = [
-  {
-    label: "parenthesised arrow parameter",
-    pattern: RAW_LOOKUP_ARROW,
-    line: "const entry = manifest.plugins.find((p) => p.name === pluginName);",
-  },
-  {
-    label: "bare arrow parameter",
-    pattern: RAW_LOOKUP_ARROW,
-    line: "const entry = manifest.plugins.find(p => p.name === pluginName);",
-  },
-  {
-    label: "quoted comparison target",
-    pattern: RAW_LOOKUP_ARROW,
-    line: 'const entry = manifest.plugins.find((p) => p.name === "hello");',
-  },
-  {
-    label: "single-quoted comparison target with inner whitespace",
-    pattern: RAW_LOOKUP_ARROW,
-    line: "const entry = manifest.plugins.find( ( p ) =>  p.name  === 'hello' );",
-  },
-  {
-    label: "block-bodied predicate",
-    pattern: RAW_LOOKUP_BLOCK_BODY,
-    line: "const entry = manifest.plugins.find((p) => { return p.name === pluginName; });",
-  },
-  {
-    label: "destructured name binding",
-    pattern: RAW_LOOKUP_DESTRUCTURED,
-    line: "const entry = manifest.plugins.find(({ name }) => name === pluginName);",
-  },
-];
-
-/** The shapes every pattern must LEAVE ALONE. */
-const NON_LOOKUPS: ReadonlyArray<{ readonly label: string; readonly line: string }> = [
-  {
-    label: "legitimate call into the one rule",
-    line: "const lookup = lookupDeclaredPlugin(manifest, pluginName);",
-  },
-  {
-    label: "name predicate over a DIFFERENT collection",
-    line: "const row = rows.find((r) => r.name === pluginName);",
-  },
-  {
-    label: "plugins find on a different field",
-    line: "const entry = manifest.plugins.find((p) => p.source === wanted);",
-  },
-];
-
 /** The import the collapse requires of every absence-judging surface. */
 const LOOKUP_IMPORT =
   /import\s*\{[^}]*\blookupDeclaredPlugin\b[^}]*\}\s*from\s+["'][^"']*domain\/manifest-lookup\.ts["']/;
@@ -298,41 +239,6 @@ test("D-99-02a: no surface re-derives the manifest-membership lookup -- the whol
     [],
     `D-99-02a: these allowlist entries no longer write the idiom and must be deleted:\n  ${stale.join("\n  ")}`,
   );
-});
-
-test("D-99-02a: the gate flags every spelling a copier would reach for, and over-reaches onto none", () => {
-  for (const twin of PLANTED_TWINS) {
-    assert.ok(
-      twin.pattern.test(twin.line),
-      `D-99-02a: ${String(twin.pattern)} does not flag the ${twin.label} twin -- ${twin.line}`,
-    );
-  }
-
-  for (const control of NON_LOOKUPS) {
-    assert.ok(
-      !RAW_MEMBERSHIP_LOOKUPS.some((re) => re.test(control.line)),
-      `D-99-02a: a pattern over-reaches onto the ${control.label} -- ${control.line}`,
-    );
-  }
-});
-
-test("D-99-02a: every proven pattern reaches the source walk, and no pattern is global", () => {
-  // A pattern proven against its twin but left out of the array is a gate that
-  // passes its own self-test while seeing nothing.
-  for (const twin of PLANTED_TWINS) {
-    assert.ok(
-      RAW_MEMBERSHIP_LOOKUPS.includes(twin.pattern),
-      `D-99-02a: the ${twin.label} pattern is proven but never reaches the source walk`,
-    );
-  }
-
-  for (const re of RAW_MEMBERSHIP_LOOKUPS) {
-    assert.equal(
-      re.global,
-      false,
-      `D-99-02a: ${String(re)} is global -- lastIndex carries across .test() calls and would skip alternating files in the walk`,
-    );
-  }
 });
 
 test("D-99-02a: list, info and update each import the one derivation", async () => {

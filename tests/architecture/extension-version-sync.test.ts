@@ -16,8 +16,8 @@ import { REPO_ROOT } from "./source-scan.ts";
  * failure so the constant must be bumped in lockstep with package.json.
  *
  * D-07-05: the manifest is addressed through `PACKAGE_JSON_REL` and the shared
- * `REPO_ROOT`, so the only path this gate names is one a literal-match scan of
- * the registry already sees.
+ * `REPO_ROOT`, so the only path this gate reads is one the registry already
+ * names.
  */
 
 test("BFILL-02 EXTENSION_VERSION is a non-empty semver-shaped string", () => {

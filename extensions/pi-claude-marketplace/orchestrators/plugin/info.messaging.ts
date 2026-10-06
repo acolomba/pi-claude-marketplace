@@ -35,8 +35,8 @@ import type { CommandContext } from "../../shared/notify-context.ts";
  *     one render path instead of a second arm that would duplicate it.
  *
  * The shared presentation vocabulary stays central in
- * `shared/notification-types.ts` and `shared/notification-grammar.ts` (D-11)
- * and is CALLED here, never duplicated.
+ * `shared/notification-types.ts` and `shared/notification-grammar.ts`
+ * (D-notification-refactor-01-11) and is CALLED here, never duplicated.
  */
 
 type PluginInfoStatus = "skipped";

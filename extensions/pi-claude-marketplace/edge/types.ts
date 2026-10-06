@@ -6,7 +6,7 @@
 //
 // `GitOps` lives in `orchestrators/marketplace/shared.ts` (D-12).
 // `PluginUpdateFn` lives in `orchestrators/types.ts` (D-06).
-// `edge/` imports both -- allowed by D-11 (edge -> orchestrators).
+// `edge/` imports both -- allowed by D-v1.0-01-11 (edge -> orchestrators).
 //
 // This module declares `EdgeDeps` only. `SubcommandHandlers` is declared and
 // exported by `./router.ts` -- import it from there

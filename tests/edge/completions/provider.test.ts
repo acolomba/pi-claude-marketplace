@@ -59,9 +59,6 @@
 // `{ name: string; description: string }[]`, with `description` required, so the
 // arm the paragraph justified has no source left.
 //
-// Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
-// and a pair absent from it reads complete. This one is absent from it.
-//
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";

@@ -1,6 +1,10 @@
+---
+last_mapped_commit: 5960d1c02ed242faa6accd4c1ff5da8c84f2accd
+last_mapped_at: 2026-10-05
+---
 # Technology Stack
 
-**Analysis Date:** 2026-08-18
+**Analysis Date:** 2026-10-05
 
 ## Languages
 
@@ -14,7 +18,7 @@
 ## Runtime
 
 **Environment:**
-- Node.js `>=20.19.0` declared in `package.json` `engines`; CI pins and runs the pipeline on Node 24 only (`.github/workflows/ci.yml`, D-01: single-Node-version matrix, justified there by `write-file-atomic@^8`'s `^22.22.2 || ^24.15.0 || >=26.0.0` engine floor and native TS-strip support)
+- Node.js `^22.22.2 || ^24.15.0 || >=26.0.0` declared in `package.json` `engines`; CI pins and runs the pipeline on Node 24 only (`.github/workflows/ci.yml`, D-01: single-Node-version matrix, justified there by `write-file-atomic@^8`'s `^22.22.2 || ^24.15.0 || >=26.0.0` engine floor and native TS-strip support)
 - ESM-only (`"type": "module"` in `package.json`)
 - `tsconfig.json` targets `ES2022`, `module`/`moduleResolution: NodeNext`, `noEmit: true` (type-checking only; no build/transpile step -- Node's native TS stripping runs `.ts` files directly)
 
@@ -30,22 +34,23 @@
 - `pi-subagents` (optional peer dep `>=0.35.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent
 
 **Testing:**
-- `node:test` (Node's built-in test runner) - suites under `tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,scripts,shared,transaction}/**/*.test.ts` plus `tests/index.test.ts` (`npm test`), plus a separate `tests/integration/**/*.test.ts` suite (`npm run test:integration`) and `tests/e2e/**/*.test.ts` (`npm run test:e2e`, pinned ref; `npm run test:e2e:nightly` runs against floating `main`)
+- `node:test` (Node's built-in test runner) - suites under `tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts` plus `tests/index.test.ts` (`npm test`; `npm run test:modules` is the same minus `architecture`; `npm run test:unpaired` runs `tests/architecture/**` plus `tests/{domain,platform}/**/*-fake.test.ts`, the tests with no source pair), plus a separate `tests/integration/**/*.test.ts` suite (`npm run test:integration`) and `tests/e2e/**/*.test.ts` (`npm run test:e2e`, pinned ref; `npm run test:e2e:nightly` runs against floating `main`)
 - Real temporary directories (`mkdtemp`, plus a `withHermeticHome` helper) for filesystem isolation -- no in-memory filesystem layer is used
-- Coverage via `node --test --experimental-test-coverage` with `lcov` reporters, split into `unit`/`integration`/`e2e` reports (`npm run test:coverage`) feeding SonarCloud (`sonar.javascript.lcov.reportPaths=coverage/unit.lcov,coverage/integration.lcov,coverage/e2e.lcov` in `sonar-project.properties`)
+- Coverage via `node --test --experimental-test-coverage` with `lcov` reporters. `npm run test:coverage:direct:all` runs each source-test pair alone and merges each pair's record for its own source into `coverage/direct.lcov`, the only report SonarCloud reads (`sonar.javascript.lcov.reportPaths=coverage/direct.lcov` in `sonar-project.properties`). `npm run test:coverage` also writes the partial-surface `coverage/integration.lcov` and `coverage/e2e.lcov`, which stay out of Sonar
 
 **Build/Dev:**
 - No bundler/build step -- TypeScript is type-checked only (`tsc --noEmit`); Node runs `.ts` sources natively
-- `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~400 lines), including custom architecture-boundary and output-discipline rules (`no-restricted-syntax` forbids `process.stdout.write`/`process.stderr.write` in `extensions/pi-claude-marketplace/**`)
+- `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~520 lines; `npm run lint` passes `--max-warnings 0` and covers `extensions tests scripts eslint.config.js`), including the architecture-boundary rules (BLOCK C) and the NFR-5 git-surface rules (BLOCK F); the output and import bans live in the fallow rule pack
 - `prettier` `^3.8.3` for formatting (`npm run format` / `format:check`)
-- `fallow` `^3.27.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` chains four subcommands, each `--fail-on-issues --format human`:
+- `fallow` `^3.27.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` first fails on any rule-pack `WARN` that `fallow rule-pack test` prints, then chains four subcommands, each `--fail-on-issues --format human`:
   - `fallow dead-code` (entry point `extensions/pi-claude-marketplace/index.ts`), scoped to production reachability by `production.deadCode`
   - `fallow dead-code --no-production --circular-deps --re-export-cycles`, which carries the two cycle classes across `tests/` and `scripts/`
-  - `fallow health` (`maxCyclomatic: 20`, `maxCognitive: 15`, `maxUnitSize: 60`, plus `maxCrap: 0`, which switches CRAP OFF -- see the CRAP note in TESTING.md before touching it)
+  - `fallow health` (`maxCyclomatic: 20`, `maxCognitive: 15`, plus `maxCrap: 0`, which switches CRAP OFF -- see the CRAP note in TESTING.md before touching it)
+  - `.fallowrc.json` also loads `rulePacks: ["rule-packs/architecture.json"]` (11 rules: `no-stdio`, `no-console`, `migrate-console-warn-only`, `debug-log-console-error-only`, `notify-chokepoint`, `pi-peer-chokepoint`, `isomorphic-git-chokepoint`, `proper-lockfile-chokepoint`, `write-file-atomic-chokepoint`, `no-network-modules`, `fetch-chokepoint`) enforcing output and import chokepoints
   - `fallow dupes` (`threshold: 3`, with one ignored-clone ID pre-approved in `duplicates.ignoredClones`)
-  - `.fallowrc.json`'s `boundaries` block defines 14 architecture zones (`entry`, `edge`, `orchestrators`, `bridges-agents`, `bridges-commands`, `bridges-mcp`, `bridges-skills`, `bridges-hooks`, `bridges-workflows`, `domain`, `transaction`, `persistence`, `platform`, `shared`) with an explicit allow-list of legal import edges between zones; the `process.stdout.*`/`process.stderr.*` call ban now lives in `rule-packs/architecture.json`, not in a `boundaries.calls` block -- finer-grained than the ESLint `no-restricted-paths` gate and the only mechanism enforcing that cross-bridge imports (e.g. `bridges-agents` -> `bridges-commands`) are forbidden
-  - CI runs a separate `fallow-audit` job (`.github/workflows/lint.yml`) using the vendor action `fallow-rs/fallow@v3` with `command: audit`, `format: github-annotations` -- this gates PRs on newly-introduced findings only, distinct from the full `npm run fallow` gate that `npm run check` runs
-- `pre-commit` framework (`.pre-commit-config.yaml`) runs trufflehog, gitlint, yamllint, yamlfmt, mdformat, markdownlint-cli2, texthooks (smartquotes/dashes/ligatures/bidi-control fixers), plus local hooks `npm-lint`, `npm-format-check`, `npm-typecheck`, and `npm-fallow` (each `pass_filenames: false` and gated by its own `files:` pattern over `extensions/`, `tests/`, `scripts/`, and the config/lockfile set, so a docs-only commit skips all four)
+  - `.fallowrc.json`'s `boundaries` block defines 14 architecture zones (`entry`, `edge`, `orchestrators`, `bridges-agents`, `bridges-commands`, `bridges-mcp`, `bridges-skills`, `bridges-hooks`, `bridges-workflows`, `domain`, `transaction`, `persistence`, `platform`, `shared`) with an explicit allow-list of legal import edges between zones -- finer-grained than the ESLint `no-restricted-paths` gate and the only mechanism enforcing that cross-bridge imports (e.g. `bridges-agents` -> `bridges-commands`) are forbidden. `rulePacks` loads `rule-packs/architecture.json`, the call and import bans for `extensions/pi-claude-marketplace/**` (stdio, console, direct `ctx.ui.notify`, the Pi peer, `isomorphic-git`, `proper-lockfile`, `write-file-atomic`, network modules, and `fetch`), each limited to its sanctioned files and reported as `policy-violation`
+  - CI runs a separate `fallow-audit` job (`.github/workflows/lint.yml`) using the vendor action `fallow-rs/fallow@v3` with `command: audit`, `format: github-annotations` -- this gates PRs on newly-introduced findings only, distinct from the full `npm run fallow` gate that `npm run check` runs. The job installs the npm dependencies first, and it fails on a `warn` verdict or a degraded analysis as well as on `fail`
+- `pre-commit` framework (`.pre-commit-config.yaml`) runs trufflehog, gitlint, yamllint (with `--strict`, so a warning fails), yamlfmt, mdformat, markdownlint-cli2, zizmor, texthooks (smartquotes/dashes/ligatures/bidi-control fixers), plus two local hooks: `prettier` (formats staged files) and `npm-check` (`pass_filenames: false`), which runs `npm run check:commit` when a staged file is a build input. Its `files:` pattern names the same build inputs as the `paths` list in `ci.yml`, which the `pull_request` trigger reuses through a YAML anchor, so a docs-only commit skips it
 
 ## Key Dependencies
 
@@ -77,24 +82,28 @@
 ## Platform Requirements
 
 **Development:**
-- Node `>=20.19.0` (engines floor); CI and local `.pre-commit-config.yaml` Node setup both use Node 24
+- Node `^22.22.2 || ^24.15.0 || >=26.0.0` (engines range); CI and local `.pre-commit-config.yaml` Node setup both use Node 24
 - npm for dependency install
 - `pre-commit` (Python-based framework, Python 3.12 in CI) for the git hook pipeline
 
 **Production:**
-- Distributed as an npm package (`pi-claude-marketplace`, currently `0.18.1`) consumed as a Pi extension via `pi.extensions` in `package.json`, pointing at `./extensions/pi-claude-marketplace/index.ts`
+- Distributed as an npm package (`pi-claude-marketplace`, currently `0.19.2`) consumed as a Pi extension via `pi.extensions` in `package.json`, pointing at `./extensions/pi-claude-marketplace/index.ts`
 - Runs inside a host Pi agent process (`@earendil-works/pi-coding-agent`) -- no standalone server or deployment target of its own
 - Published to npm via GitHub Actions on `v*` tags (`.github/workflows/publish.yml`, which calls `ci.yml` as a reusable workflow via `workflow_call` before publishing, `id-token: write` for npm provenance)
+
+## Check Output
+
+Local `npm run check` output is quiet (`scripts/test-reporter.mjs` is the `node:test` reporter; fallow runs with `--quiet`). With `CI` set, every check prints at info level. `npm run check` = `check:static` + `test:unpaired` + `test:integration` + `test:coverage:direct:all`; `check:commit` = `check:static` + `test:unpaired` + `test:coverage:direct:commit` (staged source-test pairs only). Whole-suite unit coverage no longer exists.
 
 ## CI Workflows
 
 Five workflow files in `.github/workflows/`:
-- `ci.yml` - `workflow_call` (invoked by `publish.yml`), plus `push`/`pull_request` on `main` (paths-ignore for docs/planning), plus `workflow_dispatch`. Jobs: `check` (`npm run check`), `integration-tests`, `e2e-tests` (pinned ref), `package` (`npm pack --dry-run`, depends on the other three). All run on Node 24. There is deliberately no `push` trigger on `features/**` branches
-- `lint.yml` - `pull_request` on `main` + `workflow_dispatch`. Two jobs: `pre-commit` (runs the full `.pre-commit-config.yaml` pipeline via `pre-commit/action@v3.0.1`) and `fallow-audit` (the vendor `fallow-rs/fallow@v3` action, `command: audit`, `format: github-annotations`, `fetch-depth: 0`) -- separate from and additional to the `npm run fallow` gate embedded in `npm run check`
-- `sonarcloud.yml` - `push`/`pull_request` on `main`, skipped for Dependabot and fork PRs (no secrets access); runs `npm run test:coverage` then `SonarSource/sonarqube-scan-action@v8`
+- `ci.yml` - `workflow_call` (invoked by `publish.yml`), plus `push`/`pull_request` on `main` (one YAML-anchored `paths: &build_inputs` list of build inputs, reused for `pull_request` via `*build_inputs`, and named by the `npm-check` hook), plus `workflow_dispatch`. Jobs: `static` (`npm run check:static`, then `npm run test:unpaired`), `integration` (`npm run test:integration`), `direct-coverage` (`npm run test:coverage:direct:all` on every event, uploads `coverage/direct.lcov`), `e2e-tests` (pinned ref), `sonarcloud` (calls `sonarcloud.yml` after `direct-coverage`), and `package` (`npm pack --dry-run`, after the four test jobs). Job timeouts: `static` 15 min, `integration`/`direct-coverage`/`package` 10 min, `e2e-tests`/`e2e-nightly` 20 min; the `sonarcloud` job in `ci.yml` is a `uses:` call with no timeout of its own. All run on Node 24. There is deliberately no `push` trigger on `features/**` branches
+- `lint.yml` - `push` and `pull_request` on `main` + `workflow_dispatch`. Two jobs: `pre-commit` (runs the full `.pre-commit-config.yaml` pipeline via `pre-commit/action@v3.0.1`, skipping `prettier` and `npm-check`) and `fallow-audit` (pull requests only; the vendor `fallow-rs/fallow@v3` action, `command: audit`, `format: github-annotations`, `fetch-depth: 0`, after `npm ci --ignore-scripts`; a later step fails the job on a `warn` verdict or a degraded analysis) -- separate from and additional to the `npm run fallow` gate embedded in `npm run check`
+- `sonarcloud.yml` - reusable workflow that `ci.yml` calls after `direct-coverage`; `timeout-minutes: 30`; skipped for Dependabot and fork PRs (no secrets access), and `ci.yml` also skips the call for release tags; downloads `coverage/direct.lcov` from the same run, then runs `SonarSource/sonarqube-scan-action@v8`
 - `e2e-nightly.yml` - `schedule` (`17 6 * * *`) + `workflow_dispatch`; runs `npm run test:e2e:nightly` (`PI_CM_E2E_REF=main`) against floating upstream `main`
 - `publish.yml` - `push` on `v*` tags only; calls `ci.yml` via `workflow_call`, then publishes to npm with `--provenance` on success
 
 ---
 
-*Stack analysis: 2026-08-18*
+*Stack analysis: 2026-10-05*

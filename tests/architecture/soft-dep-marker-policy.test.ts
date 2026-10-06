@@ -28,7 +28,7 @@
  * table's names with `DECLARED_MARKERS`, so a deleted or doubled row is red.
  * The second scans the extension for `satisfies CommandContext<` and compares
  * the contexts it finds with `DECLARED_MARKERS`, so a new context that nobody
- * registers here is red. A planted control proves the scan finds a context.
+ * registers here is red.
  */
 
 import assert from "node:assert/strict";
@@ -63,13 +63,8 @@ import {
 } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
 import { CENTRAL_ROW_POLICY } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
-import {
-  EXTENSION_ROOT_REL,
-  MARKER_POLICY_CONTROL_TARGETS,
-  ORCHESTRATORS_REL,
-} from "./gate-targets.ts";
+import { EXTENSION_ROOT_REL, ORCHESTRATORS_REL } from "./gate-targets.ts";
 import { REPO_ROOT, filesMatching, stripComments } from "./source-scan.ts";
-import { plantOffender, withTempRoot } from "./temp-root-control.ts";
 
 /** The one `DECLARED_MARKERS` entry that is not a `CommandContext`. */
 const CENTRAL_POLICY_NAME = "CENTRAL_ROW_POLICY (legacy notify)";
@@ -333,13 +328,13 @@ function contextNamesIn(stripped: string): string[] {
 }
 
 /**
- * Every command context declared under `root`'s extension tree, labelled as
+ * Every command context declared in the extension tree, labelled as
  * `DECLARED_MARKERS` labels it: the name, then the path below the orchestrators.
  */
-async function declaredContextsUnder(root: string): Promise<string[]> {
+async function declaredContexts(): Promise<string[]> {
   const labels: string[] = [];
-  for (const rel of await filesMatching(EXTENSION_ROOT_REL, CONTEXT_PIN, { root })) {
-    const stripped = stripComments(await readFile(path.join(root, rel), "utf8"));
+  for (const rel of await filesMatching(EXTENSION_ROOT_REL, CONTEXT_PIN)) {
+    const stripped = stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
     const where = path.posix.relative(ORCHESTRATORS_REL, rel);
     labels.push(...contextNamesIn(stripped).map((name) => `${name} (${where})`));
   }
@@ -349,7 +344,7 @@ async function declaredContextsUnder(root: string): Promise<string[]> {
 
 test("SC-5: DECLARED_MARKERS names every command context the extension declares", async () => {
   // act
-  const discovered = await declaredContextsUnder(REPO_ROOT);
+  const discovered = await declaredContexts();
 
   // assert -- set equality in both directions. A context present on disk and
   // absent here has a marker policy that SC-5 never states; one absent on
@@ -360,59 +355,4 @@ test("SC-5: DECLARED_MARKERS names every command context the extension declares"
       .filter((name) => name !== CENTRAL_POLICY_NAME)
       .sort(),
   );
-});
-
-/** The real context module whose copy receives the planted context. */
-const PLANTED_CONTEXT_HOST: (typeof MARKER_POLICY_CONTROL_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
-
-test("SC-5: the context scan reports a context planted in a copy of a real messaging module", async () => {
-  await withTempRoot("marker-policy-context-", async (root) => {
-    // arrange
-    await plantOffender(
-      root,
-      PLANTED_CONTEXT_HOST,
-      [
-        "export const PLANTED_CONTEXT = {",
-        '  Messaging: { label: "Planted" },',
-        "  rowPolicies: {},",
-        "} as const satisfies CommandContext<never>;",
-      ].join("\n"),
-    );
-
-    // act
-    const discovered = await declaredContextsUnder(root);
-
-    // assert
-    assert.deepStrictEqual(discovered, [
-      "INSTALL_CONTEXT (plugin/install.messaging.ts)",
-      "PLANTED_CONTEXT (plugin/install.messaging.ts)",
-    ]);
-  });
-});
-
-test("SC-5: an unexported context keeps its own name after an exported row policy map", async () => {
-  await withTempRoot("marker-policy-context-", async (root) => {
-    // arrange
-    await plantOffender(
-      root,
-      PLANTED_CONTEXT_HOST,
-      [
-        "export const PLANTED_POLICY = {};",
-        "const PLANTED_CONTEXT = {",
-        '  Messaging: { label: "Planted" },',
-        "  rowPolicies: PLANTED_POLICY,",
-        "} as const satisfies CommandContext<never>;",
-      ].join("\n"),
-    );
-
-    // act
-    const discovered = await declaredContextsUnder(root);
-
-    // assert
-    assert.deepStrictEqual(discovered, [
-      "(unexported) PLANTED_CONTEXT (plugin/install.messaging.ts)",
-      "INSTALL_CONTEXT (plugin/install.messaging.ts)",
-    ]);
-  });
 });

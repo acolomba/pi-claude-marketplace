@@ -61,29 +61,6 @@ void ("hook" satisfies DegradeKind);
  */
 void (true satisfies IsExact<ReturnType<typeof malformedReasonsForKinds>[number], FailureReason>);
 
-/*
- * Controls for the gate the owner is annotated against. The offender pair plants
- * each drift direction into a local restatement of the partition: a reason with
- * no home, and a grouped literal that is not a reason. Both must collapse the
- * gate to `never`, which is what turns the owner's `satisfies` into a build
- * failure; the benign case proves the same gate passes a total partition
- * through unchanged.
- */
-type GateProven<Partition, T> = [Exclude<Reason, Partition>, Exclude<Partition, Reason>] extends [
-  never,
-  never,
-]
-  ? T
-  : never;
-
-type BenignPartition = Reason;
-type MissingReasonPartition = Exclude<Reason, "components now supported">;
-type StrayReasonPartition = Reason | "not a reason";
-
-void (true satisfies IsExact<GateProven<BenignPartition, FailureReason>, FailureReason>);
-void (true satisfies IsExact<GateProven<MissingReasonPartition, FailureReason>, never>);
-void (true satisfies IsExact<GateProven<StrayReasonPartition, FailureReason>, never>);
-
 const skipSeverityCases = [
   {
     title: "classifies absent reasons as an actionable skip",

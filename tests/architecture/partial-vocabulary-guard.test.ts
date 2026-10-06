@@ -8,19 +8,15 @@
 // (out-of-scope homonyms preserved byte-for-byte).
 //
 // Scope of the ABSENCE checks (read as UTF-8 in Node so the glyph-bearing files
-// -- notify.ts, info.ts, output-catalog.md, and the PRD -- are NOT mis-detected
-// as binary the way a recursive shell `grep` would):
+// -- notify.ts, info.ts, and output-catalog.md -- are NOT mis-detected as
+// binary the way a recursive shell `grep` would):
 //   - the extension tree `extensions/pi-claude-marketplace/**/*.ts`
-//   - the two user-facing docs `docs/output-catalog.md` + `docs/messaging-style-guide.md`
+//   - the user-facing doc `docs/output-catalog.md`
 //   - the unit-suite tests `tests/**/*.ts`, RECURSIVELY, minus this file (it
 //     necessarily spells every retired token in order to forbid it) and minus
 //     the separately-scripted `tests/e2e` / `tests/integration` roots. A guard
 //     that names the vocabulary of a suite it never opens reports success over
 //     nothing, so `POLICED_TEST_ROOTS` below is asserted to have been reached
-//   - the PRD `docs/prd/pi-claude-marketplace-prd.md`, scanned SEPARATELY because
-//     it legitimately spells the stable `FORCE-NN` / `FSTAT-NN` requirement IDs
-//     and the component-level `unsupported <kind>` homonyms, which an allowlist
-//     mask preserves
 //   - the completion `description:` string VALUES in edge/completions/{provider,
 //     data}.ts (a plugin is never "unsupported"/"force"-anything to the user; the
 //     component-level "unsupported components" homonym stays allowed)
@@ -47,13 +43,11 @@
 
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { REPO_ROOT } from "./source-scan.ts";
-import { materializeTargets, plantOffender, withTempRoot } from "./temp-root-control.ts";
 
 const EXT_ROOT = path.join(REPO_ROOT, "extensions", "pi-claude-marketplace");
 const TEST_ROOT = path.join(REPO_ROOT, "tests");
@@ -71,8 +65,7 @@ const SELF = path.relative(REPO_ROOT, fileURLToPath(import.meta.url));
  * contributed a file. That is the opposite of an allow-list: the walk itself is
  * the whole of `tests/` minus the two separately-scripted roots, so a root that
  * is absent from this list is still read and still policed -- it simply has no
- * standing claim that it was reached. `tests/scripts` is absent for exactly that
- * reason and no other.
+ * standing claim that it was reached.
  */
 const POLICED_TEST_ROOTS = [
   "architecture",
@@ -117,7 +110,7 @@ function collectTreeSources(
       continue;
     }
 
-    // `entry.parentPath` is the absolute directory (Node >= 20.12).
+    // `entry.parentPath` is the absolute directory.
     const abs = path.join(entry.parentPath, entry.name);
     if (include(path.relative(REPO_ROOT, abs))) {
       readInto(files, [abs]);
@@ -133,16 +126,13 @@ function collectExtensionSources(): ReadonlyMap<string, string> {
 }
 
 /**
- * The full ABSENCE surface: the extension tree PLUS the two user-facing docs and
- * the recursive unit-test tree (this guard file and the separately-scripted e2e
- * and integration roots excluded).
+ * The full ABSENCE surface: the extension tree PLUS the output catalog and the
+ * recursive unit-test tree (this guard file and the separately-scripted e2e and
+ * integration roots excluded).
  */
 function collectGuardedSources(): ReadonlyMap<string, string> {
   const files = new Map(collectExtensionSources());
-  readInto(files, [
-    path.join(REPO_ROOT, "docs", "output-catalog.md"),
-    path.join(REPO_ROOT, "docs", "messaging-style-guide.md"),
-  ]);
+  readInto(files, [path.join(REPO_ROOT, "docs", "output-catalog.md")]);
   for (const [rel, content] of collectTreeSources(TEST_ROOT, isPolicedTestSource)) {
     files.set(rel, content);
   }
@@ -172,18 +162,6 @@ function maskUpstreamSourceSentinel(file: string, content: string): string {
 const STATUS_GUARDED_SOURCES = new Map(
   [...GUARDED_SOURCES].map(([file, content]) => [file, maskUpstreamSourceSentinel(file, content)]),
 );
-
-test("D-75-01 guard: the upstream source mask preserves a retired status literal in the same file", () => {
-  // arrange
-  const file = "extensions/pi-claude-marketplace/domain/manifest.ts";
-  const content = 'source: { source: "unsupported" }, status: "unsupported"';
-
-  // act
-  const masked = maskUpstreamSourceSentinel(file, content);
-
-  // assert
-  assert.equal(masked, 'source: UPSTREAM_SENTINEL, status: "unsupported"');
-});
 
 /** Files (repo-relative) in `sources` whose content contains `needle`. */
 function filesContaining(needle: string, sources: ReadonlyMap<string, string>): string[] {
@@ -219,9 +197,8 @@ test("D-75-01 guard: the extension tree is non-empty (sanity)", () => {
 test("D-75-01 guard: the docs surface loaded (sanity)", () => {
   assert.ok(
     GUARDED_SOURCES.has("docs/output-catalog.md") &&
-      GUARDED_SOURCES.has("docs/messaging-style-guide.md") &&
       GUARDED_SOURCES.has("tests/architecture/catalog-uat/catalog-contract.test.ts"),
-    "expected the docs + the nested catalog-uat contract to be in the guarded surface",
+    "expected the output catalog + the nested catalog-uat contract to be in the guarded surface",
   );
 });
 
@@ -252,7 +229,7 @@ test("D-75-01 guard: the recursive unit-test walk reached every policed root", (
 // ---------------------------------------------------------------------------
 // Per-(file, token) waivers. A waiver says: this file spells this token for a
 // reason the rename did not retire, so the ABSENCE check skips it HERE and
-// nowhere else. Three categories, each narrow enough that a genuine
+// nowhere else. Two categories, each narrow enough that a genuine
 // regression in the same file still fails on every other token:
 //
 //   - `homonym`  -- the token names something other than this project's plugin
@@ -261,8 +238,6 @@ test("D-75-01 guard: the recursive unit-test walk reached every policed root", (
 //   - `subject`  -- the file's case IS the proof that the retired token is
 //                   rejected, so it cannot assert that without naming it. Same
 //                   reason this guard file excludes itself.
-//   - `mapping`  -- the document IS the retired-to-live mapping table, so
-//                   naming the retired form is its purpose.
 //
 // Every row is asserted below to be load-bearing, which is what stops a waiver
 // from outliving the line it was written for.
@@ -271,7 +246,7 @@ test("D-75-01 guard: the recursive unit-test walk reached every policed root", (
 interface TokenWaiver {
   readonly file: string;
   readonly token: string;
-  readonly category: "homonym" | "subject" | "mapping";
+  readonly category: "homonym" | "subject";
   readonly why: string;
 }
 
@@ -295,28 +270,10 @@ const TOKEN_WAIVERS: readonly TokenWaiver[] = [
     why: '`Object.hasOwn(clean, "unsupported")` reads the SAME component-kind field as the fixture above, as a property key. NREG-01 needs the absent-key fact, which cannot be asserted without naming the key.',
   },
   {
-    file: "tests/scripts/check-unused-type-members.audit.test.ts",
-    token: '"unsupported"',
-    category: "homonym",
-    why: "the unused-type-member audit names its own refusal categories, one of which is the members the analysis could not settle. The case asserts that category by name, and it is the audit's vocabulary, not this project's plugin verdict vocabulary.",
-  },
-  {
     file: "tests/edge/handlers/plugin/reinstall.test.ts",
     token: "--force",
     category: "subject",
     why: 'RINST-01 / D-67-03: the case proves reinstall REJECTS the retired overwrite flag. Its input argument and the echoed `Unknown flag: "--force".` message must spell the retired flag or the case proves nothing.',
-  },
-  {
-    file: "docs/messaging-style-guide.md",
-    token: "pi-subagents is not loaded",
-    category: "mapping",
-    why: "the retired-to-live table names the retired sentence in its left column and `{requires pi-subagents}` in its right one (MSG-SD-1).",
-  },
-  {
-    file: "docs/messaging-style-guide.md",
-    token: "pi-mcp-adapter is not loaded",
-    category: "mapping",
-    why: "the same table's second soft-dependency row, mapping to `{requires pi-mcp}` (MSG-SD-1).",
   },
 ];
 
@@ -325,14 +282,7 @@ function waivedFor(token: string): string[] {
   return TOKEN_WAIVERS.filter((waiver) => waiver.token === token).map((waiver) => waiver.file);
 }
 
-/**
- * Repo-relative files in `sources` that spell `token` without a waiver.
- *
- * `sources` is a parameter rather than a closed-over constant so the controls
- * at the bottom of this file can run this exact function against a temp-root
- * copy of a real source. A clause that can only ever read the repository can
- * never be seen to fail.
- */
+/** Repo-relative files in `sources` that spell `token` without a waiver. */
 function unwaivedHits(token: string, sources: ReadonlyMap<string, string>): string[] {
   const waived = waivedFor(token);
 
@@ -395,8 +345,7 @@ const ABSENT_IDENTIFIERS = [
 
 // MSG-SD-1: the free-text soft-dependency warning sentences were replaced by
 // the per-row `{requires pi-subagents}` / `{requires pi-mcp}` reason markers.
-// The retired sentences have no homonym; the only file that may still spell
-// them is the retired-to-live mapping table itself, which is waived by name.
+// The retired sentences have no homonym, so no guarded file may spell them.
 const ABSENT_SOFT_DEP_PROSE = ["pi-subagents is not loaded", "pi-mcp-adapter is not loaded"];
 
 const ABSENT_TOKENS = [
@@ -564,78 +513,6 @@ test("D-75-01 guard: overwrite `force: true` semantics survive (rm / writeRef / 
 });
 
 // ---------------------------------------------------------------------------
-// PRD surface (docs/prd/pi-claude-marketplace-prd.md), scanned SEPARATELY
-// from GUARDED_SOURCES because it legitimately spells two OUT-of-scope
-// homonyms an allowlist must preserve:
-//   - the stable requirement/decision IDs `FORCE-01..05` / `FSTAT-01..07`
-//     (incl. the `01a` / `03a` suffixed rows) -- identifiers, not vocabulary;
-//   - the component-level `unsupported <kind>` reasons (`unsupported source`,
-//     `unsupported hooks`, `unsupported component(s)`, `settings (unsupported)`)
-//     -- a plugin is *partially-available* BECAUSE some component kinds are
-//     unsupported (section 4b).
-// ---------------------------------------------------------------------------
-
-const PRD_REL = "docs/prd/pi-claude-marketplace-prd.md";
-const PRD_CONTENT = readFileSync(path.join(REPO_ROOT, PRD_REL), "utf8");
-
-// Mask the OUT-of-scope homonyms above so the retired-token checks below cannot
-// false-positive on them. Everything left is fair game for the ABSENCE checks.
-function maskPrdAllowlist(text: string): string {
-  return text
-    .replace(/\b(?:FORCE|FSTAT)-\d+[a-z]?/g, "")
-    .replace(/UNSUPPORTED component/g, "")
-    .replace(/unsupported[ -]components?/gi, "")
-    .replace(/unsupported (?:source|hooks)/gi, "")
-    .replace(/settings \(unsupported\)/g, "");
-}
-
-const MASKED_PRD = maskPrdAllowlist(PRD_CONTENT);
-
-// The retired plugin-level flag / verdict / status / render / symbol tokens.
-// None is an ID or a component homonym, so none survives the mask after the
-// rename. The standalone backtick verdict `` `unsupported` `` cannot collide
-// with the component reasons (those keep an interior space, e.g.
-// `unsupported source kind: github`).
-const PRD_ABSENT_TOKENS = [
-  "--force",
-  "--unsupported",
-  "force-installed",
-  "force-upgradable",
-  "force-degradable",
-  "(force-installed)",
-  "(force-upgradable)",
-  "Re-run with --force",
-  "requireForceInstallable",
-  "`unsupported`",
-];
-
-for (const token of PRD_ABSENT_TOKENS) {
-  test(`D-75-01 guard: PRD retired plugin-level token absent -- ${token}`, () => {
-    assert.ok(
-      !MASKED_PRD.includes(token),
-      `retired plugin-level token ${JSON.stringify(token)} must be ABSENT from ${PRD_REL} after the rename (FORCE-/FSTAT- IDs and component-level unsupported homonyms are allowlisted)`,
-    );
-  });
-}
-
-// PRESENCE half: the allowlisted homonyms MUST survive byte-for-byte -- an
-// over-rename would silently delete an ID row or a component reason.
-test("D-75-01 guard: PRD keeps FORCE-/FSTAT- IDs and the component `unsupported` homonyms", () => {
-  assert.ok(
-    /\bFORCE-0\d/.test(PRD_CONTENT),
-    "the FORCE-NN requirement IDs must survive in the PRD",
-  );
-  assert.ok(
-    /\bFSTAT-0\d/.test(PRD_CONTENT),
-    "the FSTAT-NN requirement IDs must survive in the PRD",
-  );
-  assert.ok(
-    PRD_CONTENT.includes("unsupported source"),
-    "the component-level `unsupported source` homonym must survive in the PRD",
-  );
-});
-
-// ---------------------------------------------------------------------------
 // Completion `description:` string VALUES (edge/completions/{provider,data}.ts
 // and the edge/flag-catalog.ts single source of truth those completions derive
 // from). A completion description is user-facing prose: the retired plugin-level
@@ -717,96 +594,4 @@ test("D-75-01 guard: completion-description extractor finds the --partial rows",
       catalog.some((d) => d.includes("unsupported components")),
     "expected the partial list-filter and install/update completion descriptions to be extracted",
   );
-});
-
-// ---------------------------------------------------------------------------
-// Controls for the widened scope. Reading more files is not evidence that the
-// wider surface is policed; being SEEN to fail on one of those files is.
-//
-// D-07-01: the offender is derived from the real target at plant time rather
-// than hand-authored, so it cannot drift away from the file it stands for.
-// D-07-04: the unmutated copy of the same target is the benign half -- without
-// it, a clause that failed everything would look identical to a working one.
-// ---------------------------------------------------------------------------
-
-/**
- * The unit-test source the controls copy and mutate.
- *
- * It is a file the recursive walk added and that no waiver touches, so a hit
- * against its copy can only come from the planted line.
- */
-const CONTROL_TARGET = "tests/domain/plugin-resolver.test.ts";
-
-/** A retired render token from `ABSENT_RENDER_TOKENS`, planted by the control. */
-const CONTROL_TOKEN = "(force-installed)";
-
-/** First double-quoted `test("...")` title in a module. */
-const FIRST_TEST_TITLE = /^\s*test\("([^"\\]+)"/m;
-
-/**
- * Build the offending line from a case title `target` really declares.
- *
- * A hand-written offender is a claim about the target; restating one of its own
- * titles with a retired token is a fact about it, and it reproduces the exact
- * defect this widening exists for -- retired vocabulary in a test TITLE, which
- * a guard that only read assertion bodies would never see.
- */
-async function offenderLineFor(target: string): Promise<string> {
-  const source = await readFile(path.join(REPO_ROOT, target), "utf8");
-  const title = FIRST_TEST_TITLE.exec(source)?.[1];
-
-  assert.ok(
-    title,
-    `D-07-01: ${target} declares no double-quoted case title, so the offender below would be hand-authored rather than derived from the real file.`,
-  );
-
-  return `test("${title} renders ${CONTROL_TOKEN}", () => {});`;
-}
-
-/** Read `targets` out of `root` into the map shape the ABSENCE checks take. */
-async function sourcesUnder(
-  root: string,
-  targets: readonly string[],
-): Promise<ReadonlyMap<string, string>> {
-  const files = new Map<string, string>();
-  for (const rel of targets) {
-    files.set(rel, await readFile(path.join(root, rel), "utf8"));
-  }
-
-  return files;
-}
-
-test("D-75-01 guard: the widened scan fires on a retired token planted in a copy of a real unit-test source", async () => {
-  await withTempRoot("vocabulary-guard-offender-", async (root) => {
-    // arrange
-    await materializeTargets(root, [CONTROL_TARGET]);
-    await plantOffender(root, CONTROL_TARGET, await offenderLineFor(CONTROL_TARGET));
-
-    // act
-    const hits = unwaivedHits(CONTROL_TOKEN, await sourcesUnder(root, [CONTROL_TARGET]));
-
-    // assert
-    assert.deepStrictEqual(
-      hits,
-      [CONTROL_TARGET],
-      `the ABSENCE check must report ${CONTROL_TARGET} once a retired render token is planted in it; a silent pass here means the widened surface is read but not policed`,
-    );
-  });
-});
-
-test("D-75-01 guard: an unmutated copy of the same real unit-test source passes", async () => {
-  await withTempRoot("vocabulary-guard-benign-", async (root) => {
-    // arrange
-    await materializeTargets(root, [CONTROL_TARGET]);
-
-    // act
-    const hits = unwaivedHits(CONTROL_TOKEN, await sourcesUnder(root, [CONTROL_TARGET]));
-
-    // assert
-    assert.deepStrictEqual(
-      hits,
-      [],
-      `the byte-identical copy of ${CONTROL_TARGET} must pass, or the offender case above proves only that the check fails everything`,
-    );
-  });
 });

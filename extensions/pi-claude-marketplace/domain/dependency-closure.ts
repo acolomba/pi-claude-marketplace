@@ -354,6 +354,7 @@ async function walkChildren(
       return child.failure;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- the post-order walk shares ctx; the first failure ends it
     const failure = await walkDependencyEdge(ctx, child.edge);
     if (failure !== undefined) {
       return failure;

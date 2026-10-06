@@ -268,6 +268,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
   const targets: { scope: Scope; locations: ScopedLocations; name: string }[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one state read each
     const state = await loadState(locations.extensionRoot);
     for (const name of Object.keys(state.marketplaces)) {
       targets.push({ scope, locations, name });
@@ -287,6 +288,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
 
   // Process sequentially.
   for (const t of targets) {
+    // eslint-disable-next-line no-await-in-loop -- each refresh locks the scope and notifies in order
     await refreshOneMarketplace({
       completionCache: opts.completionCache,
       ctx: opts.ctx,
@@ -571,6 +573,7 @@ async function cascadeAutoupdates(
   const outcomes: PluginUpdateOutcome[] = [];
   for (const plugin of snapshot.plugins) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcomes.push(await pluginUpdate(plugin, name, scope));
     } catch (err) {
       // `notes` is consumed by callers OUTSIDE the notify path (e.g.

@@ -626,12 +626,14 @@ export async function resolveTagOid(opts: ResolveTagOidOptions): Promise<string 
   for (let hop = 0; hop < MAX_TAG_PEEL_HOPS; hop++) {
     let read: Awaited<ReturnType<typeof git.readTag>>;
     try {
+      // eslint-disable-next-line no-await-in-loop -- each hop reads the oid the previous tag names
       read = await git.readTag({ fs, dir: opts.dir, oid, cache: opts.cache });
     } catch {
       // Not a tag object: a LIGHTWEIGHT tag names its target directly. Only a
       // commit is checkout-able, so anything else -- a blob, a tree, or an
       // unreadable object -- is dropped like an annotated blob/tree tag is.
       try {
+        // eslint-disable-next-line no-await-in-loop -- runs once: the lightweight-tag path returns after it
         await git.readCommit({ fs, dir: opts.dir, oid, cache: opts.cache });
         return oid;
       } catch {

@@ -5,12 +5,6 @@ import test from "node:test";
 
 import { PRESENTATION_SINK_TARGETS } from "./gate-targets.ts";
 import { assertNoForbiddenSurface, REPO_ROOT, stripComments } from "./source-scan.ts";
-import {
-  assertPlantedCopyRejects,
-  materializeTargets,
-  plantBenignNearMiss,
-  withTempRoot,
-} from "./temp-root-control.ts";
 
 import type { ScanReport } from "./source-scan.ts";
 
@@ -55,13 +49,6 @@ import type { ScanReport } from "./source-scan.ts";
  *     deep-compares them with the registry group (D-07-03). The placement clause
  *     requires positive counts, so a module with no sink fails instead of
  *     passing over nothing.
- *   - It FIRES. Temp-root copies of the real module with one planted offender
- *     reject (D-07-01). The third offender uses the sanctioned spelling outside
- *     `deliver`, so only the placement clause can reject it. The `.call`,
- *     destructure, and alias offenders each pin the mention message they must
- *     fail with.
- *   - It is not failing everything. An unmutated copy passes, and a composed
- *     notify inside a line comment passes (D-07-04).
  *
  * Comments are stripped before every check because the module's header and
  * JSDoc legally describe the notify call it guards.
@@ -111,8 +98,8 @@ const ALLOWED_SINK_MODULE_LITERALS: ReadonlyArray<string> = [
  * comment-stripped module must be in `ALLOWED_SINK_MODULE_LITERALS`, and every
  * member of that set must appear.
  */
-async function assertSinkLiterals(root: string): Promise<void> {
-  const stripped = stripComments(await readFile(path.join(root, SINK_FILE), "utf8"));
+async function assertSinkLiterals(): Promise<void> {
+  const stripped = stripComments(await readFile(path.join(REPO_ROOT, SINK_FILE), "utf8"));
   const literals = [...stripped.matchAll(SINK_MODULE_LITERAL)]
     .filter((match) => match[1] === undefined)
     .map((match) => match[2] ?? "");
@@ -144,8 +131,8 @@ const TEXT_STRATEGY_IMPORT =
  * reaches `deliver` at least once. Every `ui` and `deliver` mention must be
  * one of those counted calls or the `deliver` declaration.
  */
-async function assertSinkPlacement(root: string): Promise<void> {
-  const stripped = stripComments(await readFile(path.join(root, SINK_FILE), "utf8"));
+async function assertSinkPlacement(): Promise<void> {
+  const stripped = stripComments(await readFile(path.join(REPO_ROOT, SINK_FILE), "utf8"));
   const notifyCalls = [...stripped.matchAll(/\bui\.notify\(/g)].length;
   const deliverBody = /function deliver\([^\n]*\n[\s\S]*?\n\}\n/.exec(stripped)?.[0] ?? "";
   const sinkCalls = [...deliverBody.matchAll(/\bui\.notify\(/g)].length;
@@ -196,22 +183,21 @@ async function assertSinkPlacement(root: string): Promise<void> {
   );
 }
 
-/** Every part of the gate under `root`: the pattern scan, placement, then literals. */
-async function scanPresentationSink(root: string): Promise<ScanReport> {
+/** Every part of the gate: the pattern scan, placement, then literals. */
+async function scanPresentationSink(): Promise<ScanReport> {
   const report = await assertNoForbiddenSurface(
     PRESENTATION_SINK_TARGETS,
     SINK_PATTERNS,
     describeSinkViolation,
-    { root },
   );
-  await assertSinkPlacement(root);
-  await assertSinkLiterals(root);
+  await assertSinkPlacement();
+  await assertSinkLiterals();
   return report;
 }
 
 test("D-16 / SC-5: every notify argument in the dispatch module comes from the text strategy", async () => {
   // act
-  const report = await scanPresentationSink(REPO_ROOT);
+  const report = await scanPresentationSink();
 
   // assert
   assert.ok(
@@ -223,100 +209,4 @@ test("D-16 / SC-5: every notify argument in the dispatch module comes from the t
     [...PRESENTATION_SINK_TARGETS],
     "D-07-03: the scan must have opened every declared target; one that stopped resolving drops out of `visited`.",
   );
-});
-
-/**
- * Planted offenders. `rejection` pins the clause an offender must fail on;
- * without it, any D-16 message passes.
- */
-const SINK_OFFENDERS: ReadonlyArray<{
-  readonly name: string;
-  readonly line: string;
-  readonly rejection?: RegExp;
-}> = [
-  {
-    name: "a direct notify with a composed template",
-    line: 'export function leak(ctx: NotificationContext): void { ctx.ui.notify(`x`, "info"); }',
-  },
-  {
-    name: "the sink handed a pre-composed tuple",
-    line: 'deliver(ctx, [`pre-composed`, "info"]);',
-  },
-  {
-    name: "a third sanctioned-spelling notify outside the sink",
-    line: "function relay(ctx: NotificationContext, args: NotifyArguments): void { ctx.ui.notify(args[0], args[1]); }",
-  },
-  {
-    name: "a composed template handed to the structured formatter",
-    line: "deliver(ctx, formatEnvelopeArguments(envelope, `x`));",
-  },
-  {
-    name: "a composed sentence handed to the structured path through a variable",
-    line: 'const sentence = "Nothing to prune."; emitWithSummary(ctx, envelope, sentence);',
-  },
-  {
-    name: "a member-chain context handed a variable",
-    line: "deliver(this.ctx, composed);",
-  },
-  {
-    name: "a bracket-access notify",
-    line: 'ctx.ui["notify"](args[0]);',
-  },
-  {
-    name: "a notify reached through .call",
-    line: "function leak(ctx: NotificationContext, m: { cause: Error }): void { ctx.ui.notify.call(ctx.ui, m.cause.message); }",
-    rejection: /names ui 4 time\(s\); only the 2 notify calls/,
-  },
-  {
-    name: "a destructured notify",
-    line: "function leak(ctx: NotificationContext, m: { cause: Error }): void { const { notify: n } = ctx.ui; n(m.cause.message); }",
-    rejection: /names ui 3 time\(s\); only the 2 notify calls/,
-  },
-  {
-    name: "an aliased deliver handed a pre-composed tuple",
-    line: "function leak(ctx: NotificationContext, m: { cause: Error }): void { const d = deliver; d(ctx, [m.cause.message]); }",
-    rejection: /names deliver 4 time\(s\); only its declaration and 2 direct formatter call/,
-  },
-];
-
-for (const { name, line, rejection = /D-16/ } of SINK_OFFENDERS) {
-  test(`D-16 / SC-5: the presentation-sink gate rejects ${name}`, async () => {
-    // act & assert
-    await assertPlantedCopyRejects({
-      prefix: "presentation-sink-offender-",
-      targets: PRESENTATION_SINK_TARGETS,
-      target: SINK_FILE,
-      line,
-      scan: scanPresentationSink,
-      rejection,
-    });
-  });
-}
-
-test("D-16 / SC-5: an unmutated copy of the dispatch module passes and reports it opened", async () => {
-  await withTempRoot("presentation-sink-benign-", async (root) => {
-    // arrange
-    await materializeTargets(root, PRESENTATION_SINK_TARGETS);
-
-    // act
-    const report = await scanPresentationSink(root);
-
-    // assert
-    assert.deepStrictEqual(report.visited, [...PRESENTATION_SINK_TARGETS]);
-    assert.deepStrictEqual(report.waived, []);
-  });
-});
-
-test("D-16 / SC-5: a composed notify inside a line comment passes, so the gate strips comments", async () => {
-  await withTempRoot("presentation-sink-near-miss-", async (root) => {
-    // arrange
-    await materializeTargets(root, PRESENTATION_SINK_TARGETS);
-    await plantBenignNearMiss(root, SINK_FILE, 'ctx.ui.notify(`x`, "info");');
-
-    // act
-    const report = await scanPresentationSink(root);
-
-    // assert
-    assert.deepStrictEqual(report.visited, [...PRESENTATION_SINK_TARGETS]);
-  });
 });

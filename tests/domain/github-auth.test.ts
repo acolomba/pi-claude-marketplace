@@ -132,7 +132,6 @@ void ({ kind: "pending" } satisfies PollResult);
 void ({
   ok: false,
   reason: "Device Flow failed.",
-  authAttempted: true,
 } satisfies DeviceFlowResult);
 
 describe("initiateDeviceFlow", () => {
@@ -182,7 +181,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: true,
       cred: { username: "x-access-token", password: "token-1" },
-      authAttempted: true,
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
@@ -234,7 +232,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: false,
       reason: "User cancelled authorization. Run the command again to retry.",
-      authAttempted: true,
     });
     verify(credentialOps);
     verify(onDeviceCode);
@@ -282,7 +279,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: true,
       cred: { username: "oauth2", password: "token-1" },
-      authAttempted: true,
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
@@ -442,7 +438,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: true,
       cred: { username: "oauth2", password: "token-1" },
-      authAttempted: true,
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
@@ -456,7 +451,6 @@ describe("initiateDeviceFlow", () => {
       expectedDeviceFlow: {
         ok: false,
         reason: "User cancelled authorization. Run the command again to retry.",
-        authAttempted: true,
       } as const,
     },
     {
@@ -465,7 +459,6 @@ describe("initiateDeviceFlow", () => {
       expectedDeviceFlow: {
         ok: false,
         reason: "Device code expired before authorization. Run the command again to restart.",
-        authAttempted: true,
       } as const,
     },
     {
@@ -478,7 +471,6 @@ describe("initiateDeviceFlow", () => {
       expectedDeviceFlow: {
         ok: false,
         reason: "Device Flow failed: unsupported_grant_type -- grant not supported",
-        authAttempted: true,
       } as const,
     },
     {
@@ -487,7 +479,6 @@ describe("initiateDeviceFlow", () => {
       expectedDeviceFlow: {
         ok: false,
         reason: "Device Flow failed: unsupported_grant_type",
-        authAttempted: true,
       } as const,
     },
   ]) {
@@ -566,7 +557,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: false,
       reason: "Device Flow poll failed: poll offline",
-      authAttempted: true,
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
@@ -606,7 +596,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: false,
       reason: "Device Flow poll failed: unknown error",
-      authAttempted: true,
     });
     verify(credentialOps);
     verify(onDeviceCode);
@@ -646,7 +635,6 @@ describe("initiateDeviceFlow", () => {
       ok: false,
       reason:
         "Device Flow timed out before authorization completed. Run the command again to restart.",
-      authAttempted: true,
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
@@ -694,7 +682,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: false,
       reason: "Device Flow cancelled.",
-      authAttempted: true,
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
@@ -738,7 +725,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: false,
       reason: "Device Flow cancelled.",
-      authAttempted: true,
     });
     verify(deviceFlowHttp);
     verify(credentialOps);
@@ -788,7 +774,6 @@ describe("initiateDeviceFlow", () => {
       assert.deepStrictEqual(deviceFlow, {
         ok: false,
         reason: expectedReason,
-        authAttempted: true,
       });
       verify(deviceFlowHttp);
       verify(credentialOps);
@@ -900,7 +885,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: true,
       cred: { username: "oauth2", password: "token-1" },
-      authAttempted: true,
     });
     const fetchRequests = await Promise.all(
       fetchSpy.mock.calls.map(async ({ arguments: [input, init] }) => {
@@ -986,7 +970,6 @@ describe("initiateDeviceFlow", () => {
       assert.deepStrictEqual(deviceFlow, {
         ok: false,
         reason: expectedReason,
-        authAttempted: true,
       });
       verify(credentialOps);
       verify(onDeviceCode);
@@ -1027,7 +1010,6 @@ describe("initiateDeviceFlow", () => {
       assert.deepStrictEqual(deviceFlow, {
         ok: false,
         reason: "Device Flow initialization failed: Device code response missing required fields",
-        authAttempted: true,
       });
       verify(credentialOps);
       verify(onDeviceCode);
@@ -1069,7 +1051,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: true,
       cred: { username: "oauth2", password: "token-1" },
-      authAttempted: true,
     });
     verify(credentialOps);
     verify(onDeviceCode);
@@ -1083,7 +1064,6 @@ describe("initiateDeviceFlow", () => {
       expectedDeviceFlow: {
         ok: false,
         reason: "User cancelled authorization. Run the command again to retry.",
-        authAttempted: true,
       } as const,
     },
     {
@@ -1092,7 +1072,6 @@ describe("initiateDeviceFlow", () => {
       expectedDeviceFlow: {
         ok: false,
         reason: "Device code expired before authorization. Run the command again to restart.",
-        authAttempted: true,
       } as const,
     },
     {
@@ -1101,7 +1080,6 @@ describe("initiateDeviceFlow", () => {
       expectedDeviceFlow: {
         ok: false,
         reason: "Device Flow failed: unknown_grant -- not supported",
-        authAttempted: true,
       } as const,
     },
     {
@@ -1110,7 +1088,6 @@ describe("initiateDeviceFlow", () => {
       expectedDeviceFlow: {
         ok: false,
         reason: "Device Flow failed: unknown_grant",
-        authAttempted: true,
       } as const,
     },
     {
@@ -1119,7 +1096,6 @@ describe("initiateDeviceFlow", () => {
       expectedDeviceFlow: {
         ok: false,
         reason: "Device Flow failed: unexpected",
-        authAttempted: true,
       } as const,
     },
   ]) {
@@ -1270,7 +1246,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: false,
       reason: "Device Flow failed: network_error -- TypeError: offline",
-      authAttempted: true,
     });
     verify(credentialOps);
     verify(onDeviceCode);
@@ -1306,7 +1281,6 @@ describe("initiateDeviceFlow", () => {
     assert.deepStrictEqual(deviceFlow, {
       ok: false,
       reason: "Device Flow failed: invalid_json -- HTTP 502",
-      authAttempted: true,
     });
     verify(credentialOps);
     verify(onDeviceCode);

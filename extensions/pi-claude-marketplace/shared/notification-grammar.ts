@@ -266,7 +266,7 @@ export function renderMpHeader(mp: ResolvedMarketplace): string {
  * optional tokens (e.g. an undefined scope-bracket on `available` rows)
  * never produce a double-space. Single canonical implementation.
  */
-// D-11: the row-composition primitives below (joinTokens, renderScopeBracket,
+// D-notification-refactor-01-11: the row-composition primitives below (joinTokens, renderScopeBracket,
 // renderVersion, composeVersionArrow, composeReasons) stay declared HERE as
 // the single source of the byte-stable presentation vocabulary.
 function joinTokens(parts: readonly string[]): string {

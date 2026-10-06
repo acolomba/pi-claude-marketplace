@@ -2,7 +2,7 @@
 //
 // D-03 two-tier (in-memory + file-backed) completion cache. Lives in shared/
 // because both edge/ (read path) and orchestrators/ (invalidation path) must
-// reach it, and the D-11 import boundary keeps edge/ from importing
+// reach it, and the D-v1.0-01-11 import boundary keeps edge/ from importing
 // persistence/ (where state-io / locations live). shared/ is the only home
 // that satisfies BOTH directions.
 //

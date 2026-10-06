@@ -13,6 +13,37 @@
           }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/init-worktree.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__codegraph__codegraph_explore",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/codegraph-worktree-hook.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/stop-worktree-daemon.sh"
+          }
+        ]
+      }
     ]
   }
 }

@@ -82,7 +82,7 @@ export interface MarketplaceStateRecordLike {
 
 /**
  * Injection surface that lets edge/completions reach into persistence/state
- * + domain/manifest WITHOUT importing them (D-11 / ESLint BLOCK C keeps
+ * + domain/manifest WITHOUT importing them (D-v1.0-01-11 / ESLint BLOCK C keeps
  * edge/ from importing persistence/). Constructed by `makeLocationsResolver`
  * below and threaded through getArgumentCompletions by edge/register.ts,
  * which reaches it through the `LocationsResolver` republish in
@@ -232,6 +232,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
         // `list` (no provider-local reclassification).
         for (const [pluginName, installed] of Object.entries(mp.plugins)) {
           rows.push(
+            // eslint-disable-next-line no-await-in-loop -- bounded by the marketplace's installed plugins, one row each
             await classifyInstalledPluginRow(
               pluginName,
               installed,
@@ -248,6 +249,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
             continue;
           }
 
+          // eslint-disable-next-line no-await-in-loop -- bounded by the manifest's uninstalled entries, one row each
           rows.push(await classifyNotInstalledPluginRow(entry, mp.marketplaceRoot, locations));
         }
 

@@ -419,12 +419,14 @@ export async function discoverPluginWorkflows(input: {
     // containment check is what makes a declared `/etc` a refusal rather than
     // a walk. Loud by design (PathContainmentError) -- a declared path that
     // escapes the plugin root is a defect of the manifest, not of one file.
+    // eslint-disable-next-line no-await-in-loop -- first-seen path wins the shared `seenPaths` set
     await assertPathInside(
       input.resolved.pluginRoot,
       declared,
       `workflows component path "${workflowsRel}"`,
     );
 
+    // eslint-disable-next-line no-await-in-loop -- first-seen path wins the shared `seenPaths` set
     const scan = await scanDeclaredPath({
       pluginName: input.pluginName,
       declared,
@@ -512,6 +514,7 @@ async function scanWorkflowsDirectory(input: {
   const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
 
   for (const entry of sorted) {
+    // eslint-disable-next-line no-await-in-loop -- first-seen path wins the shared `seenPaths` set
     await scanCandidate({ ...input, entry });
   }
 }

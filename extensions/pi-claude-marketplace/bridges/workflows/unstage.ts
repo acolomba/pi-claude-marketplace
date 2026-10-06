@@ -47,8 +47,10 @@ export async function unstagePluginWorkflows(
       // saved directory is shared with the user's own hand-saved workflows and
       // with every other tool, so a link can appear at a recorded name at any
       // time.
+      // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
       const target = await input.locations.workflowArtifactPath(name);
 
+      // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
       await unlink(target);
       removed.push(name);
     } catch (err) {

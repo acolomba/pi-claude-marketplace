@@ -263,6 +263,7 @@ async function applyMarketplaceRemoves(
 ): Promise<void> {
   for (const op of plan.marketplacesToRemove) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- each remove locks the scope (retries: 0)
       const result = await removeMarketplace({
         ctx: opts.ctx,
         run: opts.run,
@@ -367,6 +368,7 @@ async function applyMarketplaceAdds(
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
   for (const op of plan.marketplacesToAdd) {
+    // eslint-disable-next-line no-await-in-loop -- each add locks the scope (retries: 0)
     const result = await addMarketplace({
       ctx: opts.ctx,
       run: opts.run,
@@ -553,6 +555,7 @@ async function applyPluginInstalls(
 ): Promise<void> {
   const installPlugin = createInstallOperation(opts.hooksRouting, opts.completionCache);
   for (const op of plan.pluginsToInstall) {
+    // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
     const result = await installPlugin({
       ctx: opts.ctx,
       run: opts.run,
@@ -895,6 +898,7 @@ async function applyPluginToggles(
     // duplicating the fail-loud wording in
     // `import/execute.ts::addOnePlannedMarketplace` (the type makes the
     // branch unreachable instead of routing through a row).
+    // eslint-disable-next-line no-await-in-loop -- each toggle locks the scope (retries: 0)
     const result = await setPluginEnabled({
       ctx: opts.ctx,
       run: opts.run,
@@ -1289,6 +1293,7 @@ async function applyReconcileWithReader(
     // the single cascade instead of aborting applyReconcile wholesale.
     let readResult: ScopeReadResult;
     try {
+      // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
       readResult = await readPassForScope(reader, scope, opts.cwd);
     } catch (err) {
       // S3 / PR #51: when the throw came from migrateFirstRunConfig's
@@ -1334,6 +1339,7 @@ async function applyReconcileWithReader(
     // stamp; stamps the running version whenever the gate opened. WR-01: a
     // transient lock-held / EACCES throw is coerced to a structured row so it
     // never aborts the cascade.
+    // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
     await applyBackfillForScopeIsolated(opts, scope, readResult, outcomes);
 
     // DISP-02: after the per-scope apply pass (or the no-plan arm), rebuild
@@ -1341,6 +1347,7 @@ async function applyReconcileWithReader(
     // bucket reflecting the post-reconcile state. WR-01-style isolation:
     // a transient lock-held / EACCES throw is captured into a structured
     // `invalid-block` outcome via `rebuildScopeRoutingTableIsolated`.
+    // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
     await rebuildScopeRoutingTableIsolated(scope, opts.cwd, opts.hooksRouting, outcomes);
   }
 

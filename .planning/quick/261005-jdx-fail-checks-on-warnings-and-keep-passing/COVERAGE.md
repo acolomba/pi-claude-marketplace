@@ -1,0 +1,1 @@
+No external API integration: the task changes local check tooling (ESLint, yamllint, Fallow config, test reporter, direct-coverage script, init.sh) and one CI step that reads the existing Fallow action's outputs; it adds no external API, SDK, or service.

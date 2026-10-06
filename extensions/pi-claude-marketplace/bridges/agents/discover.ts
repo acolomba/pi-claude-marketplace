@@ -68,6 +68,7 @@ export async function discoverPluginAgents(input: {
   const warnings: string[] = [];
 
   for (const agentsDir of agentsDirs) {
+    // eslint-disable-next-line no-await-in-loop -- AG-12: the first-discovered name wins the shared map
     const entries = await readDirEntriesTolerant(agentsDir);
 
     const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
@@ -77,12 +78,14 @@ export async function discoverPluginAgents(input: {
       // T-03-27: refuse symlinks before reading the file. lstat-based check
       // (does NOT follow). Symlinks discovered here are skipped silently;
       // a malicious plugin can't escape via symlink.
+      // eslint-disable-next-line no-await-in-loop -- AG-12: the first-discovered name wins the shared map
       if (!(await isPlainMarkdownFile(agentsDir, entry))) {
         continue;
       }
 
       // Hash raw bytes (not utf8 text) so the digest survives BOM and
       // line-ending normalization.
+      // eslint-disable-next-line no-await-in-loop -- AG-12: the first-discovered name wins the shared map
       const bytes = await readFile(sourcePath);
       const sourceHash = createHash("sha256").update(bytes).digest("hex");
       const text = bytes.toString("utf8");
