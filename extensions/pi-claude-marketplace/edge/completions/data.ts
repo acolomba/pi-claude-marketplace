@@ -422,6 +422,7 @@ async function collectPluginToMarketplacesMap(
   const result = new Map<string, string[]>();
   const scopes: readonly Scope[] =
     explicitScope === undefined ? ["project", "user"] : [explicitScope];
+  // fallow-ignore-next-line code-duplication -- reviewed: the two completion walks mirror the same two-scope loop on purpose; one filters rows by status and the other keeps every row
   for (const scope of scopes) {
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one marketplace list read each
     const names = await marketplaceNamesForScope(resolver, scope);

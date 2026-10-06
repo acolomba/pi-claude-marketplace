@@ -378,6 +378,7 @@ export async function commitPreparedAgents(
   // reverse to avoid in-place mutation, per-pair try/catch into a leaks[]
   // string array, and the rollback loop NEVER throws.
   const completedRenames: { from: string; to: string }[] = [];
+  // fallow-ignore-next-line code-duplication -- reviewed: the agents and commands bridges keep the same TR-01/TR-05 commit-and-rollback shape on purpose, so each rollback contract stays beside the commit it protects
   try {
     await mkdir(prepared.locations.agentsDir, { recursive: true });
     for (const pair of prepared._stagedFilePaths) {

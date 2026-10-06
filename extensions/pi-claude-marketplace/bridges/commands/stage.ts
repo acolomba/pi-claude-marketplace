@@ -459,6 +459,7 @@ export async function replacePreparedCommands(
         throw new Error(`Cannot replace command target with non-previous content at ${pair.to}`);
       }
 
+      // fallow-ignore-next-line code-duplication -- reviewed: the commands, agents, and skills bridges keep the same TR-01/TR-05 commit-and-rollback shape on purpose, so each rollback contract stays beside the commit it protects
       // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
       await rename(pair.from, pair.to);
       renamed.push({ to: pair.to });

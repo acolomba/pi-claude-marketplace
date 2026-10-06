@@ -1703,6 +1703,7 @@ async function hydrateReEnabledMemberHooks(
     return;
   }
 
+  // fallow-ignore-next-line code-duplication -- reviewed: enable hydrates hooks exactly as install-flow does, one member at a time through the same routing seam
   for (const { member, hooksJsonPath } of withHooks) {
     try {
       // eslint-disable-next-line no-await-in-loop -- hydrates one member at a time, as /reload does
