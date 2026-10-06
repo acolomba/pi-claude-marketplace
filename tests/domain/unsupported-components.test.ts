@@ -204,3 +204,45 @@ test("UKIND-01: collectUnsupportedKinds ignores a plugin field named mod", async
   // assert
   assert.deepStrictEqual(kinds, []);
 });
+
+for (const { description, entry, manifest, expectedKinds } of [
+  {
+    description: "an entry experimental outputStyles",
+    entry: { experimental: { outputStyles: "./styles" } },
+    manifest: null,
+    expectedKinds: ["outputStyles"],
+  },
+  {
+    description: "a manifest experimental outputStyles",
+    entry: {},
+    manifest: { experimental: { outputStyles: "./styles" } },
+    expectedKinds: ["outputStyles"],
+  },
+  {
+    description: "a top-level syntaxHighlighting",
+    entry: { syntaxHighlighting: { hljsLanguages: [] } },
+    manifest: null,
+    expectedKinds: ["syntaxHighlighting"],
+  },
+  {
+    description: "an experimental syntaxHighlighting",
+    entry: {},
+    manifest: { experimental: { syntaxHighlighting: { hljsLanguages: [] } } },
+    expectedKinds: ["syntaxHighlighting"],
+  },
+]) {
+  test(`UKIND-02: collectUnsupportedKinds reports ${description}`, async () => {
+    // arrange
+    const { collectUnsupportedKinds } =
+      await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
+
+    // act
+    const kinds = await collectUnsupportedKinds(
+      { entry, manifest, pluginRoot: "/plugins/alpha", declaresHookModule: false },
+      () => Promise.resolve(null),
+    );
+
+    // assert
+    assert.deepStrictEqual(kinds, expectedKinds);
+  });
+}

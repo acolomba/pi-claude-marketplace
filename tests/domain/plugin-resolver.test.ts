@@ -261,8 +261,9 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
 
 // HOOK-01: hooks is a supported kind. A plugin declaring `hooks` at the entry
 // level with NO hooks/hooks.json on disk is not rejected with "contains
-// hooks" -- the resolver only owns convention-file discovery; entry/manifest-
-// level hooks-field semantics are deferred to future dispatch work.
+// hooks" -- for command hooks the resolver only owns convention-file
+// discovery; entry/manifest-level hooks-field semantics are deferred to future
+// dispatch work.
 test("HOOK-01: entry declares hooks field but no hooks/hooks.json on disk -> installable WITHOUT hooks in supported", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
@@ -381,6 +382,37 @@ test("UKIND-01: command hooks beside a hooks module stay supported on the partia
     componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     hooksConfigPath: path.join("hooks", "hooks.json"),
+    defaultEnabled: true,
+  });
+});
+
+test("UKIND-01: a hooks module in a hooks file plugin.json names resolves partially available with contains mod", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", hooks: "./hooks/extra.json" }),
+    },
+    [path.join(localRoot, "hooks", "extra.json")]: {
+      contents: JSON.stringify({ modules: ["./register.ts"] }),
+    },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["mod"],
+    notes: ["contains mod"],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
     defaultEnabled: true,
   });
 });

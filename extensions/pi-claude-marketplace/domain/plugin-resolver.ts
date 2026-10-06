@@ -633,10 +633,11 @@ async function runStructuralStages(args: {
     ),
     // Step 8b (HOOK-01 / D-57-04): probe `<pluginRoot>/hooks/hooks.json` and
     // either add `hooks` to supported (parse OK) or flip installable=false with
-    // the parse-failure detail. Mode-agnostic: entry-vs-manifest hooks-FIELD
-    // conflict semantics are deferred, so the convention file is the sole gate.
+    // the parse-failure detail. The convention file is the only source of
+    // command hooks. UKIND-01: hooks files that the entry or manifest `hooks`
+    // field names are read only for a hooks module.
     await resolveHooks(
-      { pluginRoot, resolution: partial },
+      { pluginRoot, entry, manifest, resolution: partial },
       { statKind: statKindOf(ctx), readFileText: readFileTextOf(ctx) },
     ),
   );

@@ -16,8 +16,13 @@ import type { StatKindReader } from "./resolver-types.ts";
  *
  * UKIND-01: `mod` is a hooks module. A hooks file declares one with a
  * non-empty top-level `modules` array. Hooks resolution checks
- * `hooks/hooks.json` and reports the result as `declaresHookModule`. No plugin
- * field selects this kind.
+ * `hooks/hooks.json` and each hooks file that the `hooks` field names by a
+ * path, and reports the result as `declaresHookModule`. No plugin field
+ * selects this kind.
+ *
+ * UKIND-02: `syntaxHighlighting` adds highlight.js languages to the terminal
+ * UI, like `themes`. It and `outputStyles` also count when nested under
+ * `experimental`, as `themes` and `monitors` do.
  *
  * D-90-06: `bin` is intentionally absent. A plugin's `<pluginRoot>/bin` is
  * runtime-honored through the PENV-01 PATH ledger, so a bin-shipping plugin
@@ -31,6 +36,7 @@ const UNSUPPORTED_COMPONENT_KINDS = [
   "channels",
   "userConfig",
   "settings",
+  "syntaxHighlighting",
   "mod",
 ] as const;
 
@@ -49,6 +55,15 @@ const UNSUPPORTED_COMPONENT_CONVENTIONS: Partial<
   outputStyles: [{ relativePath: "output-styles", kind: "dir" }],
   settings: [{ relativePath: "settings.json", kind: "file" }],
 };
+
+// Current Claude Code schemas nest these components under `experimental`,
+// while older manifests may still use top-level fields.
+const EXPERIMENTAL_KINDS: ReadonlySet<UnsupportedComponentKind> = new Set([
+  "themes",
+  "monitors",
+  "outputStyles",
+  "syntaxHighlighting",
+]);
 
 function nestedExperimentalValue(
   record: Record<string, unknown> | null | undefined,
@@ -79,9 +94,7 @@ function declaresUnsupportedKind(
     return true;
   }
 
-  // Current Claude Code schema nests these experimental components, while
-  // older manifests may still use top-level fields.
-  if (kind === "themes" || kind === "monitors") {
+  if (EXPERIMENTAL_KINDS.has(kind)) {
     return (
       nestedExperimentalValue(entry, kind) !== undefined ||
       nestedExperimentalValue(manifest, kind) !== undefined
