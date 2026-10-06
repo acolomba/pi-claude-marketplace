@@ -9,7 +9,7 @@
 // orchestrator family. If a consumer emerges outside plugin orchestrators,
 // promote the helper to a wider orchestrators/shared surface.
 //
-// Per D-11 import boundaries, this file lives in `orchestrators/plugin/`
+// Per D-v1.0-01-11 import boundaries, this file lives in `orchestrators/plugin/`
 // and may import from `domain/`, `shared/`, and `persistence/` (type-only).
 // No imports from `bridges/` or `orchestrators/marketplace/*`.
 
@@ -858,14 +858,12 @@ export async function overwriteDisabledMemberEntries(args: {
   readonly write: typeof writeAdoptingConfigEntries;
 }): Promise<void> {
   for (const key of args.keys) {
-    // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of its config file
     const selection = await args.select({ locations: args.locations, local: undefined, key });
     if (selection.kind !== "selected" || selection.current.plugins?.[key]?.enabled !== false) {
       continue;
     }
 
     const at = key.indexOf("@");
-    // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of its config file
     await args.write({
       current: selection.current,
       sibling: selection.sibling,

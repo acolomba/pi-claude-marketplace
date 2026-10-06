@@ -109,6 +109,9 @@ neither is a current terminal shortfall: neither appears in the committed pin
 `scripts/test-coverage-direct.pin.json`, which records one reason per uncovered
 site and is not an allowlist.
 
+Note 2026-10-05: `f342e3de` deleted that pin; the direct coverage gate now
+fails on any shortfall, with no recorded exceptions.
+
 This is not a flattering exclusion and it is not an implementation claim. No
 `sonar.coverage.exclusions` entry was added for either module, and the
 exclusion-policy reasoning in part 1 below is retained unchanged as the standing
@@ -939,6 +942,16 @@ Distinct from FLOW-08: that one is dead re-export lines in the bridge barrels,
 a different cause with a different fix.
 
 ## ~~FLOW-10: duplication is gated by one repo-wide percentage and nothing else~~ -- CLOSED
+
+Closed again 2026-10-05 by quick task 261005-la5. Failing the Lint
+workflow's `fallow-audit` job on a `warn` verdict is the intended policy,
+because a warning must fail every check. A pull request that introduces a
+clone group fails CI on purpose, so nothing is left to track.
+
+Reopened 2026-10-05 by quick task 261005-jdx: a warning now fails every
+check. The Lint workflow's `fallow-audit` job fails on a `warn` verdict, so
+a pull request that introduces a clone group fails CI. The 3% threshold in
+`npm run fallow` is unchanged.
 
 Closed 2026-08-17 as accepted, same day it was filed. Up to 3% duplication
 is the deliberate posture: `duplicates.threshold` is the gate, one
@@ -3324,6 +3337,10 @@ in the guide.
 stamps it, then restate the guide at the grade that holds. A doc pin
 (`tests/architecture/messaging-guide-doc-pins.test.ts`) should bind the restated
 sentence to the source the way the variant names are bound.
+
+Note 2026-10-05: `ce38da6a` deleted that test with the other documentation
+agreement tests, so the restated sentence gets no doc pin; settle it by editing
+the guide alone.
 
 ## PCERR-01: `PathContainmentError` interpolates the untrusted path raw
 

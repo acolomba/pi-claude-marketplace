@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-- Internal: local checks now select changed modules and their consumers. GSD uses focused checks during tasks and full checks before PR handoff. CI reuses unit coverage for SonarCloud, removes duplicate checks, and runs isolated coverage pairs concurrently.
+- Node.js 22.22.2 or a later 22.x release, 24.15.0 or a later 24.x release, or 26.0.0 or later is now required. (#234, #236)
+
+  - Internal: commits now run fast checks on their staged files, CI runs the full check, and SonarCloud reads per-pair direct coverage.
 
 - A private marketplace or plugin source on any git host now clones with a credential that is already in your git credential helper. Before, only `github.com` and `gitlab.com` authenticated. Thanks to @jstillwa, who found this defect and the next two in #153. (#221)
 

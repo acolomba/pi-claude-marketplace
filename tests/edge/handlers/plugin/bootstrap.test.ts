@@ -74,7 +74,7 @@
 //
 // No exhaustiveness claim: the module holds no switch and no closed-union
 // dispatch, so a missing-arm plant has no target here. No case asserts the
-// absence of direct process output (ESLint and fallow own that), and none
+// absence of direct process output (fallow owns that), and none
 // restates the tokenizer or scope-validator rules owned by
 // tests/edge/args.test.ts -- the unrecognised-scope rows claim that this
 // handler's own usage block reached the catch-and-notify path and that the

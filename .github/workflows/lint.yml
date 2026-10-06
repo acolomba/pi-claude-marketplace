@@ -1,6 +1,9 @@
 name: Lint
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -38,11 +41,14 @@ jobs:
       - name: Run pre-commit
         uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
         env:
-          # CI/check runs the full npm gate. CI/direct-coverage owns pair coverage.
-          # These hooks remain enabled for local commits.
-          SKIP: prettier,npm-check-changed
+          # The CI workflow's static, integration, and direct-coverage jobs run
+          # the npm checks. These hooks remain enabled for local commits.
+          SKIP: prettier,npm-check
 
   fallow-audit:
+    # The audit reports only the findings that a change adds against main, so
+    # a push to main has nothing to compare.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -52,8 +58,30 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Without the npm dependencies, Fallow reports a degraded analysis.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
       - name: Run fallow audit
+        id: fallow
         uses: fallow-rs/fallow@bd8fca5af5df4ccfd94c7a835d17bd93c31a7cef # v3.28.0
         with:
           command: audit
           format: github-annotations
+
+      # The action passes a warn verdict, for example a clone group that the
+      # change adds, and a degraded analysis. A warning fails a check here.
+      - name: Fail on a Fallow warning
+        if: steps.fallow.outputs.verdict == 'warn' || steps.fallow.outputs.analysis-degraded == 'true'
+        env:
+          VERDICT: ${{ steps.fallow.outputs.verdict }}
+          DEGRADED: ${{ steps.fallow.outputs.analysis-degraded }}
+        run: |
+          echo "::error::Fallow audit verdict: ${VERDICT}. Degraded analysis: ${DEGRADED}."
+          exit 1

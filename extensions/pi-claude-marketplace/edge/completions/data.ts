@@ -123,7 +123,7 @@ export type PluginRefCompletionMode =
 
 /**
  * Injection surface that lets edge/completions reach into persistence/state
- * + domain/manifest WITHOUT importing them (D-11 / ESLint BLOCK C keeps
+ * + domain/manifest WITHOUT importing them (D-v1.0-01-11 / ESLint BLOCK C keeps
  * edge/ from importing persistence/). Constructed by edge/register.ts and
  * threaded through getArgumentCompletions.
  *

@@ -250,7 +250,7 @@ The safety machinery is the part a user meets only on a bad day. Our six-phase l
 
 Underneath that sit a `proper-lockfile` advisory lock per scope, atomic writes on every JSON file, and one containment chokepoint that every name-derived path routes through. Their only concurrency control is an unlocked integer in a file, and two of their three manifest-declared paths are unchecked.
 
-Our offline guarantee is enforced rather than promised. The test `tests/architecture/no-orchestrator-network.test.ts` greps our orchestrators for git surfaces and fails the build. Their session start clones synchronously over the network whenever the cache is cold, on the same code path that starts the session.
+Our offline guarantee is enforced rather than promised. An ESLint rule block in `eslint.config.js` rejects git imports and git identifiers in our network-free orchestrators and fails the build. Their session start clones synchronously over the network whenever the cache is cold, on the same code path that starts the session.
 
 We also read `enabledPlugins` from Claude's settings in both scopes and cascade the installs. They read no Claude settings file at all.
 

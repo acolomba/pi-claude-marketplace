@@ -77,7 +77,7 @@ export const GITHUB_PROVIDER: GitAuthProvider = {
  * 4. A GitLab device-flow access token expires in 7200 seconds and the
  *    response issues NO refresh_token, unlike GitHub's classic OAuth App
  *    tokens which do not expire by default. A GitLab user therefore
- *    re-authenticates occasionally. AUTH-07 / D-32-05's `onAuthFailure` (in
+ *    re-authenticates occasionally. AUTH-07's `onAuthFailure` (in
  *    `platform/git-auth-callbacks.ts::buildAuthCallbacks`) evicts the
  *    expired credential and always cancels the in-flight operation (CP-9);
  *    it does not itself retrigger Device Flow. Recovery happens on the NEXT

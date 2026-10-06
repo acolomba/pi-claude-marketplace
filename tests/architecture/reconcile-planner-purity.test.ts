@@ -17,8 +17,8 @@ import { REPO_ROOT } from "./source-scan.ts";
  * `saveConfig` / `atomicWriteJson` / `withStateGuard` /
  * `withLockedStateTransaction` references.
  *
- * The grep operates over the COMMENT-STRIPPED source (same `stripComments`
- * pattern as `tests/architecture/no-orchestrator-network.test.ts`) so the
+ * The grep operates over the COMMENT-STRIPPED source (the same `stripComments`
+ * pattern `tests/architecture/source-scan.ts` exports) so the
  * planner's header docstring may legally mention "this module never imports
  * notify" without self-invalidating the gate.
  *

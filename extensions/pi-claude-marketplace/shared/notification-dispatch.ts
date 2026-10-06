@@ -45,9 +45,8 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  * API's `notify(msg, type?)` accepts -- NOT content inference. The standalone
  * info-surface kinds (`marketplace-not-added`, `plugin-info`, and the read-only
  * info/cascade kinds) carry no per-row severity array, so they keep a tiny
- * kind->severity map. The eslint per-file override in eslint.config.js disables
- * `no-restricted-syntax` for this file so inline `eslint-disable-next-line`
- * comments are unnecessary here.
+ * kind->severity map. The fallow rule `architecture/notify-chokepoint`
+ * excludes this file, so it needs no inline suppression.
  *
  * Public API:
  *

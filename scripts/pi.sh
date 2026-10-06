@@ -9,7 +9,7 @@ Runs Pi with only this project, pi-mcp-adapter, pi-subagents, and
 @quintinshaw/pi-dynamic-workflows loaded as extensions.
 
 Pi is the version package-lock.json pins, run from node_modules -- run
-`npm ci` first. This never launches a `pi` found on PATH.
+`npm install` first. This never launches a `pi` found on PATH.
 
 The three companion extensions are installed, at versions pinned in this
 script, into a private npm prefix outside the checkout. The default is

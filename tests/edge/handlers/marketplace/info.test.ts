@@ -43,7 +43,7 @@
 //
 // No exhaustiveness claim: marketplace/info.ts holds no switch and no
 // closed-union dispatch, so a missing-arm plant has no target here. No case
-// asserts the absence of direct process output (ESLint and fallow own that),
+// asserts the absence of direct process output (fallow owns that),
 // and none re-derives the info workflow's own row grammar, which
 // tests/orchestrators/marketplace/info.test.ts owns.
 

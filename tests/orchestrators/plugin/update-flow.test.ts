@@ -8134,7 +8134,6 @@ test("plugin update authentication: a pinned provider update threads auth to the
       const memoized: AuthAttemptResult = {
         ok: false,
         reason: "memoized authentication decline",
-        authAttempted: true,
       };
       const authMemo = new Map<string, AuthAttemptResult>([["github.com", memoized]]);
       const { ctx, pi, notifications } = makeCtx();

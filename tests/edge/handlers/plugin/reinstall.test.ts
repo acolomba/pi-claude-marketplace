@@ -84,7 +84,7 @@
 // This pair makes no exhaustiveness claim: the target selection is a chain of
 // `if` statements over string shapes, not a `switch` over a closed union, so a
 // missing-arm plant has no target here. No case asserts the absence of direct
-// process output (ESLint and fallow own that), none re-proves the shared flag
+// process output (fallow owns that), none re-proves the shared flag
 // scan owned by tests/edge/handlers/shared.test.ts or the reference split owned
 // by tests/edge/handlers/plugin/shared.test.ts, none restates the tokenizer
 // diagnostics owned by tests/edge/args.test.ts, none restates the retired

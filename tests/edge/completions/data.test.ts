@@ -34,9 +34,6 @@
 // the fallback, and the brute force that measured it unreachable, both outlived
 // the code they were about.
 //
-// Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
-// and a pair absent from it reads complete. This one is absent from it.
-//
 // No exhaustiveness claim rides on this pair: `edge/completions/data.ts`
 // contains no `switch` and no closed-union dispatch, so a deleted-arm plant has
 // no target here.

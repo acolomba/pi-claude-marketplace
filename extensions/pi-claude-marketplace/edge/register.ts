@@ -29,7 +29,7 @@
 // closes over persistence + domain surfaces inside orchestrators/, and
 // this file consumes the returned shape only.
 //
-// BLOCK A: zero direct Pi-context notify calls. The slash-command
+// IL-2: zero direct Pi-context notify calls. The slash-command
 // handler path goes through `routeClaudePlugin` which uses
 // notifyUsageError; the session_start wrapper installs an autocomplete
 // provider but does NOT emit user-visible messages.

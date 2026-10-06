@@ -54,7 +54,7 @@
 // dropMarketplaceCache call still runs (correctness preserved), only the
 // standalone-mode user-visible warning surface is absent.
 //
-// D-11 import boundaries: orchestrators/plugin/ may import named exports
+// D-v1.0-01-11 import boundaries: orchestrators/plugin/ may import named exports
 // from orchestrators/marketplace/shared.ts (GitOps, DEFAULT_GIT_OPS,
 // resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
@@ -354,7 +354,7 @@ async function prepareUpdateHandles(
  *
  * Its own function rather than a few lines inside the finalize window:
  * `prepareUpdateHandles` and that window already sit near the fallow
- * `maxCognitive: 15` and `maxUnitSize: 60` ceilings.
+ * `maxCognitive: 15` ceiling.
  */
 function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly string[] {
   const { discovery, bridge } = splitStagingWarnings({

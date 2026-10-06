@@ -130,9 +130,9 @@ test("WDEP-02 + WDEP-03: the workflows bridge has zero host-engine probe surface
   const targets = await scannedTargets();
 
   // act + assert -- scan first, so a real violation reports as a violation
-  // rather than as a roster mismatch. No `allowMissing` opts argument on
-  // purpose: every derived target exists by construction, so a missing one
-  // would mean the readdir and the read disagree.
+  // rather than as a roster mismatch. Every derived target exists by
+  // construction, so a missing one would mean the readdir and the read
+  // disagree.
   await assertNoForbiddenSurface(
     targets,
     FORBIDDEN_PATTERNS,

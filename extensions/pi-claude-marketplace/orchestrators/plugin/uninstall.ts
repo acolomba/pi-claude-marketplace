@@ -38,14 +38,14 @@
 // calls still run; there is no notification shape for "cleanup leak after a
 // successful state mutation".
 //
-// Cycle break (D-11): orchestrators/plugin/ may import named exports from
+// Cycle break (D-v1.0-01-11): orchestrators/plugin/ may import named exports from
 // orchestrators/marketplace/shared.ts ONLY (NOT from add.ts/remove.ts/etc).
 //
 // NFR-5 (no network): this file MUST NOT import platform/git or DEFAULT_GIT_OPS.
-// The architectural source-grep test gates this file by name: the D-06-06
-// declarer read composes an offline manifest read through `dependency-index.ts`
-// (memoized manifest cache + warm clone cache only, D-05-06), and that leaf is
-// gated beside it.
+// BLOCK F in `eslint.config.js` gates this file, which is not in
+// `NETWORK_SEAMS`: the D-06-06 declarer read composes an offline manifest read
+// through `dependency-index.ts` (memoized manifest cache + warm clone cache
+// only, D-05-06), and that leaf is gated beside it.
 //
 // PU-6 (legacy state migration): handled by persistence/migrate.ts at load
 // time (ST-4/ST-5). No new code needed here -- a state record missing
@@ -670,7 +670,6 @@ export async function sweepOrphans(args: {
       continue;
     }
 
-    // eslint-disable-next-line no-await-in-loop -- a later member's held check reads `gone`
     const result = await removeDependencyMember({ member, ...removal });
     if (result.removed) {
       gone.add(member.key);
@@ -725,7 +724,6 @@ export async function finalizePrunedMembers(args: {
     }
 
     if (member.removed) {
-      // eslint-disable-next-line no-await-in-loop -- each cleanup sweeps the shared clone cache
       await args.transaction.runPostCommitCleanup({
         completionCache: args.completionCache,
         locations: args.locations,

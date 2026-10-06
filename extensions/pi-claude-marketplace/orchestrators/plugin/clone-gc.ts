@@ -11,10 +11,9 @@
 //
 // This helper is fs-only: it imports loadState + the locations chokepoint +
 // node:fs/promises rm/readdir ONLY. It never touches the git surface, so any
-// orchestrator -- even one gated by
-// tests/architecture/no-orchestrator-network.test.ts -- can import it without
-// introducing a git token. (uninstall.ts itself is not on that gate's candidate
-// list; it is network-free by convention.)
+// orchestrator -- even one that BLOCK F in `eslint.config.js` lints for git
+// imports and identifiers -- can import it without introducing a git token.
+// uninstall.ts is one such gated orchestrator.
 
 import { readdir, rm } from "node:fs/promises";
 import path from "node:path";

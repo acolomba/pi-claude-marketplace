@@ -173,7 +173,6 @@ const contractCases: readonly DeviceFlowContractCase[] = [
         deviceFlow: {
           ok: true,
           cred: { username: "oauth2", password: "token-1" },
-          authAttempted: true,
         },
         notifications: [
           {
@@ -207,7 +206,6 @@ const contractCases: readonly DeviceFlowContractCase[] = [
         deviceFlow: {
           ok: false,
           reason: "Device Flow initialization failed: request offline",
-          authAttempted: true,
         },
         notifications: [],
         approvedCredentials: [],
@@ -253,7 +251,6 @@ const contractCases: readonly DeviceFlowContractCase[] = [
       assert.deepStrictEqual(observation.deviceFlow, {
         ok: false,
         reason: expectedReason,
-        authAttempted: true,
       });
       assert.deepStrictEqual(observation.notifications, [
         {
@@ -292,7 +289,6 @@ const contractCases: readonly DeviceFlowContractCase[] = [
       assert.deepStrictEqual(observation.deviceFlow, {
         ok: true,
         cred: { username: "oauth2", password: "token-1" },
-        authAttempted: true,
       });
       assert.deepStrictEqual(observation.waits, [0, 0, 5_000]);
     },
@@ -350,7 +346,6 @@ const contractCases: readonly DeviceFlowContractCase[] = [
       assert.deepStrictEqual(observation.deviceFlow, {
         ok: true,
         cred: { username: "oauth2", password: "token-1" },
-        authAttempted: true,
       });
     },
   },
@@ -377,7 +372,6 @@ const contractCases: readonly DeviceFlowContractCase[] = [
       assert.deepStrictEqual(firstObservation.deviceFlow, {
         ok: true,
         cred: { username: "oauth2", password: "token-1" },
-        authAttempted: true,
       });
       assert.deepStrictEqual(secondObservation.deviceFlow, firstObservation.deviceFlow);
       assert.deepStrictEqual(firstObservation.waits, [0]);

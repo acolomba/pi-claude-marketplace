@@ -11,10 +11,10 @@ Before editing any file, read it first. Before modifying a function, trace its c
 - NEVER commit to the main branch.
 - Branch names: `main`, `features/*`, `releases/*`. New feature branches use `features/<name>`.
 - Git commit messages and PR titles: Follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/#specification). Titles must be at least 5 characters and no more than 72 characters. Body lines must be no more than 80 characters. Avoid GSD milestone/phases mentions.
-- Run `pre-commit run --all-files` (or `pre-commit run --files <changed files>`) **before** attempting `git commit`. Fix any failures, restage, and re-run until clean. Do not commit and recover from hook failures after the fact -- a failed pre-commit hook means the commit did NOT happen, so iterating with `--amend` is wrong (it would alter the previous commit).
+- Before `git commit`, run `SKIP=npm-check pre-commit run --files <changed files>`. It runs only the fixers and linters and takes seconds. If a fixer changes a file, restage the file and run the command again until it is clean. To run them on every file, as the CI Lint workflow does, use `SKIP=npm-check pre-commit run --all-files`.
+- Then run `git commit` in the foreground with the longest tool timeout available. Its hook runs `npm run check:commit` when a staged file is a build input. Never background it and poll with sleep/grep loops. If a run can outlast the tool's foreground limit, background it once and wait for the completion notification. If a hook fails during `git commit`, the commit did NOT happen: fix the cause, restage, and commit again. Never use `--amend` for this, because it would alter the previous commit. Do not run ESLint, type checking, or tests just before committing: the hook runs the checks for the staged files.
 - NEVER use `--no-verify` to skip the hooks.
 - NEVER rebase, never rewrite history. Update branches by merging.
-- When committing from inside a worktree, prefix the commit with `SKIP=trufflehog`.
 - When writing PR descriptions, use the `simple-english` skill in Plain mode and the `humanizer` skill, if available.
 - Always use `--squash` when merging PRs (`gh pr merge --squash`). The repository does not allow merge commits or rebase merges.
 - Before merging a PR that ships a GSD milestone, audit and close the milestone (`/gsd-audit-milestone`, then `/gsd-complete-milestone`) on the PR branch, so the archive lands in the same squash.
@@ -39,7 +39,7 @@ Rules for TypeScript live under `skills/` and are not registered with any runtim
 
 ### Build verification
 
-Read `skills/local-verification/SKILL.md` when planning or running checks. Ordinary quick tasks, individual plan tasks, and review fixes may complete with task-wide focused evidence, normally supplied by the required pre-commit hooks. Do not routinely run `check:changed` separately before those hooks. Full `npm run check` remains required for combined GSD merge/phase gates and final PR/release handoff, with unchanged-input reuse as defined in the skill. This project scheduling policy governs the TypeScript and GSD skill instructions; a focused result is not full-project verification.
+Read `skills/local-verification/SKILL.md` when planning or running checks. A build input is a file that a build or a CI job reads. When a staged file is a build input, the pre-commit hook runs `npm run check:commit`. It runs the static checks, the unit tests that have no source pair, and direct coverage for the staged source-test pairs. It runs all pairs when the commit stages shared test support, the test tooling, or a dependency file. A passing hook is not a full verdict, and it cannot satisfy a GSD gate. GSD gates run `npm run check` on the combined tree: the post-merge gate of each wave, the phase gate, the merge gate, and the final PR or release handoff. `npm run check` runs what pull request CI runs, except the e2e tests and ESLint with an empty cache. A merge does not run the hook. So a quick task that commits a build input runs `npm run check` in the main checkout after its worktree is merged, before the task finishes. A gate can reuse a passing result for the same inputs, as the skill defines. This project policy governs the TypeScript and GSD skill instructions.
 
 ### Versioning
 
@@ -56,14 +56,14 @@ Before creating a PR, offer to bump the version in `package.json` and `sonar-pro
 ### Constraints
 
 - **Upstream parity:** Claude Code's behavior is the default for every user-visible decision, because this extension installs real Claude plugins and anything it does differently is something a user already learned upstream and must unlearn. Exactly two things license a divergence: a recorded project decision carried here with an ID (SC-1, for instance), or a Pi capability gap that makes parity unavailable. Neither "upstream looks wrong" nor "our way is simpler" qualifies -- those go to the user as a question. Research the upstream contract with `skills/claude-code-compat-research`.
-- **Runtime:** Node >= 20.19.0 (NFR-4)
+- **Runtime:** Node `^22.22.2 || ^24.15.0 || >=26.0.0` (NFR-4)
 - **Tech stack:** TypeScript strict; the resolver MUST expose discriminated `installable: true | false` so consumers cannot read `pluginRoot` from a non-installable plugin (NFR-7)
 - **Pi API:** `@earendil-works/pi-coding-agent` peer dependency, pinned to `>=0.86.1` (dev `^0.86.1`); the NFR-11 floor-pinning SHOULD is now satisfied
 - **File operations:** All disk mutations atomic (tmp + rename or atomic JSON write) -- NFR-1
 - **Recovery model:** No fix may require a Pi process restart; `Run /reload` must suffice (NFR-2). All operations must be safe to retry -- idempotent or fail-clean (NFR-3)
 - **Network policy (NFR-5, amended by url-source and by D-03-03):** Network is required only for git-source `marketplace add`/`update`, and for `install`/`update`/`reinstall` of git-source plugins **on cache miss only** -- warm sha-pinned cache operations stay offline. Resolving a dependency that carries a version constraint may additionally read that dependency's source repository tag list over the network, even when a cached or otherwise resolvable copy of that dependency already exists, because the constraint can demand a different tag than the cached one (D-03-03). `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations MUST NOT touch the network
 - **Containment (NFR-10, re-anchored by url-source):** Refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json`; plugin roots must resolve inside their **owning clone root** (marketplace clone for `path` sources, `plugin-clones/<key>/` for git sources)
-- **Quality bar:** `npm run check` must stay green -- typecheck + ESLint + `fallow` (dead code, health, duplication) + Prettier + unit tests + integration tests (NFR-6)
+- **Quality bar:** `npm run check` must stay green -- typecheck + ESLint + `fallow` (dead code, health, duplication) + Prettier + source/test pairing + unit tests + integration tests + 100% direct coverage for every source-test pair (NFR-6)
 - **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code (IL-2). Single sanctioned `console.warn` is the load-time legacy migration save failure (IL-3)
 - **No telemetry V1:** No metrics, no event sink, no analytics endpoint (IL-4)
 - **English only V1:** No message catalog, no locale negotiation (IL-1)
@@ -159,14 +159,6 @@ If there is no `.codegraph/` directory, skip CodeGraph entirely -- indexing is t
 ______________________________________________________________________
 
 <!-- fallow:setup-hooks:start -->
-
-## Fallow local gate
-
-Before any `git commit` or `git push`, run `fallow audit --format json --quiet --explain --gate-marker agent`. If the verdict is `fail`, fix the reported findings before retrying. Treat JSON runtime errors like `{ "error": true, ... }` as non-blocking.
-
-Audit defaults to `gate=new-only`: only findings introduced by the current changeset affect the verdict. Inherited findings on touched files are reported under `attribution` and annotated with `introduced: false`, but do not block the commit. Set `[audit] gate = "all"` in `fallow.toml` to gate every finding in changed files.
-
-For non-skill agents, treat the task map below as the local onboarding source: run the listed fallow command before destructive edits, before commits, and before pull request handoff.
 
 ## Fallow task map
 

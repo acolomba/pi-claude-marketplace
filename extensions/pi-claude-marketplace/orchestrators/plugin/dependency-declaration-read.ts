@@ -12,9 +12,9 @@
 // NFR-5: the read reaches the filesystem and the warm clone cache only. There
 // is no materializing path here at all. A git source yields a plugin root only
 // from the fs-only presence probe's `materialized` arm, and no option reaches a
-// fetch. The install owners that drive this read are pinned by name in the
-// no-orchestrator-network gate, and routing the read through this module is
-// what keeps them there.
+// fetch. The install owners that drive this read are gated by BLOCK F in
+// `eslint.config.js` (neither is in `NETWORK_SEAMS`), and routing the read
+// through this module is what keeps them gated.
 //
 // The deliberate consequence, stated rather than left to be discovered: a
 // git-source dependency whose clone is not materialized yet has no readable

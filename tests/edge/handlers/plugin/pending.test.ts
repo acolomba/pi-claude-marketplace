@@ -75,9 +75,6 @@
 // `if (first !== undefined)` narrows it with no fallback literal, no non-null
 // assertion and no type assertion.
 //
-// Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
-// and a pair absent from it reads complete. This one is absent from it.
-//
 // This pair makes no exhaustiveness claim: `edge/handlers/plugin/pending.ts`
 // contains no `switch` and no closed-union dispatch, so a missing-arm plant has
 // no target here. No case asserts the absence of direct process output (ESLint

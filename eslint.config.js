@@ -5,6 +5,106 @@ import sonarjs from "eslint-plugin-sonarjs";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+/**
+ * D-v1.0-01-11: the plugin and marketplace ledger entry points, as BLOCK C zone paths.
+ * A ledger owns a transactional verb end to end. Their `*-probe`, `*-swap`,
+ * `*-record`, `*-row`, and `*-outcome` siblings are helpers and leaf
+ * composers, and `orchestrators/plugin/bootstrap.ts` is a composer whose job
+ * is calling marketplace verbs, so none of them is listed.
+ */
+const PLUGIN_LEDGERS = [
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+];
+
+const MARKETPLACE_LEDGERS = [
+  "./extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
+  "./extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts",
+];
+
+/**
+ * NFR-5 / PI-2 / PL-3 / PRL-07: the orchestrators/ and domain/ modules that
+ * BLOCK F skips, because each one must name the git surface itself. BLOCK F
+ * is default-deny, so a new module in either directory is gated from its
+ * first commit. A module stays off this list when it reaches git through
+ * orchestrators/plugin/clone-cache.ts by entrypoint name, or through an
+ * injected field whose name the gate does not match. Add a file here only
+ * when neither works, with a one-line reason.
+ *
+ * The rule lives in ESLint because fallow cannot express it: a rule pack's
+ * banned-import rule matches whole raw specifiers without globs, no
+ * rule-pack kind bans an identifier or a string, and fallow's boundary zones
+ * are directory-scoped.
+ */
+const NETWORK_SEAMS = [
+  // D-79-04: a provider maps a token to the type-only GitCredentials shape.
+  "extensions/pi-claude-marketplace/domain/auth-registry.ts",
+  // D-32-01: the Device Flow engine types its credentials from platform/git.
+  "extensions/pi-claude-marketplace/domain/github-auth.ts",
+  // D-79-05: builds the host-keyed credential bundle from platform/git-credential.ts.
+  "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
+  // Passes the injected gitOps seam to the marketplace adds an import performs.
+  "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
+  // NFR-5: adding a git-source marketplace clones it.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
+  // D-12 / D-13: owns GitOps, DEFAULT_GIT_OPS, and refreshGitHubClone.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts",
+  // NFR-5: updating a git-source marketplace refreshes its clone.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
+  // A composer that hands gitOps to the marketplace add it calls.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts",
+  // PURL-02 / PURL-04: clones a git-source plugin on a cache miss.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts",
+  // D-03-03: lists a constrained dependency's remote tags.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts",
+  // RESV-01: the type-only RemoteTag that the cascade's tag probe returns.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts",
+  // TAGS-01: reads the marketplace clone's local tags with listTags and resolveTagOid.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts",
+  // D-10-19: the type-only RemoteTag of the constraint gate's tag query.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts",
+  // PUP-2: syncClone needs gitOps.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
+  // PUP-2: the preflight threads gitOps and the type-only RemoteTag.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
+  // RECON-01: passes the injected gitOps seam to the marketplace adds reconcile performs.
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+  // DIFF-01: declares the optional gitOps seam that apply.ts passes on.
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts",
+];
+
+const NETWORK_FREE_SYNTAX_SELECTORS = [
+  {
+    selector: "ImportExpression[source.value=/platform\\/git/]",
+    message: "NFR-5: network-free modules must not dynamically import a platform/git module.",
+  },
+  {
+    selector: "TSImportType Literal[value=/platform\\/git/]",
+    message: "NFR-5: network-free modules must not name a platform/git type through import().",
+  },
+  {
+    selector:
+      ":matches(Identifier, PrivateIdentifier)[name=/^(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)$/]",
+    message:
+      "NFR-5: network-free modules must not name gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone. Only the NETWORK_SEAMS files in eslint.config.js may name the git seam.",
+  },
+  {
+    selector: "Literal[value=/\\b(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)\\b/]",
+    message:
+      "NFR-5: network-free modules must not spell gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone in a string.",
+  },
+  {
+    selector: "TemplateElement[value.raw=/\\b(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)\\b/]",
+    message:
+      "NFR-5: network-free modules must not spell gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone in a string.",
+  },
+];
+
 export default tseslint.config(
   {
     ignores: [
@@ -94,99 +194,23 @@ export default tseslint.config(
     },
   },
   {
-    // BLOCK A (D-06 / IL-2 / IL-3): Output discipline scoped to the extension.
-    // Direct stdout/stderr writes and console.* calls are forbidden in the
-    // extension. Sanctioned exception: load-time migrate-record save failure
-    // in `migrateLegacyMarketplaceRecords` (IL-3) -- allowed via the
-    // block-level files-override for `persistence/migrate.ts` below (BLOCK
-    // B-2). No inline `eslint-disable-next-line` directive is required.
+    // IL-2 / IL-3 / OBS-01: the fallow rule pack (rule-packs/architecture.json)
+    // owns console discipline in the extension. It bans every console call
+    // except the console.warn in persistence/migrate.ts and the console.error
+    // in shared/debug-log.ts, and it holds each of those files to that one
+    // method. The base no-console warning would flag both sanctioned calls.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdout'][callee.property.name='write']",
-          message:
-            "Direct process.stdout.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-        },
-        {
-          selector:
-            "CallExpression[callee.object.object.name='process'][callee.object.property.name='stderr'][callee.property.name='write']",
-          message:
-            "Direct process.stderr.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-        },
-        {
-          selector: "CallExpression[callee.object.name='console'][callee.property.name='log']",
-          message:
-            "console.log is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-        },
-        {
-          selector: "CallExpression[callee.object.name='console'][callee.property.name='warn']",
-          message:
-            "console.warn is forbidden in the extension (IL-2) except at the single sanctioned migrateLegacyMarketplaceRecords callsite, which is allowed via a block-level files-override in this config.",
-        },
-        {
-          selector: "CallExpression[callee.object.name='console'][callee.property.name='error']",
-          message:
-            "console.error is forbidden in the extension (IL-2). Use notify(ctx, pi, NotificationMessage) (failed status carries cause via per-plugin cause?: Error) from shared/notification-dispatch.ts.",
-        },
-        {
-          selector: "CallExpression[callee.object.name='console'][callee.property.name='info']",
-          message:
-            "console.info is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
-        },
-        {
-          selector:
-            "CallExpression[callee.property.name='notify'][callee.object.property.name='ui']",
-          message:
-            "Direct ctx.ui.notify is forbidden -- use notify(ctx, pi, NotificationMessage) or notifyUsageError(ctx, UsageErrorMessage) from shared/notification-dispatch.ts.",
-        },
-      ],
-      // Catches console.debug / console.trace / console.dir which the AST
-      // selectors above don't enumerate.
-      "no-console": "error",
-    },
+    rules: { "no-console": "off" },
   },
   {
-    // BLOCK B: Per-file override -- shared/notification-dispatch.ts IS the sanctioned
-    // ctx.ui.notify call site, so its body must be allowed to call it.
-    files: ["extensions/pi-claude-marketplace/shared/notification-dispatch.ts"],
-    rules: {
-      "no-restricted-syntax": "off",
-      "no-console": "off",
-    },
-  },
-  {
-    // Per-file override (OBS-01 / D-59-05) -- shared/debug-log.ts IS the
-    // sole sanctioned runtime debug-output seam for the hooks dispatch
-    // path, so its env-gated `console.error` call must be allowed. Mirrors
-    // BLOCK B's authorization for shared/notification-dispatch.ts (sanctioned escape from
-    // IL-2 / IL-3). Scope is the single literal file path so a glob-widening
-    // drift surfaces in code review.
-    files: ["extensions/pi-claude-marketplace/shared/debug-log.ts"],
-    rules: {
-      "no-restricted-syntax": "off",
-      "no-console": "off",
-    },
-  },
-  {
-    // Per-file override -- migrate.ts emits the single sanctioned
-    // legacy-migration console.warn (IL-3). That one callsite trips BOTH
-    // rules: the explicit `console.warn` selector in `no-restricted-syntax`
-    // AND the catch-all `no-console: error`, so both must be disabled for
-    // this file (and only this file). No other console.warn is permitted in
-    // the extension.
-    files: ["extensions/pi-claude-marketplace/persistence/migrate.ts"],
-    rules: {
-      "no-console": "off",
-      "no-restricted-syntax": "off",
-    },
-  },
-  {
-    // BLOCK C (D-11): Import-direction enforcement. 8-zone no-restricted-paths
-    // mapping: each folder declares which sibling folders MUST NOT import from
-    // it (i.e. enforces the upward/inward direction of the dep graph).
+    // BLOCK C (D-v1.0-01-11): Import-direction enforcement. The first eight zones map
+    // each layer folder to the sibling folders that MUST NOT import from it
+    // (i.e. they enforce the upward/inward direction of the dep graph). The
+    // last four keep the ledger modules apart, type-only and dynamic imports
+    // included: no orchestrators/marketplace/ file imports a plugin ledger, no
+    // plugin ledger imports a marketplace ledger, and no ledger imports another
+    // ledger of its own kind. Cycle detection reports a cycle only once the
+    // graph is already circular, so these zones stop the first edge.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
     rules: {
       "import-x/no-restricted-paths": [
@@ -278,32 +302,60 @@ export default tseslint.config(
               ],
               message: "shared/ may only import from platform/ for Pi API types.",
             },
+            {
+              target: "./extensions/pi-claude-marketplace/orchestrators/marketplace",
+              from: PLUGIN_LEDGERS,
+              message:
+                "D-v1.0-01-11: orchestrators/marketplace/ must not import a plugin ledger module. Import the leaf row composer (plugin/update-row.ts), a shared type from orchestrators/types.ts, or the injected pluginUpdate seam instead.",
+            },
+            {
+              target: PLUGIN_LEDGERS,
+              from: MARKETPLACE_LEDGERS,
+              message:
+                "D-v1.0-01-11: a plugin ledger must not import a marketplace ledger module. Only orchestrators/marketplace/shared.ts is reachable from a plugin ledger.",
+            },
+            {
+              target: PLUGIN_LEDGERS,
+              from: PLUGIN_LEDGERS,
+              message: "D-v1.0-01-11: plugin ledger modules must not import each other.",
+            },
+            {
+              target: MARKETPLACE_LEDGERS,
+              from: MARKETPLACE_LEDGERS,
+              message: "D-v1.0-01-11: marketplace ledger modules must not import each other.",
+            },
           ],
         },
       ],
     },
   },
   {
-    // BLOCK E (Phase 7 D-04): Pi peer-import chokepoint. Direct imports of
-    // `@earendil-works/pi-coding-agent` are allowed only in
-    // `extensions/pi-claude-marketplace/platform/pi-api.ts`. All other
-    // extension code imports Pi API types through the wrapper so
-    // peer-dependency version bumps have a single audit point.
-    files: ["extensions/pi-claude-marketplace/**/*.ts"],
-    ignores: ["extensions/pi-claude-marketplace/platform/pi-api.ts"],
+    // BLOCK F (NFR-5 / PI-2 / PL-3 / PRL-07): default-deny. Every orchestrators/
+    // and domain/ module outside NETWORK_SEAMS names no git surface: no
+    // platform/git import of any kind (type-only and dynamic included) and no
+    // gitOps / DEFAULT_GIT_OPS / refreshGitHubClone identifier, key, or string.
+    // edge/ and index.ts are outside the rule. No other block sets either rule
+    // for extension files. A block that did would replace these options for
+    // every file that both blocks match.
+    files: [
+      "extensions/pi-claude-marketplace/orchestrators/**/*.ts",
+      "extensions/pi-claude-marketplace/domain/**/*.ts",
+    ],
+    ignores: NETWORK_SEAMS,
     rules: {
       "no-restricted-imports": [
         "error",
         {
-          paths: [
+          patterns: [
             {
-              name: "@earendil-works/pi-coding-agent",
+              regex: "platform/git",
               message:
-                "Import Pi API types from extensions/pi-claude-marketplace/platform/pi-api.ts instead.",
+                "NFR-5: network-free modules must not import a platform/git module, type-only imports included. Reach git through orchestrators/plugin/clone-cache.ts by entrypoint name.",
             },
           ],
         },
       ],
+      "no-restricted-syntax": ["error", ...NETWORK_FREE_SYNTAX_SELECTORS],
     },
   },
   {

@@ -36,8 +36,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  *     one render path instead of a second arm that would duplicate it.
  *
  * The shared presentation vocabulary stays central in
- * `shared/notification-types.ts` and `shared/notification-grammar.ts` (D-11)
- * and is CALLED here, never duplicated.
+ * `shared/notification-types.ts` and `shared/notification-grammar.ts`
+ * (D-notification-refactor-01-11) and is CALLED here, never duplicated.
  */
 
 /**
@@ -63,10 +63,13 @@ export type PluginInfoCascadeMsg = PluginSkippedMessage;
  * `pluginRow` composer rather than re-joining the tokens, so the fetch-skip
  * note cannot drift from the central renderer's `skipped` arm or from
  * `update`'s precedent.
+ *
+ * `PluginInfoCascadeMsg` has one variant, so the arm takes the whole union.
+ * A second status needs each arm narrowed with
+ * `Extract<PluginInfoCascadeMsg, { status: K }>`, as in the sibling render
+ * maps. The `satisfies` pin below accepts an arm typed with the whole union.
  */
-const PLUGIN_INFO_RENDER: {
-  [K in PluginInfoStatus]: RenderFn<Extract<PluginInfoCascadeMsg, { status: K }>>;
-} = {
+const PLUGIN_INFO_RENDER: Record<PluginInfoStatus, RenderFn<PluginInfoCascadeMsg>> = {
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
 };
 

@@ -22,7 +22,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * cascade row message shapes, and a render map total over update's OWN statuses
  * (D-10) lifting the matching `renderPluginRow` arm bodies VERBATIM. The shared
  * presentation vocabulary stays central in `shared/notification-grammar.ts`
- * (D-11) and is CALLED here, never duplicated.
+ * (D-notification-refactor-01-11) and is CALLED here, never duplicated.
  */
 
 /**
@@ -74,6 +74,7 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
   // shared `partiallyInstalledRow` threads `dependencies` so the soft-dep markers
   // fire on a degraded update exactly as on a clean `(updated)` row.
   "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
+  // fallow-ignore-next-line code-duplication -- reviewed: per-command typed render-map arms are one-line calls to shared row composers; extracting them needs a cross-command generic.
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   // XSURF-03: the partially-upgradable manual update-decline row. Byte-identical to
   // the central `renderPluginRow` arm -- reuses `ICON_INSTALLED` (`●`) because
