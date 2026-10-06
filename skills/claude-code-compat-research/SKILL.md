@@ -40,7 +40,7 @@ The container and lifecycle surface around them:
 - [Settings](https://code.claude.com/docs/en/settings) and [the .claude directory](https://code.claude.com/docs/en/claude-directory) -- where enablement and scope state live
 - [Environment variables](https://code.claude.com/docs/en/env-vars)
 
-Kinds this project deliberately does not bridge -- `lspServers`, `monitors`, `themes`, `outputStyles`, `channels`, `userConfig`, and `settings` -- still need research when a phase proposes adopting one or when you need to confirm the classification still holds. `domain/unsupported-components.ts` keeps both sets closed, and a kind in neither set is silently ignored, so a new upstream component kind is a compatibility bug waiting to happen.
+Kinds this project deliberately does not bridge -- `lspServers`, `monitors`, `themes`, `outputStyles`, `channels`, `userConfig`, `settings`, `syntaxHighlighting`, `mod` (a hooks module that a hooks file declares in `modules`), and `binaries` (counted only for Claude Code's official marketplaces) -- still need research when a phase proposes adopting one or when you need to confirm the classification still holds. `domain/unsupported-components.ts` keeps both sets closed, and a kind in neither set is silently ignored, so a new upstream component kind is a compatibility bug waiting to happen.
 
 The [documentation index](https://code.claude.com/docs/llms.txt) routes anything not listed here. Read only the pages the phase needs.
 

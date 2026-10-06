@@ -199,7 +199,7 @@ export function makePresenceProbe(
  */
 export async function probeManifestEntry(
   entry: ManifestEntry,
-  marketplaceRoot: string,
+  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
   locations: ScopedLocations,
 ): Promise<ManifestEntryClassification> {
   const parsedSource = parsePluginSource(entry.source);
@@ -216,7 +216,7 @@ export async function probeManifestEntry(
       }
 
       const ctx: ResolveContext = {
-        marketplaceRoot,
+        ...marketplaceContext,
         resolveGitPluginRoot: probe,
       };
       return classifyManifestEntry(await resolveStrict(entry, ctx));
@@ -228,7 +228,7 @@ export async function probeManifestEntry(
   }
 
   try {
-    return classifyManifestEntry(await resolveStrict(entry, { marketplaceRoot }));
+    return classifyManifestEntry(await resolveStrict(entry, marketplaceContext));
   } catch {
     return "unavailable";
   }
@@ -247,11 +247,11 @@ export async function probeManifestEntry(
  */
 export async function probeUpgradeCandidate(
   entry: ManifestEntry,
-  marketplaceRoot: string,
+  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
   locations: ScopedLocations,
 ): Promise<ResolvedPlugin | undefined> {
   const ctx: ResolveContext = {
-    marketplaceRoot,
+    ...marketplaceContext,
     resolveGitPluginRoot: makePresenceProbe(locations),
   };
   try {

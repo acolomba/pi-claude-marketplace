@@ -19,7 +19,7 @@ import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/
 
 type ComposeCandidateListRow = (
   manifestEntry: ManifestPluginEntry,
-  marketplaceRoot: string,
+  marketplaceContext: { readonly marketplaceRoot: string; readonly marketplaceName: string },
   locations: ScopedLocations,
   declaredEnabled: boolean | undefined,
 ) => Promise<CandidateRow>;
@@ -58,7 +58,7 @@ test("composes the complete available candidate projection", async (testContext)
   // act
   const row = await composeCandidateListRow(
     entry,
-    environment.marketplaceRoot,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
     environment.locations,
     undefined,
   );
@@ -90,7 +90,7 @@ test("appends installs-disabled to a partially available row", async (testContex
   // act
   const row = await composeCandidateListRow(
     entry,
-    environment.marketplaceRoot,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
     environment.locations,
     undefined,
   );
@@ -121,7 +121,7 @@ test("keeps a user-enabled partial row free of the author default", async (testC
   // act
   const row = await composeCandidateListRow(
     entry,
-    environment.marketplaceRoot,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
     environment.locations,
     true,
   );
@@ -150,7 +150,7 @@ test("composes structural unavailability without an installs-disabled claim", as
   // act
   const row = await composeCandidateListRow(
     entry,
-    environment.marketplaceRoot,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
     environment.locations,
     undefined,
   );
@@ -175,7 +175,7 @@ test("classifies a thrown candidate probe without leaking the error", async (tes
   // act
   const row = await composeCandidateListRow(
     entry,
-    environment.marketplaceRoot,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
     environment.locations,
     undefined,
   );
@@ -215,7 +215,7 @@ test("resolves a warm git mirror into an available row", async (testContext) => 
   // act
   const row = await composeCandidateListRow(
     entry,
-    environment.marketplaceRoot,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
     environment.locations,
     undefined,
   );
@@ -250,7 +250,7 @@ for (const entry of COLD_GIT_ENTRIES) {
     // act
     const row = await composeCandidateListRow(
       entry,
-      environment.marketplaceRoot,
+      { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
       environment.locations,
       undefined,
     );
@@ -267,3 +267,29 @@ for (const entry of COLD_GIT_ENTRIES) {
     });
   });
 }
+
+test("flags binaries as unsupported for an official marketplace name", async (testContext) => {
+  // arrange
+  const composeCandidateListRow = await loadComposeCandidateListRow();
+  const environment = await candidateEnvironment(testContext);
+  await mkdir(path.join(environment.marketplaceRoot, "alpha"));
+  const entry: ManifestPluginEntry = {
+    name: "alpha",
+    source: "./alpha",
+    ...{ binaries: { tool: "https://example.com/tool" } },
+  };
+
+  // act
+  const row = await composeCandidateListRow(
+    entry,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "claude-plugins-official" },
+    environment.locations,
+    undefined,
+  );
+
+  // assert
+  assert.deepStrictEqual(row, {
+    message: { status: "partially-available", name: "alpha", reasons: ["unsupported component"] },
+    bucket: "partially-available",
+  });
+});

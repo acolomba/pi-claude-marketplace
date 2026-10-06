@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- More plugins with components that Pi cannot install are now partially available. Pass `--partial` to install the components that Pi supports. (#246)
+
+  - A hooks module (a non-empty `modules` array in a hooks file) makes its plugin partially available. A `hooks.json` with only a module no longer makes its plugin unavailable.
+  - `syntaxHighlighting`, and `outputStyles` or `syntaxHighlighting` under `experimental`, now make a plugin partially available.
+  - A non-empty `binaries` map makes its plugin partially available only in one of Claude Code's official marketplaces, such as `claude-plugins-official`.
+
 - Internal: ESLint now enforces `no-await-in-loop` in the extension, the local equivalent of SonarCloud rule S9382, and every sequential loop states why it runs in order. (#238)
 
 - Node.js 22.22.2 or a later 22.x release, 24.15.0 or a later 24.x release, or 26.0.0 or later is now required. (#234, #236)

@@ -42,7 +42,7 @@ test("strict resolution rejects invalid dependencies in the selected manifest", 
   // act
   const resolved = await resolveStrict(
     { name: "host", source: "./host", dependencies: ["entry"] },
-    { marketplaceRoot: temporaryMarketplace },
+    { marketplaceRoot: temporaryMarketplace, marketplaceName: "third-party" },
   );
 
   // assert
@@ -105,9 +105,11 @@ test("resolveStrict lets a valid dependencies declaration fall through to ordina
 function resolveContext(
   marketplaceRoot: string,
   files: Record<string, "dir" | "file" | { contents: string }>,
+  marketplaceName = "third-party",
 ): ResolveContext {
   return {
     marketplaceRoot,
+    marketplaceName,
     statKind(p: string): Promise<"file" | "dir" | null> {
       const v = files[p];
 
@@ -261,8 +263,9 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
 
 // HOOK-01: hooks is a supported kind. A plugin declaring `hooks` at the entry
 // level with NO hooks/hooks.json on disk is not rejected with "contains
-// hooks" -- the resolver only owns convention-file discovery; entry/manifest-
-// level hooks-field semantics are deferred to future dispatch work.
+// hooks" -- for command hooks the resolver only owns convention-file
+// discovery; entry/manifest-level hooks-field semantics are deferred to future
+// dispatch work.
 test("HOOK-01: entry declares hooks field but no hooks/hooks.json on disk -> installable WITHOUT hooks in supported", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
@@ -321,6 +324,197 @@ test("HOOK-01: hooks/hooks.json present + parseable -> installable WITH hooks in
       `notes must no longer contain "contains hooks": ${resolvedPlugin.notes.join(" / ")}`,
     );
   }
+});
+
+test("a modules-only hooks/hooks.json resolves partially available with contains mod", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({ modules: ["./register.ts"] }),
+    },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["mod"],
+    notes: ["contains mod"],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
+});
+
+test("command hooks beside a hooks module stay supported on the partially available arm", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        hooks: {
+          PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+        },
+        modules: ["./register.ts"],
+      }),
+    },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: ["hooks"],
+    unsupported: ["mod"],
+    notes: ["contains mod"],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    hooksConfigPath: path.join("hooks", "hooks.json"),
+    defaultEnabled: true,
+  });
+});
+
+test("a hooks module in a hooks file plugin.json names resolves partially available with contains mod", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", hooks: "./hooks/extra.json" }),
+    },
+    [path.join(localRoot, "hooks", "extra.json")]: {
+      contents: JSON.stringify({ modules: ["./register.ts"] }),
+    },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["mod"],
+    notes: ["contains mod"],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
+});
+
+test("a hooks module in a hooks file the entry names resolves partially available with contains mod", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1" }),
+    },
+    [path.join(localRoot, "hooks", "extra.json")]: {
+      contents: JSON.stringify({ modules: ["./register.ts"] }),
+    },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", hooks: "./hooks/extra.json" }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["mod"],
+    notes: ["contains mod"],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
+});
+
+test("a binaries map in an official marketplace resolves partially available with contains binaries", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(
+    marketplaceRoot,
+    {
+      [localRoot]: "dir",
+      [path.join(localRoot, ".claude-plugin", "plugin.json")]: {
+        contents: JSON.stringify({ name: "p1", binaries: { tool: { sha256: "ab" } } }),
+      },
+    },
+    "claude-plugins-official",
+  );
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["binaries"],
+    notes: ["contains binaries"],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
+});
+
+test("a binaries map in a third-party marketplace resolves installable", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(
+    marketplaceRoot,
+    {
+      [localRoot]: "dir",
+      [path.join(localRoot, ".claude-plugin", "plugin.json")]: {
+        contents: JSON.stringify({ name: "p1", binaries: { tool: { sha256: "ab" } } }),
+      },
+    },
+    "third-party",
+  );
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
 });
 
 // D-90-06: bin moved out of UNSUPPORTED_COMPONENT_KINDS. A plugin whose only
@@ -674,6 +868,7 @@ test("WR-02: hooks/hooks.json EACCES propagates out of resolveStrict (not wrappe
   // throws EACCES (the file is readable to stat but not to read).
   const context: ResolveContext = {
     marketplaceRoot: marketplaceRoot,
+    marketplaceName: "third-party",
     statKind(p: string): Promise<"file" | "dir" | null> {
       if (p === localRoot) {
         return Promise.resolve("dir");
@@ -1405,6 +1600,7 @@ test("WR-03: unreadable reference file (EACCES) propagates out of resolveStrict 
   // {permission denied} -- NOT be conflated into a `malformed mcp reference` note.
   const context: ResolveContext = {
     marketplaceRoot: marketplaceRoot,
+    marketplaceName: "third-party",
     statKind(p: string): Promise<"file" | "dir" | null> {
       if (p === localRoot) {
         return Promise.resolve("dir");
@@ -1475,7 +1671,7 @@ test("MCPR-04 symlink reference (D-14) -> unavailable + note; never reads outsid
     await writeFile(path.join(externalDir, "secret.mcp.json"), WRAPPED_MCP, "utf8");
     await symlink(path.join(externalDir, "secret.mcp.json"), path.join(pluginRoot, "x.mcp.json"));
 
-    const context: ResolveContext = { marketplaceRoot: mpRoot };
+    const context: ResolveContext = { marketplaceRoot: mpRoot, marketplaceName: "third-party" };
 
     // act
     const resolvedPlugin = await resolveStrict(
@@ -1506,7 +1702,7 @@ test("MCPR-04 reference path traversing a non-directory (ENOTDIR) propagates out
     // PathContainmentError). validateReferencePath re-throws it, and it must
     // propagate for the outer probe classifier to key on `.code`.
     await writeFile(path.join(pluginRoot, "afile"), "x", "utf8");
-    const context: ResolveContext = { marketplaceRoot: mpRoot };
+    const context: ResolveContext = { marketplaceRoot: mpRoot, marketplaceName: "third-party" };
 
     // act & assert
     await assert.rejects(
@@ -3747,6 +3943,7 @@ test("resolveStrict classifies a real file source through the default stat reade
   // act
   const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./plugin-file" }), {
     marketplaceRoot: temporaryMarketplace,
+    marketplaceName: "third-party",
   });
 
   // assert
@@ -3760,7 +3957,7 @@ test("resolveStrict classifies a real file source through the default stat reade
 
 test("resolveStrict classifies an existing special-file source through the default stat reader", async () => {
   // arrange
-  const context: ResolveContext = { marketplaceRoot: "/" };
+  const context: ResolveContext = { marketplaceRoot: "/", marketplaceName: "third-party" };
 
   // act
   const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./dev/null" }), context);
@@ -3790,6 +3987,7 @@ test("resolveStrict reads a real manifest through the default file reader", asyn
   // act
   const resolvedPlugin = await resolveStrict(pluginEntry(), {
     marketplaceRoot: temporaryMarketplace,
+    marketplaceName: "third-party",
   });
 
   // assert
@@ -3817,7 +4015,10 @@ test("resolveStrict falls through a non-directory wrapper to the bare manifest",
   testContext.after(() => rm(temporaryMarketplace, { recursive: true, force: true }));
 
   // act
-  const resolved = await resolveStrict(pluginEntry(), { marketplaceRoot: temporaryMarketplace });
+  const resolved = await resolveStrict(pluginEntry(), {
+    marketplaceRoot: temporaryMarketplace,
+    marketplaceName: "third-party",
+  });
 
   // assert
   assert.deepStrictEqual(resolved, {
@@ -3842,6 +4043,7 @@ for (const code of ["EACCES", "ELOOP", undefined]) {
     const bareManifest = path.join(localRoot, "plugin.json");
     const context: ResolveContext = {
       marketplaceRoot,
+      marketplaceName: "third-party",
       statKind(filePath) {
         if (filePath === wrappedManifest) {
           return Promise.reject(Object.assign(new Error("stat refused"), { code }));
@@ -3878,6 +4080,7 @@ test("resolveStrict propagates a source containment error below a non-directory 
     () =>
       resolveStrict(pluginEntry({ source: "./afile/child" }), {
         marketplaceRoot: temporaryMarketplace,
+        marketplaceName: "third-party",
       }),
     (error: unknown) =>
       error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOTDIR",
@@ -3897,6 +4100,7 @@ test("resolveStrict propagates a component containment error below a non-directo
     () =>
       resolveStrict(pluginEntry({ skills: ["afile/child"] }), {
         marketplaceRoot: temporaryMarketplace,
+        marketplaceName: "third-party",
       }),
     (error: unknown) =>
       error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOTDIR",
@@ -3932,6 +4136,7 @@ test("resolveStrict propagates a non-Error manifest read rejection (not wrapped 
   const manifestReadFailure: unknown = "manifest read failure";
   const context: ResolveContext = {
     marketplaceRoot,
+    marketplaceName: "third-party",
     statKind(filePath) {
       if (filePath === localRoot) {
         return Promise.resolve("dir");
@@ -3995,6 +4200,7 @@ test("resolveStrict propagates a non-Error standalone mcp read rejection (not wr
   const mcpReadFailure: unknown = "standalone mcp read failure";
   const context: ResolveContext = {
     marketplaceRoot,
+    marketplaceName: "third-party",
     statKind(filePath) {
       if (filePath === localRoot) {
         return Promise.resolve("dir");

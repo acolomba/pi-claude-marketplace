@@ -2065,6 +2065,7 @@ async function buildInstalledGitRow(opts: {
     if (presence.kind === "materialized") {
       const resolved = await resolveStrict(entry, {
         marketplaceRoot: mpRecord.marketplaceRoot,
+        marketplaceName: mpRecord.name,
         readFileText: (filePath) => reader.readTextFile(filePath),
         resolveGitPluginRoot: probe,
       });
@@ -2171,6 +2172,7 @@ async function buildInstalledRow(opts: {
   try {
     const resolved = await resolveStrict(entry, {
       marketplaceRoot: mpRecord.marketplaceRoot,
+      marketplaceName: mpRecord.name,
       readFileText: (filePath) => reader.readTextFile(filePath),
     });
     if (resolved.state === "installable") {
@@ -2395,6 +2397,7 @@ async function buildGitNotInstalledRow(opts: {
   const pluginRoot = presence.pluginRoot;
   const ctx: ResolveContext = {
     marketplaceRoot: mpRecord.marketplaceRoot,
+    marketplaceName: mpRecord.name,
     readFileText: (filePath) => reader.readTextFile(filePath),
     resolveGitPluginRoot: probe,
   };
@@ -2548,6 +2551,7 @@ async function buildNotInstalledRow(opts: {
   try {
     resolved = await resolveStrict(entry, {
       marketplaceRoot: mpRecord.marketplaceRoot,
+      marketplaceName: mpRecord.name,
       readFileText: (filePath) => reader.readTextFile(filePath),
     });
   } catch (err) {

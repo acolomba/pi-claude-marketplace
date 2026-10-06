@@ -96,7 +96,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
   // act
   const resolution = await resolveStrict(
     { name: "acme", source: "./plugin-source" },
-    { marketplaceRoot: scopeRoot },
+    { marketplaceRoot: scopeRoot, marketplaceName: "third-party" },
   );
   assert.ok(resolution.installable);
   const prepared = await prepareStageMcpServers({

@@ -14,6 +14,47 @@ function emptyResolution() {
   };
 }
 
+/**
+ * A path-keyed file tree. A string node is file contents, an `Error` node is a
+ * file whose read rejects with that error, and `"dir"` is a directory. Every
+ * read lands in `reads`, and a read of a path that is not a file rejects with
+ * ENOENT.
+ */
+function fileTree(nodes: Record<string, string | Error>): {
+  reads: string[];
+  statKind: (candidate: string) => Promise<"file" | "dir" | null>;
+  readFileText: (candidate: string) => Promise<string>;
+} {
+  const reads: string[] = [];
+  return {
+    reads,
+    statKind: (candidate) => {
+      const node = nodes[candidate];
+      if (node === undefined) {
+        return Promise.resolve(null);
+      }
+
+      return Promise.resolve(node === "dir" ? "dir" : "file");
+    },
+    readFileText: (candidate) => {
+      reads.push(candidate);
+      const node = nodes[candidate];
+      if (node instanceof Error) {
+        return Promise.reject(node);
+      }
+
+      if (node === undefined || node === "dir") {
+        return Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" }));
+      }
+
+      return Promise.resolve(node);
+    },
+  };
+}
+
+const MODULE_HOOKS = JSON.stringify({ modules: ["./register.ts"] });
+const DEFAULT_HOOKS_PATH = path.join("/plugins/alpha", "hooks", "hooks.json");
+
 function dependencies(
   contents: string | undefined,
   readError?: Error,
@@ -40,7 +81,7 @@ test("resolves no hooks when the convention file is absent", async () => {
   }, "hooks-resolution.ts is absent");
   assert.ok(owner !== undefined);
   const dirty = await owner.resolveHooks(
-    { pluginRoot: "/plugins/alpha", resolution },
+    { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution },
     dependencies(undefined),
   );
 
@@ -60,7 +101,7 @@ test("records a supported hooks configuration and its relative path", async () =
 
   // act
   const dirty = await resolveHooks(
-    { pluginRoot: "/plugins/alpha", resolution },
+    { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution },
     dependencies(contents),
   );
 
@@ -74,6 +115,58 @@ test("records a supported hooks configuration and its relative path", async () =
   });
 });
 
+test("records a module declared by a modules-only convention file", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const contents = JSON.stringify({ modules: ["./register.ts"] });
+
+  // act
+  const dirty = await resolveHooks(
+    { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution },
+    dependencies(contents),
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, {
+    supported: [],
+    unsupported: [],
+    notes: [],
+    declaresHookModule: true,
+  });
+});
+
+test("keeps command hooks supported beside a declared module", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const contents = JSON.stringify({
+    hooks: {
+      SessionStart: [{ hooks: [{ type: "command", command: "echo start" }] }],
+    },
+    modules: ["./register.ts"],
+  });
+
+  // act
+  const dirty = await resolveHooks(
+    { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution },
+    dependencies(contents),
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, {
+    supported: ["hooks"],
+    unsupported: [],
+    notes: [],
+    hooksConfigPath: path.join("hooks", "hooks.json"),
+    declaresHookModule: true,
+  });
+});
+
 test("classifies malformed hooks as a structural failure", async () => {
   // arrange
   const { resolveHooks } =
@@ -82,7 +175,7 @@ test("classifies malformed hooks as a structural failure", async () => {
 
   // act
   const dirty = await resolveHooks(
-    { pluginRoot: "/plugins/alpha", resolution },
+    { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution },
     dependencies("not-json"),
   );
 
@@ -106,7 +199,10 @@ test("propagates convention-file read failures unchanged", async () => {
 
   // act & assert
   await assert.rejects(
-    resolveHooks({ pluginRoot: "/plugins/alpha", resolution }, dependencies(undefined, readError)),
+    resolveHooks(
+      { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution },
+      dependencies(undefined, readError),
+    ),
     (error: unknown) => error === readError,
   );
   assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
@@ -127,7 +223,7 @@ test("keeps supported handlers and reports dropped groups in source order", asyn
 
   // act
   const dirty = await resolveHooks(
-    { pluginRoot: "/plugins/alpha", resolution },
+    { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution },
     dependencies(contents),
   );
 
@@ -156,7 +252,7 @@ test("omits materialization when every hook is dropped", async () => {
 
   // act
   const dirty = await resolveHooks(
-    { pluginRoot: "/plugins/alpha", resolution },
+    { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution },
     dependencies(contents),
   );
 
@@ -193,7 +289,7 @@ test("flags orphan rewake fields only in the retained hook subset", async () => 
 
   // act
   const dirty = await resolveHooks(
-    { pluginRoot: "/plugins/alpha", resolution },
+    { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution },
     dependencies(contents),
   );
 
@@ -224,11 +320,11 @@ test("repeated resolutions are observationally identical", async () => {
 
   // act
   const firstDirty = await resolveHooks(
-    { pluginRoot: "/plugins/alpha", resolution: firstResolution },
+    { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution: firstResolution },
     dependencies(contents),
   );
   const secondDirty = await resolveHooks(
-    { pluginRoot: "/plugins/alpha", resolution: secondResolution },
+    { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution: secondResolution },
     dependencies(contents),
   );
 
@@ -254,11 +350,16 @@ test("parallel resolutions keep independent deterministic state", async () => {
   // act
   const [supportedDirty, droppedDirty] = await Promise.all([
     resolveHooks(
-      { pluginRoot: "/plugins/supported", resolution: supportedResolution },
+      {
+        pluginRoot: "/plugins/supported",
+        entry: {},
+        manifest: null,
+        resolution: supportedResolution,
+      },
       dependencies(supportedContents),
     ),
     resolveHooks(
-      { pluginRoot: "/plugins/dropped", resolution: droppedResolution },
+      { pluginRoot: "/plugins/dropped", entry: {}, manifest: null, resolution: droppedResolution },
       dependencies(droppedContents),
     ),
   ]);
@@ -277,4 +378,263 @@ test("parallel resolutions keep independent deterministic state", async () => {
     notes: [],
     droppedHooks: [{ kind: "event", event: "Notification" }],
   });
+});
+
+test("records a module declared by a hooks file the manifest names", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const extraPath = path.join("/plugins/alpha", "hooks", "extra.json");
+  const files = fileTree({ [extraPath]: MODULE_HOOKS });
+
+  // act
+  const dirty = await resolveHooks(
+    {
+      pluginRoot: "/plugins/alpha",
+      entry: {},
+      manifest: { hooks: "./hooks/extra.json" },
+      resolution,
+    },
+    files,
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, {
+    supported: [],
+    unsupported: [],
+    notes: [],
+    declaresHookModule: true,
+  });
+  assert.deepStrictEqual(files.reads, [extraPath]);
+});
+
+test("adopts no command hooks from a hooks file the entry names", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const extraPath = path.join("/plugins/alpha", "extra.json");
+  const files = fileTree({
+    [extraPath]: JSON.stringify({
+      hooks: { SessionStart: [{ hooks: [{ type: "command", command: "echo start" }] }] },
+    }),
+  });
+
+  // act
+  const dirty = await resolveHooks(
+    {
+      pluginRoot: "/plugins/alpha",
+      entry: { hooks: [{ SessionStart: [] }, "./extra.json"] },
+      manifest: null,
+      resolution,
+    },
+    files,
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
+  assert.deepStrictEqual(files.reads, [extraPath]);
+});
+
+for (const { description, reference } of [
+  { description: "an escaping", reference: "../outside.json" },
+  { description: "an absolute", reference: "/plugins/outside.json" },
+]) {
+  test(`never reads ${description} hooks reference`, async () => {
+    // arrange
+    const { resolveHooks } =
+      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+    const resolution = emptyResolution();
+    const files = fileTree({ "/plugins/outside.json": MODULE_HOOKS });
+
+    // act
+    const dirty = await resolveHooks(
+      { pluginRoot: "/plugins/alpha", entry: { hooks: reference }, manifest: null, resolution },
+      files,
+    );
+
+    // assert
+    assert.strictEqual(dirty, false);
+    assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
+    assert.deepStrictEqual(files.reads, []);
+  });
+}
+
+test("reads every file of a manifest hooks array until one declares a module", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const firstPath = path.join("/plugins/alpha", "hooks", "first.json");
+  const secondPath = path.join("/plugins/alpha", "hooks", "second.json");
+  const thirdPath = path.join("/plugins/alpha", "hooks", "third.json");
+  const files = fileTree({
+    [firstPath]: JSON.stringify({ hooks: {} }),
+    [secondPath]: JSON.stringify({ modules: [] }),
+    [thirdPath]: MODULE_HOOKS,
+  });
+
+  // act
+  const dirty = await resolveHooks(
+    {
+      pluginRoot: "/plugins/alpha",
+      entry: {},
+      manifest: { hooks: ["./hooks/first.json", "./hooks/second.json", "./hooks/third.json"] },
+      resolution,
+    },
+    files,
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, {
+    supported: [],
+    unsupported: [],
+    notes: [],
+    declaresHookModule: true,
+  });
+  assert.deepStrictEqual(files.reads, [firstPath, secondPath, thirdPath]);
+});
+
+test("reads the convention file once when the manifest names it", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const files = fileTree({
+    [DEFAULT_HOOKS_PATH]: JSON.stringify({
+      SessionStart: [{ hooks: [{ type: "command", command: "echo start" }] }],
+    }),
+  });
+
+  // act
+  const dirty = await resolveHooks(
+    {
+      pluginRoot: "/plugins/alpha",
+      entry: {},
+      manifest: { hooks: "./hooks/hooks.json" },
+      resolution,
+    },
+    files,
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, {
+    supported: ["hooks"],
+    unsupported: [],
+    notes: [],
+    hooksConfigPath: path.join("hooks", "hooks.json"),
+  });
+  assert.deepStrictEqual(files.reads, [DEFAULT_HOOKS_PATH]);
+});
+
+test("reads a hooks file once when the entry and the manifest both name it", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const extraPath = path.join("/plugins/alpha", "extra.json");
+  const files = fileTree({ [extraPath]: JSON.stringify({ hooks: {} }) });
+
+  // act
+  const dirty = await resolveHooks(
+    {
+      pluginRoot: "/plugins/alpha",
+      entry: { hooks: "./extra.json" },
+      manifest: { hooks: ["extra.json"] },
+      resolution,
+    },
+    files,
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
+  assert.deepStrictEqual(files.reads, [extraPath]);
+});
+
+const EXTRA_HOOKS_PATH = path.join("/plugins/alpha", "extra.json");
+
+for (const { description, nodes, expectedReads } of [
+  { description: "a missing", nodes: {}, expectedReads: [] },
+  { description: "a directory", nodes: { [EXTRA_HOOKS_PATH]: "dir" }, expectedReads: [] },
+  {
+    description: "an invalid JSON",
+    nodes: { [EXTRA_HOOKS_PATH]: "not-json" },
+    expectedReads: [EXTRA_HOOKS_PATH],
+  },
+]) {
+  test(`ignores ${description} hooks reference`, async () => {
+    // arrange
+    const { resolveHooks } =
+      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+    const resolution = emptyResolution();
+    const files = fileTree(nodes);
+
+    // act
+    const dirty = await resolveHooks(
+      {
+        pluginRoot: "/plugins/alpha",
+        entry: { hooks: "./extra.json" },
+        manifest: null,
+        resolution,
+      },
+      files,
+    );
+
+    // assert
+    assert.strictEqual(dirty, false);
+    assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
+    assert.deepStrictEqual(files.reads, expectedReads);
+  });
+}
+
+test("reads no referenced hooks file when the convention file declares a module", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const files = fileTree({
+    [DEFAULT_HOOKS_PATH]: MODULE_HOOKS,
+    [path.join("/plugins/alpha", "extra.json")]: MODULE_HOOKS,
+  });
+
+  // act
+  const dirty = await resolveHooks(
+    { pluginRoot: "/plugins/alpha", entry: { hooks: "./extra.json" }, manifest: null, resolution },
+    files,
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, {
+    supported: [],
+    unsupported: [],
+    notes: [],
+    declaresHookModule: true,
+  });
+  assert.deepStrictEqual(files.reads, [DEFAULT_HOOKS_PATH]);
+});
+
+test("propagates a referenced hooks file read failure unchanged", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const readError = Object.assign(new Error("denied"), { code: "EACCES" });
+  const files = fileTree({ [path.join("/plugins/alpha", "extra.json")]: readError });
+
+  // act & assert
+  await assert.rejects(
+    resolveHooks(
+      { pluginRoot: "/plugins/alpha", entry: {}, manifest: { hooks: "./extra.json" }, resolution },
+      files,
+    ),
+    (error: unknown) => error === readError,
+  );
+  assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
 });

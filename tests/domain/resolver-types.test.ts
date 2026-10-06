@@ -140,6 +140,7 @@ const gitPluginRootContract = {
 } satisfies GitPluginRootResult;
 const resolveContextContract = {
   marketplaceRoot: "/marketplaces/main",
+  marketplaceName: "third-party",
   statKind: statKindReaderContract,
   resolveGitPluginRoot: () => Promise.resolve(gitPluginRootContract),
 } satisfies ResolveContext;

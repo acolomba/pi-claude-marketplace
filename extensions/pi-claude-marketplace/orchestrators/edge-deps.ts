@@ -45,6 +45,7 @@ import { probeManifestEntry, probeUpgradeCandidate } from "./plugin/git-source-p
 import { classifyInstalledRecord } from "./plugin/plugin-state-classifier.ts";
 
 import type { MarketplaceManifest } from "../domain/manifest.ts";
+import type { ResolveContext } from "../domain/resolver-types.ts";
 import type { ScopedLocations } from "../persistence/locations.ts";
 import type { ExtensionState } from "../persistence/state-io.ts";
 import type { PluginIndexRow } from "../shared/completion-cache.ts";
@@ -116,7 +117,7 @@ async function classifyInstalledPluginRow(
   pluginName: string,
   installed: ExtensionState["marketplaces"][string]["plugins"][string],
   manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
-  marketplaceRoot: string,
+  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
   locations: ScopedLocations,
 ): Promise<PluginIndexRow> {
   const upgradable =
@@ -128,7 +129,7 @@ async function classifyInstalledPluginRow(
   // degrade). `upgradable === true` narrows `manifestEntry` to defined.
   let candidateResolved: Awaited<ReturnType<typeof probeUpgradeCandidate>>;
   if (upgradable) {
-    candidateResolved = await probeUpgradeCandidate(manifestEntry, marketplaceRoot, locations);
+    candidateResolved = await probeUpgradeCandidate(manifestEntry, marketplaceContext, locations);
   }
 
   return {
@@ -150,7 +151,7 @@ async function classifyInstalledPluginRow(
  */
 async function classifyNotInstalledPluginRow(
   entry: MarketplaceManifest["plugins"][number],
-  marketplaceRoot: string,
+  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
   locations: ScopedLocations,
 ): Promise<PluginIndexRow> {
   // RSTA-01 / RSTA-03: the shared presence-derived probe owns the git-source
@@ -162,7 +163,7 @@ async function classifyNotInstalledPluginRow(
   // diverges. No local try/catch is needed -- `probeManifestEntry` folds every
   // throw internally and never throws, so one broken mirror degrades one row
   // instead of poisoning the marketplace's completion index.
-  const status = await probeManifestEntry(entry, marketplaceRoot, locations);
+  const status = await probeManifestEntry(entry, marketplaceContext, locations);
 
   return {
     name: entry.name,
@@ -221,6 +222,10 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
         }
 
         const parsed = await loadMarketplaceManifest(mp.manifestPath);
+        const marketplaceContext = {
+          marketplaceRoot: mp.marketplaceRoot,
+          marketplaceName: marketplace,
+        };
 
         const installedNames = new Set(Object.keys(mp.plugins));
         const rows: PluginIndexRow[] = [];
@@ -237,7 +242,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
               pluginName,
               installed,
               parsed.plugins.find((p) => p.name === pluginName),
-              mp.marketplaceRoot,
+              marketplaceContext,
               locations,
             ),
           );
@@ -250,7 +255,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
           }
 
           // eslint-disable-next-line no-await-in-loop -- bounded by the manifest's uninstalled entries, one row each
-          rows.push(await classifyNotInstalledPluginRow(entry, mp.marketplaceRoot, locations));
+          rows.push(await classifyNotInstalledPluginRow(entry, marketplaceContext, locations));
         }
 
         return rows;

@@ -11,7 +11,23 @@ import type { StatKindReader } from "./resolver-types.ts";
  *
  * SECURITY (T-02-25): The list is closed. A new kind upstream that is in
  * neither closed set would be silently ignored. Re-audit when Claude Code adds
- * component kinds.
+ * component kinds. The last audit, on 2026-10-06, read the Claude Code 2.1.291
+ * binary and https://code.claude.com/docs/en/plugins/mods/reference.
+ *
+ * `mod` is a hooks module. A hooks file declares one with a
+ * non-empty top-level `modules` array. Hooks resolution checks
+ * `hooks/hooks.json` and each hooks file that the `hooks` field names by a
+ * path, and reports the result as `declaresHookModule`. No plugin field
+ * selects this kind.
+ *
+ * `syntaxHighlighting` adds highlight.js languages to the terminal
+ * UI, like `themes`. It and `outputStyles` also count when nested under
+ * `experimental`, as `themes` and `monitors` do.
+ *
+ * Claude Code downloads the files of a non-empty `binaries` map
+ * into `bin/` only when the marketplace name, in lowercase, is in its
+ * official set. So `binaries` counts only for those marketplaces, and the
+ * field changes nothing for any other marketplace, as in Claude Code.
  *
  * D-90-06: `bin` is intentionally absent. A plugin's `<pluginRoot>/bin` is
  * runtime-honored through the PENV-01 PATH ledger, so a bin-shipping plugin
@@ -25,6 +41,9 @@ const UNSUPPORTED_COMPONENT_KINDS = [
   "channels",
   "userConfig",
   "settings",
+  "syntaxHighlighting",
+  "mod",
+  "binaries",
 ] as const;
 
 /** One member of the closed unsupported-component vocabulary. */
@@ -43,6 +62,58 @@ const UNSUPPORTED_COMPONENT_CONVENTIONS: Partial<
   settings: [{ relativePath: "settings.json", kind: "file" }],
 };
 
+// Current Claude Code schemas nest these components under `experimental`,
+// while older manifests may still use top-level fields.
+const EXPERIMENTAL_KINDS: ReadonlySet<UnsupportedComponentKind> = new Set([
+  "themes",
+  "monitors",
+  "outputStyles",
+  "syntaxHighlighting",
+]);
+
+/**
+ * The official marketplace names of Claude Code 2.1.291, copied
+ * from the binary. Upstream lowercases a marketplace name before it checks
+ * this set.
+ */
+const OFFICIAL_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
+  "claude-code-marketplace",
+  "claude-code-plugins",
+  "claude-plugins-official",
+  "anthropic-marketplace",
+  "anthropic-plugins",
+  "agent-skills",
+  "anthropic-agent-skills",
+  "life-sciences",
+  "knowledge-work-plugins",
+  "claude-for-legal",
+  "claude-for-financial-services",
+  "financial-services-plugins",
+  "first-party-plugins",
+  "claude-tag-plugins",
+]);
+
+function isNonEmptyMap(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length > 0
+  );
+}
+
+function declaresOfficialBinaries(input: {
+  readonly entry: Record<string, unknown>;
+  readonly manifest: Record<string, unknown> | null;
+  readonly marketplaceName: string;
+}): boolean {
+  if (!OFFICIAL_MARKETPLACE_NAMES.has(input.marketplaceName.toLowerCase())) {
+    return false;
+  }
+
+  return isNonEmptyMap(input.entry.binaries) || isNonEmptyMap(input.manifest?.binaries);
+}
+
 function nestedExperimentalValue(
   record: Record<string, unknown> | null | undefined,
   key: string,
@@ -57,16 +128,27 @@ function nestedExperimentalValue(
 
 function declaresUnsupportedKind(
   kind: UnsupportedComponentKind,
-  entry: Record<string, unknown>,
-  manifest: Record<string, unknown> | null,
+  input: {
+    readonly entry: Record<string, unknown>;
+    readonly manifest: Record<string, unknown> | null;
+    readonly declaresHookModule: boolean;
+    readonly marketplaceName: string;
+  },
 ): boolean {
+  if (kind === "mod") {
+    return input.declaresHookModule;
+  }
+
+  if (kind === "binaries") {
+    return declaresOfficialBinaries(input);
+  }
+
+  const { entry, manifest } = input;
   if (entry[kind] !== undefined || manifest?.[kind] !== undefined) {
     return true;
   }
 
-  // Current Claude Code schema nests these experimental components, while
-  // older manifests may still use top-level fields.
-  if (kind === "themes" || kind === "monitors") {
+  if (EXPERIMENTAL_KINDS.has(kind)) {
     return (
       nestedExperimentalValue(entry, kind) !== undefined ||
       nestedExperimentalValue(manifest, kind) !== undefined
@@ -96,21 +178,25 @@ async function hasUnsupportedConvention(
  * The injected stat reader keeps filesystem ownership with the resolver.
  */
 export async function collectUnsupportedKinds(
-  entry: Record<string, unknown>,
-  manifest: Record<string, unknown> | null,
-  pluginRoot: string,
+  input: {
+    readonly entry: Record<string, unknown>;
+    readonly manifest: Record<string, unknown> | null;
+    readonly pluginRoot: string;
+    readonly declaresHookModule: boolean;
+    readonly marketplaceName: string;
+  },
   statKind: StatKindReader,
 ): Promise<UnsupportedComponentKind[]> {
   const found: UnsupportedComponentKind[] = [];
 
   for (const kind of UNSUPPORTED_COMPONENT_KINDS) {
-    if (declaresUnsupportedKind(kind, entry, manifest)) {
+    if (declaresUnsupportedKind(kind, input)) {
       found.push(kind);
       continue;
     }
 
     // eslint-disable-next-line no-await-in-loop -- bounded by the fixed unsupported-kind list, a few stats each
-    if (await hasUnsupportedConvention(pluginRoot, kind, statKind)) {
+    if (await hasUnsupportedConvention(input.pluginRoot, kind, statKind)) {
       found.push(kind);
     }
   }

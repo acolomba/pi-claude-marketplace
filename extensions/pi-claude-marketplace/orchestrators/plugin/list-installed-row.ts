@@ -32,6 +32,7 @@ export interface ComposeInstalledListRowOptions {
   readonly pluginScope: Scope;
   readonly marketplaceScope: Scope;
   readonly marketplaceRoot: string;
+  readonly marketplaceName: string;
   readonly record: PluginInstallRecord;
   readonly lookup: ManifestLookup;
   readonly cwd: string;
@@ -70,12 +71,12 @@ function disabledReasonsField(notInManifest: boolean): Pick<PluginDisabledMessag
 
 async function probeUpgradeCandidate(
   manifestEntry: Parameters<typeof resolveStrict>[0],
-  marketplaceRoot: string,
+  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
   pluginScope: Scope,
   cwd: string,
 ): Promise<Awaited<ReturnType<typeof resolveStrict>> | undefined> {
   const resolveContext: ResolveContext = {
-    marketplaceRoot,
+    ...marketplaceContext,
     resolveGitPluginRoot: makePresenceProbe(locationsFor(pluginScope, cwd)),
   };
   try {
@@ -89,8 +90,7 @@ async function probeUpgradeCandidate(
 export async function composeInstalledListRow(
   options: ComposeInstalledListRowOptions,
 ): Promise<InstalledListRow> {
-  const { pluginName, pluginScope, marketplaceScope, marketplaceRoot, record, lookup, cwd } =
-    options;
+  const { pluginName, pluginScope, marketplaceScope, record, lookup, cwd } = options;
   const manifestEntry = lookup.kind === "declared" ? lookup.entry : undefined;
   const notInManifest = lookup.kind === "absent";
   const upgradable =
@@ -114,7 +114,12 @@ export async function composeInstalledListRow(
   }
 
   const candidateResolved = upgradable
-    ? await probeUpgradeCandidate(manifestEntry, marketplaceRoot, pluginScope, cwd)
+    ? await probeUpgradeCandidate(
+        manifestEntry,
+        { marketplaceRoot: options.marketplaceRoot, marketplaceName: options.marketplaceName },
+        pluginScope,
+        cwd,
+      )
     : undefined;
   const status = classifyInstalledRecord(
     record,
