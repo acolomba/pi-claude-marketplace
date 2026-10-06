@@ -59,9 +59,11 @@ async function walkAndHash(hash: Hash, root: string, rel: string): Promise<void>
     hash.update(childRel);
 
     if (entry.isDirectory()) {
+      // eslint-disable-next-line no-await-in-loop -- PI-7: the hash digests entries in sorted order
       await walkAndHash(hash, root, childRel);
     } else if (entry.isFile()) {
       // Use OS-aware joiner for the actual filesystem read.
+      // eslint-disable-next-line no-await-in-loop -- PI-7: the hash digests entries in sorted order
       const buf = await readFile(path.join(root, childRel));
       hash.update(normalizeBytes(buf));
     }

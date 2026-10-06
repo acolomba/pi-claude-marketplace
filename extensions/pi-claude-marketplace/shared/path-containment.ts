@@ -128,6 +128,7 @@ export function createPathSafetyGuard(inspector: PathSafetyInspector): PathSafet
       let current = normalizedParent;
       for (const segment of segments) {
         current = path.join(current, segment);
+        // eslint-disable-next-line no-await-in-loop -- descends from parent; first symlink or missing segment ends it
         const canContinue = await assertNoSymlinkSegment(
           inspector,
           normalizedParent,

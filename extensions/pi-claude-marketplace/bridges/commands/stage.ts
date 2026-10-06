@@ -218,15 +218,18 @@ export async function prepareStageCommands(
         assertSafeName(command.generatedName, "generated command name");
         // Filename is the generated command name: <generatedName>.md
         const stagedFile = path.join(stagingRoot, command.generatedName + ".md");
+        // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
         await assertPathInside(stagingRoot, stagedFile, "staged command file");
 
         const targetFile = path.join(locations.promptsTargetDir, command.generatedName + ".md");
+        // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
         await assertPathInside(locations.promptsTargetDir, targetFile, "target command file");
 
         // FMBOM-01: a leading U+FEFF produces no gate-1 throw, so no CMD-01
         // degrade fires and the marker rides `content` straight into the
         // staged artifact below -- where Pi's loader drops
         // the whole frontmatter block at load time.
+        // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
         let content = stripBom(await readFile(command.commandFile, "utf8"));
 
         // PARSE-01: parse the SOURCE frontmatter BEFORE substitution to establish
@@ -259,6 +262,7 @@ export async function prepareStageCommands(
           projectDir: locations.scope === "project" ? cwd : undefined,
         });
         content = rewriteMarkdownReferences(content, pluginName, referenceNames);
+        // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
         await writeFile(stagedFile, content, "utf8");
 
         // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
@@ -328,6 +332,7 @@ export async function commitPreparedCommands(
   // ENOENT-tolerant -- a previously-staged file may already be gone.
   for (const name of prepared._previousNames) {
     const target = path.join(prepared.locations.promptsTargetDir, name + ".md");
+    // eslint-disable-next-line no-await-in-loop -- the first containment or unlink failure stops later unlinks
     await assertPathInside(prepared.locations.promptsTargetDir, target, "previous command file");
     // Defense-in-depth (state.json corruption could surface a bad name), checked
     // after containment so a path-separator name still surfaces as the existing
@@ -335,6 +340,7 @@ export async function commitPreparedCommands(
     assertSafeName(name, "previous command name");
 
     try {
+      // eslint-disable-next-line no-await-in-loop -- the first containment or unlink failure stops later unlinks
       await unlink(target);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -354,6 +360,7 @@ export async function commitPreparedCommands(
   try {
     await mkdir(prepared.locations.promptsTargetDir, { recursive: true });
     for (const pair of prepared._renamePairs) {
+      // eslint-disable-next-line no-await-in-loop -- TR-01: one rename at a time so rollback knows which landed
       await rename(pair.from, pair.to);
       completedRenames.push(pair);
     }
@@ -361,6 +368,7 @@ export async function commitPreparedCommands(
     const rollbackLeaks: string[] = [];
     for (const pair of [...completedRenames].reverse()) {
       try {
+        // eslint-disable-next-line no-await-in-loop -- rollback walks completed renames in reverse
         await rename(pair.to, pair.from);
       } catch (rollbackErr) {
         rollbackLeaks.push(
@@ -417,13 +425,17 @@ export async function replacePreparedCommands(
     for (const name of prepared._previousNames) {
       assertSafeName(name, "previous command name");
       const target = path.join(prepared.locations.promptsTargetDir, name + ".md");
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       await assertPathInside(prepared.locations.promptsTargetDir, target, "previous command file");
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       if (!(await pathExists(target))) {
         continue;
       }
 
       const backup = path.join(backupRoot, name + ".md");
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       await assertPathInside(backupRoot, backup, "commands backup file");
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       await rename(target, backup);
       backups.push({ name, from: target, to: backup });
     }
@@ -440,11 +452,14 @@ export async function replacePreparedCommands(
     for (const pair of prepared._renamePairs) {
       const targetName = path.basename(pair.to, ".md");
       if (ownedNames.has(targetName)) {
+        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
         await removeOrphanIfPresent(pair.to, "file");
+        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
       } else if (await pathExists(pair.to)) {
         throw new Error(`Cannot replace command target with non-previous content at ${pair.to}`);
       }
 
+      // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
       await rename(pair.from, pair.to);
       renamed.push({ to: pair.to });
     }

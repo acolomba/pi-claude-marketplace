@@ -653,6 +653,7 @@ async function rollbackReplacements(
 ): Promise<readonly string[]> {
   const leaks: string[] = [];
   for (const replacement of [...replacements].reverse()) {
+    // eslint-disable-next-line no-await-in-loop -- rollback walks completed replacements in reverse
     for (const leak of await rollbackReplacement(ops, replacement, operations)) {
       leaks.push(`${replacement.phase}: ${leak}`);
     }
@@ -685,6 +686,7 @@ async function finalizeReplacements(
 ): Promise<readonly string[]> {
   const leaks: string[] = [];
   for (const replacement of replacements) {
+    // eslint-disable-next-line no-await-in-loop -- at most four replacement phases, one cleanup each
     for (const leak of await finalizeReplacement(ops, replacement, operations)) {
       leaks.push(`${replacement.phase}: ${leak}`);
     }

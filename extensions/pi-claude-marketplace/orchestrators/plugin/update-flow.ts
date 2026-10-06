@@ -281,6 +281,7 @@ async function updatePluginsWith(
   // the `@<marketplace>` and bare forms are bulk (emit the tally).
   for (const t of targets) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- syncs each marketplace once; a sync failure aborts the batch
       await syncCloneOnce(t.scope, t.marketplace, t.locations);
     } catch (err) {
       // Pre-3-phase error (D-14 step failure or marketplace-missing): surface
@@ -307,6 +308,7 @@ async function updatePluginsWith(
 
     let outcome: UpdateRunOutcome;
     try {
+      // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcome = await runPluginUpdate(
         buildDirectThreePhaseArgs(
           opts,
@@ -852,6 +854,7 @@ async function enumerateTargets(opts: UpdatePluginsOptions): Promise<readonly Re
   const out: ResolvedTarget[] = [];
   for (const sc of scopes) {
     const locations = locationsFor(sc, cwd);
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one state read each
     const state = await loadState(locations.extensionRoot);
     for (const [mpName, mp] of Object.entries(state.marketplaces)) {
       for (const p of Object.keys(mp.plugins)) {

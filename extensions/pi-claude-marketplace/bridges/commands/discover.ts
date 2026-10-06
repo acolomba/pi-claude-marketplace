@@ -328,16 +328,19 @@ async function walkCommandsDir(
     // D-14 / PS-1: refuse symlinks outright, before recursing or reading.
     // A symlinked directory could point outside the plugin root; never follow.
     if (entry.isSymbolicLink()) {
+      // eslint-disable-next-line no-await-in-loop -- appends to the shared output and warnings in name order
       const pointsAtDir = await symlinkPointsAtDirectory(full);
       warnOnDirectorySkip(warnings, pointsAtDir, full, base, "is a symlink");
       continue;
     }
 
     if (entry.isDirectory()) {
+      // eslint-disable-next-line no-await-in-loop -- appends to the shared output and warnings in name order
       await walkCommandsDir(full, base, pluginName, out, warnings);
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- appends to the shared output and warnings in name order
     await collectCommandFile({ dir, entry, full, base, pluginName, out, warnings });
   }
 }
@@ -367,6 +370,7 @@ export async function discoverPluginCommands(input: {
       : path.resolve(input.resolved.pluginRoot, commandsRel);
 
     const found: DiscoveredCommand[] = [];
+    // eslint-disable-next-line no-await-in-loop -- first-seen dir wins the shared dedup sets
     await walkCommandsDir(commandsDir, commandsDir, input.pluginName, found, warnings);
 
     for (const command of found) {

@@ -270,6 +270,7 @@ async function readManifest(
     // D-01-07: ABSENCE is the only fall-through. The first candidate that
     // exists is this plugin's manifest and its read decides the outcome; a
     // present-but-unusable file never hands off to the next candidate.
+    // eslint-disable-next-line no-await-in-loop -- D-01-07: the first existing manifest candidate wins
     if (!(await manifestCandidateIsFile(ctx, manifestPath))) {
       continue;
     }
@@ -277,6 +278,7 @@ async function readManifest(
     // Stat and read failures (e.g. EACCES) retain their identity for the
     // outer probe classifier -- only the parse and validation below are a
     // real "malformed plugin.json".
+    // eslint-disable-next-line no-await-in-loop -- D-01-07: only the first existing candidate is read
     const raw = await readFileTextOf(ctx)(manifestPath);
 
     try {

@@ -276,6 +276,7 @@ export async function rollbackReplacementCommon(
 
   for (const pair of [...input.renamed].reverse()) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- rollback removes replacements newest first
       await input.ops.rm(pair.to, rmOptions);
     } catch (err) {
       leaks.push(
@@ -286,7 +287,9 @@ export async function rollbackReplacementCommon(
 
   for (const backup of [...input.backups].reverse()) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- rollback restores backups newest first
       await fs.mkdir(path.dirname(backup.from), { recursive: true });
+      // eslint-disable-next-line no-await-in-loop -- rollback restores backups newest first
       await input.ops.rename(backup.to, backup.from);
     } catch (err) {
       leaks.push(

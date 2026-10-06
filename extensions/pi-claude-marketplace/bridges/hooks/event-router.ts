@@ -518,6 +518,7 @@ async function hydrateCacheFromDisk(
 
     let state: ExtensionState;
     try {
+      // eslint-disable-next-line no-await-in-loop -- each scope's hydrate writes the shared routing table
       state = await reader.loadState(loc.extensionRoot);
     } catch (err) {
       // A corrupt state.json should not block the bridge from coming up;
@@ -533,6 +534,7 @@ async function hydrateCacheFromDisk(
     // projectRoot for project scope; user-scope hydrate paths use
     // homedir-rooted paths so opts.cwd is the right "current project"
     // anchor for path globs.
+    // eslint-disable-next-line no-await-in-loop -- each scope's hydrate writes the shared routing table
     await hydrateScopeFromState(state, loc, opts.cwd, reader, routingState, generationIsCurrent);
     hydrated.push({ loc });
   }
@@ -575,6 +577,7 @@ async function hydrateScopeFromState(
       // Zero or one entry today; iterate defensively for forward-compat.
       for (const slug of hookSlugs) {
         const hooksJsonPath = path.join(loc.hooksDir, slug, "hooks.json");
+        // eslint-disable-next-line no-await-in-loop -- each plugin's hydrate writes the shared routing table
         await tryHydrateOnePlugin(reader, routingState, generationIsCurrent, {
           scope: loc.scope,
           marketplace: mpName,
@@ -860,6 +863,7 @@ async function registerHooksBridgeWith(
     // the dir's absence is harmless. Idempotent across `/reload` via mkdir
     // { recursive }; failures route through hookDebugLog.
     if (routingState.getRoutingBucket("SessionStart").length > 0) {
+      // eslint-disable-next-line no-await-in-loop -- at most two scopes, one data-dir mkdir each
       await ensureSharedDataDir(loc);
     }
 
@@ -869,6 +873,7 @@ async function registerHooksBridgeWith(
     // NEVER kill strangers), SIGKILL surviving owned PIDs, unlink the
     // table. Awaited so the pi.on registrations below cannot race
     // against an in-flight kill probe.
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one PID-table reap each
     await reapOrphans(runtime, loc);
   }
 

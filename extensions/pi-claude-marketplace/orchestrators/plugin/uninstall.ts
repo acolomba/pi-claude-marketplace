@@ -670,6 +670,7 @@ export async function sweepOrphans(args: {
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- a later member's held check reads `gone`
     const result = await removeDependencyMember({ member, ...removal });
     if (result.removed) {
       gone.add(member.key);
@@ -724,6 +725,7 @@ export async function finalizePrunedMembers(args: {
     }
 
     if (member.removed) {
+      // eslint-disable-next-line no-await-in-loop -- each cleanup sweeps the shared clone cache
       await args.transaction.runPostCommitCleanup({
         completionCache: args.completionCache,
         locations: args.locations,

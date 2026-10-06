@@ -189,6 +189,7 @@ async function reduceBucket(
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- a block or stop ends the bucket; mutations feed later hooks
     const r = await executor(entry, event, ctx, pi, runtime);
     if (capturedGeneration !== runtime.currentGeneration()) {
       return { result: { kind: "noop" }, attributedTo: undefined };
@@ -282,6 +283,7 @@ export async function collectBucketOutcomes(
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- hooks run in bucket order; a generation change stops the rest
     const result = await executor(entry, event, ctx, pi, runtime);
     if (capturedGeneration !== runtime.currentGeneration()) {
       return outcomes;

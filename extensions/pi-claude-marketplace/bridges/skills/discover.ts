@@ -156,6 +156,7 @@ async function collectSkillSubdirs(
     // readdir's `withFileTypes` reports the link's TYPE (so a symlink to a
     // directory shows isDirectory()=true). lstat is the only way to detect
     // the link itself.
+    // eslint-disable-next-line no-await-in-loop -- first-seen dir wins the shared dedup sets
     if (!(await isSkillDir(entry, skillsDir))) {
       continue;
     }
@@ -232,6 +233,7 @@ export async function discoverPluginSkills(input: {
       ? skillsRel
       : path.join(input.resolved.pluginRoot, skillsRel);
 
+    // eslint-disable-next-line no-await-in-loop -- first-seen dir wins the shared dedup sets
     const handledAsSelf = await collectSelfSkillDir(
       input.pluginName,
       skillsDir,
@@ -241,6 +243,7 @@ export async function discoverPluginSkills(input: {
     );
 
     if (!handledAsSelf) {
+      // eslint-disable-next-line no-await-in-loop -- first-seen dir wins the shared dedup sets
       await collectSkillSubdirs(input.pluginName, skillsDir, seenByGenerated, seenByDir, warnings);
     }
   }

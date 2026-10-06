@@ -310,11 +310,13 @@ export async function resolvePendingForceInstalls(
     for (const install of plan.pluginsToInstall) {
       let candidate: PendingInstallCandidate | undefined;
       try {
+        // eslint-disable-next-line no-await-in-loop -- bounded by the planned installs, one locate each
         candidate = await locate(install);
         if (candidate === undefined) {
           continue;
         }
 
+        // eslint-disable-next-line no-await-in-loop -- bounded by the planned installs, one resolve each
         const resolved = await resolveStrict(candidate.manifestEntry, {
           marketplaceRoot: candidate.marketplaceRoot,
         });

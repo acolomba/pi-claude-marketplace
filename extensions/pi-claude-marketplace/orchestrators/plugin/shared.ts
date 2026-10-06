@@ -858,12 +858,14 @@ export async function overwriteDisabledMemberEntries(args: {
   readonly write: typeof writeAdoptingConfigEntries;
 }): Promise<void> {
   for (const key of args.keys) {
+    // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of its config file
     const selection = await args.select({ locations: args.locations, local: undefined, key });
     if (selection.kind !== "selected" || selection.current.plugins?.[key]?.enabled !== false) {
       continue;
     }
 
     const at = key.indexOf("@");
+    // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of its config file
     await args.write({
       current: selection.current,
       sibling: selection.sibling,
@@ -1033,12 +1035,14 @@ async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | u
   for (const candidate of MANIFEST_CANDIDATES) {
     const manifestPath = path.join(pluginRoot, candidate);
 
+    // eslint-disable-next-line no-await-in-loop -- D-01-07: the first existing manifest candidate wins
     if (!(await manifestCandidateExists(manifestPath))) {
       continue;
     }
 
     let parsed: unknown;
     try {
+      // eslint-disable-next-line no-await-in-loop -- D-01-07: only the first existing candidate is read
       parsed = JSON.parse(await readFile(manifestPath, "utf8"));
     } catch (err) {
       // Present and unusable: tier 2 / tier 3 cover it.

@@ -333,6 +333,7 @@ async function discoverComponentNames(
   const names = new Set<string>();
   for (const rel of componentDirs) {
     const abs = path.isAbsolute(rel) ? rel : path.join(pluginRoot, rel);
+    // eslint-disable-next-line no-await-in-loop -- bounded by the declared component dirs, one readdir each
     const entries = await readEntriesOrEmpty(reader, abs);
     for (const entry of entries) {
       const name = nameFromEntry(entry, kind);
@@ -605,6 +606,7 @@ async function readOwnManifestDependencies(
   pluginRoot: string,
 ): Promise<OwnManifestRead> {
   for (const candidate of MANIFEST_CANDIDATES) {
+    // eslint-disable-next-line no-await-in-loop -- the first existing manifest candidate decides the read
     const read = await readManifestCandidate(reader, path.join(pluginRoot, candidate));
     if (read.kind === "absent") {
       continue;
@@ -778,7 +780,9 @@ async function readStateOnlyHookEntries(
       // same one-line join for the same reason. NFR-10 containment is carried
       // by the `assertPathInside` chokepoint below, not by the composer.
       const hooksJsonPath = path.join(locations.hooksDir, slug, "hooks.json");
+      // eslint-disable-next-line no-await-in-loop -- the first unparseable slug returns; zero or one slug today
       await assertPathInside(locations.hooksDir, hooksJsonPath, "hooks.json info read");
+      // eslint-disable-next-line no-await-in-loop -- the first unparseable slug returns; zero or one slug today
       const raw = await reader.readTextFile(hooksJsonPath);
       const parsed = parseHooksForInfo(raw, cwd);
       if (!parsed.ok) {
