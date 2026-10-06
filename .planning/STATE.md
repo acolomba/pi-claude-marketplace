@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 3
 current_phase_name: Claude Code tool names and tool search
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-10-06T17:22:03.081Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-10-06T17:43:19.702Z"
 last_activity: 2026-10-06
 last_activity_desc: Phase 3 execution started
-state_head: f163778f2bfd20df14e72765a1e4d2201cb27065
+state_head: 94775201f953def72e4d993339142ceb0ee988b9
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 30
-  completed_plans: 23
+  completed_plans: 24
   percent: 29
 ---
 
@@ -35,7 +35,7 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 3 (Claude Code tool names and tool search) — EXECUTING
-Plan: 3 of 9
+Plan: 4 of 9
 Status: Ready to execute
 Last activity: 2026-10-06 — Phase 3 execution started
 
@@ -269,6 +269,7 @@ still open with a comment explaining what landed.
 | Phase 02 P08 | 30min | 3 tasks | 12 files |
 | Phase 03 P01 | 18 min | 3 tasks | 16 files |
 | Phase 03 P02 | 5 min | 2 tasks | 7 files |
+| Phase 03 P03 | 20min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -610,6 +611,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: Plugin MCP entries are keyed plugin_<plugin>_<server>_ by generatedMcpServerKey; state.json keeps declared names and cascade unstage maps keys back
 - [Phase 03]: Stamping warnings and override-kept notices name the generated server key
 - [Phase 03]: Hook matchers accept mcp__<server>__.* as a string server prefix (toolPrefixes on the tool-set arm); every other regex matcher still drops (MATCH-02)
+- [Phase 03]: translateMcpServer in domain/mcp-server-features.ts is the closed Claude Code server table; a server with no type is stdio, and every unnamed key is dropped
+- [Phase 03]: Plugin description resolves once in preflight: plugin.json first, then the marketplace entry; the unavailable arm never carries it
 
 ### Pending Todos
 
@@ -741,11 +744,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-02-PLAN.md
+**Stopped at:** Completed 03-03-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-06T17:22:02.874Z
+Last session: 2026-10-06T17:43:19.451Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 

@@ -82,7 +82,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
   (`directTools: "search"`), and a server marked `alwaysLoad` gets `directTools: true`.
 - [ ] **ANAME-05**: Entries leave `lifecycle` unset (adapter default `lazy`); the divergence from
   Claude Code's session-long connection is documented.
-- [ ] **ANAME-06**: The server `description` from the plugin manifest is written to the entry.
+- [x] **ANAME-06**: The server `description` from the plugin manifest is written to the entry.
 - [ ] **ANAME-07**: Claude transport and option fields are translated to adapter fields (`sse` ->
   `httpTransport`, request timeout, OAuth callback port); a Claude feature with no adapter
   equivalent (`ws`, `headersHelper`, ...) makes the plugin partially available with
@@ -180,7 +180,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | ANAME-03 | Phase 3 | Pending |
 | ANAME-04 | Phase 3 | Pending |
 | ANAME-05 | Phase 3 | Pending |
-| ANAME-06 | Phase 3 | Pending |
+| ANAME-06 | Phase 3 | Complete |
 | ANAME-07 | Phase 3 | Pending |
 | AVAR-01 | Phase 4 | Pending |
 | AVAR-02 | Phase 4 | Pending |
