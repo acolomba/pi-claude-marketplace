@@ -1469,8 +1469,8 @@ test("renders fresh status after materialization through the required capability
           return presence;
         };
       },
-      async probeManifestEntry(entry, marketplaceRoot, statusLocations) {
-        const classification = await probeManifestEntry(entry, marketplaceRoot, statusLocations);
+      async probeManifestEntry(entry, marketplaceContext, statusLocations) {
+        const classification = await probeManifestEntry(entry, marketplaceContext, statusLocations);
         sequence.push(`manifest:${classification}`);
         return classification;
       },

@@ -319,6 +319,7 @@ export async function resolvePendingForceInstalls(
         // eslint-disable-next-line no-await-in-loop -- bounded by the planned installs, one resolve each
         const resolved = await resolveStrict(candidate.manifestEntry, {
           marketplaceRoot: candidate.marketplaceRoot,
+          marketplaceName: install.marketplace,
         });
         if (resolved.state === "partially-available") {
           keys.add(forceInstallKey(install.scope, install.marketplace, install.plugin));

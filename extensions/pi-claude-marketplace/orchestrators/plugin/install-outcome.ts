@@ -500,6 +500,7 @@ async function preflightInstallResolve(
   // installable variant or surfaces disqualification notes.
   const resolved = await resolveStrict(entry, {
     marketplaceRoot: sourceMp.marketplaceRoot,
+    marketplaceName: marketplace,
     resolveGitPluginRoot: async (gitSource) => {
       const clone = await (opts.cloneProbe ?? probeInstallClone)({
         // RESV-03: a pinned dependency materializes the exact commit its

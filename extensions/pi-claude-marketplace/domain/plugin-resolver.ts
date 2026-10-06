@@ -561,7 +561,13 @@ async function addUnsupportedKindNotes(
 ): Promise<boolean> {
   let dirty = false;
   const kinds = await collectUnsupportedKinds(
-    { entry, manifest, pluginRoot, declaresHookModule: partial.declaresHookModule === true },
+    {
+      entry,
+      manifest,
+      pluginRoot,
+      declaresHookModule: partial.declaresHookModule === true,
+      marketplaceName: ctx.marketplaceName,
+    },
     statKindOf(ctx),
   );
   for (const kind of kinds) {

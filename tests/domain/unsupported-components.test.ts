@@ -100,15 +100,21 @@ test("collectUnsupportedKinds reads direct and experimental declarations in tupl
     await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
   const entry = {
     lspServers: {},
-    experimental: { monitors: {}, themes: {} },
+    experimental: { monitors: {}, themes: {}, syntaxHighlighting: {} },
     channels: null,
     userConfig: false,
   };
-  const manifest = { outputStyles: [], settings: false };
+  const manifest = { outputStyles: [], settings: false, binaries: { tool: { sha256: "ab" } } };
 
   // act
   const kinds = await collectUnsupportedKinds(
-    { entry, manifest, pluginRoot: "/plugins/alpha", declaresHookModule: false },
+    {
+      entry,
+      manifest,
+      pluginRoot: "/plugins/alpha",
+      declaresHookModule: true,
+      marketplaceName: "claude-plugins-official",
+    },
     () => Promise.reject(new Error("declarations must not probe conventions")),
   );
 
@@ -121,6 +127,9 @@ test("collectUnsupportedKinds reads direct and experimental declarations in tupl
     "channels",
     "userConfig",
     "settings",
+    "syntaxHighlighting",
+    "mod",
+    "binaries",
   ]);
 });
 
@@ -139,7 +148,13 @@ test("collectUnsupportedKinds detects every filesystem convention", async () => 
 
   // act
   const kinds = await collectUnsupportedKinds(
-    { entry: {}, manifest: null, pluginRoot, declaresHookModule: false },
+    {
+      entry: {},
+      manifest: null,
+      pluginRoot,
+      declaresHookModule: false,
+      marketplaceName: "third-party",
+    },
     (candidate) => Promise.resolve(statKinds.get(candidate) ?? null),
   );
 
@@ -161,7 +176,13 @@ for (const { description, entry } of ignoredExperimentalCases) {
 
     // act
     const kinds = await collectUnsupportedKinds(
-      { entry, manifest: null, pluginRoot: "/plugins/alpha", declaresHookModule: false },
+      {
+        entry,
+        manifest: null,
+        pluginRoot: "/plugins/alpha",
+        declaresHookModule: false,
+        marketplaceName: "third-party",
+      },
       () => Promise.resolve("file"),
     );
 
@@ -177,7 +198,13 @@ test("UKIND-01: collectUnsupportedKinds reports mod from the declared hooks modu
 
   // act
   const kinds = await collectUnsupportedKinds(
-    { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", declaresHookModule: true },
+    {
+      entry: {},
+      manifest: null,
+      pluginRoot: "/plugins/alpha",
+      declaresHookModule: true,
+      marketplaceName: "third-party",
+    },
     () => Promise.resolve(null),
   );
 
@@ -197,6 +224,7 @@ test("UKIND-01: collectUnsupportedKinds ignores a plugin field named mod", async
       manifest: { mod: "./register.ts" },
       pluginRoot: "/plugins/alpha",
       declaresHookModule: false,
+      marketplaceName: "third-party",
     },
     () => Promise.resolve(null),
   );
@@ -238,7 +266,73 @@ for (const { description, entry, manifest, expectedKinds } of [
 
     // act
     const kinds = await collectUnsupportedKinds(
-      { entry, manifest, pluginRoot: "/plugins/alpha", declaresHookModule: false },
+      {
+        entry,
+        manifest,
+        pluginRoot: "/plugins/alpha",
+        declaresHookModule: false,
+        marketplaceName: "third-party",
+      },
+      () => Promise.resolve(null),
+    );
+
+    // assert
+    assert.deepStrictEqual(kinds, expectedKinds);
+  });
+}
+
+for (const { description, marketplaceName, entry, manifest, expectedKinds } of [
+  {
+    description: "an entry binaries map in an official marketplace",
+    marketplaceName: "claude-plugins-official",
+    entry: { binaries: { tool: { sha256: "ab" } } },
+    manifest: null,
+    expectedKinds: ["binaries"],
+  },
+  {
+    description: "a manifest binaries map in an official marketplace named in mixed case",
+    marketplaceName: "Claude-Plugins-Official",
+    entry: {},
+    manifest: { binaries: { tool: { sha256: "ab" } } },
+    expectedKinds: ["binaries"],
+  },
+  {
+    description: "a binaries map in a third-party marketplace",
+    marketplaceName: "third-party",
+    entry: { binaries: { tool: { sha256: "ab" } } },
+    manifest: null,
+    expectedKinds: [],
+  },
+  {
+    description: "an empty binaries map in an official marketplace",
+    marketplaceName: "claude-plugins-official",
+    entry: { binaries: {} },
+    manifest: null,
+    expectedKinds: [],
+  },
+  {
+    description: "a null binaries value in an official marketplace",
+    marketplaceName: "claude-plugins-official",
+    entry: { binaries: null },
+    manifest: null,
+    expectedKinds: [],
+  },
+  {
+    description: "a binaries array in an official marketplace",
+    marketplaceName: "claude-plugins-official",
+    entry: { binaries: ["tool"] },
+    manifest: null,
+    expectedKinds: [],
+  },
+]) {
+  test(`UKIND-03: collectUnsupportedKinds reads ${description} as ${JSON.stringify(expectedKinds)}`, async () => {
+    // arrange
+    const { collectUnsupportedKinds } =
+      await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
+
+    // act
+    const kinds = await collectUnsupportedKinds(
+      { entry, manifest, pluginRoot: "/plugins/alpha", declaresHookModule: false, marketplaceName },
       () => Promise.resolve(null),
     );
 

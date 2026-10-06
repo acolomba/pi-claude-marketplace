@@ -297,7 +297,11 @@ describe("probeManifestEntry", () => {
     const entry: ManifestEntry = { name: "github-plugin", source: "owner/repo" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, "remote");
@@ -312,7 +316,11 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, "remote");
@@ -327,7 +335,11 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, "remote");
@@ -339,7 +351,11 @@ describe("probeManifestEntry", () => {
     const entry: ManifestEntry = { name: "missing-path", source: "./plugins/missing" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, "unavailable");
@@ -352,7 +368,11 @@ describe("probeManifestEntry", () => {
     const entry: ManifestEntry = { name: "path-plugin", source: "./plugins/path-plugin" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, "available");
@@ -365,7 +385,11 @@ describe("probeManifestEntry", () => {
     const entry: ManifestEntry = { name: "../escape", source: "./plugins/unsafe" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, "unavailable");
@@ -380,7 +404,11 @@ describe("probeManifestEntry", () => {
     const entry: ManifestEntry = { name: "corrupt-plugin", source: cloneUrl };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, "unavailable");
@@ -397,7 +425,11 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, "available");
@@ -418,7 +450,11 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, "unavailable");
@@ -436,7 +472,11 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, "partially-available");
@@ -454,7 +494,11 @@ describe("probeUpgradeCandidate", () => {
     };
 
     // act
-    const result = await probeUpgradeCandidate(entry, marketplaceRoot, locations);
+    const result = await probeUpgradeCandidate(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.deepStrictEqual(result, {
@@ -478,7 +522,11 @@ describe("probeUpgradeCandidate", () => {
     };
 
     // act
-    const result = await probeUpgradeCandidate(entry, marketplaceRoot, locations);
+    const result = await probeUpgradeCandidate(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.deepStrictEqual(result, {
@@ -507,7 +555,11 @@ describe("probeUpgradeCandidate", () => {
     };
 
     // act
-    const result = await probeUpgradeCandidate(entry, marketplaceRoot, locations);
+    const result = await probeUpgradeCandidate(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.deepStrictEqual(result, {
@@ -533,7 +585,11 @@ describe("probeUpgradeCandidate", () => {
     const entry: ManifestEntry = { name: "corrupt-upgrade", source: cloneUrl };
 
     // act
-    const result = await probeUpgradeCandidate(entry, marketplaceRoot, locations);
+    const result = await probeUpgradeCandidate(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, undefined);
@@ -548,7 +604,11 @@ describe("probeUpgradeCandidate", () => {
     };
 
     // act
-    const result = await probeUpgradeCandidate(entry, marketplaceRoot, locations);
+    const result = await probeUpgradeCandidate(
+      entry,
+      { marketplaceRoot, marketplaceName: "third-party" },
+      locations,
+    );
 
     // assert
     assert.equal(result, undefined);

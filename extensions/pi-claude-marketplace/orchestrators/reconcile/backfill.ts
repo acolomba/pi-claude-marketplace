@@ -528,7 +528,10 @@ async function resolveRecordedPluginOffline(
       return undefined;
     }
 
-    return await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
+    return await resolveStrict(entry, {
+      marketplaceRoot: mp.marketplaceRoot,
+      marketplaceName: mp.name,
+    });
   } catch (err) {
     if (record.compatibility.installable) {
       return undefined;

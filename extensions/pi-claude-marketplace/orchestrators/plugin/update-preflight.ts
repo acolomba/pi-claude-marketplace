@@ -343,6 +343,7 @@ async function resolveUpdateCandidate(
   try {
     const resolved = await resolveStrict(entry, {
       marketplaceRoot: marketplace.marketplaceRoot,
+      marketplaceName: marketplace.name,
       resolveGitPluginRoot: (gitSource) =>
         // D-10-17: overriding `sha` is what routes the EXISTING probe down
         // its already-pinned arm, exactly as an explicitly pinned entry

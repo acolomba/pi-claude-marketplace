@@ -24,6 +24,11 @@ import type { StatKindReader } from "./resolver-types.ts";
  * UI, like `themes`. It and `outputStyles` also count when nested under
  * `experimental`, as `themes` and `monitors` do.
  *
+ * UKIND-03: Claude Code downloads the files of a non-empty `binaries` map
+ * into `bin/` only when the marketplace name, in lowercase, is in its
+ * official set. So `binaries` counts only for those marketplaces, and the
+ * field changes nothing for any other marketplace, as in Claude Code.
+ *
  * D-90-06: `bin` is intentionally absent. A plugin's `<pluginRoot>/bin` is
  * runtime-honored through the PENV-01 PATH ledger, so a bin-shipping plugin
  * installs by default at Claude Code parity.
@@ -38,6 +43,7 @@ const UNSUPPORTED_COMPONENT_KINDS = [
   "settings",
   "syntaxHighlighting",
   "mod",
+  "binaries",
 ] as const;
 
 /** One member of the closed unsupported-component vocabulary. */
@@ -65,6 +71,49 @@ const EXPERIMENTAL_KINDS: ReadonlySet<UnsupportedComponentKind> = new Set([
   "syntaxHighlighting",
 ]);
 
+/**
+ * UKIND-03: the official marketplace names of Claude Code 2.1.291, copied
+ * from the binary. Upstream lowercases a marketplace name before it checks
+ * this set.
+ */
+const OFFICIAL_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
+  "claude-code-marketplace",
+  "claude-code-plugins",
+  "claude-plugins-official",
+  "anthropic-marketplace",
+  "anthropic-plugins",
+  "agent-skills",
+  "anthropic-agent-skills",
+  "life-sciences",
+  "knowledge-work-plugins",
+  "claude-for-legal",
+  "claude-for-financial-services",
+  "financial-services-plugins",
+  "first-party-plugins",
+  "claude-tag-plugins",
+]);
+
+function isNonEmptyMap(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length > 0
+  );
+}
+
+function declaresOfficialBinaries(input: {
+  readonly entry: Record<string, unknown>;
+  readonly manifest: Record<string, unknown> | null;
+  readonly marketplaceName: string;
+}): boolean {
+  if (!OFFICIAL_MARKETPLACE_NAMES.has(input.marketplaceName.toLowerCase())) {
+    return false;
+  }
+
+  return isNonEmptyMap(input.entry.binaries) || isNonEmptyMap(input.manifest?.binaries);
+}
+
 function nestedExperimentalValue(
   record: Record<string, unknown> | null | undefined,
   key: string,
@@ -83,10 +132,15 @@ function declaresUnsupportedKind(
     readonly entry: Record<string, unknown>;
     readonly manifest: Record<string, unknown> | null;
     readonly declaresHookModule: boolean;
+    readonly marketplaceName: string;
   },
 ): boolean {
   if (kind === "mod") {
     return input.declaresHookModule;
+  }
+
+  if (kind === "binaries") {
+    return declaresOfficialBinaries(input);
   }
 
   const { entry, manifest } = input;
@@ -129,6 +183,7 @@ export async function collectUnsupportedKinds(
     readonly manifest: Record<string, unknown> | null;
     readonly pluginRoot: string;
     readonly declaresHookModule: boolean;
+    readonly marketplaceName: string;
   },
   statKind: StatKindReader,
 ): Promise<UnsupportedComponentKind[]> {

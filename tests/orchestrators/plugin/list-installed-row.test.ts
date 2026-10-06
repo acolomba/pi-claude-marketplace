@@ -60,11 +60,12 @@ function manifestEntry(overrides: ManifestEntryOverrides = {}): ManifestPluginEn
 async function installedEnvironment(testContext: TestContext): Promise<{
   readonly cwd: string;
   readonly marketplaceRoot: string;
+  readonly marketplaceName: string;
 }> {
   const environment = await createHermeticEnvironment(testContext, "list-installed-row-");
   const marketplaceRoot = path.join(environment.cwd, "marketplace");
   await mkdir(marketplaceRoot, { recursive: true });
-  return { cwd: environment.cwd, marketplaceRoot };
+  return { cwd: environment.cwd, marketplaceRoot, marketplaceName: "third-party" };
 }
 
 test("composes a same-scope installed row with exact dependencies and description", async (testContext) => {

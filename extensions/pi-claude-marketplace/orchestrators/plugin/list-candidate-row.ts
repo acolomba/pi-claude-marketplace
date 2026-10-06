@@ -11,6 +11,7 @@ import { makePresenceProbe } from "./git-source-probe.ts";
 import { classifyManifestEntry } from "./plugin-state-classifier.ts";
 
 import type { ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
+import type { ResolveContext } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type {
@@ -70,12 +71,15 @@ function isGitPluginSource(
 
 async function resolveCandidateEntry(
   manifestEntry: ManifestPluginEntry,
-  marketplaceRoot: string,
+  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
   locations: ScopedLocations,
 ): Promise<ResolvedCandidate> {
   const parsedSource = parsePluginSource(manifestEntry.source);
   if (!isGitPluginSource(parsedSource)) {
-    return { kind: "resolved", resolved: await resolveStrict(manifestEntry, { marketplaceRoot }) };
+    return {
+      kind: "resolved",
+      resolved: await resolveStrict(manifestEntry, { ...marketplaceContext }),
+    };
   }
 
   const probe = makePresenceProbe(locations);
@@ -87,7 +91,7 @@ async function resolveCandidateEntry(
   return {
     kind: "resolved",
     resolved: await resolveStrict(manifestEntry, {
-      marketplaceRoot,
+      ...marketplaceContext,
       resolveGitPluginRoot: probe,
     }),
   };
@@ -160,14 +164,14 @@ function probeFailureRow(manifestEntry: ManifestPluginEntry, probeErr: unknown):
  */
 export async function availableRowMessage(
   manifestEntry: ManifestPluginEntry,
-  marketplaceRoot: string,
+  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
   locations: ScopedLocations,
   declaredEnabled: boolean | undefined,
 ): Promise<CandidateRow> {
   const claimsInstallDisabled = rowClaimsInstallDisabled(manifestEntry, declaredEnabled);
 
   try {
-    const outcome = await resolveCandidateEntry(manifestEntry, marketplaceRoot, locations);
+    const outcome = await resolveCandidateEntry(manifestEntry, marketplaceContext, locations);
     if (outcome.kind === "cold") {
       return {
         message: {
