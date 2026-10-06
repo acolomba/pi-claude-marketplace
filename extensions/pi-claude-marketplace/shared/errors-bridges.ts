@@ -55,19 +55,57 @@ export class AgentOwnershipConflictError extends Error {
  * highest-precedence other source that defines it. `winningPath` is the source
  * the adapter loads under its later-wins precedence: the owner when it ranks
  * above the target file, else the target file itself.
+ *
+ * ANAME-03: `definedAs` is the owner's own key when it differs from
+ * `serverName` only by `-` versus `_`, so the user can find the entry.
  */
 export class McpServerCollisionError extends Error {
   readonly serverName: string;
   readonly owningPath: string;
   readonly winningPath: string;
-  constructor(serverName: string, owningPath: string, winningPath: string) {
+  readonly definedAs?: string;
+  constructor(serverName: string, owningPath: string, winningPath: string, otherKey?: string) {
+    const folded = otherKey !== undefined && otherKey !== serverName;
     super(
-      `Refusing to stage MCP server "${serverName}": ${owningPath} already defines it, and pi-mcp-adapter would load the definition in ${winningPath}.`,
+      folded
+        ? `Refusing to stage MCP server "${serverName}": ${owningPath} already defines "${otherKey}", which Pi treats as the same tool namespace because it does not tell "-" from "_".`
+        : `Refusing to stage MCP server "${serverName}": ${owningPath} already defines it, and pi-mcp-adapter would load the definition in ${winningPath}.`,
     );
     this.name = "McpServerCollisionError";
     this.serverName = serverName;
     this.owningPath = owningPath;
     this.winningPath = winningPath;
+    if (folded) {
+      this.definedAs = otherKey;
+    }
+  }
+}
+
+/**
+ * ANAME-03 refusal: two servers of one plugin map to one server key, or to
+ * keys that differ only by `-` versus `_`, which Pi gives one tool namespace.
+ * Either way one server would shadow the other. `servers` holds both declared
+ * names and `keys` their keys, in declared order.
+ */
+export class McpServerKeyCollisionError extends Error {
+  readonly pluginName: string;
+  readonly servers: readonly [string, string];
+  readonly keys: readonly [string, string];
+  constructor(
+    pluginName: string,
+    servers: readonly [string, string],
+    keys: readonly [string, string],
+  ) {
+    const subject = `Refusing to stage MCP servers "${servers[0]}" and "${servers[1]}" of plugin "${pluginName}"`;
+    super(
+      keys[0] === keys[1]
+        ? `${subject}: both map to the server key "${keys[0]}".`
+        : `${subject}: their server keys "${keys[0]}" and "${keys[1]}" differ only by "-" and "_", which Pi treats as one tool namespace.`,
+    );
+    this.name = "McpServerKeyCollisionError";
+    this.pluginName = pluginName;
+    this.servers = Object.freeze([servers[0], servers[1]] as const);
+    this.keys = Object.freeze([keys[0], keys[1]] as const);
   }
 }
 

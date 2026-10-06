@@ -242,6 +242,17 @@ export function generatedMcpServerKey(plugin: string, server: string): string {
 }
 
 /**
+ * ANAME-03: a server key with every `-` folded to `_`. pi-mcp-adapter names a
+ * server's deferred-tool namespace `mcp__` plus the key with `-` folded, so
+ * two keys equal after the fold share one namespace in Pi. Claude Code keeps
+ * `-`, so refusing such a pair is a Pi capability gap. This is the only fold
+ * of a server key.
+ */
+export function foldedMcpServerKey(key: string): string {
+  return key.replaceAll("-", "_");
+}
+
+/**
  * Workflow name generator (RN-1 / WNAM-06).
  *
  * Format: `<plugin>:<workflow>` -- the same colon separator command names use.

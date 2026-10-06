@@ -19,7 +19,10 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import {
+  McpConfigFileError,
+  McpServerKeyCollisionError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
@@ -1498,6 +1501,44 @@ test("AFILE-02: a plugin with MCP servers refuses an unparseable mcp-adapter.jso
   );
   assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
   assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
+test("ANAME-03: an install whose two servers share one key refuses before any write", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-same-key-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: {
+      "a.b": { command: "node", args: ["a.js"] },
+      a_b: { command: "node", args: ["b.js"] },
+    },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    runInstallLedger(seeded.state, locations, {
+      ctx: notificationContext(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof McpServerKeyCollisionError);
+      assert.deepStrictEqual(
+        { pluginName: error.pluginName, servers: error.servers, keys: error.keys },
+        {
+          pluginName: "empty",
+          servers: ["a.b", "a_b"],
+          keys: ["plugin_empty_a_b_", "plugin_empty_a_b_"],
+        },
+      );
+      return true;
+    },
+  );
+  await assert.rejects(stat(locations.mcpAdapterJsonPath), { code: "ENOENT" });
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
 });
 
 /** A full 40-hex commit id, so the `sha-<12hex>` derivation has real bytes to cut. */

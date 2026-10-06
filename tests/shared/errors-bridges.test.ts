@@ -7,6 +7,7 @@ import {
   CommandNameError,
   McpConfigFileError,
   McpServerCollisionError,
+  McpServerKeyCollisionError,
   McpUnstagePartialError,
   WorkflowTargetOccupiedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
@@ -305,6 +306,124 @@ describe("McpServerCollisionError", () => {
           winningPath: "/scope/mcp-1.json",
         },
       ],
+    );
+  });
+
+  test("ANAME-03: names the other source's key when it folds onto the staged key", () => {
+    // arrange
+    const otherKey = "plugin_my-tools_db_";
+
+    // act
+    const error = new McpServerCollisionError(
+      "plugin_my_tools_db_",
+      "/scope/mcp-adapter.json",
+      "/scope/mcp-adapter.json",
+      otherKey,
+    );
+
+    // assert
+    assert.ok(error instanceof McpServerCollisionError);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        serverName: error.serverName,
+        owningPath: error.owningPath,
+        winningPath: error.winningPath,
+        definedAs: error.definedAs,
+      },
+      {
+        name: "McpServerCollisionError",
+        message:
+          'Refusing to stage MCP server "plugin_my_tools_db_": /scope/mcp-adapter.json already defines "plugin_my-tools_db_", which Pi treats as the same tool namespace because it does not tell "-" from "_".',
+        serverName: "plugin_my_tools_db_",
+        owningPath: "/scope/mcp-adapter.json",
+        winningPath: "/scope/mcp-adapter.json",
+        definedAs: "plugin_my-tools_db_",
+      },
+    );
+  });
+
+  test("ANAME-03: an other key equal to the staged key keeps the equal-key message and no definedAs", () => {
+    // arrange
+    const otherKey = "plugin_acme_db_";
+
+    // act
+    const error = new McpServerCollisionError(
+      "plugin_acme_db_",
+      "/scope/mcp.json",
+      "/scope/mcp-adapter.json",
+      otherKey,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, definedAs: error.definedAs },
+      {
+        message:
+          'Refusing to stage MCP server "plugin_acme_db_": /scope/mcp.json already defines it, and pi-mcp-adapter would load the definition in /scope/mcp-adapter.json.',
+        definedAs: undefined,
+      },
+    );
+  });
+});
+
+describe("McpServerKeyCollisionError", () => {
+  test("ANAME-03: names the plugin, both servers and the one key they share", () => {
+    // arrange
+    const servers = ["a.b", "a_b"] as const;
+    const keys = ["plugin_acme_a_b_", "plugin_acme_a_b_"] as const;
+
+    // act
+    const error = new McpServerKeyCollisionError("acme", servers, keys);
+
+    // assert
+    assert.ok(error instanceof McpServerKeyCollisionError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        pluginName: error.pluginName,
+        servers: error.servers,
+        keys: error.keys,
+        cause: error.cause,
+      },
+      {
+        name: "McpServerKeyCollisionError",
+        message:
+          'Refusing to stage MCP servers "a.b" and "a_b" of plugin "acme": both map to the server key "plugin_acme_a_b_".',
+        pluginName: "acme",
+        servers: ["a.b", "a_b"],
+        keys: ["plugin_acme_a_b_", "plugin_acme_a_b_"],
+        cause: undefined,
+      },
+    );
+  });
+
+  test("ANAME-03: names both keys when they differ only by - and _", () => {
+    // arrange
+    const servers = ["a-b", "a_b"] as const;
+    const keys = ["plugin_acme_a-b_", "plugin_acme_a_b_"] as const;
+
+    // act
+    const error = new McpServerKeyCollisionError("acme", servers, keys);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        message: error.message,
+        pluginName: error.pluginName,
+        servers: error.servers,
+        keys: error.keys,
+      },
+      {
+        message:
+          'Refusing to stage MCP servers "a-b" and "a_b" of plugin "acme": their server keys "plugin_acme_a-b_" and "plugin_acme_a_b_" differ only by "-" and "_", which Pi treats as one tool namespace.',
+        pluginName: "acme",
+        servers: ["a-b", "a_b"],
+        keys: ["plugin_acme_a-b_", "plugin_acme_a_b_"],
+      },
     );
   });
 });

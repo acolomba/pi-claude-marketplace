@@ -30,9 +30,13 @@ import path from "node:path";
 
 import writeFileAtomic from "write-file-atomic";
 
-import { generatedMcpServerKey } from "../../domain/name.ts";
+import { foldedMcpServerKey, generatedMcpServerKey } from "../../domain/name.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
-import { McpConfigFileError, McpServerCollisionError } from "../../shared/errors-bridges.ts";
+import {
+  McpConfigFileError,
+  McpServerCollisionError,
+  McpServerKeyCollisionError,
+} from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
 import {
@@ -82,25 +86,50 @@ interface McpCollisionCheck {
   readonly marketplaceName: string;
 }
 
+/** A source that defines a server in full, and the key it uses there. */
+interface McpDeclarer {
+  readonly sourcePath: string;
+  readonly key: string;
+}
+
 /**
- * The sources other than the plugin's own entries that define `name` in full.
- * An entry marked for the same plugin never counts, whichever source holds
- * it, because the adapter still loads one effective server (AFILE-05). The
- * target file counts when a foreign entry there holds the name.
+ * ANAME-03: the keys among `keys` that equal `name` once both fold `-` to
+ * `_`, because Pi gives such keys one tool namespace.
+ */
+function foldedMatches(keys: readonly string[], name: string): readonly string[] {
+  const folded = foldedMcpServerKey(name);
+  return keys.filter((key) => foldedMcpServerKey(key) === folded);
+}
+
+/**
+ * The sources other than the plugin's own entries that define `name` in full,
+ * under `name` or a key that folds equal to it (ANAME-03), each with its own
+ * key. An entry marked for the same plugin never counts, whichever source
+ * holds it, because the adapter still loads one effective server (AFILE-05).
+ * The target file counts when a foreign entry there holds such a key.
  */
 function otherDeclarers(
   walk: McpSourceWalk,
   check: McpCollisionCheck,
   name: string,
-): readonly string[] {
-  const declarers = (walk.declarations.get(name) ?? [])
-    .filter(
-      (declaration) =>
-        declaration.sourcePath !== check.targetPath &&
-        !isOwnedBy(declaration.entry, check.pluginName, check.marketplaceName),
-    )
-    .map((declaration) => declaration.sourcePath);
-  return Object.hasOwn(check.theirs, name) ? [...declarers, check.targetPath] : declarers;
+): readonly McpDeclarer[] {
+  const folded = foldedMcpServerKey(name);
+  const declarers = [...walk.declarations]
+    .filter(([key]) => foldedMcpServerKey(key) === folded)
+    .flatMap(([key, declarations]) =>
+      declarations
+        .filter(
+          (declaration) =>
+            declaration.sourcePath !== check.targetPath &&
+            !isOwnedBy(declaration.entry, check.pluginName, check.marketplaceName),
+        )
+        .map((declaration) => ({ sourcePath: declaration.sourcePath, key })),
+    );
+  const targetDeclarers = foldedMatches(Object.keys(check.theirs), name).map((key) => ({
+    sourcePath: check.targetPath,
+    key,
+  }));
+  return [...declarers, ...targetDeclarers];
 }
 
 function precedenceOf(walk: McpSourceWalk, sourcePath: string): number {
@@ -109,11 +138,13 @@ function precedenceOf(walk: McpSourceWalk, sourcePath: string): number {
 
 /**
  * AFILE-05 / MC-4: refuses a new name that another source already defines in
- * full. The refusal names the highest-precedence other declarer and the
+ * full, under the name or under a key that folds equal to it (ANAME-03). The
+ * refusal names the highest-precedence other declarer, its key, and the
  * source pi-mcp-adapter would load, which is the target when it ranks higher.
- * An owned entry in the target is a self-replace and stays exempt, unless a
- * foreign entry under the loaded key holds the same name: the plugin's entry
- * then sits under the shadowed key, and staging would replace the foreign one.
+ * An owned entry in the target is a self-replace and stays exempt, under
+ * either spelling, unless a foreign entry under the loaded key folds equal to
+ * the name: the plugin's entry then sits under the shadowed key, and staging
+ * would replace the foreign one.
  */
 async function assertNoMcpCollisions(check: McpCollisionCheck): Promise<void> {
   if (check.names.length === 0) {
@@ -122,19 +153,24 @@ async function assertNoMcpCollisions(check: McpCollisionCheck): Promise<void> {
 
   const walk = await walkMcpSources(check.cwd);
   for (const name of check.names) {
-    if (Object.hasOwn(check.ours, name) && !Object.hasOwn(check.theirs, name)) {
+    if (
+      foldedMatches(Object.keys(check.ours), name).length > 0 &&
+      foldedMatches(Object.keys(check.theirs), name).length === 0
+    ) {
       continue;
     }
 
-    const owningPath = [...otherDeclarers(walk, check, name)]
-      .sort((left, right) => precedenceOf(walk, left) - precedenceOf(walk, right))
+    const owner = [...otherDeclarers(walk, check, name)]
+      .sort(
+        (left, right) => precedenceOf(walk, left.sourcePath) - precedenceOf(walk, right.sourcePath),
+      )
       .at(-1);
-    if (owningPath !== undefined) {
+    if (owner !== undefined) {
       const winningPath =
-        precedenceOf(walk, owningPath) > precedenceOf(walk, check.targetPath)
-          ? owningPath
+        precedenceOf(walk, owner.sourcePath) > precedenceOf(walk, check.targetPath)
+          ? owner.sourcePath
           : check.targetPath;
-      throw new McpServerCollisionError(name, owningPath, winningPath);
+      throw new McpServerCollisionError(name, owner.sourcePath, winningPath, owner.key);
     }
   }
 }
@@ -181,14 +217,30 @@ function overrideKeptNotices(
 /**
  * ANAME-01: the plugin's servers under their generated keys, in declared
  * order. `safeSet` keeps every key an own property (WR-01).
+ *
+ * ANAME-03: the key rule maps many names to one key, and Pi gives keys that
+ * differ only by `-` versus `_` one tool namespace. Two servers that land on
+ * one folded key refuse rather than one shadowing the other.
  */
 function keyedServers(
   pluginName: string,
   servers: Readonly<Record<string, unknown>>,
 ): Record<string, unknown> {
   const keyed: Record<string, unknown> = {};
+  const earlierByFoldedKey = new Map<string, { readonly declared: string; readonly key: string }>();
   for (const [declared, entry] of Object.entries(servers)) {
-    safeSet(keyed, generatedMcpServerKey(pluginName, declared), entry);
+    const key = generatedMcpServerKey(pluginName, declared);
+    const earlier = earlierByFoldedKey.get(foldedMcpServerKey(key));
+    if (earlier !== undefined) {
+      throw new McpServerKeyCollisionError(
+        pluginName,
+        [earlier.declared, declared],
+        [earlier.key, key],
+      );
+    }
+
+    earlierByFoldedKey.set(foldedMcpServerKey(key), { declared, key });
+    safeSet(keyed, key, entry);
   }
 
   return keyed;

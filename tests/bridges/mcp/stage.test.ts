@@ -15,6 +15,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import {
   McpConfigFileError,
   McpServerCollisionError,
+  McpServerKeyCollisionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
@@ -60,6 +61,40 @@ function prepareAcme(
     pluginData: path.join(cwd, "data", "acme"),
     servers: { server: { type: "http", url: "https://acme.example/mcp" } },
   });
+}
+
+/** Prepares `pluginName`'s declared servers, each a URL transport with no env injection. */
+function preparePlugin(
+  locations: ReturnType<typeof locationsFor>,
+  cwd: string,
+  pluginName: string,
+  serverNames: readonly string[],
+): Promise<PreparedMcpStaging> {
+  return prepareStageMcpServers({
+    locations,
+    cwd,
+    marketplaceName: "catalog",
+    pluginName,
+    pluginRoot: path.join(cwd, "plugins", pluginName),
+    pluginData: path.join(cwd, "data", pluginName),
+    servers: Object.fromEntries(
+      serverNames.map((serverName) => [serverName, { type: "http", url: "https://x.example/mcp" }]),
+    ),
+  });
+}
+
+function foldedCollisionFields(collision: McpServerCollisionError): Record<string, unknown> {
+  return { ...collisionFields(collision), definedAs: collision.definedAs };
+}
+
+function keyCollisionFields(collision: McpServerKeyCollisionError): Record<string, unknown> {
+  return {
+    name: collision.name,
+    message: collision.message,
+    pluginName: collision.pluginName,
+    servers: collision.servers,
+    keys: collision.keys,
+  };
 }
 
 async function rejectionOf(pending: Promise<unknown>): Promise<unknown> {
@@ -1591,6 +1626,179 @@ describe("prepareStageMcpServers", () => {
         servers: { db: { type: "http", url: "https://db.example/mcp" } },
       }),
     );
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, expectedBytes);
+  });
+
+  test("ANAME-03: two servers that normalize to one key refuse before any write", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-same-key-");
+    await writeSource(locations.mcpAdapterJsonPath, "{");
+
+    // act
+    const collision = await rejectionOf(preparePlugin(locations, cwd, "acme", ["a.b", "a_b"]));
+
+    // assert
+    assert.ok(collision instanceof McpServerKeyCollisionError);
+    assert.deepStrictEqual(keyCollisionFields(collision), {
+      name: "McpServerKeyCollisionError",
+      message:
+        'Refusing to stage MCP servers "a.b" and "a_b" of plugin "acme": both map to the server key "plugin_acme_a_b_".',
+      pluginName: "acme",
+      servers: ["a.b", "a_b"],
+      keys: ["plugin_acme_a_b_", "plugin_acme_a_b_"],
+    });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
+  });
+
+  test("ANAME-03: two servers whose keys differ only by - and _ refuse before any write", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-folded-same-plugin-");
+    await writeSource(locations.mcpAdapterJsonPath, "{");
+
+    // act
+    const collision = await rejectionOf(preparePlugin(locations, cwd, "acme", ["a-b", "a_b"]));
+
+    // assert
+    assert.ok(collision instanceof McpServerKeyCollisionError);
+    assert.deepStrictEqual(keyCollisionFields(collision), {
+      name: "McpServerKeyCollisionError",
+      message:
+        'Refusing to stage MCP servers "a-b" and "a_b" of plugin "acme": their server keys "plugin_acme_a-b_" and "plugin_acme_a_b_" differ only by "-" and "_", which Pi treats as one tool namespace.',
+      pluginName: "acme",
+      servers: ["a-b", "a_b"],
+      keys: ["plugin_acme_a-b_", "plugin_acme_a_b_"],
+    });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
+  });
+
+  test("ANAME-03: another plugin's entry whose key folds onto ours refuses and names its key", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-folded-other-plugin-");
+    const targetBytes =
+      '{"mcpServers":{"plugin_my-tools_db_":{"url":"https://other.example/mcp","_piClaudeMarketplace":{"plugin":"my-tools","marketplace":"catalog"}}}}';
+    await writeSource(locations.mcpAdapterJsonPath, targetBytes);
+
+    // act
+    const collision = await rejectionOf(preparePlugin(locations, cwd, "my_tools", ["db"]));
+
+    // assert
+    assert.ok(collision instanceof McpServerCollisionError);
+    assert.deepStrictEqual(foldedCollisionFields(collision), {
+      name: "McpServerCollisionError",
+      message: `Refusing to stage MCP server "plugin_my_tools_db_": ${locations.mcpAdapterJsonPath} already defines "plugin_my-tools_db_", which Pi treats as the same tool namespace because it does not tell "-" from "_".`,
+      serverName: "plugin_my_tools_db_",
+      owningPath: locations.mcpAdapterJsonPath,
+      winningPath: locations.mcpAdapterJsonPath,
+      definedAs: "plugin_my-tools_db_",
+    });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), targetBytes);
+  });
+
+  test("ANAME-03: a marker-less full definition whose key folds onto ours refuses", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-folded-target-");
+    const targetBytes = '{"mcpServers":{"plugin_acme_a-b_":{"command":"user"}}}';
+    await writeSource(locations.mcpAdapterJsonPath, targetBytes);
+
+    // act
+    const collision = await rejectionOf(preparePlugin(locations, cwd, "acme", ["a_b"]));
+
+    // assert
+    assert.ok(collision instanceof McpServerCollisionError);
+    assert.deepStrictEqual(foldedCollisionFields(collision), {
+      name: "McpServerCollisionError",
+      message: `Refusing to stage MCP server "plugin_acme_a_b_": ${locations.mcpAdapterJsonPath} already defines "plugin_acme_a-b_", which Pi treats as the same tool namespace because it does not tell "-" from "_".`,
+      serverName: "plugin_acme_a_b_",
+      owningPath: locations.mcpAdapterJsonPath,
+      winningPath: locations.mcpAdapterJsonPath,
+      definedAs: "plugin_acme_a-b_",
+    });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), targetBytes);
+  });
+
+  test("ANAME-03: a full definition in ~/.agents/mcp.json whose key folds onto ours refuses and names that file", async (t) => {
+    // arrange
+    const { cwd, home } = await createHermeticEnvironment(t, "mcp-stage-folded-agents-");
+    const locations = locationsFor("user", cwd);
+    const agentsPath = path.join(home, ".agents", "mcp.json");
+    const targetBytes = '{"mcpServers":{"mine":{"command":"mine"}}}';
+    await writeSource(agentsPath, '{"mcpServers":{"plugin_acme_a-b_":{"command":"user"}}}');
+    await writeSource(locations.mcpAdapterJsonPath, targetBytes);
+
+    // act
+    const collision = await rejectionOf(preparePlugin(locations, cwd, "acme", ["a_b"]));
+
+    // assert
+    assert.ok(collision instanceof McpServerCollisionError);
+    assert.deepStrictEqual(foldedCollisionFields(collision), {
+      name: "McpServerCollisionError",
+      message: `Refusing to stage MCP server "plugin_acme_a_b_": ${agentsPath} already defines "plugin_acme_a-b_", which Pi treats as the same tool namespace because it does not tell "-" from "_".`,
+      serverName: "plugin_acme_a_b_",
+      owningPath: agentsPath,
+      winningPath: locations.mcpAdapterJsonPath,
+      definedAs: "plugin_acme_a-b_",
+    });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), targetBytes);
+  });
+
+  test("ANAME-03: the plugin's own entry under the other spelling is replaced, not refused", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-folded-self-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_acme_a-b_":{"url":"https://old.example/mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+    );
+    const expectedBytes = `{
+  "mcpServers": {
+    "plugin_acme_a_b_": {
+      "url": "https://x.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
+
+    // act
+    await commitPreparedMcp(await preparePlugin(locations, cwd, "acme", ["a_b"]));
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, expectedBytes);
+  });
+
+  test("ANAME-03: a user key that differs from ours only in letter case does not refuse", async (t) => {
+    // arrange
+    const { cwd, home } = await createHermeticEnvironment(t, "mcp-stage-folded-case-");
+    const locations = locationsFor("user", cwd);
+    await writeSource(
+      path.join(home, ".agents", "mcp.json"),
+      '{"mcpServers":{"plugin_Acme_db_":{"command":"user"}}}',
+    );
+    const expectedBytes = `{
+  "mcpServers": {
+    "plugin_acme_db_": {
+      "url": "https://x.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
+
+    // act
+    await commitPreparedMcp(await preparePlugin(locations, cwd, "acme", ["db"]));
     const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
 
     // assert

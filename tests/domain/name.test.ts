@@ -6,6 +6,7 @@ import {
   declaredAgentName,
   generatedAgentName,
   generatedCommandName,
+  foldedMcpServerKey,
   generatedMcpServerKey,
   generatedSkillName,
   generatedWorkflowName,
@@ -631,6 +632,24 @@ describe("generatedMcpServerKey", () => {
       return true;
     });
   });
+});
+
+describe("foldedMcpServerKey", () => {
+  for (const { key, foldedKey } of [
+    { key: "plugin_my-tools_db-1_", foldedKey: "plugin_my_tools_db_1_" },
+    { key: "plugin_acme_db_", foldedKey: "plugin_acme_db_" },
+  ]) {
+    test(`ANAME-03: folds ${key} to ${foldedKey}`, () => {
+      // arrange
+      const serverKey = key;
+
+      // act
+      const folded = foldedMcpServerKey(serverKey);
+
+      // assert
+      assert.strictEqual(folded, foldedKey);
+    });
+  }
 });
 
 describe("generatedWorkflowName", () => {
