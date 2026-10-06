@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-06T04:43:04.553Z"
-last_activity: 2026-10-05
+last_updated: "2026-10-06T13:52:26.889Z"
+last_activity: 2026-10-06
 last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
-state_head: 195c056d99a71df40076a40543b0842280ecc9e0
+state_head: e0b0abac80aec9c3ef91c3f443e66b0a92be14af
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-06 - Completed quick task 261005-x56: Enforce no-await-in-loop as the local S9382 and state why each sequential loop runs in order
+Last activity: 2026-10-06 - Completed quick task 261006-cwq: Pin workflow engine 3.13.1 and update compatibility notes after upstream PRs #233/#234 shipped
 
 ### workflows-replay closeout (merged from main)
 
@@ -631,6 +631,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 261005-sx5 | Close the five pre-PR review findings: fold the #234 changelog entry, delete the stale per-layer READMEs, fix the ledger phase count, scope TruffleHog to the pre-commit stage, and mirror the write-file-atomic Node range in engines | 2026-10-05 | 98b7c4f2 | [261005-sx5-close-the-five-pre-pr-review-findings-fo](./quick/261005-sx5-close-the-five-pre-pr-review-findings-fo/) |
 | 45 | Cut the #236 CHANGELOG entry to the changelog rules | 2026-10-05 | caeb4a40 | — |
 | 261005-x56 | Enforce no-await-in-loop as the local S9382 and state why each sequential loop runs in order | 2026-10-06 | 195c056d | [261005-x56-enforce-no-await-in-loop-as-the-local-s9](./quick/261005-x56-enforce-no-await-in-loop-as-the-local-s9/) |
+| 261006-cwq | Pin workflow engine 3.13.1 and update compatibility notes after upstream PRs #233/#234 shipped | 2026-10-06 | e0b0abac | [261006-cwq-update-workflow-engine-compatibility-doc](./quick/261006-cwq-update-workflow-engine-compatibility-doc/) |
 
 ## Deferred Items
 
