@@ -83,26 +83,28 @@ function restoreAgentDirectory(hadAgentDirectory: boolean, agentDirectory: strin
 }
 
 /**
- * Relocate the home directory `os.homedir()` reads, and hand the new home back
- * so the caller never re-reads the global it just wrote: a caller reading
- * `process.env.HOME` back needs a `?? ""` to satisfy `strictNullChecks`, and
- * that fallback turns a broken precondition into a silent cwd-relative probe
- * instead of a failure.
+ * Relocate the home directory `os.homedir()` reads, clear `PI_CODING_AGENT_DIR`,
+ * and hand the new home back so the caller never re-reads the global it just
+ * wrote: a caller reading `process.env.HOME` back needs a `?? ""` to satisfy
+ * `strictNullChecks`, and that fallback turns a broken precondition into a
+ * silent cwd-relative probe instead of a failure.
  *
- * The previous value is saved and its restoration registered before anything
- * is mutated, so a failing assertion cannot leave the variable relocated. A
- * variable that was absent is deleted rather than reassigned, because
- * `process.env` stringifies every assignment and an absent variable restored by
- * assignment would come back as the four letters `undefined`.
+ * The previous values are saved and their restoration registered before
+ * anything is mutated, so a failing assertion cannot leave either variable
+ * relocated. A variable that was absent is deleted rather than reassigned,
+ * because `process.env` stringifies every assignment and an absent variable
+ * restored by assignment would come back as the four letters `undefined`.
  *
  * WPTH-04: call this BEFORE `locationsFor`. The factory evaluates the workflow
- * home eagerly and freezes the result, so a bundle built before the relocation
- * points at the developer's real `~/.pi/workflows/` and the case still passes
- * while writing there.
+ * root eagerly and freezes the result. A bundle built before the relocation, or
+ * with `PI_CODING_AGENT_DIR` still set, points at the developer's real workflow
+ * root, and the case still passes while writing there. With the variable
+ * cleared, the root is `<home>/.pi/workflows/`, the path these cases assert.
  */
 async function hermeticHome(t: TestContext, label: string): Promise<string> {
   const home = await mkdtemp(path.join(os.tmpdir(), `locations-home-${label}-`));
   const previousHome = process.env.HOME;
+  const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
 
   t.after(async () => {
     if (previousHome === undefined) {
@@ -111,9 +113,16 @@ async function hermeticHome(t: TestContext, label: string): Promise<string> {
       process.env.HOME = previousHome;
     }
 
+    if (previousAgentDirectory === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
+    }
+
     await rm(home, { recursive: true, force: true, maxRetries: 3 });
   });
   process.env.HOME = home;
+  delete process.env.PI_CODING_AGENT_DIR;
   return home;
 }
 
@@ -604,32 +613,24 @@ test("WPTH-02 roots the saved directory under the home and never under the proje
   );
 });
 
-test("WPTH-05 keeps the staging directory outside every scope and extension root", async (t) => {
+test("WPTH-05 keeps the staging directory outside every scope and extension root when PI_CODING_AGENT_DIR is unset", async (t) => {
   // arrange
-  const hadAgentDirectory = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-  t.after(() => {
-    restoreAgentDirectory(hadAgentDirectory, previousAgentDirectory);
-  });
   await hermeticHome(t, "staging-invariant");
-  const firstAgentDirectory = await temporaryDirectory(t, "staging-agent-first");
-  const secondAgentDirectory = await temporaryDirectory(t, "staging-agent-second");
   const firstProjectDirectory = await temporaryDirectory(t, "staging-cwd-first");
   const secondProjectDirectory = await temporaryDirectory(t, "staging-cwd-second");
 
   // act
-  process.env.PI_CODING_AGENT_DIR = firstAgentDirectory;
   const userLocations = locationsFor("user", firstProjectDirectory);
-  process.env.PI_CODING_AGENT_DIR = secondAgentDirectory;
   const projectLocations = locationsFor("project", secondProjectDirectory);
-  restoreAgentDirectory(hadAgentDirectory, previousAgentDirectory);
 
   // assert
-  // Two bundles under one home but with differing agent directories and
-  // project directories. A refactor that rerouted staging under the extension
-  // root would break both the equality and the containment booleans; a
-  // rename-fails assertion would not, because whether the two roots land on
-  // one filesystem is a property of the machine, not of the code.
+  // Two bundles under one home but with differing project directories. A
+  // refactor that rerouted staging under the extension root would break both
+  // the equality and the containment booleans; a rename-fails assertion would
+  // not, because whether the two roots land on one filesystem is a property of
+  // the machine, not of the code. The user-scope-root boolean holds only while
+  // `PI_CODING_AGENT_DIR` is unset: with it set, the workflow root sits inside
+  // the agent directory, which is that scope root (WPTH-04).
   assert.deepStrictEqual(
     {
       stagingIsIdentical:

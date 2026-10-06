@@ -194,11 +194,12 @@ async function seedMarketplace(
 async function projectCase(
   testContext: TestContext,
 ): Promise<{ cwd: string; locations: ScopedLocations }> {
-  // WPTH-04: `workflowsSavedDir` is rooted at `os.homedir()` and honors no
-  // override, so a cascade unlinking a recorded envelope would reach the real
-  // user's saved workflows unless HOME is relocated before the bundle is built.
-  // `createHermeticEnvironment` relocates HOME (and PI_CODING_AGENT_DIR) and
-  // registers their restore, which is what keeps that reach contained here.
+  // WPTH-04: `workflowsSavedDir` sits under the engine's storage root, which
+  // `PI_CODING_AGENT_DIR` or else `os.homedir()` decides, so a cascade unlinking
+  // a recorded envelope would reach the real user's saved workflows unless both
+  // are relocated before the bundle is built. `createHermeticEnvironment`
+  // relocates HOME and PI_CODING_AGENT_DIR and registers their restore, which
+  // is what keeps that reach contained here.
   const { cwd } = await createHermeticEnvironment(testContext, "marketplace-remove-");
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });

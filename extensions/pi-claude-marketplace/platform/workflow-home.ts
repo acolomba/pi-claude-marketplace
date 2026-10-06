@@ -1,32 +1,39 @@
 // platform/workflow-home.ts
 //
-// WPTH-04: the host workflow engine derives its storage root from the home
-// directory as `~/.pi/workflows` and honors NO environment override and no
-// settings key -- its settings record carries behavioral keys only. Honoring
-// the variable that relocates this extension's OWN user-scope root would
-// therefore put artifacts where the engine never looks, so this module
-// deliberately reads no environment at all. That is the one place the two
-// roots disagree, and the disagreement is the engine's rule, not ours.
+// WPTH-04: the storage root of the host workflow engine. This module copies
+// the engine's own rule, so the bridge writes envelopes where the engine reads
+// them. The rule, transcribed from `src/workflow-paths.ts:30-34` in
+// `@quintinshaw/pi-dynamic-workflows@3.14.0`
+// (QuintinShaw/pi-dynamic-workflows#238): when `PI_CODING_AGENT_DIR` is
+// truthy, the root is `join(getAgentDir(), "workflows")`. Otherwise it is
+// `WORKFLOW_HOME_RELATIVE_DIR = ".pi/workflows"` joined onto `homedir()`.
 //
-// The engine's rooting rule, transcribed so a future reader can diff it against
-// an upgraded release without unpacking the tarball:
-// `@quintinshaw/pi-dynamic-workflows@3.10.1 dist/workflow-paths.js` declares
-// `WORKFLOW_HOME_RELATIVE_DIR = ".pi/workflows"` and joins it onto `homedir()`.
+// The engine checks the value for truthiness, so an empty value selects the
+// home default. `getAgentDir` is the Pi function the engine calls, and this
+// extension takes its user-scope root from the same function through
+// `pi-api.ts`. It expands a leading `~`, so both sides turn one value into one
+// root. Engine releases before 3.14.0 ignore the variable and always use
+// `~/.pi/workflows`.
 //
-// This is the SOLE import site for that root, mirroring the position
-// `getAgentDir` occupies in `pi-api.ts` for `scopeRoot`. The root is a pure
-// function of `os.homedir()` and this module holds no mutable module-level
-// state, so a test relocates storage by assigning `HOME` after registering the
-// restore with `t.after()`: `os.homedir()` re-reads the variable on every call
-// and caches nothing.
-//
-// No Pi package is imported here, so the `pi-api.ts` peer-import chokepoint is
-// not engaged by this module living in `platform/`.
+// This module is the only source of that root, as `getAgentDir` is for
+// `scopeRoot`. It reads the environment the engine reads and holds no state.
+// `os.homedir()` and `getAgentDir()` read their variables on every call, so a
+// test relocates storage by setting `HOME` and `PI_CODING_AGENT_DIR` after it
+// registers their restore with `t.after()`.
 
 import os from "node:os";
 import path from "node:path";
 
-/** `<homedir>/.pi/workflows` -- the host engine's storage root. */
+import { getAgentDir } from "./pi-api.ts";
+
+/**
+ * The host engine's storage root: `<agent dir>/workflows` when
+ * `PI_CODING_AGENT_DIR` is non-empty, else `<homedir>/.pi/workflows`.
+ */
 export function workflowHomeDir(): string {
+  if (process.env.PI_CODING_AGENT_DIR) {
+    return path.join(getAgentDir(), "workflows");
+  }
+
   return path.join(os.homedir(), ".pi", "workflows");
 }

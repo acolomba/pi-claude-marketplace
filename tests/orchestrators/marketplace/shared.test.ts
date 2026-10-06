@@ -197,9 +197,10 @@ async function createProjectScope(
   t: TestContext,
   label: string,
 ): Promise<{ readonly cwd: string; readonly locations: ScopedLocations }> {
-  // WPTH-04: `workflowsSavedDir` is rooted at `os.homedir()` and honors no
-  // override, so a cascade that unlinks a recorded envelope would reach the
-  // real user's saved workflows unless HOME is relocated first.
+  // WPTH-04: `workflowsSavedDir` sits under the engine's storage root, which
+  // `PI_CODING_AGENT_DIR` or else `os.homedir()` decides, so a cascade that
+  // unlinks a recorded envelope would reach the real user's saved workflows
+  // unless both are relocated first.
   const { cwd } = await createHermeticEnvironment(t, `marketplace-shared-${label}-`);
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
