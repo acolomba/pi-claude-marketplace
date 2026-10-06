@@ -1,8 +1,8 @@
 ---
 phase: 04-wire-schema-and-json-strategy
-verified: 2026-10-03T00:00:00Z
-status: gaps_found
-score: 4/5 must-haves verified
+verified: 2026-10-06T15:03:56Z
+status: human_needed
+score: 5/5 must-haves verified
 covered_files:
   - .planning/phases/04-wire-schema-and-json-strategy/04-01-PLAN.md
   - .planning/phases/04-wire-schema-and-json-strategy/04-01-SUMMARY.md
@@ -14,133 +14,171 @@ covered_files:
   - .planning/phases/04-wire-schema-and-json-strategy/04-04-SUMMARY.md
   - .planning/phases/04-wire-schema-and-json-strategy/04-05-PLAN.md
   - .planning/phases/04-wire-schema-and-json-strategy/04-05-SUMMARY.md
+  - .planning/phases/04-wire-schema-and-json-strategy/04-06-PLAN.md
+  - .planning/phases/04-wire-schema-and-json-strategy/04-06-SUMMARY.md
+  - docs/output-catalog.md
   - extensions/pi-claude-marketplace/edge/handlers/tools.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts
   - extensions/pi-claude-marketplace/shared/errors.ts
+  - extensions/pi-claude-marketplace/shared/notification-dispatch.ts
+  - extensions/pi-claude-marketplace/shared/notification-grammar.ts
   - extensions/pi-claude-marketplace/shared/notification-json.ts
   - extensions/pi-claude-marketplace/shared/notification-present.ts
   - extensions/pi-claude-marketplace/shared/notification-resolve.ts
   - extensions/pi-claude-marketplace/shared/notification-wire.ts
   - extensions/pi-claude-marketplace/shared/redact-credentials.ts
+  - package.json
   - schema/claude-plugin.schema.json
   - scripts/generate-wire-schema.mjs
+  - scripts/notify-corpus.mjs
   - scripts/wire-schema.mjs
+  - tests/architecture/catalog-uat/catalog-contract.test.ts
   - tests/architecture/catalog-uat/catalog-wire.test.ts
   - tests/architecture/no-credential-leak.test.ts
-covered_digest: "v2:sha256:b5939997a765f9a762cac84be14f41e16f681ad9cc5ef911bbd1f1aa5696f247"
+  - tests/architecture/wire-schema.test.ts
+  - tests/edge/handlers/tools.test.ts
+  - tests/shared/notification-json.test.ts
+  - tests/shared/notification-present.test.ts
+  - tests/shared/notification-resolve.test.ts
+  - tests/shared/redact-credentials.test.ts
+covered_digest: "v3:sha256:c5c2818108aab4461b00695d769ffb5741f33ff2d998586de81f72a6ee2b0780"
 behavior_unverified: 0
 overrides_applied: 0
-gaps:
-  - truth: "SC3 / PMOD-04: the model redacts credentials (URL userinfo and tokens), so they are absent from both text and JSON"
-    status: partial
-    reason: "Redaction covers thrown-message strings (cause chains, rollback causes, leaks, raw-surface strings, info urls and notes, advisories) but not marketplace block or row names. A failed `marketplace add <url-with-userinfo>` uses the user-typed raw source as the block name (`addSubjectName` returns `rawSource`), and the model emits `name` verbatim, so the userinfo reaches both the text and the JSON payload."
-    artifacts:
-      - path: "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
-        issue: "line 562 `name: addSubjectName(err, opts.rawSource)`; line 345 returns the raw user-typed source for every failure that has no derived name"
-      - path: "extensions/pi-claude-marketplace/shared/notification-resolve.ts"
-        issue: "redactCredentials is applied at leaks and raw surfaces only; block and row `name` are never redacted"
-      - path: "tests/architecture/no-credential-leak.test.ts"
-        issue: "PLANTED_CREDENTIAL_SITES lists 15 sites; none plants a credential in a marketplace block name, so the gate cannot see this path"
-    missing:
-      - "Apply redactCredentials to the marketplace block name (and the marketplace-not-added name) in resolve or present, so text and JSON both read the redacted subject"
-      - "Add a planted-credential site for a block name to PLANTED_CREDENTIAL_SITES"
-      - "Alternatively record an explicit accepted-risk override: 04-RESEARCH.md lines 274 and 309 chose not to redact names, reasoning only from the scp-style `git@host:owner/repo` subject, which has no `scheme://` and would be untouched by the userinfo pattern"
+re_verification:
+  previous_status: gaps_found
+  previous_score: 4/5
+  gaps_closed:
+    - "SC3 / PMOD-04: credentialed subject names are redacted before text and JSON conversion"
+  gaps_remaining: []
+  regressions: []
+unverified_prohibitions:
+  - "04-01 D-12: production must not validate, filter, or drop a payload"
+  - "04-01 D-08 / TEXT-01: no unapproved corpus or catalog change in that plan"
+  - "04-04 PMOD-04: redaction must not drop or truncate whole messages, causes, rows, or payloads"
+  - "04-06 PMOD-04: subject redaction must preserve the non-secret name"
+  - "04-06 D-08 / D-13: no added test notify emission or baseline, metadata, ledger, or catalog rewrite"
+human_verification:
+  - test: "Confirm the 04-01 D-12 prohibition judgment"
+    expected: "Production conversion neither validates nor filters or drops payloads."
+    why_human: "The autonomous code judgment is non-authoritative under the verifier prohibition gate."
+  - test: "Confirm the 04-01 D-08 / TEXT-01 prohibition judgment"
+    expected: "That plan accepted no unapproved corpus or catalog changes."
+    why_human: "The autonomous repository-history judgment is non-authoritative under the verifier prohibition gate."
+  - test: "Confirm the 04-04 PMOD-04 prohibition judgment"
+    expected: "Credential redaction changes only secret spans and retains surrounding failure detail."
+    why_human: "The autonomous redaction-policy judgment is non-authoritative under the verifier prohibition gate."
+  - test: "Confirm the 04-06 PMOD-04 prohibition judgment"
+    expected: "Block, row, and not-added subjects keep their non-secret identifying text."
+    why_human: "The autonomous subject-policy judgment is non-authoritative under the verifier prohibition gate."
+  - test: "Confirm the 04-06 D-08 / D-13 prohibition judgment"
+    expected: "The gap closure added no test notify emission and did not rewrite locked corpus or catalog files."
+    why_human: "The autonomous repository-history judgment is non-authoritative under the verifier prohibition gate."
 ---
 
-# Phase 4: Wire Schema and JSON Strategy Verification Report
+# Phase 4: Wire Schema and JSON Strategy Verification
 
-**Phase Goal:** A versioned typebox wire schema and a JSON strategy turn every model kind into a schema-valid payload that discloses nothing the text form does not. The JSON strategy is a format-only peer of the text strategy, and it is validated as a pure function before any sink is wired.
-**Verified:** 2026-10-03
-**Status:** gaps_found
-**Re-verification:** No, initial verification
+**Phase Goal:** A versioned typebox schema and format-only JSON strategy convert every model kind to a valid payload without disclosing data absent from text, before sink wiring.
+**Status:** human_needed. Technical score: 5/5. The old code gap is closed; five judgment-tier prohibitions need authoritative human resolution under the verifier's autonomous-mode rule.
+**Re-verification:** Yes, against the previous 4/5, gaps_found report.
 
 ## Goal Achievement
 
-### Observable Truths (ROADMAP success criteria)
+### Observable Truths
 
-| #   | Truth | Status | Evidence |
-| --- | ----- | ------ | -------- |
-| 1 | Every catalog fixture and raw kind converts to a payload with integer `schemaVersion` and a `kind` from one typebox union, and validates; a planted invalid fixture fails; a `{}` converter turns the suite red | VERIFIED | `notification-wire.ts` exports one 18-member `Type.Union` keyed by `kind`, `schemaVersion: Type.Literal(1)`. `catalog-wire.test.ts` presents all 260 catalog examples (21 sections; the ROADMAP's "205" is stale, resolved in CONTEXT) plus 8 raw kinds, validates `JSON.parse(JSON.stringify(payload))` with the compiled union. Controls present and passing: `{}` converter fails every tuple, planted off-vocabulary reason fails by tuple, foreign raw-only member fails, emit fixture without `present` fails typecheck (`@ts-expect-error`). Ran: 144 tests across catalog-wire, notification-wire, notification-json, generate-wire-schema, no-credential-leak, all pass |
-| 2 | Raw verbatim values; closed-set tokens only; versions/timestamps unabbreviated; install-scoped rows carry `scope`; optional fields absent not null; empty collections `[]`; model order; `id`; `summary` on warning/error; numeric tally; `noOp` on update no-op | VERIFIED | WIRE-03: status, reason, scope, severity, hint literals built from `as const satisfies Record<ClosedSet, true>` enrollment maps, so a closed-set change fails typecheck. `wireRow` emits `id: name@marketplace`, raw `version`, `from`/`to` on updated rows; `wireScope` always emits `scope` for the 15 install-scoped statuses. Every schema object sets `additionalProperties: false`; the walk test rejects any `undefined`/`null` member. `wireEnvelope` adds `summary` only when severity is not info; WIRE-05 test asserts `summary` present exactly when warning/error across all structured payloads; `noOp` test asserts exactly the two update no-op payloads carry `noOp: true`. Raw kinds carry no `summary` by D-01 (the raw model composes none; `async-rewake-summary` uses `text`). Per-row `dependencies` is omitted on cascade rows by the D-04 "emit what the text shows" rule |
-| 3 | Whole-payload walk finds no hidden absolute path and no live `Error`; the model redacts credentials, absent from both text and JSON; AUTH-09 covers JSON; redaction is the only text difference from baseline | PARTIAL (gap) | WIRE-08 walk (`walkAll` over all 268 presented sources) passes with controls (POSIX/Windows path planted mid-link, `Error` member, `undefined` member each yield exactly one finding; path-source `absPath` detected and accepted). AUTH-09 extended: 15 planted-credential sites each read the presentation, the JSON payload and the text delivered by production `notify`. Corpus: `node scripts/notify-corpus.mjs check` = 3143 baseline present, 0 extra (3134 plus the 9 approved D-13 entries); `git diff --exit-code 4e6c568a -- docs/output-catalog.md` empty. BUT marketplace block names are not redacted: reproduced end to end (see Gaps) |
-| 4 | JSON Schema generated from typebox source is committed and in the npm package; a test fails on drift | VERIFIED | `schema/claude-plugin.schema.json` (62.4 kB) is generated by `scripts/generate-wire-schema.mjs` from `NOTIFICATION_PAYLOAD_SCHEMA`; `package.json` `files` lists it; `npm pack --dry-run` lists `schema/claude-plugin.schema.json` (290 files). `generate-wire-schema.test.ts` deep-compares a fresh build with the committed file, checks idempotence, member count 18, a planted missing-kind drift, and the `files` entry |
-| 5 | Both LLM tools build `details` from the wire plugin-row and marketplace-block shapes, verbatim status tokens (`upgradable` stays `upgradable`); line-format content unchanged | VERIFIED | `tools.ts` builds `details.marketplaces` from `toWirePayload(presentCascade(openNotificationRun(pi), ...))` for both tools, under `MARKETPLACE_LIST_CONTEXT` / `LIST_CONTEXT` row policies. The status-to-bucket projection remains only for content lines. `git diff fc8d845d HEAD` shows the only changed content-line statement is the `mp.name`/`mp.scope` variable rename; no content assertion was removed from `tools.test.ts`. 36 tool tests pass, including whole-block assertions for `upgradable` and `partially-upgradable` rows. `toWirePayload` has its first production consumer (tools.ts), so the ROADMAP dead-code note is satisfied without pulling Phase 5 forward |
+| # | Roadmap truth | Status | Code and behavior evidence |
+| --- | --- | --- | --- |
+| 1 | Every catalog fixture and raw kind converts under one versioned typebox union; invalid controls fail | VERIFIED | notification-wire.ts declares an 18-kind Type.Union with integer literal schemaVersion 1. catalog-wire.test.ts converts all 260 current catalog examples and eight raw samples, validates JSON-round-tripped payloads, and checks empty-converter, invalid reason, and foreign-member controls. The roadmap's 205 count is stale; the current catalog contract pins 260. |
+| 2 | Raw closed-set values, scopes, IDs, summaries, tallies, no-op flag, absence and ordering rules | VERIFIED | notification-wire.ts enrolls existing token sets and closes object members; notification-json.ts maps fields explicitly, preserves ordered arrays and raw versions/timestamps, derives row IDs from names, and emits optional fields conditionally. The catalog tests exercise summary and noOp placement; owner tests exercise scope, values, empty arrays, and IDs. |
+| 3 | No hidden path or live Error; credentials absent from model text and JSON; corpus bytes locked | VERIFIED | catalog-wire.test.ts walks every payload and checks planted POSIX/Windows paths, Error, nullish, and forbidden members. resolveRows redacts block and row names; presentNotification redacts the not-added name; errors.ts and resolveRawSurface redact thrown strings. AUTH-09 reads the presentation, JSON, and production grammar text for the formerly leaking failed-add, row, split-key, and not-added subjects. Current corpus evidence is 3149 present, zero extra; catalog equals merged-main d7213bc2. |
+| 4 | Generated schema is committed, drift-tested, and packed | VERIFIED | scripts/wire-schema.mjs builds from NOTIFICATION_PAYLOAD_SCHEMA; scripts/generate-wire-schema.mjs writes it; tests/architecture/wire-schema.test.ts deep-compares a fresh build, checks all 18 members and a planted drift. package.json lists schema/claude-plugin.schema.json; npm pack dry run listed it. |
+| 5 | Both LLM tools use wire block and row shapes with verbatim status; text lines stay locked | VERIFIED | Both branches of edge/handlers/tools.ts call toWirePayload(presentCascade(...)); the marketplace tool shares loadMarketplaceListEntries with the list command. tools.test.ts asserts full details, including upgradable, and content lines. Current catalog and corpus locks hold. |
 
-**Score:** 4/5 truths verified (0 behavior-unverified)
+**Score:** 5/5 roadmap truths verified; 0 behavior-unverified. None relies on an undeclared precondition, incidental ordering, or fixture-only setup for the stated conversion outcome.
 
-### Required Artifacts
+### Prior Gap Closure
 
-| Artifact | Expected | Status | Details |
-| -------- | -------- | ------ | ------- |
-| `shared/notification-wire.ts` | typebox union, 18 kinds | VERIFIED | 581 lines, substantive, imported type-only by `notification-json.ts`, runtime by generator and tests |
-| `shared/notification-json.ts` | explicit total-map converter | VERIFIED | field-by-field, no model spread; switch over every presentation and raw kind; imported by `tools.ts` (production) |
-| `shared/notification-present.ts` | presentation step incl. info-kind redaction | VERIFIED | `presentCascade`/`presentNotification`, imported by dispatch and tools |
-| `shared/redact-credentials.ts` | single redaction function | VERIFIED | applied at resolve, errors `serializeCauseChain`, present |
-| `schema/claude-plugin.schema.json` | generated, packaged | VERIFIED | in pack list; drift-tested |
-| `scripts/generate-wire-schema.mjs`, `scripts/wire-schema.mjs` | generator | VERIFIED | `npm run schema:generate` wired |
-| `tests/architecture/catalog-uat/catalog-wire.test.ts` | catalog-wide proof | VERIFIED | passes with controls |
+The previous report reproduced a credentialed failed-add source in a block name. resolveRows now calls redactCredentials on each block name. It also calls redactRowName on string row names, restoring a trailing @ before redaction to cover an enabledPlugins last-@ split. The marketplace-not-added arm redacts its name before either strategy reads it. The AUTH-09 subject probes inspect all three outputs and have a failing planted-credential control. Focused test files passed on this checkout.
 
-### Key Link Verification
+### Required Artifacts and Key Links
 
-| From | To | Via | Status |
-| ---- | -- | --- | ------ |
-| `edge/handlers/tools.ts` | `notification-json.ts` | `toWirePayload(presentCascade(...))` both tools | WIRED |
-| `notification-dispatch.ts` | `notification-present.ts` | text formatted from the presentation | WIRED |
-| `notification-json.ts` | `notification-wire.ts` | static type only (D-12, no runtime validation in production) | WIRED |
-| generator | `notification-wire.ts` | `buildWireSchemaDocument()` | WIRED |
-| `errors.ts serializeCauseChain` | `redact-credentials.ts` | every cause link | WIRED |
+| Artifact or link | Status | Evidence |
+| --- | --- | --- |
+| notification-wire.ts → generated schema | VERIFIED | Runtime generator imports the union; drift test compares the generated document with the committed JSON. |
+| notification-present.ts → notification-json.ts and dispatch text | VERIFIED | Pure presented value reaches toWirePayload in both tools; dispatch formats that same presentation for text. |
+| notification-resolve.ts → redact-credentials.ts → text and JSON | VERIFIED | Block and row names are redacted at resolve; JSON wireBlock/wireRow uses those resolved values; grammar renders them. |
+| notification-present.ts marketplace-not-added → both strategies | VERIFIED | Redacted message name reaches renderMarketplaceNotAdded and the JSON not-added arm. |
+| errors.ts / raw surfaces → credential redactor | VERIFIED | Cause links and raw string fields pass through redactCredentials before presentation. |
+| tests/architecture/catalog-uat/catalog-wire.test.ts → compiled union | VERIFIED | Compiled validator checks all presented catalog and raw sources after JSON round trip. |
+| edge/handlers/tools.ts → shared loader and JSON converter | VERIFIED | Both tool detail branches call toWirePayload; marketplace tool and command use loadMarketplaceListEntries. |
 
-### Behavioral Spot-Checks
+The generic PLAN checker found three stale implementation references: 04-01 names tests/scripts/generate-wire-schema.test.ts, now tests/architecture/wire-schema.test.ts; 04-02 names loadMarketplaceListBlocks, now loadMarketplaceListEntries; 04-06 expects a direct redactCredentials(resolved.name) call, now redactRowName(name) for split-key safety. The replacement test, loader, and redaction path exist, are used, and satisfy the underlying must-haves. The 04-01 type-only import pattern also omits the sibling CASCADE_PAYLOAD_SCHEMA import now present in the actual type-only statement. These are stale PLAN patterns, not broken links.
 
-| Behavior | Command | Result | Status |
-| -------- | ------- | ------ | ------ |
-| Wire, converter, drift, AUTH-09, catalog proof | `node --test` on 5 files | 144 pass, 0 fail | PASS |
-| LLM tools | `node --test tests/edge/handlers/tools.test.ts` | 36 pass | PASS |
-| Text corpus equality | `node scripts/notify-corpus.mjs check` | 3143 present, 0 extra; exit 0 | PASS |
-| Catalog byte lock | `git diff --exit-code 4e6c568a -- docs/output-catalog.md` | empty | PASS |
-| Package ships schema | `npm pack --dry-run` | lists `schema/claude-plugin.schema.json` | PASS |
-| Credentialed URL as failed-add subject | probe: `addMarketplace` with `rawSource: "https://alice:s3cret@gitlab.example.com/team/private-mp"`, clone throws HTTP 401 | delivered text: `⊘ https://alice:s3cret@gitlab.example.com/team/private-mp [project] (failed) {authentication required}`; model probe shows the same string as `marketplaces[0].name` in the JSON payload | FAIL |
+### Data Flow
 
-Full `npm run check` was not re-run; the supplied evidence (full-scope pre-commit run at ad5348ab, code identical to HEAD) is accepted per `skills/local-verification`.
+| Output | Source | Trace | Status |
+| --- | --- | --- | --- |
+| LLM marketplace details | Scoped state and merged configuration | loadMarketplaceListEntries → block → presentCascade → toWirePayload → details | FLOWING |
+| LLM plugin details | Plugin list inventory and row policies | list message → presentCascade → toWirePayload → details | FLOWING |
+| Notification JSON | Resolved model / raw surface | presentNotification or resolveRawSurface → toWirePayload; validation occurs in tests | FLOWING |
+| Notification text | Same resolved presentation | dispatch → grammar renderer → ctx.ui.notify | FLOWING |
+
+### Behavioral Spot-Checks and Gates
+
+| Check | Result |
+| --- | --- |
+| Independent focused AUTH-09 test file | exit 0 |
+| Independent catalog-wire test file | exit 0 |
+| Independent wire-schema drift test file | exit 0 |
+| Combined npm run check at clean c5494971, Node v26.10.0 | exit 0; 264 direct coverage pairs |
+| Build-input comparison with c5494971 | no diff; full gate reusable under skills/local-verification/SKILL.md |
+| Corpus gate on c5494971 | exit 0; 3149 present, 0 extra; six post-phase main entries are accounted for |
+| Catalog versus merged main d7213bc2 | empty diff |
+| npm pack dry run | exit 0; schema included |
+
+No phase probe script is declared. No full check was repeated after the clean same-input gate.
 
 ### Requirements Coverage
 
-Plan frontmatter IDs: 04-01 (LLMT-01, WIRE-03, WIRE-04, WIRE-05, WIRE-06, WIRE-09), 04-02 (LLMT-01, WIRE-05), 04-03 (WIRE-01, WIRE-03, WIRE-04, WIRE-06), 04-04 (PMOD-04), 04-05 (JOUT-02, WIRE-08, WIRE-01). The union covers all 10 phase IDs. No orphaned requirements: REQUIREMENTS.md maps exactly these 10 to Phase 4; WIRE-02 and WIRE-07 map to Phase 6.
+| Requirement | Status | Evidence |
+| --- | --- | --- |
+| WIRE-01 | SATISFIED | 18-kind union; catalog and raw validation |
+| WIRE-03 | SATISFIED | Existing closed-set enrollment and invalid-reason control |
+| WIRE-04 | SATISFIED | Raw fields, explicit scope, absent optionals, empty arrays, ordered rows |
+| WIRE-05 | SATISFIED | Summary, numeric tally, and noOp assertions |
+| WIRE-06 | SATISFIED | Wire row name@marketplace ID assertions |
+| WIRE-08 | SATISFIED | Whole-payload walk with positive and negative controls |
+| WIRE-09 | SATISFIED | Drift test, package files entry, pack dry run |
+| JOUT-02 | SATISFIED | All-fixture conversion and invalid-converter controls |
+| PMOD-04 | SATISFIED | Redaction at model sites; AUTH-09 text and JSON subject probes |
+| LLMT-01 | SATISFIED | Both tool detail paths use converted wire blocks and rows |
 
-| Requirement | Source Plan | Status | Evidence |
-| ----------- | ----------- | ------ | -------- |
-| WIRE-01 | 04-03, 04-05 | SATISFIED | 18-kind union; all examples validate |
-| WIRE-03 | 04-01, 04-03 | SATISFIED | `satisfies Record<ClosedSet, true>` enrollment |
-| WIRE-04 | 04-01, 04-03 | SATISFIED | absent-not-null, `[]`, raw values, `additionalProperties: false`, walk |
-| WIRE-05 | 04-01, 04-02 | SATISFIED | summary / tally / noOp tests |
-| WIRE-06 | 04-01, 04-03 | SATISFIED | `id` on cascade and info rows |
-| WIRE-08 | 04-05 | SATISFIED | walk plus controls |
-| WIRE-09 | 04-01 | SATISFIED | generated, packed, drift test |
-| JOUT-02 | 04-05 | SATISFIED | validate-all with `{}`, planted, foreign-member controls |
-| LLMT-01 | 04-01, 04-02 | SATISFIED | both tools |
-| PMOD-04 | 04-04 | BLOCKED (partial) | redaction of thrown-message strings is complete and gated; block-name subject path leaks (gap) |
+All ten phase requirements appear in PLAN frontmatter; none is orphaned. WIRE-02, WIRE-07, and sink wiring are assigned to later phases.
 
-### Anti-Patterns Found
+### Decision Coverage
 
-None blocking. No `TBD`/`FIXME`/`XXX` in any file the phase changed. No stubs: the union, converter and tools are wired and exercised.
+The decision-coverage query returned 13 honored of 13 trackable CONTEXT decisions, no missing decision, and no blocking finding.
 
-### Known and Dispositioned Items (judged against the success criteria)
+### Test Quality and Anti-Patterns
 
-| Item | Breaks a Phase 4 criterion? |
-| ---- | --------------------------- |
-| WR-06 (JSON emits for raw surfaces the text strategy suppresses) | No. Deferred to ROADMAP Phase 5 criterion 6. SC1 to SC5 concern conversion of fixtures and kinds, and no sink is wired yet |
-| T-04-06 (marketplace tool content line echoes URL userinfo via `sourceLogical`) | No for SC3, which concerns the notification model's text and JSON. SC5 locks the content line unchanged. It is the same class of leak as the gap below and should be scheduled together with it |
-| deferred-items.md (plugin tool load-error text outside redaction) | No. Carries a `state.json` read error, outside the model |
-| 9 open Info items (IN-01..IN-09) | No. IN-06 (unhandled credential forms such as `Authorization: Basic`, `?access_token=`) is a documented residual scope of D-05 |
+Requirement-linked tests are active. The catalog suite checks full payloads and non-vacuous counts, and its invalid controls would fail a wrong converter. AUTH-09 checks actual presentation, JSON serialization, and the text grammar. Schema drift expectations are built independently of the committed file. Test writeFile calls in tools.test.ts seed temporary local state; they do not generate expected fixtures. No disabled requirement test, circular expected-value generator, unreferenced TBD/FIXME/XXX marker, placeholder, or stub was found in the phase evidence files. Current review finds zero critical and warning issues; remaining Info findings do not falsify a roadmap truth. Re-verification advisory: none.
 
-### Human Verification (not counted toward status; gaps_found takes precedence)
+### Human Verification Required
 
-1. WR-01 Bearer rule: judge whether the token-shape heuristic (secret of 16 or more characters, or any digit or one of `_.~+/-`) is an acceptable trade between hiding a secret and rewriting prose such as `Bearer token required`. Only a human can accept that policy.
+The following PLAN prohibitions have code-supported autonomous judgments, but the verifier's prohibition rule makes those judgments non-authoritative. A human can confirm each exact statement from the cited evidence.
 
-### Gaps Summary
+1. **04-01 D-12:** Production must not validate, filter, or drop a payload. notification-json.ts imports schema values as types; compiled validation is in tests/architecture/catalog-uat/catalog-wire.test.ts. Judgment: prohibition appears met.
+2. **04-01 D-08 / TEXT-01:** That plan must not accept an unapproved corpus or catalog change. Current corpus and merged-main catalog locks pass; the separately approved D-13 test-only corpus additions have an exact ledger. Judgment: prohibition appears met.
+3. **04-04 PMOD-04:** Redaction must not drop or truncate whole failure detail. redactCredentials replaces matched secret spans; owner tests assert surrounding text and multiple secrets. Judgment: prohibition appears met within the approved D-05 credential vocabulary.
+4. **04-06 PMOD-04:** Subject redaction must retain the non-secret block, row, or not-added name. The resolve/present code preserves scheme, host, path, and other subject text around the secret; owner tests assert complete output. The user has accepted conservative masking of trailing scheme://host:port row names and hyphenated Bearer text. Judgment: prohibition appears met.
+5. **04-06 D-08 / D-13:** Gap closure must not add test notify emissions or rewrite baseline, metadata, ledger, or catalog. AUTH-09 subject rows compose text without notify; the existing four notify calls remain; corpus and catalog locks pass. Judgment: prohibition appears met.
 
-One gap against SC3 / PMOD-04. The phase delivers the schema, the converter, the catalog-wide proof, the packaged generated schema, both tools' wiring, and gated redaction of every thrown-message site. What it misses is a subject-name path: when `marketplace add` fails for a source with no derived name, the row subject is the user-typed raw source, and the model never redacts names. Reproduced: a credentialed URL appears verbatim in the delivered text and in the JSON payload's `marketplaces[0].name`. The AUTH-09 gate has no site for it, so it stayed green. The research explicitly left names unredacted but only analysed the scp-style `git@host:owner/repo` subject, which the userinfo pattern (which requires `scheme://`) would not touch. Redacting names with the existing function should change no corpus byte (the research measured zero diffs on all 3134 corpus messages and the catalog for the same regex set). If the maintainer decides user-typed subjects are exempt, record an override in this file's frontmatter instead.
+These are review flags, not code gaps. No new human user-flow test is needed for this schema and formatter phase. Existing authorized risk accepts in 04-SECURITY.md are separate; that audit records 22/22 threats closed.
+
+### Deferred and Gaps
+
+No failed phase truth remains. The reviewed raw-surface suppression mismatch (WR-06) has explicit Phase 5 success criterion 6 coverage and does not affect pure conversion in this phase. No code gap is deferred by this report.
 
 ---
 
-_Verified: 2026-10-03_
-_Verifier: Claude (gsd-verifier)_
+_Verified: 2026-10-06_
+_Verifier: gsd-verifier_

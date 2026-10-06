@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 04
 current_phase_name: Wire Schema and JSON Strategy
-status: executing
-stopped_at: Session resumed; reviewing gap-closure fixes at iteration 2
-last_updated: "2026-10-06T14:36:15+00:00"
-last_activity: 2026-10-04
-last_activity_desc: Executed 04-06 (subject names redacted in the model; AUTH-09 gains three rows)
+status: verifying
+stopped_at: Phase 4 technically verified 5/5; five prohibition judgments await human confirmation
+last_updated: "2026-10-06T15:05:51+00:00"
+last_activity: 2026-10-06
+last_activity_desc: Review fixes confirmed; full check, corpus, validation and security passed; human judgment pending
 state_head: 42f80dec9b3fb56235f80bd88c44fef32efe8668
 progress:
   total_phases: 7
@@ -30,10 +30,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 04 (Wire Schema and JSON Strategy) — EXECUTING (gap closure)
+Phase: 04 (Wire Schema and JSON Strategy) — HUMAN VERIFICATION
 Plan: 6 of 6
-Status: Gap closure executed — ready for Phase 4 re-verification
-Last activity: 2026-10-04 — Executed 04-06 (subject names redacted in the model; AUTH-09 gains three rows)
+Status: Technical criteria 5/5; five judgment-tier prohibitions await human confirmation
+Last activity: 2026-10-06 — Review, full check, corpus, validation, and security complete
 
 Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 28 of 28 plans complete)
 
@@ -169,8 +169,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-06T14:36:15+00:00
-**Stopped at:** Session resumed; reviewing gap-closure fixes at iteration 2
+**Last session:** 2026-10-06T15:05:51+00:00
+**Stopped at:** Phase 4 technical verification 5/5; awaiting five human prohibition judgments
 **Resume file:** .planning/phases/04-wire-schema-and-json-strategy/.continue-here.md
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -194,7 +194,18 @@ name, and AUTH-09 has three subject-name rows, each proven to fail before its
 fix. Corpus 3143 present / 0 extra; catalog unchanged from `4e6c568a`. The
 full-scope pre-commit (`npm run check` plus all-pair coverage) passed on the
 exact code committed as `5d988d7d`. Phase 4 is not yet marked complete; it
-needs re-verification.
+has since been re-verified (see current resumption below).
+
+**Current resumption (2026-10-06):** Gap review iteration 2 confirmed all
+three fixes. The distinct ledger IDs are CR-02, WR-07, WR-08, and IN-10.
+The user accepted both conservative masking rules. Full `npm run check`
+and corpus passed at `c5494971`, Node v26.10.0: 264 direct coverage pairs,
+3149 corpus entries, zero extras. Validation covers 12 tasks and 10
+requirements; security records 18 mitigated and four accepted threats, zero
+open. Re-verification is technically 5/5 with no code gaps. Its overall
+`human_needed` status reflects five judgment-tier prohibition confirmations,
+recorded in `04-UAT.md`. Do not redo review or tests on unchanged inputs.
+After explicit confirmation, complete Phase 4 and continue from Phase 5.
 
 **Corpus determinism (resolved by quick task 261002-dys):** prune rollback
 now receives its backup-directory creator through `PruneRestoreOps`, so tests
@@ -217,7 +228,7 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Re-verify Phase 4 (`/gsd-verify-work 4` or the execute-phase verifier) now that 04-06 is executed.
+- Obtain explicit confirmation of the five assessments in `04-UAT.md`; then close Phase 4 and resume the autonomous sequence.
 
 ## Performance Metrics
 
