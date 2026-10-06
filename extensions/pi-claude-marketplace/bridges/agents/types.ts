@@ -84,6 +84,12 @@ export interface StageAgentsInput {
    */
   readonly mapModel?: boolean;
   /**
+   * ANAME-02: the declared names of the MCP servers this install writes.
+   * `convertAgent` maps an agent's `mcp__` tool names that name one of these
+   * servers to pi-subagents `mcp:` entries.
+   */
+  readonly mcpServerNames?: readonly string[] | undefined;
+  /**
    * Install cwd (the project root for project-scope installs), substituted for
    * `${CLAUDE_PROJECT_DIR}` in agent bodies (SUB-02). Required so a
    * project-scope caller cannot silently omit it and ship the token literal.

@@ -437,6 +437,8 @@ async function prepareAllHandles(
       agentsDirs: input.agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
       referenceNames: input.referenceNames,
+      // ANAME-02: the servers this reinstall writes, mapped in agent tool lists.
+      mcpServerNames: Object.keys(input.installable.mcpServers),
       cwd: input.cwd,
     });
     handles.mcp = await operations.prepareStageMcpServers({

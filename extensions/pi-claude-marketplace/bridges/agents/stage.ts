@@ -138,6 +138,7 @@ export async function prepareStagePluginAgents(
       sourceHash: d.sourceHash,
       mapModel: mapModel ?? false,
       projectDir,
+      mcpServerNames: input.mcpServerNames,
     }),
   );
 

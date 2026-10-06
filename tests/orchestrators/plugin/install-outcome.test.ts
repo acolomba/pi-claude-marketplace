@@ -1296,6 +1296,90 @@ test("stages the declared mcp servers and records their generated names", async 
   );
 });
 
+async function writeAgent(pluginRoot: string, name: string, tools: string): Promise<void> {
+  await mkdir(path.join(pluginRoot, "agents"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "agents", `${name}.md`),
+    `---\nname: ${name}\ndescription: ${name} agent\ntools: ${tools}\n---\n\nBody.\n`,
+  );
+}
+
+async function generatedAgentToolLines(
+  locations: ScopedLocations,
+  name: string,
+): Promise<string[]> {
+  const content = await readFile(
+    path.join(locations.agentsDir, `pi-claude-marketplace-empty-${name}.md`),
+    "utf8",
+  );
+  return content.split("\n").filter((line) => line.startsWith("tools:"));
+}
+
+test("ANAME-02: an agent's Claude-form MCP tool name installs as a pi-subagents mcp: entry", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-agent-mcp-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { db: { command: "node", args: ["s.js"] } },
+  });
+  await writeAgent(seeded.pluginRoot, "bot", "Read, mcp__plugin_empty_db__query");
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(await generatedAgentToolLines(locations, "bot"), [
+    "tools: read,mcp:plugin_empty_db_/query",
+  ]);
+});
+
+test("ANAME-02: a server left out by a partial install is not granted to the plugin's agents", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-agent-mcp-partial-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: {
+      db: { command: "node", args: ["s.js"] },
+      live: { type: "ws", url: "wss://example.test/live" },
+    },
+  });
+  await writeAgent(
+    seeded.pluginRoot,
+    "bot",
+    "mcp__plugin_empty_db__query, mcp__plugin_empty_live__stream",
+  );
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    partial: true,
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedMcpServerNames, ["db"]);
+  assert.deepStrictEqual(await generatedAgentToolLines(locations, "bot"), [
+    "tools: mcp:plugin_empty_db_/query",
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
+    "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
+    "[bot] dropped tools: mcp__plugin_empty_live__stream",
+  ]);
+});
+
 test("AFILE-04: staging over a commented mcp-adapter.json reports the comments-dropped notice", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-mcp-comments-");

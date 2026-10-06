@@ -314,6 +314,8 @@ async function prepareUpdateHandles(
       // cascade entrypoint never sets `args.mapModel`, so cascade re-
       // installs always resolve to false (omit `model:`).
       mapModel: args.mapModel ?? false,
+      // ANAME-02: the servers this update writes, mapped in agent tool lists.
+      mcpServerNames: Object.keys(installable.mcpServers),
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });

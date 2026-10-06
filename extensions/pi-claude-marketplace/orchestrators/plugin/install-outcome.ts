@@ -866,6 +866,9 @@ async function runInstallLedgerBody(
         // we explicitly default to false so generated agents omit
         // `model:` (the default behavior).
         mapModel: opts.mapModel ?? false,
+        // ANAME-02: the servers this install writes. The mcp phase runs
+        // later, so the set comes from the resolver, not the mcp stage.
+        mcpServerNames: Object.keys(c.resolved.mcpServers),
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: c.cwd,
       });
