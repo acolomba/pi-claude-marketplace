@@ -231,7 +231,13 @@ export type Reason =
   // It names no component kind on purpose: the load-time scan promotes ANY
   // record whose supported set strictly grew, so a token reading "workflows
   // arrived" would be a false statement about most of the rows it rides.
-  | "components now supported";
+  | "components now supported"
+  // ANAME-07: a server of the plugin uses a Claude Code MCP feature
+  // pi-mcp-adapter cannot honor, so `--partial` leaves that server out whole.
+  // A typed kind, not a note, as `unsupported hooks` is: the aggregate token
+  // rides the row, and each server with its blocking feature rides the info
+  // breakdown.
+  | "unsupported mcp";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<

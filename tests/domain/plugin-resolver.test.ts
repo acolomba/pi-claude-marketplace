@@ -1284,6 +1284,65 @@ test("ANAME-06: the unavailable arm never carries the description", async () => 
   });
 });
 
+test("ANAME-07: a ws server makes the plugin partially available with the server left out", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({
+      source: "./local",
+      mcpServers: {
+        live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        local: { command: "node" },
+      },
+    }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["mcpServers"],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: { local: { command: "node" } },
+    droppedMcpServers: [{ server: "live", feature: "ws" }],
+    defaultEnabled: true,
+  });
+});
+
+test("ANAME-07: a malformed server wins over a blocked one and makes the plugin unavailable", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({
+      source: "./local",
+      mcpServers: {
+        live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        local: { command: "node" },
+        db: { type: "http", url: "https://mcp.example.com", oauth: { callbackPort: 70_000 } },
+      },
+    }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: ['malformed mcp server "db": /oauth/callbackPort: must be <= 65535'],
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // DFEN-01 / DFEN-02: install-time enablement -- the precedence truth table
 //

@@ -6,6 +6,40 @@
 // name never reaches `mcp-adapter.json`, so a plugin cannot set an adapter-only
 // power Claude never grants, such as `auth`, `approveTools` or `lifecycle`
 // (ANAME-05, ANAME-07).
+//
+// `classifyMcpServer` sorts one server into supported, blocked by a Claude
+// feature pi-mcp-adapter cannot honor, or malformed by Claude's own schema.
+
+import Type from "typebox";
+import { Compile } from "typebox/compile";
+
+/**
+ * A Claude Code server feature pi-mcp-adapter has no equivalent for: the `ws`
+ * transport, a host-only server type, or one of the named fields (ANAME-07).
+ */
+export type McpUnsupportedFeature =
+  | "ws"
+  | "sse-ide"
+  | "ws-ide"
+  | "sdk"
+  | "claudeai-proxy"
+  | "headersHelper"
+  | "oauth.xaa"
+  | "tools[].permission_policy"
+  | "toolPermissions"
+  | "bareElicitationCapability";
+
+/** A server a partial install leaves out whole, with the first feature that blocks it. */
+export interface DroppedMcpServer {
+  readonly server: string;
+  readonly feature: McpUnsupportedFeature;
+}
+
+/** The verdict `classifyMcpServer` gives one declared server. */
+export type McpServerVerdict =
+  | { readonly kind: "supported" }
+  | { readonly kind: "blocked"; readonly feature: McpUnsupportedFeature }
+  | { readonly kind: "malformed"; readonly detail: string };
 
 // Claude ignores a `timeout` below one second.
 const MIN_TIMEOUT_MS = 1000;
@@ -154,4 +188,170 @@ export function translateMcpServer(
     directTools: server.alwaysLoad === true ? true : "search",
     toolPrefix: "mcp",
   };
+}
+
+// Claude Code 2.1.291's per-transport server schemas, chosen by `type` in
+// `classifyMcpServer`. Unknown keys stay allowed, as Claude's strip-mode
+// objects allow them. `role` and `request_timeout_ms` are never invalid, so
+// they are absent, and `oauth.xaa` accepts any value.
+const STRING_RECORD = Type.Record(Type.String(), Type.String());
+
+const COMMON_FIELDS = {
+  timeout: Type.Optional(Type.Integer({ minimum: 1 })),
+  alwaysLoad: Type.Optional(Type.Boolean()),
+  bareElicitationCapability: Type.Optional(Type.Boolean()),
+};
+
+const STDIO_SERVER = Compile(
+  Type.Object({
+    command: Type.String({ minLength: 1 }),
+    args: Type.Optional(Type.Array(Type.String())),
+    env: Type.Optional(STRING_RECORD),
+    ...COMMON_FIELDS,
+  }),
+);
+
+const OAUTH = Type.Object({
+  clientId: Type.Optional(Type.String()),
+  callbackPort: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_PORT })),
+  authServerMetadataUrl: Type.Optional(Type.String({ pattern: "^https://" })),
+  scopes: Type.Optional(Type.String({ minLength: 1 })),
+  xaa: Type.Optional(Type.Unknown()),
+});
+
+const TOOL_POLICY = Type.Object({
+  name: Type.String(),
+  permission_policy: Type.Optional(
+    Type.Union([
+      Type.Literal("always_allow"),
+      Type.Literal("always_ask"),
+      Type.Literal("always_deny"),
+    ]),
+  ),
+});
+
+const REMOTE_SERVER_SCHEMA = Type.Object({
+  url: Type.String(),
+  headers: Type.Optional(STRING_RECORD),
+  headersHelper: Type.Optional(Type.String()),
+  oauth: Type.Optional(OAUTH),
+  tools: Type.Optional(Type.Array(TOOL_POLICY)),
+  discoveryCache: Type.Optional(Type.Boolean()),
+  toolPermissions: Type.Optional(
+    Type.Record(
+      Type.String(),
+      Type.Union([Type.Literal("allow"), Type.Literal("ask"), Type.Literal("blocked")]),
+    ),
+  ),
+  ...COMMON_FIELDS,
+});
+
+const REMOTE_SERVER = Compile(REMOTE_SERVER_SCHEMA);
+
+const WS_SERVER = Compile(
+  Type.Object({
+    url: Type.String(),
+    headers: Type.Optional(STRING_RECORD),
+    headersHelper: Type.Optional(Type.String()),
+    ...COMMON_FIELDS,
+  }),
+);
+
+type RemoteServer = Type.Static<typeof REMOTE_SERVER_SCHEMA>;
+
+function malformed(errors: readonly { instancePath: string; message: string }[]): McpServerVerdict {
+  const detail = errors
+    .slice(0, 1)
+    .map((error) => `${error.instancePath || "(root)"}: ${error.message}`)
+    .join("");
+  return { kind: "malformed", detail };
+}
+
+function featureVerdict(feature: McpUnsupportedFeature | undefined): McpServerVerdict {
+  return feature === undefined ? { kind: "supported" } : { kind: "blocked", feature };
+}
+
+function elicitationFeature(server: {
+  readonly bareElicitationCapability?: boolean;
+}): McpUnsupportedFeature | undefined {
+  return server.bareElicitationCapability === true ? "bareElicitationCapability" : undefined;
+}
+
+/**
+ * The remote fields in table order: `headersHelper`, a truthy `oauth.xaa`, a
+ * per-tool `permission_policy`, a non-empty `toolPermissions`, then
+ * `bareElicitationCapability: true`.
+ */
+function remoteFeature(server: RemoteServer): McpUnsupportedFeature | undefined {
+  if (server.headersHelper !== undefined) {
+    return "headersHelper";
+  }
+
+  if (server.oauth?.xaa) {
+    return "oauth.xaa";
+  }
+
+  if ((server.tools ?? []).some((tool) => tool.permission_policy !== undefined)) {
+    return "tools[].permission_policy";
+  }
+
+  if (Object.keys(server.toolPermissions ?? {}).length > 0) {
+    return "toolPermissions";
+  }
+
+  return elicitationFeature(server);
+}
+
+function classifyStdio(server: unknown): McpServerVerdict {
+  return STDIO_SERVER.Check(server)
+    ? featureVerdict(elicitationFeature(server))
+    : malformed(STDIO_SERVER.Errors(server));
+}
+
+function classifyRemote(server: unknown): McpServerVerdict {
+  return REMOTE_SERVER.Check(server)
+    ? featureVerdict(remoteFeature(server))
+    : malformed(REMOTE_SERVER.Errors(server));
+}
+
+function classifyWs(server: unknown): McpServerVerdict {
+  return WS_SERVER.Check(server)
+    ? { kind: "blocked", feature: "ws" }
+    : malformed(WS_SERVER.Errors(server));
+}
+
+/**
+ * Classifies one declared server by Claude Code 2.1.291's server schemas
+ * (ANAME-07). A non-object, an unknown `type`, or a config its transport's
+ * schema rejects is `malformed`, with the first error as `detail`. A host-only
+ * type (`sse-ide`, `ws-ide`, `sdk`, `claudeai-proxy`) is `blocked` without
+ * validation, since Claude does not run one from a plugin. A valid server that
+ * uses a feature pi-mcp-adapter cannot honor is `blocked` with the first such
+ * feature in table order: `ws`, `headersHelper`, `oauth.xaa`,
+ * `tools[].permission_policy`, `toolPermissions`, then
+ * `bareElicitationCapability`. `role` and `discoveryCache` never block.
+ */
+export function classifyMcpServer(server: unknown): McpServerVerdict {
+  if (!isPlainObject(server)) {
+    return { kind: "malformed", detail: "(root): must be object" };
+  }
+
+  switch (server.type) {
+    case undefined:
+    case "stdio":
+      return classifyStdio(server);
+    case "sse":
+    case "http":
+    case "streamable-http":
+      return classifyRemote(server);
+    case "ws":
+      return classifyWs(server);
+    case "sse-ide":
+    case "ws-ide":
+    case "sdk":
+    case "claudeai-proxy":
+      return { kind: "blocked", feature: server.type };
+    default:
+      return { kind: "malformed", detail: `unknown type ${JSON.stringify(server.type)}` };
+  }
 }

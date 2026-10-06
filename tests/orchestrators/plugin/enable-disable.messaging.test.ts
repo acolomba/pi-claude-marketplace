@@ -587,7 +587,12 @@ test("staleGateDropped preserves first-seen unsupported-kind order and deduplica
   const actual = staleGateDropped(cause);
 
   // assert
-  assert.deepStrictEqual(actual, ["lsp", "unsupported hooks", "unsupported component"]);
+  assert.deepStrictEqual(actual, [
+    "lsp",
+    "unsupported hooks",
+    "unsupported mcp",
+    "unsupported component",
+  ]);
 });
 
 describe("composeEnableCascadeRows", () => {

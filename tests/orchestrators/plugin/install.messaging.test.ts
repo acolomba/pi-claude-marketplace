@@ -925,6 +925,39 @@ describe("resolver reason narrowing through the install failure row", () => {
     assert.deepStrictEqual(narrowedReasons, ["malformed mcp"]);
   });
 
+  test("ANAME-07: maps a malformed MCP server note to malformed mcp", () => {
+    // arrange
+    const reasons = ['malformed mcp server "db": /timeout: must be integer'];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["malformed mcp"]);
+  });
+
+  test("ANAME-07: gives malformed MCP precedence over a server named source", () => {
+    // arrange
+    const reasons = ['malformed mcp server "source": /url: must be string'];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["malformed mcp"]);
+  });
+
+  test("ANAME-07: maps a typed mcpServers kind to unsupported mcp", () => {
+    // arrange
+    const unsupportedKinds = ["mcpServers"];
+
+    // act
+    const narrowedReasons = installFailureReasons([], unsupportedKinds, true);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unsupported mcp"]);
+  });
+
   test("maps a source note to unsupported source", () => {
     // arrange
     const reasons = ["source directory does not exist"];

@@ -302,6 +302,8 @@ const EXPECTED_REASONS = [
   "stale workflow command",
   "requires pi-dynamic-workflows",
   "components now supported",
+  // ANAME-07: a server needs a Claude Code MCP feature pi-mcp-adapter lacks.
+  "unsupported mcp",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

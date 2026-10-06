@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
-import { translateMcpServer } from "../../extensions/pi-claude-marketplace/domain/mcp-server-features.ts";
+import {
+  classifyMcpServer,
+  translateMcpServer,
+} from "../../extensions/pi-claude-marketplace/domain/mcp-server-features.ts";
+
+import type { McpServerVerdict } from "../../extensions/pi-claude-marketplace/domain/mcp-server-features.ts";
 
 interface TranslationRow {
   readonly title: string;
@@ -250,39 +255,262 @@ const ROWS: readonly TranslationRow[] = [
   },
 ];
 
-for (const { title, server, description, entry } of ROWS) {
-  test(title, () => {
+describe("translateMcpServer", () => {
+  for (const { title, server, description, entry } of ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedEntry = entry;
+
+      // act
+      const translated = translateMcpServer(server, description);
+
+      // assert
+      assert.deepStrictEqual(translated, expectedEntry);
+    });
+  }
+
+  test("ANAME-07: writes fields in the order transport, oauth, timeout, description, owned", () => {
     // arrange
-    const expectedEntry = entry;
+    const server = {
+      lifecycle: "eager",
+      alwaysLoad: true,
+      timeout: 90_000,
+      oauth: { scopes: "read", clientId: "pi-client" },
+      headers: { A: "1" },
+      url: "https://mcp.example.com/sse",
+      type: "sse",
+    };
 
     // act
-    const translated = translateMcpServer(server, description);
+    const translated = translateMcpServer(server, "Hello tools");
 
     // assert
-    assert.deepStrictEqual(translated, expectedEntry);
+    assert.equal(
+      JSON.stringify(translated),
+      '{"url":"https://mcp.example.com/sse","headers":{"A":"1"},"httpTransport":"sse",' +
+        '"oauth":{"clientId":"pi-client","scope":"read"},"requestTimeoutMs":90000,' +
+        '"description":"Hello tools","directTools":true,"toolPrefix":"mcp"}',
+    );
   });
+});
+
+interface VerdictRow {
+  readonly title: string;
+  readonly server: unknown;
+  readonly verdict: McpServerVerdict;
 }
 
-test("ANAME-07: writes fields in the order transport, oauth, timeout, description, owned", () => {
-  // arrange
-  const server = {
-    lifecycle: "eager",
-    alwaysLoad: true,
-    timeout: 90_000,
-    oauth: { scopes: "read", clientId: "pi-client" },
-    headers: { A: "1" },
-    url: "https://mcp.example.com/sse",
-    type: "sse",
-  };
+const SUPPORTED: McpServerVerdict = { kind: "supported" };
 
-  // act
-  const translated = translateMcpServer(server, "Hello tools");
+const VERDICT_ROWS: readonly VerdictRow[] = [
+  {
+    title: "ANAME-07: a number is malformed",
+    server: 5,
+    verdict: { kind: "malformed", detail: "(root): must be object" },
+  },
+  {
+    title: "ANAME-07: null is malformed",
+    server: null,
+    verdict: { kind: "malformed", detail: "(root): must be object" },
+  },
+  {
+    title: "ANAME-07: an array is malformed",
+    server: [],
+    verdict: { kind: "malformed", detail: "(root): must be object" },
+  },
+  {
+    title: "ANAME-07: a url with no type is malformed",
+    server: { url: "https://x" },
+    verdict: { kind: "malformed", detail: "(root): must have required properties command" },
+  },
+  {
+    title: "ANAME-07: an unknown type is malformed",
+    server: { type: "grpc", url: "x" },
+    verdict: { kind: "malformed", detail: 'unknown type "grpc"' },
+  },
+  {
+    title: "ANAME-07: an empty command is malformed",
+    server: { command: "" },
+    verdict: { kind: "malformed", detail: "/command: must not have fewer than 1 characters" },
+  },
+  {
+    title: "ANAME-07: a fractional timeout is malformed",
+    server: { command: "node", timeout: 1.5 },
+    verdict: { kind: "malformed", detail: "/timeout: must be integer" },
+  },
+  {
+    title: "ANAME-07: a zero timeout is malformed",
+    server: { command: "node", timeout: 0 },
+    verdict: { kind: "malformed", detail: "/timeout: must be >= 1" },
+  },
+  {
+    title: "ANAME-07: a string timeout is malformed",
+    server: { command: "node", timeout: "60" },
+    verdict: { kind: "malformed", detail: "/timeout: must be integer" },
+  },
+  {
+    title: "ANAME-07: a non-string env value is malformed",
+    server: { command: "node", env: { A: 1 } },
+    verdict: { kind: "malformed", detail: "/env/A: must be string" },
+  },
+  {
+    title: "ANAME-07: a non-string args element is malformed",
+    server: { command: "node", args: ["a", 2] },
+    verdict: { kind: "malformed", detail: "/args/1: must be string" },
+  },
+  {
+    title: "ANAME-07: a callbackPort above 65535 is malformed",
+    server: { type: "http", url: "x", oauth: { callbackPort: 70_000 } },
+    verdict: { kind: "malformed", detail: "/oauth/callbackPort: must be <= 65535" },
+  },
+  {
+    title: "ANAME-07: a non-https authServerMetadataUrl is malformed",
+    server: { type: "http", url: "x", oauth: { authServerMetadataUrl: "http://x" } },
+    verdict: {
+      kind: "malformed",
+      detail: '/oauth/authServerMetadataUrl: must match pattern "^https://"',
+    },
+  },
+  {
+    title: "ANAME-07: empty scopes are malformed",
+    server: { type: "http", url: "x", oauth: { scopes: "" } },
+    verdict: { kind: "malformed", detail: "/oauth/scopes: must not have fewer than 1 characters" },
+  },
+  {
+    title: "ANAME-07: a non-string header value is malformed",
+    server: { type: "sse", url: "x", headers: { A: 1 } },
+    verdict: { kind: "malformed", detail: "/headers/A: must be string" },
+  },
+  {
+    title: "ANAME-07: an http server with no url is malformed",
+    server: { type: "streamable-http" },
+    verdict: { kind: "malformed", detail: "(root): must have required properties url" },
+  },
+  {
+    title: "ANAME-07: a ws server with a non-string url is malformed",
+    server: { type: "ws", url: 5 },
+    verdict: { kind: "malformed", detail: "/url: must be string" },
+  },
+  {
+    title: "ANAME-07: an invalid request_timeout_ms is ignored, not malformed",
+    server: { type: "http", url: "x", request_timeout_ms: "soon" },
+    verdict: SUPPORTED,
+  },
+  {
+    title: "ANAME-07: role and discoveryCache never block a server",
+    server: { type: "http", url: "x", role: "comms", discoveryCache: true },
+    verdict: SUPPORTED,
+  },
+  {
+    title: "ANAME-07: a stdio server keeps a role of any value",
+    server: { command: "node", role: 5 },
+    verdict: SUPPORTED,
+  },
+  {
+    title:
+      "ANAME-07: a falsy oauth.xaa, an empty toolPermissions and a tool without a policy are supported",
+    server: {
+      type: "sse",
+      url: "x",
+      oauth: { xaa: false },
+      toolPermissions: {},
+      tools: [{ name: "read" }],
+      bareElicitationCapability: false,
+    },
+    verdict: SUPPORTED,
+  },
+  {
+    title: "ANAME-07: a stdio server ignores the remote-only headersHelper",
+    server: { command: "node", headersHelper: "./headers.sh" },
+    verdict: SUPPORTED,
+  },
+  {
+    title: "ANAME-07: a valid ws server is blocked by ws",
+    server: { type: "ws", url: "wss://mcp.example.com/ws" },
+    verdict: { kind: "blocked", feature: "ws" },
+  },
+  {
+    title: "ANAME-07: an sse-ide server is blocked without validation",
+    server: { type: "sse-ide" },
+    verdict: { kind: "blocked", feature: "sse-ide" },
+  },
+  {
+    title: "ANAME-07: a ws-ide server is blocked without validation",
+    server: { type: "ws-ide" },
+    verdict: { kind: "blocked", feature: "ws-ide" },
+  },
+  {
+    title: "ANAME-07: an sdk server is blocked without validation",
+    server: { type: "sdk" },
+    verdict: { kind: "blocked", feature: "sdk" },
+  },
+  {
+    title: "ANAME-07: a claudeai-proxy server is blocked without validation",
+    server: { type: "claudeai-proxy" },
+    verdict: { kind: "blocked", feature: "claudeai-proxy" },
+  },
+  {
+    title: "ANAME-07: headersHelper blocks a remote server",
+    server: { type: "http", url: "x", headersHelper: "./headers.sh" },
+    verdict: { kind: "blocked", feature: "headersHelper" },
+  },
+  {
+    title: "ANAME-07: a truthy oauth.xaa blocks a remote server",
+    server: { type: "sse", url: "x", oauth: { xaa: true } },
+    verdict: { kind: "blocked", feature: "oauth.xaa" },
+  },
+  {
+    title: "ANAME-07: a per-tool permission_policy blocks a remote server",
+    server: {
+      type: "http",
+      url: "x",
+      tools: [{ name: "read" }, { name: "drop", permission_policy: "always_deny" }],
+    },
+    verdict: { kind: "blocked", feature: "tools[].permission_policy" },
+  },
+  {
+    title: "ANAME-07: a non-empty toolPermissions blocks a remote server",
+    server: { type: "http", url: "x", toolPermissions: { drop: "blocked" } },
+    verdict: { kind: "blocked", feature: "toolPermissions" },
+  },
+  {
+    title: "ANAME-07: bareElicitationCapability true blocks a stdio server",
+    server: { command: "node", bareElicitationCapability: true },
+    verdict: { kind: "blocked", feature: "bareElicitationCapability" },
+  },
+  {
+    title: "ANAME-07: bareElicitationCapability true blocks a remote server",
+    server: { type: "http", url: "x", bareElicitationCapability: true },
+    verdict: { kind: "blocked", feature: "bareElicitationCapability" },
+  },
+  {
+    title: "ANAME-07: headersHelper wins over bareElicitationCapability in table order",
+    server: { type: "http", url: "x", bareElicitationCapability: true, headersHelper: "./h.sh" },
+    verdict: { kind: "blocked", feature: "headersHelper" },
+  },
+  {
+    title: "ANAME-07: a per-tool policy wins over toolPermissions in table order",
+    server: {
+      type: "sse",
+      url: "x",
+      toolPermissions: { drop: "blocked" },
+      tools: [{ name: "drop", permission_policy: "always_ask" }],
+    },
+    verdict: { kind: "blocked", feature: "tools[].permission_policy" },
+  },
+];
 
-  // assert
-  assert.equal(
-    JSON.stringify(translated),
-    '{"url":"https://mcp.example.com/sse","headers":{"A":"1"},"httpTransport":"sse",' +
-      '"oauth":{"clientId":"pi-client","scope":"read"},"requestTimeoutMs":90000,' +
-      '"description":"Hello tools","directTools":true,"toolPrefix":"mcp"}',
-  );
+describe("classifyMcpServer", () => {
+  for (const { title, server, verdict } of VERDICT_ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedVerdict = verdict;
+
+      // act
+      const classified = classifyMcpServer(server);
+
+      // assert
+      assert.deepStrictEqual(classified, expectedVerdict);
+    });
+  }
 });

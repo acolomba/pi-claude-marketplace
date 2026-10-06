@@ -598,12 +598,14 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
       : ["unsupported source"];
   }
 
-  // MCPR-03 / D-02: mirror the shared `classifyResolverNote` arm so a broken
-  // `mcpServers` string reference renders `{malformed mcp}` here too. Placed
-  // BEFORE the `Unexpected token` arm so a JSON-parse-error reference maps to
-  // `malformed mcp` rather than `{unparseable}`, and before the
-  // `includes("source")` catch-all.
-  if (reason.startsWith("malformed mcp reference")) {
+  // MCPR-03 / D-02 / ANAME-07: mirror the shared `classifyResolverNote` arms
+  // so a broken `mcpServers` string reference and a server config Claude's
+  // schema rejects render `{malformed mcp}` here too. Placed BEFORE the
+  // `Unexpected token` arm so a JSON-parse-error reference maps to `malformed
+  // mcp` rather than `{unparseable}`, and before the `includes("source")`
+  // catch-all, because the server name in a `malformed mcp server ` note is
+  // author-controlled.
+  if (reason.startsWith("malformed mcp reference") || reason.startsWith("malformed mcp server ")) {
     return ["malformed mcp"];
   }
 

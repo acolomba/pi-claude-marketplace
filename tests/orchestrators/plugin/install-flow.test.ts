@@ -3220,6 +3220,240 @@ test("ANAME-07: install writes Claude servers through the closed adapter table",
   });
 });
 
+test("ANAME-07: a normal install of a plugin with a ws server refuses with {unsupported mcp} and the --partial hint", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname07-ws-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: {
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+          local: { command: "node" },
+        },
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map(({ message, severity }) => ({ message, severity })),
+        [
+          {
+            severity: "error",
+            message:
+              "A plugin operation has failed.\n\n" +
+              "● mp [project]\n" +
+              "  ⊖ hello (partially-available) {unsupported mcp}\n" +
+              "    Re-run with --partial to install the supported components.",
+          },
+        ],
+      );
+      assert.equal(await pathExists(path.join(cwd, ".pi", "mcp-adapter.json")), false);
+      const state = await loadState(locations.extensionRoot);
+      assert.equal("hello" in (state.marketplaces["mp"]?.plugins ?? {}), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ANAME-07: --partial installs every server except the blocked one", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname07-partial-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: {
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+          local: { command: "node" },
+        },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const dataDir = path.join(locations.dataRoot, "mp", "hello");
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        partial: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map(({ message, severity }) => ({ message, severity })),
+        [
+          {
+            severity: undefined,
+            message:
+              "● mp [project]\n" +
+              "  ◉ hello v0.0.1 (partially-installed) {unsupported mcp}\n\n" +
+              "/reload to pick up changes",
+          },
+        ],
+      );
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        `{
+  "mcpServers": {
+    "plugin_hello_local_": {
+      "command": "node",
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
+        "CLAUDE_PLUGIN_DATA": "${dataDir}",
+        "CLAUDE_PROJECT_DIR": "${cwd}"
+      },
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+      );
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepStrictEqual(
+        {
+          mcpServers: record?.resources.mcpServers,
+          unsupported: record?.compatibility.unsupported,
+        },
+        { mcpServers: ["local"], unsupported: ["mcpServers"] },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ANAME-03: a plugin tool-name prefix past 128 characters installs with no length check", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname03-"));
+    try {
+      // arrange
+      const pluginName = "p".repeat(40);
+      const serverName = "s".repeat(80);
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName,
+        mcpServers: { [serverName]: { command: "node" } },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: pluginName,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map(({ message, severity }) => ({ message, severity })),
+        [
+          {
+            severity: undefined,
+            message:
+              "● mp [project]\n" +
+              `  ● ${pluginName} v0.0.1 (installed)\n\n` +
+              "/reload to pick up changes",
+          },
+        ],
+      );
+      const adapter = JSON.parse(await readFile(adapterPath, "utf8")) as {
+        mcpServers: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(Object.keys(adapter.mcpServers), [
+        `plugin_${pluginName}_${serverName}_`,
+      ]);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        pluginName
+      ];
+      assert.deepStrictEqual(record?.resources.mcpServers, [serverName]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ANAME-07: a server Claude Code's schema rejects makes the plugin unavailable with {malformed mcp}", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname07-malformed-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: {
+          db: { command: "node", timeout: 1.5 },
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        },
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        partial: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map(({ message, severity }) => ({ message, severity })),
+        [
+          {
+            severity: "error",
+            message:
+              "A plugin operation has failed.\n\n" +
+              "● mp [project]\n" +
+              "  ⊘ hello (unavailable) {malformed mcp}",
+          },
+        ],
+      );
+      assert.equal(await pathExists(path.join(cwd, ".pi", "mcp-adapter.json")), false);
+      const state = await loadState(locations.extensionRoot);
+      assert.equal("hello" in (state.marketplaces["mp"]?.plugins ?? {}), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 for (const { title, descriptions, description } of [
   {
     title: "ANAME-06: every entry carries the plugin's description",

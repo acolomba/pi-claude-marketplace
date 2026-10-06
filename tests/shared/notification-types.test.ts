@@ -100,6 +100,7 @@ const EXPECTED_REASONS = [
   "stale workflow command",
   "requires pi-dynamic-workflows",
   "components now supported",
+  "unsupported mcp",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

@@ -154,6 +154,9 @@ function materializableFields(
     ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
     ...(partial.orphanRewake !== undefined && { orphanRewake: partial.orphanRewake }),
     ...(partial.droppedHooks !== undefined && { droppedHooks: partial.droppedHooks }),
+    ...(partial.droppedMcpServers !== undefined && {
+      droppedMcpServers: partial.droppedMcpServers,
+    }),
     defaultEnabled: metadata.defaultEnabled,
     ...(metadata.description !== undefined && { description: metadata.description }),
   };

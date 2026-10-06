@@ -320,6 +320,31 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // ANAME-07: a server needs a Claude Code MCP feature pi-mcp-adapter cannot
+    // honor, so the plugin is partially available and a normal install refuses
+    // with the aggregate `{unsupported mcp}` token and the `--partial` hint.
+    "failure-unsupported-mcp": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "partially-available",
+                name: "helper",
+                reasons: ["unsupported mcp"],
+                partialHint: true,
+                severity: "error",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // WINV-04: a plugin carrying workflows AND a second component kind Pi does
     // not support is rejected on that second kind, through the existing
     // partially-available error row and partial-install hint. The brace names

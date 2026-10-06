@@ -111,7 +111,9 @@ type UnsupportedReason =
   | "unsupported source"
   // D-90-05: the truthful marker for a dropped non-carve-out component kind.
   | "unsupported component"
-  | "no longer installable";
+  | "no longer installable"
+  // ANAME-07: a server needs a Claude Code MCP feature the adapter lacks.
+  | "unsupported mcp";
 
 /**
  * D-09: failure-class reasons -- an operation could not complete (permission /
