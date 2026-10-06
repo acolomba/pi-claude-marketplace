@@ -521,6 +521,7 @@ export async function seedSameRepoPluginMirrors(args: {
     }
 
     try {
+      // eslint-disable-next-line no-await-in-loop -- entries can share a mirror key; each seed checks the last
       await seedOnePluginMirror(
         removalOps,
         locations,

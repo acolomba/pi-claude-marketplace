@@ -339,11 +339,13 @@ async function runPollLoop(
 
   while (Date.now() < deadlineMs) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- RFC 8628: each poll waits the server interval
       await (opts.waitForPoll ?? waitForPoll)(currentIntervalSec * 1000, opts.signal);
     } catch {
       return { ok: false, reason: "Device Flow cancelled." };
     }
 
+    // eslint-disable-next-line no-await-in-loop -- RFC 8628: one token poll per interval; slow_down widens it
     const r = await safePollToken(
       http,
       provider.clientId,
@@ -354,6 +356,7 @@ async function runPollLoop(
     switch (r.kind) {
       case "success": {
         const cred: GitCredentials = provider.credentialFrom(r.accessToken);
+        // eslint-disable-next-line no-await-in-loop -- runs once: the success path returns after it
         await opts.credentialOps.approve(opts.host, cred);
         return { ok: true, cred };
       }

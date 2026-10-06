@@ -536,6 +536,7 @@ export async function reapOrphans(
       }
 
       if (process.platform === "linux") {
+        // eslint-disable-next-line no-await-in-loop -- bounded by the PID table's live orphans, one /proc read each
         const marker = await readProcEnvironMarker(tableEntry.pid, probes);
         if (marker !== tableEntry.dispatchId) {
           hookDebugLog(

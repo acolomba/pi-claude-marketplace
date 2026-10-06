@@ -56,10 +56,12 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
   const marketplaces: MarketplaceRows<never>[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one state read each
     const state = await loadState(locations.extensionRoot);
     // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config).
     // Pre-compute the merged view ONCE per scope; the inner loop reads
     // `merged.marketplaces[name]?.entry.autoupdate` for each record.
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one config read each
     const { merged } = await loadMergedScopeConfig(locations);
     for (const record of Object.values(state.marketplaces)) {
       // NotificationMessage construction recipe.

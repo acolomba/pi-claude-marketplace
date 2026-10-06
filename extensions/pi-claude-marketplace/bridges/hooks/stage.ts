@@ -107,6 +107,7 @@ async function assertNoSymlinkEscapeInHooksSubtree(
     const dir = stack.slice(-1).join("");
     stack.pop();
 
+    // eslint-disable-next-line no-await-in-loop -- each pop reads subdirs an earlier pass pushed
     const entries = await readEntriesOrSkip(inspector, dir);
     if (entries === null) {
       continue;
@@ -118,9 +119,11 @@ async function assertNoSymlinkEscapeInHooksSubtree(
       // the core of the containment guarantee: we MUST be able to detect
       // "this entry is a symlink" without issuing any FS call against the
       // target it points to.
+      // eslint-disable-next-line no-await-in-loop -- the first escaping symlink throws and ends the walk
       const stat = await inspector.lstat(linkPath);
 
       if (stat.isSymbolicLink()) {
+        // eslint-disable-next-line no-await-in-loop -- the first escaping symlink throws and ends the walk
         await assertSymlinkEntryContained(inspector, pluginRoot, linkPath);
         // Even if the symlink resolves INSIDE pluginRoot, we do NOT push
         // it onto the walk stack. Every symbolic link is a boundary -- the

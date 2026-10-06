@@ -95,8 +95,10 @@ export async function garbageCollectPluginClones(locations: ScopedLocations): Pr
 
     // SC-7 / NFR-10: every delete target routes through the chokepoint
     // (assertSafeName + assertPathInside) BEFORE the rm.
+    // eslint-disable-next-line no-await-in-loop -- bounded IO: one recursive clone delete at a time
     const dir = await locations.pluginCloneDir(key);
     try {
+      // eslint-disable-next-line no-await-in-loop -- bounded IO: one recursive clone delete at a time
       await rm(dir, { recursive: true, force: true });
     } catch (err) {
       // D-19-01: a per-dir rm leak never throws out of GC; the next pass

@@ -548,6 +548,7 @@ async function reinstallPluginsWith(
   const authMemo = new Map<string, AuthAttemptResult>();
   for (const target of targets) {
     outcomes.push(
+      // eslint-disable-next-line no-await-in-loop -- each reinstall locks the scope (retries: 0)
       await reinstallPlugin({
         ctx,
         pi,

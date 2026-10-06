@@ -124,6 +124,7 @@ async function sameEntry(left: string, right: string): Promise<boolean> {
   for (const [index, name] of leftNames.entries()) {
     if (
       name !== rightNames[index] ||
+      // eslint-disable-next-line no-await-in-loop -- the first differing entry returns false
       !(await sameEntry(path.join(left, name), path.join(right, name)))
     ) {
       return false;
@@ -301,6 +302,7 @@ export async function preparePruneRollback(
   let state: SavedPath;
   try {
     for (const [index, { root, target, phase }] of targets.entries()) {
+      // eslint-disable-next-line no-await-in-loop -- a failed snapshot deletes the backup dir
       artifacts.push(await snapshotPath(root, target, phase, backupRoot, index));
     }
 
@@ -343,6 +345,7 @@ export async function preparePruneRollback(
       const failures: PruneRestoreFailure[] = [];
       for (const saved of artifacts) {
         try {
+          // eslint-disable-next-line no-await-in-loop -- restores run in order; each failure kept
           await restoreArtifact(saved, ops);
         } catch (error: unknown) {
           failures.push({ phase: saved.phase, cause: asError(error) });
@@ -351,6 +354,7 @@ export async function preparePruneRollback(
 
       for (const saved of [agentsIndex, mcp]) {
         try {
+          // eslint-disable-next-line no-await-in-loop -- restores run in order; each failure kept
           await restoreMetadata(saved, ops);
         } catch (error: unknown) {
           failures.push({ phase: saved.phase, cause: asError(error) });

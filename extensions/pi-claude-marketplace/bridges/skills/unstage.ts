@@ -43,14 +43,17 @@ export function createUnstagePluginSkills(
     for (const name of input.previousSkillNames) {
       assertSafeName(name, "skill name to unstage");
       const dir = path.join(input.locations.skillsTargetDir, name);
+      // eslint-disable-next-line no-await-in-loop -- the first containment or removal failure stops the rest
       await assertPathInside(input.locations.skillsTargetDir, dir, "skill to unstage");
 
+      // eslint-disable-next-line no-await-in-loop -- the first containment or removal failure stops the rest
       if (!(await pathExists(dir))) {
         // ENOENT path -- idempotent skip.
         continue;
       }
 
       try {
+        // eslint-disable-next-line no-await-in-loop -- the first containment or removal failure stops the rest
         await remover.removeTree(dir);
         removed.push(name);
       } catch (err) {

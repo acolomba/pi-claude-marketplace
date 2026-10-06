@@ -142,6 +142,7 @@ async function collectStrictComponentKind(
 
   for (const raw of [...fromEntry, ...fromManifest]) {
     dirty =
+      // eslint-disable-next-line no-await-in-loop -- first-declared path wins the shared `seenPaths` set
       (await addValidatedComponentPath(resolution, kind, seenPaths, raw, pluginRoot)) || dirty;
   }
 
@@ -170,6 +171,7 @@ export async function collectStrictComponentPaths(
 
   for (const kind of COMPONENT_PATH_KINDS) {
     flags.push(
+      // eslint-disable-next-line no-await-in-loop -- each kind appends to the shared resolution in kind order
       await collectStrictComponentKind(
         input.entry,
         input.manifest,

@@ -139,6 +139,7 @@ async function foreignOccupiedTargets(
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- bounded by the staged workflows, one stat each
     if (await pathExists(pair.to)) {
       foreign.push(pair.name);
     }
@@ -223,13 +224,16 @@ export async function prepareStageWorkflows(
   try {
     for (const verdict of admitted) {
       const stagedFile = path.join(stagingRoot, `${verdict.generatedName}.json`);
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await assertPathInside(stagingRoot, stagedFile, "staged workflow file");
 
       // WPTH-04: the target comes from the bundle's sole composer, which runs
       // its own assertSafeName + assertPathInside. Recomputing the join here
       // would put a second, unguarded composer in the tree.
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       const targetFile = await locations.workflowArtifactPath(verdict.generatedName);
 
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await writeFile(stagedFile, `${JSON.stringify(buildEnvelope(verdict), null, 2)}\n`, "utf8");
 
       renamePairs.push({ name: verdict.generatedName, from: stagedFile, to: targetFile });
@@ -314,6 +318,7 @@ async function displacePreviousTargets(
     // by the time the aside path is joined the name is known to carry no
     // separator and no traversal segment. The second check is the same
     // defense-in-depth the staged-file join above takes.
+    // eslint-disable-next-line no-await-in-loop -- rollback reverses only the moves already recorded
     const target = await prepared.locations.workflowArtifactPath(name);
     const aside = path.join(displacedRoot, `${name}.json`);
     // WPTH-04: anchored on the staging ROOT, not on `displacedRoot`. The same
@@ -324,9 +329,11 @@ async function displacePreviousTargets(
     // random staging root -- and `mkdir` with `recursive: true` follows a link
     // planted at it silently, which would send a displaced envelope to a
     // directory of the planter's choosing.
+    // eslint-disable-next-line no-await-in-loop -- rollback reverses only the moves already recorded
     await assertPathInside(prepared.stagingRoot, aside, "displaced previous workflow file");
 
     try {
+      // eslint-disable-next-line no-await-in-loop -- rollback reverses only the moves already recorded
       await rename(target, aside);
       // Recorded immediately, so a throw on any later name still leaves this
       // move reversible.
@@ -361,6 +368,7 @@ async function assertTargetsUnoccupied(
   pairs: PreparedWorkflowsStaged["_renamePairs"],
 ): Promise<void> {
   for (const pair of pairs) {
+    // eslint-disable-next-line no-await-in-loop -- the first occupied target throws before any rename
     if (await pathExists(pair.to)) {
       throw new WorkflowTargetOccupiedError(pair.to);
     }
@@ -445,6 +453,7 @@ export async function commitPreparedWorkflows(
     await assertTargetsUnoccupied(prepared._renamePairs);
 
     for (const pair of prepared._renamePairs) {
+      // eslint-disable-next-line no-await-in-loop -- TR-01: one rename at a time so rollback knows which landed
       await rename(pair.from, pair.to);
       completedRenames.push(pair);
     }
@@ -458,6 +467,7 @@ export async function commitPreparedWorkflows(
 
     for (const pair of [...completedRenames].reverse()) {
       try {
+        // eslint-disable-next-line no-await-in-loop -- rollback walks completed renames in reverse
         await rename(pair.to, pair.from);
       } catch (rollbackErr) {
         stillPlaced.push({ ...pair, reason: errorMessage(rollbackErr) });
@@ -471,6 +481,7 @@ export async function commitPreparedWorkflows(
     const restoredTargets = new Set<string>();
     for (const move of [...displaced].reverse()) {
       try {
+        // eslint-disable-next-line no-await-in-loop -- restores displaced files newest first, after the reversal
         await rename(move.to, move.from);
         restoredTargets.add(move.from);
       } catch (restoreErr) {

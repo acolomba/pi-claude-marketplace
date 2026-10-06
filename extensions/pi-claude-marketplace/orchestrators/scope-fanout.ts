@@ -59,6 +59,7 @@ export async function collectMarketplaceRecordsByScope(
   const found: ScopedMarketplaceRecord[] = [];
 
   for (const scope of scopes) {
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one record read each
     const row = await readScopeMarketplaceRecord(opts, scope);
     if (row !== undefined) {
       found.push(row);

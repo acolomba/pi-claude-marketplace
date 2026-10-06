@@ -179,6 +179,7 @@ export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promi
   const failures: NotificationMessage[] = [];
   for (const f of found) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- at most two scopes, one manifest block each
       blocks.push(await buildBlock(f.record, f.autoupdate));
     } catch (err) {
       failures.push(buildManifestFailureMessage(f.record, narrowProbeError(err), f.autoupdate));

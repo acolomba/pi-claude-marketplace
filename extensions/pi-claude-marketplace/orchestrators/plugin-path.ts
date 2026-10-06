@@ -98,6 +98,7 @@ export async function recomputePluginPath(cwd: string): Promise<{
   ] as const;
   for (const { scope, extensionRoot } of scopeRoots) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- two scopes, one state read each
       freshBinDirs.push(...collectBinDirs(await loadState(extensionRoot)));
     } catch (err) {
       skipped.push({ scope, reason: errorMessage(err) });

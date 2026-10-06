@@ -341,6 +341,7 @@ async function cascadePluginsInPlace(args: {
 }): Promise<void> {
   const { record, marketplace, locations, cascade, successfullyUnstaged, failedPlugins } = args;
   for (const [pluginName, plugin] of Object.entries(record.plugins)) {
+    // eslint-disable-next-line no-await-in-loop -- each unstage rewrites the shared agents index and mcp.json
     const outcome = await cascade(pluginName, marketplace, locations, plugin);
     if (outcome.ok) {
       successfullyUnstaged.push(pluginName);
@@ -653,6 +654,7 @@ async function runPostRemoveCleanup(args: {
   }
 
   for (const cleaned of args.successfullyUnstaged) {
+    // eslint-disable-next-line no-await-in-loop -- bounded IO: one recursive data-dir delete at a time
     await removePath(locations.pluginDataDir(name, cleaned));
   }
 

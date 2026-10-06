@@ -82,6 +82,7 @@ async function hasUnsupportedConvention(
   statKind: StatKindReader,
 ): Promise<boolean> {
   for (const convention of UNSUPPORTED_COMPONENT_CONVENTIONS[kind] ?? []) {
+    // eslint-disable-next-line no-await-in-loop -- the first matching convention ends the probe
     if ((await statKind(path.join(pluginRoot, convention.relativePath))) === convention.kind) {
       return true;
     }
@@ -108,6 +109,7 @@ export async function collectUnsupportedKinds(
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- bounded by the fixed unsupported-kind list, a few stats each
     if (await hasUnsupportedConvention(pluginRoot, kind, statKind)) {
       found.push(kind);
     }

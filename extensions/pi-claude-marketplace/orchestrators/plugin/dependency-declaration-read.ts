@@ -248,6 +248,7 @@ async function readOwnManifest(
   pluginRoot: string,
 ): Promise<OwnManifestRead> {
   for (const candidate of MANIFEST_CANDIDATES) {
+    // eslint-disable-next-line no-await-in-loop -- the first existing manifest candidate decides the read
     const read = await readManifestCandidate(reader, path.join(pluginRoot, candidate));
     if (read !== undefined) {
       return read;

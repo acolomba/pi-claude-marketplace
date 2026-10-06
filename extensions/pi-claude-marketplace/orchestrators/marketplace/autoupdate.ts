@@ -518,6 +518,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
 
   for (const scope of scopes) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- at most two scopes, each flip under its own scope lock
       collectFlipRows(rows, scope, await flipOneScope(opts, scope));
     } catch (err) {
       // For a single-name flip `classifyAutoupdateFlip` throws
