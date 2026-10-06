@@ -12,12 +12,15 @@ export interface HooksResolution extends Pick<ComponentPathResolution, "supporte
   hooksConfigPath?: string;
   orphanRewake?: boolean;
   droppedHooks?: DroppedHook[];
+  /** UKIND-01: set when a hooks file declares a hooks module. */
+  declaresHookModule?: boolean;
 }
 
 interface ResolvedHooksConfig {
   readonly value: HooksConfig;
   readonly relativePath: string;
   readonly dropped: readonly DroppedHook[];
+  readonly declaresModule: boolean;
 }
 
 async function readHooksConfig(
@@ -48,6 +51,7 @@ async function readHooksConfig(
       value: parsed.value,
       relativePath: path.join("hooks", "hooks.json"),
       dropped: parsed.dropped,
+      declaresModule: parsed.declaresModule,
     },
   };
 }
@@ -68,7 +72,25 @@ function hasOrphanRewake(config: HooksConfig): boolean {
   return false;
 }
 
-/** Resolves convention hooks, supportability drops, and orphan rewake metadata. */
+function recordHooksConfig(resolution: HooksResolution, hooks: ResolvedHooksConfig): void {
+  if (hooks.dropped.length > 0) {
+    resolution.unsupported.push("hooks");
+    resolution.droppedHooks = [...hooks.dropped];
+  }
+
+  if (Object.keys(hooks.value).length > 0) {
+    resolution.supported.push("hooks");
+    resolution.hooksConfigPath = hooks.relativePath;
+    if (hasOrphanRewake(hooks.value)) {
+      resolution.orphanRewake = true;
+    }
+  }
+}
+
+/**
+ * Resolves convention hooks, supportability drops, orphan rewake metadata, and
+ * the UKIND-01 hooks-module declaration.
+ */
 export async function resolveHooks(
   input: {
     readonly pluginRoot: string;
@@ -89,18 +111,10 @@ export async function resolveHooks(
     return false;
   }
 
-  if (hooks.value.dropped.length > 0) {
-    input.resolution.unsupported.push("hooks");
-    input.resolution.droppedHooks = [...hooks.value.dropped];
+  if (hooks.value.declaresModule) {
+    input.resolution.declaresHookModule = true;
   }
 
-  if (Object.keys(hooks.value.value).length > 0) {
-    input.resolution.supported.push("hooks");
-    input.resolution.hooksConfigPath = hooks.value.relativePath;
-    if (hasOrphanRewake(hooks.value.value)) {
-      input.resolution.orphanRewake = true;
-    }
-  }
-
+  recordHooksConfig(input.resolution, hooks.value);
   return false;
 }

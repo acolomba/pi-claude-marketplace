@@ -74,6 +74,58 @@ test("records a supported hooks configuration and its relative path", async () =
   });
 });
 
+test("UKIND-01: records a module declared by a modules-only convention file", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const contents = JSON.stringify({ modules: ["./register.ts"] });
+
+  // act
+  const dirty = await resolveHooks(
+    { pluginRoot: "/plugins/alpha", resolution },
+    dependencies(contents),
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, {
+    supported: [],
+    unsupported: [],
+    notes: [],
+    declaresHookModule: true,
+  });
+});
+
+test("UKIND-01: keeps command hooks supported beside a declared module", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const contents = JSON.stringify({
+    hooks: {
+      SessionStart: [{ hooks: [{ type: "command", command: "echo start" }] }],
+    },
+    modules: ["./register.ts"],
+  });
+
+  // act
+  const dirty = await resolveHooks(
+    { pluginRoot: "/plugins/alpha", resolution },
+    dependencies(contents),
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, {
+    supported: ["hooks"],
+    unsupported: [],
+    notes: [],
+    hooksConfigPath: path.join("hooks", "hooks.json"),
+    declaresHookModule: true,
+  });
+});
+
 test("classifies malformed hooks as a structural failure", async () => {
   // arrange
   const { resolveHooks } =

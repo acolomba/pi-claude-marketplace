@@ -37,6 +37,7 @@ test("parseHooksConfig accepts an empty bare configuration", () => {
     value: {},
     dropped: [],
     ifPredicates: new Map(),
+    declaresModule: false,
   });
 });
 
@@ -53,6 +54,93 @@ test("parseHooksConfig unwraps an empty plugin configuration", () => {
     value: {},
     dropped: [],
     ifPredicates: new Map(),
+    declaresModule: false,
+  });
+});
+
+test("UKIND-01: parseHooksConfig reads a modules-only wrapper as no hooks that declares a module", () => {
+  // arrange
+  const raw = JSON.stringify({ modules: ["./register.ts"] });
+
+  // act
+  const result = parseHooksConfig(raw, TEST_IF_CTX, () => null);
+
+  // assert
+  assert.deepStrictEqual(result, {
+    ok: true,
+    value: {},
+    dropped: [],
+    ifPredicates: new Map(),
+    declaresModule: true,
+  });
+});
+
+test("UKIND-01: parseHooksConfig keeps the command hooks beside a declared module", () => {
+  // arrange
+  const raw = JSON.stringify({
+    hooks: {
+      PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+    },
+    modules: ["./register.ts"],
+  });
+
+  // act
+  const result = parseHooksConfig(raw, TEST_IF_CTX, () => null);
+
+  // assert
+  assert.deepStrictEqual(result, {
+    ok: true,
+    value: {
+      PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+    },
+    dropped: [],
+    ifPredicates: new Map(),
+    declaresModule: true,
+  });
+});
+
+test("parseHooksConfig drops an empty modules array as an unsupported event", () => {
+  // arrange
+  const raw = JSON.stringify({ modules: [] });
+
+  // act
+  const result = parseHooksConfig(raw, TEST_IF_CTX, () => null);
+
+  // assert
+  assert.deepStrictEqual(result, {
+    ok: true,
+    value: {},
+    dropped: [{ kind: "event", event: "modules" }],
+    ifPredicates: new Map(),
+    declaresModule: false,
+  });
+});
+
+test("parseHooksConfig rejects a modules value that is not an array", () => {
+  // arrange
+  const raw = JSON.stringify({ modules: "./register.ts" });
+
+  // act
+  const result = parseHooksConfig(raw, TEST_IF_CTX, () => null);
+
+  // assert
+  assert.deepStrictEqual(result, {
+    ok: false,
+    reason: "hooks.json failed schema validation: /modules: must be array",
+  });
+});
+
+test("UKIND-01: parseHooksConfig rejects a non-object hooks value beside a declared module", () => {
+  // arrange
+  const raw = JSON.stringify({ hooks: [], modules: ["./register.ts"] });
+
+  // act
+  const result = parseHooksConfig(raw, TEST_IF_CTX, () => null);
+
+  // assert
+  assert.deepStrictEqual(result, {
+    ok: false,
+    reason: "hooks.json failed schema validation: <root>: must be object",
   });
 });
 
@@ -173,6 +261,7 @@ test("parseHooksConfig keeps supported handlers, drops rejected groups and handl
     ifPredicates: new Map([
       ["PostToolUse|0|0", { rawIf: "tool == 'Edit'", event: "PostToolUse", cwd: "/projects/p" }],
     ]),
+    declaresModule: false,
   });
 });
 
@@ -210,6 +299,7 @@ test("parseHooksConfig skips if compilation when the caller requests only the ve
     },
     dropped: [],
     ifPredicates: new Map(),
+    declaresModule: false,
   });
 });
 
@@ -314,6 +404,7 @@ test("parseHooksConfig accepts the upstream hookify plugin wrapper", async () =>
     },
     dropped: [],
     ifPredicates: new Map(),
+    declaresModule: false,
   });
 });
 
@@ -333,6 +424,7 @@ test("parseHooksConfig drops an unsupported event from the plugin wrapper", asyn
     value: {},
     dropped: [{ kind: "event", event: "Notification" }],
     ifPredicates: new Map(),
+    declaresModule: false,
   });
 });
 
@@ -359,6 +451,7 @@ test("parseHooksConfig keeps a supported event while dropping an unsupported sib
     },
     dropped: [{ kind: "event", event: "Notification" }],
     ifPredicates: new Map(),
+    declaresModule: false,
   });
 });
 
@@ -385,5 +478,6 @@ test("parseHooksConfig keeps a clean matcher group while dropping a regex group"
     },
     dropped: [{ kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" }],
     ifPredicates: new Map(),
+    declaresModule: false,
   });
 });

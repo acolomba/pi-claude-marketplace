@@ -100,6 +100,7 @@ for (const { label, raw, expectedValue, expectedDropped } of [
       value: expectedValue,
       dropped: expectedDropped,
       ifPredicates: new Map(),
+      declaresModule: false,
     });
   });
 }

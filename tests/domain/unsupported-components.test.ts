@@ -107,8 +107,9 @@ test("collectUnsupportedKinds reads direct and experimental declarations in tupl
   const manifest = { outputStyles: [], settings: false };
 
   // act
-  const kinds = await collectUnsupportedKinds(entry, manifest, "/plugins/alpha", () =>
-    Promise.reject(new Error("declarations must not probe conventions")),
+  const kinds = await collectUnsupportedKinds(
+    { entry, manifest, pluginRoot: "/plugins/alpha", declaresHookModule: false },
+    () => Promise.reject(new Error("declarations must not probe conventions")),
   );
 
   // assert
@@ -137,8 +138,9 @@ test("collectUnsupportedKinds detects every filesystem convention", async () => 
   ]);
 
   // act
-  const kinds = await collectUnsupportedKinds({}, null, pluginRoot, (candidate) =>
-    Promise.resolve(statKinds.get(candidate) ?? null),
+  const kinds = await collectUnsupportedKinds(
+    { entry: {}, manifest: null, pluginRoot, declaresHookModule: false },
+    (candidate) => Promise.resolve(statKinds.get(candidate) ?? null),
   );
 
   // assert
@@ -158,11 +160,47 @@ for (const { description, entry } of ignoredExperimentalCases) {
       await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
 
     // act
-    const kinds = await collectUnsupportedKinds(entry, null, "/plugins/alpha", () =>
-      Promise.resolve("file"),
+    const kinds = await collectUnsupportedKinds(
+      { entry, manifest: null, pluginRoot: "/plugins/alpha", declaresHookModule: false },
+      () => Promise.resolve("file"),
     );
 
     // assert
     assert.deepStrictEqual(kinds, ["lspServers", "monitors", "settings"]);
   });
 }
+
+test("UKIND-01: collectUnsupportedKinds reports mod from the declared hooks module", async () => {
+  // arrange
+  const { collectUnsupportedKinds } =
+    await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
+
+  // act
+  const kinds = await collectUnsupportedKinds(
+    { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", declaresHookModule: true },
+    () => Promise.resolve(null),
+  );
+
+  // assert
+  assert.deepStrictEqual(kinds, ["mod"]);
+});
+
+test("UKIND-01: collectUnsupportedKinds ignores a plugin field named mod", async () => {
+  // arrange
+  const { collectUnsupportedKinds } =
+    await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
+
+  // act
+  const kinds = await collectUnsupportedKinds(
+    {
+      entry: { mod: "./register.ts" },
+      manifest: { mod: "./register.ts" },
+      pluginRoot: "/plugins/alpha",
+      declaresHookModule: false,
+    },
+    () => Promise.resolve(null),
+  );
+
+  // assert
+  assert.deepStrictEqual(kinds, []);
+});

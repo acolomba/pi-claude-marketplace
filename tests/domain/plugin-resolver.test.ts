@@ -323,6 +323,68 @@ test("HOOK-01: hooks/hooks.json present + parseable -> installable WITH hooks in
   }
 });
 
+test("UKIND-01: a modules-only hooks/hooks.json resolves partially available with contains mod", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({ modules: ["./register.ts"] }),
+    },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["mod"],
+    notes: ["contains mod"],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
+});
+
+test("UKIND-01: command hooks beside a hooks module stay supported on the partially available arm", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        hooks: {
+          PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+        },
+        modules: ["./register.ts"],
+      }),
+    },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: ["hooks"],
+    unsupported: ["mod"],
+    notes: ["contains mod"],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    hooksConfigPath: path.join("hooks", "hooks.json"),
+    defaultEnabled: true,
+  });
+});
+
 // D-90-06: bin moved out of UNSUPPORTED_COMPONENT_KINDS. A plugin whose only
 // on-disk payload is a `bin/` directory resolves installable (its bin/ is
 // honored at runtime by the PENV-01 PATH ledger, not staged as a component),

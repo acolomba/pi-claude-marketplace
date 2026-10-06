@@ -11,7 +11,13 @@ import type { StatKindReader } from "./resolver-types.ts";
  *
  * SECURITY (T-02-25): The list is closed. A new kind upstream that is in
  * neither closed set would be silently ignored. Re-audit when Claude Code adds
- * component kinds.
+ * component kinds. The last audit, on 2026-10-06, read the Claude Code 2.1.291
+ * binary and https://code.claude.com/docs/en/plugins/mods/reference.
+ *
+ * UKIND-01: `mod` is a hooks module. A hooks file declares one with a
+ * non-empty top-level `modules` array. Hooks resolution checks
+ * `hooks/hooks.json` and reports the result as `declaresHookModule`. No plugin
+ * field selects this kind.
  *
  * D-90-06: `bin` is intentionally absent. A plugin's `<pluginRoot>/bin` is
  * runtime-honored through the PENV-01 PATH ledger, so a bin-shipping plugin
@@ -25,6 +31,7 @@ const UNSUPPORTED_COMPONENT_KINDS = [
   "channels",
   "userConfig",
   "settings",
+  "mod",
 ] as const;
 
 /** One member of the closed unsupported-component vocabulary. */
@@ -57,9 +64,17 @@ function nestedExperimentalValue(
 
 function declaresUnsupportedKind(
   kind: UnsupportedComponentKind,
-  entry: Record<string, unknown>,
-  manifest: Record<string, unknown> | null,
+  input: {
+    readonly entry: Record<string, unknown>;
+    readonly manifest: Record<string, unknown> | null;
+    readonly declaresHookModule: boolean;
+  },
 ): boolean {
+  if (kind === "mod") {
+    return input.declaresHookModule;
+  }
+
+  const { entry, manifest } = input;
   if (entry[kind] !== undefined || manifest?.[kind] !== undefined) {
     return true;
   }
@@ -96,21 +111,24 @@ async function hasUnsupportedConvention(
  * The injected stat reader keeps filesystem ownership with the resolver.
  */
 export async function collectUnsupportedKinds(
-  entry: Record<string, unknown>,
-  manifest: Record<string, unknown> | null,
-  pluginRoot: string,
+  input: {
+    readonly entry: Record<string, unknown>;
+    readonly manifest: Record<string, unknown> | null;
+    readonly pluginRoot: string;
+    readonly declaresHookModule: boolean;
+  },
   statKind: StatKindReader,
 ): Promise<UnsupportedComponentKind[]> {
   const found: UnsupportedComponentKind[] = [];
 
   for (const kind of UNSUPPORTED_COMPONENT_KINDS) {
-    if (declaresUnsupportedKind(kind, entry, manifest)) {
+    if (declaresUnsupportedKind(kind, input)) {
       found.push(kind);
       continue;
     }
 
     // eslint-disable-next-line no-await-in-loop -- bounded by the fixed unsupported-kind list, a few stats each
-    if (await hasUnsupportedConvention(pluginRoot, kind, statKind)) {
+    if (await hasUnsupportedConvention(input.pluginRoot, kind, statKind)) {
       found.push(kind);
     }
   }

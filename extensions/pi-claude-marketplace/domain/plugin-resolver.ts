@@ -560,7 +560,11 @@ async function addUnsupportedKindNotes(
   partial: PartialResolution,
 ): Promise<boolean> {
   let dirty = false;
-  for (const kind of await collectUnsupportedKinds(entry, manifest, pluginRoot, statKindOf(ctx))) {
+  const kinds = await collectUnsupportedKinds(
+    { entry, manifest, pluginRoot, declaresHookModule: partial.declaresHookModule === true },
+    statKindOf(ctx),
+  );
+  for (const kind of kinds) {
     partial.notes.push(`contains ${kind}`);
     partial.unsupported.push(kind);
     dirty = true;
@@ -588,6 +592,7 @@ export async function resolveStrict(
 
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
   // Claude Code default locations (.lsp.json, monitors/monitors.json, etc.).
+  // UKIND-01: `mod` comes from the hooks stage's `declaresHookModule` fact.
   // `hooks` is not in UNSUPPORTED_COMPONENT_KINDS -- HOOK-01 admission is
   // owned by step 8b. D-64-07: this signal does NOT feed `dirty` (it is
   // not a structural defect); it is read separately via `partial.unsupported`
