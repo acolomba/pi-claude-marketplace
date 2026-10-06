@@ -2,21 +2,9 @@
 
 ## [Unreleased]
 
-- Node.js 22.22.2 or a later 22.x release, 24.15.0 or a later 24.x release, or 26.0.0 or later is now required. Pi needs Node.js 22.19.0 or later, and the `write-file-atomic` dependency supports only these versions. (#234, #236)
+- Node.js 22.22.2 or a later 22.x release, 24.15.0 or a later 24.x release, or 26.0.0 or later is now required. (#234, #236)
 
-  - Internal: commits run quick checks on their staged files, and CI runs only on build-input changes. CI no longer runs the same check in two jobs, and direct coverage runs its source-test pairs concurrently.
-  - A Fallow rule pack now bans stdio, console, and network calls in the extension, and ESLint keeps the import-direction and git-surface rules.
-  - Pull requests, pushes to `main`, and `npm run check` measure direct coverage for every source-test pair, and SonarCloud reads that per-pair coverage.
-  - The `check:static` and `check:commit` scripts are new, and the `test:coverage:unit` script no longer exists.
-  - The `check:changed` script no longer exists.
-  - The TruffleHog hook scans the staged files instead of git history. It now finds secrets in every commit and works in worktrees, so worktree commits no longer skip it.
-  - Tests no longer compare the READMEs or other documents with the code, so `docs/output-catalog.md` is the only document that is a build input.
-  - `npm run check` no longer runs the unused type member gate, and the `lint:type-members` and `test:analyzers` scripts no longer exist.
-  - Direct coverage no longer reads a pin file, so any shortfall fails, and the `test:coverage:direct:report` script no longer exists.
-  - A Claude Code subagent in its own worktree gets the npm dependencies and a CodeGraph index of that worktree. Its CodeGraph queries use that index.
-  - Every check now fails on a warning, a passing local check prints one summary line at most, and CI prints the full output.
-  - `scripts/init.sh` no longer lets Fallow rewrite `AGENTS.md`, so the Fallow task map there no longer changes on a Fallow upgrade.
-  - Four unrelated decisions that comments, lint messages, and codebase notes cited by one shared ID now each have their own ID.
+  - Internal: commits now run fast checks on their staged files, CI runs the full check, and SonarCloud reads per-pair direct coverage.
 
 - A private marketplace or plugin source on any git host now clones with a credential that is already in your git credential helper. Before, only `github.com` and `gitlab.com` authenticated. Thanks to @jstillwa, who found this defect and the next two in #153. (#221)
 
