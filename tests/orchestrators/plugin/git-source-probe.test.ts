@@ -58,13 +58,19 @@ async function freshDirectory(testContext: TestContext, prefix: string): Promise
   return directory;
 }
 
-async function freshLocations(
-  testContext: TestContext,
-): Promise<{ locations: ScopedLocations; marketplaceRoot: string }> {
+async function freshLocations(testContext: TestContext): Promise<{
+  locations: ScopedLocations;
+  marketplaceRoot: string;
+  marketplaceContext: { readonly marketplaceRoot: string; readonly marketplaceName: string };
+}> {
   const marketplaceRoot = await freshDirectory(testContext, "git-source-probe-");
   const locations = locationsFor("project", marketplaceRoot);
   await mkdir(locations.extensionRoot, { recursive: true });
-  return { locations, marketplaceRoot };
+  return {
+    locations,
+    marketplaceRoot,
+    marketplaceContext: { marketplaceRoot, marketplaceName: "third-party" },
+  };
 }
 
 async function mirrorDirectory(locations: ScopedLocations, cloneUrl: string): Promise<string> {
@@ -293,11 +299,11 @@ describe("makePresenceProbe", () => {
 describe("probeManifestEntry", () => {
   test("classifies a cold GitHub entry as remote", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const entry: ManifestEntry = { name: "github-plugin", source: "owner/repo" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations);
 
     // assert
     assert.equal(result, "remote");
@@ -305,14 +311,14 @@ describe("probeManifestEntry", () => {
 
   test("classifies a cold git-subdir entry as remote", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const entry: ManifestEntry = {
       name: "subdir-plugin",
       source: { source: "git-subdir", url: SUBDIR_URL, path: "plugins/canva" },
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations);
 
     // assert
     assert.equal(result, "remote");
@@ -320,14 +326,14 @@ describe("probeManifestEntry", () => {
 
   test("classifies a cold URL entry as remote", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const entry: ManifestEntry = {
       name: "url-plugin",
       source: "https://example.com/url-plugin",
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations);
 
     // assert
     assert.equal(result, "remote");
@@ -335,11 +341,11 @@ describe("probeManifestEntry", () => {
 
   test("classifies a missing path entry as unavailable", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const entry: ManifestEntry = { name: "missing-path", source: "./plugins/missing" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations);
 
     // assert
     assert.equal(result, "unavailable");
@@ -347,12 +353,12 @@ describe("probeManifestEntry", () => {
 
   test("classifies an existing path entry as available", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceRoot, marketplaceContext } = await freshLocations(testContext);
     await mkdir(path.join(marketplaceRoot, "plugins", "path-plugin"), { recursive: true });
     const entry: ManifestEntry = { name: "path-plugin", source: "./plugins/path-plugin" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations);
 
     // assert
     assert.equal(result, "available");
@@ -360,12 +366,12 @@ describe("probeManifestEntry", () => {
 
   test("classifies an unsafe path entry name as unavailable", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceRoot, marketplaceContext } = await freshLocations(testContext);
     await mkdir(path.join(marketplaceRoot, "plugins", "unsafe"), { recursive: true });
     const entry: ManifestEntry = { name: "../escape", source: "./plugins/unsafe" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations);
 
     // assert
     assert.equal(result, "unavailable");
@@ -373,14 +379,14 @@ describe("probeManifestEntry", () => {
 
   test("classifies a warm corrupt mirror as unavailable", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const cloneUrl = "https://example.com/corrupt-manifest-plugin";
     const mirrorDir = await mirrorDirectory(locations, cloneUrl);
     await mkdir(path.join(mirrorDir, ".git"), { recursive: true });
     const entry: ManifestEntry = { name: "corrupt-plugin", source: cloneUrl };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations);
 
     // assert
     assert.equal(result, "unavailable");
@@ -388,7 +394,7 @@ describe("probeManifestEntry", () => {
 
   test("classifies a warm installable git entry as available", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const cloneUrl = "https://example.com/available-plugin";
     await cloneDirectory(locations, cloneUrl, SHA_A);
     const entry: ManifestEntry = {
@@ -397,7 +403,7 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations);
 
     // assert
     assert.equal(result, "available");
@@ -405,7 +411,7 @@ describe("probeManifestEntry", () => {
 
   test("classifies a warm missing git-subdir as unavailable", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     await cloneDirectory(locations, SUBDIR_URL, SHA_A);
     const entry: ManifestEntry = {
       name: "missing-subdir",
@@ -418,7 +424,7 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations);
 
     // assert
     assert.equal(result, "unavailable");
@@ -426,7 +432,7 @@ describe("probeManifestEntry", () => {
 
   test("classifies a warm partially available git entry", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const cloneUrl = "https://example.com/partial-plugin";
     await cloneDirectory(locations, cloneUrl, SHA_A);
     const entry: ManifestEntry = {
@@ -436,7 +442,50 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceRoot, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations);
+
+    // assert
+    assert.equal(result, "partially-available");
+  });
+
+  test("flags binaries on a path entry for an official marketplace name", async (testContext) => {
+    // arrange
+    const { locations, marketplaceRoot, marketplaceContext } = await freshLocations(testContext);
+    await mkdir(path.join(marketplaceRoot, "plugins", "path-plugin"), { recursive: true });
+    const entry: ManifestEntry = {
+      name: "path-plugin",
+      source: "./plugins/path-plugin",
+      ...{ binaries: { tool: "https://example.com/tool" } },
+    };
+
+    // act
+    const result = await probeManifestEntry(
+      entry,
+      { ...marketplaceContext, marketplaceName: "claude-plugins-official" },
+      locations,
+    );
+
+    // assert
+    assert.equal(result, "partially-available");
+  });
+
+  test("flags binaries on a warm git entry for an official marketplace name", async (testContext) => {
+    // arrange
+    const { locations, marketplaceContext } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/official-binaries";
+    await cloneDirectory(locations, cloneUrl, SHA_A);
+    const entry: ManifestEntry = {
+      name: "official-binaries",
+      source: { source: "url", url: cloneUrl, sha: SHA_A },
+      ...{ binaries: { tool: "https://example.com/tool" } },
+    };
+
+    // act
+    const result = await probeManifestEntry(
+      entry,
+      { ...marketplaceContext, marketplaceName: "claude-plugins-official" },
+      locations,
+    );
 
     // assert
     assert.equal(result, "partially-available");
@@ -446,7 +495,7 @@ describe("probeManifestEntry", () => {
 describe("probeUpgradeCandidate", () => {
   test("returns a complete unavailable candidate for a cold git entry", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const entry: ManifestEntry = {
       name: "cold-upgrade",
       source: "https://example.com/cold-upgrade",
@@ -454,7 +503,7 @@ describe("probeUpgradeCandidate", () => {
     };
 
     // act
-    const result = await probeUpgradeCandidate(entry, marketplaceRoot, locations);
+    const result = await probeUpgradeCandidate(entry, marketplaceContext, locations);
 
     // assert
     assert.deepStrictEqual(result, {
@@ -467,7 +516,7 @@ describe("probeUpgradeCandidate", () => {
 
   test("returns a complete warm candidate for a newer entry", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const cloneUrl = "https://example.com/newer-upgrade";
     const cloneDir = await cloneDirectory(locations, cloneUrl, SHA_B);
     const entry: ManifestEntry = {
@@ -478,7 +527,7 @@ describe("probeUpgradeCandidate", () => {
     };
 
     // act
-    const result = await probeUpgradeCandidate(entry, marketplaceRoot, locations);
+    const result = await probeUpgradeCandidate(entry, marketplaceContext, locations);
 
     // assert
     assert.deepStrictEqual(result, {
@@ -497,7 +546,7 @@ describe("probeUpgradeCandidate", () => {
 
   test("returns a complete warm candidate for a same-version entry", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const cloneUrl = "https://example.com/same-version-upgrade";
     const cloneDir = await cloneDirectory(locations, cloneUrl, SHA_A);
     const entry: ManifestEntry = {
@@ -507,7 +556,7 @@ describe("probeUpgradeCandidate", () => {
     };
 
     // act
-    const result = await probeUpgradeCandidate(entry, marketplaceRoot, locations);
+    const result = await probeUpgradeCandidate(entry, marketplaceContext, locations);
 
     // assert
     assert.deepStrictEqual(result, {
@@ -526,14 +575,14 @@ describe("probeUpgradeCandidate", () => {
 
   test("returns undefined when the presence probe fails", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const cloneUrl = "https://example.com/corrupt-upgrade";
     const mirrorDir = await mirrorDirectory(locations, cloneUrl);
     await mkdir(path.join(mirrorDir, ".git"), { recursive: true });
     const entry: ManifestEntry = { name: "corrupt-upgrade", source: cloneUrl };
 
     // act
-    const result = await probeUpgradeCandidate(entry, marketplaceRoot, locations);
+    const result = await probeUpgradeCandidate(entry, marketplaceContext, locations);
 
     // assert
     assert.equal(result, undefined);
@@ -541,17 +590,44 @@ describe("probeUpgradeCandidate", () => {
 
   test("returns undefined when resolution rejects an unsafe entry name", async (testContext) => {
     // arrange
-    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const { locations, marketplaceContext } = await freshLocations(testContext);
     const entry: ManifestEntry = {
       name: "../escape",
       source: "https://example.com/unsafe-upgrade",
     };
 
     // act
-    const result = await probeUpgradeCandidate(entry, marketplaceRoot, locations);
+    const result = await probeUpgradeCandidate(entry, marketplaceContext, locations);
 
     // assert
     assert.equal(result, undefined);
+  });
+
+  test("flags binaries on a warm candidate for an official marketplace name", async (testContext) => {
+    // arrange
+    const { locations, marketplaceContext } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/official-upgrade";
+    await cloneDirectory(locations, cloneUrl, SHA_B);
+    const entry: ManifestEntry = {
+      name: "official-upgrade",
+      source: { source: "url", url: cloneUrl, sha: SHA_B },
+      version: "2.0.0",
+      ...{ binaries: { tool: "https://example.com/tool" } },
+    };
+
+    // act
+    const candidate = await probeUpgradeCandidate(
+      entry,
+      { ...marketplaceContext, marketplaceName: "claude-plugins-official" },
+      locations,
+    );
+
+    // assert
+    assert.equal(candidate?.state, "partially-available");
+    assert.deepStrictEqual(
+      candidate?.state === "partially-available" ? candidate.unsupported : undefined,
+      ["binaries"],
+    );
   });
 });
 

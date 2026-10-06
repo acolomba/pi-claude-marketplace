@@ -2426,6 +2426,37 @@ describe("resolvePendingForceInstalls", () => {
     assert.deepStrictEqual(forceInstallKeys, new Set(["project\u0000mp\u0000cr"]));
   });
 
+  test("collects the key of an install whose binaries count for an official marketplace", async (t) => {
+    // arrange
+    const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "reconcile-official-"));
+    t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
+    await mkdir(path.join(marketplaceRoot, "cr"), { recursive: true });
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToInstall: [{ ...install, marketplace: "claude-plugins-official" }],
+      }),
+    ];
+    const locate = (): Promise<PendingInstallCandidate> =>
+      Promise.resolve({
+        marketplaceRoot,
+        manifestEntry: {
+          name: "cr",
+          source: "./cr",
+          version: "1.0.0",
+          binaries: { tool: "https://example.com/tool" },
+        },
+      });
+
+    // act
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+
+    // assert
+    assert.deepStrictEqual(
+      forceInstallKeys,
+      new Set(["project\u0000claude-plugins-official\u0000cr"]),
+    );
+  });
+
   test("collects no key for an install whose candidate resolves installable", async (t) => {
     // arrange
     const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "reconcile-clean-"));

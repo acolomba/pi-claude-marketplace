@@ -58,13 +58,17 @@ interface SeedOptions {
   readonly declared?: boolean;
   readonly version?: string;
   readonly source?: unknown;
+  readonly marketplaceName?: string;
+  readonly pluginJson?: Record<string, unknown>;
 }
 
 async function seedUpdate(options: SeedOptions = {}): Promise<{
   readonly cwd: string;
   readonly locations: ReturnType<typeof locationsFor>;
   readonly pluginRoot: string;
+  readonly marketplaceName: string;
 }> {
+  const marketplaceName = options.marketplaceName ?? "mp";
   const cwd = await mkdtemp(path.join(tmpdir(), "update-preflight-"));
   const marketplaceRoot = path.join(cwd, "marketplace");
   const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
@@ -72,7 +76,7 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
   await mkdir(path.join(pluginRoot, "skills", "tool"), { recursive: true });
   await writeFile(
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "hello", version: options.version ?? "2.0.0" }),
+    JSON.stringify({ name: "hello", version: options.version ?? "2.0.0", ...options.pluginJson }),
   );
   await writeFile(path.join(pluginRoot, "skills", "tool", "SKILL.md"), "---\nname: tool\n---\n");
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
@@ -80,7 +84,7 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
   await writeFile(
     manifestPath,
     JSON.stringify({
-      name: "mp",
+      name: marketplaceName,
       plugins:
         options.declared === false
           ? []
@@ -98,8 +102,8 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
   await saveState(locations.extensionRoot, {
     schemaVersion: 2,
     marketplaces: {
-      mp: {
-        name: "mp",
+      [marketplaceName]: {
+        name: marketplaceName,
         scope: "project",
         source: pathSource("./marketplace"),
         addedFromCwd: cwd,
@@ -109,7 +113,7 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
       },
     },
   });
-  return { cwd, locations, pluginRoot };
+  return { cwd, locations, pluginRoot, marketplaceName };
 }
 
 async function prepare(
@@ -130,7 +134,7 @@ async function prepare(
 ) {
   return preparePluginUpdate({
     plugin: "hello",
-    marketplace: "mp",
+    marketplace: seed.marketplaceName,
     scope: "project",
     locations: seed.locations,
     cleanupClones: options.cleanupClones ?? (async () => {}),
@@ -713,6 +717,28 @@ test("admits a partial candidate only with explicit partial permission", async (
   assert.strictEqual(strictOutcome.partialUpgradable, true);
   assert.ok(!("partition" in partialOutcome));
   assert.strictEqual(partialOutcome.installable.state, "partially-available");
+});
+
+test("flags binaries on a candidate of an official marketplace", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    installed: pluginRecord("1.0.0"),
+    marketplaceName: "claude-plugins-official",
+    pluginJson: { binaries: { tool: "https://example.com/tool" } },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  const prepared = await prepare(seed, { partial: true });
+
+  // assert
+  assert.ok(!("partition" in prepared));
+  assert.deepStrictEqual(
+    prepared.installable.state === "partially-available"
+      ? prepared.installable.unsupported
+      : undefined,
+    ["binaries"],
+  );
 });
 
 test("prepares pinned and unpinned URL clones with their exact resolved sha", async (t) => {

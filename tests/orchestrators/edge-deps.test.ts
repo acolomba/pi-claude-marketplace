@@ -54,6 +54,8 @@ interface FixturePlugin {
   readonly manifestVersion?: string;
   /** Declare an unsupported component kind on the manifest entry. */
   readonly declaresUnsupported?: boolean;
+  /** Declare a non-empty `binaries` map, unsupported only for an official marketplace. */
+  readonly declaresBinaries?: boolean;
   /** Create the on-disk plugin tree (default true). */
   readonly pluginTree?: boolean;
   readonly installed?: InstalledFixture;
@@ -159,6 +161,9 @@ async function layoutMarketplace(
       source: plugin.source ?? `./plugins/${plugin.name}`,
       ...(plugin.manifestVersion === undefined ? {} : { version: plugin.manifestVersion }),
       ...(plugin.declaresUnsupported === true ? { lspServers: { ls: {} } } : {}),
+      ...(plugin.declaresBinaries === true
+        ? { binaries: { tool: "https://example.com/tool" } }
+        : {}),
     }));
   await writeFile(
     manifestPath,
@@ -390,6 +395,26 @@ const bucketizerCases = [
     marketplace: "unversioned-mp",
     plugins: () => [{ name: "plug" }],
     rows: [{ name: "plug", status: "available" }],
+  },
+  {
+    title: "marks a not-installed binaries entry of an official marketplace partially available",
+    marketplace: "claude-plugins-official",
+    plugins: () => [{ name: "plug", manifestVersion: "3.0.0", declaresBinaries: true }],
+    rows: [{ name: "plug", status: "partially-available", version: "3.0.0" }],
+  },
+  {
+    title:
+      "marks an upgrade candidate with binaries of an official marketplace partially upgradable",
+    marketplace: "claude-plugins-official",
+    plugins: () => [
+      {
+        name: "plug",
+        manifestVersion: "2.0.0",
+        declaresBinaries: true,
+        installed: { version: "1.0.0" },
+      },
+    ],
+    rows: [{ name: "plug", status: "partially-upgradable", version: "1.0.0" }],
   },
   {
     title: "marks a not-installed entry with an unsupported component partially available",

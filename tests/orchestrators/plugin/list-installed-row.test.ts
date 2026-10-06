@@ -42,6 +42,7 @@ function pluginRecord(overrides: PluginRecordOverrides = {}): PluginInstallRecor
 }
 
 interface ManifestEntryOverrides {
+  readonly binaries?: Record<string, string>;
   readonly lspServers?: ManifestPluginEntry["lspServers"];
   readonly name?: string;
   readonly version?: string;
@@ -60,11 +61,12 @@ function manifestEntry(overrides: ManifestEntryOverrides = {}): ManifestPluginEn
 async function installedEnvironment(testContext: TestContext): Promise<{
   readonly cwd: string;
   readonly marketplaceRoot: string;
+  readonly marketplaceName: string;
 }> {
   const environment = await createHermeticEnvironment(testContext, "list-installed-row-");
   const marketplaceRoot = path.join(environment.cwd, "marketplace");
   await mkdir(marketplaceRoot, { recursive: true });
-  return { cwd: environment.cwd, marketplaceRoot };
+  return { cwd: environment.cwd, marketplaceRoot, marketplaceName: "third-party" };
 }
 
 test("composes a same-scope installed row with exact dependencies and description", async (testContext) => {
@@ -372,6 +374,36 @@ test("degrades a candidate probe failure to an upgradable row", async (testConte
     status: "upgradable",
     name: "bad/name",
     reasons: [],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+  });
+});
+
+test("flags binaries on an upgrade candidate of an official marketplace", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = {
+    ...(await installedEnvironment(testContext)),
+    marketplaceName: "claude-plugins-official",
+  };
+  await mkdir(path.join(environment.marketplaceRoot, "alpha"), { recursive: true });
+  const entry = manifestEntry({ version: "2.0.0", binaries: { tool: "https://example.com/tool" } });
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record: pluginRecord(),
+    lookup: { kind: "declared", entry },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "partially-upgradable",
+    name: "alpha",
+    reasons: ["unsupported component"],
     version: "1.0.0",
     description: "Alpha plugin.",
   });
