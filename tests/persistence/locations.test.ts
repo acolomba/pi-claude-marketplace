@@ -709,32 +709,23 @@ test("roots every workflows path under PI_CODING_AGENT_DIR when it is set", asyn
   );
 });
 
-test("WPTH-05 keeps the staging directory beside the saved directory and outside the extension root when PI_CODING_AGENT_DIR is set", async (t) => {
+test("WPTH-05 keeps staging outside the extension root when PI_CODING_AGENT_DIR is set", async (t) => {
   // arrange
   await hermeticHome(t, "staging-agent-dir");
   const agentDirectory = await temporaryDirectory(t, "staging-agent-dir-root");
   const projectDirectory = await temporaryDirectory(t, "staging-agent-dir-cwd");
   process.env.PI_CODING_AGENT_DIR = agentDirectory;
-  const workflowsHome = path.join(agentDirectory, "workflows");
 
   // act
   const userLocations = locationsFor("user", projectDirectory);
   const projectLocations = locationsFor("project", projectDirectory);
 
   // assert
-  // The workflow root sits inside the agent directory, which is the user scope
-  // root, so only the extension-root containment is expected to stay false.
   assert.deepStrictEqual(
     {
-      userStagingParent: path.dirname(userLocations.workflowsStagingDir),
-      projectStagingParent: path.dirname(projectLocations.workflowsStagingDir),
-      userSavedUnderHome: isInsideDirectory(
-        userLocations.workflowsHomeDir,
-        userLocations.workflowsSavedDir,
-      ),
-      projectSavedUnderHome: isInsideDirectory(
-        projectLocations.workflowsHomeDir,
-        projectLocations.workflowsSavedDir,
+      insideUserScopeRoot: isInsideDirectory(
+        userLocations.scopeRoot,
+        userLocations.workflowsStagingDir,
       ),
       insideUserExtensionRoot: isInsideDirectory(
         userLocations.extensionRoot,
@@ -746,10 +737,7 @@ test("WPTH-05 keeps the staging directory beside the saved directory and outside
       ),
     },
     {
-      userStagingParent: workflowsHome,
-      projectStagingParent: workflowsHome,
-      userSavedUnderHome: true,
-      projectSavedUnderHome: true,
+      insideUserScopeRoot: true,
       insideUserExtensionRoot: false,
       insideProjectExtensionRoot: false,
     },

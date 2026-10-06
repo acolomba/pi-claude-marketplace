@@ -106,11 +106,10 @@ export interface ScopedLocations {
   /**
    * The host workflow engine's storage root (WPTH-04), from `workflowHomeDir`:
    * `<agent dir>/workflows/` when `PI_CODING_AGENT_DIR` is non-empty, else
-   * `~/.pi/workflows/`. It does not hang off `scopeRoot`, so it is
-   * scope-INDEPENDENT: this member is byte-identical for
-   * `locationsFor("user", cwd)` and `locationsFor("project", cwd)`. It follows
-   * the engine's rule; any other root would put artifacts where the engine
-   * never looks.
+   * `~/.pi/workflows/`. It follows the engine's rule, not `scopeRoot`, so it
+   * is scope-INDEPENDENT: this member is byte-identical for
+   * `locationsFor("user", cwd)` and `locationsFor("project", cwd)`. Any other
+   * root would put artifacts where the engine never looks.
    */
   readonly workflowsHomeDir: string;
   /**
