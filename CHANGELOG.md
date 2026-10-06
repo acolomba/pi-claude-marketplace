@@ -2,11 +2,11 @@
 
 ## [Unreleased]
 
-- More plugins that hold components Pi cannot install now show as partially available. Pass `--partial` to install the rest. (#246)
+- More plugins with components that Pi cannot install are now partially available. Pass `--partial` to install the components that Pi supports. (#246)
 
-  - A hooks module that a hooks file declares in `modules` counts, and a `hooks.json` with only a module no longer makes its plugin unavailable.
-  - `syntaxHighlighting` counts, and output styles and syntax highlighting under `experimental` count too.
-  - A `binaries` map counts only in an official Anthropic marketplace, the only place Claude Code downloads those files.
+  - A hooks module (a non-empty `modules` array in a hooks file) makes its plugin partially available. A `hooks.json` with only a module no longer makes its plugin unavailable.
+  - `syntaxHighlighting`, and `outputStyles` or `syntaxHighlighting` under `experimental`, now make a plugin partially available.
+  - A non-empty `binaries` map makes its plugin partially available only in one of Claude Code's official marketplaces, such as `claude-plugins-official`.
 
 - Internal: ESLint now enforces `no-await-in-loop` in the extension, the local equivalent of SonarCloud rule S9382, and every sequential loop states why it runs in order. (#238)
 
