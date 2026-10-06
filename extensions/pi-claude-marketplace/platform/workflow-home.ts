@@ -2,7 +2,7 @@
 //
 // WPTH-04: the storage root of the host workflow engine. This module copies
 // the engine's own rule, so the bridge writes envelopes where the engine reads
-// them. The rule, transcribed from `src/workflow-paths.ts:30-34` in
+// them. The rule, transcribed from `src/workflow-paths.ts` in
 // `@quintinshaw/pi-dynamic-workflows@3.14.0`
 // (QuintinShaw/pi-dynamic-workflows#238): when `PI_CODING_AGENT_DIR` is
 // truthy, the root is `join(getAgentDir(), "workflows")`. Otherwise it is
@@ -31,6 +31,8 @@ import { getAgentDir } from "./pi-api.ts";
  * `PI_CODING_AGENT_DIR` is non-empty, else `<homedir>/.pi/workflows`.
  */
 export function workflowHomeDir(): string {
+  // Not redundant with `getAgentDir`'s own check: the unset default here is
+  // `~/.pi/workflows`, not `<default agent dir>/workflows`.
   if (process.env.PI_CODING_AGENT_DIR) {
     return path.join(getAgentDir(), "workflows");
   }

@@ -227,6 +227,7 @@ Specifically, at 3.10.1 and unchanged at 3.13.0:
 
 - User-scope envelopes live under `~/.pi/workflows/saved/`, project-scope under `~/.pi/workflows/projects/<key>/saved/`, where `<key>` is a slug of the project directory's basename joined to the first 12 hex characters of a SHA-256 of its resolved absolute path (source-read at 3.10.1, `src/workflow-paths.ts:36-55`).
 - There is no environment-variable override and no settings knob to relocate that storage. The home directory is read from `os.homedir()` and nothing else.
+- Engine 3.14.0 changes the root when `PI_CODING_AGENT_DIR` is set. The paragraph after this list describes it.
 - The vendored determinism blocklist is a private constant with no exported contract, so it has to be re-checked against each engine upgrade rather than imported.
 - The engine depends on `acorn ^8.16.0`, the same range this bridge declares for its own `meta.name` extraction. The bridge keeps its own direct dependency, because it parses scripts whether or not the engine is installed.
 
@@ -235,6 +236,8 @@ Engine 3.14.0 adds one environment-variable override for that storage, in engine
 Releases before 3.14.0 do not include that pull request and ignore the variable. With such a release and `PI_CODING_AGENT_DIR` set, the engine reads `~/.pi/workflows/`, and this bridge writes under `$PI_CODING_AGENT_DIR/workflows/` (runtime-measured at 3.13.0). The engine then does not find the workflows that this extension installs. With the variable unset, both sides use `~/.pi/workflows/` (runtime-measured at 3.13.0 and at 3.14.0). If you set the variable, use engine 3.14.0 or later.
 
 The engine's 3.14.0 release notes say that setting the variable does not move existing workflow data. To keep the workflows saved under `~/.pi/workflows/`, copy that directory to `$PI_CODING_AGENT_DIR/workflows/`.
+
+This extension does not move them either. It recomputes the root on every command. After you set or change the variable, uninstall, update, reinstall and reconcile look under the new root. Uninstall skips a workflow file that is missing there without an error, so the files under the old root stay in place. After the variable changes, reinstall the bridge-installed workflows or move them.
 
 ## Install-time disposition
 
