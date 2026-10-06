@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 3
 current_phase_name: Claude Code tool names and tool search
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-10-06T17:12:39.267Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-10-06T17:22:03.081Z"
 last_activity: 2026-10-06
 last_activity_desc: Phase 3 execution started
-state_head: 07c96f65bdb6a07577d6ab21e140aa88bb51f109
+state_head: f163778f2bfd20df14e72765a1e4d2201cb27065
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 30
-  completed_plans: 22
+  completed_plans: 23
   percent: 29
 ---
 
@@ -35,7 +35,7 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 3 (Claude Code tool names and tool search) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-10-06 — Phase 3 execution started
 
@@ -268,6 +268,7 @@ still open with a comment explaining what landed.
 | Phase 02 P07 | 25min | 3 tasks | 10 files |
 | Phase 02 P08 | 30min | 3 tasks | 12 files |
 | Phase 03 P01 | 18 min | 3 tasks | 16 files |
+| Phase 03 P02 | 5 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -608,6 +609,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: Import keeps its notice list module-private and strips it from ClaudeImportExecutionResult; the marketplace update cascade reads notices from updated and failed outcomes
 - [Phase 03]: Plugin MCP entries are keyed plugin_<plugin>_<server>_ by generatedMcpServerKey; state.json keeps declared names and cascade unstage maps keys back
 - [Phase 03]: Stamping warnings and override-kept notices name the generated server key
+- [Phase 03]: Hook matchers accept mcp__<server>__.* as a string server prefix (toolPrefixes on the tool-set arm); every other regex matcher still drops (MATCH-02)
 
 ### Pending Todos
 
@@ -739,11 +741,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-01-PLAN.md
+**Stopped at:** Completed 03-02-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-06T17:12:39.048Z
+Last session: 2026-10-06T17:22:02.874Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 

@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "Claude Code tool names and tool search",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "4",
@@ -44,5 +44,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 3 of 7 · 29% · executing"
   },
-  "updated_at": "2026-10-06T17:12:35.964Z"
+  "updated_at": "2026-10-06T17:22:00.340Z"
 }

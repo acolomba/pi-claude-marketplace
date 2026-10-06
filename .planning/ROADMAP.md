@@ -194,11 +194,11 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. Plugin MCP tools load on demand: entries carry `directTools: "search"` and the tools are found through Pi's tool search, while a server marked `alwaysLoad` gets `directTools: true`. Entries leave `lifecycle` unset, so the adapter's `lazy` default applies, and the divergence from Claude Code's session-long connection is documented. (ANAME-04, ANAME-05)
 5. Each entry carries the server `description` from the plugin manifest. `sse` becomes `httpTransport`, and the request timeout and OAuth callback port are translated. A server that uses a Claude feature the adapter cannot honor (`ws`, `headersHelper`, ...) makes the plugin partially available with `{unsupported mcp}`: a normal install refuses with the `--partial` hint, `--partial` installs it without the affected servers, and `info` names each server and feature. (ANAME-06, ANAME-07; amended by D-03-10)
 
-**Plans**: 1/9 plans executed in 5 waves
+**Plans**: 2/9 plans executed in 5 waves
 
 **Wave 1**
 - [x] 03-01-PLAN.md — entries under the Claude Code key `plugin_<plugin>_<server>_` with `toolPrefix: "mcp"` and `directTools`; records keep declared names (ANAME-01, ANAME-04)
-- [ ] 03-02-PLAN.md — hook matchers `mcp__<server>__.*` match delivered tools; literal and `if:` forms proven (ANAME-02)
+- [x] 03-02-PLAN.md — hook matchers `mcp__<server>__.*` match delivered tools; literal and `if:` forms proven (ANAME-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 03-03-PLAN.md — closed Claude-to-adapter translation table, OAuth and timeout rules, manifest `description` (ANAME-04, ANAME-05, ANAME-06, ANAME-07)
@@ -317,7 +317,7 @@ plan these phases with the UI gate skipped.
 |-------|-----------|----------------|--------|-----------|
 | 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 9/9 | Complete    | 2026-10-02 |
 | 2. Adapter-file delivery | mcp-4 | 12/12 | Complete    | 2026-10-06 |
-| 3. Claude Code tool names and tool search | mcp-4 | 1/9 | In Progress | - |
+| 3. Claude Code tool names and tool search | mcp-4 | 2/9 | In Progress | - |
 | 4. Variable expansion at Claude Code parity | mcp-4 | 0/TBD | Not started | - |
 | 5. Automatic migration on /reload | mcp-4 | 0/TBD | Not started | - |
 | 6. Live MCP status in info | mcp-4 | 0/TBD | Not started | - |
