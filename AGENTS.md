@@ -9,7 +9,7 @@ Before editing any file, read it first. Before modifying a function, trace its c
 ### Git
 
 - NEVER commit to the main branch.
-- Branch names: `main`, `features/*`, `releases/*`. New feature branches use `features/<name>`.
+- Branch names: `main`, `features/*`, `releases/*`, and `agent-*` for temporary agent worktree branches. New feature branches use `features/<name>`.
 - Git commit messages and PR titles: Follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/#specification). Titles must be at least 5 characters and no more than 72 characters. Body lines must be no more than 80 characters. Avoid GSD milestone/phases mentions.
 - Before `git commit`, run `SKIP=npm-check pre-commit run --files <changed files>`. It runs only the fixers and linters and takes seconds. If a fixer changes a file, restage the file and run the command again until it is clean. To run them on every file, as the CI Lint workflow does, use `SKIP=npm-check pre-commit run --all-files`.
 - Then run `git commit` in the foreground with the longest tool timeout available. Its hook runs `npm run check:commit` when a staged file is a build input. Never background it and poll with sleep/grep loops. If a run can outlast the tool's foreground limit, background it once and wait for the completion notification. If a hook fails during `git commit`, the commit did NOT happen: fix the cause, restage, and commit again. Never use `--amend` for this, because it would alter the previous commit. Do not run ESLint, type checking, or tests just before committing: the hook runs the checks for the staged files.

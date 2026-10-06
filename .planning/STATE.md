@@ -1,14 +1,14 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 5
+current_phase: 05
 current_phase_name: Mode-Selected JSON Sink
 status: executing
-stopped_at: Phase 5 execution awaits worktree branch-policy resolution
-last_updated: "2026-10-06T17:41:56.861Z"
+stopped_at: Phase 5 ready for isolated executor dispatch
+last_updated: "2026-10-06T18:23:25.953Z"
 last_activity: 2026-10-06
-last_activity_desc: Phase 5 plans verified; worktree creator rejected required branch namespace
-state_head: fe3e0a399be7a5f29217fae9e737034831518eeb
+last_activity_desc: Phase 05 execution started
+state_head: 259497f56606d6efe212176210b94afb611f6cb8
 progress:
   total_phases: 7
   completed_phases: 4
@@ -30,10 +30,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 5 (Mode-Selected JSON Sink) — READY TO EXECUTE
-Plan: 0 of 7 complete
-Status: Plans verified; execution blocked on worktree branch policy
-Last activity: 2026-10-06 — Phase 5 plans verified; no executor launched because GSD rejected the required features/* namespace
+Phase: 05 (Mode-Selected JSON Sink) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 05
+Last activity: 2026-10-06 — Phase 05 execution started
 
 Progress: [██████░░░░] 57% (4 of 7 phases fully verified; 28 of 35 plans complete)
 
@@ -170,8 +170,8 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Last session:** 2026-10-06T15:09:52+00:00
-**Stopped at:** Phase 5 plans verified; executor dispatch awaits branch-policy resolution
-**Resume file:** .planning/phases/05-mode-selected-json-sink/.continue-here.md
+**Stopped at:** Phase 5 plans verified; branch-policy conflict resolved
+**Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
@@ -227,11 +227,12 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Resolve the worktree namespace conflict, then execute the seven verified
-  Phase 5 plans starting with 05-01. GSD accepts only `agent-*`,
-  `worktree-agent-*`, or `worktree-wf_*` branches; AGENTS.md requires
-  `features/*`. No worktree or worker was created. Either permit temporary
-  GSD branch names or explicitly use sequential execution on `features/json`.
+- Execute the seven verified Phase 5 plans starting with 05-01 in isolated
+  worktrees. On 2026-10-06 the user selected option 1 and authorized a permanent
+  AGENTS.md exception for temporary `agent-*` branches. GSD's existing validator
+  accepts that namespace; project scripts and hooks add no conflicting check.
+  The feature branch remains `features/json`. No implementation worker has
+  started yet.
 
 ## Performance Metrics
 
