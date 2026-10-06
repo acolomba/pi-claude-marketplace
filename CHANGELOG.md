@@ -38,8 +38,8 @@
   - Only `.js` files are workflow scripts, as in Claude Code. The `workflows` manifest field can name a single `.js` file as well as a directory.
   - Installed plugin Markdown that names a sibling workflow as `plugin:workflow` gets the workflow's installed command name, the same way it does for sibling skills and commands.
   - The extension now depends on `acorn` to read the metadata that a workflow script declares.
-  - With `PI_CODING_AGENT_DIR` set, workflows install under `$PI_CODING_AGENT_DIR/workflows` and need `pi-dynamic-workflows` 3.14.0 or later.
-  - If you set or change the variable after you installed workflow plugins, reinstall them or move the files. The old location is not cleaned up automatically.
+  - If `PI_CODING_AGENT_DIR` is set, workflows install under `$PI_CODING_AGENT_DIR/workflows`, which `pi-dynamic-workflows` reads from 3.14.0. Update the engine to 3.14.0 or later.
+  - If you set or change `PI_CODING_AGENT_DIR` after you install workflow plugins, reinstall those plugins or move their workflows to the new directory.
 
 - A plugin can declare the other plugins it needs, and `install` now installs them with it. See [Dependency resolution](docs/dependency-resolution.md). (#198)
 
