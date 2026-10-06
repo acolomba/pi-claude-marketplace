@@ -73,7 +73,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
   `mcp__plugin_<plugin>_<server>__<tool>`, by writing the server key `plugin_<plugin>_<server>_`
   (Claude's normalization: every character outside `[A-Za-z0-9_-]` becomes `_`) with
   `toolPrefix: "mcp"` pinned on the entry.
-- [ ] **ANAME-02**: Plugin hook matchers and agent `tools:` entries that name the plugin's own MCP
+- [x] **ANAME-02**: Plugin hook matchers and agent `tools:` entries that name the plugin's own MCP
   tools in Claude form match the delivered tools.
 - [x] **ANAME-03**: Two servers whose normalized keys collide (including `-`/`_` folding) are
   refused at install with a clear reason. The tool-name length Pi 1.0 accepts was measured: Pi
@@ -176,7 +176,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | AFILE-05 | Phase 2 | Complete |
 | AFILE-06 | Phase 2 | Complete |
 | ANAME-01 | Phase 3 | Complete |
-| ANAME-02 | Phase 3 | Pending |
+| ANAME-02 | Phase 3 | Complete |
 | ANAME-03 | Phase 3 | Complete |
 | ANAME-04 | Phase 3 | Pending |
 | ANAME-05 | Phase 3 | Pending |
