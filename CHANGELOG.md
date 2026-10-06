@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- More plugins that hold components Pi cannot install now show as partially available. Pass `--partial` to install the rest. (#246)
+
+  - A hooks module that `hooks.json` names in `modules` counts, and a `hooks.json` with only a module no longer makes its plugin unavailable.
+  - `syntaxHighlighting` counts, and output styles and syntax highlighting under `experimental` count too.
+  - A `binaries` map counts only in an official Anthropic marketplace, the only place Claude Code downloads those files.
+
 - Internal: ESLint now enforces `no-await-in-loop` in the extension, the local equivalent of SonarCloud rule S9382, and every sequential loop states why it runs in order. (#238)
 
 - Node.js 22.22.2 or a later 22.x release, 24.15.0 or a later 24.x release, or 26.0.0 or later is now required. (#234, #236)
