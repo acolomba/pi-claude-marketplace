@@ -662,6 +662,100 @@ test("WPTH-05 keeps the staging directory outside every scope and extension root
   );
 });
 
+test("roots every workflows path under PI_CODING_AGENT_DIR when it is set", async (t) => {
+  // arrange
+  await hermeticHome(t, "agent-dir-values");
+  const agentDirectory = await temporaryDirectory(t, "agent-dir");
+  const projectDirectory = await temporaryDirectory(t, "agent-dir-cwd");
+  process.env.PI_CODING_AGENT_DIR = agentDirectory;
+  const workflowsHome = path.join(agentDirectory, "workflows");
+  const expectedValues = {
+    user: {
+      workflowsHomeDir: workflowsHome,
+      workflowsSavedDir: path.join(workflowsHome, "saved"),
+      workflowsStagingDir: path.join(workflowsHome, ".pi-claude-marketplace-staging"),
+    },
+    project: {
+      workflowsHomeDir: workflowsHome,
+      workflowsSavedDir: path.join(
+        workflowsHome,
+        "projects",
+        workflowProjectKey(projectDirectory),
+        "saved",
+      ),
+      workflowsStagingDir: path.join(workflowsHome, ".pi-claude-marketplace-staging"),
+    },
+  };
+
+  // act
+  const userLocations = locationsFor("user", projectDirectory);
+  const projectLocations = locationsFor("project", projectDirectory);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      user: {
+        workflowsHomeDir: userLocations.workflowsHomeDir,
+        workflowsSavedDir: userLocations.workflowsSavedDir,
+        workflowsStagingDir: userLocations.workflowsStagingDir,
+      },
+      project: {
+        workflowsHomeDir: projectLocations.workflowsHomeDir,
+        workflowsSavedDir: projectLocations.workflowsSavedDir,
+        workflowsStagingDir: projectLocations.workflowsStagingDir,
+      },
+    },
+    expectedValues,
+  );
+});
+
+test("WPTH-05 keeps the staging directory beside the saved directory and outside the extension root when PI_CODING_AGENT_DIR is set", async (t) => {
+  // arrange
+  await hermeticHome(t, "staging-agent-dir");
+  const agentDirectory = await temporaryDirectory(t, "staging-agent-dir-root");
+  const projectDirectory = await temporaryDirectory(t, "staging-agent-dir-cwd");
+  process.env.PI_CODING_AGENT_DIR = agentDirectory;
+  const workflowsHome = path.join(agentDirectory, "workflows");
+
+  // act
+  const userLocations = locationsFor("user", projectDirectory);
+  const projectLocations = locationsFor("project", projectDirectory);
+
+  // assert
+  // The workflow root sits inside the agent directory, which is the user scope
+  // root, so only the extension-root containment is expected to stay false.
+  assert.deepStrictEqual(
+    {
+      userStagingParent: path.dirname(userLocations.workflowsStagingDir),
+      projectStagingParent: path.dirname(projectLocations.workflowsStagingDir),
+      userSavedUnderHome: isInsideDirectory(
+        userLocations.workflowsHomeDir,
+        userLocations.workflowsSavedDir,
+      ),
+      projectSavedUnderHome: isInsideDirectory(
+        projectLocations.workflowsHomeDir,
+        projectLocations.workflowsSavedDir,
+      ),
+      insideUserExtensionRoot: isInsideDirectory(
+        userLocations.extensionRoot,
+        userLocations.workflowsStagingDir,
+      ),
+      insideProjectExtensionRoot: isInsideDirectory(
+        projectLocations.extensionRoot,
+        projectLocations.workflowsStagingDir,
+      ),
+    },
+    {
+      userStagingParent: workflowsHome,
+      projectStagingParent: workflowsHome,
+      userSavedUnderHome: true,
+      projectSavedUnderHome: true,
+      insideUserExtensionRoot: false,
+      insideProjectExtensionRoot: false,
+    },
+  );
+});
+
 test("keeps the staging directory adjacent to the saved directory", async (t) => {
   // arrange
   const home = await hermeticHome(t, "adjacency");
