@@ -75,16 +75,20 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
   `toolPrefix: "mcp"` pinned on the entry.
 - [ ] **ANAME-02**: Plugin hook matchers and agent `tools:` entries that name the plugin's own MCP
   tools in Claude form match the delivered tools.
-- [ ] **ANAME-03**: Two servers whose normalized keys collide, or whose tool names exceed the
-  length Pi 1.0 accepts (measured first), are refused or warned at install with a clear reason.
+- [ ] **ANAME-03**: Two servers whose normalized keys collide (including `-`/`_` folding) are
+  refused at install with a clear reason; a server whose tool-name prefix alone reaches the
+  length Pi 1.0 accepts (measured first) makes the plugin partially available (amended in
+  Phase 3 discussion, D-03-10..13).
 - [ ] **ANAME-04**: Plugin MCP tools are loaded on demand through Pi's tool search
   (`directTools: "search"`), and a server marked `alwaysLoad` gets `directTools: true`.
 - [ ] **ANAME-05**: Entries leave `lifecycle` unset (adapter default `lazy`); the divergence from
   Claude Code's session-long connection is documented.
 - [ ] **ANAME-06**: The server `description` from the plugin manifest is written to the entry.
 - [ ] **ANAME-07**: Claude transport and option fields are translated to adapter fields (`sse` ->
-  `httpTransport`, request timeout, OAuth callback port); fields with no adapter equivalent (`ws`,
-  `headersHelper`) produce an install warning.
+  `httpTransport`, request timeout, OAuth callback port); a Claude feature with no adapter
+  equivalent (`ws`, `headersHelper`, ...) makes the plugin partially available with
+  `{unsupported mcp}`, and `--partial` installs it without the affected servers (amended in
+  Phase 3 discussion, D-03-10).
 - [ ] **AVAR-01**: `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}` and project-scope
   `${CLAUDE_PROJECT_DIR}` are expanded at install time, in Claude's fields only (stdio `command`,
   `args`, `env` values; remote `url`, `headers`).
