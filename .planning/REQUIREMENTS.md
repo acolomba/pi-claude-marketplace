@@ -69,7 +69,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 
 ### Entry translation (ANAME, AVAR)
 
-- [ ] **ANAME-01**: A plugin MCP server's tools reach the model as Claude Code names them,
+- [x] **ANAME-01**: A plugin MCP server's tools reach the model as Claude Code names them,
   `mcp__plugin_<plugin>_<server>__<tool>`, by writing the server key `plugin_<plugin>_<server>_`
   (Claude's normalization: every character outside `[A-Za-z0-9_-]` becomes `_`) with
   `toolPrefix: "mcp"` pinned on the entry.
@@ -83,7 +83,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 - [ ] **ANAME-05**: Entries leave `lifecycle` unset (adapter default `lazy`); the divergence from
   Claude Code's session-long connection is documented.
 - [x] **ANAME-06**: The server `description` from the plugin manifest is written to the entry.
-- [ ] **ANAME-07**: Claude transport and option fields are translated to adapter fields (`sse` ->
+- [x] **ANAME-07**: Claude transport and option fields are translated to adapter fields (`sse` ->
   `httpTransport`, request timeout, OAuth callback port); a Claude feature with no adapter
   equivalent (`ws`, `headersHelper`, ...) makes the plugin partially available with
   `{unsupported mcp}`, and `--partial` installs it without the affected servers (amended in
@@ -175,13 +175,13 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | AFILE-04 | Phase 2 | Complete |
 | AFILE-05 | Phase 2 | Complete |
 | AFILE-06 | Phase 2 | Complete |
-| ANAME-01 | Phase 3 | Pending |
+| ANAME-01 | Phase 3 | Complete |
 | ANAME-02 | Phase 3 | Pending |
 | ANAME-03 | Phase 3 | Complete |
 | ANAME-04 | Phase 3 | Pending |
 | ANAME-05 | Phase 3 | Pending |
 | ANAME-06 | Phase 3 | Complete |
-| ANAME-07 | Phase 3 | Pending |
+| ANAME-07 | Phase 3 | Complete |
 | AVAR-01 | Phase 4 | Pending |
 | AVAR-02 | Phase 4 | Pending |
 | AVAR-03 | Phase 4 | Pending |
