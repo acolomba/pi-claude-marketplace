@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-06T13:52:26.889Z"
+last_updated: "2026-10-06T20:18:38.797Z"
 last_activity: 2026-10-06
 last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
-state_head: e0b0abac80aec9c3ef91c3f443e66b0a92be14af
+state_head: 6129e7bd47b64e6ae9cdbb4eb3bf78c2b9079bfe
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-06 - Completed quick task 261006-cwq: Pin workflow engine 3.13.1 and update compatibility notes after upstream PRs #233/#234 shipped
+Last activity: 2026-10-06 - Completed quick task 261006-kr1: Adopt workflow engine 3.14.0: mirror PI_CODING_AGENT_DIR storage root and bump pins
 
 ### workflows-replay closeout (merged from main)
 
@@ -632,6 +632,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 45 | Cut the #236 CHANGELOG entry to the changelog rules | 2026-10-05 | caeb4a40 | — |
 | 261005-x56 | Enforce no-await-in-loop as the local S9382 and state why each sequential loop runs in order | 2026-10-06 | 195c056d | [261005-x56-enforce-no-await-in-loop-as-the-local-s9](./quick/261005-x56-enforce-no-await-in-loop-as-the-local-s9/) |
 | 261006-cwq | Pin workflow engine 3.13.1 and update compatibility notes after upstream PRs #233/#234 shipped | 2026-10-06 | e0b0abac | [261006-cwq-update-workflow-engine-compatibility-doc](./quick/261006-cwq-update-workflow-engine-compatibility-doc/) |
+| 261006-kr1 | Adopt workflow engine 3.14.0: mirror PI_CODING_AGENT_DIR storage root and bump pins | 2026-10-06 | 6129e7bd | [261006-kr1-adopt-workflow-engine-3-14-0-mirror-pi-c](./quick/261006-kr1-adopt-workflow-engine-3-14-0-mirror-pi-c/) |
 
 ## Deferred Items
 
