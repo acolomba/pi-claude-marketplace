@@ -26,8 +26,8 @@ import type { GitCredentials } from "./git.ts";
  *
  * Structurally identical to `domain/github-auth.ts::DeviceFlowResult`.
  * Declared LOCALLY in the platform tier so this module honors the
- * platform → domain import prohibition (`platform/README.md`: platform/
- * may import from shared/ only). `orchestrators/auth-host.ts` wraps
+ * platform → domain import prohibition (the `platform` boundary zone in
+ * `.fallowrc.json` may import from `shared` only). `orchestrators/auth-host.ts` wraps
  * `initiateDeviceFlow` in a memoizing closure and passes that closure as
  * `onAuthRequired`; TypeScript's structural typing accepts the assignment
  * with no adapter -- no shared type declaration is needed across tiers.
@@ -60,7 +60,7 @@ export type OnAuthRequiredFn = () => Promise<AuthAttemptResult>;
  *     only by storing it again (GAUTH-04, D-1-01).
  *
  * The orchestrator picks the kind; this module holds no provider knowledge
- * (`platform/README.md`: platform/ may import from shared/ only).
+ * (the `platform` boundary zone in `.fallowrc.json` may import from `shared` only).
  */
 export type BuildAuthCallbacksOpts =
   | {

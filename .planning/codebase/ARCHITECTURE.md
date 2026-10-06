@@ -178,7 +178,7 @@ last_mapped_at: 2026-10-05
 
 **Phase<C> ledger:**
 - Purpose: an ordered array of `{ name, do, undo }` phases executed in sequence; any `do` throw unwinds all prior `undo`s in reverse order
-- Examples: `extensions/pi-claude-marketplace/transaction/phase-ledger.ts`. Inner consumer: `orchestrators/plugin/install-outcome.ts` (`runInstallLedgerBody` builds the literal 6-element `skillsPhase, commandsPhase, agentsPhase, hooksPhase, mcpPhase, statePhase` array and hands it to `transaction.runPhases`; the header calls the array order part of the contract and forbids replacing it with a dynamic builder). Outer consumer: `orchestrators/plugin/install-cascade.ts` (one phase per dependency-closure member, array derived from the walk's post-order)
+- Examples: `extensions/pi-claude-marketplace/transaction/phase-ledger.ts`. Inner consumer: `orchestrators/plugin/install-outcome.ts` (`runInstallLedgerBody` builds the literal 7-element `skillsPhase, commandsPhase, agentsPhase, hooksPhase, mcpPhase, workflowsPhase, statePhase` array and hands it to `transaction.runPhases`; the header calls the array order part of the contract and forbids replacing it with a dynamic builder). Outer consumer: `orchestrators/plugin/install-cascade.ts` (one phase per dependency-closure member, array derived from the walk's post-order)
 - Pattern: `enable-disable.ts` reuses the same materialization by calling `install-outcome.ts`'s exported `runInstallLedger`, not by constructing its own `Phase<C>` array. The update family (`update-flow.ts`/`update-swap.ts`) intentionally bypasses `runPhases` for a hand-rolled heterogeneous-undo flow of its own design.
 
 **Resolver discriminated union:**

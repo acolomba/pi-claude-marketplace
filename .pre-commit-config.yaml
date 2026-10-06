@@ -49,6 +49,8 @@ repos:
       - id: trufflehog
         entry: trufflehog filesystem --results=verified --fail --no-update
         pass_filenames: true
+        # Without it, the hook also runs at the commit-msg stage and scans the commit message file.
+        stages: [pre-commit]
 
   - repo: https://github.com/jorisroovers/gitlint
     rev: v0.19.1
