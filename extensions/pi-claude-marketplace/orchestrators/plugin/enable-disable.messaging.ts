@@ -88,6 +88,7 @@ const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status
       probe,
     ),
   "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
+  // fallow-ignore-next-line code-duplication -- reviewed: per-command typed render-map arms are one-line calls to shared row composers; extracting them needs a cross-command generic.
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };
