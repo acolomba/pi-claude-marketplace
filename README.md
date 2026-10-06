@@ -26,7 +26,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 - Skills.
 - Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
-- MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
+- MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
 
 Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
@@ -120,13 +120,15 @@ Skills use Pi's `/skill:` form and also have an alias in interactive sessions:
 
 Skill aliases use a colon on every platform. If an alias conflicts with a command, the command takes precedence. Use `/skill:foo-bar` to invoke the skill.
 
-MCP server names do not change. If another MCP configuration already uses that name, the plugin install or update fails.
+Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`.
 
-| Plugin name | `mcpServers` key | Pi MCP server name                 |
-| ----------- | ---------------- | ---------------------------------- |
-| `foo`       | `api`            | `api`                              |
-| `foo`       | `foo-api`        | `foo-api`                          |
-| `bar`       | `api`            | _conflict if `api` already exists_ |
+| Plugin name | `mcpServers` key | Adapter server key  | Tool names                      | Name shown by `info` |
+| ----------- | ---------------- | ------------------- | ------------------------------- | -------------------- |
+| `foo`       | `api`            | `plugin_foo_api_`   | `mcp__plugin_foo_api__<tool>`   | `plugin:foo:api`     |
+| `foo`       | `my.db`          | `plugin_foo_my_db_` | `mcp__plugin_foo_my_db__<tool>` | `plugin:foo:my.db`   |
+| `bar`       | `api`            | `plugin_bar_api_`   | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`     |
+
+Two plugins can use the same server name, because each key holds the plugin name. The plugin install or update fails if another MCP configuration already defines the same key, or a key that differs only by `-` versus `_`. For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 
 ### Customizing generated agents
 
@@ -164,7 +166,7 @@ You can also install the same plugin in both the user and project scopes. Then t
 
 ### Partially available plugins
 
-Some plugins contain unsupported components: an unmappable hook, an LSP server, or a theme. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
+Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, or an MCP server that uses a feature pi-mcp-adapter cannot run, such as a `ws` transport or `headersHelper`. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones. For more information about MCP servers, see [MCP compatibility](docs/mcp-compatibility.md).
 
 List partially available plugins.
 
