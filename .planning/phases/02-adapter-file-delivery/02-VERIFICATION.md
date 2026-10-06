@@ -1,8 +1,8 @@
 ---
 phase: 02-adapter-file-delivery
-verified: 2026-10-04T00:52:29Z
-status: gaps_found
-score: 5/5 roadmap success criteria verified (73 plan truths: 68 test-backed, 5 backstop; 11 judgment-tier prohibitions flagged for human review)
+verified: 2026-10-06T00:00:00Z
+status: passed
+score: 5/5 roadmap success criteria verified; both previous gaps closed (gap-closure plans 02-09..02-12, 41 plan truths, 3 backstop); 8 new judgment-tier prohibitions approved by the operator; review IN-04 fixed (6cb09db2, D-02-23)
 covered_files:
   - .planning/phases/02-adapter-file-delivery/02-01-PLAN.md
   - .planning/phases/02-adapter-file-delivery/02-01-SUMMARY.md
@@ -20,10 +20,20 @@ covered_files:
   - .planning/phases/02-adapter-file-delivery/02-07-SUMMARY.md
   - .planning/phases/02-adapter-file-delivery/02-08-PLAN.md
   - .planning/phases/02-adapter-file-delivery/02-08-SUMMARY.md
+  - .planning/phases/02-adapter-file-delivery/02-09-PLAN.md
+  - .planning/phases/02-adapter-file-delivery/02-09-SUMMARY.md
+  - .planning/phases/02-adapter-file-delivery/02-10-PLAN.md
+  - .planning/phases/02-adapter-file-delivery/02-10-SUMMARY.md
+  - .planning/phases/02-adapter-file-delivery/02-11-PLAN.md
+  - .planning/phases/02-adapter-file-delivery/02-11-SUMMARY.md
+  - .planning/phases/02-adapter-file-delivery/02-12-PLAN.md
+  - .planning/phases/02-adapter-file-delivery/02-12-SUMMARY.md
+  - docs/output-catalog.md
   - extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts
   - extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts
   - extensions/pi-claude-marketplace/bridges/mcp/collision-ancestors.ts
   - extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts
+  - extensions/pi-claude-marketplace/bridges/mcp/marker.ts
   - extensions/pi-claude-marketplace/bridges/mcp/safe-set.ts
   - extensions/pi-claude-marketplace/bridges/mcp/stage.ts
   - extensions/pi-claude-marketplace/bridges/mcp/types.ts
@@ -53,207 +63,173 @@ covered_files:
   - extensions/pi-claude-marketplace/shared/errors-bridges.ts
   - extensions/pi-claude-marketplace/shared/notification-dispatch.ts
   - package.json
-covered_digest: "v2:sha256:aa634353dd8037e0aa052f8b399d71a103404cb983cd5edd20f924b60ba00e62"
+covered_digest: "v3:sha256:42128134894cad2de42fa002e6ea1bf88164939a38cd977f8a80aada920f9e03"
 behavior_unverified: 0
-gaps:
-  - truth: "Install, update, reinstall and uninstall never lose anything the user wrote in mcp-adapter.json (phase goal), including a marker-less override stub under one of the plugin's server names"
-    status: failed
-    reason: "D-02-10 absorbs the stub: non-carried fields are deleted without notice and the absorbed disabled flag leaves with our entry on uninstall. The operator chose to fix it in this milestone (D-02-21)."
-    artifacts:
-      - path: "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
-        issue: "stub absorption copies carried fields only and drops the stub (around lines 219-233)"
-      - path: "extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts"
-        issue: "withPluginServers removes the stub (around line 259)"
-      - path: "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"
-        issue: "unstage removes our entry with nothing to restore"
-    missing:
-      - "Keep the absorbed stub verbatim and inert inside the _piClaudeMarketplace marker subobject; carry it through update and reinstall"
-      - "Write the kept stub back as a marker-less entry on uninstall and every unstage"
-      - "Warn once at install naming the stub fields that stop applying (closed-catalog amendment in docs/output-catalog.md)"
-      - "Prove the adapter ignores everything under _piClaudeMarketplace against the pinned pi-mcp-adapter 5.0.0"
-  - truth: "Source comments cite requirement IDs, never milestone decision IDs (02-CONTEXT.md convention)"
-    status: partial
-    reason: "Review-fix commits added D-02-19 / D-02-20 to source comments and test titles; v1.20 D-02-0x IDs already exist in source with other meanings."
-    artifacts:
-      - path: "extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts"
-        issue: "cites D-02-19 / D-02-20"
-      - path: "tests/orchestrators/plugin/prune-rollback.test.ts"
-        issue: "test titles cite D-02-19 / D-02-20"
-    missing:
-      - "Replace every D-02-19 / D-02-20 citation in extensions/ and tests/ (rg -n 'D-02-(19|20)' extensions tests) with requirement IDs (NFR-3 for the rollback restore, AFILE-04 for comment preservation)"
 overrides_applied: 0
-human_verification:
-  - test: "Decide whether D-02-10 stub absorption is an accepted exception to the goal's 'never lose anything the user wrote' (review IN-01, deferred with no carrier)"
-    expected: "Either record an override/decision that a marker-less stub under one of the plugin's server names is consumed by install (non-carried fields such as env are dropped, and the absorbed disabled flag leaves with the entry on uninstall), or open a BACKLOG/phase item for a notice or stub restore"
-    why_human: "The behavior is a recorded operator decision (D-02-10) but contradicts the literal phase goal wording; only the operator can accept the trade-off"
-  - test: "Review the 11 judgment-tier prohibitions (02-01..02-08 must_haves.prohibitions); the verifier's non-authoritative verdict is that every one holds (evidence in the Prohibitions table)"
-    expected: "Operator confirms each prohibition is honored, or names the one that is not"
-    why_human: "Prohibitions carry no test-tier verification field; per the verifier contract a judgment-tier must-NOT is never silently passed"
+re_verification:
+  previous_status: "gaps_found"
+  previous_score: "5/5 roadmap success criteria verified; 2 gaps (stub absorption loses user fields; D-02-NN source citations)"
+  gaps_closed:
+    - "Install, update, reinstall and uninstall never lose anything the user wrote in mcp-adapter.json, including a marker-less override stub under one of the plugin's server names (D-02-21 as amended by D-02-22)"
+    - "Source comments cite requirement IDs, never milestone decision IDs (rg -n 'D-02-(19|20|21|22)' extensions tests prints nothing; the 11 v1.20 D-02-0x lines are unchanged)"
+  gaps_remaining: []
+  regressions: []
+  prior_human_items: "Item 1 (stub absorption) became gap 1 and is closed. Item 2 (the 11 judgment-tier prohibitions of 02-01..02-08) was approved by the operator on 2026-10-04; the gap-closure code does not change their verdict."
+human_verification_resolved:
+  - item: "8 judgment-tier prohibitions added by gap-closure plans 02-09..02-12"
+    resolution: "Operator approved all 8 on 2026-10-04"
+  - item: "Review IN-04: plugin-declared carried fields added to the user's written-back override"
+    resolution: "Operator chose a fix (D-02-23, amends D-02-22). 6cb09db2 writes back only the carried fields the user's stub had, each with the live entry's value; a carried field the stub lacked is never added"
 ---
 
 # Phase 2: Adapter-file delivery Verification Report
 
 **Phase Goal:** Install, update, reinstall and uninstall keep a plugin's MCP servers as marked entries in `<scopeRoot>/mcp-adapter.json`, and never lose or corrupt anything the user or the adapter wrote in that file.
-**Verified:** 2026-10-04T00:52:29Z
-**Status:** human_needed
-**Re-verification:** No (initial verification)
+**Verified:** 2026-10-04T11:05:00Z; finalized 2026-10-06 after the operator approved the gap-plan prohibitions and 6cb09db2 fixed IN-04 (D-02-23)
+**Status:** passed
+**Re-verification:** Yes, after gap closure (plans 02-09..02-12, fix commit 4a206e4a for D-02-22, fix commit 6cb09db2 for D-02-23). Verified at a638f5e0; finalized at HEAD 9940d472 (merges of `main` since 15c26e70).
+
+## Gap closure
+
+### Gap 1: a user's marker-less override stub is no longer lost (D-02-21, D-02-22): CLOSED
+
+| Requirement of D-02-21/22 | Code | Behavioral evidence | Status |
+|---|---|---|---|
+| Stub kept verbatim and inert in `_piClaudeMarketplace.keptOverride` | `stage.ts:285` passes `keptOverrides: { ...keptOverrides, ...overlays }` (raw stub objects) to `stampServers`; `adapter-entry.ts:175-179` puts it in the marker via `buildMarker` (`marker.ts:80-88`, `keptOverride` last) | Independent probe (`/tmp/afile-probe2/probe.ts`, hermetic HOME, real bridge modules, BOM + comments + trailing commas + `mcp-servers` file): marker `keptOverride` equals the stub byte-for-byte, including `env`, `headers`, `directTools` | ✓ VERIFIED |
+| Carried fields become active; credentials never do | `carriedFields` reads only the 9 `CARRIED_FIELDS` (`adapter-entry.ts:19-29,87-100`); `restoredOverride` takes non-carried fields only from the kept override (`:124-139`) | Probe: active entry holds `disabled: true`, no `headers`, no `directTools`, `env` holds only injected vars (no `secret-val`); same in `tmp/p2-10-adapter-proof.log` checkA (`envWithoutStubToken`, `noBearerToken`, `noHeaders` all true) | ✓ VERIFIED |
+| Carried through update and reinstall | `partitionServers` returns `keptOverrides` for the plugin's own entries (`adapter-doc.ts:227-245,251-271`); restage keeps them | Probe: second stage keeps `keptOverride` identical, emits no notice. Integration test asserts the project entry after update and the bytes after reinstall | ✓ VERIFIED |
+| Written back on uninstall and every unstage, live carried fields replacing kept ones (D-02-22), and only the carried fields the stub had (D-02-23) | `survivingEntry` returns `restoredOverride(kept, entry)` for an owned, non-restaged entry (`adapter-doc.ts:307-320`); `unstageMcpServers` writes `withPluginServers(..., {})` (`unstage.ts:157`); its single orchestrator caller is `cascadeUnstagePlugin` (`marketplace/shared.ts:447`), behind uninstall, disable, prune, marketplace remove, cascade undos and reconcile | Probe: after a simulated `/mcp-adapter enable` (deletes `disabled`), unstage writes back `{env, headers, directTools}` under `mcp-servers`; an update that drops the server also writes it back; a tampered full-definition `keptOverride` is not written back. Integration: `AFILE-06: a user-scope plugin disabled in the project keeps that disable ...` asserts project-scope uninstall leaves the project file **byte-identical** to the user's original and the user-scope file unchanged at every step; `... /mcp-adapter enable made while the plugin is installed survives plugin disable, enable and uninstall` covers D-02-22; `AFILE-06: uninstall writes back no carried field the plugin's entry declares and the user's override lacks` covers D-02-23 (6cb09db2) | ✓ VERIFIED |
+| Install warns once (`MCP server override kept.`) naming fields that stop applying | `overrideKeptNotices` (`stage.ts:150-174`) uses `inactiveOverrideFields`; seam `notifyMcpConfigNotices` (`notification-dispatch.ts:258-336`) renders field names only and cancels a keep that a later `override-restored` writes back; catalog block `docs/output-catalog.md:4171-4185` byte-locked by `tests/architecture/mcp-config-notices.test.ts` | Integration test asserts exactly one `MCP server override kept.` warning on project install naming `env`, none on update/reinstall/uninstall. Probe: `fields: ["env","headers","directTools"]`, no value in any notice | ✓ VERIFIED |
+| Adapter ignores the marker contents | — | `/tmp/pmaverify/package` is `pi-mcp-adapter` 5.0.0; `grep -rl '_piClaudeMarketplace\|keptOverride' dist` finds nothing. `tmp/p2-10-adapter-proof.log` (real adapter loader): effective entry applies no marker field, `consoleCalls: []`, adapter enable writer keeps the marker. The log predates 4a206e4a, but that commit changes only write-back, not the marker shape the adapter reads | ✓ VERIFIED |
+
+Note: the adapter's project-approval hash covers the whole entry, so a change to `keptOverride` changes the hash (stated in plan 02-10's truth; not a loss).
+
+### Gap 2: no milestone decision IDs in source: CLOSED
+
+- `rg -n 'D-02-(19|20|21|22)' extensions tests`: no output (exit 1). `rg -n 'D-02-1[0-9]' extensions tests`: no output.
+- `rg -n 'D-02-0[0-9]' extensions tests`: exactly 11 lines (v1.20 citations), and `git diff ceb44007 HEAD -- extensions tests` shows no `D-02-0x` line changed.
+- Commit 3ca08c36 (plan 02-09) changes only comment lines and 10 `test(` title lines (D-02-19/20 → NFR-3, one → AFILE-04); no code token changed.
 
 ## Goal Achievement
 
-### Observable Truths (ROADMAP success criteria)
+### Observable Truths (ROADMAP success criteria, regression check)
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Install writes marked entries into `<Pi agent dir>/mcp-adapter.json` / `<cwd>/.pi/mcp-adapter.json`; uninstall removes exactly those entries; NFR-10 write set, `locations.ts` and containment gates name the file (AFILE-01) | ✓ VERIFIED | `locations.ts:66,212,293` `mcpAdapterJsonPath = path.join(scopeRoot, "mcp-adapter.json")`; `stage.ts:182,285` reads/writes only that path; `unstage.ts:148-176` removes marker-matched entries from it (and same-plugin legacy `mcp.json` entries, D-02-12). AGENTS.md:65, PROJECT.md:910, PRD NFR-10/SC-2/AS-8 name the file; `tests/persistence/locations.test.ts` and `tests/architecture/config-state-write-seams.test.ts:233` pin it. Tests `AFILE-01: install writes ... keeps foreign keys` (asserts no `mcp.json` created) and `AFILE-01: uninstall removes only the plugin's marked entries` pass. Independent probe: uninstall left `settings`, `imports`, `claudePlugins`, user server `mine` and unknown key `zzz` intact, removed only `srv`/`other`. |
-| 2 | Comments/trailing commas/BOM file installs fine and keeps `settings`, `imports`, `claudePlugins`, user servers; unparseable file refuses with a typed error and keeps exact bytes; comment loss warned once (AFILE-02, AFILE-04) | ✓ VERIFIED | `adapter-doc.ts:153-177` = BOM strip + `strip-json-comments@5.0.3` (`trailingCommas: true`) + `JSON.parse`, cross-checked against the real `pi-mcp-adapter@5.0.0` tarball (shasum `6c20461d...` matches the test pin): `utils.ts:9-15` `parseJsonWithComments` is byte-for-byte the same grammar. `parseJsonc` throws `McpConfigFileError` with no cause (parser text dropped). Probe: `{"a": sk-secret}` refused, bytes kept, message has no secret. Notice seam `notification-dispatch.ts:250` is called from 15 orchestrator sites (install, update, reinstall, uninstall, prune, enable/disable, marketplace remove/update, import, reconcile); byte-locked to `docs/output-catalog.md:4149,4161` by `tests/architecture/mcp-config-notices.test.ts`. Test `AFILE-04: install over a commented mcp-adapter.json shows the comments-removed notice once` asserts the second install shows none. |
-| 3 | Legacy `mcp-servers` key: our entries go under it and user servers keep loading (AFILE-03) | ✓ VERIFIED | `adapter-doc.ts:175` selects the first present key, matching the adapter's own disable-writer rule (`config.ts:1724` in pi-mcp-adapter 5.0.0) and its loader (`raw.mcpServers ?? raw["mcp-servers"]`, `config.ts:1289`); `withPluginServers` adds a new key only when absent. Tests `AFILE-03: an mcp-servers-only file gets the entry under mcp-servers` and adapter-doc AFILE-03 cases pass. Probe: entries landed under `mcp-servers`, no `mcpServers` key added. |
-| 4 | Full-definition collisions reported naming the winning source under nine-source later-wins precedence; partial entries are overrides (AFILE-05, closes MCPSRC-01) | ✓ VERIFIED | `collision-slots.ts:86-104` source order matches `getConfigSources` in the real adapter (`config.ts:668-815`: shared-global, agents-global, agents-nested-global, pi-mcp-global, pi-global, ancestors, shared-project, pi-mcp-project, pi-project). `isFullDefinition` matches the adapter's `mergeServerMaps` string `command`/`url`/`socket` transport test. `stage.ts:108-130` throws `McpServerCollisionError(name, owningPath, winningPath)`. Ancestor opt-in only from user-global sources (`collision-ancestors.ts`, matching adapter `config.ts:746`). Probe: full def in `<cwd>/.mcp.json` refused naming both paths; a `{disabled:true}` partial in the same file did not block. BACKLOG MCPSRC-01 marked CLOSED. |
-| 5 | A user override in our entry (e.g. `disabled: true`) survives update and reinstall; closed carried set recorded and pinned against `ServerEntry` (AFILE-06) | ✓ VERIFIED | `adapter-entry.ts:17-27` module-private `CARRIED_FIELDS` (9 fields, = D-02-06). `stage.ts:223-229` passes `{...ours, ...overlays}` as `previous`; update (`update-swap.ts:320`) and reinstall (`reinstall-replace.ts:442`) prepare before any unstage, so the previous entry is visible. The test's 34 vendored `ServerEntry` keys match the real `types.ts:438-525` exactly (34, same order). Tests `AFILE-06: a disabled plugin MCP server stays disabled through update` / `... through reinstall` pass. Probe: `disabled` + `excludeTools` survived a command change; a stub's `env` was not copied (D-02-10). |
+| 1 | Install writes marked entries into the scope's `mcp-adapter.json`; uninstall removes exactly those; NFR-10 / locations / containment name the file (AFILE-01) | ✓ VERIFIED | Unchanged paths (`locations.ts`, `stage.ts` write target). Uninstall now replaces an owned entry with the user's kept override instead of deleting it; an entry with none is removed as before (probe scenario C, integration). Integration asserts no `mcp.json` is created in either scope. |
+| 2 | Comments/trailing commas/BOM file installs and keeps foreign keys; unparseable file refuses with typed error and exact bytes; comment loss warned once (AFILE-02, AFILE-04) | ✓ VERIFIED | `readMcpConfigDoc` unchanged. Probe: `settings`, `zzz`, `mine`, `last` survive install and uninstall of a BOM + comment + trailing-comma file; `comments-dropped` notice emitted before `override-kept`. |
+| 3 | Legacy `mcp-servers` key honored (AFILE-03) | ✓ VERIFIED | Probe: entry staged and override written back under `mcp-servers`; no `mcpServers` key added. |
+| 4 | Full-definition collisions reported with the winning source; partial entries are overrides (AFILE-05) | ✓ VERIFIED | Collision walk unchanged. `restorableOverride` (`adapter-doc.ts:113-116`) writes back only a partial, marker-less value, so a write-back never creates a collision; integration asserts a later user-scope install is not refused. |
+| 5 | User override in our entry survives update and reinstall; closed carried set pinned against `ServerEntry` (AFILE-06) | ✓ VERIFIED | `CARRIED_FIELDS` unchanged (9 fields). Integration asserts `disabled: true` survives update and reinstall. |
 
-**Score:** 5/5 roadmap truths verified (0 present-but-behavior-unverified)
+**Score:** 5/5 roadmap truths verified, 0 present-but-behavior-unverified. Gap-plan truths (02-09: 5, 02-10: 14, 02-11: 11, 02-12: 9; 3 backstop) map to code and passing tests; the backstops are accepted windows (prepare-to-commit, notice ordering) or title-only renames.
 
-### Plan must-haves (02-01..02-08)
+### Required Artifacts (gap plans)
 
-All 68 non-backstop truths across the eight plans map to code and to passing tests (see Behavioral Spot-Checks). The backstop (concurrency) truths:
-
-| Backstop truth | Evidence | Status |
-|----------------|----------|--------|
-| Every MCP config write is one `atomicWriteJson`; ops serialize on the state lock | `stage.ts:285`, `unstage.ts:119`; `tests/shared/atomic-json.test.ts` passes | ✓ VERIFIED |
-| A refusal performs no write | Byte-equality assertions in `AFILE-02: an MCP install over an unparseable mcp-adapter.json fails and keeps its bytes`; probe | ✓ VERIFIED |
-| Server key re-derived per read, never persisted | `readMcpConfigDoc` computes `serverKey` per call; no state field holds it | ✓ VERIFIED |
-| Collision walk reads once per stage; carry-forward reads at prepare (accepted windows) | Statements of accepted limitation, documented in `collision-slots.ts` header and plan 02-03; nothing to prove beyond the code shape | ✓ VERIFIED (accepted limitation) |
-
-### Required Artifacts
-
-| Artifact | Expected | Status | Details |
-|----------|----------|--------|---------|
-| `bridges/mcp/adapter-doc.ts` | JSONC reader, key selection, partition, next-doc | ✓ VERIFIED | 287 lines, imports `strip-json-comments`; used by stage, unstage, collision-slots |
-| `bridges/mcp/adapter-entry.ts` | Stamping + closed carry-forward | ✓ VERIFIED | Used by `stage.ts:223` |
-| `bridges/mcp/collision-slots.ts` / `collision-ancestors.ts` | Nine-source walk, ancestor trust | ✓ VERIFIED | `walkMcpSources` used by `stage.ts:113` |
-| `persistence/locations.ts` | `mcpAdapterJsonPath` | ✓ VERIFIED | |
-| `shared/errors-bridges.ts` | `McpConfigFileError`, `McpServerCollisionError.winningPath`, `McpUnstagePartialError` | ✓ VERIFIED | |
-| `shared/notification-dispatch.ts` | `McpConfigNotice`, `notifyMcpConfigNotices` | ✓ VERIFIED | 15 call sites |
-| `tests/architecture/mcp-config-notices.test.ts` | Byte lock to catalog | ✓ VERIFIED | |
-| `docs/output-catalog.md` | Two new catalog states | ✓ VERIFIED | lines 4149, 4161 |
-
-`gsd-tools verify.artifacts`: 22/22 pass across all eight plans.
+| Artifact | Expected | Status |
+|----------|----------|--------|
+| `bridges/mcp/marker.ts` | `keptOverride` member, `buildMarker(…, keptOverride?)`, `keptOverrideOf` | ✓ VERIFIED (99 lines; used by adapter-entry, adapter-doc) |
+| `bridges/mcp/adapter-doc.ts` | `keptOverrides` partition, in-place write-back, `restoredOverrideNames` | ✓ VERIFIED |
+| `bridges/mcp/adapter-entry.ts` | `keptOverrides` input, `inactiveOverrideFields`, `restoredOverride` | ✓ VERIFIED |
+| `shared/notification-dispatch.ts` | `override-kept` / `override-restored`, fold, `MCP server override kept.` | ✓ VERIFIED |
+| `docs/output-catalog.md` | `catalog-state: mcp-override-kept` | ✓ VERIFIED (`:4173`) |
+| `docs/prd/pi-claude-marketplace-prd.md` | MC-5 names `keptOverride` | ✓ VERIFIED (`:480`) |
+| `tests/integration/mcp-override-lifecycle.test.ts` | Real-operation lifecycle | ✓ VERIFIED (3 cases, 454 lines) |
+| `.planning/BACKLOG.md` MCPOVR-01 | Updated for `keptOverride` | ✓ VERIFIED (`:3765-3772`) |
 
 ### Key Link Verification
 
-`gsd-tools verify.key-links`: 19/20 by literal pattern. The one miss is 02-01's `readMcpConfigDoc\(locations\.mcpAdapterJsonPath`: plan 02-04 (D-02-14) routed the read through `readTargetConfig(locations.mcpAdapterJsonPath, ...)` (`stage.ts:182`), which calls `readMcpConfigDoc(filePath, ADAPTER_SERVER_KEYS)` (`stage.ts:152`). WIRED, by a different call shape.
-
 | From | To | Via | Status |
 |------|----|-----|--------|
-| `install-outcome.ts` | `stage.ts` | `replacePreparedMcp` / `rollbackMcpReplacement` (D-02-11 byte restore) | ✓ WIRED (`:972`, `:992`) |
-| `update-swap.ts` | `stage.ts` | `prepareStageMcpServers` before commit; notices taken only after commit | ✓ WIRED (`:320`, `:1148-1149`) |
-| `reinstall-replace.ts` | `stage.ts` | replace/rollback/finalize handles | ✓ WIRED |
-| `marketplace/shared.ts` | `unstage.ts` | `cascadeUnstagePlugin` reads `mcpResult.notices` / `written` | ✓ WIRED |
-| `prune-rollback.ts` | `locations.ts` | snapshots `mcpAdapterJsonPath` and `mcpJsonPath`; D-02-19/20 restore | ✓ WIRED (`:359`, `:368`) |
-| reconcile/import/marketplace update | `notification-dispatch.ts` | one seam call after the cascade | ✓ WIRED |
+| `stage.ts` | `adapter-entry.ts` | `keptOverrides: { ...keptOverrides, ...overlays }` (`:285`) | ✓ WIRED |
+| `adapter-doc.ts` | `marker.ts` | `keptOverrideOf(` in `restorableOverride` | ✓ WIRED |
+| `unstage.ts` | `adapter-doc.ts` | `withPluginServers(target.config, …, {})` (`:157`), `restoredOverrideNames(` (`:121`) | ✓ WIRED |
+| `marketplace/shared.ts` | `unstage.ts` | `unstageMcpServers(` (`:447`), the only orchestrator call site | ✓ WIRED |
+| `stage.ts` | `adapter-entry.ts` | `inactiveOverrideFields(` (`:160`) | ✓ WIRED |
+| `mcp-config-notices.test.ts` | `output-catalog.md` | byte lock of `mcp-override-kept` | ✓ WIRED |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data | Source | Real data | Status |
 |----------|------|--------|-----------|--------|
-| `StageMcpCommitResult.notices` | `comments-dropped` | `config.hadComments` from the bytes read in prepare | Yes | ✓ FLOWING |
-| `UnstageOutcome.mcpConfigNotices` | unstage notices | `unstageMcpServers` -> `cascadeUnstagePlugin` -> orchestrator outcome | Yes | ✓ FLOWING |
-| Carried fields | previous entry | `partitionServers(...).ours/overlays` from the live file | Yes | ✓ FLOWING |
+| marker `keptOverride` | user stub | `partitionServers(...).overlays` from the bytes read at prepare | Yes | ✓ FLOWING |
+| written-back override | kept override + live carried fields | `keptOverrideOf(entry)` + `carriedFields(entry)` at unstage read | Yes | ✓ FLOWING |
+| `override-kept` notice | field names | `inactiveOverrideFields(overlay)` | Yes | ✓ FLOWING |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| MCP bridge, notices seam, locations, errors suites | `node --test tests/bridges/mcp/*.test.ts tests/architecture/mcp-config-notices.test.ts tests/persistence/locations.test.ts tests/shared/errors-bridges.test.ts` | 230/230 pass | ✓ PASS |
-| AFILE-tagged install/update/reinstall/uninstall cases | `node --test --test-name-pattern="AFILE-0" <4 orchestrator files>` | 37/37 pass | ✓ PASS |
-| AFILE/D-02 cases in import, marketplace, enable-disable, cascades, prune, reconcile, backfill, atomic-json, dispatch | `node --test --test-name-pattern="AFILE-0\|D-02-1" <15 files>` | 66/66 pass | ✓ PASS |
-| Prune rollback (D-02-19/20 restore and races) | `node --test tests/orchestrators/plugin/prune-rollback.test.ts` | 44/44 pass | ✓ PASS |
-| Independent end-to-end probe of stage/update/collision/unstage/refusal on a BOM+comments+trailing-comma `mcp-servers` file (hermetic HOME, `/tmp/afile-probe/probe.ts`) | `node /tmp/afile-probe/probe.ts` | All expected outcomes (see truths 1-5) | ✓ PASS |
-| Grammar, precedence and `ServerEntry` cross-check against the real `pi-mcp-adapter@5.0.0` tarball (`npm pack` to `/tmp`) | source diff by inspection | shasum matches pin; grammar, source order, transport test, disable-writer key rule, 34 keys all match | ✓ PASS |
-| Phase 1 regression | `node --test tests/architecture/peer-floor.test.ts tests/platform/pi-api.test.ts tests/shared/concerns/soft-dep.test.ts` | 85/85 pass; detection sources unchanged since Phase 1 | ✓ PASS |
-| Full `npm run check` on HEAD 7fd15b22 | orchestrator run, `tmp/check02.log` | typecheck, lint and fallow passed; at format:check when this report was written; `CHECK_EXIT` pending | ? PENDING (orchestrator reconciles) |
+| MCP bridge, notices seam, catalog lock, locations, errors, atomic-json | `node --test tests/bridges/mcp/*.test.ts tests/architecture/mcp-config-notices.test.ts tests/shared/notification-dispatch.test.ts tests/persistence/locations.test.ts tests/shared/errors-bridges.test.ts tests/shared/atomic-json.test.ts` | 558/558 pass | ✓ PASS |
+| Real-operation override lifecycle | `node --test tests/integration/mcp-override-lifecycle.test.ts` | 3/3 pass | ✓ PASS |
+| Every orchestrator suite (plugin, marketplace, reconcile, import) | `node --test tests/orchestrators/{plugin,marketplace,reconcile,import}/*.test.ts` (log `tmp/verify02r-orch.log`) | 3140/3140 pass | ✓ PASS |
+| Phase 1 regression | `node --test tests/architecture/peer-floor.test.ts tests/platform/pi-api.test.ts tests/shared/concerns/soft-dep.test.ts` | 85/85 pass | ✓ PASS |
+| Independent stage/update/enable/unstage/drop/tamper probe | `node /tmp/afile-probe2/probe.ts` (hermetic HOME) | all expected (see Gap 1 table) | ✓ PASS |
+| No dropped test cases in the gap diff | title diff of `adapter-entry.test.ts` at 7fd15b22 vs HEAD; case counts of uninstall/prune tests | 0 titles lost; 11→20, 99→100, 33→35 | ✓ PASS |
+| Full `npm run check` | orchestrator runs | a638f5e0 passed (`tmp/check02c.log` CHECK_EXIT=0, 8875 unit, 68 integration); 6cb09db2 passed its focused hook run (`tmp/d0223-precommit.log`); HEAD 9940d472 after the `main` merges: `tmp/check02d.log` CHECK_EXIT=0 | ✓ PASS |
 
 ### Probe Execution
 
-Step 7c: no `scripts/*/tests/probe-*.sh` declared or present for this phase. SKIPPED.
+Step 7c: no `scripts/*/tests/probe-*.sh` declared or present. SKIPPED.
 
 ### Requirements Coverage
 
-| Requirement | Source Plan | Description | Status | Evidence |
-|-------------|-------------|-------------|--------|----------|
-| AFILE-01 | 02-01, 02-02 | Marked entries in `mcp-adapter.json`; uninstall removes exactly those; NFR-10 | ✓ SATISFIED | Truth 1 |
-| AFILE-02 | 02-01, 02-04 | Adapter grammar; typed refusal; foreign keys survive | ✓ SATISFIED | Truth 2 |
-| AFILE-03 | 02-01 | `mcp-servers` honored | ✓ SATISFIED | Truth 3 |
-| AFILE-04 | 02-04..02-08 | Comment loss warned once | ✓ SATISFIED | Truth 2; 15 seam call sites |
-| AFILE-05 | 02-02 | Nine-source later-wins; partial = override | ✓ SATISFIED | Truth 4 |
-| AFILE-06 | 02-03 | Overrides survive update/reinstall; closed set | ✓ SATISFIED | Truth 5 |
+| Requirement | Source Plan | Status | Evidence |
+|-------------|-------------|--------|----------|
+| AFILE-01 | 02-01, 02-02, 02-09, 02-10, 02-12 | ✓ SATISFIED | Truth 1; write-back through every unstage |
+| AFILE-02 | 02-01, 02-04 | ✓ SATISFIED | Truth 2 |
+| AFILE-03 | 02-01, 02-10 | ✓ SATISFIED | Truth 3; override kept/written back under `mcp-servers` |
+| AFILE-04 | 02-04..02-09, 02-11, 02-12 | ✓ SATISFIED | Truth 2; comments notice ordered before override notice |
+| AFILE-05 | 02-02, 02-10, 02-12 | ✓ SATISFIED | Truth 4 |
+| AFILE-06 | 02-03, 02-10, 02-11, 02-12 | ✓ SATISFIED | Truth 5; gap 1 |
 
-All six IDs appear in plan frontmatter and in REQUIREMENTS.md (lines 52-66, traceability 169-174). No orphaned requirement.
+No orphaned requirement.
 
-### Decisions D-02-01..20
+### Prohibitions
 
-All honored in code, with these notes: D-02-15 is a BACKLOG item (MCPOVR-01, `BACKLOG.md:3750`); D-02-18 keeps marker-keyed unstage for multi-member cascades (WR-06 skipped by decision); D-02-19/20 implemented in `prune-rollback.ts:206-270` with the documented compare-then-write window; Phase 3 hand-off on `requestTimeoutMs` is recorded in ROADMAP Phase 3 Notes; IN-02 (stale legacy entries) is carried in ROADMAP Phase 5 Notes.
+The 11 prohibitions of 02-01..02-08 were approved by the operator on 2026-10-04. The gap-closure code does not change their verdict: credential fields still never become active (they live only inside the inert marker), no parser text is surfaced, no new key shadows a user server, and the write-back is always a partial entry.
 
-### Prohibitions (judgment tier, non-authoritative verifier verdict)
+New judgment-tier prohibitions from the gap plans (verifier verdict non-authoritative; the operator approved all 8 on 2026-10-04):
 
-| Prohibition | Verdict | Evidence |
-|-------------|---------|----------|
-| Never touch adapter cache/keyring/OAuth/approval files | Holds | Only writes: `atomicWriteJson` to `mcpAdapterJsonPath`/`mcpJsonPath`; collision walk is read-only |
-| Never surface raw JSON parser text | Holds | `adapter-doc.ts:115-122` drops the error, no cause; test + probe |
-| Never shadow a user server via a new key or overwrite a same-named user entry | Holds | key selection rule; `theirs` collision; CR-01 fix in `assertNoMcpCollisions` |
-| Never silently shadow a user server in any of the nine sources | Holds | Truth 4 |
-| Project file cannot opt into ancestor discovery | Holds | `configuredAncestorRoots` reads global reads only |
-| Never copy credential-bearing fields | Holds | `CARRIED_FIELDS` excludes them; probe `env` not copied |
-| Never drop comments silently (install/update/reinstall/uninstall/prune/remove/enable/disable/cascades/reload/import/marketplace update) — 5 statements | Holds | Notices on every rewrite path including failure arms; restored-byte paths emit none |
-
-Flagged: unverified-prohibition, human review recommended (see Human Verification 2).
+| Plan | Prohibition | Verdict | Evidence |
+|------|-------------|---------|----------|
+| 02-09 | MUST NOT change a v1.20 `D-02-0x` citation, any code token, or any other line | Holds | 3ca08c36 changes 24 lines, all comments or `test(` titles; D-02-0x lines unchanged |
+| 02-10 | MUST NOT copy a credential-bearing override field into any field outside `keptOverride` | Holds | `carriedFields` is closed to 9 non-credential fields; probe and adapter proof log |
+| 02-10 | MUST NOT drop a user override silently | Holds | Kept at stage, carried at restage, written back at unstage and at a stage that drops the server (probe). By D-02-22, a kept carried field the live entry no longer has is left out (the adapter's own enable removed it) |
+| 02-10 | MUST NOT rename `_piClaudeMarketplace`, `plugin`, `marketplace`, or make a marker without `keptOverride` unreadable | Holds | `marker.ts:15,41-69` |
+| 02-10 | MUST NOT write back a non-override `keptOverride` | Holds | `restorableOverride` requires `isOverlay`; probe scenario C writes nothing back |
+| 02-11 | MUST NOT put any override field value in a notice | Holds | `mcpOverrideKeptLine` interpolates plugin, server, scope, file and field names only; probe |
+| 02-11 | MUST NOT show override-kept for an override the same command wrote back | Holds | `standingOverrideNotices` fold; notification-dispatch and install-flow tests |
+| 02-12 | MUST NOT let a write-back change any file but the one that held the entry | Holds | Integration asserts the user-scope file byte-identical across project install/update/reinstall/uninstall |
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| (76 phase-touched files) | - | TBD/FIXME/XXX/TODO/HACK | none found | - |
-| `orchestrators/plugin/prune-rollback.ts`, `prune.ts`, `marketplace/shared.ts`, `bridges/mcp/unstage.ts`, `types.ts`, `shared/errors-bridges.ts`, `shared/atomic-json.ts` (+ tests) | various | Source comments cite milestone decision IDs `D-02-19` / `D-02-20` | ℹ️ Info | 02-CONTEXT.md says source comments cite requirement IDs, never `D-02-NN`, because v1.20 `D-02-0x` IDs already exist in source with other meanings (e.g. `edge/handlers/plugin/uninstall.ts:25`). No collision today for 19/20, but the convention is broken by the review-fix commits |
-| `bridges/mcp/stage.ts:219-233`, `adapter-doc.ts:259` | - | Stub absorption drops non-carried stub fields with no notice (review IN-01) | ⚠️ Warning | See Human Verification 1 |
+| 30 files changed since 7fd15b22 | - | TBD/FIXME/XXX/TODO/HACK | none found | - |
+| `tests/orchestrators/plugin/uninstall.test.ts` | 5288 | "Phase 5" planning reference in a comment | ℹ️ Info | Pre-existing (8b6ac3bc6, 2026-10-01), not from this phase |
+| `bridges/mcp/adapter-entry.ts` | 127 | `restoredOverride` appended carried fields that only the live entry held, including plugin-declared ones (review IN-04) | ✓ Resolved | Fixed by 6cb09db2 under D-02-23: only the stub's own carried fields come back. Unit test `a carried field the plugin's live entry declares and the kept override lacks is not added`; integration test `uninstall writes back no carried field the plugin's entry declares and the user's override lacks` |
+| `bridges/mcp/adapter-doc.ts` | 357-383 | A restaged entry is appended after the kept entries, so a written-back override sits at the end of the map rather than at the stub's original position | ℹ️ Info | Key order only; the adapter does not read order. Matches plan 02-10's stated rule |
 
-Other deferred review Info items (IN-03 helper drift `ENOTDIR`, IN-04 over-refusal of a non-object `mcp-servers` beside `mcpServers`, IN-05, IN-06, IN-08, IN-09) are safe-side or cosmetic and do not threaten the goal.
+Other deferred gap-review Info items (IN-01 fold test, IN-02 asymmetric fact model, IN-03 duplicate `isPlainObject`, IN-05 `{}` write-back, IN-06 comment width) do not threaten the goal.
 
-### Human Verification Required
+### Human Verification (resolved)
 
-### 1. Stub absorption vs "never lose" (IN-01 / D-02-10)
-
-**Test:** In a project, with a user-scope plugin `p` whose server `srv` is disabled by `/mcp-adapter disable` (the adapter writes `{"disabled": true}` into `<cwd>/.pi/mcp-adapter.json`, since its writer always targets the project file), add any extra field to that stub (for example `env`), then install `p` at project scope, then uninstall it.
-**Expected (current code):** install absorbs the stub: `disabled` is carried into the marked entry, other fields are deleted with no notice; uninstall removes the marked entry, so the project-level disable is gone and the user-scope server loads again in this project.
-**Why human:** This is exactly what D-02-10 decided, but the phase goal says the file must never lose anything the user wrote. The review deferred IN-01 with no carrier (not in BACKLOG or a later phase). The operator should either accept it with an override, for example:
-
-```yaml
-overrides:
-  - must_have: "never lose or corrupt anything the user or the adapter wrote in that file"
-    reason: "D-02-10: a marker-less stub under one of the plugin's server names is absorbed by install (carried fields only); dropping its other fields and losing it on uninstall is accepted"
-    accepted_by: "acolomba"
-    accepted_at: "<ISO timestamp>"
-```
-
-or file a BACKLOG item next to MCPOVR-01 (notice on absorption, or restore the stub's carried fields as a marker-less stub on uninstall).
-
-### 2. Judgment-tier prohibitions
-
-**Test:** Read the Prohibitions table above against the code it cites.
-**Expected:** Every prohibition holds.
-**Why human:** No prohibition carries a test-tier verification; the verifier's verdict is non-authoritative by contract.
+1. **Gap-closure judgment-tier prohibitions:** the operator approved all 8 on 2026-10-04.
+2. **Plugin-declared carried fields in a written-back override (IN-04):** the operator chose a fix over an override (D-02-23). 6cb09db2 writes back only the carried fields the user's stub had; the stub `{"disabled": true}` under a plugin entry that declares `lifecycle` and `debug` now comes back as `{"disabled": true}`.
 
 ### Deferred to later phases (not gaps)
 
-- Live adapter loading of the written entries: Phase 7 live UAT (ADOC-02). Phase 2 criteria are proven against the adapter's real 5.0.0 grammar, precedence and `ServerEntry`.
-- IN-02 stale legacy `mcp.json` entries after update/reinstall: ROADMAP Phase 5 Notes.
-- `requestTimeoutMs` translate-vs-carry interaction: ROADMAP Phase 3 Notes.
+- Live adapter loading of the written entries: Phase 7 live UAT (ADOC-02).
+- IN-02 (full-phase review) stale legacy `mcp.json` entries after update/reinstall: ROADMAP Phase 5 Notes.
+- `requestTimeoutMs` translate-vs-carry, and how write-back treats a carried field that Phase 3's translation writes: ROADMAP Phase 3 Notes ("Carried from Phase 2 (D-02-22)"). D-02-23 already keeps a plugin-declared carried field the stub lacked out of the write-back.
+- MCPOVR-01: a choice written into the plugin's own entry with no kept override still does not survive disable/enable (BACKLOG, updated).
 
 ### Gaps Summary
 
-**Operator review (2026-10-04):** the prohibitions table is approved; every prohibition holds. Human item 1 became a gap: the operator chose to fix stub absorption in this milestone under D-02-21 (preserve the stub inert in the marker, restore it on uninstall, warn at install). The D-02-NN source-comment convention breach is a second, partial gap. The full `npm run check` passed on 7fd15b22 (`tmp/check02.log`, CHECK_EXIT=0).
-
-No blocking gaps. All five roadmap success criteria and all six AFILE requirements are met by wired, tested code, and the critical contracts (grammar, nine-source order, transport test, server-key rule, 34-key `ServerEntry`) were cross-checked against the real `pi-mcp-adapter@5.0.0` package rather than the summaries. Status is `human_needed` for two reasons: the D-02-10 stub-absorption behavior conflicts with the goal's literal "never lose" wording and has no recorded acceptance or carrier, and the judgment-tier prohibitions need operator sign-off. The full `npm run check` result is pending in the orchestrator (typecheck, lint and fallow were already green in `tmp/check02.log`).
+Both previous gaps are closed. A user's marker-less override stub is now kept verbatim inside the marker, carried through update and reinstall, and written back on every unstage; the cross-scope integration test proves a project uninstall restores the user's original bytes exactly. No `D-02-19..22` citation remains in source or test titles, and the v1.20 citations are untouched. The five success criteria and AFILE-01..06 show no regression across 3,786 targeted tests and an independent probe. The operator approved the 8 new judgment-tier prohibitions, and 6cb09db2 (D-02-23) fixed review IN-04, so a written-back override no longer gains plugin-declared carried fields. Status is `passed`.
 
 ---
 
-_Verified: 2026-10-04T00:52:29Z_
+_Verified: 2026-10-04T11:05:00Z_
 _Verifier: Claude (gsd-verifier)_
