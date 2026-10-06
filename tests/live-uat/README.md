@@ -129,33 +129,38 @@ All four assertions are proven against a real engine in a credential-free sandbo
 
 ## Engine storage canary -- `workflow-storage-canary.mjs`
 
-Proves that the envelopes this extension writes are the envelopes the host workflow engine reads (WSTOR-01). The offline suites pin the bytes the bridge writes against a layout read out of the engine's source; this driver installs a workflow-bearing plugin through the extension's own `/claude:plugin` handler into a scratch `HOME`, then reads it back through the **engine's** public entry -- `createWorkflowStorage`, `parseWorkflowScript`, `workflowUserSavedDir`, `workflowProjectPaths` -- resolved out of the same scratch install the agent-failure canary uses. A layout the engine moved shows up as a listing that comes back empty, which is exactly the failure nothing inside `npm run check` can see.
+Proves that the envelopes this extension writes are the envelopes the host workflow engine reads (WSTOR-01). The offline suites pin the bytes the bridge writes against a layout read out of the engine's source; this driver installs a workflow-bearing plugin through the extension's own `/claude:plugin` handler into a scratch sandbox, then reads it back through the **engine's** public entry -- `createWorkflowStorage`, `parseWorkflowScript`, `workflowUserSavedDir`, `workflowProjectPaths` -- resolved out of the same scratch install the agent-failure canary uses. A layout the engine moved shows up as a listing that comes back empty, which is exactly the failure nothing inside `npm run check` can see.
 
 Nothing is run: no subagent starts, so no provider credentials are needed in either direction.
 
 ### Prerequisites
 
-| Requirement                                              | Notes                                                                                                                                                                                                                                                                                                      |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A scratch install of `@quintinshaw/pi-dynamic-workflows` | The same route as the agent-failure canary. Pin the version you mean to publish a grade for; the driver reads the version out of the engine's own manifest and prints it in every PASS line. Keep the prefix on a real filesystem -- a tmpfs `/tmp` that is out of inodes fails the install with `ENOSPC`. |
-| A disposable `PI_CODING_AGENT_DIR` sandbox               | Use `$(pwd)/tmp/pi-uat/wf-store`. The driver rewrites `HOME` to a fresh child of this directory before either side is imported, because both the bridge and the engine derive the storage root from `os.homedir()`; it refuses any directory outside `tmp/pi-uat` before creating anything.                |
+| Requirement                                              | Notes                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A scratch install of `@quintinshaw/pi-dynamic-workflows` | The same route as the agent-failure canary. Pin the version you mean to publish a grade for; the driver reads the version out of the engine's own manifest and prints it in every PASS line. Keep the prefix on a real filesystem -- a tmpfs `/tmp` that is out of inodes fails the install with `ENOSPC`.        |
+| A disposable `PI_CODING_AGENT_DIR` sandbox               | Use `$(pwd)/tmp/pi-uat/wf-store`. The driver refuses any directory outside `tmp/pi-uat` before it creates anything. It then points `HOME` and `PI_CODING_AGENT_DIR` at fresh children of this directory before either side is imported, because both the bridge and the engine derive the storage root from them. |
 
 ### Run
 
 ```bash
 mkdir -p /var/tmp/wf-engine tmp/pi-uat/wf-store
-npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.13.0
+npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.14.0
 PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-store \
 PI_WORKFLOW_ENGINE_ROOT=/var/tmp/wf-engine/node_modules \
   node tests/live-uat/workflow-storage-canary.mjs
+PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-store \
+PI_WORKFLOW_ENGINE_ROOT=/var/tmp/wf-engine/node_modules \
+  node tests/live-uat/workflow-storage-canary.mjs --home-default
 rm -rf /var/tmp/wf-engine tmp/pi-uat/wf-store
 ```
 
 The fixture is one plugin with four scripts: two the engine loads (one with a `meta.name` that repeats the plugin prefix, so the envelope name is the elided form while the script keeps the full one), and two it refuses at first run (no `meta.description`; a statement before the `meta` export). Both scopes are driven in turn, and the plugin is always uninstalled and the marketplace removed afterward.
 
+The first run roots storage under `PI_CODING_AGENT_DIR`, which the driver points at a child of the sandbox. The second run, with `--home-default`, clears that variable after the sandbox check, so both sides root storage under `HOME`. Engine releases before 3.14.0 ignore `PI_CODING_AGENT_DIR`, so against them only the second run passes W0.
+
 ### What it asserts (exit 0 conditions)
 
-- **W0 -- the precondition.** The bridge's `workflowsSavedDir` equals the engine's `workflowUserSavedDir()` and `workflowProjectPaths(cwd).savedDir` under the same `HOME`. Without it, an empty listing in W1 would be a home mismatch rather than the engine moving its storage.
+- **W0 -- the precondition.** The bridge's `workflowsSavedDir` equals the engine's `workflowUserSavedDir()` and `workflowProjectPaths(cwd).savedDir` under the same `HOME` and `PI_CODING_AGENT_DIR`. Without it, an empty listing in W1 would be a root mismatch rather than the engine moving its storage.
 - **W1** -- the engine's own `list()` reports every admitted script under its generated name, in the tier the scope maps to (`user` or `project`), read off the row's `source` field rather than inferred from a path.
 - **W2** -- `load(name)` round-trips every envelope, and the script bytes are the plugin's source bytes, unchanged. This is the verbatim promise measured on the engine's side.
 - **W3** -- the engine's `parseWorkflowScript` admits the two loadable scripts and refuses the other two with the messages its checks 9 and 3 raise.
@@ -165,7 +170,7 @@ The fixture is one plugin with four scripts: two the engine loads (one with a `m
 ### What it routes to `human_needed` (exit non-zero)
 
 - **No engine.** `PI_WORKFLOW_ENGINE_ROOT` unset, or the engine's manifest unreadable beneath it. Prints `LIVE ENGINE REQUIRED`.
-- **A non-sandbox agent directory.** Refused on the resolved path before anything is created, because `HOME` is about to be rewritten to a child of it.
+- **A non-sandbox agent directory.** Refused on the resolved path before anything is created, because `HOME` and `PI_CODING_AGENT_DIR` are about to be rewritten to children of it.
 
 ### The negative control
 
@@ -178,6 +183,32 @@ PI_WORKFLOW_ENGINE_ROOT=/var/tmp/wf-engine/node_modules \
 ```
 
 Expect exit 1 naming `[user] W2`, after W0 and `[user] W1` have passed.
+
+### Observed result (2026-10-06, engine 3.14.0)
+
+```text
+[wf-storage-canary] engine 3.14.0, storage root from PI_CODING_AGENT_DIR
+[wf-storage-canary] PASS: W0: the bridge and the engine derive the same saved directories for both scopes from PI_CODING_AGENT_DIR (engine 3.14.0)
+[wf-storage-canary] PASS: [user] W1: the engine lists all 4 envelopes in its user tier (engine 3.14.0)
+[wf-storage-canary] PASS: [user] W2: load() returns every envelope with byte-identical script source (engine 3.14.0)
+[wf-storage-canary] PASS: [user] W3: the engine's parser admits 2 scripts and refuses 2 at the checks the install warned about (engine 3.14.0)
+[wf-storage-canary] PASS: [user] W4: the install named check 9 and check 3 for the scripts the engine refuses at them (engine 3.14.0)
+[wf-storage-canary] PASS: [user] W5: uninstall leaves the engine's listing empty (engine 3.14.0)
+[wf-storage-canary] PASS: [project] W1: the engine lists all 4 envelopes in its project tier (engine 3.14.0)
+[wf-storage-canary] PASS: [project] W2: load() returns every envelope with byte-identical script source (engine 3.14.0)
+[wf-storage-canary] PASS: [project] W3: the engine's parser admits 2 scripts and refuses 2 at the checks the install warned about (engine 3.14.0)
+[wf-storage-canary] PASS: [project] W4: the install named check 9 and check 3 for the scripts the engine refuses at them (engine 3.14.0)
+[wf-storage-canary] PASS: [project] W5: uninstall leaves the engine's listing empty (engine 3.14.0)
+[wf-storage-canary] all assertions proven; exit 0
+```
+
+The `--home-default` run printed the same lines with `from HOME` in place of `from PI_CODING_AGENT_DIR`, and it exited 0. Three controls exited 1:
+
+- `--invert` failed at `[user] W2`.
+- Against engine 3.14.0, the bridge from before it followed `PI_CODING_AGENT_DIR` failed W0. It rooted storage under `HOME`, and the engine rooted it under the agent directory.
+- Against engine 3.13.0, the run without `--home-default` failed W0, because that release ignores `PI_CODING_AGENT_DIR`. The `--home-default` run against 3.13.0 passed.
+
+The sandbox was empty afterward.
 
 ### Observed result (2026-09-21, engine 3.13.0)
 

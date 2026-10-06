@@ -14,17 +14,21 @@
 // named by `PI_WORKFLOW_ENGINE_ROOT`:
 //
 //   mkdir -p /var/tmp/wf-engine tmp/pi-uat/wf-store
-//   npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.13.0
+//   npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.14.0
 //   PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-store \
 //   PI_WORKFLOW_ENGINE_ROOT=/var/tmp/wf-engine/node_modules \
-//     node tests/live-uat/workflow-storage-canary.mjs
+//     node tests/live-uat/workflow-storage-canary.mjs [--home-default]
 //   rm -rf /var/tmp/wf-engine tmp/pi-uat/wf-store
 //
-// Both sides of the contract are driven for real: the bridge derives the
-// engine's storage root from `os.homedir()`, so `HOME` is pointed inside the
-// sandbox before either side is imported, and the engine derives the same
-// root the same way. A layout the engine moved would show up here as a
-// listing that comes back empty, which is exactly the failure the offline
+// Both sides of the contract are driven for real. From engine 3.14.0 on, the
+// bridge and the engine both root storage at `$PI_CODING_AGENT_DIR/workflows`
+// when that variable is set, and at `~/.pi/workflows` otherwise (WPTH-04).
+// The driver points `HOME` and `PI_CODING_AGENT_DIR` at fresh children of the
+// sandbox before either side is imported. `--home-default` clears
+// `PI_CODING_AGENT_DIR` instead, so both sides fall back to `HOME`. Engine
+// releases before 3.14.0 ignore the variable, so against them only
+// `--home-default` passes W0. A layout the engine moved would show up here as
+// a listing that comes back empty, which is exactly the failure the offline
 // suites cannot see (the engine is deliberately in no dependency manifest --
 // NFR-5, D-98-10).
 //
@@ -45,6 +49,15 @@ import { CanaryExit, createEngineScratch } from "./engine-scratch.mjs";
 
 /** Negative control: flip the byte-identity expectation and nothing else. */
 const INVERT = process.argv.includes("--invert");
+
+/**
+ * Measure the home-default root: clear `PI_CODING_AGENT_DIR` after the sandbox
+ * check, so both sides derive the storage root from `HOME`.
+ */
+const HOME_DEFAULT = process.argv.includes("--home-default");
+
+/** The variable both sides derive the storage root from in this run. */
+const ROOT_SOURCE = HOME_DEFAULT ? "HOME" : "PI_CODING_AGENT_DIR";
 
 const { pass, liveEngineRequired, resolveEngine, assertSandboxContainment } = createEngineScratch(
   "wf-storage-canary",
@@ -287,14 +300,14 @@ async function main() {
     "Refusing to point HOME and the install at a directory outside the disposable sandbox.",
   );
 
-  console.log(`[wf-storage-canary] engine ${version}`);
+  console.log(`[wf-storage-canary] engine ${version}, storage root from ${ROOT_SOURCE}`);
 
-  // Everything lives under one fresh child of the sandbox: HOME (the engine's
-  // storage root hangs off it), the agent-state directory, the project the
-  // project-scope install keys on, and the fixture marketplace. HOME is
-  // rewritten BEFORE either side is imported, because both derive the storage
-  // root from `os.homedir()` at call time and the extension reads the agent
-  // directory as it loads.
+  // Everything lives under one fresh child of the sandbox: HOME, the
+  // agent-state directory, the project the project-scope install keys on, and
+  // the fixture marketplace. HOME is rewritten, and PI_CODING_AGENT_DIR
+  // rewritten or cleared, BEFORE either side is imported, because both sides
+  // derive the storage root from them at call time and the extension reads the
+  // agent directory as it loads.
   const root = path.join(sandboxRoot, `wf-storage-canary-${process.pid}`);
   const home = path.join(root, "home");
   const agentDir = path.join(root, "agent");
@@ -303,7 +316,11 @@ async function main() {
   await mkdir(agentDir, { recursive: true });
   await mkdir(projectDir, { recursive: true });
   process.env.HOME = home;
-  process.env.PI_CODING_AGENT_DIR = agentDir;
+  if (HOME_DEFAULT) {
+    delete process.env.PI_CODING_AGENT_DIR;
+  } else {
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+  }
 
   try {
     const pluginDir = await buildMarketplace(path.join(root, "mkt"));
@@ -336,7 +353,7 @@ async function main() {
       `W0: the bridge's project saved directory is not the engine's at engine ${version}.`,
     );
     pass(
-      `W0: the bridge and the engine derive the same saved directories for both scopes (engine ${version})`,
+      `W0: the bridge and the engine derive the same saved directories for both scopes from ${ROOT_SOURCE} (engine ${version})`,
     );
 
     for (const scope of ["user", "project"]) {
