@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
-milestone: v1.20
+milestone: any-git-host
 status: Awaiting next milestone
-stopped_at: v1.20 archived; awaiting next milestone
+stopped_at: milestone any-git-host archived (2026-09-30); awaiting next milestone
 last_updated: "2026-10-06T13:53:27.309Z"
 last_activity: 2026-10-06
 last_activity_desc: Completed quick task 261006-a8c (unsupported mod, syntaxHighlighting, binaries)
 state_head: 6af2e9e97ca8bea6273a2ae13d7cba38174660d8
-milestone_name: transitive-dependencies
+milestone_name: Any Git Host
 progress:
-  total_phases: 12
-  completed_phases: 12
-  total_plans: 55
-  completed_plans: 55
+  total_phases: 3
+  completed_phases: 3
+  total_plans: 11
+  completed_plans: 11
   percent: 100
 ---
 
@@ -25,13 +25,15 @@ See: `.planning/PROJECT.md` (updated 2026-09-24 after v1.20 closeout)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone. v1.20 closed with 12/12 phases
-and 45/45 requirements. The private-repository credential challenge deferred
-in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
+**Current focus:** Planning the next milestone. any-git-host closed on
+2026-09-30 with 3/3 phases and 10/10 requirements, after v1.20 closed with
+12/12 phases and 45/45 requirements. The private-repository credential
+challenge deferred in v1.20 Phase 3 UAT passed on 2026-09-30, after the merge
+of #221.
 
 ## Current Position
 
-Phase: Milestone v1.20 complete
+Phase: Milestone any-git-host complete
 Plan: —
 Status: Awaiting next milestone
 Last activity: 2026-10-06 - Completed quick task 261006-a8c: Flag mod, syntaxHighlighting, binaries (official marketplaces), and experimental.outputStyles as unsupported components

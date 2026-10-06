@@ -529,8 +529,8 @@ been declared in `package.json` and invoked by nothing, now run: the three fast 
 
 **Shipped:** url-source URL Sources (2026-07-13, Phases 76-79). Arbitrary public HTTPS git URLs are first-class sources for both marketplaces and plugins: `marketplace add/update/remove/info` clone `source.url` directly (no github.com reconstruction); the resolver classifies `url` / `git-subdir` / `github`-object plugin sources installable through a source-addressed refcounted clone cache (`plugin-clones/<urlhash12>-<sha12>/`, one external-monorepo clone serving every referencing plugin, warm-cache operations offline); the full plugin lifecycle works for git sources (sha-change atomic swaps, last-reference clone GC on uninstall/update/marketplace-remove, network-free list/info + install-completion parity); and the GitHub-only Device Flow generalized into a `GitAuthProvider` registry (public repos on any host clone unauthenticated, registered hosts run their flow host-keyed via `CredentialOps`, no-provider hosts fail clean, no-credential-leak gate covers every provider file). `npm run check` GREEN (2739 unit + 16 integration).
 
-**Next:** define the next milestone (`/gsd-new-milestone`). One live credential
-challenge remains in deferred UAT; see the v1.20 audit. Earlier context carried forward, all
+**Next:** define the next milestone (`/gsd-new-milestone`). The live credential
+challenge deferred in the v1.20 audit passed on 2026-09-30. Earlier context carried forward, all
 deliberate: **two** accepted direct-coverage shortfalls, down from seven
 (`bridges/commands/discover.ts` and `orchestrators/plugin/install-outcome.ts`, both pinned
 by whole reading string, so they fail on an improvement as loudly as on a regression); three
