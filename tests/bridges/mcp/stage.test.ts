@@ -58,7 +58,7 @@ function prepareAcme(
     pluginName: "acme",
     pluginRoot: path.join(cwd, "plugins", "acme"),
     pluginData: path.join(cwd, "data", "acme"),
-    servers: { server: { url: "https://acme.example/mcp" } },
+    servers: { server: { type: "http", url: "https://acme.example/mcp" } },
   });
 }
 
@@ -289,7 +289,7 @@ describe("prepareStageMcpServers", () => {
             pluginName: "acme",
             pluginRoot: path.join(cwd, "plugins", "acme"),
             pluginData: path.join(cwd, "data", "acme"),
-            servers: { server: { url: "https://mcp.example.test" } },
+            servers: { server: { type: "http", url: "https://mcp.example.test" } },
           }),
         (error: unknown) => {
           assert.ok(error instanceof McpConfigFileError);
@@ -379,7 +379,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
-      servers: { server: { url: "https://mcp.example.test" } },
+      servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
     // act
@@ -437,7 +437,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
-      servers: { server: { url: "https://mcp.example.test" } },
+      servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
     // assert
@@ -473,7 +473,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
-      servers: { server: { url: "https://mcp.example.test" } },
+      servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
     // assert
@@ -535,7 +535,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
-      servers: { server: { url: "https://mcp.example.test" } },
+      servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
     // assert
@@ -583,7 +583,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
-      servers: { server: { url: "https://mcp.example.test" } },
+      servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
     // assert
@@ -616,7 +616,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
-      servers: { server: { url: "https://mcp.example.test" } },
+      servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
     // act
@@ -1194,8 +1194,8 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       servers: {
-        beta: { url: "https://beta.example/mcp" },
-        alpha: { url: "https://alpha.example/mcp" },
+        beta: { type: "http", url: "https://beta.example/mcp" },
+        alpha: { type: "http", url: "https://alpha.example/mcp" },
       },
     });
 
@@ -1483,8 +1483,8 @@ describe("prepareStageMcpServers", () => {
         pluginRoot: path.join(cwd, "plugins", "acme"),
         pluginData: path.join(cwd, "data", "acme"),
         servers: {
-          db: { url: "https://db.example/mcp" },
-          "my.api": { url: "https://api.example/mcp" },
+          db: { type: "http", url: "https://db.example/mcp" },
+          "my.api": { type: "http", url: "https://api.example/mcp" },
         },
       });
 
@@ -1534,7 +1534,7 @@ describe("prepareStageMcpServers", () => {
         pluginName: "acme",
         pluginRoot: path.join(cwd, "plugins", "acme"),
         pluginData: path.join(cwd, "data", "acme"),
-        servers: { db: { url: "https://db.example/mcp" } },
+        servers: { db: { type: "http", url: "https://db.example/mcp" } },
       }),
     );
 
@@ -1588,7 +1588,7 @@ describe("prepareStageMcpServers", () => {
         pluginName: "acme",
         pluginRoot: path.join(cwd, "plugins", "acme"),
         pluginData: path.join(cwd, "data", "acme"),
-        servers: { db: { url: "https://db.example/mcp" } },
+        servers: { db: { type: "http", url: "https://db.example/mcp" } },
       }),
     );
     const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");

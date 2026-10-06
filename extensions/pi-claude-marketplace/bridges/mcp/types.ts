@@ -34,6 +34,8 @@ export interface StageMcpInput {
   readonly pluginData: string;
   /** Canonical provenance for state.json (e.g. "<pluginRoot>/.mcp.json"); optional. */
   readonly sourcePath?: string;
+  /** The plugin's description, written on every server entry when present (ANAME-06). */
+  readonly description?: string | undefined;
 }
 
 /**

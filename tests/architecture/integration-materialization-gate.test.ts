@@ -64,6 +64,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
       workflows: [],
     },
     defaultEnabled: true,
+    description: "case-local isolation source",
     mcpServers: {
       local: {
         command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
@@ -84,6 +85,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
         "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)},
         "CLAUDE_PROJECT_DIR": ${JSON.stringify(scopeRoot)}
       },
+      "description": "case-local isolation source",
       "directTools": "search",
       "toolPrefix": "mcp",
       "_piClaudeMarketplace": {
@@ -110,6 +112,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
     pluginData,
     sourcePath: path.join(pluginRoot, ".mcp.json"),
     servers: resolution.mcpServers,
+    description: resolution.description,
   });
   const commit = await commitPreparedMcp(prepared);
   const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");

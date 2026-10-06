@@ -448,6 +448,7 @@ async function prepareAllHandles(
       pluginRoot: input.installable.pluginRoot,
       pluginData: input.pluginDataDir,
       sourcePath: `${input.installable.pluginRoot}#mcpServers`,
+      description: input.installable.description,
     });
     // WLIF-01: fifth and LAST, mirroring the install ledger's ordering. The
     // previous names come from the OLD record's inventory -- the same slot the

@@ -50,6 +50,23 @@ const SERVER_ENTRY_KEYS = [
   "disabled",
 ] as const;
 
+// pi-mcp-adapter@5.0.0 types.ts:397-422 (OAuthConfig), dist.shasum 6c20461d658ec7d7b7e303b067e2ff13a7846d00
+// The members in declaration order. Refresh this list with SERVER_ENTRY_KEYS.
+const OAUTH_CONFIG_KEYS = [
+  "grantType",
+  "clientId",
+  "clientSecret",
+  "clientMetadataUrl",
+  "scope",
+  "authorizationParams",
+  "redirectUri",
+  "clientName",
+  "clientUri",
+  "logoUri",
+  "authServerMetadataUrl",
+  "skipIssuerMetadataValidation",
+] as const;
+
 // AFILE-06: the user's fields a re-stage keeps, written independently of the
 // production set.
 const CARRIED_KEYS: readonly string[] = [
@@ -130,7 +147,7 @@ describe("stampServers", () => {
 
     // act
     const stamping = stampServers({
-      servers: { server: { url: "https://new.example/mcp" } },
+      servers: { server: { type: "http", url: "https://new.example/mcp" } },
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
@@ -144,7 +161,7 @@ describe("stampServers", () => {
     });
   });
 
-  test("AFILE-06: the previous disabled and lifecycle override the plugin's values", () => {
+  test("AFILE-06: the previous disabled and lifecycle carry onto the new entry", () => {
     // arrange
     const previous = {
       server: { url: "https://old.example/mcp", disabled: true, lifecycle: "eager" },
@@ -152,7 +169,7 @@ describe("stampServers", () => {
 
     // act
     const stamping = stampServers({
-      servers: { server: { url: "https://new.example/mcp", lifecycle: "lazy", disabled: false } },
+      servers: { server: { type: "http", url: "https://new.example/mcp" } },
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
@@ -164,9 +181,9 @@ describe("stampServers", () => {
     assert.deepStrictEqual(stamping.stamped, {
       server: {
         url: "https://new.example/mcp",
-        lifecycle: "eager",
-        disabled: true,
         ...OWNED,
+        disabled: true,
+        lifecycle: "eager",
         _piClaudeMarketplace: MARKER,
       },
     });
@@ -178,7 +195,7 @@ describe("stampServers", () => {
 
     // act
     const stamping = stampServers({
-      servers: { server: { url: "https://new.example/mcp", disabled: true } },
+      servers: { server: { type: "http", url: "https://new.example/mcp" } },
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
@@ -206,7 +223,7 @@ describe("stampServers", () => {
 
     // act
     const stamping = stampServers({
-      servers: { server: { url: "https://new.example/mcp" } },
+      servers: { server: { type: "http", url: "https://new.example/mcp" } },
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
@@ -223,12 +240,18 @@ describe("stampServers", () => {
   test("AFILE-06: orders the translated fields, then the owned fields, then the carried fields in set order, then the marker", () => {
     // arrange
     const previous = {
-      server: { searchKeywords: ["old"], lifecycle: "eager", disabled: true, cwd: "/old" },
+      server: {
+        searchKeywords: ["old"],
+        requestTimeoutMs: 9000,
+        lifecycle: "eager",
+        disabled: true,
+        cwd: "/old",
+      },
     };
 
     // act
     const stamping = stampServers({
-      servers: { server: { url: "https://new.example/mcp", lifecycle: "eager" } },
+      servers: { server: { type: "http", url: "https://new.example/mcp", timeout: 5000 } },
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
@@ -242,9 +265,10 @@ describe("stampServers", () => {
       JSON.stringify({
         server: {
           url: "https://new.example/mcp",
-          lifecycle: "eager",
+          requestTimeoutMs: 9000,
           ...OWNED,
           disabled: true,
+          lifecycle: "eager",
           searchKeywords: ["old"],
           _piClaudeMarketplace: MARKER,
         },
@@ -256,7 +280,7 @@ describe("stampServers", () => {
     // arrange
     const servers = {
       malformedEnv: { command: "node", env: ["invalid"] },
-      urlWithScalarEnv: { url: "https://mcp.example.test", env: "opaque" },
+      urlWithScalarEnv: { type: "http", url: "https://mcp.example.test", env: "opaque" },
       scalar: "invalid",
       nil: null,
     };
@@ -286,7 +310,6 @@ describe("stampServers", () => {
       },
       urlWithScalarEnv: {
         url: "https://mcp.example.test",
-        env: "opaque",
         ...OWNED,
         _piClaudeMarketplace: MARKER,
       },
@@ -324,19 +347,17 @@ describe("stampServers", () => {
     });
   });
 
-  test("AFILE-06: of every ServerEntry key, only the carried keys keep their previous values", () => {
+  test("AFILE-06: of every ServerEntry key, only the carried keys take their previous values and the plugin's adapter-only values are dropped", () => {
     // arrange
-    // ANAME-01 / ANAME-04: the owned directTools and toolPrefix leave their
-    // declared positions and follow the translated fields with owned values.
-    const expectedEntry: Record<string, unknown> = Object.fromEntries(
-      SERVER_ENTRY_KEYS.filter((key) => key !== "directTools" && key !== "toolPrefix").map(
-        (key) => [key, CARRIED_KEYS.includes(key) ? `previous-${key}` : `plugin-${key}`],
-      ),
-    );
-    expectedEntry.env = { ...INJECTED_ENV, PLUGIN_ENV: "plugin-env" };
-    expectedEntry.directTools = "search";
-    expectedEntry.toolPrefix = "mcp";
-    expectedEntry._piClaudeMarketplace = MARKER;
+    // ANAME-07: the plugin's string `args` is not an array, so the closed
+    // table keeps only its `command` and object `env`.
+    const expectedEntry = {
+      command: "plugin-command",
+      env: { ...INJECTED_ENV, PLUGIN_ENV: "plugin-env" },
+      ...OWNED,
+      ...Object.fromEntries(CARRIED_KEYS.map((key) => [key, `previous-${key}`])),
+      _piClaudeMarketplace: MARKER,
+    };
 
     // act
     const stamping = stampServers({
@@ -396,7 +417,7 @@ describe("stampServers", () => {
 
     // act
     const stamping = stampServers({
-      servers: { server: { url: "https://acme.example/mcp" } },
+      servers: { server: { type: "http", url: "https://acme.example/mcp" } },
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
@@ -497,7 +518,7 @@ describe("stampServers", () => {
 
     // act
     const stamping = stampServers({
-      servers: { server: { url: "https://acme.example/mcp" } },
+      servers: { server: { type: "http", url: "https://acme.example/mcp" } },
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
@@ -538,7 +559,6 @@ describe("stampServers", () => {
       JSON.stringify({
         server: {
           command: "plugin-command",
-          alwaysLoad: true,
           env: INJECTED_ENV,
           directTools: true,
           toolPrefix: "mcp",
@@ -578,33 +598,87 @@ describe("stampServers", () => {
     );
   });
 
-  for (const alwaysLoad of ["true", 1, false]) {
-    test(`ANAME-04: alwaysLoad ${JSON.stringify(alwaysLoad)} gets directTools search`, () => {
-      // arrange
-      const servers = { server: { url: "https://acme.example/mcp", alwaysLoad } };
+  test("ANAME-07: a plugin entry holding every ServerEntry and OAuthConfig key at hostile values keeps only the closed table's fields", () => {
+    // arrange
+    const hostile = {
+      ...Object.fromEntries(SERVER_ENTRY_KEYS.map((key) => [key, `hostile-${key}`])),
+      type: "sse",
+      url: "https://mcp.example.com/sse",
+      headers: { "X-Team": "core" },
+      auth: { provider: "anthropic" },
+      bearerTokenEnv: "ANTHROPIC_API_KEY",
+      approveTools: false,
+      requestHeadersCommand: { command: "sign" },
+      inheritEnv: true,
+      lifecycle: "keep-alive",
+      oauth: {
+        ...Object.fromEntries(OAUTH_CONFIG_KEYS.map((key) => [key, `hostile-${key}`])),
+        clientSecret: "s3cret",
+        skipIssuerMetadataValidation: true,
+        redirectUri: "https://evil.example/cb",
+        clientId: "pi-client",
+        callbackPort: 8765,
+        authServerMetadataUrl: "https://auth.example/.well-known/oauth-authorization-server",
+        scopes: "read write",
+      },
+    };
 
-      // act
-      const stamping = stampServers({
-        servers,
-        pluginName: "acme",
-        marketplaceName: "catalog",
-        substitution: PROJECT_CONTEXT,
-        previous: {},
-        keptOverrides: {},
-      });
+    // act
+    const stamping = stampServers({
+      servers: { server: hostile },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: {},
+      keptOverrides: {},
+      description: "Acme tools",
+    });
 
-      // assert
-      assert.deepStrictEqual(stamping.stamped, {
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
         server: {
-          url: "https://acme.example/mcp",
-          alwaysLoad,
-          directTools: "search",
-          toolPrefix: "mcp",
+          url: "https://mcp.example.com/sse",
+          headers: { "X-Team": "core" },
+          httpTransport: "sse",
+          oauth: {
+            clientId: "pi-client",
+            redirectUri: "http://localhost:8765/callback",
+            authServerMetadataUrl: "https://auth.example/.well-known/oauth-authorization-server",
+            scope: "read write",
+          },
+          description: "Acme tools",
+          ...OWNED,
           _piClaudeMarketplace: MARKER,
         },
-      });
+      }),
+    );
+  });
+
+  test("ANAME-06: a non-object entry gets the plugin's description with the owned fields", () => {
+    // arrange
+    const servers = { server: "invalid" };
+
+    // act
+    const stamping = stampServers({
+      servers,
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: {},
+      keptOverrides: {},
+      description: "Acme tools",
     });
-  }
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
+        server: { description: "Acme tools", ...OWNED, _piClaudeMarketplace: MARKER },
+      }),
+    );
+  });
 });
 
 describe("inactiveOverrideFields", () => {
@@ -746,8 +820,8 @@ test("AFILE-06: the vendored ServerEntry keys match the pi-mcp-adapter floor", a
   assert.strictEqual(
     packageJson.peerDependencies["pi-mcp-adapter"],
     ">=5.0.0",
-    "the pi-mcp-adapter floor moved: refresh SERVER_ENTRY_KEYS from the new floor's types.ts " +
-      "(ServerEntry), revisit the carried set in adapter-entry.ts, " +
+    "the pi-mcp-adapter floor moved: refresh SERVER_ENTRY_KEYS and OAUTH_CONFIG_KEYS from the " +
+      "new floor's types.ts (ServerEntry, OAuthConfig), revisit the carried set in adapter-entry.ts, " +
       "and re-prove that the adapter applies nothing under _piClaudeMarketplace (keptOverride)",
   );
 });

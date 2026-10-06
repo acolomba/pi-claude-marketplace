@@ -308,6 +308,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     substitution,
     previous: { ...ours, ...overlays },
     keptOverrides: { ...keptOverrides, ...overlays },
+    description: input.description,
   });
 
   // Keep theirs verbatim; replace ours with stamped (or drop ours when

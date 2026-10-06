@@ -86,6 +86,8 @@ interface MaterializableFields {
     >
   >;
   defaultEnabled: Type.TBoolean;
+  // ANAME-06: written on every MCP server entry of the plugin.
+  description: Type.TOptional<Type.TString>;
 }
 
 // TypeBox requires a mapped property record; an interface has no implicit index signature.

@@ -10726,6 +10726,83 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through update", asy
   });
 });
 
+test("ANAME-06: update writes the new version's description and timeout", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-aname06-");
+    try {
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+      const pluginJsonPath = path.join(pluginRoot, ".claude-plugin", "plugin.json");
+      const mcpJsonPath = path.join(pluginRoot, ".mcp.json");
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: { version: "1.0.0", hasSkill: false, omitPluginJsonVersion: true },
+        },
+      });
+      await writeFile(pluginJsonPath, JSON.stringify({ name: "hello", description: "Old" }));
+      await writeFile(
+        mcpJsonPath,
+        JSON.stringify({ mcpServers: { api: { type: "http", url: "https://api.example/mcp" } } }),
+      );
+      const seed = makeCtx();
+      await createInstallOperation(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      )({ ctx: seed.ctx, pi: seed.pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await writeFile(pluginJsonPath, JSON.stringify({ name: "hello", description: "New" }));
+      await writeFile(
+        mcpJsonPath,
+        JSON.stringify({
+          mcpServers: { api: { type: "http", url: "https://api.example/mcp", timeout: 60000 } },
+        }),
+      );
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.1" } });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.strictEqual(record?.version, "1.0.1");
+      assert.equal(
+        await readFile(locations.mcpAdapterJsonPath, "utf8"),
+        `{
+  "mcpServers": {
+    "plugin_hello_api_": {
+      "url": "https://api.example/mcp",
+      "requestTimeoutMs": 60000,
+      "description": "New",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 /** AFILE-04: the exact comments-dropped notice for the project-scope adapter file. */
 const PROJECT_COMMENTS_DROPPED_NOTICE: NotifyRecord = {
   severity: "warning",

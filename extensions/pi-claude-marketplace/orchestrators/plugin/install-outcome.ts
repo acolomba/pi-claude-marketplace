@@ -969,6 +969,7 @@ async function runInstallLedgerBody(
         pluginRoot: c.resolved.pluginRoot,
         pluginData: c.pluginDataDir,
         sourcePath: `${c.resolved.pluginRoot}#mcpServers`,
+        description: c.resolved.description,
       });
       c.mcpReplacement = await replacePreparedMcp(prep);
       const result = prep.result;

@@ -562,6 +562,7 @@ function buildSeededPluginManifest(
     pluginJsonVersion?: string | null;
     experimental?: object;
     pluginJsonDefaultEnabled?: boolean;
+    pluginJsonDescription?: string;
     declareDependencies?: boolean;
     dependencyVersion?: string;
     dependencyMarketplace?: string;
@@ -569,6 +570,7 @@ function buildSeededPluginManifest(
 ): Record<string, unknown> {
   return {
     name: pluginName,
+    ...(opts.pluginJsonDescription !== undefined && { description: opts.pluginJsonDescription }),
     ...(opts.pluginJsonVersion === undefined
       ? { version: "0.0.1" }
       : opts.pluginJsonVersion !== null && { version: opts.pluginJsonVersion }),
@@ -601,10 +603,12 @@ function buildSeededMarketplaceEntry(
     dependencyVersion?: string;
     dependencyMarketplace?: string;
     entryDefaultEnabled?: boolean;
+    entryDescription?: string;
   },
 ): Record<string, unknown> {
   return {
     name: pluginName,
+    ...(opts.entryDescription !== undefined && { description: opts.entryDescription }),
     source: opts.rawSourceOverride ?? `./plugins/${pluginName}`,
     ...(opts.agentDirectories !== undefined && { agents: [...opts.agentDirectories] }),
     ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
@@ -714,6 +718,10 @@ async function seedPathMarketplaceWithPlugin(opts: {
    * Absent -> plugin.json is written exactly as it is without this knob.
    */
   pluginJsonDefaultEnabled?: boolean;
+  /** ANAME-06: the plugin.json `description`, which wins over `entryDescription`. */
+  pluginJsonDescription?: string;
+  /** ANAME-06: the marketplace entry's `description`, the fallback. */
+  entryDescription?: string;
   /**
    * D-64-06: declare unsupported component kinds in the plugin's own
    * plugin.json so `resolveStrict` returns `state: "partially-available"` with NO
@@ -3083,7 +3091,6 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
     },
     "plugin_my_plugin_live_": {
       "command": "live-server",
-      "alwaysLoad": true,
       "env": {
         "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
         "CLAUDE_PLUGIN_DATA": "${dataDir}",
@@ -3109,6 +3116,179 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
     }
   });
 });
+
+test("ANAME-07: install writes Claude servers through the closed adapter table", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname07-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: {
+          remote: {
+            type: "sse",
+            url: "https://mcp.example.com/sse",
+            headers: { "X-Team": "core" },
+            timeout: 90000,
+            alwaysLoad: true,
+            oauth: {
+              clientId: "pi-client",
+              callbackPort: 8765,
+              scopes: "read write",
+              clientSecret: "s3cret",
+              skipIssuerMetadataValidation: true,
+              redirectUri: "https://evil.example/cb",
+            },
+            approveTools: false,
+            auth: { provider: "anthropic" },
+            bearerTokenEnv: "ANTHROPIC_API_KEY",
+            requestHeadersCommand: { command: "sign" },
+            cwd: "/",
+            lifecycle: "eager",
+          },
+          local: {
+            type: "stdio",
+            command: "node",
+            args: ["server.js"],
+            env: { LOG: "1" },
+            timeout: 500,
+            lifecycle: "keep-alive",
+            inheritEnv: false,
+          },
+        },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const dataDir = path.join(locations.dataRoot, "mp", "hello");
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        `{
+  "mcpServers": {
+    "plugin_hello_remote_": {
+      "url": "https://mcp.example.com/sse",
+      "headers": {
+        "X-Team": "core"
+      },
+      "httpTransport": "sse",
+      "oauth": {
+        "clientId": "pi-client",
+        "redirectUri": "http://localhost:8765/callback",
+        "scope": "read write"
+      },
+      "requestTimeoutMs": 90000,
+      "directTools": true,
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    },
+    "plugin_hello_local_": {
+      "command": "node",
+      "args": [
+        "server.js"
+      ],
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
+        "CLAUDE_PLUGIN_DATA": "${dataDir}",
+        "CLAUDE_PROJECT_DIR": "${cwd}",
+        "LOG": "1"
+      },
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { title, descriptions, description } of [
+  {
+    title: "ANAME-06: every entry carries the plugin's description",
+    descriptions: { pluginJsonDescription: "Hello tools", entryDescription: "Entry tools" },
+    description: "Hello tools",
+  },
+  {
+    title: "ANAME-06: the marketplace entry's description is the fallback",
+    descriptions: { entryDescription: "Entry tools" },
+    description: "Entry tools",
+  },
+]) {
+  test(title, async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-aname06-"));
+      try {
+        // arrange
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          pluginName: "hello",
+          ...descriptions,
+          mcpServers: {
+            api: { type: "http", url: "https://api.example.com/mcp", description: "Server text" },
+            docs: { type: "http", url: "https://docs.example.com/mcp" },
+          },
+        });
+        const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+        const { ctx, pi } = makeCtx();
+
+        // act
+        await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+        // assert
+        assert.equal(
+          await readFile(adapterPath, "utf8"),
+          `{
+  "mcpServers": {
+    "plugin_hello_api_": {
+      "url": "https://api.example.com/mcp",
+      "description": "${description}",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    },
+    "plugin_hello_docs_": {
+      "url": "https://docs.example.com/mcp",
+      "description": "${description}",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
 
 test("AFILE-02: an MCP install over an unparseable mcp-adapter.json fails and keeps its bytes", async () => {
   await withHermeticHome(async ({ installPlugin }) => {

@@ -472,7 +472,8 @@ test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survive
 test("AFILE-06: uninstall writes back no carried field the plugin's entry declares and the user's override lacks", async () => {
   await withHermeticEnvironment("mcp-override-plugin-carried-", async ({ cwd }) => {
     // arrange
-    await seedMcpPlugin(cwd, ["project"], { command: "node", lifecycle: "eager", debug: true });
+    // ANAME-07: `timeout` is the one carried field a plugin's entry can set.
+    await seedMcpPlugin(cwd, ["project"], { command: "node", timeout: 5000 });
     const locations = locationsFor("project", cwd);
     const overrideBytes = `{
   "mcpServers": {
@@ -503,11 +504,11 @@ test("AFILE-06: uninstall writes back no carried field the plugin's entry declar
     const uninstalledBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
 
     // assert
-    const { lifecycle, debug, disabled } = installed.mcpServers.plugin_hello_srv_;
+    const { requestTimeoutMs, disabled } = installed.mcpServers.plugin_hello_srv_;
     assert.deepStrictEqual(
-      { installedCarried: { lifecycle, debug, disabled }, uninstalledBytes },
+      { installedCarried: { requestTimeoutMs, disabled }, uninstalledBytes },
       {
-        installedCarried: { lifecycle: "eager", debug: true, disabled: true },
+        installedCarried: { requestTimeoutMs: 5000, disabled: true },
         uninstalledBytes: overrideBytes,
       },
     );
