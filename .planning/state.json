@@ -21,7 +21,7 @@
     {
       "number": "4",
       "name": "Wire Schema and JSON Strategy",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "5",
@@ -41,8 +41,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 04 of 7 · ready to verify"
+    "label": "Advance to the next step (plan phase 5)",
+    "reason": "Phase 5 of 7 — needs a plan"
   },
-  "updated_at": "2026-10-03T20:58:02.521Z"
+  "updated_at": "2026-10-06T15:09:13.611Z"
 }
