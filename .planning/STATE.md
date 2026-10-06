@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 3
 current_phase_name: Claude Code tool names and tool search
 status: executing
-stopped_at: Completed 03-07-PLAN.md
-last_updated: "2026-10-06T18:56:19.846Z"
+stopped_at: Completed 03-08-PLAN.md
+last_updated: "2026-10-06T19:14:10.254Z"
 last_activity: 2026-10-06
 last_activity_desc: Phase 3 execution started
-state_head: 8b710fe4e1412510d7eea88076ce83cad5efac57
+state_head: 946c85b2dc004095e2e96bfb61937a577b10f7e5
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 30
-  completed_plans: 28
+  completed_plans: 29
   percent: 29
 ---
 
@@ -35,7 +35,7 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 3 (Claude Code tool names and tool search) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
 Last activity: 2026-10-06 — Phase 3 execution started
 
@@ -274,6 +274,7 @@ still open with a comment explaining what landed.
 | Phase 03 P05 | 11min | 2 tasks | 7 files |
 | Phase 03 P06 | 12min | 2 tasks | 12 files |
 | Phase 03 P07 | 16min | 3 tasks | 10 files |
+| Phase 03 P08 | 17min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -624,6 +625,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: McpServerSummaryEntry.unsupportedFeature is a plain string: shared/ cannot import domain/
 - [Phase 03]: Agent MCP grants use the longest written-server Claude prefix; an empty or slash-holding tool part is never mapped (ANAME-02)
 - [Phase 03]: A per-tool disallow under a surviving whole-server mcp: grant warns rather than narrowing; async: true is warned, never injected (ANAME-02)
+- [Phase 03]: Plugin-set carried fields (only requestTimeoutMs today) belong to the plugin; carry-forward skips them and the marker lists their names as pluginSetFields
+- [Phase 03]: A field the previous marker lists as plugin-set comes from that marker's kept override, so the user's stub timeout applies again once the plugin drops its timeout
+- [Phase 03]: Write-back restores the kept override's own value for a field the live marker lists as plugin-set
 
 ### Pending Todos
 
@@ -755,11 +759,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-07-PLAN.md
+**Stopped at:** Completed 03-08-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-06T18:56:19.616Z
+Last session: 2026-10-06T19:14:10.016Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 
