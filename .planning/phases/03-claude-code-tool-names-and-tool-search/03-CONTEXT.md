@@ -94,7 +94,7 @@ source; source comments cite requirement IDs (ANAME-0N), never `D-03-NN`.
   that blocks it. REQUIREMENTS.md ANAME-03/ANAME-07 and ROADMAP Phase 3
   criteria 3 and 5 are amended with this context.
   — **Reversibility:** costly — new catalog token and states pinned by gates.
-- **D-03-11:** No "little room left" length warning: a prefix that leaves any
+- **D-03-11 [informational, superseded by D-03-17]:** No "little room left" length warning: a prefix that leaves any
   room installs normally.
 
 ### Name clashes (ANAME-03)
@@ -128,6 +128,41 @@ source; source comments cite requirement IDs (ANAME-0N), never `D-03-NN`.
   record may keep declared names (planner's choice, weigh the Phase 5 rename
   map). Skills need no rewrite: they name tools, which ANAME-01 delivers
   exactly.
+
+### Post-research decisions (operator, 2026-10-06)
+Raised by 03-RESEARCH.md open questions.
+
+- **D-03-17:** Amends D-03-10 and D-03-11. The length arm is dropped. The
+  measurement (03-RESEARCH.md "Measurement record") showed Pi 1.0 + adapter 5
+  register, send and execute tool names of any length (64-136 tested); only
+  providers cap them (OpenAI 64, Anthropic 128), and Claude Code does not check.
+  No install-time length check exists; the measurement and the provider limits
+  are documented.
+- **D-03-18:** A server config invalid by Claude 2.1.291's schema (unknown
+  `type`, `url` with no `type`, a known field with an invalid value such as a
+  non-integer `timeout` or an out-of-range `callbackPort`) is malformed: the
+  plugin resolves `unavailable` with `{malformed mcp}`, as a broken
+  `mcpServers` reference does today (house rule: malformed -> unavailable,
+  unsupported -> partially-available). Stricter than Claude, which skips only
+  that server.
+- **D-03-19:** D-03-15 maps as decided; the agents bridge adds a conversion
+  warning that an agent whose `tools:` gained `mcp:` entries needs `async: true`
+  launches (pi-subagents fails a foreground launch, or one with an uncached
+  server, once `mcp:` entries are present), and the README "Customizing
+  generated agents" text says so. `async: true` is not injected.
+- **D-03-20:** D-03-10's feature list also includes `bareElicitationCapability:
+  true` and the host-only types `sse-ide`, `ws-ide`, `sdk`, `claudeai-proxy`.
+  `role` and `discoveryCache` stay silently dropped (D-03-08).
+- **D-03-21 [informational]:** Recommendations adopted without a separate
+  question: ANAME-04 is verified through the adapter's `mcp({ search })`
+  activating Pi deferred tools, plus a `"defaultTools": ["+tool_search"]`
+  variant; this extension never edits Pi settings (NFR-10), and the docs state
+  that Pi's `tool_search` is off by default. `type: "http"` leaves
+  `httpTransport` unset. The D-03-14 prefix form is accepted as one alternative
+  inside pipe matchers (per-alternative degradation, #217). Proxy calls
+  (`mcp({ tool })`) reach hooks as tool `mcp` and are a documented divergence.
+  Claude's ~28 h timeout default vs the adapter's 60 s is documented, not
+  synthesized. OAuth `callbackPort` maps to `http://localhost:<port>/callback`.
 
 ### Claude's Discretion
 - Module layout of the translator (extend `bridges/mcp/adapter-entry.ts` or
