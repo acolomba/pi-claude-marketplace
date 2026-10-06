@@ -588,6 +588,13 @@ v1.20 requirements are in [the archive](milestones/v1.20-REQUIREMENTS.md).
   `{requires pi-mcp-adapter}` and `info` gains a `requires:` line that tags
   a missing companion (ADET-01, ADET-02) — mcp-4 Phase 1, verified
   2026-10-02.
+- ✓ Plugin MCP tools reach the model under Claude Code's names: key
+  `plugin_<plugin>_<server>_`, tools `mcp__plugin_<plugin>_<server>__<tool>`,
+  `toolPrefix: "mcp"` and `directTools: "search"` on every entry. Hook
+  matchers and agent `tools:` match them, folded key clashes refuse, and a
+  closed 2.1.291 field table translates transport, timeout, OAuth and
+  `description`. Unhonored features give `{unsupported mcp}` with `--partial`
+  (ANAME-01..07) — mcp-4 Phase 3, verified 2026-10-06.
 - ✓ Bare and wrapped plugin manifests follow consistent precedence, malformed
   manifests keep their failure behavior, and missing manifests remain valid —
   v1.20 Phase 1, verified 2026-09-14.
@@ -1047,6 +1054,11 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-06 after mcp-4 Phase 3 (Claude Code tool names and tool
+search) verified; the operator accepted review warnings WR-01, WR-02, WR-03 and
+WR-05 as they stand. Phase 4 (variable expansion at Claude Code parity) is next.
+Prior updates follow._
 
 _Last updated: 2026-10-02 after mcp-4 Phase 1 (Pi 1.0 floor and adapter-only
 detection) verified 5/5; Phase 2 (adapter-file delivery) is next. Prior updates

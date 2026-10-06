@@ -2,44 +2,44 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 3
-current_phase_name: Claude Code tool names and tool search
-status: executing
-stopped_at: "Phase 3 executed (9/9, npm run check green at 0a8bf82d); phase gates pending: code review, regression gate, verifier, security, Nyquist"
-last_updated: "2026-10-06T19:56:52.387Z"
+current_phase: 4
+current_phase_name: Variable expansion at Claude Code parity
+status: planning
+stopped_at: Phase 03 complete, ready to plan Phase 4
+last_updated: "2026-10-06T20:58:25.960Z"
 last_activity: 2026-10-06
-last_activity_desc: Phase 3 execution started
-state_head: 0a8bf82d870fbacc1cea35823fbba325fedad466
+last_activity_desc: Phase 03 complete, transitioned to Phase 4
+state_head: 515f7377c5b5cdb6bb9a07ec215a5a235f9f876a
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 30
   completed_plans: 30
-  percent: 29
+  percent: 43
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-01 at the mcp-4 start)
+See: `.planning/PROJECT.md` (updated 2026-10-06 after mcp-4 Phase 3)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 3 — Claude Code tool names and tool search
+**Current focus:** Phase 4 — Variable expansion at Claude Code parity
 The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
 
 ## Current Position
 
-Phase: 3 (Claude Code tool names and tool search) — EXECUTING
-Plan: 9 of 9
-Status: All 9 plans executed, awaiting phase verification
-Last activity: 2026-10-06 — Phase 3 execution started
+Phase: 4 — Variable expansion at Claude Code parity
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-06 — Phase 03 complete, transitioned to Phase 4
 
-Progress: [███░░░░░░░] 29%
+Progress: [████░░░░░░] 43%
 
 ### workflows-replay closeout (merged from main)
 
@@ -72,7 +72,7 @@ still open with a comment explaining what landed.
 
 **Velocity:**
 
-- Total plans completed: 221
+- Total plans completed: 223
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -88,7 +88,7 @@ still open with a comment explaining what landed.
 | 113. Orchestrator Support       |    35 | 7h 46m recorded | 16.6 min recorded |
 | 01 | 9 | - | - |
 | 2 | 12 | - | - |
-| 3 | 7 | - | - |
+| 03 | 9 | - | - |
 | 04 | 6 | - | - |
 | 5 | 3 | - | - |
 | 06 | 4 | - | - |
@@ -294,6 +294,18 @@ still open with a comment explaining what landed.
 
 Decisions are logged in the PROJECT.md Key Decisions table.
 
+- [mcp-4 Phase 3] Plugin MCP servers use Claude Code's key
+  `plugin_<plugin>_<server>_` with `toolPrefix: "mcp"` and
+  `directTools: "search"`; a closed 2.1.291 field table translates entries
+  (D-03-01, D-03-02, D-03-07).
+- [mcp-4 Phase 3] Keys that collide after normalization or the `-`/`_` fold
+  refuse at install; no tool-name length check exists (D-03-12, D-03-13,
+  D-03-17).
+- [mcp-4 Phase 3] UAT 2026-10-06: the operator accepted review warnings
+  WR-01 (TR-03 accounting with a legacy `mcp.json` entry), WR-02 (OAuth with
+  `headers`), WR-03 (the same-plugin clash refuses inside the ledger) and
+  WR-05 (fallow audit `warn` from the ADET-01 fixture clones) as they stand.
+  All 10 review findings stay `open` in `03-REVIEW-DISPOSITION.md`.
 - [Phase 12] Preview uses `(will uninstall) {dependency pruned}` and actual
   prune uses `(uninstalled) {dependency pruned}`; the preview never writes.
 - [Phase 12] Both empty modes give a scoped informational reason. The
@@ -638,9 +650,8 @@ The mcp-4 open decisions are listed in `ROADMAP.md` under "Open decisions",
 each bound to the discuss session that settles it. Two prerequisites gate
 planning:
 
-1. **Phase 3:** measure the tool-name length Pi 1.0 accepts with a long fixture
-   before the phase is planned (ANAME-03), and confirm the Claude plugin tool
-   form with `skills/claude-code-compat-research`.
+1. Done 2026-10-06: Phase 3 measured the tool-name length (Pi has no limit,
+   D-03-17) and confirmed the Claude plugin tool form.
 2. **Phase 4:** write a threat model before planning (secrets on disk, the
    credential deny-list, shell execution through a leading `!`).
 
@@ -762,11 +773,19 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 3 executed (9/9, npm run check green at 0a8bf82d); phase gates pending: code review, regression gate, verifier, security, Nyquist
+**Stopped at:** Phase 03 complete, ready to plan Phase 4
 
-**Resume file:** .planning/phases/03-claude-code-tool-names-and-tool-search/03-09-SUMMARY.md
+**Resume file:** None
 
-Last session: 2026-10-06T19:56:52.100Z
+Last session: 2026-10-06
+Phase 3 closed. Gates: Nyquist validation (23/23 green), security (20/20
+threats closed), code review (0 critical, 5 warnings, 5 info, all `open`),
+regression gate (`npm run check` green on d6029660, Node v26.10.0), verifier
+`human_needed` with four operator decisions, UAT 4/4 pass, verification
+canonicalized to `passed`. Before the PR: the fallow audit verdict is `warn`
+(WR-05), and the Lint `fallow-audit` job fails on it.
+
+Previous session: 2026-10-06T19:56:52.100Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 

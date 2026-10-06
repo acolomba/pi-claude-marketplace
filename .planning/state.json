@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "Claude Code tool names and tool search",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "4",
@@ -41,8 +41,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 3 of 7 · 29% · executing"
+    "label": "Advance to the next step (plan phase 4)",
+    "reason": "Phase 4 of 7 — needs a plan"
   },
-  "updated_at": "2026-10-06T19:14:06.227Z"
+  "updated_at": "2026-10-06T20:58:26.028Z"
 }
