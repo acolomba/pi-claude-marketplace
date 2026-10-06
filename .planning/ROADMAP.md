@@ -194,7 +194,26 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. Plugin MCP tools load on demand: entries carry `directTools: "search"` and the tools are found through Pi's tool search, while a server marked `alwaysLoad` gets `directTools: true`. Entries leave `lifecycle` unset, so the adapter's `lazy` default applies, and the divergence from Claude Code's session-long connection is documented. (ANAME-04, ANAME-05)
 5. Each entry carries the server `description` from the plugin manifest. `sse` becomes `httpTransport`, and the request timeout and OAuth callback port are translated. A server that uses a Claude feature the adapter cannot honor (`ws`, `headersHelper`, ...) makes the plugin partially available with `{unsupported mcp}`: a normal install refuses with the `--partial` hint, `--partial` installs it without the affected servers, and `info` names each server and feature. (ANAME-06, ANAME-07; amended by D-03-10)
 
-**Plans**: TBD
+**Plans**: 9 plans in 5 waves
+
+**Wave 1**
+- [ ] 03-01-PLAN.md — entries under the Claude Code key `plugin_<plugin>_<server>_` with `toolPrefix: "mcp"` and `directTools`; records keep declared names (ANAME-01, ANAME-04)
+- [ ] 03-02-PLAN.md — hook matchers `mcp__<server>__.*` match delivered tools; literal and `if:` forms proven (ANAME-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03-03-PLAN.md — closed Claude-to-adapter translation table, OAuth and timeout rules, manifest `description` (ANAME-04, ANAME-05, ANAME-06, ANAME-07)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03-04-PLAN.md — unhonored MCP features give `{unsupported mcp}` and a partial install; invalid configs give `{malformed mcp}`; no length check (ANAME-03, ANAME-07)
+- [ ] 03-05-PLAN.md — same-plugin and `-`/`_`-folded key collisions refused before any write (ANAME-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 03-06-PLAN.md — `info` shows `plugin:<plugin>:<server>` and names each left-out server with its feature (ANAME-01, ANAME-07)
+- [ ] 03-07-PLAN.md — agent `tools:` / `disallowedTools:` map Claude MCP names to pi-subagents `mcp:` entries, with the `async: true` warning (ANAME-02)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 03-08-PLAN.md — a plugin-set timeout belongs to the plugin; write-back restores the user's own stub value (ANAME-07)
+- [ ] 03-09-PLAN.md — `docs/mcp-compatibility.md` and README: naming, tool search, length measurement, lifecycle and other divergences (ANAME-03, ANAME-04, ANAME-05)
 
 **Notes.** Measure first: the length limit is unknown on Pi 1.0, because the features/mcp spike measured only Pi's built-in MCP, which hashes names at 64 characters. Confirm the Claude plugin tool form with `skills/claude-code-compat-research` before the name builder is written. Every requirement here changes the entry shape, so the shape must be final before Phase 5; a second rename costs users a second round of sign-ins and approvals. ANAME-07 writes `requestTimeoutMs` from the manifest, but AFILE-06 carries that field forward from the previous entry, so this phase must decide how a translated value and a carried user value interact; without that decision a plugin's later timeout change never takes effect (02-RESEARCH.md Pitfall 5).
 
@@ -298,7 +317,7 @@ plan these phases with the UI gate skipped.
 |-------|-----------|----------------|--------|-----------|
 | 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 9/9 | Complete    | 2026-10-02 |
 | 2. Adapter-file delivery | mcp-4 | 12/12 | Complete    | 2026-10-06 |
-| 3. Claude Code tool names and tool search | mcp-4 | 0/TBD | Not started | - |
+| 3. Claude Code tool names and tool search | mcp-4 | 0/9 | Not started | - |
 | 4. Variable expansion at Claude Code parity | mcp-4 | 0/TBD | Not started | - |
 | 5. Automatic migration on /reload | mcp-4 | 0/TBD | Not started | - |
 | 6. Live MCP status in info | mcp-4 | 0/TBD | Not started | - |

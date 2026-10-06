@@ -38,16 +38,33 @@ created: "2026-10-06"
 
 ## Per-Task Verification Map
 
-Filled by the planner from 03-RESEARCH.md "Phase Requirements → Test Map"; task IDs are assigned when plans exist.
+Filled by the planner from 03-RESEARCH.md "Phase Requirements → Test Map". Each command is the task's own `<verify>` in short form; the plan file holds the exact command and its failure signal. Task commands that set `TMPDIR` use `/var/tmp/mcp4-p3-NN`.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 3-xx-xx | — | — | ANAME-01 | — | N/A | unit | `node --test tests/domain/name.test.ts tests/bridges/mcp/adapter-entry.test.ts` | ✅ extend | ⬜ pending |
-| 3-xx-xx | — | — | ANAME-02 | — | N/A | unit | `node --test tests/domain/components/hooks/matcher.test.ts tests/bridges/hooks/dispatch.test.ts tests/bridges/agents/convert.test.ts` | ✅ extend | ⬜ pending |
-| 3-xx-xx | — | — | ANAME-03 | — | Refuse before any write (bytes unchanged) | unit | `node --test tests/bridges/mcp/stage.test.ts tests/bridges/mcp/collision-slots.test.ts` | ✅ extend | ⬜ pending |
-| 3-xx-xx | — | — | ANAME-04/05/06 | — | N/A | unit | `node --test tests/bridges/mcp/adapter-entry.test.ts tests/domain/plugin-resolver.test.ts` | ✅ extend | ⬜ pending |
-| 3-xx-xx | — | — | ANAME-07 | T-03 (closed translation) | No plugin-set `auth`, `approveTools`, `requestHeadersCommand`, `inheritEnv`, `bearerToken*`, `cwd` reaches the entry | unit (security) | `node --test tests/bridges/mcp/adapter-entry.test.ts` + new domain module test | ❌ W0 | ⬜ pending |
-| 3-xx-xx | — | — | ANAME-07 / D-03-10 | — | N/A | unit + integration + catalog | `node --test tests/domain/mcp-resolution.test.ts tests/domain/plugin-resolver.test.ts tests/orchestrators/plugin/install-flow.test.ts && npm run test:architecture` | ✅ extend + catalog fixtures | ⬜ pending |
+| 3-01-01 | 01 | 1 | ANAME-01, ANAME-04 | T-03-02 | Owned `toolPrefix`/`directTools` on every entry; a global or plugin `toolPrefix` cannot rename tools | unit + e2e | `node --test tests/domain/name.test.ts && node --test --test-name-pattern="^(ANAME-01\|AFILE-0\|PI-9\|D-102-02)" tests/orchestrators/plugin/install-flow.test.ts` | ✅ extend | ⬜ pending |
+| 3-01-02 | 01 | 1 | ANAME-01 | T-03-03 | Cascade unstage maps removed keys back to declared names | unit | `node --test tests/bridges/mcp/adapter-entry.test.ts tests/bridges/mcp/stage.test.ts tests/orchestrators/marketplace/shared.test.ts` + direct coverage | ✅ extend | ⬜ pending |
+| 3-01-03 | 01 | 1 | ANAME-01 | — | N/A | unit + integration + e2e | `npm run test:modules && npm run test:integration && node --test tests/e2e/install-soft-deps.test.ts` | ✅ extend | ⬜ pending |
+| 3-02-01 | 02 | 1 | ANAME-02 | T-03-04 | No RegExp built from matcher text | unit | `node --test tests/domain/components/hooks/matcher.test.ts tests/bridges/hooks/dispatch.test.ts` + direct coverage | ✅ extend | ⬜ pending |
+| 3-02-02 | 02 | 1 | ANAME-02 | T-03-05 | Proxy-call hook gap documented | unit + docs | `node --test tests/domain/components/hooks/partition.test.ts tests/bridges/hooks/if-field/index.test.ts` | ✅ extend | ⬜ pending |
+| 3-03-01 | 03 | 2 | ANAME-07 | T-03-06, T-03-07, T-03-08 | Closed table drops adapter-only and credential keys | unit + e2e | `node --test tests/domain/mcp-server-features.test.ts && node --test --test-name-pattern="^(ANAME-0\|AFILE-0)" tests/orchestrators/plugin/install-flow.test.ts` | ❌ created in this task | ⬜ pending |
+| 3-03-02 | 03 | 2 | ANAME-06 | — | N/A | unit + e2e | `node --test tests/domain/plugin-resolver.test.ts && node --test --test-name-pattern="^ANAME-0" tests/orchestrators/plugin/install-flow.test.ts` | ✅ extend | ⬜ pending |
+| 3-03-03 | 03 | 2 | ANAME-04, ANAME-05, ANAME-07 | T-03-06, T-03-07, T-03-08 | Every vendored `ServerEntry` and `OAuthConfig` key in hostile plugin input stays out of the entry | unit (security) + integration | `npm run test:modules && npm run test:integration` + direct coverage | ✅ extend | ⬜ pending |
+| 3-04-01 | 04 | 3 | ANAME-07 | T-03-10 | An unhonored per-tool policy or helper refuses a normal install | unit + e2e + closed-set gates | `node --test tests/architecture/notify-closed-set-locks.test.ts tests/architecture/compat-01-no-expansion.test.ts tests/architecture/partial-vocabulary-guard.test.ts && node --test --test-name-pattern="^ANAME-07" tests/orchestrators/plugin/install-flow.test.ts` | ✅ extend | ⬜ pending |
+| 3-04-02 | 04 | 3 | ANAME-07 | T-03-11 | An invalid config is never half-honored (unavailable) | unit + parity + e2e | `node --test tests/domain/mcp-server-features.test.ts tests/domain/mcp-resolution.test.ts tests/shared/probe-classifiers.test.ts tests/orchestrators/plugin/install.messaging.test.ts tests/architecture/cross-surface-reason-parity.test.ts` + direct coverage | ✅ extend | ⬜ pending |
+| 3-04-03 | 04 | 3 | ANAME-03, ANAME-07 | T-03-12 | N/A | e2e + catalog gate | `npm run test:modules && npm run test:architecture && npm run test:integration` | ✅ extend + new catalog fixtures | ⬜ pending |
+| 3-05-01 | 05 | 3 | ANAME-03 | T-03-13 | Refuse before any write (no file, no record) | unit + ledger e2e | `node --test tests/shared/errors-bridges.test.ts tests/bridges/mcp/stage.test.ts && node --test --test-name-pattern="^ANAME-03" tests/orchestrators/plugin/install-outcome.test.ts` | ✅ extend | ⬜ pending |
+| 3-05-02 | 05 | 3 | ANAME-03 | T-03-13 | Folded clash refused within a plugin, across plugins and against user servers (bytes unchanged) | unit | `npm run test:modules && npm run test:integration` + direct coverage | ✅ extend | ⬜ pending |
+| 3-06-01 | 06 | 4 | ANAME-01, ANAME-07 | — | N/A | unit | `node --test tests/orchestrators/plugin/info.test.ts` | ✅ extend | ⬜ pending |
+| 3-06-02 | 06 | 4 | ANAME-07 | T-03-14 | N/A | unit + catalog gate | `npm run test:modules && npm run test:architecture && npm run test:integration` + direct coverage | ✅ extend + new catalog fixture | ⬜ pending |
+| 3-07-01 | 07 | 4 | ANAME-02 | T-03-15 | Only servers this install writes are granted | unit + ledger e2e | `node --test tests/bridges/agents/convert.test.ts tests/bridges/agents/stage.test.ts && node --test --test-name-pattern="^ANAME-02" tests/orchestrators/plugin/install-outcome.test.ts` | ✅ extend | ⬜ pending |
+| 3-07-02 | 07 | 4 | ANAME-02 | T-03-15, T-03-16 | A disallow never weakens without a trace | unit | `node --test tests/bridges/agents/convert.test.ts tests/bridges/agents/stage.test.ts` + direct coverage | ✅ extend | ⬜ pending |
+| 3-07-03 | 07 | 4 | ANAME-02 | T-03-15 | A left-out server is never granted | ledger e2e | `npm run test:modules && npm run test:integration` + direct coverage | ✅ extend | ⬜ pending |
+| 3-08-01 | 08 | 5 | ANAME-07 | T-03-18 | A stale plugin timeout never survives as a user value | unit + e2e | `node --test tests/bridges/mcp/marker.test.ts tests/bridges/mcp/adapter-entry.test.ts && node --test --test-name-pattern="^(ANAME-0\|AFILE-06)" tests/orchestrators/plugin/update-flow.test.ts` | ✅ extend | ⬜ pending |
+| 3-08-02 | 08 | 5 | ANAME-07 | T-03-17 | The marker holds field names only | unit | `node --test tests/bridges/mcp/adapter-entry.test.ts tests/bridges/mcp/adapter-doc.test.ts tests/bridges/mcp/stage.test.ts tests/bridges/mcp/marker.test.ts` + direct coverage | ✅ extend | ⬜ pending |
+| 3-08-03 | 08 | 5 | ANAME-07 | T-03-18 | The user's stub round-trips through a plugin-owned timeout | integration + notices lock | `npm run test:modules && npm run test:architecture && npm run test:integration` | ✅ extend | ⬜ pending |
+| 3-09-01 | 09 | 5 | ANAME-03, ANAME-04, ANAME-05 | T-03-19 | Docs never say the extension edits Pi settings | docs lint | `pre-commit run markdownlint-cli2 --files docs/mcp-compatibility.md README.md` | ❌ new document | ⬜ pending |
+| 3-09-02 | 09 | 5 | ANAME-05 | — | N/A | docs | `rg -q "Divergences" docs/mcp-compatibility.md` | ❌ new document | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -55,9 +72,9 @@ Filled by the planner from 03-RESEARCH.md "Phase Requirements → Test Map"; tas
 
 ## Wave 0 Requirements
 
-- [ ] Paired test for the new domain field-table / unsupported-feature module (e.g. `tests/domain/mcp-server-features.test.ts`)
-- [ ] Shared expected-key helper (or production builder import) for the MCP-touching tests whose keys change
-- [ ] Catalog-uat fixtures for every new `{unsupported mcp}` block in `docs/output-catalog.md`
+- [ ] Paired test for the new domain field-table / unsupported-feature module: `tests/domain/mcp-server-features.test.ts`, created by plan 03-03 Task 1 and completed by 03-03 Task 3 and 03-04 Task 2
+- [ ] Expected keys in MCP-touching tests: written literally in owner tests, and through the production `generatedMcpServerKey` import where a test derives them (e2e, plan 03-01 Task 3)
+- [ ] Catalog-uat fixtures for every new `{unsupported mcp}` block in `docs/output-catalog.md`: plan 03-04 Task 3 (install and list states) and plan 03-06 Task 2 (info state)
 
 ---
 
