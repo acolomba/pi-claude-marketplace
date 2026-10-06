@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 02
-current_phase_name: Adapter-file delivery
-status: executing
-stopped_at: Completed 02-08-PLAN.md
-last_updated: "2026-10-04T02:47:32.327Z"
-last_activity: 2026-10-03
-last_activity_desc: Plans 02-09..02-12 complete (D-02-21 keep-and-restore override)
-state_head: ceb44007b34200f4e2609ce804a0d262176ae3d9
+current_phase: 3
+current_phase_name: Claude Code tool names and tool search
+status: planning
+stopped_at: Phase 2 complete, ready to plan Phase 3
+last_updated: "2026-10-06T14:32:33.425Z"
+last_activity: 2026-10-06
+last_activity_desc: Phase 2 complete, transitioned to Phase 3
+state_head: 8682f7143dce2615e5d0cce9e40620829b8ecd9d
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 21
-  completed_plans: 17
-  percent: 14
+  completed_plans: 21
+  percent: 29
 ---
 
 # Project State
@@ -27,19 +27,19 @@ See: `.planning/PROJECT.md` (updated 2026-10-01 at the mcp-4 start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Adapter-file delivery
+**Current focus:** Phase 3 — Claude Code tool names and tool search (Phase 2 verified, Nyquist-validated and threat-secure 2026-10-06)
 The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
 
 ## Current Position
 
-Phase: 02 (Adapter-file delivery) — EXECUTING
-Plan: 12 of 12 (gap closure 02-09..02-12 executed)
-Status: Gap closure executed — code review, full check and re-verification next
-Last activity: 2026-10-04 — Plans 02-09..02-12 complete (D-02-21 keep-and-restore override)
+Phase: 3 — Claude Code tool names and tool search
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-06 — Phase 2 complete, transitioned to Phase 3
 
-Progress: [█░░░░░░░░░] 14%
+Progress: [███░░░░░░░] 29%
 
 ### workflows-replay closeout (merged from main)
 
@@ -72,7 +72,7 @@ still open with a comment explaining what landed.
 
 **Velocity:**
 
-- Total plans completed: 211
+- Total plans completed: 221
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -87,7 +87,7 @@ still open with a comment explaining what landed.
 | 112. Hook Runtime               |    31 | 7h 58m          | 15.4 min          |
 | 113. Orchestrator Support       |    35 | 7h 46m recorded | 16.6 min recorded |
 | 01 | 9 | - | - |
-| 02 | 2 | - | - |
+| 2 | 12 | - | - |
 | 3 | 7 | - | - |
 | 04 | 6 | - | - |
 | 5 | 3 | - | - |
@@ -736,9 +736,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 2 gap closure planned (02-09..02-12, D-02-21); next: execute gap plans
+**Stopped at:** Phase 2 complete, ready to plan Phase 3
 
-**Resume file:** .planning/phases/02-adapter-file-delivery/.continue-here.md
+**Resume file:** None
 
 Last session: 2026-10-03T21:30:00.000Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase

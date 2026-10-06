@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Adapter-file delivery",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "3",
@@ -41,8 +41,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 02 of 7 · 14% · executing"
+    "label": "Advance to the next step (plan phase 3)",
+    "reason": "Phase 3 of 7 — needs a plan"
   },
-  "updated_at": "2026-10-03T11:42:28.944Z"
+  "updated_at": "2026-10-06T14:32:33.510Z"
 }
