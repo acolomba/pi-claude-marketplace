@@ -24,7 +24,7 @@
     "eslint": "^10.11.0",
     "eslint-plugin-import-x": "^4.16.2",
     "eslint-plugin-sonarjs": "^4.2.2",
-    "fallow": "^3.27.0",
+    "fallow": "^3.30.0",
     "globals": "^17.6.0",
     "prettier": "^3.9.9",
     "strong-mock": "^9.2.2",
