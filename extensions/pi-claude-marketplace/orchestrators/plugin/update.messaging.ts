@@ -74,6 +74,7 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
   // shared `partiallyInstalledRow` threads `dependencies` so the soft-dep markers
   // fire on a degraded update exactly as on a clean `(updated)` row.
   "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
+  // fallow-ignore-next-line code-duplication -- reviewed: per-command typed render-map arms are one-line calls to shared row composers; extracting them needs a cross-command generic.
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   // XSURF-03: the partially-upgradable manual update-decline row. Byte-identical to
   // the central `renderPluginRow` arm -- reuses `ICON_INSTALLED` (`●`) because
