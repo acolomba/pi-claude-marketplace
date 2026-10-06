@@ -514,3 +514,88 @@ test("AFILE-06: uninstall writes back no carried field the plugin's entry declar
     );
   });
 });
+
+test("ANAME-07: a project install over a stub keeps the user's timeout for write-back while the plugin's timeout applies", async () => {
+  await withHermeticEnvironment("mcp-override-plugin-set-", async ({ cwd }) => {
+    // arrange
+    await seedMcpPlugin(cwd, ["project"], {
+      type: "http",
+      url: "https://hello.example/mcp",
+      timeout: 60000,
+    });
+    const locations = locationsFor("project", cwd);
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_hello_srv_":{"requestTimeoutMs":5000,"disabled":true}}}\n',
+    );
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const completionCache = createCompletionCache();
+    const installed = makeCtx();
+    const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+
+    // act
+    await createInstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...installed.session, ...request });
+    const installedText = await readFile(locations.mcpAdapterJsonPath, "utf8");
+    // pi-mcp-adapter 5.0.0's `/mcp-adapter enable plugin_hello_srv_` removes
+    // `disabled` from the entry and keeps every other member, the marker included.
+    const installedDoc = JSON.parse(installedText) as {
+      mcpServers: { plugin_hello_srv_: Record<string, unknown> };
+    };
+    const { disabled: _disabled, ...userEnabledEntry } = installedDoc.mcpServers.plugin_hello_srv_;
+    await writeFile(
+      locations.mcpAdapterJsonPath,
+      `${JSON.stringify({ mcpServers: { plugin_hello_srv_: userEnabledEntry } }, null, 2)}\n`,
+    );
+    await createUninstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...makeCtx().session, ...request });
+    const uninstalledBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(JSON.parse(installedText), {
+      mcpServers: {
+        plugin_hello_srv_: {
+          url: "https://hello.example/mcp",
+          requestTimeoutMs: 60000,
+          directTools: "search",
+          toolPrefix: "mcp",
+          disabled: true,
+          _piClaudeMarketplace: {
+            plugin: "hello",
+            marketplace: "mp",
+            pluginSetFields: ["requestTimeoutMs"],
+            keptOverride: { requestTimeoutMs: 5000, disabled: true },
+          },
+        },
+      },
+    });
+    assert.deepStrictEqual(installed.notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+        severity: "warning",
+      },
+      {
+        message:
+          'MCP server override kept.\n\nhello now provides "plugin_hello_srv_" in the project-scope mcp-adapter.json. Your override for "plugin_hello_srv_" is kept, but these fields of it stop applying: requestTimeoutMs. It comes back when you uninstall or disable hello.',
+        severity: "warning",
+      },
+    ]);
+    assert.strictEqual(
+      uninstalledBytes,
+      `{
+  "mcpServers": {
+    "plugin_hello_srv_": {
+      "requestTimeoutMs": 5000
+    }
+  }
+}
+`,
+    );
+  });
+});

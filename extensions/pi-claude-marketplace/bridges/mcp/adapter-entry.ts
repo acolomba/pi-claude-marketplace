@@ -8,21 +8,30 @@
 // `toolPrefix: "mcp"`, which keeps the tool names Claude Code's
 // `mcp__plugin_<plugin>_<server>__<tool>` whatever the user's global
 // `settings.toolPrefix` says (ANAME-01). The user's own fields carry over from
-// the entry it replaces (AFILE-06), and the MC-5 marker goes last. The marker
-// may keep the user override the entry replaced, verbatim and inert (AFILE-06).
-// Every change to entry content belongs in this module or the table.
+// the entry it replaces (AFILE-06), except a carried field the plugin's entry
+// sets, which belongs to the plugin (ANAME-07). The MC-5 marker goes last. It
+// names the carried fields the plugin set and may keep the user override the
+// entry replaced, verbatim and inert (AFILE-06). Every change to entry content
+// belongs in this module or the table.
 
 import { translateMcpServer } from "../../domain/mcp-server-features.ts";
 
-import { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker } from "./marker.ts";
+import {
+  CLAUDE_MARKETPLACE_MARKER_KEY,
+  buildMarker,
+  keptOverrideOf,
+  pluginSetFieldsOf,
+} from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 import { substituteAndInject, type McpSubstitutionContext } from "./substitute.ts";
 
 // AFILE-06: the user's choices in pi-mcp-adapter's `ServerEntry` that survive
 // a re-stage. `directTools`, `toolPrefix` and `description` are owned by this
-// extension, and every other field comes from the plugin's translated entry. No credential-bearing field is in
-// the set, so a previous entry or a user stub never leaks one into the new
-// entry.
+// extension, and every other field comes from the plugin's translated entry.
+// The closed table can set `requestTimeoutMs` from the plugin's `timeout`
+// (ANAME-07); a carried field the plugin sets is the plugin's. No
+// credential-bearing field is in the set, so a previous entry or a user stub
+// never leaks one into the new entry.
 const CARRIED_FIELDS = [
   "disabled",
   "approveTools",
@@ -91,20 +100,31 @@ function translatedEntry(
   return translateMcpServer(substituteAndInject(entry, substitution), description);
 }
 
+/** ANAME-07: the carried fields the translated entry sets, in carried-set order. */
+function pluginSetFieldsIn(translated: Readonly<Record<string, unknown>>): readonly string[] {
+  return CARRIED_FIELDS.filter((field) => Object.hasOwn(translated, field));
+}
+
 /**
  * AFILE-06: copies each carried field the previous entry holds as an own
  * property, whatever its value, so an explicit `disabled: false` survives
- * like `true`.
+ * like `true`. A field in `pluginSet` belongs to the plugin and is skipped
+ * (ANAME-07). A field the previous entry's marker lists as plugin-set holds
+ * the plugin's old value, so it comes from the override that marker keeps,
+ * if any, and a timeout a later version drops leaves no stale value behind.
  */
-function carriedFields(previous: unknown): Record<string, unknown> {
+function carriedFields(previous: unknown, pluginSet: readonly string[]): Record<string, unknown> {
   const carried: Record<string, unknown> = {};
   if (!isPlainObject(previous)) {
     return carried;
   }
 
+  const previousPluginSet = pluginSetFieldsOf(previous);
+  const kept = keptOverrideOf(previous) ?? {};
   for (const field of CARRIED_FIELDS) {
-    if (Object.hasOwn(previous, field)) {
-      carried[field] = previous[field];
+    const source = previousPluginSet.includes(field) ? kept : previous;
+    if (!pluginSet.includes(field) && Object.hasOwn(source, field)) {
+      carried[field] = source[field];
     }
   }
 
@@ -114,36 +134,45 @@ function carriedFields(previous: unknown): Record<string, unknown> {
 /**
  * AFILE-06: the fields of a kept override that do not apply while the
  * plugin's entry holds the server name, in the override's key order. These are
- * its own fields outside the carried set. `directTools` and `toolPrefix` are
- * among them, because the plugin's entry owns both.
+ * its own fields outside the carried set, and its carried fields in
+ * `pluginSetFields`, which take the plugin's value (ANAME-07). `directTools`
+ * and `toolPrefix` are among them, because the plugin's entry owns both.
  */
 export function inactiveOverrideFields(
   override: Readonly<Record<string, unknown>>,
+  pluginSetFields: readonly string[],
 ): readonly string[] {
-  return Object.freeze(Object.keys(override).filter((field) => !CARRIED_FIELD_SET.has(field)));
+  return Object.freeze(
+    Object.keys(override).filter(
+      (field) => !CARRIED_FIELD_SET.has(field) || pluginSetFields.includes(field),
+    ),
+  );
 }
 
 /**
  * AFILE-06: the override written back in place of the plugin's live entry.
- * Each field outside the carried set comes back as kept, in the kept key order.
- * Each carried field the kept override holds takes the live entry's value
- * instead, so a `/mcp-adapter enable` or `disable` run while the plugin held
- * the name wins over the kept value. Such a field is left out when the live
- * entry lacks it, as a restage leaves it out, because pi-mcp-adapter's enable
- * writer removes `disabled` from the entry. A carried field the kept override
- * lacks is never added, so a value the plugin's entry declares (such as
- * `requestTimeoutMs`) stays out of the user's override. Only the kept override's own
- * fields come back, so the result is still an override and never a full
- * definition (AFILE-05).
+ * Each field outside the carried set comes back as kept, in the kept key order,
+ * and so does each carried field the live entry's marker lists as plugin-set,
+ * because the live value there is the plugin's (ANAME-07). Every other carried
+ * field the kept override holds takes the live entry's value instead, so a
+ * `/mcp-adapter enable` or `disable` run while the plugin held the name wins
+ * over the kept value. Such a field is left out when the live entry lacks it,
+ * as a restage leaves it out, because pi-mcp-adapter's enable writer removes
+ * `disabled` from the entry. A carried field the kept override lacks is never
+ * added, so a value the plugin's entry declares (such as `requestTimeoutMs`)
+ * stays out of the user's override. Only the kept override's own fields come
+ * back, so the result is still an override and never a full definition
+ * (AFILE-05).
  */
 export function restoredOverride(
   kept: Readonly<Record<string, unknown>>,
   live: unknown,
 ): Record<string, unknown> {
-  const liveCarried = carriedFields(live);
+  const livePluginSet = pluginSetFieldsOf(live);
+  const liveCarried = carriedFields(live, livePluginSet);
   const restored: Record<string, unknown> = {};
   for (const [field, value] of Object.entries(kept)) {
-    if (!CARRIED_FIELD_SET.has(field)) {
+    if (!CARRIED_FIELD_SET.has(field) || livePluginSet.includes(field)) {
       safeSet(restored, field, value);
     } else if (Object.hasOwn(liveCarried, field)) {
       restored[field] = liveCarried[field];
@@ -168,11 +197,13 @@ function keptOverrideFor(
 /**
  * Builds the entry for each plugin server: the translated plugin entry with
  * its owned fields (ANAME-04, ANAME-06, ANAME-07), then the fields carried
- * from the entry it replaces in carried-set order, then the MC-5 marker, which
- * keeps the server's user override when there is one. A carried value
- * overrides the plugin's value; a carried field the plugin also sets keeps the
- * plugin's key position. Carried fields come from `previous` alone, so a
- * credential-bearing field of an override stays inside the marker (AFILE-06).
+ * from the entry it replaces in carried-set order, then the MC-5 marker. The
+ * marker names the carried fields the plugin's entry sets and keeps the
+ * server's user override when there is one. A carried field the plugin sets
+ * takes the plugin's value, so a timeout change in a later version applies
+ * (ANAME-07). Carried fields come from `previous` and the override its marker
+ * keeps, so a credential-bearing field of an override stays inside the marker
+ * (AFILE-06).
  */
 export function stampServers(input: StampServersInput): {
   readonly stamped: Record<string, unknown>;
@@ -188,17 +219,17 @@ export function stampServers(input: StampServersInput): {
       input.description,
       warnings,
     );
+    const pluginSetFields = pluginSetFieldsIn(translated);
     // safeSet copies a server literally named `__proto__` as an own key, so
     // it is stamped and written rather than dropped through the inherited
     // setter (WR-01).
     safeSet(stamped, name, {
       ...translated,
-      ...carriedFields(input.previous[name]),
-      [CLAUDE_MARKETPLACE_MARKER_KEY]: buildMarker(
-        input.pluginName,
-        input.marketplaceName,
-        keptOverrideFor(input.keptOverrides, name),
-      ),
+      ...carriedFields(input.previous[name], pluginSetFields),
+      [CLAUDE_MARKETPLACE_MARKER_KEY]: buildMarker(input.pluginName, input.marketplaceName, {
+        pluginSetFields,
+        keptOverride: keptOverrideFor(input.keptOverrides, name),
+      }),
     });
   }
 

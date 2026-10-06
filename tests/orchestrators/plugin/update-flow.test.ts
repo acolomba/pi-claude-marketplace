@@ -10790,13 +10790,116 @@ test("ANAME-06: update writes the new version's description and timeout", async 
       "toolPrefix": "mcp",
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "pluginSetFields": [
+          "requestTimeoutMs"
+        ]
       }
     }
   }
 }
 `,
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ANAME-07: a plugin-set timeout wins over a carried override and a dropped one leaves no stale value", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-aname07-");
+    try {
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+      const mcpJsonPath = path.join(pluginRoot, ".mcp.json");
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: { version: "1.0.0", hasSkill: false, omitPluginJsonVersion: true },
+        },
+      });
+      await writeFile(
+        mcpJsonPath,
+        JSON.stringify({
+          mcpServers: { api: { type: "http", url: "https://api.example/mcp", timeout: 120000 } },
+        }),
+      );
+      const seed = makeCtx();
+      await createInstallOperation(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      )({ ctx: seed.ctx, pi: seed.pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
+        mcpServers: Record<string, Record<string, unknown>>;
+      };
+      installed.mcpServers.plugin_hello_api_ = {
+        ...installed.mcpServers.plugin_hello_api_,
+        requestTimeoutMs: 5000,
+        disabled: true,
+      };
+      await writeFile(locations.mcpAdapterJsonPath, `${JSON.stringify(installed, null, 2)}\n`);
+      await writeFile(
+        mcpJsonPath,
+        JSON.stringify({
+          mcpServers: { api: { type: "http", url: "https://api.example/mcp", timeout: 90000 } },
+        }),
+      );
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.1" } });
+      const target = { kind: "plugin", plugin: "hello", marketplace: "mp" } as const;
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({ ctx, pi, scope: "project", cwd, target });
+      const afterTimeoutChange: unknown = JSON.parse(
+        await readFile(locations.mcpAdapterJsonPath, "utf8"),
+      );
+      await writeFile(
+        mcpJsonPath,
+        JSON.stringify({ mcpServers: { api: { type: "http", url: "https://api.example/mcp" } } }),
+      );
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.2" } });
+      await updatePlugins({ ctx, pi, scope: "project", cwd, target });
+      const afterTimeoutDrop: unknown = JSON.parse(
+        await readFile(locations.mcpAdapterJsonPath, "utf8"),
+      );
+
+      // assert
+      assert.deepStrictEqual(afterTimeoutChange, {
+        mcpServers: {
+          plugin_hello_api_: {
+            url: "https://api.example/mcp",
+            requestTimeoutMs: 90000,
+            directTools: "search",
+            toolPrefix: "mcp",
+            disabled: true,
+            _piClaudeMarketplace: {
+              plugin: "hello",
+              marketplace: "mp",
+              pluginSetFields: ["requestTimeoutMs"],
+            },
+          },
+        },
+      });
+      assert.deepStrictEqual(afterTimeoutDrop, {
+        mcpServers: {
+          plugin_hello_api_: {
+            url: "https://api.example/mcp",
+            directTools: "search",
+            toolPrefix: "mcp",
+            disabled: true,
+            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+          },
+        },
+      });
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.strictEqual(record?.version, "1.0.2");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

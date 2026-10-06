@@ -237,7 +237,7 @@ describe("stampServers", () => {
     });
   });
 
-  test("AFILE-06: orders the translated fields, then the owned fields, then the carried fields in set order, then the marker", () => {
+  test("AFILE-06: orders the translated fields, then the owned fields, then the carried fields in set order, then the marker, and the plugin's timeout wins", () => {
     // arrange
     const previous = {
       server: {
@@ -265,11 +265,152 @@ describe("stampServers", () => {
       JSON.stringify({
         server: {
           url: "https://new.example/mcp",
-          requestTimeoutMs: 9000,
+          requestTimeoutMs: 5000,
           ...OWNED,
           disabled: true,
           lifecycle: "eager",
           searchKeywords: ["old"],
+          _piClaudeMarketplace: { ...MARKER, pluginSetFields: ["requestTimeoutMs"] },
+        },
+      }),
+    );
+  });
+
+  test("ANAME-07: the plugin's timeout replaces a carried requestTimeoutMs while disabled carries", () => {
+    // arrange
+    const previous = {
+      server: { url: "https://old.example/mcp", requestTimeoutMs: 5000, disabled: true },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://new.example/mcp", timeout: 120000 } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous,
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
+        server: {
+          url: "https://new.example/mcp",
+          requestTimeoutMs: 120000,
+          ...OWNED,
+          disabled: true,
+          _piClaudeMarketplace: { ...MARKER, pluginSetFields: ["requestTimeoutMs"] },
+        },
+      }),
+    );
+  });
+
+  test("ANAME-07: a timeout the previous marker lists as plugin-set does not survive a version without one", () => {
+    // arrange
+    const previous = {
+      server: {
+        url: "https://old.example/mcp",
+        requestTimeoutMs: 120000,
+        disabled: true,
+        _piClaudeMarketplace: { ...MARKER, pluginSetFields: ["requestTimeoutMs"] },
+      },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://new.example/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous,
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
+        server: {
+          url: "https://new.example/mcp",
+          ...OWNED,
+          disabled: true,
+          _piClaudeMarketplace: MARKER,
+        },
+      }),
+    );
+  });
+
+  test("ANAME-07: the kept override's own timeout applies again once the plugin drops its timeout", () => {
+    // arrange
+    const keptOverride = { requestTimeoutMs: 5000, disabled: true };
+    const previous = {
+      server: {
+        url: "https://old.example/mcp",
+        requestTimeoutMs: 120000,
+        disabled: true,
+        _piClaudeMarketplace: {
+          ...MARKER,
+          pluginSetFields: ["requestTimeoutMs"],
+          keptOverride,
+        },
+      },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://new.example/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous,
+      keptOverrides: { server: keptOverride },
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
+        server: {
+          url: "https://new.example/mcp",
+          ...OWNED,
+          disabled: true,
+          requestTimeoutMs: 5000,
+          _piClaudeMarketplace: { ...MARKER, keptOverride },
+        },
+      }),
+    );
+  });
+
+  test("ANAME-07: a user requestTimeoutMs no marker lists carries when the plugin sets no timeout", () => {
+    // arrange
+    const previous = {
+      server: {
+        url: "https://old.example/mcp",
+        requestTimeoutMs: 5000,
+        _piClaudeMarketplace: MARKER,
+      },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://new.example/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous,
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
+        server: {
+          url: "https://new.example/mcp",
+          ...OWNED,
+          requestTimeoutMs: 5000,
           _piClaudeMarketplace: MARKER,
         },
       }),
@@ -708,16 +849,72 @@ describe("inactiveOverrideFields", () => {
   ]) {
     test(`AFILE-06: names the inactive fields of ${description} in key order`, () => {
       // act
-      const inactive = inactiveOverrideFields(override);
+      const inactive = inactiveOverrideFields(override, []);
 
       // assert
       assert.deepStrictEqual(inactive, fields);
       assert.strictEqual(Object.isFrozen(inactive), true);
     });
   }
+
+  for (const { description, pluginSetFields, fields } of [
+    {
+      description: "with requestTimeoutMs plugin-set",
+      pluginSetFields: ["requestTimeoutMs"],
+      fields: ["requestTimeoutMs", "env"],
+    },
+    { description: "with no plugin-set field", pluginSetFields: [], fields: ["env"] },
+  ]) {
+    test(`ANAME-07: names a plugin-set carried field among the inactive fields ${description}`, () => {
+      // arrange
+      const override = { requestTimeoutMs: 5000, disabled: true, env: {} };
+
+      // act
+      const inactive = inactiveOverrideFields(override, pluginSetFields);
+
+      // assert
+      assert.deepStrictEqual(inactive, fields);
+    });
+  }
 });
 
 describe("restoredOverride", () => {
+  test("ANAME-07: a carried field the live marker lists as plugin-set comes back with the kept value", () => {
+    // arrange
+    const kept = { requestTimeoutMs: 5000, disabled: true };
+    const live = {
+      command: "plugin-command",
+      requestTimeoutMs: 60000,
+      _piClaudeMarketplace: {
+        ...MARKER,
+        pluginSetFields: ["requestTimeoutMs"],
+        keptOverride: kept,
+      },
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.strictEqual(JSON.stringify(restored), '{"requestTimeoutMs":5000}');
+  });
+
+  test("ANAME-07: a carried field no live marker lists keeps the live-value rule", () => {
+    // arrange
+    const kept = { requestTimeoutMs: 5000, disabled: true };
+    const live = {
+      command: "plugin-command",
+      requestTimeoutMs: 7000,
+      _piClaudeMarketplace: { ...MARKER, keptOverride: kept },
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.strictEqual(JSON.stringify(restored), '{"requestTimeoutMs":7000}');
+  });
+
   test("AFILE-06: the live entry's disabled false replaces the kept disabled true in its kept position", () => {
     // arrange
     const kept = { disabled: true, env: { STUB_TOKEN: "stub-secret" } };

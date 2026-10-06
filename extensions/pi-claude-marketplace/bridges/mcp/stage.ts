@@ -48,7 +48,7 @@ import {
 } from "./adapter-doc.ts";
 import { inactiveOverrideFields, stampServers } from "./adapter-entry.ts";
 import { walkMcpSources, type McpSourceWalk } from "./collision-slots.ts";
-import { isOwnedBy } from "./marker.ts";
+import { isOwnedBy, pluginSetFieldsOf } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
 import type { McpSubstitutionContext } from "./substitute.ts";
@@ -185,20 +185,22 @@ function commentsDroppedNotices(hadComments: boolean, scope: Scope): McpConfigFi
 
 /**
  * AFILE-06: one notice per staged name, in the plugin's declared order, that
- * absorbs a marker-less override holding fields the new entry does not carry.
- * A restaged name that carries a kept override absorbs no overlay, so it adds
- * no notice.
+ * absorbs a marker-less override holding fields the new entry does not carry
+ * or carried fields the plugin's stamped entry sets (ANAME-07). A restaged
+ * name that carries a kept override absorbs no overlay, so it adds no notice.
  */
 function overrideKeptNotices(
-  names: readonly string[],
+  stamped: Readonly<Record<string, unknown>>,
   overlays: Readonly<Record<string, unknown>>,
   scope: Scope,
   pluginName: string,
 ): McpOverrideKeptNotice[] {
   const notices: McpOverrideKeptNotice[] = [];
-  for (const server of names) {
+  for (const [server, entry] of Object.entries(stamped)) {
     const overlay = Object.hasOwn(overlays, server) ? overlays[server] : undefined;
-    const fields = isPlainObject(overlay) ? inactiveOverrideFields(overlay) : [];
+    const fields = isPlainObject(overlay)
+      ? inactiveOverrideFields(overlay, pluginSetFieldsOf(entry))
+      : [];
     if (fields.length > 0) {
       notices.push({
         kind: "override-kept",
@@ -386,7 +388,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // fields the new entry does not carry is reported after it.
   const notices = Object.freeze<McpConfigNotice[]>([
     ...commentsDroppedNotices(config.hadComments, locations.scope),
-    ...overrideKeptNotices(newKeys, overlays, locations.scope, pluginName),
+    ...overrideKeptNotices(stamped, overlays, locations.scope, pluginName),
   ]);
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...declaredNames]),

@@ -859,6 +859,39 @@ describe("withPluginServers", () => {
       '{"mcpServers":{"enabled":{"disabled":false,"env":{"TOKEN":"token-1"}},"cleared":{"headers":{"Authorization":"Bearer user"}}}}',
     );
   });
+
+  test("ANAME-07: dropping an entry whose plugin set the timeout writes back the stub's own timeout", () => {
+    // arrange
+    const servers = {
+      plugin_acme_srv_: {
+        url: "https://acme.example/mcp",
+        requestTimeoutMs: 60000,
+        directTools: "search",
+        toolPrefix: "mcp",
+        disabled: true,
+        _piClaudeMarketplace: {
+          ...ACME_MARKER,
+          pluginSetFields: ["requestTimeoutMs"],
+          keptOverride: { requestTimeoutMs: 5000, disabled: true },
+        },
+      },
+    };
+    const config = {
+      doc: { mcpServers: servers },
+      serverKey: "mcpServers",
+      serverMaps: new Map([["mcpServers", servers]]),
+      hadComments: false,
+    } satisfies McpConfigDoc;
+
+    // act
+    const next = withPluginServers(config, "acme", "catalog", {});
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      '{"mcpServers":{"plugin_acme_srv_":{"requestTimeoutMs":5000,"disabled":true}}}',
+    );
+  });
 });
 
 describe("restoredOverrideNames", () => {

@@ -6,6 +6,7 @@ import {
   buildMarker,
   isOwnedBy,
   keptOverrideOf,
+  pluginSetFieldsOf,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/marker.ts";
 
 describe("CLAUDE_MARKETPLACE_MARKER_KEY", () => {
@@ -43,7 +44,7 @@ describe("buildMarker", () => {
     const keptOverride = { disabled: true, env: { TOKEN: "stub-secret" } };
 
     // act
-    const marker = buildMarker("deploy-tools", "team-marketplace", keptOverride);
+    const marker = buildMarker("deploy-tools", "team-marketplace", { keptOverride });
 
     // assert
     assert.strictEqual(
@@ -58,10 +59,130 @@ describe("buildMarker", () => {
     const expectedKeys = ["plugin", "marketplace"];
 
     // act
-    const marker = buildMarker("deploy-tools", "team-marketplace", undefined);
+    const marker = buildMarker("deploy-tools", "team-marketplace", { keptOverride: undefined });
 
     // assert
     assert.deepStrictEqual(Object.keys(marker), expectedKeys);
+  });
+
+  test("ANAME-07: places the plugin-set field names after marketplace and before the kept override", () => {
+    // arrange
+    const parts = {
+      keptOverride: { requestTimeoutMs: 5000, disabled: true },
+      pluginSetFields: ["requestTimeoutMs"],
+    };
+
+    // act
+    const marker = buildMarker("deploy-tools", "team-marketplace", parts);
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(marker),
+      '{"plugin":"deploy-tools","marketplace":"team-marketplace","pluginSetFields":["requestTimeoutMs"],"keptOverride":{"requestTimeoutMs":5000,"disabled":true}}',
+    );
+  });
+
+  test("ANAME-07: writes no pluginSetFields member for an empty name list", () => {
+    // act
+    const marker = buildMarker("deploy-tools", "team-marketplace", { pluginSetFields: [] });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(marker),
+      '{"plugin":"deploy-tools","marketplace":"team-marketplace"}',
+    );
+  });
+});
+
+describe("pluginSetFieldsOf", () => {
+  test("ANAME-07: returns the names an owned entry's marker lists", () => {
+    // arrange
+    const server = {
+      command: "node",
+      requestTimeoutMs: 60000,
+      _piClaudeMarketplace: {
+        plugin: "search-tools",
+        marketplace: "official",
+        pluginSetFields: ["requestTimeoutMs"],
+      },
+    };
+
+    // act
+    const fields = pluginSetFieldsOf(server);
+
+    // assert
+    assert.deepStrictEqual(fields, ["requestTimeoutMs"]);
+  });
+
+  for (const { description, server } of [
+    {
+      description: "a marker without pluginSetFields",
+      server: { _piClaudeMarketplace: { plugin: "search-tools", marketplace: "official" } },
+    },
+    {
+      description: "a non-array pluginSetFields",
+      server: {
+        _piClaudeMarketplace: {
+          plugin: "search-tools",
+          marketplace: "official",
+          pluginSetFields: "requestTimeoutMs",
+        },
+      },
+    },
+    {
+      description: "a pluginSetFields array holding a number",
+      server: {
+        _piClaudeMarketplace: {
+          plugin: "search-tools",
+          marketplace: "official",
+          pluginSetFields: ["requestTimeoutMs", 7],
+        },
+      },
+    },
+    {
+      description: "an inherited pluginSetFields",
+      server: {
+        _piClaudeMarketplace: Object.assign(
+          Object.create({ pluginSetFields: ["requestTimeoutMs"] }),
+          { plugin: "search-tools", marketplace: "official" },
+        ) as unknown,
+      },
+    },
+    { description: "an entry without a marker", server: { requestTimeoutMs: 60000 } },
+  ] satisfies ReadonlyArray<{ description: string; server: unknown }>) {
+    test(`ANAME-07: returns no names for ${description}`, () => {
+      // act
+      const fields = pluginSetFieldsOf(server);
+
+      // assert
+      assert.deepStrictEqual(fields, []);
+    });
+  }
+
+  test("ANAME-07: a malformed pluginSetFields leaves the marker's kept override readable", () => {
+    // arrange
+    const server = {
+      _piClaudeMarketplace: {
+        plugin: "search-tools",
+        marketplace: "official",
+        pluginSetFields: [7],
+        keptOverride: { disabled: true },
+      },
+    };
+
+    // act
+    const parsed = {
+      fields: pluginSetFieldsOf(server),
+      keptOverride: keptOverrideOf(server),
+      owned: isOwnedBy(server, "search-tools", "official"),
+    };
+
+    // assert
+    assert.deepStrictEqual(parsed, {
+      fields: [],
+      keptOverride: { disabled: true },
+      owned: true,
+    });
   });
 });
 

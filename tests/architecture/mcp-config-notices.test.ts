@@ -41,8 +41,8 @@ const CATALOG_NOTICE_ROWS: readonly CatalogNoticeRow[] = [
       scope: "project",
       file: "mcp-adapter.json",
       plugin: "hello",
-      server: "srv",
-      fields: ["env", "headers"],
+      server: "plugin_hello_srv_",
+      fields: ["requestTimeoutMs", "env"],
     },
   },
 ];

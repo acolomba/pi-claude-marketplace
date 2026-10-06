@@ -1212,6 +1212,64 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
+  test("ANAME-07: staging a plugin timeout over a stub's timeout writes the plugin's value and names the stub's", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-plugin-set-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_acme_server_":{"requestTimeoutMs":5000,"disabled":true}}}',
+    );
+    const expectedBytes = `{
+  "mcpServers": {
+    "plugin_acme_server_": {
+      "url": "https://acme.example/mcp",
+      "requestTimeoutMs": 60000,
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "disabled": true,
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog",
+        "pluginSetFields": [
+          "requestTimeoutMs"
+        ],
+        "keptOverride": {
+          "requestTimeoutMs": 5000,
+          "disabled": true
+        }
+      }
+    }
+  }
+}
+`;
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { server: { type: "http", url: "https://acme.example/mcp", timeout: 60000 } },
+    });
+    await commitPreparedMcp(prepared);
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, expectedBytes);
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "override-kept",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "plugin_acme_server_",
+        fields: ["requestTimeoutMs"],
+      },
+    ]);
+  });
+
   test("AFILE-06: override-kept notices follow the plugin's declared server order", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-order-");

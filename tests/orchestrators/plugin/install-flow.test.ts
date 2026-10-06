@@ -3189,7 +3189,10 @@ test("ANAME-07: install writes Claude servers through the closed adapter table",
       "toolPrefix": "mcp",
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "pluginSetFields": [
+          "requestTimeoutMs"
+        ]
       }
     },
     "plugin_hello_local_": {
