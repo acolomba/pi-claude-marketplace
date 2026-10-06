@@ -2,9 +2,9 @@
 
 ## [Unreleased]
 
-- Node.js 22.22.2 or later is now required, because Pi and the `write-file-atomic` dependency already need Node 22. (#236)
+- Node.js 22.22.2 or a later 22.x release, 24.15.0 or a later 24.x release, or 26.0.0 or later is now required. Pi needs Node.js 22.19.0 or later, and the `write-file-atomic` dependency supports only these versions. (#234, #236)
 
-  - Internal: commits run quick checks on their staged files, and CI runs only on build-input changes.
+  - Internal: commits run quick checks on their staged files, and CI runs only on build-input changes. CI no longer runs the same check in two jobs, and direct coverage runs its source-test pairs concurrently.
   - A Fallow rule pack now bans stdio, console, and network calls in the extension, and ESLint keeps the import-direction and git-surface rules.
   - Pull requests, pushes to `main`, and `npm run check` measure direct coverage for every source-test pair, and SonarCloud reads that per-pair coverage.
   - The `check:static` and `check:commit` scripts are new, and the `test:coverage:unit` script no longer exists.
@@ -17,8 +17,6 @@
   - Every check now fails on a warning, a passing local check prints one summary line at most, and CI prints the full output.
   - `scripts/init.sh` no longer lets Fallow rewrite `AGENTS.md`, so the Fallow task map there no longer changes on a Fallow upgrade.
   - Four unrelated decisions that comments, lint messages, and codebase notes cited by one shared ID now each have their own ID.
-
-- Internal: local checks now select changed modules and their consumers. GSD uses focused checks during tasks and full checks before PR handoff. CI reuses unit coverage for SonarCloud, removes duplicate checks, and runs isolated coverage pairs concurrently.
 
 - A private marketplace or plugin source on any git host now clones with a credential that is already in your git credential helper. Before, only `github.com` and `gitlab.com` authenticated. Thanks to @jstillwa, who found this defect and the next two in #153. (#221)
 
