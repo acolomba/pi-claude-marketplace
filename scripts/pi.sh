@@ -92,12 +92,16 @@ try {
 ' "$repo_root/tests/pi-runtime.ts" "$repo_root")
 
 # Companion extensions, pinned here only -- never in package.json or
-# package-lock.json (NFR-5, D-98-10). 3.13.0 is the engine version
-# docs/workflows-compatibility.md grades.
+# package-lock.json (NFR-5, D-98-10). Engine 3.13.1 includes engine PRs
+# #233 (child sessions use the host Pi) and #234 (completed-run status).
+# No grade in docs/workflows-compatibility.md names 3.13.1. Do not move
+# this pin to a release with engine PR #238 until the bridge follows it.
+# That release stores workflows under PI_CODING_AGENT_DIR, which --home
+# sets, and the bridge ignores that variable for workflows (WPTH-04).
 pi_cm_pins=(
   "pi-mcp-adapter@2.37.0"
   "pi-subagents@0.71.0"
-  "@quintinshaw/pi-dynamic-workflows@3.13.0"
+  "@quintinshaw/pi-dynamic-workflows@3.13.1"
 )
 
 # Prefix resolved against the invocation directory, before the --cd change

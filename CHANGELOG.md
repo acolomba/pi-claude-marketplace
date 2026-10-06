@@ -25,7 +25,7 @@
 
 - A hook matcher that lists several tools now runs on the tools Pi supports and ignores the ones it does not. Pi drops the whole matcher only when it supports none of the tools in the list. Thanks to @fank, who reported #217. (#219)
 
-- Pi Coding Agent 0.86.1 is now required. This version supports workflow child tools with the current `@quintinshaw/pi-dynamic-workflows` engine.
+- Pi Coding Agent 0.86.1 is now required.
 
 - A plugin that ships workflow scripts now installs them as workflows the Pi workflow engine can load. (#205)
 
@@ -33,7 +33,7 @@
   - Only `.js` files are workflow scripts, as in Claude Code. The `workflows` manifest field can name a single `.js` file as well as a directory.
   - Installed plugin Markdown that names a sibling workflow as `plugin:workflow` gets the workflow's installed command name, the same way it does for sibling skills and commands.
   - The extension now depends on `acorn` to read the metadata that a workflow script declares.
-  - Release waits for `pi-dynamic-workflows` fixes [#232](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/232), [#233](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/233), and [#234](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/234).
+  - Release waits for `pi-dynamic-workflows` fix [#232](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/232).
 
 - A plugin can declare the other plugins it needs, and `install` now installs them with it. See [Dependency resolution](docs/dependency-resolution.md). (#198)
 

@@ -189,13 +189,15 @@ Two further facts about the installed name. If a command of that name is already
 The marketplace and the workflow engine each declare a minimum Pi version.
 
 - `pi-claude-marketplace` peers on `@earendil-works/pi-coding-agent >=0.86.1`.
-- `@quintinshaw/pi-dynamic-workflows` 3.13.0 peers on `@earendil-works/pi-coding-agent >=0.80.8` and `@earendil-works/pi-tui >=0.80.6` (verified against the published package metadata; the same floors 3.10.1 declared).
+- `@quintinshaw/pi-dynamic-workflows` 3.13.0 and 3.13.1 peer on `@earendil-works/pi-coding-agent >=0.80.8` and `@earendil-works/pi-tui >=0.80.6`. The published package metadata of both releases states these minimum versions, and 3.10.1 declared the same ones.
 
-The marketplace requires the higher Pi version because workflow children need their tools. In the tested pairing, Pi 0.85.1 hosted an engine with a Pi 0.87.0 dependency. The children received no tools. Pi 0.86.1 passed the same OpenAI tool test with the unpatched engine. Install Pi 0.86.1 or a newer version before you install this extension.
+The marketplace raised its minimum Pi version to 0.86.1 because of a child-tool failure in engine 3.13.0. Each `agent()` call starts a child session. Engine 3.13.0 creates that session with its own Pi dependency, and the host Pi sends the session's requests to the model. In the tested pairing, Pi 0.85.1 hosted an engine with a Pi 0.87.0 dependency. These two Pi versions use different tool formats, so the child sessions received no tools. Pi 0.86.1 passed the same OpenAI tool test with the same engine.
+
+Engine 3.13.1 creates each child session through the host Pi instead (engine pull request [#233](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/233)). The session and its model requests then come from the same Pi, so their tool formats always match. The pull request states this, and no run recorded here used engine 3.13.1. The minimum stays at 0.86.1 because the 2026-09-23 run below tested that version. Lowering it needs a new run with an older Pi. Install Pi 0.86.1 or a newer version before you install this extension.
 
 On 2026-09-23, a saved workflow installed through this bridge ran with Pi 0.86.1 and the published engine 3.13.0. Pi loaded both packages through normal extension discovery. The engine resolved its Pi dependency at 0.87.1. An OpenAI child called `read` and `structured_output`, returned the expected value, and posted it to the parent session. The run then cleared its pending-delivery marker.
 
-Engine 3.13.0 still has two visible limits. If you launch Pi with `--no-extensions -e` to load the engine explicitly, the engine can leave result delivery pending. Load it through Pi's normal package discovery. Also, `/workflows status <id>` can print `Workflow running` for a completed run. Use `/workflows list` to read the persisted status.
+Engine 3.13.1 keeps one known limit from 3.13.0. If you launch Pi with `--no-extensions -e` to load the engine explicitly, the engine can leave result delivery pending. Load it through Pi's normal package discovery. As of 2026-10-06, engine pull request [#232](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/232) fixes this on the engine's main branch, and no release includes it.
 
 Install the engine with:
 
@@ -227,6 +229,8 @@ Specifically, at 3.10.1 and unchanged at 3.13.0:
 - There is no environment-variable override and no settings knob to relocate that storage. The home directory is read from `os.homedir()` and nothing else.
 - The vendored determinism blocklist is a private constant with no exported contract, so it has to be re-checked against each engine upgrade rather than imported.
 - The engine depends on `acorn ^8.16.0`, the same range this bridge declares for its own `meta.name` extraction. The bridge keeps its own direct dependency, because it parses scripts whether or not the engine is installed.
+
+Engine pull request [#238](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/238) adds an environment-variable override for the storage root. As of 2026-10-06, it is on the engine's main branch, and no release includes it. With that change, the engine stores workflows under `$PI_CODING_AGENT_DIR/workflows` when `PI_CODING_AGENT_DIR` is set. This bridge still derives the storage root from the home directory alone (WPTH-04). If you install an engine release that includes #238, leave `PI_CODING_AGENT_DIR` unset until this bridge follows the same rule. Otherwise, the engine does not find the workflows that this extension installs.
 
 ## Install-time disposition
 
