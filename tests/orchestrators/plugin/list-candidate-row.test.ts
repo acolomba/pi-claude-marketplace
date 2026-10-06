@@ -267,3 +267,29 @@ for (const entry of COLD_GIT_ENTRIES) {
     });
   });
 }
+
+test("flags binaries as unsupported for an official marketplace name", async (testContext) => {
+  // arrange
+  const composeCandidateListRow = await loadComposeCandidateListRow();
+  const environment = await candidateEnvironment(testContext);
+  await mkdir(path.join(environment.marketplaceRoot, "alpha"));
+  const entry: ManifestPluginEntry = {
+    name: "alpha",
+    source: "./alpha",
+    ...{ binaries: { tool: "https://example.com/tool" } },
+  };
+
+  // act
+  const row = await composeCandidateListRow(
+    entry,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "claude-plugins-official" },
+    environment.locations,
+    undefined,
+  );
+
+  // assert
+  assert.deepStrictEqual(row, {
+    message: { status: "partially-available", name: "alpha", reasons: ["unsupported component"] },
+    bucket: "partially-available",
+  });
+});

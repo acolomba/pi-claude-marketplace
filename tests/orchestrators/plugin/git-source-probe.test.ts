@@ -447,6 +447,49 @@ describe("probeManifestEntry", () => {
     // assert
     assert.equal(result, "partially-available");
   });
+
+  test("flags binaries on a path entry for an official marketplace name", async (testContext) => {
+    // arrange
+    const { locations, marketplaceRoot, marketplaceContext } = await freshLocations(testContext);
+    await mkdir(path.join(marketplaceRoot, "plugins", "path-plugin"), { recursive: true });
+    const entry: ManifestEntry = {
+      name: "path-plugin",
+      source: "./plugins/path-plugin",
+      ...{ binaries: { tool: "https://example.com/tool" } },
+    };
+
+    // act
+    const result = await probeManifestEntry(
+      entry,
+      { ...marketplaceContext, marketplaceName: "claude-plugins-official" },
+      locations,
+    );
+
+    // assert
+    assert.equal(result, "partially-available");
+  });
+
+  test("flags binaries on a warm git entry for an official marketplace name", async (testContext) => {
+    // arrange
+    const { locations, marketplaceContext } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/official-binaries";
+    await cloneDirectory(locations, cloneUrl, SHA_A);
+    const entry: ManifestEntry = {
+      name: "official-binaries",
+      source: { source: "url", url: cloneUrl, sha: SHA_A },
+      ...{ binaries: { tool: "https://example.com/tool" } },
+    };
+
+    // act
+    const result = await probeManifestEntry(
+      entry,
+      { ...marketplaceContext, marketplaceName: "claude-plugins-official" },
+      locations,
+    );
+
+    // assert
+    assert.equal(result, "partially-available");
+  });
 });
 
 describe("probeUpgradeCandidate", () => {
@@ -558,6 +601,33 @@ describe("probeUpgradeCandidate", () => {
 
     // assert
     assert.equal(result, undefined);
+  });
+
+  test("flags binaries on a warm candidate for an official marketplace name", async (testContext) => {
+    // arrange
+    const { locations, marketplaceContext } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/official-upgrade";
+    await cloneDirectory(locations, cloneUrl, SHA_B);
+    const entry: ManifestEntry = {
+      name: "official-upgrade",
+      source: { source: "url", url: cloneUrl, sha: SHA_B },
+      version: "2.0.0",
+      ...{ binaries: { tool: "https://example.com/tool" } },
+    };
+
+    // act
+    const candidate = await probeUpgradeCandidate(
+      entry,
+      { ...marketplaceContext, marketplaceName: "claude-plugins-official" },
+      locations,
+    );
+
+    // assert
+    assert.equal(candidate?.state, "partially-available");
+    assert.deepStrictEqual(
+      candidate?.state === "partially-available" ? candidate.unsupported : undefined,
+      ["binaries"],
+    );
   });
 });
 

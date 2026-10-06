@@ -42,6 +42,7 @@ function pluginRecord(overrides: PluginRecordOverrides = {}): PluginInstallRecor
 }
 
 interface ManifestEntryOverrides {
+  readonly binaries?: Record<string, string>;
   readonly lspServers?: ManifestPluginEntry["lspServers"];
   readonly name?: string;
   readonly version?: string;
@@ -373,6 +374,36 @@ test("degrades a candidate probe failure to an upgradable row", async (testConte
     status: "upgradable",
     name: "bad/name",
     reasons: [],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+  });
+});
+
+test("flags binaries on an upgrade candidate of an official marketplace", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = {
+    ...(await installedEnvironment(testContext)),
+    marketplaceName: "claude-plugins-official",
+  };
+  await mkdir(path.join(environment.marketplaceRoot, "alpha"), { recursive: true });
+  const entry = manifestEntry({ version: "2.0.0", binaries: { tool: "https://example.com/tool" } });
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record: pluginRecord(),
+    lookup: { kind: "declared", entry },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "partially-upgradable",
+    name: "alpha",
+    reasons: ["unsupported component"],
     version: "1.0.0",
     description: "Alpha plugin.",
   });
