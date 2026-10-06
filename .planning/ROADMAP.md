@@ -17,7 +17,7 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 - [x] **Phase 1: Presentation Model** — Every presentation decision is computed once, upstream of a text renderer that no longer probes state or walks `Error` objects (16 plans complete; verification passed) (completed 2026-10-01)
 - [x] **Phase 2: Row Policies** — Per-verb rendering differences become a total row-policy map of data instead of string render callbacks (completed 2026-10-02)
 - [x] **Phase 3: Typed Raw Surfaces** — Every raw-string output surface becomes a typed model kind, so text is a pure formatter of the model (completed 2026-10-03)
-- [ ] **Phase 4: Wire Schema and JSON Strategy** — A versioned typebox wire schema and a format-only JSON strategy, validated as a pure function and first consumed by the LLM tools
+- [x] **Phase 4: Wire Schema and JSON Strategy** — A versioned typebox wire schema and a format-only JSON strategy, validated as a pure function and first consumed by the LLM tools (completed 2026-10-06)
 - [ ] **Phase 5: Mode-Selected JSON Sink** — `ctx.mode` selects the strategy, and `json`/`rpc` output reaches consumers through `pi.appendEntry` from every output site
 - [ ] **Phase 6: Command-Run Contract** — Payloads carry their origin and invocation, and every command run emits a complete set of payloads, even when it throws
 - [ ] **Phase 7: Mode Refusals, Real-Pi Verification, and Docs** — Browse and device-flow refuse clearly by mode, a real headless Pi run proves the contract, and the schema is documented
@@ -174,7 +174,7 @@ Plans:
 5. Both LLM tools build their `details` from the wire schema's plugin-row and marketplace-block shapes, with verbatim status tokens: `upgradable` stays `upgradable`. Their line-format text content does not change.
 
 **Note:** fallow production dead-code rejects a module that nothing in production imports, so an unwired JSON strategy cannot end this phase. The LLM tool surface (LLMT-01) is the strategy's first production consumer. If the tools cannot use the strategy's entry point, the structured-path sink wiring from Phase 5 moves forward into this phase.
-**Plans:** 6/6 plans executed, sequential (waves 1-5, then one gap-closure plan)
+**Plans:** 6/6 plans complete, sequential (waves 1-5, then one gap-closure plan)
 
 **Wave 1**
 - [x] 04-01-PLAN.md — Tracer: plugin LLM tool details through the presentation step, wire schema, and JSON strategy; generated schema file in the package with a drift test (LLMT-01, WIRE-09)
@@ -249,7 +249,7 @@ Plans:
 | 1. Presentation Model | 16/16 | Complete    | 2026-10-01 |
 | 2. Row Policies | 2/2 | Complete    | 2026-10-02 |
 | 3. Typed Raw Surfaces | 4/4 | Complete    | 2026-10-03 |
-| 4. Wire Schema and JSON Strategy | 6/6 | In Progress|  |
+| 4. Wire Schema and JSON Strategy | 6/6 | Complete    | 2026-10-06 |
 | 5. Mode-Selected JSON Sink | 0/TBD | Not started | - |
 | 6. Command-Run Contract | 0/TBD | Not started | - |
 | 7. Mode Refusals, Real-Pi Verification, and Docs | 0/TBD | Not started | - |

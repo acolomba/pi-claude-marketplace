@@ -577,11 +577,17 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active — json-output
 
-No active requirements are defined. The completed v1.20 requirements are in
-[the archive](milestones/v1.20-REQUIREMENTS.md). All validated requirements
-below remain historical completed work.
+Remaining json-output requirements are tracked in [REQUIREMENTS.md](REQUIREMENTS.md):
+mode-selected output, command-run metadata and completion, mode refusals,
+real-Pi verification, and documentation (Phases 5-7).
 
 ### Validated
+
+- ✓ Versioned wire schema and format-only JSON conversion cover all model
+  kinds; both LLM tools expose wire details. Credentials are redacted before
+  text or JSON rendering. Schema drift, package inclusion, payload disclosure,
+  and output locks are verified — json-output Phase 4, 2026-10-06
+  (WIRE-01/03/04/05/06/08/09, JOUT-02, PMOD-04, LLMT-01).
 
 - ✓ Bare and wrapped plugin manifests follow consistent precedence, malformed
   manifests keep their failure behavior, and missing manifests remain valid —
@@ -1157,3 +1163,7 @@ _Last updated: 2026-09-30 after the any-git-host milestone closed in workstream 
 _Last updated: 2026-10-01 after json-output Phase 1 verification. Both human checks passed. Test coverage validation passed, and the level 1 security review closed all 29 registered threats. Phase 2 awaits planning._
 
 _Last updated: 2026-10-03 after json-output Phase 3 (Typed Raw Surfaces): 4 plans, RAWS-01..05 and TEXT-01 validated, text bytes unchanged, review converged clean after three iterations._
+
+_Last updated: 2026-10-06 after json-output Phase 4: six plans, ten requirements,
+5/5 verified criteria and five human-confirmed prohibition assessments.
+Security records 18 mitigated and four accepted threats. Phase 5 is next._

@@ -1,7 +1,7 @@
 ---
 phase: 04-wire-schema-and-json-strategy
 verified: 2026-10-06T15:03:56Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - .planning/phases/04-wire-schema-and-json-strategy/04-01-PLAN.md
@@ -51,34 +51,21 @@ re_verification:
     - "SC3 / PMOD-04: credentialed subject names are redacted before text and JSON conversion"
   gaps_remaining: []
   regressions: []
-unverified_prohibitions:
+unverified_prohibitions: []
+human_verification: []
+human_confirmed: "2026-10-06"
+human_confirmed_prohibitions:
   - "04-01 D-12: production must not validate, filter, or drop a payload"
   - "04-01 D-08 / TEXT-01: no unapproved corpus or catalog change in that plan"
   - "04-04 PMOD-04: redaction must not drop or truncate whole messages, causes, rows, or payloads"
   - "04-06 PMOD-04: subject redaction must preserve the non-secret name"
   - "04-06 D-08 / D-13: no added test notify emission or baseline, metadata, ledger, or catalog rewrite"
-human_verification:
-  - test: "Confirm the 04-01 D-12 prohibition judgment"
-    expected: "Production conversion neither validates nor filters or drops payloads."
-    why_human: "The autonomous code judgment is non-authoritative under the verifier prohibition gate."
-  - test: "Confirm the 04-01 D-08 / TEXT-01 prohibition judgment"
-    expected: "That plan accepted no unapproved corpus or catalog changes."
-    why_human: "The autonomous repository-history judgment is non-authoritative under the verifier prohibition gate."
-  - test: "Confirm the 04-04 PMOD-04 prohibition judgment"
-    expected: "Credential redaction changes only secret spans and retains surrounding failure detail."
-    why_human: "The autonomous redaction-policy judgment is non-authoritative under the verifier prohibition gate."
-  - test: "Confirm the 04-06 PMOD-04 prohibition judgment"
-    expected: "Block, row, and not-added subjects keep their non-secret identifying text."
-    why_human: "The autonomous subject-policy judgment is non-authoritative under the verifier prohibition gate."
-  - test: "Confirm the 04-06 D-08 / D-13 prohibition judgment"
-    expected: "The gap closure added no test notify emission and did not rewrite locked corpus or catalog files."
-    why_human: "The autonomous repository-history judgment is non-authoritative under the verifier prohibition gate."
 ---
 
 # Phase 4: Wire Schema and JSON Strategy Verification
 
 **Phase Goal:** A versioned typebox schema and format-only JSON strategy convert every model kind to a valid payload without disclosing data absent from text, before sink wiring.
-**Status:** human_needed. Technical score: 5/5. The old code gap is closed; five judgment-tier prohibitions need authoritative human resolution under the verifier's autonomous-mode rule.
+**Status:** passed. Technical score: 5/5. The user explicitly confirmed all five prohibition assessments on 2026-10-06; 04-UAT.md records the response.
 **Re-verification:** Yes, against the previous 4/5, gaps_found report.
 
 ## Goal Achievement
@@ -162,9 +149,9 @@ The decision-coverage query returned 13 honored of 13 trackable CONTEXT decision
 
 Requirement-linked tests are active. The catalog suite checks full payloads and non-vacuous counts, and its invalid controls would fail a wrong converter. AUTH-09 checks actual presentation, JSON serialization, and the text grammar. Schema drift expectations are built independently of the committed file. Test writeFile calls in tools.test.ts seed temporary local state; they do not generate expected fixtures. No disabled requirement test, circular expected-value generator, unreferenced TBD/FIXME/XXX marker, placeholder, or stub was found in the phase evidence files. Current review finds zero critical and warning issues; remaining Info findings do not falsify a roadmap truth. Re-verification advisory: none.
 
-### Human Verification Required
+### Human Verification Completed
 
-The following PLAN prohibitions have code-supported autonomous judgments, but the verifier's prohibition rule makes those judgments non-authoritative. A human can confirm each exact statement from the cited evidence.
+The following code-supported assessments were presented together. The user replied "sure" to the explicit request to confirm all five and continue on 2026-10-06. Each is now human-confirmed; see 04-UAT.md.
 
 1. **04-01 D-12:** Production must not validate, filter, or drop a payload. notification-json.ts imports schema values as types; compiled validation is in tests/architecture/catalog-uat/catalog-wire.test.ts. Judgment: prohibition appears met.
 2. **04-01 D-08 / TEXT-01:** That plan must not accept an unapproved corpus or catalog change. Current corpus and merged-main catalog locks pass; the separately approved D-13 test-only corpus additions have an exact ledger. Judgment: prohibition appears met.
@@ -172,7 +159,7 @@ The following PLAN prohibitions have code-supported autonomous judgments, but th
 4. **04-06 PMOD-04:** Subject redaction must retain the non-secret block, row, or not-added name. The resolve/present code preserves scheme, host, path, and other subject text around the secret; owner tests assert complete output. The user has accepted conservative masking of trailing scheme://host:port row names and hyphenated Bearer text. Judgment: prohibition appears met.
 5. **04-06 D-08 / D-13:** Gap closure must not add test notify emissions or rewrite baseline, metadata, ledger, or catalog. AUTH-09 subject rows compose text without notify; the existing four notify calls remain; corpus and catalog locks pass. Judgment: prohibition appears met.
 
-These are review flags, not code gaps. No new human user-flow test is needed for this schema and formatter phase. Existing authorized risk accepts in 04-SECURITY.md are separate; that audit records 22/22 threats closed.
+All five review flags are resolved by that confirmation. No code gap was waived. No new human user-flow test is needed for this schema and formatter phase. Existing authorized risk accepts in 04-SECURITY.md are separate; that audit records 22/22 threats closed.
 
 ### Deferred and Gaps
 

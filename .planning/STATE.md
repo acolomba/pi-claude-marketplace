@@ -1,19 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 04
-current_phase_name: Wire Schema and JSON Strategy
-status: verifying
-stopped_at: Phase 4 technically verified 5/5; five prohibition judgments await human confirmation
-last_updated: "2026-10-06T15:05:51+00:00"
+current_phase: 5
+current_phase_name: Mode-Selected JSON Sink
+status: planning
+stopped_at: Phase 4 complete, ready to plan Phase 5
+last_updated: "2026-10-06T15:09:13.545Z"
 last_activity: 2026-10-06
-last_activity_desc: Review fixes confirmed; full check, corpus, validation and security passed; human judgment pending
-state_head: 42f80dec9b3fb56235f80bd88c44fef32efe8668
+last_activity_desc: Phase 4 complete, transitioned to Phase 5
+state_head: fef74b4ff9ddfdb889f441fe9d087109dedc7472
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 28
   completed_plans: 28
+  percent: 57
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -21,21 +22,21 @@ milestone_name: Mode-Keyed Presentation Strategies
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-01 after json-output Phase 1 verification)
+See: `.planning/PROJECT.md` (updated 2026-10-06 after json-output Phase 4 verification)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 04 — Wire Schema and JSON Strategy
+**Current focus:** Phase 05 — Mode-Selected JSON Sink
 
 ## Current Position
 
-Phase: 04 (Wire Schema and JSON Strategy) — HUMAN VERIFICATION
-Plan: 6 of 6
-Status: Technical criteria 5/5; five judgment-tier prohibitions await human confirmation
-Last activity: 2026-10-06 — Review, full check, corpus, validation, and security complete
+Phase: 5 — Mode-Selected JSON Sink
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-06 — Phase 4 complete, transitioned to Phase 5
 
-Progress: [████░░░░░░] 43% (3 of 7 phases fully verified; 28 of 28 plans complete)
+Progress: [██████░░░░] 57% (4 of 7 phases fully verified; 28 of 28 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,9 +170,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-06T15:05:51+00:00
-**Stopped at:** Phase 4 technical verification 5/5; awaiting five human prohibition judgments
-**Resume file:** .planning/phases/04-wire-schema-and-json-strategy/.continue-here.md
+**Last session:** 2026-10-06T15:09:52+00:00
+**Stopped at:** Phase 4 complete, ready to plan Phase 5
+**Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
@@ -193,8 +194,7 @@ and plugin row name, `presentNotification` redacts the marketplace-not-added
 name, and AUTH-09 has three subject-name rows, each proven to fail before its
 fix. Corpus 3143 present / 0 extra; catalog unchanged from `4e6c568a`. The
 full-scope pre-commit (`npm run check` plus all-pair coverage) passed on the
-exact code committed as `5d988d7d`. Phase 4 is not yet marked complete; it
-has since been re-verified (see current resumption below).
+exact code committed as `5d988d7d`. Phase 4 is now complete; its final re-verification is recorded below.
 
 **Current resumption (2026-10-06):** Gap review iteration 2 confirmed all
 three fixes. The distinct ledger IDs are CR-02, WR-07, WR-08, and IN-10.
@@ -202,10 +202,10 @@ The user accepted both conservative masking rules. Full `npm run check`
 and corpus passed at `c5494971`, Node v26.10.0: 264 direct coverage pairs,
 3149 corpus entries, zero extras. Validation covers 12 tasks and 10
 requirements; security records 18 mitigated and four accepted threats, zero
-open. Re-verification is technically 5/5 with no code gaps. Its overall
-`human_needed` status reflects five judgment-tier prohibition confirmations,
-recorded in `04-UAT.md`. Do not redo review or tests on unchanged inputs.
-After explicit confirmation, complete Phase 4 and continue from Phase 5.
+open. Re-verification passed 5/5 with no code gaps. The user explicitly
+confirmed all five prohibition assessments on 2026-10-06 ("sure");
+`04-UAT.md` records 5/5 passed. Phase 4 is complete; Phase 5 discussion is
+next. Current-session checks remain reusable while build inputs are unchanged.
 
 **Corpus determinism (resolved by quick task 261002-dys):** prune rollback
 now receives its backup-directory creator through `PruneRestoreOps`, so tests
@@ -228,7 +228,7 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Obtain explicit confirmation of the five assessments in `04-UAT.md`; then close Phase 4 and resume the autonomous sequence.
+- Gather Phase 5 context, then plan and execute the mode-selected JSON sink.
 
 ## Performance Metrics
 
