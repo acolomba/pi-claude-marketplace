@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-06T00:35:59.642Z"
+last_updated: "2026-10-06T01:20:41.433Z"
 last_activity: 2026-10-05
 last_activity_desc: Completed quick task 261004-u7n (type member gate removed)
-state_head: e41d3e561d8a03f8bd5dde8d19156a5093c5155c
+state_head: ce13f8aab4d4d7f3f43cc81e9dfbd42f5bd6cf69
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -34,7 +34,7 @@ in Phase 3 UAT passed on 2026-09-30, after the merge of #221.
 Phase: Milestone v1.20 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-05 - Completed quick task 261005-rmz: Suppress the reviewed render-arm clone groups in fallow
+Last activity: 2026-10-05 - Completed quick task 261005-rk5: Register the worktree init hook for Codex
 
 ### workflows-replay closeout (merged from main)
 
@@ -627,6 +627,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 40 | Ban http2 imports in the fallow network chokepoint | 2026-10-05 | da3f41ad | — |
 | 261005-phr | Drop Node 20 and give each shared decision ID its own ID | 2026-10-05 | 6af548d4 | [261005-phr-drop-node-20-and-give-each-bare-d-11-a-u](./quick/261005-phr-drop-node-20-and-give-each-bare-d-11-a-u/) |
 | 261005-rmz | Suppress the reviewed render-arm clone groups in fallow | 2026-10-05 | e41d3e56 | [261005-rmz-ignore-the-reviewed-render-arm-clone-gro](./quick/261005-rmz-ignore-the-reviewed-render-arm-clone-gro/) |
+| 261005-rk5 | Register the worktree init hook for Codex: make scripts/init-worktree.sh host-agnostic and add a SessionStart hook to .codex/config.toml | 2026-10-05 | ce13f8aa | [261005-rk5-register-the-worktree-init-hook-for-code](./quick/261005-rk5-register-the-worktree-init-hook-for-code/) |
 
 ## Deferred Items
 
