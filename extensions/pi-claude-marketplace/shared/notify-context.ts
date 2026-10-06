@@ -342,7 +342,8 @@ function dispatchRow<Status extends string, Msg extends PluginNotificationMessag
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
-  const arm = context.render[row.status as Status] as
+  const { render } = context;
+  const arm = render[row.status as Status] as
     RenderFn<Extract<Msg, { status: Status }>> | undefined;
   if (arm === undefined) {
     // WR-02 / SEV-02: the fallback is an internal-drift error condition, so it
