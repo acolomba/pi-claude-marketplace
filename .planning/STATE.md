@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 status: Awaiting next milestone
 stopped_at: v1.20 archived; awaiting next milestone
-last_updated: "2026-10-06T12:29:09.601Z"
+last_updated: "2026-10-06T13:53:27.309Z"
 last_activity: 2026-10-06
 last_activity_desc: Completed quick task 261006-a8c (unsupported mod, syntaxHighlighting, binaries)
-state_head: a3e0a50ee2b4bcb01274a600df27a234821e6515
+state_head: 6af2e9e97ca8bea6273a2ae13d7cba38174660d8
 milestone_name: transitive-dependencies
 progress:
   total_phases: 12
@@ -581,57 +581,10 @@ Latest implementation: `260917-hfp` — the phase 5 review's Info items are
 all settled: IN-01/02/03/08 fixed (prune sweeps only in standalone mode, the
 reconcile retry loop counts settled outcomes), IN-07 catalog prose fixed,
 IN-04 carried to BACKLOG `PRUNE-GUARD-MR-01`, 2026-09-17.
-See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/260917-hfp-SUMMARY.md).
+See [task summary](./[0m[01;34mmilestones/any-git-host-quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0[0m[K//260917-hfp-SUMMARY.md).
 
 | #          | Description                                                                                                 | Date       | Commit   | Directory                                                                                            |
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| 260907-l4w | Fix issue #155: agents bridge frontmatter parser mangles YAML multiline (block scalar) description values | 2026-09-07 | c82a731b | [260907-l4w-fix-issue-155-agents-bridge-frontmatter-](./quick/260907-l4w-fix-issue-155-agents-bridge-frontmatter-/) |
-| 260907-m38 | Implement SKFM-01: repair a single-line frontmatter scalar whose only defect is an unquoted colon | 2026-09-07 | 66be4e43 | [260907-m38-implement-skfm-01-repair-single-line-fro](./quick/260907-m38-implement-skfm-01-repair-single-line-fro/) |
-| 260907-qar | mark backlog entries WFLW-01 and DFEN-01 closed | 2026-09-07 | 32396cff | [260907-qar-mark-backlog-entries-wflw-01-and-dfen-01](./quick/260907-qar-mark-backlog-entries-wflw-01-and-dfen-01/) |
-| 260907-qqo | HKPS-01: if-field PowerShell(...) rule prefix support in the hooks bridge | 2026-09-07 | ae06d27f | [260907-qqo-hkps-01-if-field-powershell-rule-prefix-](./quick/260907-qqo-hkps-01-if-field-powershell-rule-prefix-/) |
-| 260907-qsx | adopt SonarJS recommended ruleset for extensions | 2026-09-07 | fe1313c6 | [260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex](./quick/260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex/) |
-| 260907-q0h | Fix issue #143: make generated command name separator platform-dependent so Windows installs stop failing with EINVAL | 2026-09-07 | bf53dec0 | [260907-q0h-fix-issue-143-make-generated-command-nam](./quick/260907-q0h-fix-issue-143-make-generated-command-nam/) |
-| 6 | Switch the Windows command name separator from dash to dot (follow-up to 260907-q0h, #143) | 2026-09-08 | 7ce485b1 | — |
-| 260907-uzb | FMBOM-01: strip leading UTF-8 BOM at skill and agent frontmatter read sites | 2026-09-08 | fb54c5d7 | [260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil](./quick/260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil/) |
-| 260909-g1l | correct UDISP-01 backlog entry and add bare plugin.json manifest-path entry | 2026-09-09 | 9a8f740b | [260909-g1l-correct-udisp-01-backlog-entry-and-add-b](./quick/260909-g1l-correct-udisp-01-backlog-entry-and-add-b/) |
-| 260917-cqc | Tighten dependents guard on unusable own manifest (IN-05); accept unreadable token (IN-06) | 2026-09-17 | fda3bc8e | [260917-cqc-tighten-dependents-guard-on-unusable-own](./quick/260917-cqc-tighten-dependents-guard-on-unusable-own/) |
-| 260917-g97 | Resolve window #59 (#32 before the 2026-09-20 merge from main renumbered it): the cold-git `(remote)` info row renders its entry-declared dependencies line (D-01-32) | 2026-09-17 | 975e6236 | [260917-g97-resolve-window-32-give-the-componentsres](./quick/260917-g97-resolve-window-32-give-the-componentsres/) |
-| 260917-hfp | Clear the phase 5 review nits IN-01, IN-02, IN-03, IN-07, IN-08; IN-04 carried to BACKLOG `PRUNE-GUARD-MR-01` | 2026-09-17 | 97c9ce14 | [260917-hfp-clear-the-phase-5-review-nits-in-01-in-0](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/) |
-| 261001-g4u | Resolve the 23 SonarCloud findings on PR 198 with real fixes and no-await-in-loop directives | 2026-10-01 | 4455c76f | [261001-g4u-resolve-the-23-sonarcloud-findings-on-pr](./quick/261001-g4u-resolve-the-23-sonarcloud-findings-on-pr/) |
-| 261003-w7b | Speed up commit-time checks: targeted check-changed rules, lock, log, quiet output, agent guidance | 2026-10-04 | 8cff1fc4 | [261003-w7b-speed-up-commit-time-checks-targeted-che](./quick/261003-w7b-speed-up-commit-time-checks-targeted-che/) |
-| 15 | check-changed: Markdown under .agents/ and .claude/ selects no checks | 2026-10-04 | 5b5d06c7 | — |
-| 261004-az6 | Run negative controls only when their checker changes; drop planning-data test readers | 2026-10-04 | 1d2cdd51 | [261004-az6-run-negative-controls-only-when-their-ch](./quick/261004-az6-run-negative-controls-only-when-their-ch/) |
-| 261004-d9z | Make pre-commit incremental-only; move whole-suite checks to checkpoints | 2026-10-04 | 6708e06a | [261004-d9z-make-pre-commit-incremental-only-move-wh](./quick/261004-d9z-make-pre-commit-incremental-only-move-wh/) |
-| 261004-f34 | Remove negative controls and planted-violation tests | 2026-10-04 | f07734d1 | [261004-f34-remove-negative-controls-and-planted-vio](./quick/261004-f34-remove-negative-controls-and-planted-vio/) |
-| 261004-kwl | Remove tooling self-tests; replace network and ledger gates with ESLint rules | 2026-10-04 | babd67cc | [261004-kwl-remove-tooling-self-tests-replace-networ](./quick/261004-kwl-remove-tooling-self-tests-replace-networ/) |
-| 261004-re9 | Fix stale doc references to removed modules and tests | 2026-10-05 | 67ba13cb | [261004-re9-fix-stale-doc-references-to-removed-modu](./quick/261004-re9-fix-stale-doc-references-to-removed-modu/) |
-| 21 | Drop planted-violation steps from the unit testing guidelines | 2026-10-05 | 227513d5 | — |
-| 261004-rpt | Allowlist build inputs for CI and local checks | 2026-10-05 | ac2abb3c | [261004-rpt-allowlist-build-inputs-for-ci-and-local-](./quick/261004-rpt-allowlist-build-inputs-for-ci-and-local-/) |
-| 23 | List only the docs tests read as build inputs | 2026-10-05 | c53df4d7 | — |
-| 261004-t4g | Remove the Fallow rule pack and fold its stdio ban into ESLint | 2026-10-05 | 1da67a83 | [261004-t4g-remove-the-fallow-rule-pack-and-fold-its](./quick/261004-t4g-remove-the-fallow-rule-pack-and-fold-its/) |
-| 261004-tbe | Remove doc-agreement tests; keep only output-catalog as a docs build input | 2026-10-05 | b1094171 | [261004-tbe-remove-doc-agreement-tests-keep-only-out](./quick/261004-tbe-remove-doc-agreement-tests-keep-only-out/) |
-| 261004-u3o | Remove three unread type members | 2026-10-05 | 90291781 | [261004-u3o-remove-three-unread-type-members-and-the](./quick/261004-u3o-remove-three-unread-type-members-and-the/) |
-| 27 | init.sh: leave core.hooksPath alone; tolerate a refused pre-commit install | 2026-10-05 | 90291781 | — |
-| 261004-u7n | Remove the unused type member gate and the coverage pin | 2026-10-05 | 53a86f3d | [261004-u7n-remove-the-unused-type-member-gate](./quick/261004-u7n-remove-the-unused-type-member-gate/) |
-| 261005-9me | Replace the check-changed selector with an npm run check pre-commit hook | 2026-10-05 | ce686548 | [261005-9me-replace-the-check-changed-selector-with-](./quick/261005-9me-replace-the-check-changed-selector-with-/) |
-| 261005-c2w | Set up worktree subagents with node_modules and their own CodeGraph index | 2026-10-05 | 732ba0d1 | [261005-c2w-set-up-worktree-subagents-with-node-modu](./quick/261005-c2w-set-up-worktree-subagents-with-node-modu/) |
-| 31 | Route worktree CodeGraph queries without a per-call sync; pi.sh says npm install | 2026-10-05 | 53a0adf8 | — |
-| 32 | Trim CONTRIBUTING.md to setup, running Pi, and checks; changelog for worktree hooks | 2026-10-05 | 53a0adf8 | — |
-| 33 | Restore the worktree CodeGraph sync before each query | 2026-10-05 | eb9c1460 | — |
-| 261005-e23 | Keep worktree CodeGraph indexes current with a per-worktree daemon | 2026-10-05 | 7c2c3ccd | [261005-e23-keep-worktree-codegraph-indexes-current-](./quick/261005-e23-keep-worktree-codegraph-indexes-current-/) |
-| 35 | Switch the TruffleHog hook to filesystem mode (v3.97.9) and drop SKIP=trufflehog | 2026-10-05 | 1b636217 | — |
-| 261005-hpr | Restructure verification checks by granularity: staged pairs on commit, full tree at gates, split CI jobs | 2026-10-05 | e9d9c5df | [261005-hpr-restructure-verification-checks-by-granu](./quick/261005-hpr-restructure-verification-checks-by-granu/) |
-| 261005-jdx | Fail checks on warnings, keep passing output quiet, stop fallow rewriting AGENTS.md | 2026-10-05 | f1f634e2 | [261005-jdx-fail-checks-on-warnings-and-keep-passing](./quick/261005-jdx-fail-checks-on-warnings-and-keep-passing/) |
-| 261005-la5 | Clean up review leftovers and show full CI output | 2026-10-05 | cf8399b4 | [261005-la5-clean-up-review-leftovers-and-show-full-](./quick/261005-la5-clean-up-review-leftovers-and-show-full-/) |
-| 261005-n1k | Move output discipline to a fallow rule pack and default-deny NFR-5 | 2026-10-05 | 89c0e356 | [261005-n1k-move-output-discipline-to-a-fallow-rule-](./quick/261005-n1k-move-output-discipline-to-a-fallow-rule-/) |
-| 40 | Ban http2 imports in the fallow network chokepoint | 2026-10-05 | da3f41ad | — |
-| 261005-phr | Drop Node 20 and give each shared decision ID its own ID | 2026-10-05 | 6af548d4 | [261005-phr-drop-node-20-and-give-each-bare-d-11-a-u](./quick/261005-phr-drop-node-20-and-give-each-bare-d-11-a-u/) |
-| 261005-rmz | Suppress the reviewed render-arm clone groups in fallow | 2026-10-05 | e41d3e56 | [261005-rmz-ignore-the-reviewed-render-arm-clone-gro](./quick/261005-rmz-ignore-the-reviewed-render-arm-clone-gro/) |
-| 261005-rk5 | Register the worktree init hook for Codex: make scripts/init-worktree.sh host-agnostic and add a SessionStart hook to .codex/config.toml | 2026-10-05 | ce13f8aa | [261005-rk5-register-the-worktree-init-hook-for-code](./quick/261005-rk5-register-the-worktree-init-hook-for-code/) |
-| 261005-sx5 | Close the five pre-PR review findings: fold the #234 changelog entry, delete the stale per-layer READMEs, fix the ledger phase count, scope TruffleHog to the pre-commit stage, and mirror the write-file-atomic Node range in engines | 2026-10-05 | 98b7c4f2 | [261005-sx5-close-the-five-pre-pr-review-findings-fo](./quick/261005-sx5-close-the-five-pre-pr-review-findings-fo/) |
-| 45 | Cut the #236 CHANGELOG entry to the changelog rules | 2026-10-05 | caeb4a40 | — |
-| 261005-x56 | Enforce no-await-in-loop as the local S9382 and state why each sequential loop runs in order | 2026-10-06 | 195c056d | [261005-x56-enforce-no-await-in-loop-as-the-local-s9](./quick/261005-x56-enforce-no-await-in-loop-as-the-local-s9/) |
-| 261006-a8c | Flag mod, syntaxHighlighting, binaries (official marketplaces), and experimental.outputStyles as unsupported components | 2026-10-06 | a3e0a50e | [261006-a8c-flag-mods-syntaxhighlighting-binaries-ex](./quick/261006-a8c-flag-mods-syntaxhighlighting-binaries-ex/) |
 
 ## Deferred Items
 
@@ -701,24 +654,24 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
-| 260919-c5m | Standardize on AGENTS.md instead of CLAUDE.md as the canonical project-instructions file | 2026-09-19 | 8f87272a | Complete | [260919-c5m-standardize-on-agents-md-instead-of-clau](./quick/260919-c5m-standardize-on-agents-md-instead-of-clau/) |
-| 260917-bh3 | Condense the #181 unreleased CHANGELOG entries | 2026-09-17 | 399dea49 | Complete | [260917-bh3-condense-the-181-unreleased-changelog-en](./quick/260917-bh3-condense-the-181-unreleased-changelog-en/) |
-| 260913-uwq | Gate and commit the issue-179 fix: agents omitting `tools:` inherit Pi's defaults, and the two dropped agent fields get targeted guidance | 2026-09-13 | a9186816 | Complete | [260913-uwq-issue-179-agent-tools-and-mcpservers-con](./quick/260913-uwq-issue-179-agent-tools-and-mcpservers-con/) |
-| 260913-ttl | Close the remaining SonarQube branch-coverage gap to reach 100% line and 100% branch coverage | 2026-09-13 | d2ef20fa..46815bd6 | Complete | [260913-ttl-close-the-remaining-sonarqube-branch-cov](./quick/260913-ttl-close-the-remaining-sonarqube-branch-cov/) |
-| 260913-r2h | Make a FIFO state-harness over-read fail loudly instead of hanging to the test timeout | 2026-09-13 | c45850af | Complete | [260913-r2h-make-a-fifo-harness-over-read-fail-loudl](./quick/260913-r2h-make-a-fifo-harness-over-read-fail-loudl/) |
-| 260913-n7w | Fix the FIFO state server so each reader open receives exactly one payload | 2026-09-13 | e4f12cce | Complete | [260913-n7w-fix-the-fifo-state-server-reader-pairing](./quick/260913-n7w-fix-the-fifo-state-server-reader-pairing/) |
-| 260913-l07 | Fix every remaining zizmor finding, drop the severity floor, and simplify the gate comments | 2026-09-13 | 729348b4 | Complete | [260913-l07-fix-remaining-zizmor-findings-and-simpli](./quick/260913-l07-fix-remaining-zizmor-findings-and-simpli/) |
-| 260913-f6a | Gate the two SonarQube workflow findings, githubactions:S6505 and githubactions:S7637 | 2026-09-13 | 8a8a0396..69797ebc | Complete | [260913-f6a-gate-sonar-workflow-findings-s6505-and-s](./quick/260913-f6a-gate-sonar-workflow-findings-s6505-and-s/) |
-| 260920-qx0 | Reject `--local` on the merged-read marketplace verbs (info, list, update) | 2026-09-20 | f2fbd402 | complete | [260920-qx0-remove-local-from-marketplace-info](./quick/260920-qx0-remove-local-from-marketplace-info/) |
-| 260921-t5t | Suppress success-count lines for empty cascades and non-bulk operations | 2026-09-21 | ffdecc5f | shipped in PR #209 | [260921-t5t-when-a-command-returns-an-empty-result-a](./quick/260921-t5t-when-a-command-returns-an-empty-result-a/) |
-| 260922-ckn | Read the Claude Code compatibility skill during discuss phases; fix a racy coverage test | 2026-09-22 | 0b0623a3 | complete | [260922-ckn-implement-upstream-informed-discuss-phas](./quick/260922-ckn-implement-upstream-informed-discuss-phas/) |
-| 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na/) |
-| 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | b07ae35c | complete | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew/) |
-| 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./quick/260924-q0m-keep-only-plugin-qualified-interactive-s/) |
-| 261001-iad | Deduplicate CI checks and run isolated direct coverage pairs concurrently | 2026-10-01 | b0d45f4f | complete | [261001-iad-deduplicate-ci-checks-and-run-isolated-d](./quick/261001-iad-deduplicate-ci-checks-and-run-isolated-d/) |
-| 261001-jpu | Remove brittle CI configuration assertions and retain the separate Sonar workflow | 2026-10-01 | f69e5023 | complete | [261001-jpu-remove-brittle-ci-configuration-assertio](./quick/261001-jpu-remove-brittle-ci-configuration-assertio/) |
-| 261001-jwu | Optimize local checks and GSD verification with native caches and conservative changed-file checks | 2026-10-01 | 462f3f24 | complete | [261001-jwu-optimize-local-checks-and-gsd-verificati](./quick/261001-jwu-optimize-local-checks-and-gsd-verificati/) |
-| 261001-mlt | Schedule focused task gates and full combined verification without duplicate local runs | 2026-10-01 | d9b672b9 | complete | [261001-mlt-schedule-focused-task-gates-and-full-pha](./quick/261001-mlt-schedule-focused-task-gates-and-full-pha/) |
+| 260919-c5m | Standardize on AGENTS.md instead of CLAUDE.md as the canonical project-instructions file | 2026-09-19 | 8f87272a | Complete | [260919-c5m-standardize-on-agents-md-instead-of-clau](./[0m[01;34mmilestones/test-backlog-quick/260919-c5m-standardize-on-agents-md-instead-of-clau[0m[K//) |
+| 260917-bh3 | Condense the #181 unreleased CHANGELOG entries | 2026-09-17 | 399dea49 | Complete | [260917-bh3-condense-the-181-unreleased-changelog-en](./[0m[01;34mmilestones/test-backlog-quick/260917-bh3-condense-the-181-unreleased-changelog-en[0m[K//) |
+| 260913-uwq | Gate and commit the issue-179 fix: agents omitting `tools:` inherit Pi's defaults, and the two dropped agent fields get targeted guidance | 2026-09-13 | a9186816 | Complete | [260913-uwq-issue-179-agent-tools-and-mcpservers-con](./[0m[01;34mmilestones/test-backlog-quick/260913-uwq-issue-179-agent-tools-and-mcpservers-con[0m[K//) |
+| 260913-ttl | Close the remaining SonarQube branch-coverage gap to reach 100% line and 100% branch coverage | 2026-09-13 | d2ef20fa..46815bd6 | Complete | [260913-ttl-close-the-remaining-sonarqube-branch-cov](./[0m[01;34mmilestones/test-backlog-quick/260913-ttl-close-the-remaining-sonarqube-branch-cov[0m[K//) |
+| 260913-r2h | Make a FIFO state-harness over-read fail loudly instead of hanging to the test timeout | 2026-09-13 | c45850af | Complete | [260913-r2h-make-a-fifo-harness-over-read-fail-loudl](./[0m[01;34mmilestones/test-backlog-quick/260913-r2h-make-a-fifo-harness-over-read-fail-loudl[0m[K//) |
+| 260913-n7w | Fix the FIFO state server so each reader open receives exactly one payload | 2026-09-13 | e4f12cce | Complete | [260913-n7w-fix-the-fifo-state-server-reader-pairing](./[0m[01;34mmilestones/test-backlog-quick/260913-n7w-fix-the-fifo-state-server-reader-pairing[0m[K//) |
+| 260913-l07 | Fix every remaining zizmor finding, drop the severity floor, and simplify the gate comments | 2026-09-13 | 729348b4 | Complete | [260913-l07-fix-remaining-zizmor-findings-and-simpli](./[0m[01;34mmilestones/test-backlog-quick/260913-l07-fix-remaining-zizmor-findings-and-simpli[0m[K//) |
+| 260913-f6a | Gate the two SonarQube workflow findings, githubactions:S6505 and githubactions:S7637 | 2026-09-13 | 8a8a0396..69797ebc | Complete | [260913-f6a-gate-sonar-workflow-findings-s6505-and-s](./[0m[01;34mmilestones/test-backlog-quick/260913-f6a-gate-sonar-workflow-findings-s6505-and-s[0m[K//) |
+| 260920-qx0 | Reject `--local` on the merged-read marketplace verbs (info, list, update) | 2026-09-20 | f2fbd402 | complete | [260920-qx0-remove-local-from-marketplace-info](./[0m[01;34mmilestones/any-git-host-quick/260920-qx0-remove-local-from-marketplace-info[0m//) |
+| 260921-t5t | Suppress success-count lines for empty cascades and non-bulk operations | 2026-09-21 | ffdecc5f | shipped in PR #209 | [260921-t5t-when-a-command-returns-an-empty-result-a](./[0m[01;34mmilestones/any-git-host-quick/260921-t5t-when-a-command-returns-an-empty-result-a[0m[K//) |
+| 260922-ckn | Read the Claude Code compatibility skill during discuss phases; fix a racy coverage test | 2026-09-22 | 0b0623a3 | complete | [260922-ckn-implement-upstream-informed-discuss-phas](./[0m[01;34mmilestones/any-git-host-quick/260922-ckn-implement-upstream-informed-discuss-phas[0m[K//) |
+| 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./[0m[01;34mmilestones/any-git-host-quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na[0m[K//) |
+| 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | b07ae35c | complete | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./[0m[01;34mmilestones/any-git-host-quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew[0m[K//) |
+| 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./[0m[01;34mmilestones/any-git-host-quick/260924-q0m-keep-only-plugin-qualified-interactive-s[0m[K//) |
+| 261001-iad | Deduplicate CI checks and run isolated direct coverage pairs concurrently | 2026-10-01 | b0d45f4f | complete | [261001-iad-deduplicate-ci-checks-and-run-isolated-d](./[0m[01;34mmilestones/any-git-host-quick/261001-iad-deduplicate-ci-checks-and-run-isolated-d[0m[K//) |
+| 261001-jpu | Remove brittle CI configuration assertions and retain the separate Sonar workflow | 2026-10-01 | f69e5023 | complete | [261001-jpu-remove-brittle-ci-configuration-assertio](./[0m[01;34mmilestones/any-git-host-quick/261001-jpu-remove-brittle-ci-configuration-assertio[0m[K//) |
+| 261001-jwu | Optimize local checks and GSD verification with native caches and conservative changed-file checks | 2026-10-01 | 462f3f24 | complete | [261001-jwu-optimize-local-checks-and-gsd-verificati](./[0m[01;34mmilestones/any-git-host-quick/261001-jwu-optimize-local-checks-and-gsd-verificati[0m[K//) |
+| 261001-mlt | Schedule focused task gates and full combined verification without duplicate local runs | 2026-10-01 | d9b672b9 | complete | [261001-mlt-schedule-focused-task-gates-and-full-pha](./[0m[01;34mmilestones/any-git-host-quick/261001-mlt-schedule-focused-task-gates-and-full-pha[0m[K//) |
 
 ## Session Continuity
 
