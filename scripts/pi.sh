@@ -92,16 +92,16 @@ try {
 ' "$repo_root/tests/pi-runtime.ts" "$repo_root")
 
 # Companion extensions, pinned here only -- never in package.json or
-# package-lock.json (NFR-5, D-98-10). Engine 3.13.1 includes engine PRs
-# #233 (child sessions use the host Pi) and #234 (completed-run status).
-# No grade in docs/workflows-compatibility.md names 3.13.1. Do not move
-# this pin to a release with engine PR #238 until the bridge follows it.
-# That release stores workflows under PI_CODING_AGENT_DIR, which --home
-# sets, and the bridge ignores that variable for workflows (WPTH-04).
+# package-lock.json (NFR-5, D-98-10). Engine 3.14.0 is the newest release
+# that docs/workflows-compatibility.md grades. It includes engine PR #232,
+# which fixes result delivery under the --no-extensions -e launch below.
+# It stores workflows under PI_CODING_AGENT_DIR when that variable is set,
+# as the bridge does (WPTH-04). --home sets the variable, so an engine
+# before 3.14.0 does not find the workflows the bridge installs.
 pi_cm_pins=(
   "pi-mcp-adapter@2.37.0"
   "pi-subagents@0.71.0"
-  "@quintinshaw/pi-dynamic-workflows@3.13.1"
+  "@quintinshaw/pi-dynamic-workflows@3.14.0"
 )
 
 # Prefix resolved against the invocation directory, before the --cd change
