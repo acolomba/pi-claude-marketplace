@@ -252,7 +252,7 @@ We degrade rather than refuse. An unsupported component kind marks the plugin `p
 
 We recover without a restart. `applyReconcile` on `resources_discover` diffs desired state against disk and re-materializes what is absent, so `/reload` alone is the whole recovery story.
 
-We enforce our offline promise with a build gate rather than a convention. `tests/architecture/no-orchestrator-network.test.ts` greps the orchestrators for git surfaces and fails the build.
+We enforce our offline promise with a build gate rather than a convention. An ESLint block in `eslint.config.js` rejects git surfaces in the network-free orchestrators and fails the build.
 
 We carry a desired-state configuration in `claude-plugins.json` and `claude-plugins.local.json` that a user can commit and share. We also import the installed plugin set of Claude Code from `settings.json` and `settings.local.json`.
 

@@ -47,7 +47,7 @@
 //
 // No exhaustiveness claim: plugin/uninstall.ts holds no switch and no
 // closed-union dispatch, so a missing-arm plant has no target here. No case
-// asserts the absence of direct process output (ESLint and fallow own that),
+// asserts the absence of direct process output (fallow owns that),
 // none re-proves the scope-target scan owned by tests/edge/handlers/shared.test.ts
 // or the reference parse owned by tests/edge/handlers/plugin/shared.test.ts, and
 // none re-derives the uninstall workflow's own row grammar, which

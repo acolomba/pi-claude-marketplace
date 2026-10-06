@@ -17,3 +17,10 @@ args = ["serve", "--mcp"]
 [mcp_servers.fallow]
 command = "npx"
 args = ["--no", "fallow-mcp"]
+
+[[hooks.SessionStart]]
+matcher = "startup|resume|fork"
+
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "bash scripts/init-worktree.sh"

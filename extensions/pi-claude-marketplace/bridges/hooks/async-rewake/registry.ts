@@ -30,8 +30,8 @@
 // IL-2 EXEMPTION (T-62-09): the single sanctioned runtime notify call
 // in the entire `bridges/hooks/async-rewake/` subtree is the
 // `rewakeSummary` surface inside `onChildExit`, routed through
-// `notifyAsyncRewakeSummary` in `shared/notification-dispatch.ts` so the eslint
-// `no-restricted-syntax` ctx.ui.notify gate stays GREEN here.
+// `notifyAsyncRewakeSummary` in `shared/notification-dispatch.ts` so the fallow
+// rule `architecture/notify-chokepoint` stays green here.
 // Runtime notify is otherwise forbidden in bridge code; the exemption
 // exists because `rewakeSummary` is the upstream-mandated UI status
 // surface declared in the plugin author's hook handler. Every other
@@ -536,6 +536,7 @@ export async function reapOrphans(
       }
 
       if (process.platform === "linux") {
+        // eslint-disable-next-line no-await-in-loop -- bounded by the PID table's live orphans, one /proc read each
         const marker = await readProcEnvironMarker(tableEntry.pid, probes);
         if (marker !== tableEntry.dispatchId) {
           hookDebugLog(

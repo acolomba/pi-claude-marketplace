@@ -86,10 +86,11 @@ export const UPDATE_CONTEXT = {
       ]),
     // SEV-03 / D-69-01: an autoupdate cascade candidate that re-resolved
     // `partially-available` degraded via the partial path. Reuse `partiallyInstalledRow` --
-    // the SOLE composition site (D-11 "call, never duplicate") -- so the
+    // the SOLE composition site (D-notification-refactor-01-11 "call, never duplicate") -- so the
     // `◉ <name> v<version> (partially-installed) {dropped kinds[, requires pi-...]}`
     // bytes stay identical to the install / update success surfaces.
     "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
+    // fallow-ignore-next-line code-duplication -- reviewed: per-command typed render-map arms are one-line calls to shared row composers; extracting them needs a cross-command generic.
     skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
     failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
   },

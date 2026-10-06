@@ -23,7 +23,7 @@
 //
 // No exhaustiveness claim: the module holds no switch and no closed-union
 // dispatch, so a missing-arm plant has no target here. No case asserts the
-// absence of direct process output -- ESLint and fallow own that -- and none
+// absence of direct process output -- fallow owns that -- and none
 // re-pins the catalog's per-verb flag sets (tests/edge/flag-catalog.test.ts).
 
 import assert from "node:assert/strict";

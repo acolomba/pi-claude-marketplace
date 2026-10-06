@@ -19,11 +19,6 @@
  *     the github.com path is byte-identical.
  *   - D-32-04: notifyFn callback (no `ctx` import; preserves the
  *     shared/notification-dispatch.ts chokepoint at the boundary).
- *   - D-32-05: every DeviceFlowResult -- success OR failure -- carries
- *     `authAttempted: true` as a reference-only / future-proofing marker.
- *     `onAuthFailure(url, cred)` never receives a DeviceFlowResult (only the
- *     credential) and does not branch on the flag; it always returns
- *     { cancel: true } regardless (AUTH-07; CP-9 retry-loop guard).
  *   - D-32-06: AUTH-09 discipline -- user_code and verification_uri MAY
  *     appear in notifyFn; access_token / cred.* / r.accessToken MUST NEVER
  *     appear in notifyFn or new Error(...) interpolation. Enforced by
@@ -135,15 +130,8 @@ export interface InitiateDeviceFlowOpts {
   waitForPoll?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
 }
 
-/**
- * Discriminated result. Both branches carry `authAttempted: true` as a
- * reference-only / future-proofing marker (CP-9) -- onAuthFailure never
- * receives this value and does not branch on it; it always returns
- * { cancel: true } regardless.
- */
-export type DeviceFlowResult =
-  | { ok: true; cred: GitCredentials; authAttempted: true }
-  | { ok: false; reason: string; authAttempted: true };
+/** Discriminated result of a Device Flow run. */
+export type DeviceFlowResult = { ok: true; cred: GitCredentials } | { ok: false; reason: string };
 
 /**
  * Extract a `(<error> -- <error_description>)` suffix from a non-2xx
@@ -312,17 +300,13 @@ function makeDeviceFlowHttp(deviceCodeUrl: string, tokenUrl: string): DeviceFlow
  * the resulting credential best-effort via the injected CredentialOps.
  *
  * Returns a discriminated DeviceFlowResult:
- *   - { ok: true, cred, authAttempted: true } -- token successfully obtained
+ *   - { ok: true, cred } -- token successfully obtained
  *     AND credentialOps.approve(host, cred) invoked (its failure -- if any
  *     -- propagates; the default impl swallows internally per its best-effort
  *     contract).
- *   - { ok: false, reason, authAttempted: true } -- terminal failure
+ *   - { ok: false, reason } -- terminal failure
  *     (access_denied / expired_token / deadline exceeded / init failure /
  *     unexpected error / caller aborted).
- *
- * D-32-05: authAttempted is true in BOTH branches as a reference-only /
- * future-proofing marker -- onAuthFailure never receives this value and
- * does not branch on it; it always returns { cancel: true } regardless.
  */
 async function safePollToken(
   http: DeviceFlowHttp,
@@ -355,11 +339,13 @@ async function runPollLoop(
 
   while (Date.now() < deadlineMs) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- RFC 8628: each poll waits the server interval
       await (opts.waitForPoll ?? waitForPoll)(currentIntervalSec * 1000, opts.signal);
     } catch {
-      return { ok: false, reason: "Device Flow cancelled.", authAttempted: true };
+      return { ok: false, reason: "Device Flow cancelled." };
     }
 
+    // eslint-disable-next-line no-await-in-loop -- RFC 8628: one token poll per interval; slow_down widens it
     const r = await safePollToken(
       http,
       provider.clientId,
@@ -370,8 +356,9 @@ async function runPollLoop(
     switch (r.kind) {
       case "success": {
         const cred: GitCredentials = provider.credentialFrom(r.accessToken);
+        // eslint-disable-next-line no-await-in-loop -- runs once: the success path returns after it
         await opts.credentialOps.approve(opts.host, cred);
-        return { ok: true, cred, authAttempted: true };
+        return { ok: true, cred };
       }
 
       case "pending":
@@ -385,22 +372,19 @@ async function runPollLoop(
         return {
           ok: false,
           reason: "User cancelled authorization. Run the command again to retry.",
-          authAttempted: true,
         };
       case "expired_token":
         return {
           ok: false,
           reason: "Device code expired before authorization. Run the command again to restart.",
-          authAttempted: true,
         };
       case "poll_error":
-        return { ok: false, reason: r.reason, authAttempted: true };
+        return { ok: false, reason: r.reason };
       case "unexpected": {
         const detail = r.description === undefined ? "" : ` -- ${r.description}`;
         return {
           ok: false,
           reason: `Device Flow failed: ${r.error}${detail}`,
-          authAttempted: true,
         };
       }
     }
@@ -410,7 +394,6 @@ async function runPollLoop(
     ok: false,
     reason:
       "Device Flow timed out before authorization completed. Run the command again to restart.",
-    authAttempted: true,
   };
 }
 
@@ -427,7 +410,6 @@ export async function initiateDeviceFlow(opts: InitiateDeviceFlowOpts): Promise<
     return {
       ok: false,
       reason: `Device Flow initialization failed: ${err instanceof Error ? err.message : "unknown error"}`,
-      authAttempted: true,
     };
   }
 

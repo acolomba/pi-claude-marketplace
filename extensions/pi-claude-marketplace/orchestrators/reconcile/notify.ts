@@ -291,7 +291,7 @@ function forceInstallKey(scope: Scope, marketplace: string, plugin: string): str
  * keys whose candidate resolves `state === "partially-available"` -- the planned
  * install would degrade and proceed under the partial path, so its pending row
  * renders `(will partially install)`. The resolve is the cache/no-network resolver
- * (guarded by the `no-orchestrator-network` architecture test); a probe throw
+ * (guarded by BLOCK F in `eslint.config.js`); a probe throw
  * or an unlocatable candidate degrades to NO force (the safe, truthful preview
  * default), never a crash on this read-only surface (IL-2).
  *
@@ -310,11 +310,13 @@ export async function resolvePendingForceInstalls(
     for (const install of plan.pluginsToInstall) {
       let candidate: PendingInstallCandidate | undefined;
       try {
+        // eslint-disable-next-line no-await-in-loop -- bounded by the planned installs, one locate each
         candidate = await locate(install);
         if (candidate === undefined) {
           continue;
         }
 
+        // eslint-disable-next-line no-await-in-loop -- bounded by the planned installs, one resolve each
         const resolved = await resolveStrict(candidate.manifestEntry, {
           marketplaceRoot: candidate.marketplaceRoot,
         });

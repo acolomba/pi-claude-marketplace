@@ -37,13 +37,14 @@ import type {
  * set, its cascade row message shapes, and a render map total over reinstall's
  * OWN statuses (D-10) lifting the matching `renderPluginRow` arm bodies
  * VERBATIM. The shared presentation vocabulary stays central in
- * `shared/notification-grammar.ts` (D-11) and is CALLED here, never duplicated.
+ * `shared/notification-grammar.ts` (D-notification-refactor-01-11) and is CALLED here, never
+ * duplicated.
  *
  * NFR-9: the `manual recovery` / `failed` cause-chain and rollback-partial
  * trailing lines are NOT composed here. The render map renders only the single
  * row body; the central `emitContextCascade` seam appends the indented
- * cause-chain / rollback-partial lines through `redactAbsolutePaths` (D-11), so
- * the path-redaction security seam is never bypassed.
+ * cause-chain / rollback-partial lines through `redactAbsolutePaths`
+ * (D-notification-refactor-01-11), so the path-redaction security seam is never bypassed.
  */
 
 /**
@@ -85,6 +86,7 @@ const REINSTALL_RENDER: {
       p.reasons,
       probe,
     ),
+  // fallow-ignore-next-line code-duplication -- reviewed: per-command typed render-map arms are one-line calls to shared row composers; extracting them needs a cross-command generic.
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
   "manual recovery": (p, probe, mpScope) =>

@@ -27,8 +27,8 @@ import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
  * cascade row is an install row plus the one RESV-05 skip, which is a fact about
  * how THIS command treated one closure member and not a new member of any shared
  * closed set. The shared presentation vocabulary stays central in
- * `shared/notification-grammar.ts` (D-11); this module CALLS it and writes no
- * row builder of its own. The reason tokens the failure rows carry ARE shared
+ * `shared/notification-grammar.ts` (D-notification-refactor-01-11); this module CALLS it and writes
+ * no row builder of its own. The reason tokens the failure rows carry ARE shared
  * closed-set members, declared in `shared/notification-types.ts::REASONS` and
  * pinned by enumeration -- no row here composes prose of its own for the brace.
  *

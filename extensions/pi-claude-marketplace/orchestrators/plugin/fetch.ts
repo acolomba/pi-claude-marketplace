@@ -9,9 +9,8 @@
 //   - git materialize: the `clone-cache.ts` entrypoints (via the injected
 //     FetchCloneCacheSeam), reached ONLY by name -- fetch.ts names zero git
 //     surface (no git-ops handle, no default-git-ops constant, no clone-refresh
-//     helper, no platform-git import), a gate enforced by
-//     tests/architecture/no-orchestrator-network.test.ts's forbidden-targets
-//     set.
+//     helper, no platform-git import). BLOCK F in `eslint.config.js` enforces
+//     that, because this file is not in its `NETWORK_SEAMS` list.
 //   - auth: `auth-host.ts`'s `buildCloneAuth` with a single sweep-wide
 //     `authMemo` so a bulk sweep triggers each host's device flow at most once
 //     (FTCH-06).
@@ -164,6 +163,7 @@ export function createFetchPlugins(
       // NEVER-throws per-plugin (mirrors updateSinglePlugin): a thrown fetch is
       // captured as a `(failed)` row and the sweep continues to the remaining
       // plugins.
+      // eslint-disable-next-line no-await-in-loop -- the shared `authMemo` runs the device flow once per host
       const row = await fetchOne(target, {
         ctx,
         seam,
@@ -255,6 +255,7 @@ async function enumerateFetchTargets(opts: FetchPluginsOptions): Promise<FetchEn
   const manifestFailures: ManifestFailure[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, cwd);
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one state read each
     const state = await loadState(locations.extensionRoot);
 
     for (const [mpName, mp] of Object.entries(state.marketplaces)) {
@@ -264,6 +265,7 @@ async function enumerateFetchTargets(opts: FetchPluginsOptions): Promise<FetchEn
 
       try {
         targets.push(
+          // eslint-disable-next-line no-await-in-loop -- bounded by the scope's marketplaces, one manifest load each
           ...(await enumerateMarketplaceEntries(mpName, mp, scope, locations, wantPlugin)),
         );
       } catch (err) {

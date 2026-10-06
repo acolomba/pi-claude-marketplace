@@ -932,12 +932,10 @@ test("memoizes one accepted Device Flow result across a same-host sweep", async 
     // assert
     assert.deepStrictEqual(authResults, [
       {
-        authAttempted: true,
         cred: { password: "token", username: "x-access-token" },
         ok: true,
       },
       {
-        authAttempted: true,
         cred: { password: "token", username: "x-access-token" },
         ok: true,
       },

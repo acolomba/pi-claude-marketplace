@@ -48,7 +48,7 @@
 //
 // No exhaustiveness claim: the selection is an `if` over an optional value, not a
 // switch over a closed union, so a missing-arm plant has no target here. No case
-// asserts the absence of direct process output (ESLint and fallow own that), none
+// asserts the absence of direct process output (fallow owns that), none
 // restates the tokenizer rules owned by tests/edge/args.test.ts or the positional
 // schema owned by tests/edge/args-schema.test.ts, and none re-derives either
 // update workflow's outcome.

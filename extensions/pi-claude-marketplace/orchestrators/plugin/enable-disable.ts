@@ -24,9 +24,8 @@
 // on every abort/no-op -- exactly what the catalog's CFG-03 states claim.
 //
 // NFR-5 (no network): this file MUST NOT import platform/git or DEFAULT_GIT_OPS.
-// The architecture gate at
-// `tests/architecture/no-orchestrator-network.test.ts` (FORBIDDEN_TARGETS) is
-// armed for this file -- adding any forbidden surface fails the gate.
+// It is not in `NETWORK_SEAMS`, so BLOCK F in `eslint.config.js` rejects any
+// forbidden surface here, and adding one fails `npm run lint`.
 //
 // A6: `loadConfig(targetConfigPath)` runs INSIDE the locked transaction so
 // a concurrent flip from another process either fails fast at lock
@@ -1785,6 +1784,7 @@ async function hydrateReEnabledMemberHooks(
     return;
   }
 
+  // fallow-ignore-next-line code-duplication -- reviewed: enable hydrates hooks exactly as install-flow does, one member at a time through the same routing seam
   for (const { member, hooksJsonPath } of withHooks) {
     try {
       // eslint-disable-next-line no-await-in-loop -- hydrates one member at a time, as /reload does

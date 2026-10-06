@@ -31,7 +31,7 @@
 //
 // No exhaustiveness claim: marketplace/list.ts holds no switch and no
 // closed-union dispatch, so a missing-arm plant has no target here. No case
-// asserts the absence of direct process output (ESLint and fallow own that),
+// asserts the absence of direct process output (fallow owns that),
 // none re-proves the tokenizer's last-scope-wins rule (tests/edge/args.test.ts)
 // or the positional-schema contract (tests/edge/args-schema.test.ts), and none
 // re-derives the list workflow's own outcome.

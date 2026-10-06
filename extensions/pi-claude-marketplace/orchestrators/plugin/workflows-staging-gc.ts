@@ -21,13 +21,13 @@
 // what keeps the retention predicate here and the displacement in the commit
 // from drifting apart.
 //
-// None of them reaches the git surface, so any orchestrator -- even one gated
-// by tests/architecture/no-orchestrator-network.test.ts -- can import this
-// module without introducing a git token. The bridge import is the only one
-// that is not a leaf, and it is safe on the terms that gate actually uses: the
-// gate greps named files for git tokens, and `install.ts` is both gated and
-// already importing the same bridge module directly. It needs no state load
-// either, which is one import fewer than `clone-gc.ts`, its structural model.
+// None of them reaches the git surface, so any orchestrator -- even one that
+// BLOCK F in `eslint.config.js` gates -- can import this module without
+// introducing a git token. The bridge import is the only non-leaf one, and it
+// is safe on the terms BLOCK F uses: it lints each gated file's own source for
+// git imports and identifiers, and `install-outcome.ts` is gated and already
+// imports the workflows bridge directly. It needs no state load either, which
+// is one import fewer than `clone-gc.ts`, its structural model.
 
 import { lstat, readdir, rm } from "node:fs/promises";
 import path from "node:path";
@@ -126,6 +126,7 @@ export async function garbageCollectWorkflowsStaging(
     // -- or stops being searchable -- between enumeration and inspection.
     let stats: Stats;
     try {
+      // eslint-disable-next-line no-await-in-loop -- bounded IO: one staging tree swept at a time
       stats = await lstat(candidate);
     } catch (err) {
       leaks.push(`${name}: ${errorMessage(err)}`);
@@ -158,6 +159,7 @@ export async function garbageCollectWorkflowsStaging(
     // same D-19-01 sanction that keeps the whole sweep silent. What a refusal
     // buys is the `rm` that never runs on the refused entry, not a report.
     try {
+      // eslint-disable-next-line no-await-in-loop -- bounded IO: one staging tree swept at a time
       await assertPathInside(
         locations.workflowsHomeDir,
         candidate,
@@ -175,11 +177,13 @@ export async function garbageCollectWorkflowsStaging(
     // on a recovery instruction the product just gave. Cause-independent by
     // design: a crash mid-commit strands the same bytes in the same place, and
     // the sweeper cannot tell the two apart -- nor does it need to.
+    // eslint-disable-next-line no-await-in-loop -- bounded IO: one staging tree swept at a time
     if (await holdsDisplacedEnvelopes(candidate)) {
       continue;
     }
 
     try {
+      // eslint-disable-next-line no-await-in-loop -- bounded IO: one staging tree swept at a time
       await rm(candidate, { recursive: true, force: true });
     } catch (err) {
       // D-19-01: a per-tree rm leak never throws out of the sweep; the next
@@ -252,6 +256,7 @@ export async function scanRetainedWorkflowsStaging(
     // entry vanishes between enumeration and inspection is skipped.
     let stats: Stats;
     try {
+      // eslint-disable-next-line no-await-in-loop -- bounded by the staging dir's entries, one inspection each
       stats = await lstat(candidate);
     } catch {
       continue;
@@ -269,6 +274,7 @@ export async function scanRetainedWorkflowsStaging(
     // ending the pass: one poisoned entry must not hide every other retained
     // tree from the only surface that names them.
     try {
+      // eslint-disable-next-line no-await-in-loop -- bounded by the staging dir's entries, one inspection each
       await assertPathInside(
         locations.workflowsHomeDir,
         candidate,
@@ -278,6 +284,7 @@ export async function scanRetainedWorkflowsStaging(
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- bounded by the staging dir's entries, one inspection each
     const displaced = await readDisplacedEnvelopes(candidate);
     if (!displaced.holds) {
       continue;

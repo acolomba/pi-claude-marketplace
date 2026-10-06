@@ -30,8 +30,8 @@ import type { Scope } from "../../shared/types.ts";
  * contexts -- `ENABLE_CONTEXT` and `DISABLE_CONTEXT` -- each with its OWN render
  * map total over its OWN statuses (D-10). The render-arm bodies are lifted
  * VERBATIM from the central `renderPluginRow` switch; the shared presentation
- * vocabulary stays central in `shared/notification-grammar.ts` (D-11) and is CALLED here,
- * never duplicated.
+ * vocabulary stays central in `shared/notification-grammar.ts` (D-notification-refactor-01-11)
+ * and is CALLED here, never duplicated.
  *
  * UAT-03 / RLD-05 / D-07: the fresh-disable `(disabled)` row's
  * `/reload to pick up changes` trailer is NOT a render concern -- it is driven
@@ -71,8 +71,8 @@ export type DisableMsg = PluginDisabledMessage | PluginSkippedMessage | PluginFa
  * `dependencies.includes(...)` gating is preserved verbatim for byte parity.
  *
  * ENBL-07 / FSTAT-07 / D-66-04: the `partially-installed` arm CALLS the shared
- * `partiallyInstalledRow` composition site (D-11), so a re-enable that drops
- * component kinds renders the same `◉ ... (partially-installed) {kinds}` bytes
+ * `partiallyInstalledRow` composition site (D-notification-refactor-01-11), so a re-enable that
+ * drops component kinds renders the same `◉ ... (partially-installed) {kinds}` bytes
  * the install cascade and the `list` inventory row render for the very same
  * record.
  */
@@ -88,6 +88,7 @@ const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status
       probe,
     ),
   "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
+  // fallow-ignore-next-line code-duplication -- reviewed: per-command typed render-map arms are one-line calls to shared row composers; extracting them needs a cross-command generic.
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };

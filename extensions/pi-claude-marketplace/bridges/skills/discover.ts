@@ -156,6 +156,7 @@ async function collectSkillSubdirs(
     // readdir's `withFileTypes` reports the link's TYPE (so a symlink to a
     // directory shows isDirectory()=true). lstat is the only way to detect
     // the link itself.
+    // eslint-disable-next-line no-await-in-loop -- first-seen dir wins the shared dedup sets
     if (!(await isSkillDir(entry, skillsDir))) {
       continue;
     }

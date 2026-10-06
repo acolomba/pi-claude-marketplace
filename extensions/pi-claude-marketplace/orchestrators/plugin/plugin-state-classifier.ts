@@ -11,8 +11,8 @@
 // disk or network I/O -- the caller owns the no-network `resolveStrict` probe and
 // passes the result (or `undefined` on a probe failure) in. This keeps the
 // classifier free of the `platform`/network layers and lets the no-network
-// boundary stay at the caller, where the architecture guard
-// (tests/architecture/no-orchestrator-network.test.ts) enforces it.
+// boundary stay at the caller, where the network-free ESLint block
+// (BLOCK F in `eslint.config.js`) enforces it.
 
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 

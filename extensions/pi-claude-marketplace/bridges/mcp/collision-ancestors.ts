@@ -91,13 +91,8 @@ export async function ancestorSourcePaths(
   const entries: readonly unknown[] = configuredRoots;
   const home = await pathIdentity(homedir());
   const canonicalCwd = await pathIdentity(cwd);
-  const roots: string[] = [];
-  for (const entry of entries) {
-    const root = await validRoot(entry, home, canonicalCwd);
-    if (root !== undefined) {
-      roots.push(root);
-    }
-  }
+  const resolved = await Promise.all(entries.map((entry) => validRoot(entry, home, canonicalCwd)));
+  const roots = resolved.filter((root): root is string => root !== undefined);
 
   roots.sort((left, right) => right.length - left.length);
   const deepest = roots[0];

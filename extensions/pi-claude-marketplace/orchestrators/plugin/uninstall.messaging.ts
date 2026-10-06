@@ -19,7 +19,8 @@ import type { Scope } from "../../shared/types.ts";
  * set, its row message shapes, its command-private reason, and a render map
  * total over uninstall's OWN statuses (D-10) lifting the matching
  * `renderPluginRow` arm bodies VERBATIM. Shared presentation vocabulary stays
- * central in `shared/notification-grammar.ts` (D-11) and is CALLED here, never duplicated.
+ * central in `shared/notification-grammar.ts` (D-notification-refactor-01-11) and is CALLED here,
+ * never duplicated.
  */
 
 // D-05-11 / D-06-06: the command-private reasons owned by `uninstall` are

@@ -35,14 +35,14 @@ jobs:
         run: npm ci --ignore-scripts
 
       # No token or run-id override: download only from this workflow run.
-      - name: Download accepted unit coverage
+      - name: Download the direct coverage report
         uses: actions/download-artifact@v8
         with:
-          name: unit-coverage
+          name: direct-coverage-lcov
           path: coverage
 
       - name: Require the coverage report
-        run: test -s coverage/unit.lcov
+        run: test -s coverage/direct.lcov
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2

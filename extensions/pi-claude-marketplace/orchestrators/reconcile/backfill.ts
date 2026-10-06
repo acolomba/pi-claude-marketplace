@@ -258,6 +258,7 @@ async function scanForceInstalledBackfills(
   let anyFailure = false;
   for (const [marketplace, mp] of Object.entries(state.marketplaces)) {
     for (const [plugin, record] of Object.entries(mp.plugins)) {
+      // eslint-disable-next-line no-await-in-loop -- each backfill reinstall locks the scope (retries: 0)
       const failed = await backfillOnePluginIsolated(
         opts,
         { scope, marketplace, mp, plugin, record },

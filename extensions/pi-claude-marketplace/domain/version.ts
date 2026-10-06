@@ -1,6 +1,6 @@
 // domain/version.ts
 //
-// PI-7 hash-version computation per D-11 + D-12.
+// PI-7 hash-version computation per D-v1.0-02-11 + D-12.
 //
 // Algorithm:
 //   1. Walk pluginRoot recursively, skipping HASH_WALK_SKIP entries.
@@ -59,9 +59,11 @@ async function walkAndHash(hash: Hash, root: string, rel: string): Promise<void>
     hash.update(childRel);
 
     if (entry.isDirectory()) {
+      // eslint-disable-next-line no-await-in-loop -- PI-7: the hash digests entries in sorted order
       await walkAndHash(hash, root, childRel);
     } else if (entry.isFile()) {
       // Use OS-aware joiner for the actual filesystem read.
+      // eslint-disable-next-line no-await-in-loop -- PI-7: the hash digests entries in sorted order
       const buf = await readFile(path.join(root, childRel));
       hash.update(normalizeBytes(buf));
     }
@@ -70,7 +72,7 @@ async function walkAndHash(hash: Hash, root: string, rel: string): Promise<void>
 }
 
 /**
- * D-11: normalize file bytes before hashing.
+ * D-v1.0-02-11: normalize file bytes before hashing.
  *   1. Strip leading UTF-8 BOM (\xEF\xBB\xBF).
  *   2. Collapse \r\n -> \n (matches git autocrlf=input behavior).
  *

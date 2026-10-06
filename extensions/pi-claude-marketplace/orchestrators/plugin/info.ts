@@ -164,7 +164,7 @@ export interface PluginInfoReader {
 
 /**
  * FTCH-04 / NFR-5: injected clone-cache seam for the `info --fetch` hook. info.ts
- * is a FORBIDDEN_TARGET for the git surface (no-orchestrator-network gate), so
+ * is not in `NETWORK_SEAMS`, so BLOCK F in `eslint.config.js` gates it, and
  * the fetch-materialize flows through the sibling `clone-cache.ts` seam by name
  * -- info NEVER references the git ops directly. Mirrors
  * `install-clone-probe.ts::InstallCloneCacheSeam`. Production leaves it undefined and info
@@ -335,6 +335,7 @@ async function discoverComponentNames(
   const names = new Set<string>();
   for (const rel of componentDirs) {
     const abs = path.isAbsolute(rel) ? rel : path.join(pluginRoot, rel);
+    // eslint-disable-next-line no-await-in-loop -- bounded by the declared component dirs, one readdir each
     const entries = await readEntriesOrEmpty(reader, abs);
     for (const entry of entries) {
       const name = nameFromEntry(entry, kind);
@@ -487,8 +488,8 @@ const OWN_MANIFEST_NOT_READABLE: OwnManifestRead = { kind: "not-readable" };
  * `missing-subdir` each mean there is no local tree this surface may read. The
  * materializing fetch probe is NEVER reached from here, not even when
  * `--fetch` was passed -- "readable" never means fetching (D-01-32), NFR-5
- * forbids `info` touching the network, and this file is pinned BY NAME in the
- * no-orchestrator-network gate. The consequence is deliberate and worth
+ * forbids `info` touching the network, and BLOCK F in `eslint.config.js` gates
+ * this file, which is not in `NETWORK_SEAMS`. The consequence is deliberate and worth
  * stating: on a cold `--fetch` run the dependency list comes from the entry
  * even though the row builders materialize a clone moments later.
  *
@@ -607,6 +608,7 @@ async function readOwnManifestDependencies(
   pluginRoot: string,
 ): Promise<OwnManifestRead> {
   for (const candidate of MANIFEST_CANDIDATES) {
+    // eslint-disable-next-line no-await-in-loop -- the first existing manifest candidate decides the read
     const read = await readManifestCandidate(reader, path.join(pluginRoot, candidate));
     if (read.kind === "absent") {
       continue;
@@ -780,7 +782,9 @@ async function readStateOnlyHookEntries(
       // same one-line join for the same reason. NFR-10 containment is carried
       // by the `assertPathInside` chokepoint below, not by the composer.
       const hooksJsonPath = path.join(locations.hooksDir, slug, "hooks.json");
+      // eslint-disable-next-line no-await-in-loop -- the first unparseable slug returns; zero or one slug today
       await assertPathInside(locations.hooksDir, hooksJsonPath, "hooks.json info read");
+      // eslint-disable-next-line no-await-in-loop -- the first unparseable slug returns; zero or one slug today
       const raw = await reader.readTextFile(hooksJsonPath);
       const parsed = parseHooksForInfo(raw, cwd);
       if (!parsed.ok) {
@@ -1934,7 +1938,7 @@ function buildNonPathInstalledRow(
  * threaded down to the git-source row builders. `locations` are supplied
  * per-block by the caller. Mirrors the install clone-probe's auth bundle wiring; info reaches the
  * git surface ONLY through the `clone-cache.ts` seam + `auth-host.ts`
- * re-exports (no-orchestrator-network gate, NFR-5).
+ * re-exports (BLOCK F in `eslint.config.js`, NFR-5).
  */
 interface InfoFetchContext {
   readonly ctx: NotificationContext;

@@ -49,8 +49,8 @@
 // Architectural constraints (NFR-5 / PI-2 / PL-3):
 //   - No withStateGuard (no mutation, no state file write).
 //   - No `platform/git` import, no `DEFAULT_GIT_OPS`, no `gitOps` reference.
-//   - `tests/architecture/no-orchestrator-network.test.ts` greps this source
-//     after stripComments and asserts zero gitOps surface.
+//   - BLOCK F in `eslint.config.js` lints this source and rejects any
+//     gitOps surface.
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
@@ -329,6 +329,7 @@ async function enumerateMarketplacePlugins(args: {
 
   // Installed bucket.
   for (const [pluginName, record] of Object.entries(installedRecords)) {
+    // eslint-disable-next-line no-await-in-loop -- bounded by the marketplace's installed records, one row each
     const row = await composeInstalledListRow({
       pluginName,
       pluginScope,
@@ -370,6 +371,7 @@ async function enumerateMarketplacePlugins(args: {
     // DFEN-04 / D-01: the config key is the flat `<plugin>@<marketplace>` form,
     // and the merged view resolves base-vs-local by the same identity rule
     // `install` applies (a local entry replaces the base entry wholesale).
+    // eslint-disable-next-line no-await-in-loop -- bounded by the manifest's uninstalled entries, one row each
     const { message: row, bucket } = await availableRowMessage(
       manifestEntry,
       mpRecord.marketplaceRoot,
@@ -653,6 +655,7 @@ export async function loadPluginListPayload(
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- bounded by the project marketplaces, one block build each
     const built = await buildMarketplaceMessage({
       opts,
       mpName,
@@ -675,9 +678,11 @@ export async function loadPluginListPayload(
     // is a clone (per D-13-17 semantics) and exists.
     const projectMp = projectState.marketplaces[mpName];
     const { folded, foldedNames } = isOrphanMarketplaceClone(projectMp, mpRecord)
-      ? await computeOrphanFold(opts, mpName, projectMp, projectMerged)
+      ? // eslint-disable-next-line no-await-in-loop -- bounded by the user marketplaces, one orphan fold each
+        await computeOrphanFold(opts, mpName, projectMp, projectMerged)
       : EMPTY_ORPHAN_FOLD;
 
+    // eslint-disable-next-line no-await-in-loop -- bounded by the user marketplaces, one block build each
     const built = await buildMarketplaceMessage({
       opts,
       mpName,

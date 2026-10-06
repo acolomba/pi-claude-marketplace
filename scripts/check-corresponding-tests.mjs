@@ -7,7 +7,7 @@ import ts from "typescript";
 const defaultProjectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const productionRoot = "extensions/pi-claude-marketplace";
 const testRoot = "tests";
-const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration", "scripts"]);
+const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration"]);
 
 function toProjectPath(projectRoot, absolutePath) {
   return path.relative(projectRoot, absolutePath).split(path.sep).join("/");
@@ -132,7 +132,7 @@ function isStructuralSupplement(projectRoot, testPath) {
   return imports.includes(companions.fakePath) && imports.includes(companions.contractPath);
 }
 
-export function checkCorrespondingTests(projectRoot = defaultProjectRoot) {
+function checkCorrespondingTests(projectRoot = defaultProjectRoot) {
   const sourcePaths = filesBelow(projectRoot, productionRoot, (name) => name.endsWith(".ts"));
   const testPaths = filesBelow(projectRoot, testRoot, (name) => name.endsWith(".test.ts"));
   const sourceSet = new Set(sourcePaths);
@@ -190,7 +190,10 @@ function main() {
   const violations = checkCorrespondingTests(projectRoot);
 
   if (violations.length === 0) {
-    process.stdout.write("Corresponding-test gate passed.\n");
+    if (process.env.CI) {
+      process.stdout.write("Corresponding-test gate passed.\n");
+    }
+
     return;
   }
 

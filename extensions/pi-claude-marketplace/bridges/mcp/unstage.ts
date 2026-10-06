@@ -154,6 +154,7 @@ async function writeUnstageTargets(
   for (const target of targets) {
     let bytes: Buffer;
     try {
+      // eslint-disable-next-line no-await-in-loop -- a failed write reports only the files written before it
       bytes = await atomicWriteJson(
         target.filePath,
         withPluginServers(target.config, owner.pluginName, owner.marketplaceName, {}),

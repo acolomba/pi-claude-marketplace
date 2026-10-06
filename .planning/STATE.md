@@ -659,6 +659,39 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 260917-g97 | Resolve window #59 (#32 before the 2026-09-20 merge from main renumbered it): the cold-git `(remote)` info row renders its entry-declared dependencies line (D-01-32) | 2026-09-17 | 975e6236 | [260917-g97-resolve-window-32-give-the-componentsres](./quick/260917-g97-resolve-window-32-give-the-componentsres/) |
 | 260917-hfp | Clear the phase 5 review nits IN-01, IN-02, IN-03, IN-07, IN-08; IN-04 carried to BACKLOG `PRUNE-GUARD-MR-01` | 2026-09-17 | 97c9ce14 | [260917-hfp-clear-the-phase-5-review-nits-in-01-in-0](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/) |
 | 261001-g4u | Resolve the 23 SonarCloud findings on PR 198 with real fixes and no-await-in-loop directives | 2026-10-01 | 4455c76f | [261001-g4u-resolve-the-23-sonarcloud-findings-on-pr](./quick/261001-g4u-resolve-the-23-sonarcloud-findings-on-pr/) |
+| 261003-w7b | Speed up commit-time checks: targeted check-changed rules, lock, log, quiet output, agent guidance | 2026-10-04 | 8cff1fc4 | [261003-w7b-speed-up-commit-time-checks-targeted-che](./quick/261003-w7b-speed-up-commit-time-checks-targeted-che/) |
+| 15 | check-changed: Markdown under .agents/ and .claude/ selects no checks | 2026-10-04 | 5b5d06c7 | — |
+| 261004-az6 | Run negative controls only when their checker changes; drop planning-data test readers | 2026-10-04 | 1d2cdd51 | [261004-az6-run-negative-controls-only-when-their-ch](./quick/261004-az6-run-negative-controls-only-when-their-ch/) |
+| 261004-d9z | Make pre-commit incremental-only; move whole-suite checks to checkpoints | 2026-10-04 | 6708e06a | [261004-d9z-make-pre-commit-incremental-only-move-wh](./quick/261004-d9z-make-pre-commit-incremental-only-move-wh/) |
+| 261004-f34 | Remove negative controls and planted-violation tests | 2026-10-04 | f07734d1 | [261004-f34-remove-negative-controls-and-planted-vio](./quick/261004-f34-remove-negative-controls-and-planted-vio/) |
+| 261004-kwl | Remove tooling self-tests; replace network and ledger gates with ESLint rules | 2026-10-04 | babd67cc | [261004-kwl-remove-tooling-self-tests-replace-networ](./quick/261004-kwl-remove-tooling-self-tests-replace-networ/) |
+| 261004-re9 | Fix stale doc references to removed modules and tests | 2026-10-05 | 67ba13cb | [261004-re9-fix-stale-doc-references-to-removed-modu](./quick/261004-re9-fix-stale-doc-references-to-removed-modu/) |
+| 21 | Drop planted-violation steps from the unit testing guidelines | 2026-10-05 | 227513d5 | — |
+| 261004-rpt | Allowlist build inputs for CI and local checks | 2026-10-05 | ac2abb3c | [261004-rpt-allowlist-build-inputs-for-ci-and-local-](./quick/261004-rpt-allowlist-build-inputs-for-ci-and-local-/) |
+| 23 | List only the docs tests read as build inputs | 2026-10-05 | c53df4d7 | — |
+| 261004-t4g | Remove the Fallow rule pack and fold its stdio ban into ESLint | 2026-10-05 | 1da67a83 | [261004-t4g-remove-the-fallow-rule-pack-and-fold-its](./quick/261004-t4g-remove-the-fallow-rule-pack-and-fold-its/) |
+| 261004-tbe | Remove doc-agreement tests; keep only output-catalog as a docs build input | 2026-10-05 | b1094171 | [261004-tbe-remove-doc-agreement-tests-keep-only-out](./quick/261004-tbe-remove-doc-agreement-tests-keep-only-out/) |
+| 261004-u3o | Remove three unread type members | 2026-10-05 | 90291781 | [261004-u3o-remove-three-unread-type-members-and-the](./quick/261004-u3o-remove-three-unread-type-members-and-the/) |
+| 27 | init.sh: leave core.hooksPath alone; tolerate a refused pre-commit install | 2026-10-05 | 90291781 | — |
+| 261004-u7n | Remove the unused type member gate and the coverage pin | 2026-10-05 | 53a86f3d | [261004-u7n-remove-the-unused-type-member-gate](./quick/261004-u7n-remove-the-unused-type-member-gate/) |
+| 261005-9me | Replace the check-changed selector with an npm run check pre-commit hook | 2026-10-05 | ce686548 | [261005-9me-replace-the-check-changed-selector-with-](./quick/261005-9me-replace-the-check-changed-selector-with-/) |
+| 261005-c2w | Set up worktree subagents with node_modules and their own CodeGraph index | 2026-10-05 | 732ba0d1 | [261005-c2w-set-up-worktree-subagents-with-node-modu](./quick/261005-c2w-set-up-worktree-subagents-with-node-modu/) |
+| 31 | Route worktree CodeGraph queries without a per-call sync; pi.sh says npm install | 2026-10-05 | 53a0adf8 | — |
+| 32 | Trim CONTRIBUTING.md to setup, running Pi, and checks; changelog for worktree hooks | 2026-10-05 | 53a0adf8 | — |
+| 33 | Restore the worktree CodeGraph sync before each query | 2026-10-05 | eb9c1460 | — |
+| 261005-e23 | Keep worktree CodeGraph indexes current with a per-worktree daemon | 2026-10-05 | 7c2c3ccd | [261005-e23-keep-worktree-codegraph-indexes-current-](./quick/261005-e23-keep-worktree-codegraph-indexes-current-/) |
+| 35 | Switch the TruffleHog hook to filesystem mode (v3.97.9) and drop SKIP=trufflehog | 2026-10-05 | 1b636217 | — |
+| 261005-hpr | Restructure verification checks by granularity: staged pairs on commit, full tree at gates, split CI jobs | 2026-10-05 | e9d9c5df | [261005-hpr-restructure-verification-checks-by-granu](./quick/261005-hpr-restructure-verification-checks-by-granu/) |
+| 261005-jdx | Fail checks on warnings, keep passing output quiet, stop fallow rewriting AGENTS.md | 2026-10-05 | f1f634e2 | [261005-jdx-fail-checks-on-warnings-and-keep-passing](./quick/261005-jdx-fail-checks-on-warnings-and-keep-passing/) |
+| 261005-la5 | Clean up review leftovers and show full CI output | 2026-10-05 | cf8399b4 | [261005-la5-clean-up-review-leftovers-and-show-full-](./quick/261005-la5-clean-up-review-leftovers-and-show-full-/) |
+| 261005-n1k | Move output discipline to a fallow rule pack and default-deny NFR-5 | 2026-10-05 | 89c0e356 | [261005-n1k-move-output-discipline-to-a-fallow-rule-](./quick/261005-n1k-move-output-discipline-to-a-fallow-rule-/) |
+| 40 | Ban http2 imports in the fallow network chokepoint | 2026-10-05 | da3f41ad | — |
+| 261005-phr | Drop Node 20 and give each shared decision ID its own ID | 2026-10-05 | 6af548d4 | [261005-phr-drop-node-20-and-give-each-bare-d-11-a-u](./quick/261005-phr-drop-node-20-and-give-each-bare-d-11-a-u/) |
+| 261005-rmz | Suppress the reviewed render-arm clone groups in fallow | 2026-10-05 | e41d3e56 | [261005-rmz-ignore-the-reviewed-render-arm-clone-gro](./quick/261005-rmz-ignore-the-reviewed-render-arm-clone-gro/) |
+| 261005-rk5 | Register the worktree init hook for Codex: make scripts/init-worktree.sh host-agnostic and add a SessionStart hook to .codex/config.toml | 2026-10-05 | ce13f8aa | [261005-rk5-register-the-worktree-init-hook-for-code](./quick/261005-rk5-register-the-worktree-init-hook-for-code/) |
+| 261005-sx5 | Close the five pre-PR review findings: fold the #234 changelog entry, delete the stale per-layer READMEs, fix the ledger phase count, scope TruffleHog to the pre-commit stage, and mirror the write-file-atomic Node range in engines | 2026-10-05 | 98b7c4f2 | [261005-sx5-close-the-five-pre-pr-review-findings-fo](./quick/261005-sx5-close-the-five-pre-pr-review-findings-fo/) |
+| 45 | Cut the #236 CHANGELOG entry to the changelog rules | 2026-10-05 | caeb4a40 | — |
+| 261005-x56 | Enforce no-await-in-loop as the local S9382 and state why each sequential loop runs in order | 2026-10-06 | 195c056d | [261005-x56-enforce-no-await-in-loop-as-the-local-s9](./quick/261005-x56-enforce-no-await-in-loop-as-the-local-s9/) |
 
 ## Deferred Items
 

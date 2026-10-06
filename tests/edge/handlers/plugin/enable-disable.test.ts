@@ -37,7 +37,7 @@
 //
 // This pair makes no exhaustiveness claim: the module holds no switch and no
 // closed-union dispatch, so a missing-arm plant has no target here. No case
-// asserts the absence of direct process output (ESLint and fallow own that),
+// asserts the absence of direct process output (fallow owns that),
 // none re-proves the scope-target scan owned by tests/edge/handlers/shared.test.ts
 // or the reference parse owned by tests/edge/handlers/plugin/shared.test.ts, none
 // restates the tokenizer diagnostics owned by tests/edge/args.test.ts, and no

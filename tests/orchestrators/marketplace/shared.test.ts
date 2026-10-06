@@ -476,7 +476,7 @@ test("refreshGitHubClone tracks the default branch and invokes its callback afte
   });
   const credentials = createCredentialOpsFake({ boundary: "memory" });
   const onAuthRequired = (): Promise<AuthAttemptResult> =>
-    Promise.resolve({ ok: false, reason: "not invoked", authAttempted: true });
+    Promise.resolve({ ok: false, reason: "not invoked" });
   const auth: GitAuthBundle = {
     credentialOps: credentials.credentialOps,
     host: "github.com",

@@ -8,7 +8,7 @@
  *   2. Plugin PATH ledger core (`applyPathLedger`) -- pure PATH transform.
  *
  * Pure-leaf posture (mirrors `shared/debug-log.ts`): no module-level state,
- * no fs, and -- per the D-11 import-direction rule -- no imports outside
+ * no fs, and -- per the D-v1.0-01-11 import-direction rule -- no imports outside
  * `platform/`. The state-reading I/O shell (`recomputePluginPath`) and the
  * `ExtensionState`-typed `collectBinDirs` live in `orchestrators/plugin-path.ts`
  * where importing `persistence/` is permitted; they build on the pure core here.

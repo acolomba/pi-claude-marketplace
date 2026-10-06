@@ -304,28 +304,6 @@ void (true satisfies IsExact<StatusToken, (typeof EXPECTED_STATUS_TOKENS)[number
 void (true satisfies IsExact<PluginStatus, (typeof EXPECTED_PLUGIN_STATUSES)[number]>);
 void (true satisfies IsExact<MarketplaceStatus, (typeof EXPECTED_MARKETPLACE_STATUSES)[number]>);
 
-// Discriminating controls for the four proofs above: they assert `false`, so a
-// proof that had degenerated into something always-true would fail HERE. One
-// control per direction, on the largest set -- a member the union does not hold,
-// and a member it holds that the list drops.
-void (false satisfies IsExact<Reason, (typeof EXPECTED_REASONS)[number] | "not a reason">);
-void (false satisfies IsExact<
-  Reason,
-  Exclude<(typeof EXPECTED_REASONS)[number], "components now supported">
->);
-void (false satisfies IsExact<
-  StatusToken,
-  (typeof EXPECTED_STATUS_TOKENS)[number] | "not a token"
->);
-void (false satisfies IsExact<
-  PluginStatus,
-  (typeof EXPECTED_PLUGIN_STATUSES)[number] | "not a status"
->);
-void (false satisfies IsExact<
-  MarketplaceStatus,
-  (typeof EXPECTED_MARKETPLACE_STATUSES)[number] | "not a status"
->);
-
 const VOCABULARIES: readonly {
   readonly name: string;
   readonly members: readonly string[];

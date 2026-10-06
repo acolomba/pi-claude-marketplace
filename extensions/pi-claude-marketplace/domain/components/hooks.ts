@@ -59,7 +59,7 @@ const TOOL_EVENT_MEMBERS = new Set<string>(TOOL_EVENTS);
 
 // MATCH-03: the `if`-field permission-rule primitives live in
 // `bridges/hooks/if-field/` -- domain MUST NOT import upward
-// (D-11 import direction). `parseHooksConfig` consumes
+// (D-v1.0-01-11 import direction). `parseHooksConfig` consumes
 // the predicate compile path as a generic `<P>` callback parameter so
 // the parser layer never type-depends on the concrete predicate union.
 // The bridge layer wires `compileIfPredicate` at the `parseHooksConfig`
@@ -71,7 +71,7 @@ const TOOL_EVENT_MEMBERS = new Set<string>(TOOL_EVENTS);
  * Anchor context consumed by the `compileIf` callback. This is the SOLE
  * declaration of the anchor triple; `bridges/hooks/if-field/index.ts`
  * publishes `CompileIfPredicateContext` as an alias of it. The
- * declaration lives here because D-11 fixes the import direction: a
+ * declaration lives here because D-v1.0-01-11 fixes the import direction: a
  * bridge may name a domain type, so the parser never depends on the
  * bridge surface.
  */

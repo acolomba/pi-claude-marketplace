@@ -240,6 +240,7 @@ export async function buildScopeDeclarationIndex(
         continue;
       }
 
+      // eslint-disable-next-line no-await-in-loop -- the first unreadable record stops the index
       const read = await readRecordDeclarations(options, marketplace, name);
       if (!read.ok) {
         return read;
@@ -263,6 +264,7 @@ export async function buildScopeDeclarationDetail(
   const declarations = new Map<string, readonly AddressedDependency[]>();
   for (const marketplace of Object.values(options.state.marketplaces)) {
     for (const name of Object.keys(marketplace.plugins)) {
+      // eslint-disable-next-line no-await-in-loop -- the first unreadable record stops the index
       const read = await readRecordDeclarations(options, marketplace, name);
       if (!read.ok) {
         return read;

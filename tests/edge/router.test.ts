@@ -27,7 +27,7 @@
 // their own cases, because those constants are part of the surface this pair
 // owns: the completion provider reads the subcommand lists beside them.
 //
-// No case asserts the absence of direct process output -- ESLint and fallow own
+// No case asserts the absence of direct process output -- fallow owns
 // that -- and none restates the perma-forbidden-handler or hook-column fences
 // owned by tests/architecture/scope-fences-63.test.ts.
 

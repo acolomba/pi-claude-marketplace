@@ -711,6 +711,7 @@ export async function loadVisibleMarketplaces(opts: {
   const out: { scope: Scope; record: ExtensionState["marketplaces"][string] }[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one state read each
     const state = await loadState(locations.extensionRoot);
     for (const record of Object.values(state.marketplaces)) {
       out.push({ scope, record });

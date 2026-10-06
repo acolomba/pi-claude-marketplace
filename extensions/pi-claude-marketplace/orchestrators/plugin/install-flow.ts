@@ -552,6 +552,7 @@ async function authorizeMissingDependency(args: {
   let policyError: Error | undefined;
   for (const declaringMarketplace of sources.foreign) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- the first allowing marketplace returns; `??=` keeps the first error
       const source = await resolveInstallMarketplaceSource({
         targetScope: args.scope,
         cwd: args.cwd,
@@ -562,6 +563,7 @@ async function authorizeMissingDependency(args: {
         continue;
       }
 
+      // eslint-disable-next-line no-await-in-loop -- the first allowing marketplace returns; `??=` keeps the first error
       const manifest = await loadMarketplaceManifest(source.sourceRecord.manifestPath);
       if (manifest.allowCrossMarketplaceDependenciesOn?.includes(args.marketplace) === true) {
         return true;

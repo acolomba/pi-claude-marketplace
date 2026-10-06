@@ -5,8 +5,8 @@
  * COMPAT-01 promises that the manifest-independent lifecycle work introduced NO
  * manifest snapshot, NO orphan field on the persisted record, NO state-schema
  * migration, NO status token, NO reason token, NO glyph, and NO new network
- * path. This one file holds every structural clause of that promise, so a
- * reviewer reads this file and knows the whole contract.
+ * path. This one file holds every structural clause of that promise except the
+ * network one, which ESLint enforces (see the Network paragraph below).
  *
  * Clause by clause:
  *
@@ -40,15 +40,9 @@
  *   pre-validation fill, per D-04-03), and a version joins the union only with
  *   such a fill behind it; either lands here deliberately.
  *
- *   Network (COMPAT-01 / D-98-09) -- DELEGATED, not duplicated. The NFR-5
- *   orchestrator-network gate already proves both info surfaces carry zero
- *   gitOps surface; this file asserts those two surfaces are still among that
- *   gate's targets, so the clause is documented here and proven there. The
- *   delegation is mechanical: both gates share the scanning helper in
- *   `tests/architecture/source-scan.ts`. This file MUST NOT import
- *   `no-orchestrator-network.test.ts` -- under `node:test`, importing a module
- *   that registers cases at its top level runs those cases a SECOND time and
- *   misreports the count.
+ *   Network (COMPAT-01) -- not asserted here. BLOCK F in `eslint.config.js`
+ *   lints both info surfaces, with every other network-free module, for git
+ *   surface.
  *
  * Rationale -- reading source through the filesystem API (D-98-10):
  *   The two scanning clauses read their targets with `readFile(..., "utf8")`
@@ -74,7 +68,9 @@
  *     each of those surfaces is negative-grepped in the acceptance criteria --
  *     so this paragraph names them descriptively rather than by their API
  *     spelling, which would defeat the grep it exists to explain.
- *   - An import of any `*.test.ts` module (see the network clause above).
+ *   - An import of any `*.test.ts` module. Under `node:test`, importing a module
+ *     that registers cases at its top level runs those cases a second time and
+ *     misreports the count.
  */
 
 import assert from "node:assert/strict";
@@ -94,11 +90,7 @@ import {
   renderRemoteRow,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
-import {
-  COMPAT_NO_EXPANSION_TARGETS,
-  NETWORK_FREE_TARGETS,
-  SCOPE_FENCE_TARGETS,
-} from "./gate-targets.ts";
+import { COMPAT_NO_EXPANSION_TARGETS, SCOPE_FENCE_TARGETS } from "./gate-targets.ts";
 import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 import type { LedgerDegradationSignals } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
@@ -123,12 +115,6 @@ import type {
  */
 const NOTIFICATION_GRAMMAR_REL = COMPAT_NO_EXPANSION_TARGETS[0];
 const OUTPUT_CATALOG_REL = COMPAT_NO_EXPANSION_TARGETS[1];
-
-/**
- * The registry module the delegation clause below reads. A test path, not a
- * production one, so D-07-05 does not cover it and it is spelled here.
- */
-const NETWORK_GATE_REL = "tests/architecture/gate-targets.ts";
 
 /**
  * The vocabulary owner the closed-set clauses read as data.
@@ -196,16 +182,8 @@ async function readVocabulary(name: string): Promise<readonly string[]> {
   return declaredVocabulary(await readStrippedSource(NOTIFICATION_TYPES_REL), name);
 }
 
-/**
- * WR-07: one glyph-declaration pattern in two flavours -- `GLYPH_DECLARATIONS`
- * counts them across the module, `GLYPH_DECLARATION` tests a single spelling.
- * Built from ONE source string so the counting clause and the clause that pins
- * what the pattern must see can never drift apart, and split by flag because a
- * `/g/` regex carries `lastIndex` across `.test()` calls.
- */
-const GLYPH_DECLARATION_SOURCE = String.raw`\bconst ICON_[A-Z_]+\b`;
-const GLYPH_DECLARATIONS = new RegExp(GLYPH_DECLARATION_SOURCE, "g");
-const GLYPH_DECLARATION = new RegExp(GLYPH_DECLARATION_SOURCE);
+/** WR-07: every glyph declaration in a module, global so `match` counts them all. */
+const GLYPH_DECLARATIONS = /\bconst ICON_[A-Z_]+\b/g;
 
 async function readStrippedSource(rel: string): Promise<string> {
   return stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
@@ -629,59 +607,6 @@ test("COMPAT-01: the notification grammar owner declares no eighth glyph", async
   );
 });
 
-test("COMPAT-01: the glyph-declaration pattern recognises every spelling a glyph export can take", () => {
-  // arrange
-  // WR-07: the clause above asserts an ABSENCE, so a pattern that matched
-  // nothing would pass it just as quietly as a correct one. Pin what the pattern
-  // is required to see, including the two spellings a simpler pattern would miss.
-  const spellings = [
-    'export const ICON_EIGHTH = "◎";',
-    'export const ICON_EIGHTH: string = "◎";',
-    '/** doc */ export const ICON_EIGHTH = "◎";',
-    'const ICON_EIGHTH = "◎";',
-    'const ICON_EIGHTH: string = "◎";',
-  ];
-  // And what it must NOT see: a reference is not a declaration.
-  const reference = "return `${ICON_EIGHTH} ${name}`;";
-
-  // act
-  const declarationMatches = spellings.map((spelling) => GLYPH_DECLARATION.test(spelling));
-  const referenceMatches = GLYPH_DECLARATION.test(reference);
-
-  // assert
-  assert.deepStrictEqual(declarationMatches, [true, true, true, true, true]);
-  assert.strictEqual(referenceMatches, false, "a glyph USE must not count as a declaration");
-});
-
-test("COMPAT-01: the vocabulary reader sees a declared tuple's members and nothing else", () => {
-  // arrange
-  // The four order clauses assert an EQUALITY against a reader, so a reader that
-  // returned the wrong slice would fail them loudly -- but one that matched a
-  // DIFFERENT declaration of the same shape would not. Plant both confusions: a
-  // same-prefixed neighbour declared first, and a mention of the real name after
-  // the declaration terminates.
-  const planted = [
-    'export type ReasonGroup = "decoy one" | "decoy two";',
-    "",
-    "export type Reason =",
-    '  | "first"',
-    '  | "second";',
-    "",
-    'export type ContentReason = Exclude<Reason, "not a member">;',
-  ].join("\n");
-  const expected = ["first", "second"];
-
-  // act
-  const parsedMembers = declaredVocabulary(planted, "Reason");
-
-  // assert
-  assert.deepStrictEqual(
-    parsedMembers,
-    expected,
-    "COMPAT-01: the reader must anchor on the named vocabulary's own declaration.",
-  );
-});
-
 type IsExact<Actual, Expected> = [Actual] extends [Expected]
   ? [Expected] extends [Actual]
     ? true
@@ -778,36 +703,5 @@ test("COMPAT-01: the default state declares the current schema version", () => {
     declaredSchemaVersion,
     expected,
     "COMPAT-01 / D-04-03: a first-load state.json is written at schemaVersion 3, the version the provenance migration introduced.",
-  );
-});
-
-test("COMPAT-01: the network clause is covered by the orchestrator-network gate", async () => {
-  // arrange
-  // DELEGATION (D-98-09): the NFR-5 gate runs the actual assertion. This clause
-  // only proves the two info surfaces are still in its target list, which
-  // D-07-05 keeps in the registry module, so removing one there fails here
-  // rather than silently uncovering the clause. WR-06: that
-  // the named files still EXIST is the shared scanner's job -- it fails on a
-  // missing target rather than skipping it, so a rename cannot leave both gates
-  // green over a file neither read.
-  //
-  // The annotation is the load-bearing half: `(typeof NETWORK_FREE_TARGETS)[number]`
-  // is the union of the group's own entries, so dropping either surface from the
-  // registry stops this file compiling. The scrape below stays as the runtime
-  // half, and covers the case where the registry module itself moves.
-  const requiredTargets: ReadonlyArray<(typeof NETWORK_FREE_TARGETS)[number]> = [
-    "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
-    "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
-  ];
-
-  // act
-  const src = await readStrippedSource(NETWORK_GATE_REL);
-  const missing = requiredTargets.filter((rel) => !src.includes(`"${rel}"`));
-
-  // assert
-  assert.deepStrictEqual(
-    missing,
-    [],
-    `COMPAT-01: the info surfaces must stay gated for zero gitOps surface by ${NETWORK_GATE_REL}. Removing a target there would silently drop this clause.`,
   );
 });

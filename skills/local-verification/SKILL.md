@@ -5,24 +5,46 @@ description: Select and schedule this repository's build checks when planning, i
 
 # Local verification
 
-Use owner tests while editing and the prescribed pre-commit hooks as the normal task gate. Those hooks already run `npm run check:changed`; do not routinely run that command separately just before the hooks.
+Each check runs at the scope that its moment needs:
 
-## Planning and implementation
+- A commit checks the files that it stages. The pre-commit hook `npm-check` runs `npm run check:commit` when a staged file is a build input.
+- A GSD gate or a handoff checks the whole tree on this machine with `npm run check`.
+- Pull request CI checks the whole tree on a clean machine with network access. It also runs the e2e tests and lints from an empty ESLint cache, which `npm run check` does not.
+- CI on `main` repeats the pull request checks, in case a pull request merged without them.
+- The nightly e2e run tests against the newest upstream `main` to catch upstream drift.
 
-Give each task a concrete `<verify>` command and retain its starting commit. Named suite commands are `test:modules`, `test:architecture`, `test:analyzers`, `test:integration`, and `test:e2e`. Use an owner test or the relevant suite for feedback before committing.
+A build input is a file that a build or a CI job reads. The build inputs are the files that the hook's `files` pattern in `.pre-commit-config.yaml` matches. The `paths` list of the `push` trigger in `.github/workflows/ci.yml` names the same files, and the `pull_request` trigger reuses it through a YAML anchor. Change the two lists together.
 
-An ordinary quick task, individual plan task, or review fix may complete with passing focused checks covering its entire change. For a single-commit task, the successful pre-commit run supplies that evidence. Do not append `npm run check` merely to mark the task complete. Record `focused task verification passed; full phase/PR verification pending` in its summary.
+## What the commands run
 
-`check:changed` compares HEAD with the index, worktree, and untracked files. After committing, its default comparison no longer covers that commit: use `npm run check:changed -- --base <start-commit>` when fresh task-wide verification is needed. `--list` previews selection. An empty selection does not verify committed code. For multi-commit tasks, reuse the per-commit results only when they cover the whole task and later changes have not invalidated earlier evidence; otherwise run against the task base. Also run any acceptance checks the selector does not cover.
+`npm run check:static` runs type checking, ESLint, the workflow install-script check, Fallow, the Prettier check, and source/test pairing at the same time. Locally it prints one line for each passing step and the full output of each failing step. A warning fails its step: ESLint runs with `--max-warnings 0`, and Prettier, Fallow, and the gate scripts fail on every finding. Fallow also fails when a rule-pack rule matches no file.
 
-The selector follows production imports, re-exports, and type references. Shared test support, removals, tool/config changes, or uncertain selection run the full check and all-pair coverage. Markdown under `.planning/` and `skills/`, plus AGENTS.md, CLAUDE.md, and CONTRIBUTING.md, needs the document hooks only.
+`npm run check:commit` runs `check:static`, then the unit tests that have no source pair (`tests/architecture/` and the four fake contract suites), then direct coverage for the staged source-test pairs. It reads only the staged files. Unstaged edits and untracked files do not count. It runs all pairs when a staged file can change the coverage of any pair: a file under `tests/` that is not a `.test.ts` file (a fake, contract, fixture, or harness), `scripts/test-coverage-direct.mjs`, `scripts/test-reporter.mjs`, `package.json`, `package-lock.json`, or `tsconfig.json`.
 
-Pre-commit remains mandatory before each commit, even if checks were run manually earlier. A successful hook can satisfy a requested focused or full command only when it actually ran that command over the required inputs. This is a scheduling policy, not an automatic hook-result cache.
+`npm run check` runs `check:static`, the unit tests that have no source pair, the integration suite, and direct coverage for all pairs. Direct coverage runs the test of each pair alone and requires 100% line, function, and branch coverage of its source. Every source has exactly one paired test, so this also covers the whole unit suite.
 
-## Completion and GSD gates
+Locally, the test and direct coverage steps print nothing when they pass. The all-pair run also prints one `Merged LCOV` line. A failing test prints Node's report and the count line, and a coverage shortfall names the source and its coverage.
 
-Keep `workflow.test_command` set to `npm run check`. Full verification is required for GSD's combined post-merge/phase gates and final PR or release handoff, and CI continues to run it. The selector's full-completion reminder refers to these boundaries. It covers architecture, integration, full typed lint, and member analysis. After combining plans, check the combined tree; separate task passes cannot prove it. The 2,400-second GSD timeout is a limit, not a passing result.
+In CI, every check prints at info level. GitHub Actions sets the `CI` variable, and the checks print everything when it is not empty. Tests print each result and the skip and todo counts. `check:static` also prints the output of passing steps. Fallow prints its progress lines and the full duplication report. Direct coverage adds one line for each pair and a run summary. A warning still fails its check.
 
-When GSD's post-merge, regression, or verifier step repeats a full check, reuse passing evidence only from this session and only for unchanged inputs. Record the command, exit status, commit, Node version, and scope in the summary. Use a clean verified commit as the reference. If verification ran on a dirty tree, retain its exact diff and untracked file contents for comparison; a list of changed paths is not enough. Planning-only Markdown commits can reuse evidence if `git diff <verified-commit> -- . ':(exclude,glob).planning/**/*.md'` is empty and no new untracked executable inputs exist. Never reuse after changes to source, test support, dependencies, configuration, runtime, or installed tools. If the prior state or result is uncertain, rerun. No persistent success marker or custom cache replaces this comparison.
+## Committing
 
-This project policy takes precedence over generic skill instructions to run the full suite after every task or review fix. It permits focused task completion and reuse at the appropriate scope. It does not permit calling a focused result full-project verification, skipping a required combined-tree or handoff gate, or accepting a failed or timed-out run.
+Run `SKIP=npm-check pre-commit run --files <changed files>` first. It runs only the fixers and linters and takes seconds. A linter warning fails it too, because yamllint runs with `--strict`. If a fixer changes a file, restage the file and run the command again until it is clean.
+
+Then run `git commit` in the foreground with the longest tool timeout available. Never background it and poll with sleep/grep loops. If a run can outlast the tool's foreground limit, background it once and wait for the completion notification. If a hook fails, the commit did not happen. Fix the cause, restage, and commit again. Never use `--amend` for this.
+
+During `git commit`, pre-commit stashes unstaged edits. It does not move untracked files, so stage or remove untracked build inputs before you commit. The pre-commit tool passes no deleted file to a hook, and it applies its top-level `exclude` first. So the hook skips a commit that only deletes build inputs or only changes files under `tests/domain/fixtures/hash-stability/`. Run `npm run check` yourself before such a commit.
+
+Use the owner test (`node --test <test-path>`) or a named suite (`test:modules`, `test:architecture`, `test:integration`, `test:e2e`) for feedback while you edit. Do not run ESLint, type checking, or tests just before a commit. The hook runs them.
+
+ESLint keeps a cache in `node_modules/.cache/eslint/`. The cache keys each result to the file's content and the configuration. Typed rules also read other files' types, so a cached pass can be stale after another file changes. CI lints from an empty cache and is the backstop. To lint fresh locally, delete that directory first.
+
+## Planning and GSD gates
+
+A passing hook is not a full verdict, and it cannot satisfy a GSD gate. Give each task a concrete `<verify>` command, and record the hook result of each commit in the summary.
+
+Keep `workflow.test_command` set to `npm run check`. A merge does not run the hook. So GSD's post-merge gate for each wave, the phase gate, the merge gate, and the final PR or release handoff run `npm run check` on the combined tree. A quick task that commits a build input runs `npm run check` in the main checkout after its executor worktree is merged, before the task finishes. The 2,400-second GSD timeout is a limit, not a passing result.
+
+Reuse a passing result only from this session and only for unchanged inputs. Record the command, exit status, commit, and Node version in the summary. Use a clean verified commit as the reference. If verification ran on a dirty tree, retain its exact diff and untracked file contents for comparison. A list of changed paths is not enough. Planning-only Markdown commits can reuse a result if `git diff <verified-commit> -- . ':(exclude,glob).planning/**/*.md'` is empty and no new untracked executable inputs exist. Never reuse a result after changes to source, test support, dependencies, configuration, runtime, or installed tools. If the prior state or result is uncertain, rerun. No persistent success marker or custom cache replaces this comparison.
+
+This project policy takes precedence over generic skill instructions to run the full suite after every task or review fix. It does not permit skipping a required combined-tree or handoff gate, or accepting a failed or timed-out run.

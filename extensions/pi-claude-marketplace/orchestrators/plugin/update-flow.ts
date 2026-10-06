@@ -54,7 +54,7 @@
 // dropMarketplaceCache call still runs (correctness preserved), only the
 // standalone-mode user-visible warning surface is absent.
 //
-// D-11 import boundaries: orchestrators/plugin/ may import named exports
+// D-v1.0-01-11 import boundaries: orchestrators/plugin/ may import named exports
 // from orchestrators/marketplace/shared.ts (GitOps, DEFAULT_GIT_OPS,
 // resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
@@ -282,6 +282,7 @@ async function updatePluginsWith(
   // the `@<marketplace>` and bare forms are bulk (emit the tally).
   for (const t of targets) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- syncs each marketplace once; a sync failure aborts the batch
       await syncCloneOnce(t.scope, t.marketplace, t.locations);
     } catch (err) {
       // Pre-3-phase error (D-14 step failure or marketplace-missing): surface
@@ -310,6 +311,7 @@ async function updatePluginsWith(
 
     let outcome: UpdateRunOutcome;
     try {
+      // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcome = await runPluginUpdate(
         buildDirectThreePhaseArgs(
           opts,
@@ -879,6 +881,7 @@ async function enumerateTargets(opts: UpdatePluginsOptions): Promise<readonly Re
   const out: ResolvedTarget[] = [];
   for (const sc of scopes) {
     const locations = locationsFor(sc, cwd);
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one state read each
     const state = await loadState(locations.extensionRoot);
     for (const [mpName, mp] of Object.entries(state.marketplaces)) {
       for (const p of Object.keys(mp.plugins)) {

@@ -131,6 +131,7 @@ async function sameEntry(left: string, right: string): Promise<boolean> {
   for (const [index, name] of leftNames.entries()) {
     if (
       name !== rightNames[index] ||
+      // eslint-disable-next-line no-await-in-loop -- the first differing entry returns false
       !(await sameEntry(path.join(left, name), path.join(right, name)))
     ) {
       return false;
