@@ -16,7 +16,7 @@ import type { NotificationContext } from "../../../extensions/pi-claude-marketpl
 const PLUGIN_REPO_URL = "https://example.com/formatter";
 
 function auth(): DependencyTagProbeOptions["auth"] {
-  const ctx: NotificationContext = { ui: { notify: () => undefined } };
+  const ctx: NotificationContext = { mode: "tui", ui: { notify: () => undefined } };
   const credentialOps: CredentialOps = {
     approve: () => Promise.resolve(),
     fill: () => Promise.resolve(null),

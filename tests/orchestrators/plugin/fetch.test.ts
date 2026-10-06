@@ -116,6 +116,9 @@ function notificationBoundary(name: string, expectedCalls = 1): NotificationBoun
   const ctx = mock<ExtensionContext>({ exactParams: true, name: `${name} context` });
   const ui = mock<NotificationUi>({ exactParams: true, name: `${name} UI` });
   const notifications: CapturedNotification[] = [];
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(expectedCalls);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(expectedCalls);

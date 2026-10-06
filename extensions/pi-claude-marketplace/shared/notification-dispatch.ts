@@ -13,6 +13,7 @@ import {
   renderPruneEmpty,
   renderReconcilePendingEmpty,
 } from "./notification-grammar.ts";
+import { toWirePayload } from "./notification-json.ts";
 import {
   presentCascade,
   presentNotification,
@@ -20,6 +21,7 @@ import {
   presentUpdateNoOp,
 } from "./notification-present.ts";
 import { resolveRawSurface } from "./notification-resolve.ts";
+import { requireNotificationMode } from "./notification-run.ts";
 import { composeRetainedWorkflowsAdvisories } from "./notification-summary.ts";
 
 import type { NotifyArguments } from "./notification-grammar.ts";
@@ -46,7 +48,7 @@ import type { NotificationContext } from "../platform/pi-api.ts";
 
 /**
  * shared/notification-dispatch.ts -- the sole site that calls the Pi notify
- * API (IL-2). Every emission ends in the private `deliver` sink, which makes
+ * API (IL-2) and appendEntry API (JOUT-01). Text reaches `deliver`, which makes
  * exactly one notify call from the argument tuple the text strategy returns
  * (D-02). The text strategy in notification-grammar.ts supplies both the text
  * and the argument count (D-15).
@@ -72,14 +74,9 @@ import type { NotificationContext } from "../platform/pi-api.ts";
  */
 
 /**
- * D-02 / D-15: the single sink. Makes exactly one notify call from `args`, or
- * none when the text strategy returns `undefined` for an empty surface.
+ * D-02 / D-15: makes exactly one notify call with the text strategy's arity.
  */
-function deliver(ctx: NotificationContext, args: NotifyArguments | undefined): void {
-  if (args === undefined) {
-    return;
-  }
-
+function deliver(ctx: NotificationContext, args: NotifyArguments): void {
   if (args.length === 1) {
     ctx.ui.notify(args[0]);
   } else {
@@ -93,7 +90,13 @@ function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, b
 
 /** D-02 / D-13: resolves, formats, and delivers one raw surface. */
 function emitRawSurface(ctx: NotificationContext, surface: RawSurface): void {
-  deliver(ctx, formatRawSurface(resolveRawSurface(surface)));
+  const args = formatRawSurface(resolveRawSurface(surface));
+  if (args === undefined) {
+    return;
+  }
+
+  requireNotificationMode(ctx.mode);
+  deliver(ctx, args);
 }
 
 /** D-14: the entry point for the hook-origin group of raw surfaces. */
@@ -249,7 +252,7 @@ export function notify(
   run: NotificationRun,
   message: NotificationMessage,
 ): void {
-  emitPresentation(ctx, presentNotification(run, message));
+  emitPresentation(ctx, run, presentNotification(run, message));
 }
 
 /**
@@ -339,11 +342,23 @@ function formatPresentationBody(presentation: NotificationPresentation): string 
 }
 
 /**
- * GRAM-04: formats one presentation and delivers it through the shared
- * summary seam, so every structured emission makes one notify call (IL-2).
+ * MODE-01: selects transport from the live context for each presentation.
  */
-function emitPresentation(ctx: NotificationContext, presentation: NotificationPresentation): void {
-  emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
+function emitPresentation(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  presentation: NotificationPresentation,
+): void {
+  switch (requireNotificationMode(ctx.mode)) {
+    case "tui":
+    case "print":
+      emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
+      return;
+    case "json":
+    case "rpc":
+      run.entrySink.appendEntry("claude-plugin", toWirePayload(presentation));
+      return;
+  }
 }
 
 /** Emits resolved command rows, advisories, and the stamped envelope. */
@@ -353,7 +368,7 @@ export function emitContextCascade(
   message: CascadeNotificationMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  emitPresentation(ctx, presentCascade(run, message, rowPolicies));
+  emitPresentation(ctx, run, presentCascade(run, message, rowPolicies));
 }
 
 /** Emits surviving rows followed by the fixed zero-update headline. */
@@ -363,7 +378,7 @@ export function emitUpdateNoOpCascade(
   message: CascadeNotificationMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  emitPresentation(ctx, presentUpdateNoOp(run, message, rowPolicies));
+  emitPresentation(ctx, run, presentUpdateNoOp(run, message, rowPolicies));
 }
 
 /** Emits an applied reconcile cascade without a reload trailer. */
@@ -373,5 +388,5 @@ export function emitReconcileAppliedContextCascade(
   message: ReconcileAppliedCascadeMessage,
   rowPolicies: RowPolicyMap,
 ): void {
-  emitPresentation(ctx, presentReconcileApplied(run, message, rowPolicies));
+  emitPresentation(ctx, run, presentReconcileApplied(run, message, rowPolicies));
 }

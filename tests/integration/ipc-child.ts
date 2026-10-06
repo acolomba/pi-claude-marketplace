@@ -26,6 +26,7 @@ export function makeNotifyCollectingCtx(cwd: string): {
 } {
   const notifications: NotificationRecord[] = [];
   const ctx = {
+    mode: "tui",
     cwd,
     ui: {
       notify: (body: string, severity?: string): void => {

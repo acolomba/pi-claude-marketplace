@@ -168,6 +168,7 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
     // Boot the bridge: hydrate the cache from disk for both scopes so the
     // rebuild walks both scopes' cached entries.
     const placeholderCtx = {
+      mode: "tui",
       cwd: projectCwd,
       ui: { notify: () => {} },
       sessionManager: {

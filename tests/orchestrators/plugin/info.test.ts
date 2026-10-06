@@ -305,6 +305,9 @@ function makeCtx(expectedNotifications = 1): {
   const notifications: NotifyRecord[] = [];
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(expectedNotifications);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(expectedNotifications);

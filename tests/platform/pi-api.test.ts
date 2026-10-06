@@ -117,11 +117,15 @@ void (true satisfies Same<
 >);
 void (true satisfies Same<PiBoundary.StopReason, PiBoundary.AssistantMessage["stopReason"]>);
 void (true satisfies PiBoundary.ExtensionAPI extends PiBoundary.ToolInventory ? true : false);
+void (true satisfies Same<PiBoundary.ExtensionMode, "tui" | "rpc" | "json" | "print">);
+// @ts-expect-error the consumer context requires an explicit mode
+void ({ ui: { notify: () => undefined } } satisfies PiBoundary.NotificationContext);
 void (true satisfies PiBoundary.ExtensionContext extends PiBoundary.NotificationContext
   ? true
   : false);
 void ({ getAllTools: () => [{ name: "subagent" }] } satisfies PiBoundary.ToolInventory);
 void ({
+  mode: "tui",
   ui: { notify: (_message: string): void => undefined },
 } satisfies PiBoundary.NotificationContext);
 
@@ -144,7 +148,7 @@ void ("unsupported" satisfies PiBoundary.StopReason);
 // @ts-expect-error a tool inventory must expose getAllTools
 void ({} satisfies PiBoundary.ToolInventory);
 // @ts-expect-error a notification context must expose ui.notify
-void ({ ui: {} } satisfies PiBoundary.NotificationContext);
+void ({ mode: "tui", ui: {} } satisfies PiBoundary.NotificationContext);
 
 describe("getAgentDir", () => {
   test("re-exports the peer binding", () => {

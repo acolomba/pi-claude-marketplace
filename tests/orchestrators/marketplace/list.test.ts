@@ -58,6 +58,9 @@ function notificationBoundary(name: string, expectsNotification: boolean): Notif
   const ui = mock<NotificationUi>({ exactParams: true, name: `${name} UI` });
   const notifications: CapturedNotification[] = [];
   if (expectsNotification) {
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .times(1);
     when(() => ctx.ui).thenReturn(ui);
     when(() => ui.notify).thenReturn((message, severity) => {
       notifications.push({ message, ...(severity === undefined ? {} : { severity }) });

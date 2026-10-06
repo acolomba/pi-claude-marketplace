@@ -81,7 +81,7 @@ function credentialOps(): CredentialOps {
 
 /** A no-op ui context, for the git-arm cases whose auth threading needs one. */
 function silentCtx(): NotificationContext {
-  return { ui: { notify: () => undefined } };
+  return { mode: "tui", ui: { notify: () => undefined } };
 }
 
 /** The target's own git source repository, for the git-arm cases below. */
@@ -467,7 +467,7 @@ describe("evaluateUpdateConstraint", () => {
     const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
     const source = gitSource();
     const calls: DependencyTagProbeOptions[] = [];
-    const ctx: NotificationContext = { ui: { notify: () => undefined } };
+    const ctx: NotificationContext = { mode: "tui", ui: { notify: () => undefined } };
     const credOps = credentialOps();
     const seam: UpdateConstraintSeam = {
       buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
@@ -575,7 +575,7 @@ describe("evaluateUpdateConstraint", () => {
     ]);
     const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
     const source = gitSource();
-    const ctx: NotificationContext = { ui: { notify: () => undefined } };
+    const ctx: NotificationContext = { mode: "tui", ui: { notify: () => undefined } };
     const credOps = credentialOps();
     const deviceFlowHttp: DeviceFlowHttp = {
       requestCode: () => Promise.reject(new Error("not used")),

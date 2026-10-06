@@ -98,6 +98,9 @@ function makeCtx(
     workflowEngineLoaded: false,
     ...options.softDeps,
   });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .once();
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
@@ -4344,6 +4347,9 @@ test("listPlugins normalizes a non-Error notification failure before reporting i
     })();
     notificationFailure.next();
     let notifyCall = 0;
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .twice();
     when(() => ctx.ui)
       .thenReturn(ui)
       .twice();

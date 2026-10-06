@@ -38,11 +38,12 @@ import type { NotificationRun } from "../../extensions/pi-claude-marketplace/sha
 // ---------------------------------------------------------------------------
 
 interface MockCtx {
+  mode: string;
   ui: { notify: ReturnType<typeof mock.fn> };
 }
 
 function makeCtx(): MockCtx {
-  return { ui: { notify: mock.fn() } };
+  return { mode: "tui", ui: { notify: mock.fn() } };
 }
 
 // ---------------------------------------------------------------------------

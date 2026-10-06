@@ -54,6 +54,7 @@ interface TestCtx {
 function makeCtx(cwd: string): TestCtx {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     cwd,
     ui: {
       notify(message: string, severity?: string): void {

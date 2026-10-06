@@ -664,6 +664,7 @@ function probePresentation(message: NotificationMessage): LeakProbe {
   const presentation = presentNotification(runWithAllLoaded(), message);
   const delivered: string[] = [];
   const ctx: NotificationContext = {
+    mode: "tui",
     ui: {
       notify: (text) => {
         delivered.push(text);

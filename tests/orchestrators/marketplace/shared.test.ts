@@ -245,6 +245,9 @@ function notificationBoundary(expectation?: NotificationExpectation): {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
   if (expectation !== undefined) {
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .times(1);
     when(() => ctx.ui).thenReturn(ui);
     when(() => {
       ui.notify(expectation.message, expectation.severity);

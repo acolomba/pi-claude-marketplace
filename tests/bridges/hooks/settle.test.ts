@@ -59,6 +59,7 @@ function makePi(sendError?: Error): { pi: ExtensionAPI; sent: SendCall[] } {
 function makeContext(): { ctx: ExtensionContext; notified: NotifyCall[] } {
   const notified: NotifyCall[] = [];
   const ctx = {
+    mode: "tui",
     ui: {
       notify: (text: string, severity?: "info" | "warning" | "error"): void => {
         notified.push({ text, severity });

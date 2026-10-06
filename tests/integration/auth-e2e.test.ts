@@ -123,6 +123,7 @@ function makeNotifyCapture(): {
 } {
   const notifyCalls: Array<{ message: string; severity?: string }> = [];
   const context: NotificationContext = {
+    mode: "tui",
     ui: {
       notify: (message, severity) => {
         notifyCalls.push({

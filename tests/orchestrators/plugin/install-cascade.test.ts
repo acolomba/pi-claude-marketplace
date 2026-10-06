@@ -76,7 +76,7 @@ const GIT_SOURCE_URL = "https://example.com/org/repo";
 const PINNED_OID = "0123456789abcdef0123456789abcdef01234567";
 
 function notificationContext(): NotificationContext {
-  return { ui: { notify: () => undefined } };
+  return { mode: "tui", ui: { notify: () => undefined } };
 }
 
 /** A closure member of the fixture marketplace, as the walk would report it. */

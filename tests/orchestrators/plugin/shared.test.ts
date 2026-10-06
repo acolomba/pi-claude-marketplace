@@ -173,7 +173,7 @@ function makeRecordingBoundary(notifications: { message: string; severity?: stri
       notifications.push(severity === undefined ? { message } : { message, severity });
     },
   } as unknown as ExtensionContext["ui"];
-  const ctx = { ui } as ExtensionContext;
+  const ctx = { mode: "tui", ui } as ExtensionContext;
   return { ctx };
 }
 
@@ -2026,6 +2026,9 @@ describe("emitMarketplaceNotAdded", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -2062,6 +2065,9 @@ describe("emitMarketplaceNotAdded", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -2208,6 +2214,9 @@ describe("surfaceDiscoveryWarnings", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -2237,6 +2246,9 @@ describe("surfaceDiscoveryWarnings", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();

@@ -1,5 +1,16 @@
 import { redactCredentials } from "./redact-credentials.ts";
 
+/** Rejects a host mode before an operation starts or output is delivered. */
+export class UnsupportedModeError extends Error {
+  readonly mode: string;
+
+  constructor(mode: string) {
+    super(`Unsupported notification mode: ${mode}`);
+    this.name = "UnsupportedModeError";
+    this.mode = mode;
+  }
+}
+
 /** Normalize a thrown `unknown` to its message text, since `instanceof Error`
  *  narrowing must be repeated everywhere a caught value is interpolated. */
 export function errorMessage(err: unknown): string {

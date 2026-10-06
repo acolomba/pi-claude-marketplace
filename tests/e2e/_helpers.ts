@@ -85,6 +85,7 @@ export function makeMockPi(tools: readonly unknown[]): MockPiHarness {
 export function makeCtx(cwd: string): { ctx: ExtensionContext; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     cwd,
     ui: {
       notify: (message: string, severity?: string): void => {

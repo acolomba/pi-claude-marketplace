@@ -77,6 +77,9 @@ function makeFetchBoundary(): FetchBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "fetch context" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "fetch UI" });
   const notifications: NotifyRecord[] = [];
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .once();
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
@@ -103,6 +106,7 @@ function makeCtx(): {
 } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     ui: {
       notify(message: string, severity?: string): void {
         notifications.push(severity === undefined ? { message } : { message, severity });

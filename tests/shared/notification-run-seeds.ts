@@ -3,19 +3,30 @@ import type { NotificationRun } from "../../extensions/pi-claude-marketplace/sha
 
 /** Returns a fresh notification run whose snapshot is `softDeps`. */
 export function runWithSoftDeps(softDeps: SoftDepStatus): NotificationRun {
-  return { softDeps: { ...softDeps } };
+  return {
+    softDeps: { ...softDeps },
+    entrySink: {
+      appendEntry(): never {
+        throw new Error("A text-only notification run cannot append entries");
+      },
+    },
+  };
 }
 
 /** Returns a fresh notification run whose snapshot reports no companion loaded. */
 export function runWithNothingLoaded(): NotificationRun {
-  return {
-    softDeps: { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false },
-  };
+  return runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
+  });
 }
 
 /** Returns a fresh notification run whose snapshot reports every companion loaded. */
 export function runWithAllLoaded(): NotificationRun {
-  return {
-    softDeps: { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: true },
-  };
+  return runWithSoftDeps({
+    piSubagentsLoaded: true,
+    piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
+  });
 }

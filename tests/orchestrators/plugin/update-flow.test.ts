@@ -277,6 +277,7 @@ function makeCtx(softDeps?: Partial<SoftDepStatus>): {
 } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     ui: {
       notify: (m: string, s?: string): void => {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });

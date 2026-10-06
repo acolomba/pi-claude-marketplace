@@ -181,6 +181,7 @@ JSON
     // the new before_agent_start drain handler.
     const { pi, registrations } = makeMockPi();
     const placeholderCtx = {
+      mode: "tui",
       cwd: extensionRoot,
       ui: { notify: () => {} },
       sessionManager: {
@@ -295,6 +296,7 @@ JSON
     );
 
     const placeholderCtx = {
+      mode: "tui",
       cwd: extensionRoot,
       ui: { notify: () => {} },
       sessionManager: {

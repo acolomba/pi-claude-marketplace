@@ -323,6 +323,9 @@ describe("buildAuthForHost", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .twice();
     when(() => ctx.ui)
       .thenReturn(ui)
       .twice();
@@ -479,6 +482,9 @@ describe("buildAuthForHost", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -567,6 +573,9 @@ describe("buildAuthForHost", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .twice();
     when(() => ctx.ui)
       .thenReturn(ui)
       .twice();
@@ -705,6 +714,9 @@ describe("buildAuthForHost", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -844,6 +856,9 @@ describe("buildCloneAuth", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();

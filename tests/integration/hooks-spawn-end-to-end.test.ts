@@ -181,6 +181,7 @@ echo '{}'
     // handler's stdin envelope, and `ctx.cwd` to resolve project-scope
     // locations. Stub each to a deterministic test fixture.
     const placeholderCtx = {
+      mode: "tui",
       cwd: extensionRoot,
       ui: { notify: () => {} },
       sessionManager: {
@@ -320,6 +321,7 @@ echo '{}'
 
     const { pi, registrations } = makeMockPi();
     const placeholderCtx = {
+      mode: "tui",
       cwd: extensionRoot,
       ui: { notify: () => {} },
       sessionManager: {
