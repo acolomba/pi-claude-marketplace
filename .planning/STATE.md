@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 3
 current_phase_name: Claude Code tool names and tool search
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-10-06T18:11:28.622Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-10-06T18:25:02.217Z"
 last_activity: 2026-10-06
 last_activity_desc: Phase 3 execution started
-state_head: a623ffab8e4efa864deb44efd62223ebf04b9872
+state_head: 346dd7dc0b0beb502f15da897c0be468235e9066
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 30
-  completed_plans: 25
+  completed_plans: 26
   percent: 29
 ---
 
@@ -35,7 +35,7 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 3 (Claude Code tool names and tool search) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-10-06 — Phase 3 execution started
 
@@ -271,6 +271,7 @@ still open with a comment explaining what landed.
 | Phase 03 P02 | 5 min | 2 tasks | 7 files |
 | Phase 03 P03 | 20min | 3 tasks | 17 files |
 | Phase 03 P04 | 23 min | 3 tasks | 24 files |
+| Phase 03 P05 | 11min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -616,6 +617,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: Plugin description resolves once in preflight: plugin.json first, then the marketplace entry; the unavailable arm never carries it
 - [Phase 03]: classifyMcpServer validates every server against compiled Claude Code 2.1.291 schemas; a blocked feature adds the typed mcpServers kind ({unsupported mcp}) with no note, and a schema-invalid config adds a "malformed mcp server" note that makes the plugin unavailable
 - [Phase 03]: Remote-only fields (headersHelper, tools, toolPermissions) are not features on a stdio server, because Claude strip-mode stdio schema drops them; alwaysLoad, bareElicitationCapability and discoveryCache must be booleans
+- [Phase 03]: MCP same-plugin key collisions refuse in keyedServers before readTargetConfig; folded cross-source refusals name the other key via McpServerCollisionError.definedAs
 
 ### Pending Todos
 
@@ -747,11 +749,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-04-PLAN.md
+**Stopped at:** Completed 03-05-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-06T18:11:12.007Z
+Last session: 2026-10-06T18:25:01.965Z
 The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
 numbering reset to 1. No phase directories exist yet.
 

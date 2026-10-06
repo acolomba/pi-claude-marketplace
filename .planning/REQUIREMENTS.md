@@ -75,7 +75,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
   `toolPrefix: "mcp"` pinned on the entry.
 - [ ] **ANAME-02**: Plugin hook matchers and agent `tools:` entries that name the plugin's own MCP
   tools in Claude form match the delivered tools.
-- [ ] **ANAME-03**: Two servers whose normalized keys collide (including `-`/`_` folding) are
+- [x] **ANAME-03**: Two servers whose normalized keys collide (including `-`/`_` folding) are
   refused at install with a clear reason. The tool-name length Pi 1.0 accepts was measured: Pi
   has no limit, so no length check exists (amended in Phase 3, D-03-12, D-03-13, D-03-17).
 - [ ] **ANAME-04**: Plugin MCP tools are loaded on demand through Pi's tool search
@@ -177,7 +177,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | AFILE-06 | Phase 2 | Complete |
 | ANAME-01 | Phase 3 | Pending |
 | ANAME-02 | Phase 3 | Pending |
-| ANAME-03 | Phase 3 | Pending |
+| ANAME-03 | Phase 3 | Complete |
 | ANAME-04 | Phase 3 | Pending |
 | ANAME-05 | Phase 3 | Pending |
 | ANAME-06 | Phase 3 | Complete |
