@@ -185,6 +185,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
 
   for (const scope of scopes) {
     const loc = locationsFor(scope, opts.cwd);
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one config read each
     const outcome = await loadMergedScopeConfig(loc);
 
     // CFG-03 abort: if EITHER base or local config is invalid,
@@ -213,6 +214,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     // catches exactly this class).
     let state;
     try {
+      // eslint-disable-next-line no-await-in-loop -- at most two scopes, one state read each
       state = await loadState(loc.extensionRoot);
     } catch (err) {
       invalidBlocks.push({

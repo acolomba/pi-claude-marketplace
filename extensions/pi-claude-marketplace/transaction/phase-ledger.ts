@@ -85,6 +85,7 @@ async function rollbackExecuted<C>(
     }
 
     try {
+      // eslint-disable-next-line no-await-in-loop -- undo walks the executed phases newest first
       await done.undo(ctx);
     } catch (undoErr) {
       if (undoErr instanceof PathContainmentError) {
@@ -155,6 +156,7 @@ export async function runPhases<C>(phases: readonly Phase<C>[], ctx: C): Promise
   const executed: Phase<C>[] = [];
   for (const phase of phases) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- later phases read ctx; the first throw stops the run
       await phase.do(ctx);
       executed.push(phase);
     } catch (err) {
@@ -162,7 +164,9 @@ export async function runPhases<C>(phases: readonly Phase<C>[], ctx: C): Promise
       // Failing-phase own undo FIRST (TR-02 / saga "started -> eligible for
       // compensation"), then reverse-walk over executed[]. Newest-first per
       // AS-4 / MSG-RP-1: failing-phase partial prepends to index 0.
+      // eslint-disable-next-line no-await-in-loop -- runs once: TR-02 undoes the failing phase before the walk
       const failingPartial = await invokeFailingPhaseUndo(phase, ctx);
+      // eslint-disable-next-line no-await-in-loop -- runs once after the failing phase's undo, then returns
       const reversePartials = await rollbackExecuted(executed, ctx);
       const rollbackPartials: RollbackPartial[] =
         failingPartial === undefined ? reversePartials : [failingPartial, ...reversePartials];

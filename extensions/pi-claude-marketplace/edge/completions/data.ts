@@ -364,8 +364,11 @@ async function getInstallPluginToMarketplacesMap(
   const allowed = partial ? PARTIAL_INSTALL_STATUSES : INSTALL_STATUSES;
   const result = new Map<string, string[]>();
   for (const source of await sourceMarketplacesForInstall(resolver, targetScope)) {
+    // eslint-disable-next-line no-await-in-loop -- bounded by the source marketplaces, one state read each
     const targetInstalled = await installedNamesInTarget(resolver, targetScope, source.marketplace);
+    // eslint-disable-next-line no-await-in-loop -- bounded by the source marketplaces, one path lookup each
     const cachePath = await resolver.pluginCachePath(source.scope, source.marketplace);
+    // eslint-disable-next-line no-await-in-loop -- bounded by the source marketplaces, one cached index each
     const rows = await completionCache.getPluginIndex(
       cachePath,
       source.scope,
@@ -420,9 +423,12 @@ async function collectPluginToMarketplacesMap(
   const scopes: readonly Scope[] =
     explicitScope === undefined ? ["project", "user"] : [explicitScope];
   for (const scope of scopes) {
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one marketplace list read each
     const names = await marketplaceNamesForScope(resolver, scope);
     for (const mp of names) {
+      // eslint-disable-next-line no-await-in-loop -- bounded by each scope's marketplaces, one path lookup each
       const cachePath = await resolver.pluginCachePath(scope, mp);
+      // eslint-disable-next-line no-await-in-loop -- bounded by each scope's marketplaces, one cached index each
       const rows = await completionCache.getPluginIndex(cachePath, scope, mp, () =>
         rebuildPluginIndex(resolver, scope, mp),
       );
@@ -469,9 +475,12 @@ async function getInfoPluginToMarketplacesMap(
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   for (const scope of SCOPES) {
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one marketplace list read each
     const names = await marketplaceNamesForScope(resolver, scope);
     for (const mp of names) {
+      // eslint-disable-next-line no-await-in-loop -- bounded by each scope's marketplaces, one path lookup each
       const cachePath = await resolver.pluginCachePath(scope, mp);
+      // eslint-disable-next-line no-await-in-loop -- bounded by each scope's marketplaces, one cached index each
       const rows = await completionCache.getPluginIndex(cachePath, scope, mp, () =>
         rebuildPluginIndex(resolver, scope, mp),
       );

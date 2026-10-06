@@ -406,6 +406,19 @@ export default tseslint.config(
     },
   },
   {
+    // The local equivalent of typescript:S9382 (promises awaited one at a
+    // time in a loop). SonarCloud runs S9382 as core `no-await-in-loop`,
+    // which `eslint-plugin-sonarjs` does not ship, so the Sonar way spread
+    // above does not carry it.
+    //
+    // Scoped to mirror `sonar.sources`, like the blocks above. SonarCloud
+    // drops tests/** via `sonar.test.exclusions`.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    rules: {
+      "no-await-in-loop": "error",
+    },
+  },
+  {
     // Tests deliberately do defensive checking after operations that "should"
     // have populated state, and `node:test`'s `test(...)` returns an unawaited
     // promise by design. Relax the rules that fight that style.

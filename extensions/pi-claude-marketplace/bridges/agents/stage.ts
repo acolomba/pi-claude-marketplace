@@ -197,6 +197,7 @@ export async function prepareStagePluginAgents(
   const safePreviousEntries: AgentsIndexEntry[] = [];
   const foreignPreservedEntries: AgentsIndexEntry[] = [];
   for (const entry of previousEntries) {
+    // eslint-disable-next-line no-await-in-loop -- bounded by this plugin's prior agents, one ownership read each
     const safety = await isOwnedAgentFile(entry.targetPath);
     if (safety.ok) {
       safePreviousEntries.push(entry);
@@ -222,10 +223,13 @@ export async function prepareStagePluginAgents(
 
     for (const c of converted) {
       const stagedFile = path.join(stagingDir, c.generatedName + ".md");
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await assertPathInside(stagingDir, stagedFile, "staged agent file");
       const targetFile = path.join(locations.agentsDir, c.generatedName + ".md");
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await assertPathInside(locations.agentsDir, targetFile, "agent target path");
 
+      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await writeFile(stagedFile, c.fileContent, "utf8");
       stagedFilePaths.push({ from: stagedFile, to: targetFile });
 
@@ -341,6 +345,7 @@ export async function commitPreparedAgents(
   try {
     const previousTargets = new Set(prepared._previousEntries.map((entry) => entry.targetPath));
     for (const entry of prepared._newEntries) {
+      // eslint-disable-next-line no-await-in-loop -- the first non-previous target throws before any rm
       if (!previousTargets.has(entry.targetPath) && (await pathExists(entry.targetPath))) {
         throw new Error(
           `Cannot replace agent target with non-previous content at ${entry.targetPath}`,
@@ -376,6 +381,7 @@ export async function commitPreparedAgents(
   try {
     await mkdir(prepared.locations.agentsDir, { recursive: true });
     for (const pair of prepared._stagedFilePaths) {
+      // eslint-disable-next-line no-await-in-loop -- TR-01: one rename at a time so rollback knows which landed
       await rename(pair.from, pair.to);
       completedRenames.push(pair);
     }
@@ -398,6 +404,7 @@ export async function commitPreparedAgents(
     const rollbackLeaks: string[] = [];
     for (const pair of [...completedRenames].reverse()) {
       try {
+        // eslint-disable-next-line no-await-in-loop -- rollback walks completed renames in reverse
         await rename(pair.to, pair.from);
       } catch (rollbackErr) {
         rollbackLeaks.push(
@@ -474,13 +481,17 @@ export async function replacePreparedAgents(
   try {
     for (const entry of backupEntries) {
       assertSafeName(entry.generatedName, "previous agent name");
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       await assertPathInside(prepared.locations.agentsDir, entry.targetPath, "previous agent file");
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       if (!(await pathExists(entry.targetPath))) {
         continue;
       }
 
       const backup = path.join(backupRoot, entry.generatedName + ".md");
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       await assertPathInside(backupRoot, backup, "agents backup file");
+      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
       await rename(entry.targetPath, backup);
       backups.push({ name: entry.generatedName, from: entry.targetPath, to: backup });
     }
@@ -497,11 +508,14 @@ export async function replacePreparedAgents(
     for (const pair of prepared._stagedFilePaths) {
       const targetName = path.basename(pair.to, ".md");
       if (ownedNames.has(targetName)) {
+        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
         await removeOrphanIfPresent(pair.to, "file");
+        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
       } else if (await pathExists(pair.to)) {
         throw new Error(`Cannot replace agent target with non-previous content at ${pair.to}`);
       }
 
+      // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
       await rename(pair.from, pair.to);
       renamed.push({ to: pair.to });
     }

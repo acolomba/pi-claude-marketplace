@@ -51,6 +51,7 @@ export async function loadEffectiveServerNames(cwd: string): Promise<Map<string,
     let text: string;
 
     try {
+      // eslint-disable-next-line no-await-in-loop -- four fixed slots, one file read each
       text = await readFile(slotPath, "utf8");
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;

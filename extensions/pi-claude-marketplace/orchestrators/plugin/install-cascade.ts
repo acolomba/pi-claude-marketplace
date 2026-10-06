@@ -906,6 +906,7 @@ async function resolveMemberConstraints(
       continue;
     }
 
+    // eslint-disable-next-line no-await-in-loop -- the first unresolvable member ends the cascade plan
     const outcome = await resolveOneMember(options, member);
     if (outcome.kind === "failed") {
       return { ok: false, failure: outcome.failure };
