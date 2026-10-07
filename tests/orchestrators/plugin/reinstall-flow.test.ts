@@ -5101,9 +5101,7 @@ for (const mode of ["json", "rpc"]) {
           cwd,
           marketplaceRoot: path.join(cwd, "mp-src"),
           resources: { skill: "old skill" },
-          install: true,
         });
-        await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
         const capture = createJsonCapture();
         const ctx = {
           mode,
@@ -5112,6 +5110,20 @@ for (const mode of ["json", "rpc"]) {
           },
         };
         const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+        const installPlugin = createInstallOperation(
+          createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          createCompletionCache(),
+        );
+        await installPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          notifications: { mode: "orchestrated" },
+        });
+        await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
         // act
         const outcomes = await reinstallPlugins({
