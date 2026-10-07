@@ -13,6 +13,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createCredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
+import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
@@ -23,7 +24,10 @@ import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 import type { GitAuthBundle } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type { CredentialSpawn } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
-import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  ExtensionContext,
+  ToolInventory,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /** Narrows a bundle the case expects to run a Device Flow, and fails the case otherwise. */
 function expectDeviceFlow(auth: GitAuthBundle): Extract<GitAuthBundle, { kind: "device-flow" }> {
@@ -114,6 +118,109 @@ describe("NO_STORED_CREDENTIAL_CAUSE", () => {
 });
 
 describe("buildAuthForHost", () => {
+  test("selects the live mode for a delayed prompt and memoizes only the authentication", async () => {
+    // arrange
+    const capture = createJsonCapture();
+    let mode = "json";
+    const reads: string[] = [];
+    const ctx = {
+      get mode() {
+        reads.push(mode);
+        return mode;
+      },
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const inventory = mock<ToolInventory>({ exactParams: true, name: "inventory" });
+    when(() => inventory.getAllTools())
+      .thenReturn([])
+      .times(3);
+    const pi = {
+      getAllTools: () => inventory.getAllTools(),
+      appendEntry: capture.entrySink.appendEntry,
+    };
+    const run = openNotificationRun(pi);
+    const snapshot = run.softDeps;
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const deviceCode = {
+      device_code: "delayed-device-secret",
+      user_code: "LATE-1234",
+      verification_uri: "https://github.com/login/device",
+      expires_in: 900,
+      interval: 0,
+      access_token: "unexpected-provider-secret",
+      password: "unexpected-password",
+    };
+    const deviceFlow = createDeviceFlowFake({
+      boundary: "memory",
+      network: "disabled",
+      deviceCode,
+      pollResponses: [
+        { kind: "success", accessToken: "delayed-token", tokenType: "bearer", scope: "repo" },
+      ],
+    });
+    const authMemo = new Map<string, AuthAttemptResult>();
+    const auth = expectDeviceFlow(
+      buildAuthForHost({
+        host: "github.com",
+        credentialOps: credentials.credentialOps,
+        ctx,
+        run,
+        deviceFlowHttp: deviceFlow.http,
+        authMemo,
+      }),
+    );
+    const readsBeforePrompt = [...reads];
+
+    // act
+    mode = "rpc";
+    const authentication = await auth.onAuthRequired();
+    const repeatedAuthentication = await auth.onAuthRequired();
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "device-flow-prompt",
+          severity: "info",
+          needsReload: false,
+          verificationUri: "https://github.com/login/device",
+          userCode: "LATE-1234",
+        },
+      },
+    ]);
+    assert.deepStrictEqual(authentication, {
+      ok: true,
+      cred: { username: "x-access-token", password: "delayed-token" },
+    });
+    assert.strictEqual(repeatedAuthentication, authentication);
+    assert.deepStrictEqual(authMemo, new Map([["github.com", authentication]]));
+    assert.deepStrictEqual(readsBeforePrompt, []);
+    assert.deepStrictEqual(reads, ["rpc"]);
+    assert.strictEqual(run.entrySink, pi);
+    assert.strictEqual(run.softDeps, snapshot);
+    assert.deepStrictEqual(snapshot, {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: false,
+    });
+    assert.deepStrictEqual(deviceFlow.calls, {
+      requestCode: [{ clientId: "Ov23liNcyK08uGdU0mMl", scope: "repo" }],
+      pollToken: [
+        { clientId: "Ov23liNcyK08uGdU0mMl", deviceCode: "delayed-device-secret", intervalSec: 0 },
+      ],
+    });
+    assert.deepStrictEqual(credentials.storedCredential("github.com"), {
+      username: "x-access-token",
+      password: "delayed-token",
+    });
+    capture.assertValid();
+    verify(inventory);
+  });
+
   for (const mode of ["json", "rpc"]) {
     test(`appends the host-bound device prompt in ${mode}`, async () => {
       // arrange
