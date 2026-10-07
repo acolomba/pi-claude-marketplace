@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 05
 current_phase_name: Mode-Selected JSON Sink
 status: executing
-stopped_at: Plan 05-04 merged and combined-tree gate passed; ready for 05-05
-last_updated: "2026-10-07T12:35:06.951Z"
+stopped_at: Plan 05-05 merged and combined-tree gate passed; ready for 05-06
+last_updated: "2026-10-07T13:19:50.641Z"
 last_activity: 2026-10-07
-last_activity_desc: Plan 05-04 merged and combined-tree check passed
-state_head: 19280e11c5bcc094f3fbb1dac53bc293fe297019
+last_activity_desc: Plan 05-05 merged and combined-tree check passed
+state_head: d4050b89380688d636ab17ab963190afd6ed39d2
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 35
-  completed_plans: 32
+  completed_plans: 33
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Mode-Selected JSON Sink) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
-Last activity: 2026-10-07 — Plan 05-04 merged and combined-tree check passed
+Last activity: 2026-10-07 — Plan 05-05 merged and combined-tree check passed
 
-Progress: [██████░░░░] 57% (4 of 7 phases fully verified; 32 of 35 plans complete)
+Progress: [██████░░░░] 57% (4 of 7 phases fully verified; 33 of 35 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,8 +169,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-07T12:35:06.689Z
-**Stopped at:** Plan 05-04 merged and combined-tree gate passed; ready for 05-05
+**Last session:** 2026-10-07T13:19:50.391Z
+**Stopped at:** Plan 05-05 merged and combined-tree gate passed; ready for 05-06
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -227,10 +227,10 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Continue Phase 5 with 05-05 in an isolated `agent-*` worktree. The user
+- Continue Phase 5 with 05-06 in an isolated `agent-*` worktree. The user
   authorized that namespace on 2026-10-06; AGENTS.md records the policy.
-- Plan 05-04's two implementation/test commits and summary were reconciled and merged into
-  `features/json` at `19280e11`. Its worker is complete and worktree removed.
+- Plan 05-05's three implementation/test commits and summary were reconciled and merged into
+  `features/json` at `d4050b89`. Its worker is complete and worktree removed.
   On 2026-10-07, `npm run check` exited 0 on that merged tree with Node
   v26.10.0 and all 264 direct-coverage pairs. The corpus check also exited 0:
   3149 entries present, zero extras. The catalog matches `26cb0056`.
@@ -270,6 +270,7 @@ archived milestone artifacts.
 | Phase 05 P02 | 33 min | 2 tasks | 51 files |
 | Phase 05 P03 | 30 min | 2 tasks | 14 files |
 | Phase 05 P04 | 25 min | 2 tasks | 30 files |
+| Phase 05 P05 | 30 min | 2 tasks | 10 files |
 
 ## Decisions
 
