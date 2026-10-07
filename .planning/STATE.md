@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 04
 current_phase_name: Variable expansion at Claude Code parity
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-10-07T17:12:43.708Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-10-07T17:39:55.620Z"
 last_activity: 2026-10-07
-last_activity_desc: Completed 04-02 (missing-variable install warning)
-state_head: e29c66248bb3862fb75bb974fe668cfb4b604c2d
+last_activity_desc: Completed 04-03 (credential deny-list at Claude Code parity)
+state_head: ad18260718c38ef95680b74e83afde96bcd68d68
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 39
-  completed_plans: 32
+  completed_plans: 33
   percent: 43
 ---
 
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 04 (Variable expansion at Claude Code parity) — EXECUTING
-Plan: 3 of 9
+Plan: 4 of 9
 Status: Ready to execute
-Last activity: 2026-10-07 — Completed 04-02 (missing-variable install warning)
+Last activity: 2026-10-07 — Completed 04-03 (credential deny-list at Claude Code parity)
 
 Progress: [████░░░░░░] 43%
 
@@ -278,6 +278,7 @@ still open with a comment explaining what landed.
 | Phase 03 P09 | 7min | 2 tasks | 3 files |
 | Phase 04 P01 | 20 min | 3 tasks | 15 files |
 | Phase 04 P02 | 12 min | 2 tasks | 10 files |
+| Phase 04 P03 | 24 min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -647,6 +648,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: README.es.md carries the same MCP name table, partial-install text and agent MCP rule as README.md (.claude/rules/readme.md)
 - [Phase 04]: Plugin MCP entries translate first, then expand only Claude's five fields; references keep names only and the adapter encoding is a separate serializer
 - [Phase 04]: variables-missing notices derive from the per-server variable reports and carry names only; the row renders after override-kept
+- [Phase 04]: the credential deny-list is a verbatim 2.1.291 snapshot pinned by set digests and differential-fuzzed against the evidence code; mode-gated sets (Gqe, Voo, Gur, tRe) are omitted
+- [Phase 04]: a plain-field deny-listed variable unset at install is written as the split-token literal, never a kept reference, so a value set later cannot reach the server
 
 ### Pending Todos
 
@@ -780,11 +783,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 04-02-PLAN.md
+**Stopped at:** Completed 04-03-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-07T17:12:43.424Z
+Last session: 2026-10-07T17:39:55.362Z
 Phase 3 closed. Gates: Nyquist validation (23/23 green), security (20/20
 threats closed), code review (0 critical, 5 warnings, 5 info, all `open`),
 regression gate (`npm run check` green on d6029660, Node v26.10.0), verifier
