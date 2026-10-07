@@ -238,6 +238,10 @@ archived milestone artifacts.
   264 direct pairs. Strict corpus verification passed with 3149 entries,
   zero extras; catalog and schema are unchanged. No production input has
   changed during approval closeout.
+- Final approval handoff: `npm run check` exited 0 at `d25a3a09` on
+  Node v26.10.0, with all 264 direct pairs. Evidence:
+  `/tmp/json-phase5-approved-handoff-check.log`. Canonical verification and
+  the UAT completion predicate both pass with no blockers.
 - Phase 6 (Command-Run Contract) is next and has not started. Execution's
   `--no-transition` scope stops here; plan or discuss it when continuing.
 - Phase-close file warnings are parser false positives: abbreviated source
