@@ -91,22 +91,26 @@ const PARTIAL_MARKER_TAIL = /[${](?:e(?:nv?)?)?$/;
 
 /**
  * AVAR-01 / AVAR-03: give pi-mcp-adapter the two variables written MCP entries
- * read from Pi's process. The reserved variable is always set to the empty
- * string first: the split tokens in written entries need it set, and the
- * adapter refuses a `url` that names an unset variable. Claude Code expands
- * `${CLAUDE_PROJECT_DIR}` in every scope, so a user-scope entry keeps the
- * reference and the adapter reads the current project from Pi's process.
+ * read from Pi's process. Claude Code expands `${CLAUDE_PROJECT_DIR}` in every
+ * scope, so a user-scope entry keeps the reference and the adapter reads the
+ * current project from Pi's process.
  *
- * A `cwd` that holds `$env:` or `{env:`, or ends in `$`, `{` or a longer
- * prefix of either marker, is not exported (AVAR-05). The adapter would expand
- * the marker, and plugin text after the reference can complete such a tail
- * into a reference to a withheld credential. The skip also removes any
+ * The reserved variable is set to the empty string before `readCwd` runs, so
+ * it is set even when `readCwd` throws: the split tokens in written entries
+ * need it set, and the adapter refuses a `url` that names an unset variable.
+ * A throw from `readCwd` propagates and leaves `CLAUDE_PROJECT_DIR` unchanged.
+ *
+ * A working directory that holds `$env:` or `{env:`, or ends in `$`, `{` or a
+ * longer prefix of either marker, is not exported (AVAR-05). The adapter would
+ * expand the marker, and plugin text after the reference can complete such a
+ * tail into a reference to a withheld credential. The skip also removes any
  * previous `CLAUDE_PROJECT_DIR`, so no server reads a stale or inherited
  * project. Returns `false` for that skip so the caller can log it; this module
  * does not log. Bash and MCP children inherit both values.
  */
-export function applyMcpAdapterEnv(cwd: string): boolean {
+export function applyMcpAdapterEnv(readCwd: () => string): boolean {
   process.env[ADAPTER_EMPTY_ENV] = "";
+  const cwd = readCwd();
   if (ADAPTER_MARKER.test(cwd) || PARTIAL_MARKER_TAIL.test(cwd)) {
     Reflect.deleteProperty(process.env, "CLAUDE_PROJECT_DIR");
     return false;

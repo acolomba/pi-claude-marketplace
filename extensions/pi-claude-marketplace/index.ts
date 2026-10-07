@@ -34,7 +34,7 @@ import type {
  */
 function applyMcpAdapterEnvFrom(readCwd: () => string): void {
   try {
-    if (!applyMcpAdapterEnv(readCwd())) {
+    if (!applyMcpAdapterEnv(readCwd)) {
       hookDebugLog(
         "CLAUDE_PROJECT_DIR removed: the working directory holds a pi-mcp-adapter variable marker or ends in the start of one",
         "env",

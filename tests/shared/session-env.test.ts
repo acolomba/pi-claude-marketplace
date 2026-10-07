@@ -210,7 +210,7 @@ describe("applyMcpAdapterEnv", () => {
     process.env.CLAUDE_PROJECT_DIR = "/work/previous";
 
     // act
-    const exported = applyMcpAdapterEnv("/work/project");
+    const exported = applyMcpAdapterEnv(() => "/work/project");
 
     // assert
     assert.strictEqual(exported, true);
@@ -229,7 +229,7 @@ describe("applyMcpAdapterEnv", () => {
     process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "user-value";
 
     // act
-    applyMcpAdapterEnv("/work/project");
+    applyMcpAdapterEnv(() => "/work/project");
 
     // assert
     assert.strictEqual(process.env.PI_CLAUDE_MARKETPLACE_EMPTY, "");
@@ -254,7 +254,7 @@ describe("applyMcpAdapterEnv", () => {
       process.env.CLAUDE_PROJECT_DIR = "/work/previous";
 
       // act
-      const exported = applyMcpAdapterEnv(cwd);
+      const exported = applyMcpAdapterEnv(() => cwd);
 
       // assert
       assert.strictEqual(exported, false);
@@ -268,12 +268,41 @@ describe("applyMcpAdapterEnv", () => {
     });
   }
 
+  test("AVAR-03: sets the reserved empty variable before a cwd read that throws", (t) => {
+    // arrange
+    restoreEnvAfter(t, ["PI_CLAUDE_MARKETPLACE_EMPTY", "CLAUDE_PROJECT_DIR"]);
+    process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "user-value";
+    process.env.CLAUDE_PROJECT_DIR = "/work/previous";
+    const cwdGone = new Error("cwd gone");
+
+    let thrown: unknown;
+
+    // act
+    try {
+      applyMcpAdapterEnv(() => {
+        throw cwdGone;
+      });
+    } catch (error: unknown) {
+      thrown = error;
+    }
+
+    // assert
+    assert.strictEqual(thrown, cwdGone);
+    assert.deepStrictEqual(
+      {
+        PI_CLAUDE_MARKETPLACE_EMPTY: process.env.PI_CLAUDE_MARKETPLACE_EMPTY,
+        CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR,
+      },
+      { PI_CLAUDE_MARKETPLACE_EMPTY: "", CLAUDE_PROJECT_DIR: "/work/previous" },
+    );
+  });
+
   test("AVAR-01: exports a cwd whose $ and { neither form a marker nor end it", (t) => {
     // arrange
     restoreEnvAfter(t, ["PI_CLAUDE_MARKETPLACE_EMPTY", "CLAUDE_PROJECT_DIR"]);
 
     // act
-    const exported = applyMcpAdapterEnv("/work/a$b{env}c");
+    const exported = applyMcpAdapterEnv(() => "/work/a$b{env}c");
 
     // assert
     assert.strictEqual(exported, true);
@@ -297,7 +326,7 @@ describe("applyMcpAdapterEnv", () => {
     process.env.SENV_TEST_SENTINEL = "sentinel";
 
     // act
-    applyMcpAdapterEnv("/work/project");
+    applyMcpAdapterEnv(() => "/work/project");
 
     // assert
     assert.deepStrictEqual(

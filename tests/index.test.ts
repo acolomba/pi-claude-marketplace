@@ -1651,7 +1651,7 @@ test("AVAR-01: session_start removes CLAUDE_PROJECT_DIR for a working directory 
   verifyBoundary();
 });
 
-test("NFR-2: a session context whose cwd cannot be read leaves the values alone and does not throw", async (t) => {
+test("NFR-2: a session context whose cwd cannot be read still empties the reserved variable, keeps CLAUDE_PROJECT_DIR and does not throw", async (t) => {
   // arrange
   await createHermeticScope(t, "adapter-env-refused");
   const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0);
@@ -1669,7 +1669,7 @@ test("NFR-2: a session context whose cwd cannot be read leaves the values alone 
       process.env.CLAUDE_PROJECT_DIR,
       ...SESSION_ENV_KEYS.map((key) => process.env[key]),
     ],
-    ["stale", "/work/previous", "1", "session-1", "session-1"],
+    ["", "/work/previous", "1", "session-1", "session-1"],
   );
   verifyBoundary();
 });

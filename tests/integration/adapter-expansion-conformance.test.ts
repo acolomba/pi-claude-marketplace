@@ -509,7 +509,7 @@ function projectDirHeaderRun(
 ): { readonly cwd: string; readonly exported: boolean; readonly output: string } {
   const written = userScopeHeader(`\${CLAUDE_PROJECT_DIR}${completion}ANTHROPIC_API_KEY}`);
   return withProcessEnv({ CLAUDE_PROJECT_DIR: "", [EMPTY_ENV_NAME]: "" }, () => {
-    const exported = applyMcpAdapterEnv(cwd);
+    const exported = applyMcpAdapterEnv(() => cwd);
     const projectDir = process.env.CLAUDE_PROJECT_DIR;
     const runtimeEnv: Environment =
       projectDir === undefined
