@@ -42,6 +42,7 @@ import {
   TOP_LEVEL_SUBCOMMANDS,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
+import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import { createJsonCapture } from "./json-capture.ts";
@@ -49,6 +50,64 @@ import { createNotificationBoundary } from "./notification-boundary.ts";
 import { createMachineNotificationBoundary } from "./notification-boundary.ts";
 
 import type { ExtensionCommandContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+test("preserves ordered duplicate rejections around a handler emission on the same run", async () => {
+  // arrange
+  const capture = createJsonCapture();
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  when(() => ctx.mode)
+    .thenReturn("json")
+    .times(1);
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "handlers" });
+  when(() => handlers.list).thenReturn((args, handlerCtx, handlerRun) => {
+    assert.strictEqual(args, "");
+    assert.strictEqual(handlerCtx, ctx);
+    assert.strictEqual(handlerRun, run);
+    notify(handlerCtx, handlerRun, { marketplaces: [] });
+    return Promise.resolve();
+  });
+
+  // act
+  await routeClaudePlugin("unknown", handlers, ctx, run);
+  when(() => ctx.mode)
+    .thenReturn("rpc")
+    .times(3);
+  await routeClaudePlugin("list", handlers, ctx, run);
+  await routeClaudePlugin("unknown", handlers, ctx, run);
+  await routeClaudePlugin("unknown", handlers, ctx, run);
+
+  // assert
+  const expectedUsageEntry = {
+    customType: "claude-plugin",
+    payload: {
+      schemaVersion: 1,
+      kind: "usage-error",
+      severity: "error",
+      needsReload: false,
+      message: 'Unknown subcommand: "unknown".',
+      usage: EXPECTED_TOP_LEVEL_USAGE,
+    },
+  };
+  assert.deepStrictEqual(capture.entries, [
+    expectedUsageEntry,
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "cascade",
+        severity: "info",
+        needsReload: false,
+        marketplaces: [],
+      },
+    },
+    expectedUsageEntry,
+    expectedUsageEntry,
+  ]);
+  capture.assertValid();
+  verify(ctx);
+  verify(handlers);
+});
 
 test("appends a complete unknown-command usage error in json", async () => {
   // arrange

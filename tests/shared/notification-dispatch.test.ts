@@ -100,7 +100,7 @@ for (const mode of ["json", "rpc"]) {
   });
 }
 
-test("reads a live mode getter on the same run while retaining its original snapshot", () => {
+test("keeps mixed entries and duplicates ordered while reading live mode on the original run", () => {
   // arrange
   const capture = createJsonCapture();
   let mode = "json";
@@ -129,25 +129,45 @@ test("reads a live mode getter on the same run while retaining its original snap
   };
 
   // act
-  notify(ctx, run, { marketplaces: [] });
+  notifyUsageError(ctx, run, { message: "Invalid input.", usage: "Usage: command" });
   tools = [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }];
   mode = "rpc";
   notify(ctx, run, { marketplaces: [] });
+  mode = "json";
+  notifyUsageError(ctx, run, { message: "Invalid input.", usage: "Usage: command" });
+  mode = "rpc";
+  notifyUsageError(ctx, run, { message: "Invalid input.", usage: "Usage: command" });
 
   // assert
-  const expectedEntry = {
+  const expectedUsageEntry = {
     customType: "claude-plugin",
     payload: {
       schemaVersion: 1,
-      kind: "cascade",
-      severity: "info",
+      kind: "usage-error",
+      severity: "error",
       needsReload: false,
-      marketplaces: [],
+      message: "Invalid input.",
+      usage: "Usage: command",
     },
   };
-  assert.deepStrictEqual(capture.entries, [expectedEntry, expectedEntry]);
-  assert.notStrictEqual(capture.entries[0], capture.entries[1]);
-  assert.deepStrictEqual(reads, ["json", "rpc"]);
+  assert.deepStrictEqual(capture.entries, [
+    expectedUsageEntry,
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "cascade",
+        severity: "info",
+        needsReload: false,
+        marketplaces: [],
+      },
+    },
+    expectedUsageEntry,
+    expectedUsageEntry,
+  ]);
+  assert.notStrictEqual(capture.entries[0], capture.entries[2]);
+  assert.notStrictEqual(capture.entries[2], capture.entries[3]);
+  assert.deepStrictEqual(reads, ["json", "rpc", "json", "rpc"]);
   assert.deepStrictEqual(run.softDeps, {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
