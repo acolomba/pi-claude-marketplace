@@ -13390,6 +13390,7 @@ test("WLIF-01: a re-stage over a kept record displaces the plugin's own envelope
       // act
       const result = await runInstallLedger(kept, locations, {
         ctx,
+        run: runWithNothingLoaded(),
         cwd,
         marketplace: "mp",
         plugin: "hello",
@@ -13460,6 +13461,7 @@ test("WLIF-05: the projection reports the placed names in discovery order, stabl
       // rather than refusing on occupancy.
       const result = await runInstallLedger(kept, locations, {
         ctx,
+        run: runWithNothingLoaded(),
         cwd,
         marketplace: "mp",
         plugin: "hello",
@@ -13522,6 +13524,7 @@ test("WLIF-05: a refused re-stage places nothing and leaves the foreign envelope
       await assert.rejects(
         runInstallLedger(kept, locations, {
           ctx,
+          run: runWithNothingLoaded(),
           cwd,
           marketplace: "mp",
           plugin: "hello",
@@ -13568,6 +13571,7 @@ test("WLIF-01: a statePhase failure takes the envelope and the staging tree back
       await assert.rejects(
         runInstallLedger(state, locations, {
           ctx,
+          run: runWithNothingLoaded(),
           cwd,
           marketplace: "mp",
           plugin: "hello",
@@ -13778,6 +13782,7 @@ test("WLIF-03: an undo that cannot remove a placed envelope raises the typed fai
           locations,
           {
             ctx,
+            run: runWithNothingLoaded(),
             cwd,
             marketplace: "mp",
             plugin: "hello",
@@ -13836,6 +13841,7 @@ test("T-112-01: an envelope this install did not place survives the undo byte-un
       await assert.rejects(
         runInstallLedger(state, locations, {
           ctx,
+          run: runWithNothingLoaded(),
           cwd,
           marketplace: "mp",
           plugin: "hello",
@@ -13903,6 +13909,7 @@ test("WLIF-03: an unremovable envelope does not abort the rest of the removal", 
           locations,
           {
             ctx,
+            run: runWithNothingLoaded(),
             cwd,
             marketplace: "mp",
             plugin: "hello",

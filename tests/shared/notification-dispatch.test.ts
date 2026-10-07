@@ -6238,12 +6238,59 @@ test("notifyPluginPathSkipped emits the skipped scope and reason at warning seve
   );
 });
 
+test("retains a caught invalid device prompt append for final validation", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const ctx = {
+    mode: "rpc",
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = {
+    ...runWithNothingLoaded(),
+    entrySink: {
+      appendEntry(customType: string, payload: unknown) {
+        assert.ok(typeof payload === "object" && payload !== null);
+        capture.entrySink.appendEntry(customType, { ...payload, accessToken: "forbidden-token" });
+      },
+    },
+  };
+
+  // act
+  assert.throws(() => {
+    notifyDeviceFlowPrompt(ctx, run, {
+      verificationUri: "https://github.com/login/device",
+      userCode: "BAD-1234",
+    });
+  }, assert.AssertionError);
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "device-flow-prompt",
+        severity: "info",
+        needsReload: false,
+        verificationUri: "https://github.com/login/device",
+        userCode: "BAD-1234",
+        accessToken: "forbidden-token",
+      },
+    },
+  ]);
+  assert.throws(() => {
+    capture.assertValid();
+  }, assert.AssertionError);
+});
+
 test("notifyDeviceFlowPrompt emits the verification URI and user code at info severity", (t) => {
   // arrange
   const ctx = createContext(t);
 
   // act
-  notifyDeviceFlowPrompt(ctx, {
+  notifyDeviceFlowPrompt(ctx, runWithNothingLoaded(), {
     verificationUri: "https://github.com/login/device",
     userCode: "ABCD-1234",
   });

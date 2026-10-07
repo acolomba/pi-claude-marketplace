@@ -366,6 +366,7 @@ async function materializeEnableRoot(
     locations,
     {
       ctx: opts.ctx,
+      run: opts.run,
       scope,
       cwd: opts.cwd,
       marketplace: opts.marketplace,
@@ -850,6 +851,7 @@ function buildEnableCascadeMemberPhase(
           locations,
           {
             ctx: opts.ctx,
+            run: opts.run,
             scope,
             cwd: opts.cwd,
             marketplace: member.marketplace,

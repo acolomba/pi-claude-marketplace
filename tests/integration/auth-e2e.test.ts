@@ -31,6 +31,7 @@ import {
 import { notifyDeviceFlowPrompt } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type {
   DeviceCodeResponse,
@@ -134,7 +135,7 @@ function makeNotifyCapture(): {
     },
   };
   const onDeviceCode: InitiateDeviceFlowOpts["onDeviceCode"] = (prompt) => {
-    notifyDeviceFlowPrompt(context, prompt);
+    notifyDeviceFlowPrompt(context, runWithNothingLoaded(), prompt);
   };
 
   return { notifyCalls, onDeviceCode };

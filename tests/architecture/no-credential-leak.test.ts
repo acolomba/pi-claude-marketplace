@@ -209,7 +209,7 @@ const ALLOWED_DEVICE_CODE_DECLARATION =
  * callback forwards its argument and nothing else.
  */
 const ALLOWED_PROMPT_BINDING =
-  /onDeviceCode:\s*\(\s*prompt\s*\)\s*=>\s*\{\s*notifyDeviceFlowPrompt\(\s*ctx\s*,\s*prompt\s*\);?\s*\}/g;
+  /onDeviceCode:\s*\(\s*prompt\s*\)\s*=>\s*\{\s*notifyDeviceFlowPrompt\(\s*ctx\s*,\s*run\s*,\s*prompt\s*\);?\s*\}/g;
 
 /** The prompt helper's import under its own name. An `as` rename does not match. */
 const ALLOWED_PROMPT_HELPER_IMPORT =
@@ -217,7 +217,7 @@ const ALLOWED_PROMPT_HELPER_IMPORT =
 
 /** The prompt helper's declaration in the dispatch module. */
 const ALLOWED_PROMPT_HELPER_DECLARATION =
-  /\bexport function notifyDeviceFlowPrompt\(ctx: NotificationContext, prompt: DeviceFlowPrompt\): void \{/g;
+  /\bexport function notifyDeviceFlowPrompt\(\s*ctx: NotificationContext,\s*run: NotificationRun,\s*prompt: DeviceFlowPrompt,?\s*\): void \{/g;
 
 /** Any mention of either identifier, used to discover the files that name one. */
 const DEVICE_PROMPT_REFERENCE = /\b(?:onDeviceCode|notifyDeviceFlowPrompt)\b/;
@@ -329,7 +329,7 @@ async function scanPromptReferences(): Promise<ReadonlyArray<string>> {
   );
   assert.ok(
     bindings > 0,
-    `D-07-03: no onDeviceCode: (prompt) => { notifyDeviceFlowPrompt(ctx, prompt); } binding exists under ${EXTENSION_ROOT_REL}, so the AUTH-09 reference allow-list passes over nothing. Re-aim the gate at the module that now binds the device-code prompt.`,
+    `D-07-03: no onDeviceCode: (prompt) => { notifyDeviceFlowPrompt(ctx, run, prompt); } binding exists under ${EXTENSION_ROOT_REL}, so the AUTH-09 reference allow-list passes over nothing. Re-aim the gate at the module that now binds the device-code prompt.`,
   );
   assert.deepStrictEqual(
     stray,

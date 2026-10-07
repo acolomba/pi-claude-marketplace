@@ -416,6 +416,7 @@ async function runAddInGuard(args: {
     if (source.kind === "github") {
       recordedName = await addGithubInGuard({
         ctx: opts.ctx,
+        run: opts.run,
         state,
         locations,
         source,
@@ -431,6 +432,7 @@ async function runAddInGuard(args: {
       // provider lookup decides its Device Flow half (PROV-03).
       recordedName = await addUrlInGuard({
         ctx: opts.ctx,
+        run: opts.run,
         state,
         locations,
         source,
@@ -926,6 +928,7 @@ async function addGitClonedInGuard(args: {
 
 async function addGithubInGuard(args: {
   ctx: NotificationContext;
+  run: NotificationRun;
   state: ExtensionState;
   locations: ScopedLocations;
   source: GitHubSource;
@@ -953,6 +956,7 @@ async function addGithubInGuard(args: {
     host,
     credentialOps,
     ctx,
+    run: args.run,
     ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
   });
 
@@ -981,6 +985,7 @@ async function addGithubInGuard(args: {
  */
 async function addUrlInGuard(args: {
   ctx: NotificationContext;
+  run: NotificationRun;
   state: ExtensionState;
   locations: ScopedLocations;
   source: UrlSource;
@@ -997,6 +1002,7 @@ async function addUrlInGuard(args: {
     host,
     credentialOps,
     ctx,
+    run: args.run,
     ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
   });
 

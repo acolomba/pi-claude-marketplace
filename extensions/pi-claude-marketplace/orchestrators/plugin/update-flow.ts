@@ -1017,7 +1017,10 @@ export interface PluginUpdateOperations {
  * exactly that gap.
  */
 async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
-  const preflight = await preparePluginUpdate(args);
+  const preflight = await preparePluginUpdate({
+    ...args,
+    ...(!args.cascade && { notification: { ctx: args.ctx, run: args.run } }),
+  });
   if (isUpdatePreflightOutcome(preflight)) {
     return preflight;
   }

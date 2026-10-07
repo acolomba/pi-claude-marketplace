@@ -399,6 +399,7 @@ async function refreshUrlClone(
     host,
     credentialOps,
     ctx,
+    run: args.run,
     ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
   });
 
@@ -456,6 +457,7 @@ async function refreshRecord(
         host,
         credentialOps,
         ctx,
+        run: args.run,
         ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
       });
 
