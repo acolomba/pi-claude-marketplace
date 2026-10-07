@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-10-07T16:19:39.898Z",
+  "phase": "04",
+  "phase_name": "Variable expansion at Claude Code parity",
+  "phase_dir": ".planning/phases/04-variable-expansion-at-claude-code-parity",
+  "plan": 1,
+  "task": 0,
+  "total_tasks": 0,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Merge origin/main (#248, engine 3.14.0) into features/mcp-4", "status": "done", "commit": "710289a0"},
+    {"id": 2, "name": "Phase 4 discuss: 04-CONTEXT.md D-04-01..12", "status": "done", "commit": "9b0539f6"},
+    {"id": 3, "name": "Quick task 261007-9a2: pi-mcp-adapter peer floor >=5.1.0", "status": "done", "commit": "df6a8c39"},
+    {"id": 4, "name": "Phase 4 research (04-RESEARCH.md, 04-EVIDENCE-claude-2.1.291.txt)", "status": "done", "commit": "79a1d7ab"},
+    {"id": 5, "name": "Post-research decisions D-04-13..19 in CONTEXT", "status": "done", "commit": "e855745a"},
+    {"id": 6, "name": "Validation strategy 04-VALIDATION.md", "status": "done", "commit": "f0114255"},
+    {"id": 7, "name": "Phase 4 plans: 9 plans in 7 waves, checker passed (2nd round)", "status": "done", "commit": "993e065a"}
+  ],
+  "remaining_tasks": [
+    {"id": 8, "name": "Execute phase 4 (plans 04-01..04-09, sequential on main checkout)", "status": "not_started"},
+    {"id": 9, "name": "Phase 4 code review, verification, transition", "status": "not_started"},
+    {"id": 10, "name": "Phases 5-7 (discuss -> plan -> execute each)", "status": "not_started"},
+    {"id": 11, "name": "Milestone lifecycle: audit -> complete -> cleanup (needs phases 1-2 re-verified first)", "status": "not_started"}
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Approve the blocking-human package-legitimacy checkpoint in plan 04-08 (pi-mcp-adapter@5.1.0, flagged only as too new)", "context": "Never auto-approved; execution stops there", "blocking": true},
+    {"action": "Decide whether openUi joins the D-02-06 carried-field set", "context": "Adapter 5.1.0 added ServerEntry.openUi; today it is dropped on update/reinstall. Decide before the release that ships phases 2-5", "blocking": false},
+    {"action": "Review closed-catalog wording drafts in plans 04-02, 04-03, 04-07 (variables-missing, credentials-blanked/'withheld', info suffix)", "context": "Planner drafts for operator review", "blocking": false},
+    {"action": "Re-verify phases 1 and 2 (verification stale): /gsd-execute-phase 1 and /gsd-execute-phase 2", "context": "Required before milestone audit; excluded from this run by --from 4", "blocking": false},
+    {"action": "Add D-04-10 (migration reports both variable notices) to Phase 5 ROADMAP criteria", "context": "Planner suggestion; Phase 5 not edited", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Adapter-only syntax $env:/{env:} written as split-token literals with reserved empty var PI_CLAUDE_MARKETPLACE_EMPTY; leading ~ (and ${VAR:-~...}) in command/args -> {unsupported mcp} partial install", "rationale": "Claude passes them literally; adapter expands; no escape exists (verified against real adapter functions)", "phase": "04"},
+    {"decision": "Mirror Claude 2.1.291 deny-lists (plain everywhere, remote-sink in url/headers), port JA verbatim, omit mode-gated sets Gqe/Voo/Gur/tRe", "rationale": "Parity; research corrected CONTEXT facts", "phase": "04"},
+    {"decision": "Export CLAUDE_PROJECT_DIR=session cwd at factory and session_start; skip when cwd contains $env:/{env:}", "rationale": "Claude resolves it in every scope", "phase": "04"},
+    {"decision": "pi-mcp-adapter peer range >=5.1.0 <6; conformance test runs in CI via PI_MCP_ADAPTER_ROOT", "rationale": "Operator: stay on 5.x; security control must run in CI", "phase": "04"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "/clear, then /gsd-autonomous --from 4 --interactive (phase 4 has CONTEXT + 9 plans, so it goes straight to execute-phase 4)",
+  "context_notes": "Paused at the start of execute-phase 4 because orchestrator context reached 66%. init.manager misreports phases 4-7 as executed (archived 04-07 dirs); trust init.phase-op. Execution must run sequentially on the main checkout (agent worktrees lack node_modules): force the dispatch-isolation sentinel to none per plan before each executor dispatch."
+}
