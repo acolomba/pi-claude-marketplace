@@ -1,26 +1,23 @@
 ---
-status: testing
+status: complete
 phase: 05-mode-selected-json-sink
 source: [05-VERIFICATION.md]
 started: "2026-10-07T16:10:33.809271Z"
-updated: "2026-10-07T16:10:33.809271Z"
+updated: 2026-10-07T16:38:06.808Z
 ---
 
 ## Current Test
 
-number: 1
-name: P-05-01 — Reports remain session data
-expected: |
-  A claude-plugin report entry appends session data. It does not itself add a
-  model instruction or start a model turn. Existing hook completion injection
-  keeps its separate contract.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
 ### 1. P-05-01 — Reports remain session data
 expected: Report delivery only appends session data; separate hook completion behavior stays unchanged. The report itself adds no model instruction or new turn.
-result: [pending]
+result: pass
+source: human intent review
+reported: "approve"
+resolution: User approved both presented intent checks after the assistant explicitly asked for their approval.
 
 Review evidence: the sole report sink is the live mode switch in
 `extensions/pi-claude-marketplace/shared/notification-dispatch.ts`.
@@ -31,7 +28,10 @@ product boundary.
 
 ### 2. P-05-02 — Stop-cap warning remains clear
 expected: The text and JSON identify the plugin, the eight-block cap, the ended turn despite the active block, and warning severity. The user can understand that the plugin's Stop block was overridden.
-result: [pending]
+result: pass
+source: human intent review
+reported: "approve"
+resolution: User approved both presented intent checks after the assistant explicitly asked for their approval.
 
 Review evidence: the existing text states “Stop hook override cap reached”
 and that the plugin's Stop hook blocked eight times in a row and the turn ended
@@ -43,9 +43,9 @@ override clearly enough.
 ## Summary
 
 total: 2
-passed: 0
+passed: 2
 issues: 0
-pending: 2
+pending: 0
 skipped: 0
 blocked: 0
 
