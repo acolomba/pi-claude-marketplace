@@ -1070,9 +1070,10 @@ test("AFILE-06: the vendored ServerEntry keys match the pi-mcp-adapter floor", a
   // assert
   assert.strictEqual(
     packageJson.peerDependencies["pi-mcp-adapter"],
-    ">=5.1.0",
-    "the pi-mcp-adapter floor moved: refresh SERVER_ENTRY_KEYS and OAUTH_CONFIG_KEYS from the " +
+    ">=5.1.0 <6",
+    "the pi-mcp-adapter range moved: refresh SERVER_ENTRY_KEYS and OAUTH_CONFIG_KEYS from the " +
       "new floor's types.ts (ServerEntry, OAuthConfig), revisit the carried set in adapter-entry.ts, " +
-      "and re-prove that the adapter applies nothing under _piClaudeMarketplace (keptOverride)",
+      "re-prove that the adapter applies nothing under _piClaudeMarketplace (keptOverride), " +
+      "and re-prove the variable escape against the new range's interpolation passes",
   );
 });
