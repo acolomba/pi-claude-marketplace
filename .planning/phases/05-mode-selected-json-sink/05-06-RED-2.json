@@ -1,0 +1,10 @@
+{
+  "command": "node --test --test-reporter=tap --test-name-pattern=\"suppresses fresh Stop work for unsupported initial mode\" tests/bridges/hooks/settle.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: suppresses fresh Stop work for unsupported initial mode\nnot ok 1 - suppresses fresh Stop work for unsupported initial mode\n  ---\n  duration_ms: 7.182531\n  type: 'test'\n  location: '/home/acolomba/src/pi-claude-marketplace-json/.claude/worktrees/agent-p05-06-1791379262/tests/bridges/hooks/settle.test.ts:225:3'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    true !== false\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: false\n  actual: true\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///home/acolomba/src/pi-claude-marketplace-json/.claude/worktrees/agent-p05-06-1791379262/tests/bridges/hooks/settle.test.ts:249:12)\n    async Test.run (node:internal/test_runner/test:1409:7)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2319.259919\n",
+  "targetTest": "suppresses fresh Stop work for unsupported initial mode",
+  "targetFile": "tests/bridges/hooks/settle.test.ts",
+  "expected": "Unsupported initial mode leaves Stop inactive and invokes no hook",
+  "actual": "Stop becomes active after hook execution",
+  "semanticAssessment": "Target executed and failed the Stop-active-state assertion after unsupported mode allowed a new continuation; no fixture or import failure."
+}
