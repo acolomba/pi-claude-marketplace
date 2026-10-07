@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -8,12 +8,17 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
-import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import {
+  createEnableOperation,
+  createInstallOperation,
+  createReinstallOperation,
+} from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
-import { makeCtx, seedMcpPlugin } from "./mcp-plugin-seed.ts";
+import { makeCtx, seedMcpPlugin, type NotifyRecord } from "./mcp-plugin-seed.ts";
 
 // A real install writes Claude Code's variable rule into the plugin's
 // pi-mcp-adapter entry (AVAR-01..03) and warns about the variables the server
@@ -154,5 +159,187 @@ test("AVAR-05: a remote server's header never receives a set deny-listed credent
     } finally {
       restoreVariables(saved);
     }
+  });
+});
+
+// Every verb that stages a plugin's entries reports the unset variable and the
+// withheld credential after its own rows (AVAR-04). Plugin `hello` declares a
+// stdio server `local` that reads `PI_CM_AVAR_SITE`, which the case leaves
+// unset, and a remote server `api` that sends `ANTHROPIC_API_KEY`, which the
+// case sets and Claude Code never sends to a remote server.
+
+const CREDENTIAL_SENTINEL = "avar-sentinel-04-09";
+
+async function seedVariablePlugin(cwd: string): Promise<string> {
+  const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
+  await writeFile(
+    path.join(pluginRoot, ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        local: { command: "node", args: ["--site", "${PI_CM_AVAR_SITE}"] },
+        api: {
+          type: "http",
+          url: "https://mcp.example.test/mcp",
+          headers: { Authorization: "Bearer ${ANTHROPIC_API_KEY}" },
+        },
+      },
+    }),
+  );
+  return pluginRoot;
+}
+
+async function withUnsetSiteAndSetCredential(body: () => Promise<void>): Promise<void> {
+  const saved = new Map([
+    ["PI_CM_AVAR_SITE", process.env.PI_CM_AVAR_SITE],
+    ["ANTHROPIC_API_KEY", process.env.ANTHROPIC_API_KEY],
+  ]);
+  try {
+    delete process.env.PI_CM_AVAR_SITE;
+    process.env.ANTHROPIC_API_KEY = CREDENTIAL_SENTINEL;
+    await body();
+  } finally {
+    restoreVariables(saved);
+  }
+}
+
+function assertVariableWarningsAfter(
+  notifications: readonly NotifyRecord[],
+  rows: readonly NotifyRecord[],
+): void {
+  assert.deepStrictEqual(notifications, [
+    ...rows,
+    {
+      message:
+        'MCP server variables not set.\n\nServer "plugin_hello_local_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: PI_CM_AVAR_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+      severity: "warning",
+    },
+    {
+      message:
+        'MCP server credentials withheld.\n\nServer "plugin_hello_api_" from hello in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+      severity: "warning",
+    },
+  ]);
+  assert.deepStrictEqual(
+    notifications.filter(({ message }) => message.includes(CREDENTIAL_SENTINEL)),
+    [],
+  );
+}
+
+test("AVAR-04: an update reports the unset variable and the withheld credential after its rows", async () => {
+  await withHermeticEnvironment("mcp-variable-update-", async ({ cwd }) => {
+    await withUnsetSiteAndSetCredential(async () => {
+      // arrange
+      const pluginRoot = await seedVariablePlugin(cwd);
+      const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+      const completionCache = createCompletionCache();
+      const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+      await createInstallOperation(
+        hooksRouting,
+        completionCache,
+      )({
+        ...makeCtx().session,
+        ...request,
+      });
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "1.1.0" }),
+      );
+      await writeFile(
+        path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"),
+        JSON.stringify({
+          name: "mp",
+          plugins: [{ name: "hello", source: "./plugins/hello", version: "1.1.0" }],
+        }),
+      );
+      const updated = makeCtx();
+
+      // act
+      await createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins({
+        ...updated.session,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assertVariableWarningsAfter(updated.notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 → v1.1.0 (updated) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+    });
+  });
+});
+
+test("AVAR-04: a reinstall reports the unset variable and the withheld credential after its rows", async () => {
+  await withHermeticEnvironment("mcp-variable-reinstall-", async ({ cwd }) => {
+    await withUnsetSiteAndSetCredential(async () => {
+      // arrange
+      await seedVariablePlugin(cwd);
+      const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+      const completionCache = createCompletionCache();
+      const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+      await createInstallOperation(
+        hooksRouting,
+        completionCache,
+      )({
+        ...makeCtx().session,
+        ...request,
+      });
+      const reinstalled = makeCtx();
+
+      // act
+      await createReinstallOperation(
+        hooksRouting,
+        completionCache,
+      )({
+        ...reinstalled.session,
+        ...request,
+      });
+
+      // assert
+      assertVariableWarningsAfter(reinstalled.notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+          severity: undefined,
+        },
+      ]);
+    });
+  });
+});
+
+test("AVAR-04: enabling a disabled plugin reports the unset variable and the withheld credential after its rows", async () => {
+  await withHermeticEnvironment("mcp-variable-enable-", async ({ cwd }) => {
+    await withUnsetSiteAndSetCredential(async () => {
+      // arrange
+      await seedVariablePlugin(cwd);
+      const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+      const setPluginEnabled = createEnableOperation(hooksRouting);
+      const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+      await createInstallOperation(
+        hooksRouting,
+        createCompletionCache(),
+      )({
+        ...makeCtx().session,
+        ...request,
+      });
+      await setPluginEnabled({ ...makeCtx().session, ...request, enable: false });
+      const enabled = makeCtx();
+
+      // act
+      await setPluginEnabled({ ...enabled.session, ...request, enable: true });
+
+      // assert
+      assertVariableWarningsAfter(enabled.notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+    });
   });
 });

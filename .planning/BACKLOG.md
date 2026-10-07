@@ -1700,7 +1700,21 @@ footnote list at 33-35; per-surface tables; the "MCP runtime env
 inheritance" subsection at 151). Documentation only -- no extension source
 changes, since we neither set nor consume `AI_AGENT`.
 
-## ENVLIT-01: `literalEnv` opt-out is unevaluated for MCP env fidelity
+Source for the rewrite (2026-10-07): the "Variables" section of
+`docs/mcp-compatibility.md` states the current MCP variable rules.
+
+## ~~ENVLIT-01: `literalEnv` opt-out is unevaluated for MCP env fidelity~~ -- CLOSED
+
+Closed 2026-10-07 by AVAR-03 in the `mcp-4` milestone. The missing fact is now
+known: Claude Code 2.1.291 expands `${VAR}` and `${VAR:-default}` in stdio
+`env` values (all keys except `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA`).
+Verdict: `literalEnv` is not used. `literalEnv: true` turns off the adapter's
+runtime `${VAR}` expansion of `env`, and Claude's rule needs that expansion,
+because this extension never writes a resolved environment value. The
+install-time rewrite keeps `${VAR}` for the adapter and escapes the
+adapter-only syntax instead. `docs/mcp-compatibility.md` section "Variables"
+records the verdict.
+
 
 Surfaced 2026-08-13 from the upstream release review. The doc-accuracy
 half of this is [ENVDOC-01]; this item is the behavioral question, which
@@ -2478,7 +2492,17 @@ Code seams: `bridges/agents/frontmatter.ts` (`parseFrontmatter`),
 `bridges/skills/stage.ts` (the gate-1 parse call), `platform/pi-api.ts:38`
 (the re-exported parser).
 
-## MENVX-01: a staged MCP `env` value beginning with `!` executes as a shell command
+## ~~MENVX-01: a staged MCP `env` value beginning with `!` executes as a shell command~~ -- CLOSED
+
+Closed 2026-10-07 by AVAR-03 in the `mcp-4` milestone. Disposition: escape.
+A written `env` or `headers` value that starts with `!` is written with one
+more `!`, so `!x` becomes `!!x`. pi-mcp-adapter drops one `!` from a `!!`
+value and interpolates the rest, so it outputs the literal value that Claude
+Code passes and runs no shell command. The adapter conformance test
+(`tests/integration/adapter-expansion-conformance.test.ts`) proves this
+against pi-mcp-adapter 5.1.0 in CI. `docs/mcp-compatibility.md` section
+"Variables" records the rule.
+
 
 Surfaced by the upstream release review covering 2026-08-24..2026-08-31,
 verified first-hand against the published `pi-mcp-adapter@2.31.0` tarball on

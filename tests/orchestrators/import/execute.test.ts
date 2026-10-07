@@ -1920,6 +1920,98 @@ test("AFILE-04: import over a commented mcp-adapter.json shows the comments-remo
   verifyBoundary();
 });
 
+test("AVAR-04: an import reports the unset variable and the withheld credential after its cascade", async (t) => {
+  // arrange
+  // Plugin `hello` declares a stdio server that reads the unset
+  // `PI_CM_AVAR_SITE` and a remote server that sends the set
+  // `ANTHROPIC_API_KEY`, which Claude Code never sends to a remote server.
+  const savedSite = process.env.PI_CM_AVAR_SITE;
+  const savedCredential = process.env.ANTHROPIC_API_KEY;
+  t.after(() => {
+    for (const [name, saved] of [
+      ["PI_CM_AVAR_SITE", savedSite],
+      ["ANTHROPIC_API_KEY", savedCredential],
+    ] as const) {
+      if (saved === undefined) {
+        Reflect.deleteProperty(process.env, name);
+      } else {
+        process.env[name] = saved;
+      }
+    }
+  });
+  delete process.env.PI_CM_AVAR_SITE;
+  process.env.ANTHROPIC_API_KEY = "avar-sentinel-04-09";
+  const { cwd } = await createHermeticScopes(t, "mcp-variable-notices");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 1);
+  const marketplaceRoot = path.join(cwd, "fixture-mp");
+  await writeUnder(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "fixture-mp",
+      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
+    }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "hello", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "1.0.0" }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "hello", ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        local: { command: "node", args: ["--site", "${PI_CM_AVAR_SITE}"] },
+        api: {
+          type: "http",
+          url: "https://mcp.example.test/mcp",
+          headers: { Authorization: "Bearer ${ANTHROPIC_API_KEY}" },
+        },
+      },
+    }),
+  );
+  await writeUnder(
+    path.join(cwd, ".claude", "settings.json"),
+    settingsNaming(marketplaceRoot, { "hello@fixture-mp": true }),
+  );
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● fixture-mp [project] (added)\n" +
+        "  ● hello (installed) {requires pi-mcp-adapter}\n\n" +
+        "Import: 2 successes\n\n" +
+        "/reload to pick up changes",
+    },
+    {
+      message:
+        "MCP server variables not set.\n\n" +
+        'Server "plugin_hello_local_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: PI_CM_AVAR_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+      severity: "warning",
+    },
+    {
+      message:
+        "MCP server credentials withheld.\n\n" +
+        'Server "plugin_hello_api_" from hello in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+      severity: "warning",
+    },
+  ]);
+  assert.deepStrictEqual(
+    notifications.filter(({ message }) => message.includes("avar-sentinel-04-09")),
+    [],
+  );
+  verifyBoundary();
+});
+
 test("reports no changed resources when every install left the Pi resource set alone", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "no-resource-change");

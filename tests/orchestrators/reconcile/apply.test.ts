@@ -6145,6 +6145,82 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  test("AVAR-04: the reconcile cascade reports the unset variable and the withheld credential", async (t) => {
+    // arrange
+    // Plugin `hello` declares a stdio server that reads the unset
+    // `PI_CM_AVAR_SITE` and a remote server that sends the set
+    // `ANTHROPIC_API_KEY`, which Claude Code never sends to a remote server.
+    const savedSite = process.env.PI_CM_AVAR_SITE;
+    const savedCredential = process.env.ANTHROPIC_API_KEY;
+    t.after(() => {
+      for (const [name, saved] of [
+        ["PI_CM_AVAR_SITE", savedSite],
+        ["ANTHROPIC_API_KEY", savedCredential],
+      ] as const) {
+        if (saved === undefined) {
+          Reflect.deleteProperty(process.env, name);
+        } else {
+          process.env[name] = saved;
+        }
+      }
+    });
+    delete process.env.PI_CM_AVAR_SITE;
+    process.env.ANTHROPIC_API_KEY = "avar-sentinel-04-09";
+    const { cwd } = await seedCommentedAdapterScope(t, "avar-install", {
+      trees: { hello: {} },
+      declared: { "hello@mp": {} },
+      recorded: {},
+      owners: [],
+    });
+    await writeUnder(
+      path.join(cwd, "mp-src", "plugins", "hello", ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          local: { command: "node", args: ["--site", "${PI_CM_AVAR_SITE}"] },
+          api: {
+            type: "http",
+            url: "https://mcp.example.test/mcp",
+            headers: { Authorization: "Bearer ${ANTHROPIC_API_KEY}" },
+          },
+        },
+      }),
+    );
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(4, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● hello (installed) {requires pi-mcp-adapter}\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+      COMMENTS_REMOVED_NOTICE,
+      {
+        message:
+          "MCP server variables not set.\n\n" +
+          'Server "plugin_hello_local_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: PI_CM_AVAR_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+        severity: "warning",
+      },
+      {
+        message:
+          "MCP server credentials withheld.\n\n" +
+          'Server "plugin_hello_api_" from hello in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+        severity: "warning",
+      },
+    ]);
+    assert.deepStrictEqual(
+      notifications.filter(({ message }) => message.includes("avar-sentinel-04-09")),
+      [],
+    );
+    verifyBoundary();
+  });
+
   test("AFILE-04: a reload with nothing to apply stays silent and leaves the commented mcp-adapter.json unchanged", async (t) => {
     // arrange
     const { cwd, project, adapter } = await seedCommentedAdapterScope(t, "afile-silent", {
