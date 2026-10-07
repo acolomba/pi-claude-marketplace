@@ -180,7 +180,7 @@ async function assertSinkPlacement(): Promise<void> {
   );
   assert.match(
     stripped,
-    /function emitRawSurface\([^}]+const args = formatRawSurface\(resolveRawSurface\(surface\)\);\s+if \(args === undefined\) \{\s+return;\s+\}\s+requireNotificationMode\(ctx.mode\);\s+deliver\(ctx, args\);\s+\}/,
+    /function emitRawSurface\([^}]+const args = formatRawSurface\(resolveRawSurface\(surface\)\)!;\s+requireNotificationMode\(ctx.mode\);\s+deliver\(ctx, args\);\s+\}/,
     `D-16: no deliver call in ${SINK_FILE} passes formatRawSurface output, so the raw-surface path never reaches the sink.`,
   );
   assert.match(stripped, /const args = formatRawSurface\(presentation\)!;\s+deliver\(ctx, args\);/);

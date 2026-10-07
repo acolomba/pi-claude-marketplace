@@ -6163,9 +6163,9 @@ test("async rewake dispatch preserves empty and repeated input behavior", (t) =>
   const ctx = createContext(t);
 
   // act
-  notifyAsyncRewakeSummary(ctx, "");
-  notifyAsyncRewakeSummary(ctx, "ready");
-  notifyAsyncRewakeSummary(ctx, "ready");
+  notifyAsyncRewakeSummary(ctx, runWithNothingLoaded(), "");
+  notifyAsyncRewakeSummary(ctx, runWithNothingLoaded(), "ready");
+  notifyAsyncRewakeSummary(ctx, runWithNothingLoaded(), "ready");
 
   // assert
   assert.deepStrictEqual(
@@ -6175,6 +6175,60 @@ test("async rewake dispatch preserves empty and repeated input behavior", (t) =>
       ["ready", "info"],
     ],
   );
+});
+
+for (const mode of ["json", "rpc"]) {
+  test(`rewake dispatch preserves whitespace and duplicates in ${mode}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    notifyAsyncRewakeSummary(ctx, run, "");
+    notifyAsyncRewakeSummary(ctx, run, " \n");
+    notifyAsyncRewakeSummary(ctx, run, " \n");
+
+    // assert
+    const expectedEntry = {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "async-rewake-summary",
+        severity: "info",
+        needsReload: false,
+        text: " \n",
+      },
+    };
+    assert.deepStrictEqual(capture.entries, [expectedEntry, expectedEntry]);
+    capture.assertValid();
+  });
+}
+
+test("empty rewake does not read mode or sink", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const ctx = {
+    get mode(): string {
+      throw new Error("stale mode");
+    },
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+  // act
+  notifyAsyncRewakeSummary(ctx, run, "");
+
+  // assert
+  assert.deepStrictEqual(capture.entries, []);
+  capture.assertValid();
 });
 
 test("stop override dispatch preserves exact warning bytes", (t) => {
