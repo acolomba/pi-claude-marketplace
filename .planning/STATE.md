@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 05
 current_phase_name: Mode-Selected JSON Sink
 status: executing
-stopped_at: Phase 5 ready for isolated executor dispatch
-last_updated: "2026-10-06T18:23:25.953Z"
-last_activity: 2026-10-06
-last_activity_desc: Phase 05 execution started
-state_head: 259497f56606d6efe212176210b94afb611f6cb8
+stopped_at: Plan 05-01 merged and full combined-tree gate passed; ready for 05-02
+last_updated: "2026-10-07T10:25:36.617Z"
+last_activity: 2026-10-07
+last_activity_desc: Plan 05-01 merged and combined-tree check passed
+state_head: e36a71cf16ed0c1b5845c25a01ee2bc92c9549e5
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 35
-  completed_plans: 28
+  completed_plans: 29
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Mode-Selected JSON Sink) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 05
-Last activity: 2026-10-06 — Phase 05 execution started
+Plan: 2 of 7
+Status: Ready to execute
+Last activity: 2026-10-07 — Plan 05-01 merged and combined-tree check passed
 
-Progress: [██████░░░░] 57% (4 of 7 phases fully verified; 28 of 35 plans complete)
+Progress: [██████░░░░] 57% (4 of 7 phases fully verified; 29 of 35 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,8 +169,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-06T15:09:52+00:00
-**Stopped at:** Phase 5 plans verified; branch-policy conflict resolved
+**Last session:** 2026-10-07T10:25:36.108Z
+**Stopped at:** Plan 05-01 merged and full combined-tree gate passed; ready for 05-02
 **Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -227,12 +227,14 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Execute the seven verified Phase 5 plans starting with 05-01 in isolated
-  worktrees. On 2026-10-06 the user selected option 1 and authorized a permanent
-  AGENTS.md exception for temporary `agent-*` branches. GSD's existing validator
-  accepts that namespace; project scripts and hooks add no conflicting check.
-  The feature branch remains `features/json`. No implementation worker has
-  started yet.
+- Continue Phase 5 with 05-02 in an isolated `agent-*` worktree. The user
+  authorized that namespace on 2026-10-06; AGENTS.md records the policy.
+- Plan 05-01's two task commits and summary were reconciled and merged into
+  `features/json` at `e36a71cf`. Its worker is complete and worktree removed.
+  On 2026-10-07, `npm run check` exited 0 on that merged tree with Node
+  v26.10.0 and all 264 direct-coverage pairs. The corpus check also exited 0:
+  3149 entries present, zero extras. The catalog matches `26cb0056`.
+  Schema drift passed; codebase-map drift is advisory (warn, no remap request).
 
 ## Performance Metrics
 
@@ -264,6 +266,7 @@ archived milestone artifacts.
 | Phase 04 P04 | 84min | 2 tasks | 9 files |
 | Phase 04 P05 | 67 min | 2 tasks | 6 files |
 | Phase 04 P06 | 83 min | 2 tasks | 6 files |
+| Phase 05 P01 | 35 min | 2 tasks | 69 files |
 
 ## Decisions
 
