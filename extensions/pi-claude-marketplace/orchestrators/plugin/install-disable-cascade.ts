@@ -32,19 +32,23 @@ export interface FreshInstallDisableOptions {
 /**
  * Result of the materialize-then-disable cascade. AFILE-04: both arms carry
  * the unstage's MCP config notices, because a later cascade slot can fail
- * after the MCP slot rewrote a commented file.
+ * after the MCP slot rewrote a commented file. AVAR-04: both arms also carry
+ * the declared names of the MCP servers the unstage removed, so the caller can
+ * drop the install's variable notices for them.
  */
 export type FreshInstallDisableResult =
   | {
       readonly ok: true;
       readonly removeRoutes: true;
       readonly mcpConfigNotices: readonly McpConfigNotice[];
+      readonly droppedMcpServers: readonly string[];
     }
   | {
       readonly ok: false;
       readonly cause: Error;
       readonly removeRoutes: boolean;
       readonly mcpConfigNotices: readonly McpConfigNotice[];
+      readonly droppedMcpServers: readonly string[];
     };
 
 /** Facts used to compose the exact install-disabled notification row. */
@@ -109,6 +113,7 @@ function foldFailedDisableCascade(
     cause: cascade.cause,
     removeRoutes: cascade.dropped.hooks.length > 0,
     mcpConfigNotices: cascade.mcpConfigNotices ?? [],
+    droppedMcpServers: cascade.dropped.mcpServers,
   };
 }
 
@@ -163,6 +168,7 @@ export function composeInstallDisableCascade(dependencies: {
           ),
           removeRoutes: false,
           mcpConfigNotices: [],
+          droppedMcpServers: [],
         };
       }
 
@@ -184,6 +190,7 @@ export function composeInstallDisableCascade(dependencies: {
         ok: true,
         removeRoutes: true,
         mcpConfigNotices: cascade.mcpConfigNotices ?? [],
+        droppedMcpServers: cascade.dropped.mcpServers,
       };
     },
 

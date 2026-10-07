@@ -677,6 +677,38 @@ test("AFILE-04 a later member's failure still reports the comments an earlier me
   ]);
 });
 
+test("AVAR-04 a later member's failure drops the variable notice of the server an earlier member's undo removed", async (t) => {
+  // arrange: bar's server references a variable no environment sets, and the
+  // requesting plugin is ALREADY recorded, so its own ledger throws after bar
+  // staged and bar's undo then removes the server.
+  const environment = await createHermeticEnvironment(t, "install-cascade-variable-notice-undo-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { preinstalled: ["foo"] });
+  const locations = locationsFor("project", environment.cwd);
+  await writeFile(
+    path.join(environment.cwd, MARKETPLACE, "plugins", "bar", ".mcp.json"),
+    JSON.stringify({
+      mcpServers: { "bar-server": { command: "node", args: ["${PI_CM_UNSET_IN_EVERY_ENV}"] } },
+    }),
+  );
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "member-failed");
+  assert.strictEqual(cascade.key, `foo@${MARKETPLACE}`);
+  assert.deepStrictEqual(cascade.mcpConfigNotices, []);
+});
+
 test("AFILE-04 a member undo that unstages from a commented mcp-adapter.json reports the notice on member-failed", async (t) => {
   // arrange: bar stages over a comment-free file, then the user's comment
   // lands before the requesting plugin's ledger throws, so only bar's undo

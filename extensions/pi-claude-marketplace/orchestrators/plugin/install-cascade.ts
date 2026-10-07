@@ -102,7 +102,7 @@ import { parsePluginSource } from "../../domain/source.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
-import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
+import { cascadeUnstagePlugin, foldUnstageNotices } from "../marketplace/shared.ts";
 
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
 import { runInstallLedger } from "./install-outcome.ts";
@@ -1023,7 +1023,8 @@ function buildMemberPhase(
  * did not materialize the member or the snapshot no longer records it.
  *
  * AFILE-04: the unstage rewrites the MCP config files again, and its notices
- * join the run's even when a later slot then fails.
+ * join the run's even when a later slot then fails. AVAR-04: the variable
+ * notices of the servers it removed leave the run's list.
  *
  * The primitive REPORTS rather than throws -- its whole body is a try/catch
  * returning `{ok: false, dropped, cause}` -- and the ledger's only
@@ -1061,7 +1062,12 @@ async function unstageMaterializedMember(
     options.locations,
     installed,
   );
-  run.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
+  foldUnstageNotices(run.mcpConfigNotices, {
+    scope: options.locations.scope,
+    plugin: member.name,
+    droppedServers: outcome.dropped.mcpServers,
+    notices: outcome.mcpConfigNotices ?? [],
+  });
   if (!outcome.ok) {
     applyPartialCascadeFold(installed, outcome.dropped);
     throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);

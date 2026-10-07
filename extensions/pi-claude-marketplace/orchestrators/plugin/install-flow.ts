@@ -22,7 +22,7 @@ import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispat
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
-import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
+import { cascadeUnstagePlugin, crossScopeFlag, foldUnstageNotices } from "../marketplace/shared.ts";
 
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
 import {
@@ -1748,6 +1748,8 @@ async function installPluginWithTransaction(
         let removeDisabledRoutesAfterSave = false;
         // AFILE-04: the stage's notices, then the disable cascade's, which
         // rewrites the MCP config files again when the install lands disabled.
+        // AVAR-04: the disable drops the variable notices of the servers it
+        // removed.
         let mcpConfigNotices = installed.mcpConfigNotices;
         if (landedDisabled) {
           // D-102-01: the six-phase ledger already ran and the state phase wrote
@@ -1761,7 +1763,14 @@ async function installPluginWithTransaction(
             plugin,
           });
           removeDisabledRoutesAfterSave = disableResult.removeRoutes;
-          mcpConfigNotices = [...mcpConfigNotices, ...disableResult.mcpConfigNotices];
+          const folded = [...mcpConfigNotices];
+          foldUnstageNotices(folded, {
+            scope: locations.scope,
+            plugin,
+            droppedServers: disableResult.droppedMcpServers,
+            notices: disableResult.mcpConfigNotices,
+          });
+          mcpConfigNotices = folded;
           cascadeFailure.mcpConfigNotices = mcpConfigNotices;
           if (!disableResult.ok) {
             // D-102-02: record the cause and fall through. The fold already

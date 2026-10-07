@@ -13,6 +13,7 @@ import {
   classifyAutoupdateFlip,
   loadVisibleMarketplaces,
   crossScopeFlag,
+  foldUnstageNotices,
   marketplaceInOtherScope,
   narrowCascadeFailure,
   refreshGitHubClone,
@@ -47,6 +48,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { McpConfigNotice } from "../../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -838,6 +840,103 @@ test("cascadeUnstagePlugin raises a typed workflows failure naming every unremov
   assert.deepStrictEqual(outcome.dropped.hooks, ["sample"]);
   assert.deepStrictEqual(outcome.dropped.workflows, ["sample:greet"]);
   await assert.rejects(() => stat(removablePath), { code: "ENOENT" });
+});
+
+test("AVAR-04: foldUnstageNotices drops the variable notices of the removed servers and appends the unstage's notices", () => {
+  // arrange
+  const notices: McpConfigNotice[] = [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      names: ["API_SITE"],
+    },
+    {
+      kind: "credentials-blanked",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      names: ["ANTHROPIC_API_KEY"],
+    },
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      fields: ["env"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      names: ["API_SITE"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
+      names: ["DOCS_SITE"],
+    },
+  ];
+
+  // act
+  foldUnstageNotices(notices, {
+    scope: "project",
+    plugin: "hello",
+    droppedServers: ["api"],
+    notices: [
+      {
+        kind: "override-restored",
+        scope: "project",
+        file: "mcp-adapter.json",
+        server: "plugin_hello_api_",
+      },
+    ],
+  });
+
+  // assert
+  assert.deepStrictEqual(notices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      fields: ["env"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      names: ["API_SITE"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
+      names: ["DOCS_SITE"],
+    },
+    {
+      kind: "override-restored",
+      scope: "project",
+      file: "mcp-adapter.json",
+      server: "plugin_hello_api_",
+    },
+  ]);
 });
 
 test("AFILE-04: cascadeUnstagePlugin carries the notice for a commented mcp-adapter.json", async (t) => {

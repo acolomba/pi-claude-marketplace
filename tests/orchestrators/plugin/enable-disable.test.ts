@@ -7197,6 +7197,52 @@ test("AFILE-04: an enable cascade undo that unstages from a commented mcp-adapte
   });
 });
 
+test("AVAR-04: an enable cascade undo shows no variable notice for the member server it removed", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the member's server references a variable no environment
+    // sets, and the root's ledger throws after the member staged it.
+    const { mpRoot } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    await writeFile(
+      path.join(mpRoot, "plugins", "b", ".mcp.json"),
+      JSON.stringify({
+        mcpServers: { "b-server": { command: "node", args: ["${PI_CM_UNSET_IN_EVERY_ENV}"] } },
+      }),
+    );
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        if (options.plugin === "a") {
+          return rejectUnknown(new Error("a's own ledger failed"));
+        }
+
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [ROOT_LEDGER_FAILED_ROW]);
+  });
+});
+
 test("AFILE-02: enabling a plugin with no MCP servers over an unparseable mcp-adapter.json leaves it unchanged and says so", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange

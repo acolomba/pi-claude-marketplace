@@ -120,6 +120,7 @@ test("disables a freshly installed record after a clean five-kind cascade", asyn
     ok: true,
     removeRoutes: true,
     mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    droppedMcpServers: ["server-a", "server-b"],
   });
   assert.deepStrictEqual(state.marketplaces.marketplace?.plugins.plugin, {
     version: "1.2.3",
@@ -164,6 +165,7 @@ test("returns the internal failure without running an unstage when the record is
   assert.equal(disableOutcome.ok, false);
   assert.equal(disableOutcome.removeRoutes, false);
   assert.deepStrictEqual(disableOutcome.mcpConfigNotices, []);
+  assert.deepStrictEqual(disableOutcome.droppedMcpServers, []);
   assert.equal(
     disableOutcome.ok ? undefined : disableOutcome.cause.message,
     'installPlugin: internal error -- the state phase left no record for plugin "plugin" to disable.',
@@ -210,6 +212,7 @@ for (const row of [
       cause,
       removeRoutes: row.expectedRemoveRoutes,
       mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+      droppedMcpServers: ["server-a"],
     });
     assert.deepStrictEqual(state.marketplaces.marketplace?.plugins.plugin?.resources, {
       skills: ["skill-b"],
@@ -243,7 +246,12 @@ test("AFILE-04: a clean cascade that rewrote no commented file carries no notice
   });
 
   // assert
-  assert.deepStrictEqual(disableOutcome, { ok: true, removeRoutes: true, mcpConfigNotices: [] });
+  assert.deepStrictEqual(disableOutcome, {
+    ok: true,
+    removeRoutes: true,
+    mcpConfigNotices: [],
+    droppedMcpServers: [],
+  });
 });
 
 test("AFILE-04: a partial cascade that rewrote no commented file carries no notices", async () => {
@@ -273,6 +281,7 @@ test("AFILE-04: a partial cascade that rewrote no commented file carries no noti
     cause,
     removeRoutes: false,
     mcpConfigNotices: [],
+    droppedMcpServers: [],
   });
 });
 

@@ -3706,6 +3706,94 @@ test("AFILE-04: a failed dependency cascade still reports the removed comments a
   });
 });
 
+// AVAR-04: a variable name that no environment sets, so every stage of a
+// server that references it reports the variable as missing.
+const UNSET_VARIABLE_ARGS = ["${PI_CM_UNSET_IN_EVERY_ENV}"];
+
+test("AVAR-04: a failed dependency cascade shows no variable notice for the dependency server its undo removed", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-avar04-cascade-failed-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+        declareDependencies: true,
+        siblingPlugins: [
+          {
+            name: "some-other-plugin",
+            mcpServers: { server2: { command: "node", args: UNSET_VARIABLE_ARGS } },
+          },
+        ],
+      });
+      const agentsPath = await seedForeignServer1();
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed)\n" +
+            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AVAR-04: an install that lands disabled shows no variable notice for the server the disable removed", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-avar04-landed-disabled-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        mcpServers: { server1: { command: "node", args: UNSET_VARIABLE_ARGS } },
+      });
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ◍ hello v0.0.1 (disabled) {installs disabled}\n" +
+            "    Run enable on this plugin to use its components.",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("AFILE-04: promoting a disabled dependency that re-materializes MCP servers shows the notice", async () => {
   await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-promotion-"));

@@ -361,6 +361,37 @@ export function mcpConfigNoticesMember(notices: readonly McpConfigNotice[]): {
   return notices.length === 0 ? {} : { mcpConfigNotices: notices };
 }
 
+/**
+ * AVAR-04: appends an unstage's MCP config notices to a command's notices, in
+ * place. It first drops the `variables-missing` and `credentials-blanked`
+ * notices of the servers the unstage removed, because they describe entries
+ * that the scope's mcp-adapter.json no longer holds. `droppedServers` holds
+ * declared names, as `UnstageOutcome.dropped.mcpServers` does. File notices
+ * stay, because the files were still rewritten.
+ */
+export function foldUnstageNotices(
+  notices: McpConfigNotice[],
+  unstaged: {
+    readonly scope: Scope;
+    readonly plugin: string;
+    readonly droppedServers: readonly string[];
+    readonly notices: readonly McpConfigNotice[];
+  },
+): void {
+  const removed = new Set(
+    unstaged.droppedServers.map((name) => generatedMcpServerKey(unstaged.plugin, name)),
+  );
+  const standing = notices.filter(
+    (notice) =>
+      !(
+        (notice.kind === "variables-missing" || notice.kind === "credentials-blanked") &&
+        notice.scope === unstaged.scope &&
+        removed.has(notice.server)
+      ),
+  );
+  notices.splice(0, notices.length, ...standing, ...unstaged.notices);
+}
+
 /** NFR-3: spreads `writtenMcpFiles` onto an outcome only when a file was rewritten. */
 function writtenMcpFilesMember(files: readonly McpWrittenFile[]): {
   readonly writtenMcpFiles?: readonly McpWrittenFile[];

@@ -76,7 +76,7 @@ import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
-import { mcpConfigNoticesMember } from "../marketplace/shared.ts";
+import { foldUnstageNotices, mcpConfigNoticesMember } from "../marketplace/shared.ts";
 
 import { buildScopeDeclarationIndex, readRecordDeclarations } from "./dependency-index.ts";
 import {
@@ -847,8 +847,13 @@ async function unstageBackToDisabled(
     installedNow,
   );
   // AFILE-04: kept even when a later slot fails, because the MCP slot already
-  // rewrote the file.
-  mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
+  // rewrote the file. AVAR-04: the variable notices of the removed servers go.
+  foldUnstageNotices(mcpConfigNotices, {
+    scope: locations.scope,
+    plugin,
+    droppedServers: outcome.dropped.mcpServers,
+    notices: outcome.mcpConfigNotices ?? [],
+  });
   if (!outcome.ok) {
     applyPartialCascadeFold(installedNow, outcome.dropped);
     throw outcome.cause ?? new Error(`Rollback of "${key}" did not complete.`);
