@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 04
 current_phase_name: Variable expansion at Claude Code parity
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-10-07T16:58:10.682Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-10-07T17:12:43.708Z"
 last_activity: 2026-10-07
-last_activity_desc: Completed 04-01 (Claude variable rule and adapter encoding)
-state_head: 0f4d7a8e632d5357c319cea5d85bd7d71f480c21
+last_activity_desc: Completed 04-02 (missing-variable install warning)
+state_head: e29c66248bb3862fb75bb974fe668cfb4b604c2d
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 39
-  completed_plans: 31
+  completed_plans: 32
   percent: 43
 ---
 
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 04 (Variable expansion at Claude Code parity) — EXECUTING
-Plan: 2 of 9
-Status: Executing Phase 04
-Last activity: 2026-10-07 — Completed 04-01 (Claude variable rule and adapter encoding)
+Plan: 3 of 9
+Status: Ready to execute
+Last activity: 2026-10-07 — Completed 04-02 (missing-variable install warning)
 
 Progress: [████░░░░░░] 43%
 
@@ -277,6 +277,7 @@ still open with a comment explaining what landed.
 | Phase 03 P08 | 17min | 3 tasks | 12 files |
 | Phase 03 P09 | 7min | 2 tasks | 3 files |
 | Phase 04 P01 | 20 min | 3 tasks | 15 files |
+| Phase 04 P02 | 12 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -645,6 +646,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: docs/mcp-compatibility.md is the home of the MCP naming, tool search, length, lifecycle and divergence records; docs cite ANAME-0N, never D-03-NN
 - [Phase 03]: README.es.md carries the same MCP name table, partial-install text and agent MCP rule as README.md (.claude/rules/readme.md)
 - [Phase 04]: Plugin MCP entries translate first, then expand only Claude's five fields; references keep names only and the adapter encoding is a separate serializer
+- [Phase 04]: variables-missing notices derive from the per-server variable reports and carry names only; the row renders after override-kept
 
 ### Pending Todos
 
@@ -778,11 +780,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 04-01-PLAN.md
+**Stopped at:** Completed 04-02-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-07T16:58:10.432Z
+Last session: 2026-10-07T17:12:43.424Z
 Phase 3 closed. Gates: Nyquist validation (23/23 green), security (20/20
 threats closed), code review (0 critical, 5 warnings, 5 info, all `open`),
 regression gate (`npm run check` green on d6029660, Node v26.10.0), verifier

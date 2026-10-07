@@ -92,7 +92,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 - [ ] **AVAR-01**: `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}` and project-scope
   `${CLAUDE_PROJECT_DIR}` are expanded at install time, in Claude's fields only (stdio `command`,
   `args`, `env` values; remote `url`, `headers`).
-- [ ] **AVAR-02**: `${VAR:-default}` is resolved at install time with Claude's rule (an empty value
+- [x] **AVAR-02**: `${VAR:-default}` is resolved at install time with Claude's rule (an empty value
   counts as set); plain `${VAR}` is left for the adapter to expand at runtime, so no environment
   value is ever written to disk.
 - [ ] **AVAR-03**: A leading `!` in values the adapter would run as a shell command is escaped as
@@ -184,7 +184,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | ANAME-06 | Phase 3 | Complete |
 | ANAME-07 | Phase 3 | Complete |
 | AVAR-01 | Phase 4 | Pending |
-| AVAR-02 | Phase 4 | Pending |
+| AVAR-02 | Phase 4 | Complete |
 | AVAR-03 | Phase 4 | Pending |
 | AVAR-04 | Phase 4 | Pending |
 | AVAR-05 | Phase 4 | Pending |

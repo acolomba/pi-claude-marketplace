@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 25
+open_count: 24
 waived_count: 27
-fixed_count: 37
+fixed_count: 38
 total_count: 89
-last_updated: 2026-10-07T16:56:59.121Z
+last_updated: 2026-10-07T17:11:49.465Z
 ---
 
 # Broken Windows Ledger
@@ -103,7 +103,7 @@ last_updated: 2026-10-07T16:56:59.121Z
 | 86 | 01 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/info.ts |  | buildRemoteNotInstalledRow spreads a dependencies field the componentsResolved:false row shape does not carry, so the D-01-32 cold-git fallback renders nothing | fixed |  | 2026-09-13T19:27:02.848Z | 2026-09-17T16:14:30.946Z |
 | 87 | 09 | deviation | tests/orchestrators/plugin/install-flow.test.ts | 11732 | ESLint @typescript-eslint/require-await on marketplaceTagProbe (introduced by 09-03's 71dcea21); plan 09-04 defers the fix per Task 3's own instruction not to fix earlier-plan defects | fixed |  | 2026-09-22T07:47:54.363Z | 2026-09-22T08:03:16.136Z |
 | 88 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/substitute.ts |  | [mcp-4] VariableReport.blanked is always empty until the credential deny-list arm lands (plan 04-03) | open |  | 2026-10-07T16:56:58.753Z |  |
-| 89 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/stage.ts |  | [mcp-4] prepareStageMcpServers ignores stampServers variableReports until the missing-variable notice lands (plan 04-02) | open |  | 2026-10-07T16:56:59.121Z |  |
+| 89 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/stage.ts |  | [mcp-4] prepareStageMcpServers ignores stampServers variableReports until the missing-variable notice lands (plan 04-02) | fixed |  | 2026-10-07T16:56:59.121Z | 2026-10-07T17:11:49.465Z |
 
 ````json
 [
@@ -1202,10 +1202,10 @@ last_updated: 2026-10-07T16:56:59.121Z
     "file": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
     "line": null,
     "description": "[mcp-4] prepareStageMcpServers ignores stampServers variableReports until the missing-variable notice lands (plan 04-02)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-10-07T16:56:59.121Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-07T17:11:49.465Z",
     "milestone": null
   }
 ]
