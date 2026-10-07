@@ -3,30 +3,6 @@ phase: 04
 review: 04-REVIEW.md
 titles: json
 findings:
-  - id: WR-01
-    severity: warning
-    disposition: open
-    title: "The `CLAUDE_PROJECT_DIR` export guard misses a cwd that ends with a partial trigger, so a remote-sink credential reaches a remote header"
-  - id: WR-02
-    severity: warning
-    disposition: open
-    title: "The leading-`~` classifier misses a leading reference that expands to empty, so the adapter still home-expands the value"
-  - id: WR-03
-    severity: warning
-    disposition: open
-    title: "Variable notices are emitted for entries that a rollback or a disabled landing removed"
-  - id: WR-04
-    severity: warning
-    disposition: open
-    title: "\"Not set\" guidance is wrong for a deny-listed plain-field name that is written as literal text"
-  - id: WR-05
-    severity: warning
-    disposition: open
-    title: "Skipping the `CLAUDE_PROJECT_DIR` export leaves a stale or inherited value in place"
-  - id: WR-06
-    severity: warning
-    disposition: open
-    title: "The reserved empty variable is not reset when the cwd read throws, which breaks the documented \"always set first\" contract"
   - id: IN-01
     severity: info
     disposition: open
@@ -35,10 +11,6 @@ findings:
     severity: info
     disposition: open
     title: "Staging reads `process.env` implicitly, so orchestrator tests have to mutate global state"
-  - id: IN-03
-    severity: info
-    disposition: open
-    title: "No orchestrator-level test shows that install, update, reinstall or enable route the new notices"
   - id: IN-04
     severity: info
     disposition: open
@@ -47,26 +19,79 @@ findings:
     severity: info
     disposition: open
     title: "`SCAN_BUILTINS` replaces builtins with `\"\"`, which can join text into a variable that the real expansion would not see"
-open: 11
-total: 11
-recorded: 2026-10-07T20:19:07.413Z
+  - id: IN-06
+    severity: info
+    disposition: open
+    title: "A cwd read that throws still leaves a stale or inherited `CLAUDE_PROJECT_DIR` in place"
+  - id: IN-07
+    severity: info
+    disposition: open
+    title: "The cwd partial-tail skip now gives the wrong reason for its divergence"
+  - id: IN-08
+    severity: info
+    disposition: open
+    title: "A user-scope `${HOST}:port` URL can now fail once at load"
+  - id: IN-09
+    severity: info
+    disposition: open
+    title: "The docs wording reads as if `:}` gets the token"
+  - id: WR-01
+    severity: warning
+    disposition: fixed
+    title: "The `CLAUDE_PROJECT_DIR` export guard misses a cwd that ends with a partial trigger (iteration 1)"
+  - id: WR-02
+    severity: warning
+    disposition: fixed
+    title: "The leading-`~` classifier misses a leading reference that expands to empty (iteration 1)"
+  - id: WR-03
+    severity: warning
+    disposition: fixed
+    title: "Variable notices are emitted for entries that a rollback or a disabled landing removed (iteration 1)"
+  - id: WR-04
+    severity: warning
+    disposition: fixed
+    title: "\"Not set\" guidance is wrong for a deny-listed plain-field name (iteration 1)"
+  - id: WR-05
+    severity: warning
+    disposition: fixed
+    title: "Skipping the `CLAUDE_PROJECT_DIR` export leaves a stale or inherited value in place (iteration 1)"
+  - id: WR-06
+    severity: warning
+    disposition: fixed
+    title: "The reserved empty variable is not reset when the cwd read throws (iteration 1)"
+  - id: IN-03
+    severity: info
+    disposition: open
+    title: "No orchestrator-level test shows that install, update, reinstall or enable route the new notices"
+  - id: WR-07
+    severity: warning
+    disposition: fixed
+    title: "A kept reference whose runtime value ends in a partial trigger lets plugin text after it pull a withheld credential into a remote header (iteration 2)"
+open: 9
+total: 16
+recorded: 2026-10-07T21:55:05.735Z
 ---
 
 # Phase 04: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| WR-03 | warning | open | - |
-| WR-04 | warning | open | - |
-| WR-05 | warning | open | - |
-| WR-06 | warning | open | - |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
-| IN-03 | info | open | - |
 | IN-04 | info | open | - |
 | IN-05 | info | open | - |
+| IN-06 | info | open | - |
+| IN-07 | info | open | - |
+| IN-08 | info | open | - |
+| IN-09 | info | open | - |
+| WR-01 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
+| WR-02 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
+| WR-03 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
+| WR-04 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
+| WR-05 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
+| WR-06 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
+| IN-03 | info | open | - (not in the current review) |
+| WR-07 | warning | fixed | 04-REVIEW-FIX.md (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
