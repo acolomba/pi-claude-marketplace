@@ -1,8 +1,8 @@
 ---
 phase: "05"
 slug: mode-selected-json-sink
-status: pending
-nyquist_compliant: false
+status: validated
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-10-06"
 ---
@@ -17,7 +17,7 @@ created: "2026-10-06"
 | Config | package.json and skills/local-verification/SKILL.md |
 | Quick command | `node --test tests/shared/notification-dispatch.test.ts` |
 | Full suite | `npm run check` |
-| Runtime | Measure during execution; full direct coverage is the long gate |
+| Runtime | Node v26.10.0; combined-tree gate passed at 5ba904966f9d76e0f83651edc6c98b7967b88e22 with 264 direct pairs |
 
 ## Sampling Rate
 
@@ -285,15 +285,24 @@ the workflow obtains the required assessment; do not mark it passed here.
 
 - [x] Every final task has an automated check, observable failure, requirement, and threat mapping.
 - [x] New production modules have paired owner tests and direct coverage (no new modules here; all 264 pairs pass).
-- [ ] Each wave has a combined-tree full check.
+- [x] Each wave has a combined-tree full check.
 - [x] Corpus and catalog remain unchanged.
 - [x] Transient lint violation fails and is removed (in-memory subjects only).
 - [x] No watch commands or unverified persistent success markers.
-- [ ] Execution evidence supports `nyquist_compliant: true`.
+- [x] Execution evidence supports `nyquist_compliant: true` for automated requirement coverage.
 
-**Approval:** Both 05-07 tasks are accepted on the corrected combined
-prerequisite tree; all six success criteria have passing execution evidence.
-The TENB-02 / SC5 checkpoint is resolved. Wave 0's required contracts and
-fixtures are complete. Parent post-merge verification and independent
-assumption/prohibition assessments remain outstanding, so phase-wide
-Nyquist sign-off remains false and status is pending.
+**Approval:** All 14 tasks have executed automated checks, and all six phase
+requirements have behavioral coverage. The combined-tree `npm run check` passed
+at `5ba904966f9d76e0f83651edc6c98b7967b88e22` on Node `v26.10.0`, with
+264 direct pairs. The strict corpus check passed with 3149 baseline entries
+present and zero extras. The TENB-02 / SC5 checkpoint is resolved. This is
+Nyquist sign-off for automated requirement coverage. A-05-01, A-05-02,
+P-05-01, and P-05-02 still require independent final-verifier judgment.
+
+## Validation Audit 2026-10-07
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
