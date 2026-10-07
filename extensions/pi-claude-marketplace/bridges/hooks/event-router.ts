@@ -828,6 +828,27 @@ async function registerHooksBridgeWith(
     return bindRegistrationCallback(runtime, capturedGeneration, callbackForGeneration);
   }
 
+  function bindDispatch<Event, Result>(
+    callbackForGeneration: RegistrationCallbackFactory<
+      [event: Event, ctx: ExtensionContext],
+      Result
+    >,
+  ): (event: Event, ctx: ExtensionContext) => Result | undefined {
+    return bind((generation) => {
+      const callback = callbackForGeneration(generation);
+      return (event: Event, ctx: ExtensionContext): Result | undefined => {
+        try {
+          requireNotificationMode(ctx.mode);
+        } catch (error: unknown) {
+          hookDebugLog(`hook dispatch skipped: ${errorMessage(error)}`);
+          return undefined;
+        }
+
+        return callback(event, ctx);
+      };
+    });
+  }
+
   // /reload re-enters this factory and must not leak a stale SessionStart
   // additionalContext entry from the prior session into the new buffer.
   // Clearing here makes the invariant explicit: each bridge load starts
@@ -925,31 +946,39 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "session_shutdown",
-    bind((generation) => compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor)),
+    bindDispatch((generation) =>
+      compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor),
+    ),
   );
   pi.on(
     "session_before_compact",
-    bind((generation) => compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor)),
+    bindDispatch((generation) =>
+      compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor),
+    ),
   );
   pi.on(
     "session_compact",
-    bind((generation) =>
+    bindDispatch((generation) =>
       compositeHandlerFor(runtime, "PostCompact", generation, pi, opts.executor),
     ),
   );
   pi.on(
     "input",
-    bind((generation) =>
+    bindDispatch((generation) =>
       compositeHandlerFor(runtime, "UserPromptSubmit", generation, pi, opts.executor),
     ),
   );
   pi.on(
     "tool_call",
-    bind((generation) => compositeHandlerFor(runtime, "PreToolUse", generation, pi, opts.executor)),
+    bindDispatch((generation) =>
+      compositeHandlerFor(runtime, "PreToolUse", generation, pi, opts.executor),
+    ),
   );
   pi.on(
     "tool_result",
-    bind((generation) => toolResultCompositeHandler(runtime, generation, pi, opts.executor)),
+    bindDispatch((generation) =>
+      toolResultCompositeHandler(runtime, generation, pi, opts.executor),
+    ),
   );
   // SessionStart additionalContext drain: every agent turn fires
   // before_agent_start; the handler returns early when the pending

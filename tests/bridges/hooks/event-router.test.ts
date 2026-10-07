@@ -2541,6 +2541,150 @@ const EMPTY_STATE_READER: HooksHydrationDeps = {
   readHooksJson,
 };
 
+for (const { claudeEvent, event } of [
+  { claudeEvent: "SessionEnd", event: { type: "session_shutdown" } },
+  { claudeEvent: "PreCompact", event: { type: "session_before_compact", trigger: "manual" } },
+  { claudeEvent: "PostCompact", event: { type: "session_compact", trigger: "manual" } },
+  {
+    claudeEvent: "UserPromptSubmit",
+    event: { type: "input", text: "hello", source: "interactive" },
+  },
+  {
+    claudeEvent: "PreToolUse",
+    event: { type: "tool_call", toolCallId: "mode-call", toolName: "bash", input: {} },
+  },
+  {
+    claudeEvent: "PostToolUse",
+    event: {
+      type: "tool_result",
+      toolCallId: "mode-call",
+      toolName: "bash",
+      input: {},
+      content: [],
+      isError: false,
+    },
+  },
+  {
+    claudeEvent: "PostToolUseFailure",
+    event: {
+      type: "tool_result",
+      toolCallId: "mode-call",
+      toolName: "bash",
+      input: {},
+      content: [],
+      isError: true,
+    },
+  },
+] as const) {
+  for (const { failure, readRejectedMode } of [
+    { failure: "unknown mode", readRejectedMode: (): string => "unknown" },
+    {
+      failure: "throwing mode getter",
+      readRejectedMode: (): string => {
+        throw new Error("stale mode");
+      },
+    },
+  ]) {
+    test(`rejects fresh ${claudeEvent} hooks after startup rejects a ${failure}`, async (t) => {
+      // arrange
+      const { root } = await createHermeticEnvironment(t, "hooks-router-mode-");
+      const runtime = createHooksRuntime();
+      const { pi, registrations, messages } = makeRecordingPi();
+      const dispatches: BucketAEvent[] = [];
+      const executor: HookExecutor = (entry) => {
+        dispatches.push(entry.claudeEvent);
+        return Promise.resolve({ kind: "noop" });
+      };
+
+      const context = new Proxy(makeContext(root, root), {
+        get(target, property, receiver): unknown {
+          if (property === "mode") {
+            return readRejectedMode();
+          }
+
+          return Reflect.get(target, property, receiver);
+        },
+      });
+      await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+        cwd: root,
+        executor,
+      });
+      const entry: RoutingEntry = {
+        ...preToolUseEntry("mode-plugin", root),
+        claudeEvent,
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+      };
+      runtime.setRoutingBucket(claudeEvent, [entry]);
+
+      // act
+      await registeredHandler(registrations, "session_start")(
+        { type: "session_start", reason: "startup" },
+        context,
+      );
+      const hookOutput = await registeredHandler(registrations, event.type)(event, context);
+
+      // assert
+      assert.strictEqual(hookOutput, undefined);
+      assert.deepStrictEqual(runtime.getRoutingBucket(claudeEvent), [entry]);
+      assert.deepStrictEqual(messages, []);
+      assert.deepStrictEqual(dispatches, []);
+    });
+
+    for (const mode of ["tui", "print", "json", "rpc"]) {
+      test(`dispatches ${claudeEvent} in ${mode} then rejects a live ${failure}`, async (t) => {
+        // arrange
+        const { root } = await createHermeticEnvironment(t, "hooks-router-live-mode-");
+        const runtime = createHooksRuntime();
+        const { pi, registrations, messages } = makeRecordingPi();
+        const dispatches: BucketAEvent[] = [];
+        const executor: HookExecutor = (entry) => {
+          dispatches.push(entry.claudeEvent);
+          return Promise.resolve({ kind: "noop" });
+        };
+
+        let readMode = (): string => mode;
+        const context = new Proxy(makeContext(root, root), {
+          get(target, property, receiver): unknown {
+            if (property === "mode") {
+              return readMode();
+            }
+
+            return Reflect.get(target, property, receiver);
+          },
+        });
+        await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+          cwd: root,
+          executor,
+        });
+        await registeredHandler(registrations, "session_start")(
+          { type: "session_start", reason: "startup" },
+          context,
+        );
+        const entry: RoutingEntry = {
+          ...preToolUseEntry("mode-plugin", root),
+          claudeEvent,
+          matcher: parseMatcher(""),
+          rawMatcher: "",
+        };
+        runtime.setRoutingBucket(claudeEvent, [entry]);
+        const handler = registeredHandler(registrations, event.type);
+
+        // act
+        const supportedOutput = await handler(event, context);
+        readMode = readRejectedMode;
+        const rejectedOutput = await handler(event, context);
+
+        // assert
+        assert.deepStrictEqual([supportedOutput, rejectedOutput], [undefined, undefined]);
+        assert.deepStrictEqual(runtime.getRoutingBucket(claudeEvent), [entry]);
+        assert.deepStrictEqual(messages, []);
+        assert.deepStrictEqual(dispatches, [claudeEvent]);
+      });
+    }
+  }
+}
+
 function preToolUseEntry(pluginId: string, cwd: string): RoutingEntry {
   return {
     scope: "project",
