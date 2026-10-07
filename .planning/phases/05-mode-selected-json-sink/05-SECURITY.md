@@ -96,3 +96,12 @@ risk was introduced; `threats_open` remains zero.
 The corrected combined tree passed `npm run check` (exit 0, Node v26.10.0,
 264 direct pairs); see `/tmp/json-phase5-fixed-parent-check.log` and
 05-REVIEW.md for the independent callback review.
+
+The subsequent A-05-01 audit found state-changing bookkeeping callbacks also
+needed guards. Commit `191f75e83dfa3fc26a43edaee315ce72da831ac2` covers those
+roots and validates mode before assistant-cache consumption. Independent
+review verifies all 11 registrations, preserves generation-first ordering,
+and confirms cap/cache state and cleanup behavior. No threat acceptance was
+added; zero threats remain open. The latest combined-tree gate passed with
+264 direct pairs; see 05-VERIFICATION-FIX.md for exact evidence and the
+current commit reference.

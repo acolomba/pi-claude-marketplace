@@ -323,3 +323,19 @@ corpus check also exited 0: 3149 baseline entries, zero extras, and no
 missing/extra diagnostic lines (`/tmp/json-phase5-fixed-parent-corpus.log`).
 The output catalog is unchanged from `26cb0056`. The four assumption/prohibition
 judgments still belong to the final verifier.
+
+## Final mutation-root correction
+
+The final verifier found an additional MODE-02 gap in bookkeeping callbacks
+and pre-guard assistant-cache consumption. Commit
+`191f75e83dfa3fc26a43edaee315ce72da831ac2` fixes it with 54 new behavioral
+regressions. Both owner suites pass 205 tests and both direct pairs retain
+100% coverage. Independent code review verifies all 11 registered roots.
+
+The new parent `npm run check` exited 0 on Node `v26.10.0`, including all
+264 direct pairs and prior-phase suites. Strict corpus verification exited 0
+with 3149 entries and zero extras or missing/extra diagnostics. Catalog and
+schema diffs are empty. Current logs are
+`/tmp/json-phase5-state-guard-parent-check.log` and
+`/tmp/json-phase5-state-guard-parent-corpus.log`. The current verified build
+reference is `191f75e8`; the earlier gate predates this correction.

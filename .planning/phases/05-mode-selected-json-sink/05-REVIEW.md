@@ -1,6 +1,6 @@
 ---
 phase: 05-mode-selected-json-sink
-reviewed: 2026-10-07T15:29:35Z
+reviewed: 2026-10-07T16:01:16Z
 depth: standard
 files_reviewed: 145
 files_reviewed_list:
@@ -159,7 +159,7 @@ status: clean
 
 # Phase 5: Code Review Report
 
-**Reviewed:** 2026-10-07T15:29:35Z
+**Reviewed:** 2026-10-07T16:01:16Z
 
 **Depth:** standard
 
@@ -178,7 +178,10 @@ Mechanical fixture changes were distinguished from changed behavior.
 The original blocker, CR-01, is resolved by
 `cd569d2aeb02f2691a636e325fc3c7976c4952c1`. Independent re-review covered the
 two-file fix and its registration, generation, executor, and cleanup boundaries.
-No open findings remain in the original scope or the fix. Phase 6 error wrapping
+The subsequent verifier found a bookkeeping gap missed by that review. Its
+four-file correction at `191f75e83dfa3fc26a43edaee315ce72da831ac2` has now
+also been independently reviewed. No open code-review findings remain.
+Phase 6 error wrapping
 and Phase 7 mode-specific browse/authentication behavior and real-Pi e2e remain
 intentional deferrals and are not findings.
 
@@ -330,6 +333,70 @@ dispatch assertions for the four supported modes.
 
 ## Validation Evidence and Limits
 
+### Subsequent Verification Gap: A-05-01 / MODE-02 — resolved in code
+
+**Original classification:** BLOCKER, reported by the independent verifier after
+the first review fix. Excluded from current finding counts.
+
+**Original issue:** The earlier review closed CR-01's fresh-dispatch gap but
+missed state-only callbacks. `before_agent_start` drained pending context,
+`agent_end` replaced assistant state, and the second `input` subscription reset
+the Stop count and cap latch without mode validation. Settle consumed its cached
+assistant before its branch-local validation. These changes were not independent
+cleanup and violated MODE-02. The verifier's finding superseded the earlier
+broad claim that the root audit was complete.
+
+**Fix and independent resolution:** Commit
+`191f75e83dfa3fc26a43edaee315ce72da831ac2` changes
+`extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:831-849,987-1009`
+to reuse the narrow wrapper, now named `bindWithMode`, for bookkeeping. It moves
+settle's mode check to
+`extensions/pi-claude-marketplace/bridges/hooks/settle.ts:138-149`, before
+`takeLastAssistant()`. All 11 real registrations were traced:
+
+| Registration | First callback state change/work | Mode guard |
+| --- | --- | --- |
+| session_start | Hydration and routing rebuild, shared directories, dispatch | Existing startup boundary |
+| session_shutdown | Fresh SessionEnd dispatch | bindWithMode |
+| session_before_compact | Fresh PreCompact dispatch | bindWithMode |
+| session_compact | Fresh PostCompact dispatch | bindWithMode |
+| input, first subscription | Fresh UserPromptSubmit dispatch | bindWithMode |
+| tool_call | Fresh PreToolUse dispatch | bindWithMode |
+| tool_result | Fresh PostToolUse or PostToolUseFailure dispatch | bindWithMode |
+| before_agent_start | Pending-context drain | bindWithMode |
+| agent_end | Assistant cache replacement | bindWithMode |
+| agent_settled | Assistant cache consumption | settleHandlerFor, before takeLastAssistant |
+| input, second subscription | Stop-active state, count, and notification latch reset | bindWithMode |
+
+The outer registration generation check precedes context access. Settle also
+retains its own generation check before reading mode. New catches cover only the
+live mode getter and membership validation; callback/executor calls remain
+outside them. Registration reset, in-memory child shutdown, orphan reaping, and
+async terminal-child removal/PID persistence remain independent of these guards.
+
+Moving `openNotificationRun(pi)` outside the former Stop-branch catch does not
+expose an uncontained host access. In `platform/pi-api.ts:161-209`, all three
+inventory probes catch property access, invocation, and result traversal
+failures. `notification-run.ts:37-38` stores the host reference without reading
+`appendEntry`. An independent executable probe ran the actual settle handler
+with a throwing `getAllTools` getter and a throwing `appendEntry` getter:
+settle completed, the inventory getter was read three times, and the sink getter
+was never read. Opening a run over a revoked host proxy also completed with all
+three soft-dependency flags false. Later sink access remains inside the existing
+Stop-cap notification catch.
+
+The 54 new regression cases were read and traced to real registrations and
+runtime state: 40 registered bookkeeping cases cover all four supported modes
+followed by unknown/throwing modes, including seven-entry and already-notified
+eight-entry Stop states; 14 settle cases preserve the exact cached assistant
+across all seven stop reasons and both rejection forms. State assertions would
+fail if the new guards were removed. The fixer's recorded RED run confirms all
+54 failed before the production change. No additional code correction or
+human-only code check is needed. The verifier owns formal A-05-01 disposition
+and the separate P-05-01/P-05-02 judgments.
+
+### Check History
+
 The original supplied full `npm run check` passed at
 `5ba904966f9d76e0f83651edc6c98b7967b88e22` on Node 26.10.0 with 264
 source/test pairs. The supplied strict corpus check reports 3149 baseline entries
@@ -342,8 +409,16 @@ exited 0 on Node 26.10.0. This includes the owner tests, the existing
 rejecting-executor assertion, and the architecture test that invokes every stale
 registration with arguments that throw on property access. The fixer separately
 reported 108 owner tests passing and 100% direct pair coverage in the mandatory
-commit hook. The parent is running the full combined-tree `npm run check`; that
-gate remains separate from this clean code-review verdict.
+commit hook.
+
+At `191f75e8`, independent execution of
+`node --test --test-reporter=dot tests/bridges/hooks/event-router.test.ts tests/bridges/hooks/settle.test.ts tests/architecture/hooks-lifecycle.test.ts`
+exited 0 on Node 26.10.0. This covers both changed owner suites and the
+all-registrations stale-generation test. The fixer's report records 205 owner
+tests passing and 100% line/function/branch coverage for both changed pairs in
+the mandatory commit hook. The parent is running the full combined-tree
+`npm run check` and strict corpus check for this source revision; those gates
+remain separate from this clean code-review verdict.
 
 Review-specific execution used the real hook registration and dispatch code with
 an injected executor, without installing dependencies or changing source files.
@@ -352,7 +427,7 @@ independent verifier judgments.
 
 ---
 
-_Reviewed: 2026-10-07T15:29:35Z_
+_Reviewed: 2026-10-07T16:01:16Z_
 
 _Reviewer: the agent (gsd-code-reviewer)_
 
