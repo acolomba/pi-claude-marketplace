@@ -54,6 +54,7 @@ import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/doma
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   AgentEndEvent,
+  AssistantMessage,
   BeforeAgentStartEvent,
   ExtensionAPI,
   ExtensionContext,
@@ -888,6 +889,195 @@ function registeredHandler(
   }
 
   return handler as (...args: unknown[]) => unknown;
+}
+
+function assistantForBookkeeping(): AssistantMessage {
+  return {
+    role: "assistant",
+    content: [{ type: "text", text: "answer" }],
+    api: "anthropic-messages",
+    provider: "anthropic",
+    model: "test-model",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: "pending",
+    timestamp: 1,
+  };
+}
+
+for (const mode of ["tui", "print", "json", "rpc"]) {
+  for (const { failure, rejectMode } of [
+    { failure: "unknown mode", rejectMode: (): string => "unknown" },
+    {
+      failure: "throwing mode getter",
+      rejectMode: (): string => {
+        throw new Error("stale mode");
+      },
+    },
+  ]) {
+    test(`preserves pending context when before_agent_start changes from ${mode} to ${failure}`, async (t) => {
+      // arrange
+      const { root } = await createHermeticEnvironment(t, "hooks-pending-mode-");
+      const runtime = createHooksRuntime();
+      const { pi, registrations } = makeRecordingPi();
+      let readMode = (): string => mode;
+      const context = new Proxy(makeContext(root, root), {
+        get(target, property, receiver): unknown {
+          if (property === "mode") {
+            return readMode();
+          }
+
+          return Reflect.get(target, property, receiver);
+        },
+      });
+      await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+        cwd: root,
+      });
+      const pending = {
+        context: "pending",
+        scope: "user",
+        marketplace: "catalog",
+        pluginId: "alpha",
+      } as const;
+      const handler = registeredHandler(registrations, "before_agent_start");
+      const event = {
+        type: "before_agent_start",
+        systemPrompt: "base",
+        prompt: "hello",
+        systemPromptOptions: {},
+      };
+      runtime.appendPendingSessionStartContext(pending);
+
+      // act
+      const supportedOutput = await handler(event, context);
+      const supportedPending = runtime.pendingSessionStartContextEntries();
+      runtime.appendPendingSessionStartContext(pending);
+      readMode = rejectMode;
+      const rejectedOutput = await handler(event, context);
+
+      // assert
+      assert.deepStrictEqual(supportedOutput, { systemPrompt: "base\n\npending" });
+      assert.deepStrictEqual(supportedPending, []);
+      assert.strictEqual(rejectedOutput, undefined);
+      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [pending]);
+    });
+
+    test(`preserves assistant cache when agent_end changes from ${mode} to ${failure}`, async (t) => {
+      // arrange
+      const { root } = await createHermeticEnvironment(t, "hooks-assistant-mode-");
+      const runtime = createHooksRuntime();
+      const { pi, registrations } = makeRecordingPi();
+      let readMode = (): string => mode;
+      const context = new Proxy(makeContext(root, root), {
+        get(target, property, receiver): unknown {
+          if (property === "mode") {
+            return readMode();
+          }
+
+          return Reflect.get(target, property, receiver);
+        },
+      });
+      await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+        cwd: root,
+      });
+      const handler = registeredHandler(registrations, "agent_end");
+      const assistant = assistantForBookkeeping();
+
+      // act
+      const supportedOutput = await handler({ type: "agent_end", messages: [assistant] }, context);
+      readMode = rejectMode;
+      const rejectedOutput = await handler({ type: "agent_end", messages: [] }, context);
+
+      // assert
+      assert.deepStrictEqual([supportedOutput, rejectedOutput], [undefined, undefined]);
+      assert.strictEqual(runtime.takeLastAssistant(), assistant);
+    });
+
+    test(`preserves assistant cache when agent_settled changes from ${mode} to ${failure}`, async (t) => {
+      // arrange
+      const { root } = await createHermeticEnvironment(t, "hooks-settled-mode-");
+      const runtime = createHooksRuntime();
+      const { pi, registrations } = makeRecordingPi();
+      let readMode = (): string => mode;
+      const context = new Proxy(makeContext(root, root), {
+        get(target, property, receiver): unknown {
+          if (property === "mode") {
+            return readMode();
+          }
+
+          return Reflect.get(target, property, receiver);
+        },
+      });
+      await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+        cwd: root,
+      });
+      const handler = registeredHandler(registrations, "agent_settled");
+      const assistant = assistantForBookkeeping();
+      runtime.recordLastAssistant(assistant);
+
+      // act
+      const supportedOutput = await handler({ type: "agent_settled" }, context);
+      const supportedCache = runtime.takeLastAssistant();
+      runtime.recordLastAssistant(assistant);
+      readMode = rejectMode;
+      const rejectedOutput = await handler({ type: "agent_settled" }, context);
+
+      // assert
+      assert.deepStrictEqual([supportedOutput, rejectedOutput], [undefined, undefined]);
+      assert.strictEqual(supportedCache, undefined);
+      assert.strictEqual(runtime.takeLastAssistant(), assistant);
+    });
+
+    for (const reentries of [7, 8]) {
+      test(`preserves ${reentries}-entry Stop cap when input changes from ${mode} to ${failure}`, async (t) => {
+        // arrange
+        const { root } = await createHermeticEnvironment(t, "hooks-input-mode-");
+        const runtime = createHooksRuntime();
+        const { pi, registrations } = makeRecordingPi();
+        let readMode = (): string => mode;
+        const context = new Proxy(makeContext(root, root), {
+          get(target, property, receiver): unknown {
+            if (property === "mode") {
+              return readMode();
+            }
+
+            return Reflect.get(target, property, receiver);
+          },
+        });
+        await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+          cwd: root,
+        });
+        const handler = registeredHandler(registrations, "input", 1);
+        const event = { type: "input", text: "hello", source: "interactive" };
+        runtime.recordStopReentry();
+
+        // act
+        const supportedOutput = await handler(event, context);
+        const supportedActive = runtime.isStopHookActive();
+        for (let index = 0; index < reentries; index += 1) {
+          runtime.recordStopReentry();
+        }
+
+        readMode = rejectMode;
+        const rejectedOutput = await handler(event, context);
+
+        // assert
+        assert.deepStrictEqual([supportedOutput, rejectedOutput], [undefined, undefined]);
+        assert.strictEqual(supportedActive, false);
+        assert.strictEqual(runtime.isStopHookActive(), true);
+        assert.deepStrictEqual(runtime.recordStopReentry(), {
+          reenter: false,
+          notifyCap: reentries === 7,
+        });
+      });
+    }
+  }
 }
 
 function seedPluginConfig(

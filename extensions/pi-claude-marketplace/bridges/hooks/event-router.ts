@@ -172,8 +172,8 @@ async function readAndCachePluginHooksWith(
 /**
  * Factory: build the `before_agent_start` handler closure registered on
  * Pi at `registerHooksBridge` time. The registration wrapper checks its
- * captured generation synchronously before invoking this closure. A stale
- * registration returns undefined without draining the live context buffer.
+ * captured generation and live mode before invoking this closure. A stale
+ * registration or rejected mode leaves the live context buffer intact.
  *
  * Drain semantics:
  *   - empty buffer -> returns undefined (no systemPrompt mutation, no
@@ -828,7 +828,7 @@ async function registerHooksBridgeWith(
     return bindRegistrationCallback(runtime, capturedGeneration, callbackForGeneration);
   }
 
-  function bindDispatch<Event, Result>(
+  function bindWithMode<Event, Result>(
     callbackForGeneration: RegistrationCallbackFactory<
       [event: Event, ctx: ExtensionContext],
       Result
@@ -840,7 +840,7 @@ async function registerHooksBridgeWith(
         try {
           requireNotificationMode(ctx.mode);
         } catch (error: unknown) {
-          hookDebugLog(`hook dispatch skipped: ${errorMessage(error)}`);
+          hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
           return undefined;
         }
 
@@ -946,37 +946,37 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "session_shutdown",
-    bindDispatch((generation) =>
+    bindWithMode((generation) =>
       compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor),
     ),
   );
   pi.on(
     "session_before_compact",
-    bindDispatch((generation) =>
+    bindWithMode((generation) =>
       compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor),
     ),
   );
   pi.on(
     "session_compact",
-    bindDispatch((generation) =>
+    bindWithMode((generation) =>
       compositeHandlerFor(runtime, "PostCompact", generation, pi, opts.executor),
     ),
   );
   pi.on(
     "input",
-    bindDispatch((generation) =>
+    bindWithMode((generation) =>
       compositeHandlerFor(runtime, "UserPromptSubmit", generation, pi, opts.executor),
     ),
   );
   pi.on(
     "tool_call",
-    bindDispatch((generation) =>
+    bindWithMode((generation) =>
       compositeHandlerFor(runtime, "PreToolUse", generation, pi, opts.executor),
     ),
   );
   pi.on(
     "tool_result",
-    bindDispatch((generation) =>
+    bindWithMode((generation) =>
       toolResultCompositeHandler(runtime, generation, pi, opts.executor),
     ),
   );
@@ -986,14 +986,14 @@ async function registerHooksBridgeWith(
   // turn.
   pi.on(
     "before_agent_start",
-    bind(() => createBeforeAgentStartHandler(runtime)),
+    bindWithMode(() => createBeforeAgentStartHandler(runtime)),
   );
   // Settle-time turn-boundary dispatch: agent_end caches the run's
   // last-assistant message; agent_settled reads it and gates on stopReason
   // to run the Stop / StopFailure buckets (STOP-01).
   pi.on(
     "agent_end",
-    bind((generation) => agentEndCacheHandler(runtime, generation)),
+    bindWithMode((generation) => agentEndCacheHandler(runtime, generation)),
   );
   pi.on(
     "agent_settled",
@@ -1006,7 +1006,7 @@ async function registerHooksBridgeWith(
   // NOT pass through `input`, so the flag never self-clears.
   pi.on(
     "input",
-    bind((generation) => inputResetHandlerFor(runtime, generation)),
+    bindWithMode((generation) => inputResetHandlerFor(runtime, generation)),
   );
 }
 

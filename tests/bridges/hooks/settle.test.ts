@@ -250,7 +250,7 @@ for (const scenario of [
         : [],
     );
     assert.deepStrictEqual(flags, [false, true, true, true, true, true, true, true, true]);
-    assert.strictEqual(modeReads, 10);
+    assert.strictEqual(modeReads, 11);
     assert.strictEqual(sinkReads, scenario.failure === "mode" ? 0 : 1);
     assert.strictEqual(inventory.mock.callCount(), 27);
     capture.assertValid();
@@ -298,6 +298,53 @@ for (const scenario of [
     assert.strictEqual(inventory.mock.callCount(), 0);
     capture.assertValid();
   });
+}
+
+for (const stopReason of [
+  "stop",
+  "error",
+  "length",
+  "pending",
+  "aborted",
+  "toolUse",
+  "deferred",
+] as const) {
+  for (const { failure, readMode } of [
+    { failure: "unknown mode", readMode: (): string => "unknown" },
+    {
+      failure: "throwing mode getter",
+      readMode: (): string => {
+        throw new Error("stale mode");
+      },
+    },
+  ]) {
+    test(`preserves the ${stopReason} assistant cache on ${failure}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      const { pi, sent } = makePi();
+      const ending = agentEnd(stopReason);
+      const assistant = ending.messages[1];
+      assert.ok(assistant?.role === "assistant");
+      runtime.recordLastAssistant(assistant);
+      const context = new Proxy(emptyContext, {
+        get(target, property, receiver): unknown {
+          if (property === "mode") {
+            return readMode();
+          }
+
+          return Reflect.get(target, property, receiver);
+        },
+      });
+      const handler = settleHandlerFor(runtime, runtime.currentGeneration(), pi);
+
+      // act
+      await handler(settledEvent, context);
+
+      // assert
+      assert.strictEqual(runtime.takeLastAssistant(), assistant);
+      assert.deepStrictEqual(sent, []);
+    });
+  }
 }
 
 test("uses only the supplied runtime for Stop re-entry", async () => {

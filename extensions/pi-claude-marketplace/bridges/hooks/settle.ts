@@ -135,6 +135,13 @@ export function settleHandlerFor(
       return;
     }
 
+    try {
+      requireNotificationMode(ctx.mode);
+    } catch (error: unknown) {
+      hookDebugLog(`settle: context unavailable: ${errorMessage(error)}`);
+      return;
+    }
+
     // One-shot consumption: clear the cache so a spurious second `agent_settled`
     // without an intervening `agent_end` no-ops instead of reprocessing the same
     // (stale) message. Each legitimate re-entry produces a fresh `agent_end`
@@ -146,28 +153,13 @@ export function settleHandlerFor(
 
     switch (last.stopReason) {
       case "stop": {
-        let run: NotificationRun;
-        try {
-          requireNotificationMode(ctx.mode);
-          run = openNotificationRun(pi);
-        } catch (err: unknown) {
-          hookDebugLog(`settle: Stop context unavailable: ${errorMessage(err)}`);
-          return;
-        }
-
+        const run = openNotificationRun(pi);
         await runStopBucket(runtime, last, capturedGeneration, ctx, pi, run, executor);
         return;
       }
 
       case "error":
       case "length": {
-        try {
-          requireNotificationMode(ctx.mode);
-        } catch (err: unknown) {
-          hookDebugLog(`settle: StopFailure context unavailable: ${errorMessage(err)}`);
-          return;
-        }
-
         const stopErrorMessage = last.errorMessage ?? "";
         const errorType = classifyStopFailure(stopErrorMessage, last.stopReason);
         if (errorType === "unknown") {
