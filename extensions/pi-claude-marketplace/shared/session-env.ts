@@ -100,13 +100,15 @@ const PARTIAL_MARKER_TAIL = /[${](?:e(?:nv?)?)?$/;
  * A `cwd` that holds `$env:` or `{env:`, or ends in `$`, `{` or a longer
  * prefix of either marker, is not exported (AVAR-05). The adapter would expand
  * the marker, and plugin text after the reference can complete such a tail
- * into a reference to a withheld credential. Any previous `CLAUDE_PROJECT_DIR`
- * stays. Returns `false` for that skip so the caller can log it; this module
+ * into a reference to a withheld credential. The skip also removes any
+ * previous `CLAUDE_PROJECT_DIR`, so no server reads a stale or inherited
+ * project. Returns `false` for that skip so the caller can log it; this module
  * does not log. Bash and MCP children inherit both values.
  */
 export function applyMcpAdapterEnv(cwd: string): boolean {
   process.env[ADAPTER_EMPTY_ENV] = "";
   if (ADAPTER_MARKER.test(cwd) || PARTIAL_MARKER_TAIL.test(cwd)) {
+    Reflect.deleteProperty(process.env, "CLAUDE_PROJECT_DIR");
     return false;
   }
 

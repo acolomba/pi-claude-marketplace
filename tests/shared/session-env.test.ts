@@ -247,7 +247,7 @@ describe("applyMcpAdapterEnv", () => {
     "/work/p{en",
     "/work/p{env",
   ]) {
-    test(`AVAR-01: does not export the cwd ${cwd} and still sets the reserved variable`, (t) => {
+    test(`AVAR-01: does not export the cwd ${cwd}, removes the previous project and still sets the reserved variable`, (t) => {
       // arrange
       restoreEnvAfter(t, ["PI_CLAUDE_MARKETPLACE_EMPTY", "CLAUDE_PROJECT_DIR"]);
       process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "user-value";
@@ -263,7 +263,7 @@ describe("applyMcpAdapterEnv", () => {
           PI_CLAUDE_MARKETPLACE_EMPTY: process.env.PI_CLAUDE_MARKETPLACE_EMPTY,
           CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR,
         },
-        { PI_CLAUDE_MARKETPLACE_EMPTY: "", CLAUDE_PROJECT_DIR: "/work/previous" },
+        { PI_CLAUDE_MARKETPLACE_EMPTY: "", CLAUDE_PROJECT_DIR: undefined },
       );
     });
   }

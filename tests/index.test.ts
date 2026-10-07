@@ -1629,7 +1629,7 @@ test("AVAR-01: session_start refreshes CLAUDE_PROJECT_DIR from the session's cwd
   verifyBoundary();
 });
 
-test("AVAR-01: session_start does not export a working directory holding an adapter variable marker", async (t) => {
+test("AVAR-01: session_start removes CLAUDE_PROJECT_DIR for a working directory holding an adapter variable marker", async (t) => {
   // arrange
   await createHermeticScope(t, "adapter-env-marker");
   const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, {
@@ -1646,7 +1646,7 @@ test("AVAR-01: session_start does not export a working directory holding an adap
   // assert
   assert.deepStrictEqual(
     [process.env.PI_CLAUDE_MARKETPLACE_EMPTY, process.env.CLAUDE_PROJECT_DIR],
-    ["", "/work/previous"],
+    ["", undefined],
   );
   verifyBoundary();
 });
