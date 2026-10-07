@@ -498,6 +498,83 @@ const VERDICT_ROWS: readonly VerdictRow[] = [
     },
     verdict: { kind: "blocked", feature: "tools[].permission_policy" },
   },
+  {
+    title: "AVAR-03: a command of exactly ~ blocks a stdio server",
+    server: { command: "~" },
+    verdict: { kind: "blocked", feature: "command ~" },
+  },
+  {
+    title: "AVAR-03: a command starting with ~/ blocks a stdio server",
+    server: { command: "~/bin/server" },
+    verdict: { kind: "blocked", feature: "command ~" },
+  },
+  {
+    title: "AVAR-03: a command starting with ~\\ blocks a stdio server",
+    server: { command: "~\\bin\\server.exe" },
+    verdict: { kind: "blocked", feature: "command ~" },
+  },
+  {
+    title: "AVAR-03: a command starting with a reference whose default is ~ blocks a stdio server",
+    server: { command: "${HOME_DIR:-~}/bin/x" },
+    verdict: { kind: "blocked", feature: "command ~" },
+  },
+  {
+    title:
+      "AVAR-03: a command that is a reference whose default starts with ~/ blocks a stdio server",
+    server: { command: "${X:-~/bin}" },
+    verdict: { kind: "blocked", feature: "command ~" },
+  },
+  {
+    title: "AVAR-03: an args element starting with ~/ blocks a stdio server",
+    server: { command: "node", args: ["--x", "~/a"] },
+    verdict: { kind: "blocked", feature: "args ~" },
+  },
+  {
+    title:
+      "AVAR-03: an args element that is a reference whose default starts with ~\\ blocks a stdio server",
+    server: { command: "node", args: ["${X:-~\\a}"] },
+    verdict: { kind: "blocked", feature: "args ~" },
+  },
+  {
+    title: "AVAR-03: command ~ wins over args ~ in table order",
+    server: { command: "~/a", args: ["~/b"] },
+    verdict: { kind: "blocked", feature: "command ~" },
+  },
+  {
+    title: "AVAR-03: args ~ wins over bareElicitationCapability in table order",
+    server: { command: "node", args: ["~/a"], bareElicitationCapability: true },
+    verdict: { kind: "blocked", feature: "args ~" },
+  },
+  {
+    title: "AVAR-03: a command starting with ~user stays supported",
+    server: { command: "~user/bin" },
+    verdict: SUPPORTED,
+  },
+  {
+    title: "AVAR-03: a ~/ that is not leading stays supported",
+    server: { command: "node", args: ["a~/b"] },
+    verdict: SUPPORTED,
+  },
+  {
+    title: "AVAR-03: a ~/ after an empty default stays supported",
+    server: { command: "node", args: ["${X:-}~/a"] },
+    verdict: SUPPORTED,
+  },
+  {
+    title: "AVAR-03: a leading reference with no default stays supported",
+    server: { command: "${HOME}/bin/x" },
+    verdict: SUPPORTED,
+  },
+  {
+    title: "AVAR-03: a reference whose default is ~user stays supported",
+    server: { command: "${X:-~user}" },
+    verdict: SUPPORTED,
+  },
+  {
+    title: "AVAR-03: a ~/ in a remote url or header stays supported",
+    server: { type: "http", url: "https://h.test/~/x", headers: { A: "~/x" } },
+    verdict: SUPPORTED,
+  },
 ];
 
 describe("classifyMcpServer", () => {

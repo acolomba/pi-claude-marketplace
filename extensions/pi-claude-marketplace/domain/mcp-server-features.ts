@@ -16,6 +16,10 @@ import { Compile } from "typebox/compile";
 /**
  * A Claude Code server feature pi-mcp-adapter has no equivalent for: the `ws`
  * transport, a host-only server type, or one of the named fields (ANAME-07).
+ * `command ~` and `args ~` are a leading home marker in a stdio server's
+ * `command` or an `args` element. Claude Code passes it through literally, but
+ * pi-mcp-adapter expands it to the home directory after interpolation, so no
+ * written form keeps the value literal (AVAR-03).
  */
 export type McpUnsupportedFeature =
   | "ws"
@@ -27,6 +31,8 @@ export type McpUnsupportedFeature =
   | "oauth.xaa"
   | "tools[].permission_policy"
   | "toolPermissions"
+  | "command ~"
+  | "args ~"
   | "bareElicitationCapability";
 
 /** A server a partial install leaves out whole, with the first feature that blocks it. */
@@ -302,9 +308,34 @@ function remoteFeature(server: RemoteServer): McpUnsupportedFeature | undefined 
   return elicitationFeature(server);
 }
 
+// The values pi-mcp-adapter home-expands: exactly `~`, or a `~/` or `~\`
+// prefix. `~\` counts on every platform, although the adapter expands it only
+// on Windows. `~user/x` is left alone.
+const LEADING_HOME = /^~(?:$|[/\\])/;
+// A leading `${NAME:-default}` reference whose default is such a value. The
+// check does not read the environment, so the default counts even when NAME
+// is set at install (AVAR-03).
+const LEADING_HOME_DEFAULT = /^\$\{[A-Za-z_]\w*:-~(?:[/\\][^}]*)?\}/;
+
+function startsWithHomeMarker(value: string): boolean {
+  return LEADING_HOME.test(value) || LEADING_HOME_DEFAULT.test(value);
+}
+
+/** `command ~` before `args ~`, so a server with both reports its command. */
+function homeFeature(server: {
+  readonly command: string;
+  readonly args?: readonly string[];
+}): McpUnsupportedFeature | undefined {
+  if (startsWithHomeMarker(server.command)) {
+    return "command ~";
+  }
+
+  return (server.args ?? []).some((arg) => startsWithHomeMarker(arg)) ? "args ~" : undefined;
+}
+
 function classifyStdio(server: unknown): McpServerVerdict {
   return STDIO_SERVER.Check(server)
-    ? featureVerdict(elicitationFeature(server))
+    ? featureVerdict(homeFeature(server) ?? elicitationFeature(server))
     : malformed(STDIO_SERVER.Errors(server));
 }
 
@@ -328,8 +359,10 @@ function classifyWs(server: unknown): McpServerVerdict {
  * validation, since Claude does not run one from a plugin. A valid server that
  * uses a feature pi-mcp-adapter cannot honor is `blocked` with the first such
  * feature in table order: `ws`, `headersHelper`, `oauth.xaa`,
- * `tools[].permission_policy`, `toolPermissions`, then
- * `bareElicitationCapability`. `role` and `discoveryCache` never block.
+ * `tools[].permission_policy`, `toolPermissions`, then for stdio `command ~`
+ * and `args ~` (AVAR-03), then `bareElicitationCapability`. `role` and
+ * `discoveryCache` never block, and neither does a `~` in a remote server's
+ * `url` or `headers`, which the adapter does not home-expand.
  */
 export function classifyMcpServer(server: unknown): McpServerVerdict {
   if (!isPlainObject(server)) {

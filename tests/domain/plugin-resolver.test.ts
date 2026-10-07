@@ -1317,6 +1317,39 @@ test("ANAME-07: a ws server makes the plugin partially available with the server
   });
 });
 
+test("AVAR-03: a stdio server whose args start with ~/ makes the plugin partially available with the server left out", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({
+      source: "./local",
+      mcpServers: {
+        home: { command: "node", args: ["~/bin/server.js"] },
+        local: { command: "node", args: ["server.js"] },
+      },
+    }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["mcpServers"],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: { local: { command: "node", args: ["server.js"] } },
+    droppedMcpServers: [{ server: "home", feature: "args ~" }],
+    defaultEnabled: true,
+  });
+});
+
 test("ANAME-07: a malformed server wins over a blocked one and makes the plugin unavailable", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });

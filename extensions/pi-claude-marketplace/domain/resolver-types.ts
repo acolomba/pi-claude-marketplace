@@ -81,6 +81,8 @@ type DroppedMcpServerSchema = Type.TObject<{
       Type.TLiteral<"oauth.xaa">,
       Type.TLiteral<"tools[].permission_policy">,
       Type.TLiteral<"toolPermissions">,
+      Type.TLiteral<"command ~">,
+      Type.TLiteral<"args ~">,
       Type.TLiteral<"bareElicitationCapability">,
     ]
   >;

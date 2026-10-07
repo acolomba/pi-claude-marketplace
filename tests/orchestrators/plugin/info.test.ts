@@ -6951,6 +6951,35 @@ async function seedAlphaWithPluginJson(
   );
 }
 
+test("AVAR-03: info names a server left out for a leading ~ with its field", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaWithPluginJson(home, cwd, {
+      name: "alpha",
+      mcpServers: {
+        home: { command: "node", args: ["~/bin/server.js"] },
+        db: { command: "db-server" },
+      },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊖ alpha v1.0.0 (partially-available) {unsupported mcp}",
+          "    mcp: plugin:alpha:db, plugin:alpha:home (unsupported args ~)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 for (const { inventory, label, requiresLine } of [
   {
     label: "Pi's built-in MCP alone tags pi-mcp-adapter missing",
