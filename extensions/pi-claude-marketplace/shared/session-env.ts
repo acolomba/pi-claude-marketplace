@@ -83,7 +83,11 @@ export const ADAPTER_EMPTY_ENV = "PI_CLAUDE_MARKETPLACE_EMPTY";
 
 // pi-mcp-adapter's two variable markers. The adapter re-scans a value it
 // inserts, so a marker inside an exported value would expand a variable.
-const ADAPTER_MARKERS = ["$env:", "{env:"] as const;
+const ADAPTER_MARKER = /\$env:|\{env:/;
+
+// A tail that the entry text after a kept `${CLAUDE_PROJECT_DIR}` can complete
+// into a marker.
+const PARTIAL_MARKER_TAIL = /[${](?:e(?:nv?)?)?$/;
 
 /**
  * AVAR-01 / AVAR-03: give pi-mcp-adapter the two variables written MCP entries
@@ -93,14 +97,16 @@ const ADAPTER_MARKERS = ["$env:", "{env:"] as const;
  * `${CLAUDE_PROJECT_DIR}` in every scope, so a user-scope entry keeps the
  * reference and the adapter reads the current project from Pi's process.
  *
- * A `cwd` holding `$env:` or `{env:` is not exported, because the adapter would
- * expand the marker; any previous `CLAUDE_PROJECT_DIR` stays. Returns `false`
- * for that skip so the caller can log it; this module does not log. Bash and
- * MCP children inherit both values.
+ * A `cwd` that holds `$env:` or `{env:`, or ends in `$`, `{` or a longer
+ * prefix of either marker, is not exported (AVAR-05). The adapter would expand
+ * the marker, and plugin text after the reference can complete such a tail
+ * into a reference to a withheld credential. Any previous `CLAUDE_PROJECT_DIR`
+ * stays. Returns `false` for that skip so the caller can log it; this module
+ * does not log. Bash and MCP children inherit both values.
  */
 export function applyMcpAdapterEnv(cwd: string): boolean {
   process.env[ADAPTER_EMPTY_ENV] = "";
-  if (ADAPTER_MARKERS.some((marker) => cwd.includes(marker))) {
+  if (ADAPTER_MARKER.test(cwd) || PARTIAL_MARKER_TAIL.test(cwd)) {
     return false;
   }
 

@@ -235,7 +235,18 @@ describe("applyMcpAdapterEnv", () => {
     assert.strictEqual(process.env.PI_CLAUDE_MARKETPLACE_EMPTY, "");
   });
 
-  for (const cwd of ["/work/$env:HOME", "/work/{env:SECRET}"]) {
+  for (const cwd of [
+    "/work/$env:HOME",
+    "/work/{env:SECRET}",
+    "/work/p$",
+    "/work/p$e",
+    "/work/p$en",
+    "/work/p$env",
+    "/work/p{",
+    "/work/p{e",
+    "/work/p{en",
+    "/work/p{env",
+  ]) {
     test(`AVAR-01: does not export the cwd ${cwd} and still sets the reserved variable`, (t) => {
       // arrange
       restoreEnvAfter(t, ["PI_CLAUDE_MARKETPLACE_EMPTY", "CLAUDE_PROJECT_DIR"]);
@@ -256,6 +267,18 @@ describe("applyMcpAdapterEnv", () => {
       );
     });
   }
+
+  test("AVAR-01: exports a cwd whose $ and { neither form a marker nor end it", (t) => {
+    // arrange
+    restoreEnvAfter(t, ["PI_CLAUDE_MARKETPLACE_EMPTY", "CLAUDE_PROJECT_DIR"]);
+
+    // act
+    const exported = applyMcpAdapterEnv("/work/a$b{env}c");
+
+    // assert
+    assert.strictEqual(exported, true);
+    assert.strictEqual(process.env.CLAUDE_PROJECT_DIR, "/work/a$b{env}c");
+  });
 
   test("AVAR-01: leaves the session triple and an unrelated key unchanged", (t) => {
     // arrange

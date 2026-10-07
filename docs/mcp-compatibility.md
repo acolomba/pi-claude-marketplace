@@ -192,7 +192,7 @@ This extension reserves the variable `PI_CLAUDE_MARKETPLACE_EMPTY`. It sets the 
 
 A user-scope entry keeps `${CLAUDE_PROJECT_DIR}`. This extension sets `CLAUDE_PROJECT_DIR` in the process of Pi to the working directory of the session, when it loads and at each session start. pi-mcp-adapter then expands the reference to the current project when it starts the server. Claude Code also uses the current project, at every scope. The install does not report this variable as not set.
 
-If the directory name holds `$env:` or `{env:`, this extension does not set the variable, because pi-mcp-adapter would expand that text again. A debug-log line records the skip.
+If the directory name holds `$env:` or `{env:`, this extension does not set the variable, because pi-mcp-adapter would expand that text again. The same applies if the directory name ends in `$`, `{`, or the start of `$env` or `{env`, such as `$en`. The plugin text after `${CLAUDE_PROJECT_DIR}` can complete such an ending into `$env:NAME` or `{env:NAME}`, and pi-mcp-adapter would then send the value of `NAME` to the server, even a withheld credential. A debug-log line records the skip.
 
 ### Withheld credentials
 

@@ -29,6 +29,7 @@ import { test } from "node:test";
 import { serializeSegments } from "../../extensions/pi-claude-marketplace/bridges/mcp/adapter-escape.ts";
 import { substituteAndInject } from "../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 import { expandClaudeValue } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
+import { applyMcpAdapterEnv } from "../../extensions/pi-claude-marketplace/shared/session-env.ts";
 import { EXPANSION_BUILTINS, EXPANSION_CASES } from "../bridges/mcp/expansion-cases.ts";
 
 import {
@@ -458,6 +459,85 @@ test("AVAR-05: no deny-listed credential reaches pi-mcp-adapter's url or headers
     { runs: runs.length, leaks },
     { runs: EXPECTED_CREDENTIAL_RUNS, leaks: [] },
   );
+});
+
+/** A working directory tail and the plugin text that completes it into a marker. */
+interface PartialTriggerCwd {
+  readonly cwd: string;
+  readonly completion: string;
+}
+
+const PARTIAL_TRIGGER_CWDS: readonly PartialTriggerCwd[] = [
+  { cwd: "/work/p$", completion: "env:" },
+  { cwd: "/work/p$e", completion: "nv:" },
+  { cwd: "/work/p$en", completion: "v:" },
+  { cwd: "/work/p$env", completion: ":" },
+  { cwd: "/work/p{", completion: "env:" },
+  { cwd: "/work/p{e", completion: "nv:" },
+  { cwd: "/work/p{en", completion: "v:" },
+  { cwd: "/work/p{env", completion: ":" },
+];
+
+const PROJECT_DIR_CREDENTIAL = { ANTHROPIC_API_KEY: "sentinel-ANTHROPIC_API_KEY" };
+
+function userScopeHeader(raw: string): string {
+  const ctx: McpSubstitutionContext = {
+    ...EXPANSION_BUILTINS,
+    projectDir: undefined,
+    env: PROJECT_DIR_CREDENTIAL,
+  };
+  const { entry } = substituteAndInject(
+    { url: "https://mcp.example.test/", headers: { Value: raw } },
+    ctx,
+  );
+  const header: unknown =
+    typeof entry.headers === "object" && entry.headers !== null && "Value" in entry.headers
+      ? entry.headers.Value
+      : undefined;
+  if (typeof header !== "string") {
+    throw new Error(`substituteAndInject wrote no header for ${raw}`);
+  }
+
+  return header;
+}
+
+// The session export runs as the extension runs it. The header then goes
+// through the adapter with the CLAUDE_PROJECT_DIR that export left.
+function projectDirHeaderRun(
+  utils: PiMcpAdapterUtils,
+  { cwd, completion }: PartialTriggerCwd,
+): { readonly cwd: string; readonly exported: boolean; readonly output: string } {
+  const written = userScopeHeader(`\${CLAUDE_PROJECT_DIR}${completion}ANTHROPIC_API_KEY}`);
+  return withProcessEnv({ CLAUDE_PROJECT_DIR: "", [EMPTY_ENV_NAME]: "" }, () => {
+    const exported = applyMcpAdapterEnv(cwd);
+    const projectDir = process.env.CLAUDE_PROJECT_DIR;
+    const runtimeEnv: Environment =
+      projectDir === undefined
+        ? PROJECT_DIR_CREDENTIAL
+        : { ...PROJECT_DIR_CREDENTIAL, CLAUDE_PROJECT_DIR: projectDir };
+    return { cwd, exported, output: commandSecretOutput(utils, written, runtimeEnv) };
+  });
+}
+
+test("AVAR-05: a cwd tail that plugin text after ${CLAUDE_PROJECT_DIR} completes into a marker leaks no credential", async (t) => {
+  // arrange
+  const adapter = await loadAdapter();
+  if (adapter === undefined) {
+    t.skip(NOT_INSTALLED);
+    return;
+  }
+
+  const expectedRuns = PARTIAL_TRIGGER_CWDS.map(({ cwd, completion }) => ({
+    cwd,
+    exported: false,
+    output: `${completion}ANTHROPIC_API_KEY}`,
+  }));
+
+  // act
+  const runs = PARTIAL_TRIGGER_CWDS.map((row) => projectDirHeaderRun(adapter.utils, row));
+
+  // assert
+  assert.deepStrictEqual(runs, expectedRuns);
 });
 
 const DRIFT_MESSAGE =
