@@ -52,6 +52,9 @@ function createWireHarness(name: string): WireHarness {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: `${name} context` });
   const ui = mock<WireUi>({ exactParams: true, name: `${name} UI` });
   const notifications: CapturedNotification[] = [];
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
   when(() => ctx.ui).thenReturn(ui);
   when(() => ui.notify).thenReturn((message, severity) => {
     notifications.push({ message, ...(severity === undefined ? {} : { severity }) });

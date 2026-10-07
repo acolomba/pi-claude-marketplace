@@ -275,8 +275,9 @@ async function loadExtension(
   emissions: number,
   rootReads: number,
   cwd?: { readonly value: string; readonly reads: number },
+  modeReads = emissions,
 ): Promise<LoadedExtension> {
-  const boundary = createNotificationBoundary(emissions, cwd);
+  const boundary = createNotificationBoundary(emissions, cwd, modeReads);
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   if (rootReads > 0) {
     when(() => pi.getAllTools())
@@ -1019,7 +1020,7 @@ test("keeps hook routing and command completion state inside each extension-load
   process.chdir(ownerCwd);
   // Three tool reads: the command's notification run is the only probe, and the
   // add notification renders from its snapshot (D-05).
-  const owner = await loadExtension(1, 3, { value: ownerCwd, reads: 1 });
+  const owner = await loadExtension(1, 3, { value: ownerCwd, reads: 1 }, 2);
   const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
   await owner.bridgeSessionStart({ type: "session_start", reason: "startup" }, ownerHookContext);
   const toolEvent: ToolCallEvent = {
@@ -1411,7 +1412,12 @@ test("reports an aborted reconcile as one raw error line and still answers (NFR-
   // arrange
   const scope = await createHermeticScope(t, "reconcile-aborted");
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, TOOL_READS_PER_DISCOVER);
+  const { discover, ctx, verifyBoundary } = await loadExtension(
+    0,
+    TOOL_READS_PER_DISCOVER,
+    undefined,
+    2,
+  );
   const recorded: Notification[] = [];
   let attempts = 0;
   const refusing = contextNotifyingThrough(ctx, (message, severity) => {
@@ -1439,7 +1445,12 @@ test("still answers when the last-ditch reconcile notification is also refused (
   // arrange
   const scope = await createHermeticScope(t, "last-ditch-refused");
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, TOOL_READS_PER_DISCOVER);
+  const { discover, ctx, verifyBoundary } = await loadExtension(
+    0,
+    TOOL_READS_PER_DISCOVER,
+    undefined,
+    2,
+  );
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [
@@ -1460,7 +1471,12 @@ test("still answers when the plugin PATH warning notification is refused (NFR-2)
   // arrange
   const scope = await createHermeticScope(t, "warning-refused");
   const statePath = await seedUnreadableState(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, TOOL_READS_PER_DISCOVER);
+  const { discover, ctx, verifyBoundary } = await loadExtension(
+    0,
+    TOOL_READS_PER_DISCOVER,
+    undefined,
+    3,
+  );
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [
@@ -1500,7 +1516,12 @@ test("attempts every skipped-scope PATH warning when every host notification thr
   const staleProjectBin = path.join(scope.cwd, "stale-project", "bin");
   process.env.PATH = ["/usr/bin", staleUserBin, staleProjectBin].join(path.delimiter);
   process.env.PI_CLAUDE_MARKETPLACE_PATH = [staleUserBin, staleProjectBin].join(path.delimiter);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 2 * TOOL_READS_PER_DISCOVER);
+  const { discover, ctx, verifyBoundary } = await loadExtension(
+    0,
+    2 * TOOL_READS_PER_DISCOVER,
+    undefined,
+    4,
+  );
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [

@@ -65,10 +65,17 @@ export interface NotificationBoundary {
 export function createNotificationBoundary(
   emissions: number,
   cwd?: { readonly value: string; readonly reads: number },
+  modeReads = emissions,
 ): NotificationBoundary {
   const notifications: Notification[] = [];
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "extension context" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
+  if (modeReads > 0) {
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .times(modeReads);
+  }
+
   if (emissions > 0) {
     when(() => ctx.ui)
       .thenReturn(ui)

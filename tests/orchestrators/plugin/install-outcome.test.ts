@@ -37,7 +37,7 @@ import type { NotificationContext } from "../../../extensions/pi-claude-marketpl
 import type { TestContext } from "node:test";
 
 function notificationContext(): NotificationContext {
-  return { ui: { notify: () => undefined } };
+  return { mode: "tui", ui: { notify: () => undefined } };
 }
 
 /**

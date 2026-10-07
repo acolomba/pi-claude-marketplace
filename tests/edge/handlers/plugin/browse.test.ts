@@ -127,6 +127,9 @@ test("browse rejects non-empty arguments with usage error", async () => {
   const { handlers } = createMockActionHandlers();
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
   when(() => ctx.ui).thenReturn(ui);
   when(() => {
     ui.notify("browse takes no arguments.\n\nUsage: /claude:plugin browse", "error");
@@ -167,7 +170,9 @@ test("TUI mode with no marketplaces emits structured (no marketplaces) notificat
   const { handlers } = createMockActionHandlers();
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
-  when(() => ctx.mode).thenReturn("tui");
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(2);
   when(() => ctx.cwd).thenReturn(scope.cwd);
   when(() => ctx.ui).thenReturn(ui);
   when(() => {
@@ -301,7 +306,9 @@ test("TUI mode when loadMarketplaceEntries throws emits structured failure notif
   const { handlers } = createMockActionHandlers();
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
-  when(() => ctx.mode).thenReturn("tui");
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(2);
   when(() => ctx.cwd).thenReturn(scope.cwd);
   when(() => ctx.ui).thenReturn(ui);
   const capturedNotify = It.willCapture<string>();

@@ -101,6 +101,7 @@ interface NotifyRecord {
 function makeCtx(cwd: string): { ctx: NotificationContext; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     cwd,
     ui: {
       notify(message: string, severity?: string): void {

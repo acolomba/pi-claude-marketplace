@@ -60,6 +60,9 @@ interface NotifyHarness {
 function createNotifyHarness(expected: ExpectedNotification): NotifyHarness {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .once();
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();

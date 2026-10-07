@@ -35,9 +35,31 @@ import {
   UnreadableSourceCloneError,
   UnremovableLeftoverCloneError,
   UnsupportedSourceError,
+  UnsupportedModeError,
   UnsafeGeneratedNameError,
   WorkflowNameCollisionError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+
+describe("UnsupportedModeError", () => {
+  test("preserves the unsupported runtime mode as structured data", () => {
+    // arrange
+    const mode = " json";
+
+    // act
+    const error = new UnsupportedModeError(mode);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, mode: error.mode, message: error.message },
+      {
+        name: "UnsupportedModeError",
+        mode,
+        message: "Unsupported notification mode:  json",
+      },
+    );
+  });
+});
 
 import type {
   CleanupFailure,

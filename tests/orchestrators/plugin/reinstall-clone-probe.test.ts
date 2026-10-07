@@ -32,7 +32,7 @@ async function freshLocations(testContext: TestContext): Promise<{
 }
 
 function auth(): Parameters<typeof probeReinstallClone>[0]["auth"] {
-  const ctx: NotificationContext = { ui: { notify: () => undefined } };
+  const ctx: NotificationContext = { mode: "tui", ui: { notify: () => undefined } };
   const credentialOps: CredentialOps = {
     approve: () => Promise.resolve(),
     fill: () => Promise.resolve(null),

@@ -98,7 +98,7 @@ interface MockCtx {
 
 function makeCtx(): MockCtx {
   const notify = mock.fn();
-  const ctx = { ui: { notify } } as unknown as ExtensionContext;
+  const ctx = { mode: "tui", ui: { notify } } as unknown as ExtensionContext;
   return { ctx, notify };
 }
 

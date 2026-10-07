@@ -5,9 +5,10 @@ import type {
   ToolInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationEntrySink } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 export type MockCtx = NotificationContext;
-export type MockPi = ToolInventory;
+export type MockPi = ToolInventory & NotificationEntrySink;
 type NotifyArguments = [message: string, severity?: "info" | "warning" | "error"];
 interface MockNotificationUi {
   readonly notify: (...args: NotifyArguments) => void;
@@ -30,6 +31,9 @@ export function makeCtx(): MockContextBoundary {
   const notifications: CapturedNotification[] = [];
   const ctx = mock<NotificationContext>({ exactParams: true, name: "catalog context" });
   const ui = mock<MockNotificationUi>({ exactParams: true, name: "catalog notification UI" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -54,7 +58,7 @@ export function makeCtx(): MockContextBoundary {
 }
 
 function makePi(tools: readonly ToolInventoryItem[]): MockPi {
-  const pi = mock<ToolInventory>({ exactParams: true, name: "catalog Pi API" });
+  const pi = mock<MockPi>({ exactParams: true, name: "catalog Pi API" });
   when(() => pi.getAllTools())
     .thenReturn(tools)
     .times(3);

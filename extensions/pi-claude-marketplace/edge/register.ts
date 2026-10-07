@@ -36,7 +36,7 @@
 
 import { makeLocationsResolver } from "../orchestrators/edge-deps.ts";
 import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall-flow.ts";
-import { openNotificationRun } from "../shared/notification-run.ts";
+import { openNotificationRun, requireNotificationMode } from "../shared/notification-run.ts";
 
 import {
   isClaudePluginCommandLine,
@@ -135,7 +135,10 @@ export function registerClaudePluginCommand(
     // D-05 / D-07: one notification run per command invocation, opened
     // before routing, so every emission of the command reads one snapshot.
     // A usage error opens its run too.
-    handler: (args, ctx) => routeClaudePlugin(args, handlers, ctx, openNotificationRun(pi)),
+    handler: (args, ctx) => {
+      requireNotificationMode(ctx.mode);
+      return routeClaudePlugin(args, handlers, ctx, openNotificationRun(pi));
+    },
     // This `process.cwd()` is the single sanctioned site.
     // The arrow body runs per completion lookup and reads
     // `process.cwd()` there, so a fresh `makeLocationsResolver` is

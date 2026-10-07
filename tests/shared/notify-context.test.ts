@@ -112,6 +112,9 @@ void omissionMustRemainATypeError;
 function createHarness(notification: NotificationRecord): Harness {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
   when(() => ctx.ui).thenReturn(ui);
   if (notification.severity === undefined) {
     when(() => {

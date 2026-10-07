@@ -59,6 +59,9 @@ function notificationBoundary(name: string): NotificationBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: `${name} context` });
   const ui = mock<NotificationUi>({ exactParams: true, name: `${name} UI` });
   const notifications: NotificationBoundary["notifications"] = [];
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
   when(() => ctx.ui).thenReturn(ui);
   when(() => ui.notify).thenReturn((message, severity) => {
     notifications.push({ message, ...(severity === undefined ? {} : { severity }) });

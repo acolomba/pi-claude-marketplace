@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test, type TestContext } from "node:test";
+import { test, type TestContext, type Mock } from "node:test";
 
 import {
   emitContextCascade,
@@ -25,11 +25,17 @@ import type {
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 interface NotificationContext {
-  readonly ui: { readonly notify: ReturnType<TestContext["mock"]["fn"]> };
+  mode: string;
+  readonly ui: {
+    readonly notify: Mock<(message: string, severity?: "info" | "warning" | "error") => void>;
+  };
 }
 
 function createContext(t: TestContext): NotificationContext {
-  return { ui: { notify: t.mock.fn() } };
+  return {
+    mode: "tui",
+    ui: { notify: t.mock.fn((_message: string, _severity?: "info" | "warning" | "error") => {}) },
+  };
 }
 
 /** pi-subagents and pi-mcp-adapter are loaded; the workflow engine is not. */
@@ -44,7 +50,7 @@ function notificationRun(): NotificationRun {
 function emitContext(t: TestContext, message: CascadeNotificationMessage): readonly unknown[] {
   const ctx = createContext(t);
 
-  emitContextCascade(ctx as never, notificationRun(), message, CENTRAL_ROW_POLICY);
+  emitContextCascade(ctx, notificationRun(), message, CENTRAL_ROW_POLICY);
 
   assert.equal(ctx.ui.notify.mock.callCount(), 1);
   return ctx.ui.notify.mock.calls[0]!.arguments;
@@ -577,8 +583,8 @@ test("update no-op fold preserves empty and non-empty bodies", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitUpdateNoOpCascade(emptyContext as never, notificationRun(), emptyMessage, CENTRAL_ROW_POLICY);
-  emitUpdateNoOpCascade(bodyContext as never, notificationRun(), bodyMessage, CENTRAL_ROW_POLICY);
+  emitUpdateNoOpCascade(emptyContext, notificationRun(), emptyMessage, CENTRAL_ROW_POLICY);
+  emitUpdateNoOpCascade(bodyContext, notificationRun(), bodyMessage, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(emptyContext.ui.notify.mock.calls[0]!.arguments, [
@@ -614,7 +620,7 @@ test("reconcile applied fold suppresses reload while preserving severity and tal
   } satisfies Parameters<typeof emitReconcileAppliedContextCascade>[2];
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, notificationRun(), message, CENTRAL_ROW_POLICY);
+  emitReconcileAppliedContextCascade(ctx, notificationRun(), message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [

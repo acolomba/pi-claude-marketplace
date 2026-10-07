@@ -107,6 +107,9 @@ function notificationBoundary(expectedCalls: 0 | 1): NotificationBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
   if (expectedCalls === 1) {
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();

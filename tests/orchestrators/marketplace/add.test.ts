@@ -332,6 +332,9 @@ function makeCtx(expectedNotifications = 1): {
   const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
   let notificationCalls = 0;
   if (expectedNotifications > 0) {
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .times(expectedNotifications);
     when(() => ctx.ui)
       .thenReturn(ui)
       .times(expectedNotifications);

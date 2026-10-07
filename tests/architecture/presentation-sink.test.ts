@@ -15,8 +15,8 @@ import type { ScanReport } from "./source-scan.ts";
  *   In the dispatch module named by `PRESENTATION_SINK_TARGETS`, every notify
  *   argument comes from the text strategy's output. A `ui.notify(` call may
  *   pass only `args[0]` or `args[0], args[1]`, and a `deliver` call may pass
- *   only a direct `formatEnvelopeArguments(` or `formatRawSurface(` call. A
- *   pre-composed tuple or a variable reaching the sink is a violation.
+ *   only direct `formatEnvelopeArguments(` output or the guarded raw formatter
+ *   result. The raw result's exact provenance and sole use are pinned below.
  *
  * Literals:
  *   The formatters accept any string as the body, so the module may hold no
@@ -67,8 +67,7 @@ const SINK_PATTERNS: ReadonlyArray<{ readonly name: string; readonly pattern: Re
   // stops it, so the `deliver` declaration does not match.
   {
     name: "sink handed a value that is not a text-strategy call",
-    pattern:
-      /\bdeliver\(\s*[A-Za-z_$][\w$.]*\s*,(?!\s*(?:formatEnvelopeArguments|formatRawSurface)\()/,
+    pattern: /\bdeliver\(\s*[A-Za-z_$][\w$.]*\s*,(?!\s*(?:formatEnvelopeArguments\(|args\)))/,
   },
 ];
 
@@ -87,6 +86,7 @@ const SINK_MODULE_LITERAL =
  * the list cannot outlive the code it describes.
  */
 const ALLOWED_SINK_MODULE_LITERALS: ReadonlyArray<string> = [
+  '"claude-plugin"',
   '"(no marketplaces)"',
   '"\\n"',
   '"\\n\\n"',
@@ -152,9 +152,10 @@ async function assertSinkPlacement(): Promise<void> {
   const deliverMentions = [...stripped.matchAll(/\bdeliver\b/g)].length;
   const formatterDeliverCalls = [
     ...stripped.matchAll(
-      /\bdeliver\(\s*[A-Za-z_$][\w$.]*\s*,\s*(?:formatEnvelopeArguments|formatRawSurface)\(/g,
+      /\bdeliver\(\s*[A-Za-z_$][\w$.]*\s*,\s*(?:formatEnvelopeArguments\(|args\))/g,
     ),
   ].length;
+  assert.strictEqual([...stripped.matchAll(/\bdeliver\(ctx, args\)/g)].length, 1);
 
   assert.strictEqual(
     uiMentions,
@@ -178,7 +179,7 @@ async function assertSinkPlacement(): Promise<void> {
   );
   assert.match(
     stripped,
-    /\bdeliver\(\s*[A-Za-z_$][\w$]*\s*,\s*formatRawSurface\(/,
+    /function emitRawSurface\([^}]+const args = formatRawSurface\(resolveRawSurface\(surface\)\);\s+if \(args === undefined\) \{\s+return;\s+\}\s+requireNotificationMode\(ctx.mode\);\s+deliver\(ctx, args\);\s+\}/,
     `D-16: no deliver call in ${SINK_FILE} passes formatRawSurface output, so the raw-surface path never reaches the sink.`,
   );
 }

@@ -63,7 +63,10 @@ export type {
 } from "@earendil-works/pi-coding-agent";
 export type { AutocompleteProvider } from "@earendil-works/pi-tui";
 
-import type { AgentEndEvent } from "@earendil-works/pi-coding-agent";
+import type { AgentEndEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+/** Pi's mode union, derived from its context because the root omits the alias. */
+export type ExtensionMode = ExtensionContext["mode"];
 
 /**
  * Structural `text` content block -- mirrors `pi-ai`'s `TextContent`
@@ -137,6 +140,7 @@ export interface NotificationUi {
 
 /** Consumer-owned view of a Pi context used only to emit notifications. */
 export interface NotificationContext {
+  readonly mode: string;
   readonly ui: NotificationUi;
 }
 

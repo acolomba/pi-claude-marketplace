@@ -68,11 +68,13 @@ import {
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { UnsupportedModeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
+import { createJsonCapture } from "./json-capture.ts";
 import { createNotificationBoundary } from "./notification-boundary.ts";
 
 import type { Notification } from "./notification-boundary.ts";
@@ -166,6 +168,7 @@ interface CommandUnderTest {
  */
 interface CommandProbes {
   readonly runs: number;
+  readonly capture?: ReturnType<typeof createJsonCapture>;
 }
 
 interface WrapperUnderTest {
@@ -380,6 +383,12 @@ function registerCommandWithCache(
     .thenReturn()
     .times(1);
   const toolReads = probes.runs * 3;
+  if (probes.capture !== undefined) {
+    when(() => pi.appendEntry)
+      .thenReturn(probes.capture.entrySink.appendEntry)
+      .times(1);
+  }
+
   if (toolReads > 0) {
     when(() => pi.getAllTools())
       .thenReturn([])
@@ -411,6 +420,107 @@ function registerCommandWithCache(
 function registerCommandUnderTest(probes: CommandProbes): CommandUnderTest {
   return registerCommandWithCache(createCompletionCache(), undefined, undefined, probes);
 }
+
+for (const mode of ["json", "rpc"]) {
+  test(`registered list appends a complete cascade in ${mode} without UI access`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "machine-list");
+    await seedProjectMarketplace(cwd, "demo");
+    const manifestPath = marketplaceRecordIn(cwd, "demo").manifestPath;
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(manifestPath, JSON.stringify({ name: "demo", plugins: [] }));
+    const capture = createJsonCapture();
+    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1, capture });
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    try {
+      await Reflect.apply(registration.handler, undefined, ["list --scope project", ctx]);
+    } catch {
+      // The retained capture ledger below must expose caught delivery failures.
+    }
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "cascade",
+          severity: "info",
+          needsReload: false,
+          tally: { label: "Plugin list", success: { count: 0 }, failures: 0, warnings: 0 },
+          marketplaces: [{ name: "demo", scope: "project", plugins: [] }],
+        },
+      },
+    ]);
+    capture.assertValid();
+    verifyRegistrar();
+  });
+}
+
+for (const mode of ["", "JSON", " json", "rpc ", "ｊｓｏｎ", "jsоn", "unknown"]) {
+  test(`registered command rejects ${JSON.stringify(mode)} before routing or probing`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "unsupported-mode");
+    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
+    const work: string[] = [];
+    const ctx = {
+      mode,
+      get cwd() {
+        work.push("route");
+        return cwd;
+      },
+    };
+    const originalPath = process.env.PATH;
+
+    // act & assert
+    assert.throws(
+      () => Reflect.apply(registration.handler, undefined, ["install alpha@demo", ctx]),
+      (error: unknown) => {
+        assert.ok(error instanceof UnsupportedModeError);
+        assert.strictEqual(error.mode, mode);
+        return true;
+      },
+    );
+    assert.deepStrictEqual(work, []);
+    assert.deepStrictEqual(await retryTree(cwd), []);
+    assert.strictEqual(process.env.PATH, originalPath);
+    verifyRegistrar();
+  });
+}
+
+test("a stale command mode getter prevents routing and inventory reads", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "stale-mode");
+  const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
+  const stale = new Error("context is stale");
+  const work: string[] = [];
+  const ctx = {
+    get mode(): string {
+      throw stale;
+    },
+    get cwd() {
+      work.push("route");
+      return cwd;
+    },
+  };
+
+  // act & assert
+  assert.throws(
+    () => Reflect.apply(registration.handler, undefined, ["install alpha@demo", ctx]),
+    (error: unknown) => error === stale,
+  );
+  assert.deepStrictEqual(work, []);
+  assert.deepStrictEqual(await retryTree(cwd), []);
+  verifyRegistrar();
+});
 
 function createBootstrapGitOps(sourceTree: string): EdgeDeps["gitOps"] {
   const git = createGitOpsFake({
@@ -479,7 +589,7 @@ describe("registerClaudePluginCommand", () => {
   test("hands the argument text and the command context to the subcommand router (D-04)", async (t) => {
     // arrange
     await createHermeticScope(t, "command-handler");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
     // One run per invocation, usage errors included; the usage error probes nothing.
     const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
     const expectedNotifications: readonly Notification[] = [
@@ -512,10 +622,14 @@ describe("registerClaudePluginCommand", () => {
       const untouchedState = await readFile(untouched.stateJsonPath, "utf8");
       const untouchedTree = await retryTree(untouched.scopeRoot);
       const lockSpy = t.mock.method(lockfile, "lock");
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
-        value: cwd,
-        reads: 1,
-      });
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(
+        1,
+        {
+          value: cwd,
+          reads: 1,
+        },
+        2,
+      );
       // The one run is the only probe: the prune notification renders from it.
       const { registration, verifyRegistrar } = registerCommandWithCache(
         createCompletionCache(),
@@ -572,7 +686,7 @@ describe("registerClaudePluginCommand", () => {
       const userTree = await retryTree(user.scopeRoot);
       const projectTree = await retryTree(project.scopeRoot);
       const lockSpy = t.mock.method(lockfile, "lock");
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
       // One run per invocation, usage errors included; the usage error probes nothing.
       const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
@@ -599,10 +713,14 @@ describe("registerClaudePluginCommand", () => {
   test("shares the supplied lifecycle routing owner with registered import execution", async (t) => {
     // arrange
     const { cwd } = await createHermeticScope(t, "import-routing-owner");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, {
-      value: cwd,
-      reads: 1,
-    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(
+      0,
+      {
+        value: cwd,
+        reads: 1,
+      },
+      1,
+    );
     const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     let forwardedHooksRouting: unknown;
     const importClaudeSettings: ImportDelegate = (options) => {
@@ -756,6 +874,9 @@ describe("registerClaudePluginCommand", () => {
     when(() => ctx.cwd)
       .thenReturn(cwd)
       .times(1);
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .times(3);
     when(() => ctx.ui)
       .thenReturn(ui)
       .times(2);
@@ -884,6 +1005,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(2);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -975,6 +1099,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(2);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1084,6 +1211,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(2);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1190,6 +1320,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(2);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1315,6 +1448,9 @@ test("one soft-dep snapshot drives both the severity stamp and the markers of a 
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(2);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1406,6 +1542,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(2);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1511,6 +1650,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(2);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1988,7 +2130,7 @@ for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_A
       test(`registered ${spelling} rejects ${kind} before reading runtime context`, async (t) => {
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-arguments");
-        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
         // One run per invocation, usage errors included; the usage error probes nothing.
         const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
@@ -2018,7 +2160,7 @@ for (const { verb, aliases = [], operand, usage } of COMMAND_ARGUMENT_CASES.filt
       test(`registered ${spelling} rejects the empty scope ${emptyValue} before a valid-looking token`, async (t) => {
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-empty-scope");
-        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
         // One run per invocation, usage errors included; the usage error probes nothing.
         const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 

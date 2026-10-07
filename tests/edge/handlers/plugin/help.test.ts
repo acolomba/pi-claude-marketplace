@@ -20,6 +20,9 @@ import type { ExtensionCommandContext } from "../../../../extensions/pi-claude-m
 test("help with empty args emits top-level usage at info severity", async () => {
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
   when(() => ctx.ui).thenReturn(ui);
   when(() => {
     ui.notify(TOP_LEVEL_USAGE, "info");
@@ -35,6 +38,9 @@ test("help with empty args emits top-level usage at info severity", async () => 
 test("help with 'help' topic emits top-level usage at info severity", async () => {
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
   when(() => ctx.ui).thenReturn(ui);
   when(() => {
     ui.notify(TOP_LEVEL_USAGE, "info");
@@ -50,6 +56,9 @@ test("help with 'help' topic emits top-level usage at info severity", async () =
 test("help with 'marketplace' topic emits marketplace usage at info severity", async () => {
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
   when(() => ctx.ui).thenReturn(ui);
   when(() => {
     ui.notify(MARKETPLACE_USAGE, "info");
@@ -65,6 +74,9 @@ test("help with 'marketplace' topic emits marketplace usage at info severity", a
 test("help with unknown topic emits usage error at error severity", async () => {
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
   when(() => ctx.ui).thenReturn(ui);
   when(() => {
     ui.notify(

@@ -165,7 +165,7 @@ test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND stat
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -213,7 +213,7 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -305,7 +305,7 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -366,7 +366,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -430,7 +430,7 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
 
     function mpRecord(name: string): Record<string, unknown> {
       return {
@@ -532,7 +532,7 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
       },
     } as never);
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const installPlugin = createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
@@ -583,7 +583,7 @@ test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orch
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
