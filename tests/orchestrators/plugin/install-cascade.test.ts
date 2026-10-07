@@ -22,6 +22,7 @@ import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shar
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -292,6 +293,7 @@ function unmaterializedSummary(
 function ledgerOptionsFor(cwd: string): (member: ResolvedCascadeMember) => InstallLedgerOptions {
   return (member) => ({
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     scope: "project",
     cwd,
     marketplace: member.marketplace,
@@ -3158,6 +3160,7 @@ test("AUTH-09 the tag query rides the credential collaborators the member's inst
   };
   const authMemo = new Map<string, AuthAttemptResult>();
   const ctx = notificationContext();
+  const run = runWithNothingLoaded();
   const seen: DependencyTagProbeOptions[] = [];
 
   // act
@@ -3172,6 +3175,7 @@ test("AUTH-09 the tag query rides the credential collaborators the member's inst
     ledgerOptionsFor: (member) => ({
       ...ledgerOptionsFor(environment.cwd)(member),
       ctx,
+      run,
       credentialOps,
       deviceFlowHttp,
       authMemo,
@@ -3190,7 +3194,7 @@ test("AUTH-09 the tag query rides the credential collaborators the member's inst
   assert.strictEqual(cascade.kind, "installed");
   assert.deepStrictEqual(
     seen.map((query) => query.auth),
-    [{ ctx, credentialOps, deviceFlowHttp, authMemo }],
+    [{ ctx, run, credentialOps, deviceFlowHttp, authMemo }],
   );
 });
 

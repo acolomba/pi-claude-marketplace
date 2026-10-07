@@ -43,6 +43,7 @@ import type { DeviceFlowHttp } from "../domain/github-auth.ts";
 import type { AuthAttemptResult, OnAuthRequiredFn } from "../platform/git-auth-callbacks.ts";
 import type { CredentialOps } from "../platform/git-credential.ts";
 import type { NotificationContext } from "../platform/pi-api.ts";
+import type { NotificationRun } from "../shared/notification-run.ts";
 import type { GitAuthBundle } from "./marketplace/shared.ts";
 
 // Re-export the auth/credential types the network-gated plugin orchestrators
@@ -169,10 +170,11 @@ export function buildAuthForHost(args: {
   host: string;
   credentialOps: CredentialOps;
   ctx: NotificationContext;
+  run: NotificationRun;
   deviceFlowHttp?: DeviceFlowHttp;
   authMemo?: Map<string, AuthAttemptResult>;
 }): GitAuthBundle {
-  const { host, credentialOps, ctx, deviceFlowHttp, authMemo } = args;
+  const { host, credentialOps, ctx, run, deviceFlowHttp, authMemo } = args;
 
   const provider = findProviderForHost(host);
   if (provider === undefined) {
@@ -191,7 +193,7 @@ export function buildAuthForHost(args: {
       host,
       credentialOps,
       onDeviceCode: (prompt) => {
-        notifyDeviceFlowPrompt(ctx, prompt);
+        notifyDeviceFlowPrompt(ctx, run, prompt);
       },
       ...(deviceFlowHttp !== undefined && { http: deviceFlowHttp }),
     });
@@ -223,6 +225,7 @@ export function buildCloneAuth(
   kind: "url" | "git-subdir" | "github",
   auth: {
     readonly ctx: NotificationContext;
+    readonly run: NotificationRun;
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -232,6 +235,7 @@ export function buildCloneAuth(
     host: hostFromCloneUrl(cloneUrl, kind),
     credentialOps: auth.credentialOps,
     ctx: auth.ctx,
+    run: auth.run,
     ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
     ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
   });

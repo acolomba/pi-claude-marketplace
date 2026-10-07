@@ -707,6 +707,7 @@ async function probeMemberPin(
     tagMemo: options.tagMemo,
     auth: {
       ctx: ledger.ctx,
+      run: ledger.run,
       credentialOps: ledger.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
       ...(ledger.deviceFlowHttp !== undefined && { deviceFlowHttp: ledger.deviceFlowHttp }),
       ...(ledger.authMemo !== undefined && { authMemo: ledger.authMemo }),

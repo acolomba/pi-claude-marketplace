@@ -189,6 +189,7 @@ function buildInfoFetchContext(opts: GetPluginInfoOptions): InfoFetchContext | u
 
   return {
     ctx: opts.ctx,
+    run: opts.run,
     seam: opts.cloneCacheSeam ?? {
       resolvePluginPin,
       materializePluginClone,
@@ -1941,6 +1942,7 @@ function buildNonPathInstalledRow(
  */
 interface InfoFetchContext {
   readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
   readonly seam: InfoCloneCacheSeam;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;

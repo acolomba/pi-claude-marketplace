@@ -13,6 +13,7 @@ import {
   type ReinstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-clone-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
@@ -38,7 +39,7 @@ function auth(): Parameters<typeof probeReinstallClone>[0]["auth"] {
     fill: () => Promise.resolve(null),
     reject: () => Promise.resolve(),
   };
-  return { ctx, credentialOps };
+  return { ctx, run: runWithNothingLoaded(), credentialOps };
 }
 
 async function writeMirrorHead(mirrorRoot: string, sha: string): Promise<void> {

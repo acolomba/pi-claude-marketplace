@@ -25,6 +25,7 @@ import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
@@ -231,6 +232,7 @@ test("returns the marketplace-absent discriminant without mutating state", async
   // act
   const ledgerOutcome = await runInstallLedger(state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "missing",
     plugin: "empty",
@@ -252,6 +254,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     pinVersionOverride: "pinned-by-caller",
@@ -390,6 +393,7 @@ test("captures the resolved version when a concurrent record aborts state commit
     locations,
     {
       ctx: notificationContext(),
+      run: runWithNothingLoaded(),
       cwd: environment.cwd,
       marketplace: "marketplace",
       plugin: "empty",
@@ -437,6 +441,7 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
     locations,
     {
       ctx: notificationContext(),
+      run: runWithNothingLoaded(),
       cwd: environment.cwd,
       marketplace: "marketplace",
       plugin: "empty",
@@ -465,6 +470,7 @@ test("preserves installedAt while replacing an existing disabled record", async 
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     allowExistingRecord: true,
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -503,6 +509,7 @@ test("LOAD-02: re-materializing a held-down record drops the dependency marker",
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     allowExistingRecord: true,
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -578,6 +585,7 @@ async function installWithFaultedStagingCleanup(
 
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -652,6 +660,7 @@ test("surfaces the workflows staging cleanup leak and still lands the install", 
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -724,6 +733,7 @@ test("a failed workflows removal during rollback surfaces as its own partial rat
     locations,
     {
       ctx: notificationContext(),
+      run: runWithNothingLoaded(),
       cwd: environment.cwd,
       marketplace: "marketplace",
       plugin: "empty",
@@ -780,6 +790,7 @@ test("throws already-installed when a target-scope record exists and the caller 
   // act
   const operation = runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -815,6 +826,7 @@ test("throws not-in-manifest for a plugin the cached manifest does not carry", a
   // act
   const operation = runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "ghost",
@@ -846,6 +858,7 @@ test("CMP-3: a project-target install adopts a clone of the user-scope marketpla
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -876,6 +889,7 @@ test("flags binaries as unsupported when the marketplace is an official one", as
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "claude-plugins-official",
     plugin: "empty",
@@ -906,6 +920,7 @@ test("--partial admits the partially-available arm the default gate refuses", as
   const locations = locationsFor("project", environment.cwd);
   const options = {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -951,6 +966,7 @@ test("collects the per-source frontmatter degrade records from the skills and co
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -1007,6 +1023,7 @@ test("AS-7: a retired foreign agent target is preserved while a distinct agent i
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -1047,6 +1064,7 @@ test("writes the hooks config and records the plugin's hooks slug on the state r
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -1094,6 +1112,7 @@ test("an mcp phase that cannot even prepare unwinds the hooks config the phase b
     locations,
     {
       ctx: notificationContext(),
+      run: runWithNothingLoaded(),
       cwd: environment.cwd,
       marketplace: "marketplace",
       plugin: "empty",
@@ -1146,6 +1165,7 @@ test("a hooks.json that turns malformed after resolution unwinds the ledger", as
     locations,
     {
       ctx: notificationContext(),
+      run: runWithNothingLoaded(),
       cwd: environment.cwd,
       marketplace: "marketplace",
       plugin: "empty",
@@ -1204,6 +1224,7 @@ async function assertFailingPhaseUndoIsInert(
     locations,
     {
       ctx: notificationContext(),
+      run: runWithNothingLoaded(),
       cwd: environment.cwd,
       marketplace: "marketplace",
       plugin: "empty",
@@ -1272,6 +1293,7 @@ test("stages the declared mcp servers and records their generated names", async 
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -1304,6 +1326,7 @@ test("PURL-09 / D-77-01 / D-77-02: a git-source install takes its root and its v
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -1355,6 +1378,7 @@ test("RESV-03: a source pin override materializes the pinned commit, not the ent
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -1413,6 +1437,7 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -1459,6 +1484,7 @@ test("TAGS-01/03 (D-07-06/07): a pinned path-source install records the tag's ow
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -1507,6 +1533,7 @@ test("an unpinned path-source install threads neither pathPluginPin nor resolveP
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -1544,6 +1571,7 @@ test("D-07-06: with no pathPinProbe override, a pinned path-source install falls
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",
@@ -1576,6 +1604,7 @@ test("D-07-06: a pinned path-source install whose callback does not materialize 
   // act
   const blocked = runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     cwd: environment.cwd,
     marketplace: "marketplace",
     plugin: "empty",

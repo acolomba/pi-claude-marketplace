@@ -122,7 +122,7 @@ export interface PreparePluginUpdateOptions {
   /** State I/O for the disabled-pin refresh; production callers omit it. */
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly partial?: boolean;
-  readonly ctx?: NotificationContext;
+  readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   /**
    * D-10-02 / D-10-19: the constraint gate is composed through this field,
@@ -205,7 +205,7 @@ function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
   locations: ScopedLocations,
   auth: {
-    readonly ctx?: NotificationContext;
+    readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -214,9 +214,9 @@ function makeUpdateCloneProbe(
   let captured: string | undefined;
 
   function cloneAuth(cloneUrl: string, kind: GitBackedSource["kind"]): GitAuthBundle {
-    return auth.ctx === undefined
+    return auth.notification === undefined
       ? buildStoredCredentialAuth(hostFromCloneUrl(cloneUrl, kind), auth.credentialOps)
-      : buildCloneAuth(cloneUrl, kind, { ...auth, ctx: auth.ctx });
+      : buildCloneAuth(cloneUrl, kind, { ...auth, ...auth.notification });
   }
 
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
@@ -768,13 +768,13 @@ function postFetchGuard(
  * on this file.
  */
 function buildUpdateAuth(options: PreparePluginUpdateOptions): {
-  readonly ctx?: NotificationContext;
+  readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
 } {
   return {
-    ...(options.ctx !== undefined && { ctx: options.ctx }),
+    ...(options.notification !== undefined && { notification: options.notification }),
     credentialOps: options.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
     ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
     ...(options.authMemo !== undefined && { authMemo: options.authMemo }),

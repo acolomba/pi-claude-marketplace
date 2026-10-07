@@ -6243,7 +6243,7 @@ test("notifyDeviceFlowPrompt emits the verification URI and user code at info se
   const ctx = createContext(t);
 
   // act
-  notifyDeviceFlowPrompt(ctx, {
+  notifyDeviceFlowPrompt(ctx, runWithNothingLoaded(), {
     verificationUri: "https://github.com/login/device",
     userCode: "ABCD-1234",
   });

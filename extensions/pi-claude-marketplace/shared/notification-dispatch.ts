@@ -205,12 +205,20 @@ export function notifyDiagnostic(
  * `prompt` reaches the kind. The text strategy composes the sentence at
  * explicit `"info"` severity.
  */
-export function notifyDeviceFlowPrompt(ctx: NotificationContext, prompt: DeviceFlowPrompt): void {
-  emitRawSurface(ctx, {
-    kind: "device-flow-prompt",
-    verificationUri: prompt.verificationUri,
-    userCode: prompt.userCode,
-  });
+export function notifyDeviceFlowPrompt(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  prompt: DeviceFlowPrompt,
+): void {
+  emitPresentation(
+    ctx,
+    run,
+    resolveRawSurface({
+      kind: "device-flow-prompt",
+      verificationUri: prompt.verificationUri,
+      userCode: prompt.userCode,
+    }),
+  );
 }
 
 /**
@@ -373,7 +381,7 @@ function emitPresentation(
       if ("envelope" in presentation) {
         emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
       } else {
-        // Usage and nonempty diagnostics always produce a tuple.
+        // Usage, device prompts, and nonempty diagnostics always produce a tuple.
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- empty diagnostics return before transport selection
         const args = formatRawSurface(presentation)!;
         deliver(ctx, args);

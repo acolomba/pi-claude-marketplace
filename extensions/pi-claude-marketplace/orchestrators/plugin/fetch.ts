@@ -168,6 +168,7 @@ export function createFetchPlugins(
       // eslint-disable-next-line no-await-in-loop -- the shared `authMemo` runs the device flow once per host
       const row = await fetchOne(target, {
         ctx,
+        run,
         seam,
         status,
         credentialOps,
@@ -315,6 +316,7 @@ async function enumerateMarketplaceEntries(
 
 interface FetchOneDeps {
   readonly ctx: ExtensionContext;
+  readonly run: NotificationRun;
   readonly seam: FetchCloneCacheSeam;
   readonly status: FetchStatus;
   readonly credentialOps: CredentialOps;

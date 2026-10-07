@@ -17,6 +17,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
@@ -126,7 +127,7 @@ async function prepare(
     readonly constraintTagMemo?: PreparePluginUpdateOptions["constraintTagMemo"];
     readonly constraintMarketplaceTagMemo?: PreparePluginUpdateOptions["constraintMarketplaceTagMemo"];
     readonly cleanupClones?: () => Promise<void>;
-    readonly ctx?: NotificationContext;
+    readonly notification?: PreparePluginUpdateOptions["notification"];
     readonly credentialOps?: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -148,7 +149,7 @@ async function prepare(
     ...(options.constraintMarketplaceTagMemo !== undefined && {
       constraintMarketplaceTagMemo: options.constraintMarketplaceTagMemo,
     }),
-    ...(options.ctx !== undefined && { ctx: options.ctx }),
+    ...(options.notification !== undefined && { notification: options.notification }),
     ...(options.credentialOps !== undefined && { credentialOps: options.credentialOps }),
     ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
     ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
@@ -1271,7 +1272,12 @@ test("passes authenticated clone context and refs through both clone arms", asyn
   };
 
   // act
-  const auth = { ctx, credentialOps, deviceFlowHttp, authMemo };
+  const auth = {
+    notification: { ctx, run: runWithNothingLoaded() },
+    credentialOps,
+    deviceFlowHttp,
+    authMemo,
+  };
   const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam, ...auth });
   const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam, ...auth });
 

@@ -14,9 +14,11 @@ import {
 import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createCredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { GitAuthBundle } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
@@ -112,6 +114,67 @@ describe("NO_STORED_CREDENTIAL_CAUSE", () => {
 });
 
 describe("buildAuthForHost", () => {
+  for (const mode of ["json", "rpc"]) {
+    test(`appends the host-bound device prompt in ${mode}`, async () => {
+      // arrange
+      const capture = createJsonCapture();
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: {
+          device_code: "device-secret",
+          user_code: "HOST-1234",
+          verification_uri: "https://github.com/login/device",
+          expires_in: 900,
+          interval: 0,
+        },
+        pollResponses: [
+          { kind: "success", accessToken: "auth-secret", tokenType: "bearer", scope: "repo" },
+        ],
+      });
+      const auth = expectDeviceFlow(
+        buildAuthForHost({
+          host: "github.com",
+          credentialOps: credentials.credentialOps,
+          ctx,
+          run,
+          deviceFlowHttp: deviceFlow.http,
+        }),
+      );
+
+      // act
+      const authentication = await auth.onAuthRequired();
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "device-flow-prompt",
+            severity: "info",
+            needsReload: false,
+            verificationUri: "https://github.com/login/device",
+            userCode: "HOST-1234",
+          },
+        },
+      ]);
+      assert.deepStrictEqual(authentication, {
+        ok: true,
+        cred: { username: "x-access-token", password: "auth-secret" },
+      });
+      capture.assertValid();
+    });
+  }
+
   test("forwards an unregistered host's stored credential through the real auth callbacks", async () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
@@ -123,6 +186,7 @@ describe("buildAuthForHost", () => {
       host: "git.example.invalid",
       credentialOps: credentials.credentialOps,
       ctx,
+      run: runWithNothingLoaded(),
     });
     const callbacks = buildAuthCallbacks(auth);
 
@@ -148,6 +212,7 @@ describe("buildAuthForHost", () => {
       host: "git.example.invalid",
       credentialOps: credentials.credentialOps,
       ctx,
+      run: runWithNothingLoaded(),
     });
     const callbacks = buildAuthCallbacks(auth);
 
@@ -178,6 +243,7 @@ describe("buildAuthForHost", () => {
       host: "git.example.invalid",
       credentialOps: credentials.credentialOps,
       ctx,
+      run: runWithNothingLoaded(),
     });
     const callbacks = buildAuthCallbacks(auth);
 
@@ -209,6 +275,7 @@ describe("buildAuthForHost", () => {
       host: "github.com",
       credentialOps: credentials.credentialOps,
       ctx,
+      run: runWithNothingLoaded(),
     });
     const callbacks = buildAuthCallbacks(auth);
 
@@ -239,6 +306,7 @@ describe("buildAuthForHost", () => {
       host: "git.example.invalid",
       credentialOps: credentials.credentialOps,
       ctx,
+      run: runWithNothingLoaded(),
     });
 
     // assert
@@ -263,6 +331,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
       }),
     );
 
@@ -297,6 +366,7 @@ describe("buildAuthForHost", () => {
         host: "gitlab.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
       }),
     );
 
@@ -365,6 +435,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         deviceFlowHttp: deviceFlow.http,
       }),
     );
@@ -450,6 +521,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         deviceFlowHttp: deviceFlow.http,
         authMemo,
       }),
@@ -519,6 +591,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         deviceFlowHttp: deviceFlow.http,
         authMemo,
       }),
@@ -611,6 +684,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         deviceFlowHttp: deviceFlow.http,
         authMemo,
       }),
@@ -620,6 +694,7 @@ describe("buildAuthForHost", () => {
         host: "gitlab.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         deviceFlowHttp: deviceFlow.http,
         authMemo,
       }),
@@ -769,6 +844,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         authMemo,
       }),
     );
@@ -891,6 +967,7 @@ describe("buildCloneAuth", () => {
     const auth = expectDeviceFlow(
       buildCloneAuth("not a valid URL", "github", {
         ctx,
+        run: runWithNothingLoaded(),
         credentialOps: credentials.credentialOps,
         deviceFlowHttp: deviceFlow.http,
         authMemo,
@@ -947,7 +1024,11 @@ describe("buildCloneAuth", () => {
       boundary: "memory",
       credentials: [["gitlab.com", { username: "oauth2", password: "stored-secret" }]],
     });
-    const authOptions = { credentialOps: credentials.credentialOps, ctx };
+    const authOptions = {
+      credentialOps: credentials.credentialOps,
+      ctx,
+      run: runWithNothingLoaded(),
+    };
     const auth = buildCloneAuth("https://gitlab.com/team/plugin.git", "url", authOptions);
     const callbacks = buildAuthCallbacks(auth);
 
@@ -964,7 +1045,7 @@ describe("buildCloneAuth", () => {
       approve: [],
       reject: [],
     });
-    assert.deepStrictEqual(Object.keys(authOptions), ["credentialOps", "ctx"]);
+    assert.deepStrictEqual(Object.keys(authOptions), ["credentialOps", "ctx", "run"]);
     verify(ctx);
   });
 
@@ -989,6 +1070,7 @@ describe("buildCloneAuth", () => {
     const auth = expectDeviceFlow(
       buildCloneAuth(cloneUrl, "url", {
         ctx,
+        run: runWithNothingLoaded(),
         credentialOps: credentials.credentialOps,
         deviceFlowHttp: deviceFlow.http,
       }),
@@ -1030,7 +1112,7 @@ describe("buildCloneAuth", () => {
     const auth = buildCloneAuth(
       "https://gitlab.com:8443/team/repository.git#plugin",
       "git-subdir",
-      { ctx, credentialOps: credentials.credentialOps },
+      { ctx, run: runWithNothingLoaded(), credentialOps: credentials.credentialOps },
     );
 
     // assert

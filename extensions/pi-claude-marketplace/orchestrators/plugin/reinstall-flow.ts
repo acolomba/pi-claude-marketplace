@@ -743,6 +743,7 @@ async function runLockedReinstall(
       seam: opts.cloneCacheSeam,
     }),
     ctx: opts.ctx,
+    run: opts.run,
     credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
@@ -914,6 +915,7 @@ async function resolveInstallable(
     readonly recordedSha: string | undefined;
     readonly seam?: ReinstallCloneCacheSeam;
     readonly ctx: NotificationContext;
+    readonly run: NotificationRun;
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -936,6 +938,7 @@ async function resolveInstallable(
             ...(input.seam !== undefined && { seam: input.seam }),
             auth: {
               ctx: input.ctx,
+              run: input.run,
               credentialOps: input.credentialOps,
               ...(input.deviceFlowHttp !== undefined && { deviceFlowHttp: input.deviceFlowHttp }),
               ...(input.authMemo !== undefined && { authMemo: input.authMemo }),

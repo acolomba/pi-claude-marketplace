@@ -38,6 +38,7 @@ import { buildCloneAuth } from "../auth-host.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 
 /** The tag-listing operation this probe reaches the network through. */
@@ -83,6 +84,7 @@ export interface DependencyTagProbeOptions {
   readonly tagMemo?: Map<string, readonly RemoteTag[]>;
   readonly auth: {
     readonly ctx: NotificationContext;
+    readonly run: NotificationRun;
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;

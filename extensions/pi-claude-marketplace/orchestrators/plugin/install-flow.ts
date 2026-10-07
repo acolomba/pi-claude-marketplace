@@ -268,6 +268,7 @@ export interface InstallTransaction {
 type InstallLedgerCallerOptions = Pick<
   InstallPluginOptions,
   | "ctx"
+  | "run"
   | "mapModel"
   | "partial"
   | "cloneCacheSeam"
@@ -323,6 +324,7 @@ function buildInstallLedgerOptions(
 ): InstallLedgerOptions {
   return {
     ctx: opts.ctx,
+    run: opts.run,
     scope: core.scope,
     cwd: core.cwd,
     marketplace: core.marketplace,
@@ -1159,6 +1161,7 @@ async function materializePromotedRecord(
     args.locations,
     {
       ctx: opts.ctx,
+      run: opts.run,
       scope: opts.scope,
       cwd: opts.cwd,
       marketplace: opts.marketplace,
