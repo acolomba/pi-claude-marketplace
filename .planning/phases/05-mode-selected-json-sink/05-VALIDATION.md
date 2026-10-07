@@ -44,8 +44,8 @@ Task IDs are phase-qualified plan.task names. Each plan supplies the complete co
 | 05-02.2 | MODE-01, JOUT-01, TENB-02 | T-05-06 | node --test tests/shared/notification-dispatch.test.ts tests/edge/router.test.ts | Live mode, duplicate count/order, or snapshot-count assertion fails | passed: 286 tests; ordered mixed entries, adjacent duplicates, live getter and original snapshot; commit 25398caa |
 | 05-03.1 | JOUT-01, MODE-01, TENB-01 | T-05-07 | node --test tests/orchestrators/import/execute.test.ts tests/orchestrators/plugin/shared.test.ts tests/orchestrators/plugin/install-flow.test.ts tests/orchestrators/plugin/reinstall-flow.test.ts tests/orchestrators/plugin/update-flow.test.ts tests/orchestrators/reconcile/apply.test.ts tests/shared/notification-dispatch.test.ts | A diagnostic producer misses capture, bypasses redaction, or changes completed state | passed: 1040 owner tests; final direct coverage 100%; commits 0c9e0abd, c9634f59 |
 | 05-03.2 | JOUT-01, TENB-01 | T-05-08 | node --test tests/shared/notification-dispatch.test.ts tests/orchestrators/reconcile/apply.test.ts | Empty/no-op, duplicate ordering, or retained invalid-middle assertion fails | passed: 334 tests; empty, blank, ordered duplicates and retained caught failure; commit f9a80456 |
-| 05-04.1 | JOUT-01, MODE-01, TENB-01 | T-05-09, 10 | node --test tests/orchestrators/auth-host.test.ts tests/orchestrators/plugin/install-clone-probe.test.ts tests/orchestrators/plugin/reinstall-clone-probe.test.ts tests/orchestrators/plugin/dependency-tag-probe.test.ts tests/orchestrators/plugin/update-preflight.test.ts tests/orchestrators/plugin/update-constraint-gate.test.ts tests/integration/auth-e2e.test.ts | Any auth carrier loses parent run or stored-only paths acquire a prompt | pending execution |
-| 05-04.2 | JOUT-01, MODE-01, TENB-01 | T-05-11 | node --test tests/orchestrators/auth-host.test.ts tests/shared/notification-dispatch.test.ts tests/architecture/no-credential-leak.test.ts tests/architecture/catalog-uat/catalog-wire.test.ts | Delayed mode read, exact two-field prompt, or whole-payload secret protection fails | pending execution |
+| 05-04.1 | JOUT-01, MODE-01, TENB-01 | T-05-09, 10 | node --test tests/orchestrators/auth-host.test.ts tests/orchestrators/plugin/install-clone-probe.test.ts tests/orchestrators/plugin/reinstall-clone-probe.test.ts tests/orchestrators/plugin/dependency-tag-probe.test.ts tests/orchestrators/plugin/update-preflight.test.ts tests/orchestrators/plugin/update-constraint-gate.test.ts tests/integration/auth-e2e.test.ts | Any auth carrier loses parent run or stored-only paths acquire a prompt | passed: 145 owner tests; 17 direct pairs at 100%; commit dbb9e985 |
+| 05-04.2 | JOUT-01, MODE-01, TENB-01 | T-05-11 | node --test tests/orchestrators/auth-host.test.ts tests/shared/notification-dispatch.test.ts tests/architecture/no-credential-leak.test.ts tests/architecture/catalog-uat/catalog-wire.test.ts | Delayed mode read, exact two-field prompt, or whole-payload secret protection fails | passed: 308 tests; delayed live mode, original snapshot, memo and retained invalid capture; commit eb7ed820 |
 | 05-05.1 | MODE-02, JOUT-01, JOUT-05, TENB-01 | T-05-12, 13, 15 | node --test tests/index.test.ts tests/edge/register.test.ts tests/shared/notification-dispatch.test.ts tests/shared/debug-log.test.ts | Unknown-mode writes occur, stale callback rejects, or independent discovery/PATH work disappears | pending execution |
 | 05-05.2 | MODE-02, JOUT-05 | T-05-14 | node --test tests/bridges/hooks/event-router.test.ts tests/index.test.ts | Factory creates fresh directories, unsupported session dispatches, or cleanup is skipped | pending execution |
 | 05-06.1 | JOUT-01, JOUT-05, MODE-02, TENB-01 | T-05-16, 17 | node --test tests/bridges/hooks/async-rewake/registry.test.ts tests/shared/notification-dispatch.test.ts tests/architecture/hooks-async-rewake.test.ts | Stale callback escapes, terminal cleanup fails, old generation emits, or independent valid exit-2 handling stops | pending execution |
@@ -91,6 +91,19 @@ A-05-01 and A-05-02 remain flagged unclassified assumptions. P-05-01 and P-05-02
 - Retained Task 1 TAP evidence classified `RED_EVIDENCE_OK`; green source and tests were committed together under the explicit hook policy. Task 2 was test-only.
 - The model's zero-length diagnostic lines predicate runs before resolution and transport selection. Both protected UI calls and the formatter-provenance gate remain unchanged.
 - Later plan rows, assumptions, prohibitions, and phase-wide sign-off remain pending.
+
+### Observed plan 05-04 evidence
+
+- Node `v26.10.0`, isolated branch `agent-p05-04-1791374242`.
+- Task commits `dbb9e985` and `eb7ed820` passed all required commit hooks.
+- `npm run check` exited 0 at `eb7ed820b4b62c5ef6ad6dc7f6c7c053557656f7`, including all direct pairs (264 LCOV records).
+- Task 1 owner command passed 145 tests. Its 17 changed source pairs passed isolated 100% line/function/branch coverage. Task 2 command passed 308 tests.
+- The delayed callback reads only the emission-time `rpc` mode, retains the original sink/snapshot, performs no further inventory probes, and reuses the host memo. Whole-entry assertions exclude provider credential fields.
+- AUTH-09 exact binding/declaration patterns now require the run argument. The two protected UI calls, formatter provenance controls, callback field whitelist, and stored-only update behavior remain enforced.
+- Corpus subprocess and saved-log assertions passed: 3149 baseline entries present, zero extras; 8859 tests passed, zero failed, one pre-existing optional resolver skip. No skip was added.
+- `git diff --exit-code 26cb0056 -- docs/output-catalog.md` passed without output.
+- Task 1 evidence classified `RED_EVIDENCE_OK`; green source and tests were committed together under the explicit hook policy. Task 2 adds test-only proof of behavior already implemented by Task 1.
+- Later plans and phase-wide sign-off remain pending.
 
 Tests must prove live mode selection on the same run, exclusive JSON/RPC
 entry delivery, unsupported plain-string rejection before mutation, empty
