@@ -4,11 +4,11 @@ milestone: json-output
 current_phase: 05
 current_phase_name: Mode-Selected JSON Sink
 status: verifying
-stopped_at: All seven execution plans merged; final combined-tree gate passed; independent phase assessments next
-last_updated: "2026-10-07T14:42:17.874Z"
+stopped_at: Implementation and independent reviews complete; two explicit intent judgments pending in 05-UAT.md
+last_updated: "2026-10-07T16:10:33.809271Z"
 last_activity: 2026-10-07
-last_activity_desc: All seven execution plans merged and combined-tree check passed
-state_head: 5ba904966f9d76e0f83651edc6c98b7967b88e22
+last_activity_desc: All six criteria verified; review gaps fixed; full check and strict corpus pass; two UAT judgments pending
+state_head: 191f75e83dfa3fc26a43edaee315ce72da831ac2
 progress:
   total_phases: 7
   completed_phases: 4
@@ -30,10 +30,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 05 (Mode-Selected JSON Sink) — EXECUTING
+Phase: 05 (Mode-Selected JSON Sink) — HUMAN VERIFICATION
 Plan: 7 of 7
-Status: Phase complete — ready for verification
-Last activity: 2026-10-07 — All seven execution plans merged and combined-tree check passed
+Status: Implementation verified 6/6 — two human judgments pending
+Last activity: 2026-10-07 — All six criteria verified; review gaps fixed; full check and strict corpus pass; two UAT judgments pending
 
 Progress: [██████░░░░] 57% (4 of 7 phases fully verified; 35 of 35 plans complete)
 
@@ -169,9 +169,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-07T14:42:17.633Z
-**Stopped at:** All seven execution plans merged; final combined-tree gate passed; independent phase assessments next
-**Resume file:** None
+**Last session:** 2026-10-07T16:10:33.809271Z
+**Stopped at:** Implementation and independent reviews complete; two explicit intent judgments pending in 05-UAT.md
+**Resume file:** .planning/phases/05-mode-selected-json-sink/05-UAT.md
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
@@ -227,16 +227,23 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Run Phase 5 independent validation, security, code review, and goal verification.
-  All seven execution plans are merged; the phase is not yet verified.
-- Plan 05-07 and its explicit-mode fixture correction were merged at `5ba90496`.
-  Its workers are complete and the registered worktree is removed.
-  On 2026-10-07, `npm run check` exited 0 on the merged tree with Node
-  v26.10.0 and all 264 direct-coverage pairs. The corpus check also exited 0:
-  3149 entries present, zero extras. Catalog and generated-schema diffs are empty.
-  Schema drift passed; codebase-map drift remains advisory (warn, no remap request).
-- A-05-01/A-05-02 and P-05-01/P-05-02 require the independent assessments;
-  passing tests alone do not resolve their recorded statuses.
+- Phase 5 implementation verifies 6/6 with no open code or security findings.
+  All seven plans are merged. Review fixes `cd569d2a` and `191f75e8` guard
+  fresh hook dispatch and bookkeeping before state changes.
+- The owner verification status is `human_needed`. Continue with
+  `$gsd-verify-work 05` and resolve P-05-01 and P-05-02 in `05-UAT.md`.
+  Both have favorable independent code evidence but need explicit intent
+  judgments. Do not infer their approval from passing tests.
+- `npm run check` exited 0 at `191f75e8` on Node v26.10.0, with all
+  264 direct pairs. Strict corpus verification exited 0: 3149 entries,
+  zero extras. Catalog and schema are unchanged. Logs:
+  `/tmp/json-phase5-state-guard-parent-check.log` and
+  `/tmp/json-phase5-state-guard-parent-corpus.log`.
+- A-05-01 is closed by independent registered-callback verification;
+  A-05-02 is verified for the enumerated output paths. No implementation
+  gap remains. Temporary fix worktrees, branches, and sentinels are removed.
+- Phase 5 remains pending; do not advance to Phase 6 before the two judgments.
+  Execution was invoked with `--no-transition`.
 
 ## Performance Metrics
 
