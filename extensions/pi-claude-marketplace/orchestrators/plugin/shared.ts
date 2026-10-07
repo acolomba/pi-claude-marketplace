@@ -1579,6 +1579,7 @@ export function splitStagingWarnings(warnings: {
  */
 export function surfaceDiscoveryWarnings(
   ctx: NotificationContext,
+  run: NotificationRun,
   args: {
     readonly plugin: string;
     readonly verb: "installed" | "updated" | "reinstalled";
@@ -1594,7 +1595,7 @@ export function surfaceDiscoveryWarnings(
     lines.length === 1
       ? `Plugin "${args.plugin}" ${args.verb}; 1 declared component has a note.`
       : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components have notes.`;
-  notifyDiagnostic(ctx, header, lines);
+  notifyDiagnostic(ctx, run, header, lines);
 }
 
 /**

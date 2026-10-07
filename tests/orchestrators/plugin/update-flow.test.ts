@@ -57,6 +57,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -9341,6 +9342,94 @@ async function seedCollidingSkills(marketplaceRoot: string, pluginName = "hello"
     await mkdir(path.join(skillsDir, dir), { recursive: true });
     await writeFile(path.join(skillsDir, dir, "SKILL.md"), `---\nname: foo\n---\n\n${dir}\n`);
   }
+}
+
+for (const mode of ["json", "rpc"]) {
+  test(`appends update discovery diagnostics after the cascade in ${mode}`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await createCaseDir("update-machine-diagnostics-");
+      try {
+        const seeded = await seedPathMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        await seedCollidingSkills(seeded.marketplaceRoot);
+        const capture = createJsonCapture();
+        const ctx = {
+          mode,
+          get ui() {
+            return capture.ui;
+          },
+        };
+        const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+
+        // assert
+        assert.strictEqual(
+          (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces["mp"]?.plugins[
+            "hello"
+          ]?.version,
+          "1.0.1",
+        );
+        assert.deepStrictEqual(capture.entries, [
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              kind: "cascade",
+              severity: "info",
+              needsReload: true,
+              marketplaces: [
+                {
+                  name: "mp",
+                  scope: "project",
+                  plugins: [
+                    {
+                      name: "hello",
+                      id: "hello@mp",
+                      scope: "project",
+                      reasons: [],
+                      status: "updated",
+                      from: "1.0.0",
+                      to: "1.0.1",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              kind: "diagnostic",
+              severity: "warning",
+              needsReload: false,
+              header: 'Plugin "hello" updated; 1 declared component has a note.',
+              lines: [
+                'skill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+              ],
+            },
+          },
+        ]);
+        capture.assertValid();
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
 }
 
 test("D-141-03: a standalone updatePlugins run surfaces the skills discovery warning after the row", async () => {

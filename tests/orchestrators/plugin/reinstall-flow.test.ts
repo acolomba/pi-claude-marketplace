@@ -75,6 +75,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -5088,6 +5089,92 @@ async function seedCollidingSkills(
       );
     }
   }
+}
+
+for (const mode of ["json", "rpc"]) {
+  test(`appends reinstall discovery diagnostics after the cascade in ${mode}`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-machine-diagnostics-"));
+      try {
+        const { pluginRoot } = await seedMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          resources: { skill: "old skill" },
+          install: true,
+        });
+        await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
+        const capture = createJsonCapture();
+        const ctx = {
+          mode,
+          get ui() {
+            return capture.ui;
+          },
+        };
+        const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+        // act
+        const outcomes = await reinstallPlugins({
+          ctx,
+          run,
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+
+        // assert
+        assert.strictEqual(outcomes[0]?.partition, "reinstalled");
+        assert.strictEqual(
+          (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces["mp"]?.plugins[
+            "hello"
+          ]?.version,
+          "1.0.0",
+        );
+        assert.deepStrictEqual(capture.entries, [
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              kind: "cascade",
+              severity: "info",
+              needsReload: true,
+              marketplaces: [
+                {
+                  name: "mp",
+                  scope: "project",
+                  plugins: [
+                    {
+                      name: "hello",
+                      id: "hello@mp",
+                      scope: "project",
+                      reasons: [],
+                      status: "reinstalled",
+                      version: "1.0.0",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              kind: "diagnostic",
+              severity: "warning",
+              needsReload: false,
+              header: 'Plugin "hello" reinstalled; 1 declared component has a note.',
+              lines: [
+                'skill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+              ],
+            },
+          },
+        ]);
+        capture.assertValid();
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
 }
 
 test("D-141-03: a standalone reinstall surfaces a skills discovery warning after the row", async () => {

@@ -375,7 +375,7 @@ async function updatePluginsWith(
   }
 
   composeCascade(ctx, run, outcomes, cardinality);
-  surfaceUpdateDiscoveryWarnings(ctx, outcomes);
+  surfaceUpdateDiscoveryWarnings(ctx, run, outcomes);
 }
 
 /**
@@ -393,6 +393,7 @@ async function updatePluginsWith(
  */
 function surfaceUpdateDiscoveryWarnings(
   ctx: NotificationContext,
+  run: NotificationRun,
   outcomes: readonly { readonly outcome: PluginUpdateOutcome }[],
 ): void {
   for (const { outcome } of outcomes) {
@@ -400,7 +401,7 @@ function surfaceUpdateDiscoveryWarnings(
       continue;
     }
 
-    surfaceDiscoveryWarnings(ctx, {
+    surfaceDiscoveryWarnings(ctx, run, {
       plugin: outcome.name,
       verb: "updated",
       warnings: outcome.notes,

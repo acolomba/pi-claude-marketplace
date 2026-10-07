@@ -575,7 +575,7 @@ async function reinstallPluginsWith(
   }
 
   renderReinstallPartitionAndNotify(ctx, run, outcomes, cardinality);
-  surfaceReinstallDiscoveryWarnings(ctx, outcomes);
+  surfaceReinstallDiscoveryWarnings(ctx, run, outcomes);
   return Object.freeze(outcomes);
 }
 
@@ -595,6 +595,7 @@ async function reinstallPluginsWith(
  */
 function surfaceReinstallDiscoveryWarnings(
   ctx: NotificationContext,
+  run: NotificationRun,
   outcomes: readonly ReinstallPluginOutcome[],
 ): void {
   for (const outcome of outcomes) {
@@ -602,7 +603,7 @@ function surfaceReinstallDiscoveryWarnings(
       continue;
     }
 
-    surfaceDiscoveryWarnings(ctx, {
+    surfaceDiscoveryWarnings(ctx, run, {
       plugin: outcome.name,
       verb: "reinstalled",
       warnings: outcome.discoveryWarnings,

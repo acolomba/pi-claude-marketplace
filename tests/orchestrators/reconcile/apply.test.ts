@@ -60,6 +60,7 @@ import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import lockfile from "proper-lockfile";
+import { mock, verify, when } from "strong-mock";
 
 import {
   createHooksRouting,
@@ -84,6 +85,8 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -2490,6 +2493,111 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
+
+  for (const mode of ["json", "rpc"]) {
+    test(`appends reconcile diagnostics after committed installs in ${mode}`, async (t) => {
+      // arrange
+      const { cwd, project } = await createHermeticScopes(t, "machine-install-warnings");
+      const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+        duo: { agents: ["with-mcp-servers", "with-mcp-servers"] },
+      });
+      await writeUnder(
+        project.configJsonPath,
+        configBytes({
+          marketplaces: { mp: { source: marketplaceRoot } },
+          plugins: { "duo@mp": {} },
+        }),
+      );
+      await seedState(project, {
+        schemaVersion: 3,
+        lastReconciledExtensionVersion: EXTENSION_VERSION,
+        marketplaces: {
+          mp: marketplaceRecord({
+            cwd,
+            scope: "project",
+            marketplace: "mp",
+            rawSource: marketplaceRoot,
+            manifestPath,
+            marketplaceRoot,
+          }),
+        },
+      });
+      const capture = createJsonCapture();
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const inventory = mock<Pick<Parameters<typeof openNotificationRun>[0], "getAllTools">>({
+        exactParams: true,
+        name: "inventory",
+      });
+      when(() => inventory.getAllTools())
+        .thenReturn([])
+        .times(3);
+      const pi = {
+        getAllTools: () => inventory.getAllTools(),
+        appendEntry: capture.entrySink.appendEntry,
+      };
+      const run = openNotificationRun(pi);
+      const { gitOps, clonedUrls } = createOfflineGitOps();
+
+      // act
+      await applyReconcile({ ctx, run, cwd, scope: "project", gitOps });
+
+      // assert
+      assert.deepStrictEqual((await recordFor(project, "mp", "duo"))?.resources.agents, [
+        "pi-claude-marketplace-duo-bot0",
+        "pi-claude-marketplace-duo-bot1",
+      ]);
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "reconcile-applied-cascade",
+            severity: "info",
+            needsReload: false,
+            tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
+            marketplaces: [
+              {
+                name: "mp",
+                scope: "project",
+                plugins: [
+                  {
+                    name: "duo",
+                    id: "duo@mp",
+                    scope: "project",
+                    status: "installed",
+                    reasons: ["requires pi-subagents"],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "diagnostic",
+            severity: "warning",
+            needsReload: false,
+            header: "2 post-install warnings surfaced from reconcile installs.",
+            lines: [
+              '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["duo:bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
+              '[bot1] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["duo:bot1"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
+            ],
+          },
+        },
+      ]);
+      assert.deepStrictEqual(clonedUrls(), []);
+      capture.assertValid();
+      assert.strictEqual(run.entrySink, pi);
+      verify(inventory);
+    });
+  }
 
   test("S2: two agents with dropped mcpServers raise the plural post-install warning header", async (t) => {
     // arrange

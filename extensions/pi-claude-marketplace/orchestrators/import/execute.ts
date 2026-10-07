@@ -1433,6 +1433,7 @@ function dispatchFailedOutcome(
  */
 function surfaceImportDiagnostics(
   ctx: ImportClaudeSettingsOptions["ctx"],
+  run: NotificationRun,
   diagnostics: readonly ImportDiagnostic[],
 ): void {
   if (diagnostics.length === 0) {
@@ -1444,7 +1445,7 @@ function surfaceImportDiagnostics(
     lines.length === 1
       ? "1 import diagnostic surfaced."
       : `${lines.length.toString()} import diagnostics surfaced.`;
-  notifyDiagnostic(ctx, header, lines);
+  notifyDiagnostic(ctx, run, header, lines);
 }
 
 /**
@@ -1497,7 +1498,7 @@ export async function importClaudeSettings(
   // OUT-04 / D-04: import is a plural (bulk) operation -> emit the trailing
   // per-operation tally under the `Import` label.
   notifyWithContext(opts.ctx, opts.run, IMPORT_CONTEXT, marketplaces, undefined, "plural");
-  surfaceImportDiagnostics(opts.ctx, result.diagnostics);
+  surfaceImportDiagnostics(opts.ctx, opts.run, result.diagnostics);
 
   return result;
 }

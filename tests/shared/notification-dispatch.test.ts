@@ -6009,13 +6009,49 @@ test("a single-target label remains inert without plural cardinality", (t) => {
   ]);
 });
 
+for (const mode of ["json", "rpc"]) {
+  test(`appends a redacted diagnostic through the parent run in ${mode}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    notifyDiagnostic(ctx, run, "import of https://user:tok@host/o/r skipped:", [
+      "x-access-token:abc123 rejected",
+      "plain line",
+    ]);
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "diagnostic",
+          severity: "warning",
+          needsReload: false,
+          header: "import of https://***@host/o/r skipped:",
+          lines: ["x-access-token:*** rejected", "plain line"],
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+}
+
 test("diagnostic dispatch preserves empty and ordered warning captures", (t) => {
   // arrange
   const ctx = createContext(t);
 
   // act
-  notifyDiagnostic(ctx, "Warnings", []);
-  notifyDiagnostic(ctx, "Warnings", ["first", "second"]);
+  notifyDiagnostic(ctx, runWithNothingLoaded(), "Warnings", []);
+  notifyDiagnostic(ctx, runWithNothingLoaded(), "Warnings", ["first", "second"]);
 
   // assert
   assert.equal(ctx.ui.notify.mock.callCount(), 1);

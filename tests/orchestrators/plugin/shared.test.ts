@@ -39,6 +39,7 @@ import {
   CrossPluginConflictError,
   MarketplaceNotFoundError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
@@ -2197,13 +2198,62 @@ describe("splitStagingWarnings", () => {
 });
 
 describe("surfaceDiscoveryWarnings", () => {
+  for (const mode of ["json", "rpc"]) {
+    test(`preserves redacted discovery lines and the parent sink in ${mode}`, () => {
+      // arrange
+      const capture = createJsonCapture();
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+      // act
+      surfaceDiscoveryWarnings(ctx, run, {
+        plugin: "alpha",
+        verb: "installed",
+        warnings: [
+          "Could not read /private/plugin/skills/alpha-skill",
+          "fetch with Bearer abc.def failed",
+          "fetch with Bearer abc.def failed",
+        ],
+      });
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "diagnostic",
+            severity: "warning",
+            needsReload: false,
+            header: 'Plugin "alpha" installed; 3 declared components have notes.',
+            lines: [
+              "Could not read alpha-skill",
+              "fetch with Bearer *** failed",
+              "fetch with Bearer *** failed",
+            ],
+          },
+        },
+      ]);
+      capture.assertValid();
+    });
+  }
+
   // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
   test("does not notify when no discovery warning exists", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
 
     // act
-    surfaceDiscoveryWarnings(ctx, { plugin: "alpha", verb: "installed", warnings: [] });
+    surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
+      plugin: "alpha",
+      verb: "installed",
+      warnings: [],
+    });
 
     // assert
     verify(ctx);
@@ -2230,7 +2280,7 @@ describe("surfaceDiscoveryWarnings", () => {
       .once();
 
     // act
-    surfaceDiscoveryWarnings(ctx, {
+    surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
       plugin: "alpha",
       verb: "installed",
       warnings: ["Could not read /private/plugin/skills/alpha-skill"],
@@ -2262,7 +2312,7 @@ describe("surfaceDiscoveryWarnings", () => {
       .once();
 
     // act
-    surfaceDiscoveryWarnings(ctx, {
+    surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
       plugin: "alpha",
       verb: "updated",
       warnings: ["first warning", "second warning"],

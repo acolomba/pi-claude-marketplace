@@ -2082,7 +2082,7 @@ async function installPluginWithTransaction(
           undefined,
           "single",
         );
-        surfaceDiscoveryWarnings(ctx, {
+        surfaceDiscoveryWarnings(ctx, run, {
           plugin,
           verb: "installed",
           warnings: postCommitWarnings,
