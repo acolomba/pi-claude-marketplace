@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 23
+open_count: 25
 waived_count: 27
 fixed_count: 37
-total_count: 87
-last_updated: 2026-09-26T03:28:56.741Z
+total_count: 89
+last_updated: 2026-10-07T16:56:59.121Z
 ---
 
 # Broken Windows Ledger
@@ -102,6 +102,8 @@ last_updated: 2026-09-26T03:28:56.741Z
 | 85 | 1 | unrun-verify | tests/orchestrators/marketplace/update.test.ts |  | 20 unit cases in the plugin and edge surfaces remain RED by design until plan 01-03 realigns them; whole-suite npm run test:coverage:unit exits 1 | open |  | 2026-09-26T03:28:56.741Z |  |
 | 86 | 01 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/info.ts |  | buildRemoteNotInstalledRow spreads a dependencies field the componentsResolved:false row shape does not carry, so the D-01-32 cold-git fallback renders nothing | fixed |  | 2026-09-13T19:27:02.848Z | 2026-09-17T16:14:30.946Z |
 | 87 | 09 | deviation | tests/orchestrators/plugin/install-flow.test.ts | 11732 | ESLint @typescript-eslint/require-await on marketplaceTagProbe (introduced by 09-03's 71dcea21); plan 09-04 defers the fix per Task 3's own instruction not to fix earlier-plan defects | fixed |  | 2026-09-22T07:47:54.363Z | 2026-09-22T08:03:16.136Z |
+| 88 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/substitute.ts |  | [mcp-4] VariableReport.blanked is always empty until the credential deny-list arm lands (plan 04-03) | open |  | 2026-10-07T16:56:58.753Z |  |
+| 89 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/stage.ts |  | [mcp-4] prepareStageMcpServers ignores stampServers variableReports until the missing-variable notice lands (plan 04-02) | open |  | 2026-10-07T16:56:59.121Z |  |
 
 ````json
 [
@@ -111,9 +113,9 @@ last_updated: 2026-09-26T03:28:56.741Z
     "phase": "86",
     "file": "extensions/pi-claude-marketplace/bridges/skills/stage.ts",
     "line": null,
-    "description": "SKILL-01 backstop: after /reload a degraded skill's /skill:<name> resolves and the model never auto-invokes it (disable-model-invocation) \u2014 needs a live Pi session, not exercised in unit tests",
+    "description": "SKILL-01 backstop: after /reload a degraded skill's /skill:<name> resolves and the model never auto-invokes it (disable-model-invocation) — needs a live Pi session, not exercised in unit tests",
     "status": "waived",
-    "reason": "SKILL-01 backstop needs a live Pi session \u2014 after `/reload`, a degraded skill's `/skill:<name>` resolves and the model never auto-invokes it. Not exercisable in unit tests, so it is outside this milestone's boundary.",
+    "reason": "SKILL-01 backstop needs a live Pi session — after `/reload`, a degraded skill's `/skill:<name>` resolves and the model never auto-invokes it. Not exercisable in unit tests, so it is outside this milestone's boundary.",
     "recorded_at": "2026-07-26T13:18:03.001Z",
     "resolved_at": "2026-09-12T16:13:08.655Z"
   },
@@ -221,7 +223,7 @@ last_updated: 2026-09-26T03:28:56.741Z
     "line": null,
     "description": "applyPlan's documented remove-before-add ordering is not discriminated by any input: swapping the two leaves the owner suite green, because the planner makes the removal and add buckets disjoint by name. The add-before-install and project-before-user orderings ARE discriminated and are pinned.",
     "status": "waived",
-    "reason": "`applyPlan`'s documented remove-before-add ordering is not discriminated by any input \u2014 the planner makes the buckets disjoint by name. The add-before-install and project-before-user orderings ARE discriminated and pinned.",
+    "reason": "`applyPlan`'s documented remove-before-add ordering is not discriminated by any input — the planner makes the buckets disjoint by name. The add-before-install and project-before-user orderings ARE discriminated and pinned.",
     "recorded_at": "2026-09-02T04:33:39.577Z",
     "resolved_at": "2026-09-12T16:13:11.296Z"
   },
@@ -447,7 +449,7 @@ last_updated: 2026-09-26T03:28:56.741Z
     "phase": "117",
     "file": ".planning/codebase/CONVENTIONS.md",
     "line": 151,
-    "description": "CONVENTIONS.md:151 claims barrels exist per bridge kind 'plus the aggregate bridges/index.ts'. Measured in 117-12: extensions/pi-claude-marketplace/bridges/ holds agents/, commands/, hooks/, mcp/, skills/ and README.md \u2014 there is no bridges/index.ts. The five per-kind barrels do exist. Documentation drift in a planning document, outside the source tree and outside this phase's scope (D-117-13 opened no production licence and this plan edits no source); recorded, not fixed.",
+    "description": "CONVENTIONS.md:151 claims barrels exist per bridge kind 'plus the aggregate bridges/index.ts'. Measured in 117-12: extensions/pi-claude-marketplace/bridges/ holds agents/, commands/, hooks/, mcp/, skills/ and README.md — there is no bridges/index.ts. The five per-kind barrels do exist. Documentation drift in a planning document, outside the source tree and outside this phase's scope (D-117-13 opened no production licence and this plan edits no source); recorded, not fixed.",
     "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-03T22:29:00.933Z",
@@ -1002,7 +1004,7 @@ last_updated: 2026-09-26T03:28:56.741Z
     "phase": "117",
     "file": "tests/live-uat/stop-canary.mjs",
     "line": null,
-    "description": "[workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join(\"tmp\",\"pi-uat\")) \u2014 a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope.",
+    "description": "[workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join(\"tmp\",\"pi-uat\")) — a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope.",
     "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-09T20:11:19.722Z",
@@ -1179,6 +1181,32 @@ last_updated: 2026-09-26T03:28:56.741Z
     "recorded_at": "2026-09-22T07:47:54.363Z",
     "resolved_at": "2026-09-22T08:03:16.136Z",
     "milestone": "v1.20"
+  },
+  {
+    "id": 88,
+    "kind": "stub",
+    "phase": "04",
+    "file": "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts",
+    "line": null,
+    "description": "[mcp-4] VariableReport.blanked is always empty until the credential deny-list arm lands (plan 04-03)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-07T16:56:58.753Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 89,
+    "kind": "stub",
+    "phase": "04",
+    "file": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
+    "line": null,
+    "description": "[mcp-4] prepareStageMcpServers ignores stampServers variableReports until the missing-variable notice lands (plan 04-02)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-07T16:56:59.121Z",
+    "resolved_at": null,
+    "milestone": null
   }
 ]
 ````

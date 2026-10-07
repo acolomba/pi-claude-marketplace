@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 4
+current_phase: 04
 current_phase_name: Variable expansion at Claude Code parity
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-10-07T16:14:04.317Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-10-07T16:58:10.682Z"
 last_activity: 2026-10-07
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
-state_head: d98b304476c77b66400fcee0060dbf4e3888a6da
+last_activity_desc: Completed 04-01 (Claude variable rule and adapter encoding)
+state_head: 0f4d7a8e632d5357c319cea5d85bd7d71f480c21
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 39
-  completed_plans: 30
+  completed_plans: 31
   percent: 43
 ---
 
@@ -27,17 +27,17 @@ See: `.planning/PROJECT.md` (updated 2026-10-06 after mcp-4 Phase 3)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 4 — Variable expansion at Claude Code parity
+**Current focus:** Phase 04 — Variable expansion at Claude Code parity
 The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
 
 ## Current Position
 
-Phase: 4 (Variable expansion at Claude Code parity) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-07 - Completed quick task 261007-9a2: Raise the pi-mcp-adapter peer floor to 5.1.0 (D-04-12)
+Phase: 04 (Variable expansion at Claude Code parity) — EXECUTING
+Plan: 2 of 9
+Status: Executing Phase 04
+Last activity: 2026-10-07 — Completed 04-01 (Claude variable rule and adapter encoding)
 
 Progress: [████░░░░░░] 43%
 
@@ -276,6 +276,7 @@ still open with a comment explaining what landed.
 | Phase 03 P07 | 16min | 3 tasks | 10 files |
 | Phase 03 P08 | 17min | 3 tasks | 12 files |
 | Phase 03 P09 | 7min | 2 tasks | 3 files |
+| Phase 04 P01 | 20 min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -643,6 +644,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: Write-back restores the kept override's own value for a field the live marker lists as plugin-set
 - [Phase 03]: docs/mcp-compatibility.md is the home of the MCP naming, tool search, length, lifecycle and divergence records; docs cite ANAME-0N, never D-03-NN
 - [Phase 03]: README.es.md carries the same MCP name table, partial-install text and agent MCP rule as README.md (.claude/rules/readme.md)
+- [Phase 04]: Plugin MCP entries translate first, then expand only Claude's five fields; references keep names only and the adapter encoding is a separate serializer
 
 ### Pending Todos
 
@@ -776,11 +778,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 4 context gathered
+**Stopped at:** Completed 04-01-PLAN.md
 
-**Resume file:** .planning/phases/04-variable-expansion-at-claude-code-parity/04-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-10-07T10:40:13.551Z
+Last session: 2026-10-07T16:58:10.432Z
 Phase 3 closed. Gates: Nyquist validation (23/23 green), security (20/20
 threats closed), code review (0 critical, 5 warnings, 5 info, all `open`),
 regression gate (`npm run check` green on d6029660, Node v26.10.0), verifier

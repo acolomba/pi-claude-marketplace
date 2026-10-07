@@ -236,10 +236,10 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. A referenced variable that is unset and has no default produces a missing-variable warning at install, as Claude Code warns. (AVAR-04)
 5. A `url` or `headers` value that references `ANTHROPIC_API_KEY` or another variable on Claude's credential deny-list does not receive that credential, and a security test proves it. (AVAR-05)
 
-**Plans**: 9 plans in 7 waves
+**Plans**: 1/9 plans executed in 7 waves
 
 **Wave 1**
-- [ ] 04-01-PLAN.md — Claude's variable rule writes the entry for the adapter: five fields only, `${VAR:-default}`, split tokens, the boundary guard and `!!`, with each server's unset variables reported by the walk (AVAR-01, AVAR-02, AVAR-03)
+- [x] 04-01-PLAN.md — Claude's variable rule writes the entry for the adapter: five fields only, `${VAR:-default}`, split tokens, the boundary guard and `!!`, with each server's unset variables reported by the walk (AVAR-01, AVAR-02, AVAR-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 04-02-PLAN.md — a real install writes Claude's rule and shows the missing-variable warning after its rows (AVAR-04, AVAR-01, AVAR-02)
@@ -342,7 +342,7 @@ plan these phases with the UI gate skipped.
 | 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 9/9 | Complete    | 2026-10-02 |
 | 2. Adapter-file delivery | mcp-4 | 12/12 | Complete    | 2026-10-06 |
 | 3. Claude Code tool names and tool search | mcp-4 | 9/9 | Complete    | 2026-10-06 |
-| 4. Variable expansion at Claude Code parity | mcp-4 | 0/7 | Not started | - |
+| 4. Variable expansion at Claude Code parity | mcp-4 | 1/9 | In Progress | - |
 | 5. Automatic migration on /reload | mcp-4 | 0/TBD | Not started | - |
 | 6. Live MCP status in info | mcp-4 | 0/TBD | Not started | - |
 | 7. Docs and live proof | mcp-4 | 0/TBD | Not started | - |
