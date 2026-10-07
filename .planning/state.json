@@ -21,7 +21,7 @@
     {
       "number": "4",
       "name": "Variable expansion at Claude Code parity",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "5",
@@ -41,8 +41,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 04 of 7 · 43% · executing"
+    "label": "Advance to the next step (plan phase 5)",
+    "reason": "Phase 5 of 7 — needs a plan"
   },
-  "updated_at": "2026-10-07T16:58:07.809Z"
+  "updated_at": "2026-10-07T22:02:43.387Z"
 }

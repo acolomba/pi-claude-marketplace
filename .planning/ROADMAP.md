@@ -27,7 +27,7 @@ Decimal phases (2.1, 3.1) are urgent insertions only, marked INSERTED.
 - [x] **Phase 1: Pi 1.0 floor and adapter-only detection** - Pi 1.0, pi-subagents 0.74.0 and pi-mcp-adapter 5.0.0 become the floors, every devDependency except TypeScript moves to its latest release, the features/mcp Pi 0.99 fixes are re-implemented at 1.0, both live canaries pass on Pi 1.0, and only pi-mcp-adapter itself (never Pi's built-in MCP) satisfies the MCP soft dependency. (completed 2026-10-02)
 - [x] **Phase 2: Adapter-file delivery** - install, update, reinstall and uninstall keep plugin MCP servers as marked entries in `<scopeRoot>/mcp-adapter.json`: read as JSONC the way the adapter reads it, refused rather than replaced when unparseable, written under the legacy `mcp-servers` key when the user's file uses it, checked for collisions in adapter 5's nine-source order, and carrying user overrides through updates. Entry content keeps today's shape in this phase. (completed 2026-10-06)
 - [x] **Phase 3: Claude Code tool names and tool search** - plugin MCP tools reach the model as `mcp__plugin_<plugin>_<server>__<tool>` through the key `plugin_<plugin>_<server>_` and a pinned `toolPrefix: "mcp"`, load on demand through Pi's tool search, and carry the manifest description and translated transport options. Starts with a measurement of the tool-name length Pi 1.0 accepts. (completed 2026-10-06)
-- [ ] **Phase 4: Variable expansion at Claude Code parity** - plugin and project path variables and `${VAR:-default}` expand at install time by Claude's rules, plain `${VAR}` is left for the adapter at runtime, the adapter's second expansion is escaped or warned about, and Claude's credential deny-list holds for `url` and `headers`. Needs a threat model.
+- [x] **Phase 4: Variable expansion at Claude Code parity** - plugin and project path variables and `${VAR:-default}` expand at install time by Claude's rules, plain `${VAR}` is left for the adapter at runtime, the adapter's second expansion is escaped or warned about, and Claude's credential deny-list holds for `url` and `headers`. Needs a threat model. (completed 2026-10-07)
 - [ ] **Phase 5: Automatic migration on /reload** - `/reload` moves each installed plugin's marked entries from `mcp.json` into `mcp-adapter.json` in their final shape, adding before removing, idempotently, with one notice that lists the renames and what they cost the user.
 - [ ] **Phase 6: Live MCP status in info** - `/claude:plugin info` shows each plugin MCP server's state from the adapter's status events, and an explicit unknown state when there is nothing to show.
 - [ ] **Phase 7: Docs and live proof** - README and docs describe the new delivery and its divergences, a live UAT against a real adapter 5 proves the whole path, and the CHANGELOG records the milestone.
@@ -236,7 +236,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. A referenced variable that is unset and has no default produces a missing-variable warning at install, as Claude Code warns. (AVAR-04)
 5. A `url` or `headers` value that references `ANTHROPIC_API_KEY` or another variable on Claude's credential deny-list does not receive that credential, and a security test proves it. (AVAR-05)
 
-**Plans**: 9/9 plans executed in 7 waves
+**Plans**: 9/9 plans complete in 7 waves
 
 **Wave 1**
 - [x] 04-01-PLAN.md — Claude's variable rule writes the entry for the adapter: five fields only, `${VAR:-default}`, split tokens, the boundary guard and `!!`, with each server's unset variables reported by the walk (AVAR-01, AVAR-02, AVAR-03)
@@ -342,7 +342,7 @@ plan these phases with the UI gate skipped.
 | 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 9/9 | Complete    | 2026-10-02 |
 | 2. Adapter-file delivery | mcp-4 | 12/12 | Complete    | 2026-10-06 |
 | 3. Claude Code tool names and tool search | mcp-4 | 9/9 | Complete    | 2026-10-06 |
-| 4. Variable expansion at Claude Code parity | mcp-4 | 9/9 | In Progress | - |
+| 4. Variable expansion at Claude Code parity | mcp-4 | 9/9 | Complete    | 2026-10-07 |
 | 5. Automatic migration on /reload | mcp-4 | 0/TBD | Not started | - |
 | 6. Live MCP status in info | mcp-4 | 0/TBD | Not started | - |
 | 7. Docs and live proof | mcp-4 | 0/TBD | Not started | - |

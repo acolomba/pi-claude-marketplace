@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 04
-current_phase_name: Variable expansion at Claude Code parity
-status: verifying
-stopped_at: Completed 04-09-PLAN.md
-last_updated: "2026-10-07T20:00:32.410Z"
+current_phase: 5
+current_phase_name: Automatic migration on /reload
+status: planning
+stopped_at: Phase 04 complete, ready to plan Phase 5
+last_updated: "2026-10-07T22:02:43.298Z"
 last_activity: 2026-10-07
-last_activity_desc: Completed 04-09 (every staging verb reports both variable warnings; Variables doc; MENVX-01 and ENVLIT-01 closed)
-state_head: c0a51935bb4a6757db43c97232e0c866d8fd0d9e
+last_activity_desc: Phase 04 complete, transitioned to Phase 5
+state_head: 1629bac1033d69cc2ba885d5df7e3b0f56fd9c32
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 39
   completed_plans: 39
-  percent: 43
+  percent: 57
 ---
 
 # Project State
@@ -34,12 +34,12 @@ sign-ins and approvals.
 
 ## Current Position
 
-Phase: 04 (Variable expansion at Claude Code parity) — EXECUTING
-Plan: 9 of 9
-Status: Phase complete — ready for verification
-Last activity: 2026-10-07 — Completed 04-09 (every staging verb reports both variable warnings; Variables doc; MENVX-01 and ENVLIT-01 closed)
+Phase: 5 — Automatic migration on /reload
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-07 — Phase 04 complete, transitioned to Phase 5
 
-Progress: [████░░░░░░] 43%
+Progress: [██████░░░░] 57%
 
 ### workflows-replay closeout (merged from main)
 
@@ -72,7 +72,7 @@ still open with a comment explaining what landed.
 
 **Velocity:**
 
-- Total plans completed: 223
+- Total plans completed: 226
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -89,7 +89,7 @@ still open with a comment explaining what landed.
 | 01 | 9 | - | - |
 | 2 | 12 | - | - |
 | 03 | 9 | - | - |
-| 04 | 6 | - | - |
+| 04 | 9 | - | - |
 | 5 | 3 | - | - |
 | 06 | 4 | - | - |
 | 07 | 3 | - | - |
@@ -795,7 +795,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 04-09-PLAN.md
+**Stopped at:** Phase 04 complete, ready to plan Phase 5
 
 **Resume file:** None
 

@@ -3811,3 +3811,20 @@ the user writes into the plugin's own entry while the plugin owns the name
 The `keptOverride` member shows that the marker can carry an additive member,
 so "the marker cannot hold them" no longer holds as written. Whether those
 choices belong in the marker or in persisted state is still open.
+
+## MCPROW-01: review the `enable` and `import` row grammar when MCP notices follow
+
+Surfaced by the `mcp-4` variable expansion verification (2026-10-07). The
+staging-verb tests record two behaviors as found rather than designed:
+
+- `enable` of a plugin whose servers carry unset variables or withheld
+  credentials renders the plugin row as `(installed)` at warning severity, not
+  as an enabled row.
+- An `import` row that carries the two MCP notices is info severity and has no
+  "needs attention" summary line, unlike a standalone install row.
+
+The operator accepted both for the variable expansion phase. Scope when picked
+up: decide whether each matches the tri-state severity model (info = desired
+state reached, warning = carried out but short) and the import grammar, check
+Claude Code's `/plugin` behavior first, then update the renderer, the catalog
+and the pinned tests together.
