@@ -889,7 +889,12 @@ async function registerHooksBridgeWith(
       return async (event, ctx) => {
         try {
           requireNotificationMode(ctx.mode);
-          await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState, generationIsCurrent);
+          try {
+            await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState, generationIsCurrent);
+          } catch (err) {
+            hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
+          }
+
           if (!generationIsCurrent()) {
             return;
           }
