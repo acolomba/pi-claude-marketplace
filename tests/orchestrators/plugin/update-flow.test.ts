@@ -10711,7 +10711,6 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through update", asy
             env: {
               CLAUDE_PLUGIN_ROOT: pluginRoot,
               CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
-              CLAUDE_PROJECT_DIR: cwd,
             },
             directTools: "search",
             toolPrefix: "mcp",

@@ -82,8 +82,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
       ],
       "env": {
         "CLAUDE_PLUGIN_ROOT": ${JSON.stringify(pluginRoot)},
-        "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)},
-        "CLAUDE_PROJECT_DIR": ${JSON.stringify(scopeRoot)}
+        "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)}
       },
       "description": "case-local isolation source",
       "directTools": "search",

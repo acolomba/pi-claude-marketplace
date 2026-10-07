@@ -98,7 +98,6 @@ test("AVAR-03: --partial installs the plugin without the server whose args start
           env: {
             CLAUDE_PLUGIN_ROOT: pluginRoot,
             CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
-            CLAUDE_PROJECT_DIR: cwd,
           },
           directTools: "search",
           toolPrefix: "mcp",

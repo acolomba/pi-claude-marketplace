@@ -3009,8 +3009,7 @@ test("AFILE-01: install writes the plugin's marked entries into project mcp-adap
       ],
       "env": {
         "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
-        "CLAUDE_PLUGIN_DATA": "${dataDir}",
-        "CLAUDE_PROJECT_DIR": "${cwd}"
+        "CLAUDE_PLUGIN_DATA": "${dataDir}"
       },
       "directTools": "search",
       "toolPrefix": "mcp",
@@ -3079,8 +3078,7 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
       "command": "db-server",
       "env": {
         "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
-        "CLAUDE_PLUGIN_DATA": "${dataDir}",
-        "CLAUDE_PROJECT_DIR": "${cwd}"
+        "CLAUDE_PLUGIN_DATA": "${dataDir}"
       },
       "directTools": "search",
       "toolPrefix": "mcp",
@@ -3093,8 +3091,7 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
       "command": "live-server",
       "env": {
         "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
-        "CLAUDE_PLUGIN_DATA": "${dataDir}",
-        "CLAUDE_PROJECT_DIR": "${cwd}"
+        "CLAUDE_PLUGIN_DATA": "${dataDir}"
       },
       "directTools": true,
       "toolPrefix": "mcp",
@@ -3203,7 +3200,6 @@ test("ANAME-07: install writes Claude servers through the closed adapter table",
       "env": {
         "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
         "CLAUDE_PLUGIN_DATA": "${dataDir}",
-        "CLAUDE_PROJECT_DIR": "${cwd}",
         "LOG": "1"
       },
       "directTools": "search",
@@ -3319,8 +3315,7 @@ test("ANAME-07: --partial installs every server except the blocked one", async (
       "command": "node",
       "env": {
         "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
-        "CLAUDE_PLUGIN_DATA": "${dataDir}",
-        "CLAUDE_PROJECT_DIR": "${cwd}"
+        "CLAUDE_PLUGIN_DATA": "${dataDir}"
       },
       "directTools": "search",
       "toolPrefix": "mcp",

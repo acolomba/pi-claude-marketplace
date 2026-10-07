@@ -3,9 +3,12 @@
  * mutate Pi's live `process.env` so every bash child spawned through Pi's bash
  * tool sees Claude-Code-parity environment (SENV-01/02/03, PENV-01).
  *
- * Two disjoint concerns on disjoint key sets (D-90-03):
+ * Three disjoint concerns on disjoint key sets (D-90-03):
  *   1. Session vars (`applySessionEnv`) -- refreshed on every `session_start`.
  *   2. Plugin PATH ledger core (`applyPathLedger`) -- pure PATH transform.
+ *   3. pi-mcp-adapter vars (`applyMcpAdapterEnv`) -- the reserved empty
+ *      variable and `CLAUDE_PROJECT_DIR`, set at load and on every
+ *      `session_start` (AVAR-01, AVAR-03).
  *
  * Pure-leaf posture (mirrors `shared/debug-log.ts`): no module-level state,
  * no fs, and -- per the D-v1.0-01-11 import-direction rule -- no imports outside
@@ -77,6 +80,33 @@ export const PATH_LEDGER_ENV = "PI_CLAUDE_MARKETPLACE_PATH";
  * `PI_CLAUDE_MARKETPLACE_PATH` convention).
  */
 export const ADAPTER_EMPTY_ENV = "PI_CLAUDE_MARKETPLACE_EMPTY";
+
+// pi-mcp-adapter's two variable markers. The adapter re-scans a value it
+// inserts, so a marker inside an exported value would expand a variable.
+const ADAPTER_MARKERS = ["$env:", "{env:"] as const;
+
+/**
+ * AVAR-01 / AVAR-03: give pi-mcp-adapter the two variables written MCP entries
+ * read from Pi's process. The reserved variable is always set to the empty
+ * string first: the split tokens in written entries need it set, and the
+ * adapter refuses a `url` that names an unset variable. Claude Code expands
+ * `${CLAUDE_PROJECT_DIR}` in every scope, so a user-scope entry keeps the
+ * reference and the adapter reads the current project from Pi's process.
+ *
+ * A `cwd` holding `$env:` or `{env:` is not exported, because the adapter would
+ * expand the marker; any previous `CLAUDE_PROJECT_DIR` stays. Returns `false`
+ * for that skip so the caller can log it; this module does not log. Bash and
+ * MCP children inherit both values.
+ */
+export function applyMcpAdapterEnv(cwd: string): boolean {
+  process.env[ADAPTER_EMPTY_ENV] = "";
+  if (ADAPTER_MARKERS.some((marker) => cwd.includes(marker))) {
+    return false;
+  }
+
+  process.env.CLAUDE_PROJECT_DIR = cwd;
+  return true;
+}
 
 /**
  * PENV-01 ledger core (pure): given the current PATH, the prior ledger (the

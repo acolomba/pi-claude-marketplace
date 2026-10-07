@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { describe, test } from "node:test";
+import { describe, test, type TestContext } from "node:test";
 
 import {
   ADAPTER_EMPTY_ENV,
+  applyMcpAdapterEnv,
   applyPathLedger,
   applySessionEnv,
   claudeSessionEnvFor,
@@ -182,6 +183,104 @@ describe("ADAPTER_EMPTY_ENV", () => {
 
     // assert
     assert.strictEqual(emptyKey, expectedEmptyKey);
+  });
+});
+
+/** Restores each key the case touches; an absent key is deleted, not stringified. */
+function restoreEnvAfter(t: TestContext, keys: readonly string[]): void {
+  const saved = keys.map((key) => {
+    return { key, previous: process.env[key] };
+  });
+  t.after(() => {
+    for (const { key, previous } of saved) {
+      if (previous === undefined) {
+        Reflect.deleteProperty(process.env, key);
+      } else {
+        process.env[key] = previous;
+      }
+    }
+  });
+}
+
+describe("applyMcpAdapterEnv", () => {
+  test("AVAR-01: sets the reserved empty variable and CLAUDE_PROJECT_DIR to the cwd", (t) => {
+    // arrange
+    restoreEnvAfter(t, ["PI_CLAUDE_MARKETPLACE_EMPTY", "CLAUDE_PROJECT_DIR"]);
+    Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_EMPTY");
+    process.env.CLAUDE_PROJECT_DIR = "/work/previous";
+
+    // act
+    const exported = applyMcpAdapterEnv("/work/project");
+
+    // assert
+    assert.strictEqual(exported, true);
+    assert.deepStrictEqual(
+      {
+        PI_CLAUDE_MARKETPLACE_EMPTY: process.env.PI_CLAUDE_MARKETPLACE_EMPTY,
+        CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR,
+      },
+      { PI_CLAUDE_MARKETPLACE_EMPTY: "", CLAUDE_PROJECT_DIR: "/work/project" },
+    );
+  });
+
+  test("AVAR-03: overwrites a non-empty reserved value with the empty string", (t) => {
+    // arrange
+    restoreEnvAfter(t, ["PI_CLAUDE_MARKETPLACE_EMPTY", "CLAUDE_PROJECT_DIR"]);
+    process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "user-value";
+
+    // act
+    applyMcpAdapterEnv("/work/project");
+
+    // assert
+    assert.strictEqual(process.env.PI_CLAUDE_MARKETPLACE_EMPTY, "");
+  });
+
+  for (const cwd of ["/work/$env:HOME", "/work/{env:SECRET}"]) {
+    test(`AVAR-01: does not export the cwd ${cwd} and still sets the reserved variable`, (t) => {
+      // arrange
+      restoreEnvAfter(t, ["PI_CLAUDE_MARKETPLACE_EMPTY", "CLAUDE_PROJECT_DIR"]);
+      process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "user-value";
+      process.env.CLAUDE_PROJECT_DIR = "/work/previous";
+
+      // act
+      const exported = applyMcpAdapterEnv(cwd);
+
+      // assert
+      assert.strictEqual(exported, false);
+      assert.deepStrictEqual(
+        {
+          PI_CLAUDE_MARKETPLACE_EMPTY: process.env.PI_CLAUDE_MARKETPLACE_EMPTY,
+          CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR,
+        },
+        { PI_CLAUDE_MARKETPLACE_EMPTY: "", CLAUDE_PROJECT_DIR: "/work/previous" },
+      );
+    });
+  }
+
+  test("AVAR-01: leaves the session triple and an unrelated key unchanged", (t) => {
+    // arrange
+    const keys = [
+      "PI_CLAUDE_MARKETPLACE_EMPTY",
+      "CLAUDE_PROJECT_DIR",
+      "CLAUDECODE",
+      "CLAUDE_CODE_SESSION_ID",
+      "CLAUDE_SESSION_ID",
+      "SENV_TEST_SENTINEL",
+    ];
+    restoreEnvAfter(t, keys);
+    process.env.CLAUDECODE = "1";
+    process.env.CLAUDE_CODE_SESSION_ID = "session-1";
+    process.env.CLAUDE_SESSION_ID = "session-1";
+    process.env.SENV_TEST_SENTINEL = "sentinel";
+
+    // act
+    applyMcpAdapterEnv("/work/project");
+
+    // assert
+    assert.deepStrictEqual(
+      keys.map((key) => process.env[key]),
+      ["", "/work/project", "1", "session-1", "session-1", "sentinel"],
+    );
   });
 });
 

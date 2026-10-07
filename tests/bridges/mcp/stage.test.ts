@@ -180,7 +180,6 @@ describe("prepareStageMcpServers", () => {
           env: {
             CLAUDE_PLUGIN_ROOT: pluginRoot,
             CLAUDE_PLUGIN_DATA: pluginData,
-            CLAUDE_PROJECT_DIR: cwd,
             CUSTOM: path.join(pluginData, "custom"),
           },
           directTools: "search",
@@ -1057,7 +1056,6 @@ describe("prepareStageMcpServers", () => {
       "env": {
         "CLAUDE_PLUGIN_ROOT": ${JSON.stringify(pluginRoot)},
         "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)},
-        "CLAUDE_PROJECT_DIR": ${JSON.stringify(cwd)},
         "PLUGIN_TOKEN": "plugin-env"
       },
       "directTools": "search",
@@ -1594,7 +1592,6 @@ describe("prepareStageMcpServers", () => {
           env: {
             CLAUDE_PLUGIN_ROOT: pluginRoot,
             CLAUDE_PLUGIN_DATA: pluginData,
-            CLAUDE_PROJECT_DIR: cwd,
             MODE: "!!fast",
           },
           directTools: "search",
@@ -1684,7 +1681,6 @@ describe("prepareStageMcpServers", () => {
           env: {
             CLAUDE_PLUGIN_ROOT: pluginRoot,
             CLAUDE_PLUGIN_DATA: pluginData,
-            CLAUDE_PROJECT_DIR: cwd,
           },
           directTools: "search",
           toolPrefix: "mcp",
@@ -2323,8 +2319,7 @@ describe("commitPreparedMcp", () => {
       ],
       "env": {
         "CLAUDE_PLUGIN_ROOT": ${JSON.stringify(pluginRoot)},
-        "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)},
-        "CLAUDE_PROJECT_DIR": ${JSON.stringify(cwd)}
+        "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)}
       },
       "directTools": "search",
       "toolPrefix": "mcp",
@@ -2467,8 +2462,7 @@ describe("replacePreparedMcp", () => {
       "command": "node",
       "env": {
         "CLAUDE_PLUGIN_ROOT": ${JSON.stringify(pluginRoot)},
-        "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)},
-        "CLAUDE_PROJECT_DIR": ${JSON.stringify(cwd)}
+        "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)}
       },
       "directTools": "search",
       "toolPrefix": "mcp",

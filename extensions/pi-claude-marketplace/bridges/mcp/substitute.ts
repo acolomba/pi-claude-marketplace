@@ -23,11 +23,11 @@ import type { ClaudeBuiltins, ClaudeEnv, FieldClass } from "../../domain/claude-
 /**
  * Resolution context for one staged entry. `pluginRoot` / `pluginData` are the
  * real install paths substituted for `${CLAUDE_PLUGIN_ROOT}` /
- * `${CLAUDE_PLUGIN_DATA}`. `projectDir` carries the `CLAUDE_PROJECT_DIR` arm
- * (MENV-03): the construction site computes it ONCE as "project scope -> cwd,
- * user scope -> undefined", so a user-scope context structurally cannot carry
- * a usable project dir and the substitution and injection arms cannot drift.
- * The field is required (not optional) so every construction site states the
+ * `${CLAUDE_PLUGIN_DATA}`. `projectDir` feeds only the install-time expansion
+ * of `${CLAUDE_PROJECT_DIR}` (AVAR-01): the construction site computes it ONCE
+ * as "project scope -> cwd, user scope -> undefined", so a user-scope entry
+ * keeps the reference for pi-mcp-adapter to expand from Pi's process. The
+ * field is required (not optional) so every construction site states the
  * decision explicitly. `env` is the environment Claude's rule reads to decide
  * whether a variable is set (AVAR-02); no value from it is ever written.
  */
@@ -147,6 +147,11 @@ function writtenField(
  * and its declared env spread over it, so declared keys win (Claude Code
  * spread order). `env` sits after `command` and `args`, where the closed table
  * writes it. A remote entry never gains an env.
+ *
+ * AVAR-01: Claude Code injects only `CLAUDE_PLUGIN_ROOT` and
+ * `CLAUDE_PLUGIN_DATA`. MENV-03 is satisfied by inheritance:
+ * `CLAUDE_PROJECT_DIR` reaches every MCP child through Pi's process, where
+ * `applyMcpAdapterEnv` sets it.
  */
 function withInjectedEnv(
   translated: Readonly<Record<string, unknown>>,
@@ -160,7 +165,6 @@ function withInjectedEnv(
   const injected: Record<string, string> = {
     CLAUDE_PLUGIN_ROOT: ctx.pluginRoot,
     CLAUDE_PLUGIN_DATA: ctx.pluginData,
-    ...(ctx.projectDir !== undefined ? { CLAUDE_PROJECT_DIR: ctx.projectDir } : {}),
   };
   return {
     command,

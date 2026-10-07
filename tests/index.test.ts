@@ -228,7 +228,13 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
   const { agentDir, cwd, home } = await createHermeticEnvironment(t, `index-${label}-`);
   const processRoot = await mkdtemp(path.join(tmpdir(), `index-${label}-process-`));
   const previousCwd = process.cwd();
-  const tracked = ["PATH", "PI_CLAUDE_MARKETPLACE_PATH", ...SESSION_ENV_KEYS];
+  const tracked = [
+    "PATH",
+    "PI_CLAUDE_MARKETPLACE_PATH",
+    "PI_CLAUDE_MARKETPLACE_EMPTY",
+    "CLAUDE_PROJECT_DIR",
+    ...SESSION_ENV_KEYS,
+  ];
   const saved = tracked.map((key) => {
     return { key, previous: process.env[key] };
   });
@@ -518,6 +524,19 @@ function contextWithoutSessionManager(ctx: ExtensionCommandContext): ExtensionCo
     get(target, property, receiver): unknown {
       if (property === "sessionManager") {
         return undefined;
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+
+/** A context whose working-directory read throws. */
+function contextRefusingCwdRead(ctx: ExtensionCommandContext): ExtensionCommandContext {
+  return new Proxy(ctx, {
+    get(target, property, receiver): unknown {
+      if (property === "cwd") {
+        throw new Error("working directory refused");
       }
 
       return Reflect.get(target, property, receiver);
@@ -1499,8 +1518,11 @@ test("attempts every skipped-scope PATH warning when every host notification thr
 
 test("applies the three Claude-Code session variables from the session id (SENV-01/02/03)", async (t) => {
   // arrange
-  await createHermeticScope(t, "session-env");
-  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0);
+  const scope = await createHermeticScope(t, "session-env");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, {
+    value: scope.cwd,
+    reads: 1,
+  });
   const sessionCtx = contextWithSessionId(ctx, () => "session-1");
   const expectedSessionEnv = ["1", "session-1", "session-1"];
 
@@ -1517,8 +1539,11 @@ test("applies the three Claude-Code session variables from the session id (SENV-
 
 test("leaves the session variables alone when the session id cannot be read (WR-02)", async (t) => {
   // arrange
-  await createHermeticScope(t, "session-env-refused");
-  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0);
+  const scope = await createHermeticScope(t, "session-env-refused");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, {
+    value: scope.cwd,
+    reads: 1,
+  });
   const sessionCtx = contextWithSessionId(ctx, () => {
     throw new Error("session id refused");
   });
@@ -1541,8 +1566,11 @@ test("leaves the session variables alone when the session id cannot be read (WR-
 
 test("leaves the session variables alone when there is no session manager (WR-02)", async (t) => {
   // arrange
-  await createHermeticScope(t, "session-env-absent");
-  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0);
+  const scope = await createHermeticScope(t, "session-env-absent");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, {
+    value: scope.cwd,
+    reads: 1,
+  });
   const sessionCtx = contextWithoutSessionManager(ctx);
   for (const key of SESSION_ENV_KEYS) {
     Reflect.deleteProperty(process.env, key);
@@ -1557,6 +1585,91 @@ test("leaves the session variables alone when there is no session manager (WR-02
   assert.deepStrictEqual(
     SESSION_ENV_KEYS.map((key) => process.env[key]),
     expectedSessionEnv,
+  );
+  verifyBoundary();
+});
+
+test("AVAR-03: the factory sets the reserved empty variable and CLAUDE_PROJECT_DIR from the process working directory", async (t) => {
+  // arrange
+  await createHermeticScope(t, "adapter-env-factory");
+  const expectedProjectDir = process.cwd();
+  process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "stale";
+  process.env.CLAUDE_PROJECT_DIR = "/work/stale";
+
+  // act
+  const { verifyBoundary } = await loadExtension(0, 0);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env.PI_CLAUDE_MARKETPLACE_EMPTY, process.env.CLAUDE_PROJECT_DIR],
+    ["", expectedProjectDir],
+  );
+  verifyBoundary();
+});
+
+test("AVAR-01: session_start refreshes CLAUDE_PROJECT_DIR from the session's cwd", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "adapter-env-session");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, {
+    value: scope.cwd,
+    reads: 1,
+  });
+  const sessionCtx = contextWithSessionId(ctx, () => "session-1");
+  process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "stale";
+  process.env.CLAUDE_PROJECT_DIR = "/work/stale";
+
+  // act
+  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env.PI_CLAUDE_MARKETPLACE_EMPTY, process.env.CLAUDE_PROJECT_DIR],
+    ["", scope.cwd],
+  );
+  verifyBoundary();
+});
+
+test("AVAR-01: session_start does not export a working directory holding an adapter variable marker", async (t) => {
+  // arrange
+  await createHermeticScope(t, "adapter-env-marker");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, {
+    value: "/work/{env:SECRET}",
+    reads: 1,
+  });
+  const sessionCtx = contextWithSessionId(ctx, () => "session-1");
+  process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "stale";
+  process.env.CLAUDE_PROJECT_DIR = "/work/previous";
+
+  // act
+  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env.PI_CLAUDE_MARKETPLACE_EMPTY, process.env.CLAUDE_PROJECT_DIR],
+    ["", "/work/previous"],
+  );
+  verifyBoundary();
+});
+
+test("NFR-2: a session context whose cwd cannot be read leaves the values alone and does not throw", async (t) => {
+  // arrange
+  await createHermeticScope(t, "adapter-env-refused");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0);
+  const sessionCtx = contextRefusingCwdRead(contextWithSessionId(ctx, () => "session-1"));
+  process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "stale";
+  process.env.CLAUDE_PROJECT_DIR = "/work/previous";
+
+  // act
+  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+
+  // assert
+  assert.deepStrictEqual(
+    [
+      process.env.PI_CLAUDE_MARKETPLACE_EMPTY,
+      process.env.CLAUDE_PROJECT_DIR,
+      ...SESSION_ENV_KEYS.map((key) => process.env[key]),
+    ],
+    ["stale", "/work/previous", "1", "session-1", "session-1"],
   );
   verifyBoundary();
 });

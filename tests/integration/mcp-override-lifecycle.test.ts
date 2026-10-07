@@ -92,7 +92,6 @@ test("AFILE-06: a project install keeps the user's override in its entry and uni
           env: {
             CLAUDE_PLUGIN_ROOT: pluginRoot,
             CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
-            CLAUDE_PROJECT_DIR: cwd,
           },
           directTools: "search",
           toolPrefix: "mcp",
@@ -191,7 +190,6 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
     const projectEnv = {
       CLAUDE_PLUGIN_ROOT: pluginRoot,
       CLAUDE_PLUGIN_DATA: path.join(project.dataRoot, "mp", "hello"),
-      CLAUDE_PROJECT_DIR: cwd,
     };
     const userEnv = {
       CLAUDE_PLUGIN_ROOT: pluginRoot,
@@ -378,7 +376,6 @@ test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survive
               env: {
                 CLAUDE_PLUGIN_ROOT: pluginRoot,
                 CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
-                CLAUDE_PROJECT_DIR: cwd,
               },
               directTools: "search",
               toolPrefix: "mcp",

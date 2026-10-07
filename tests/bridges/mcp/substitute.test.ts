@@ -60,12 +60,8 @@ const SCOPE_BUILTINS = {
 } as const;
 
 const INJECTED_ENV = {
-  project: {
-    CLAUDE_PLUGIN_ROOT: "/plugins/acme",
-    CLAUDE_PLUGIN_DATA: "/data/mp/acme",
-    CLAUDE_PROJECT_DIR: "/work/project",
-  },
-  user: { CLAUDE_PLUGIN_ROOT: "/plugins/acme", CLAUDE_PLUGIN_DATA: "/data/mp/acme" },
+  CLAUDE_PLUGIN_ROOT: "/plugins/acme",
+  CLAUDE_PLUGIN_DATA: "/data/mp/acme",
 } as const;
 
 const PROJECT_CONTEXT: McpSubstitutionContext = { ...EXPANSION_BUILTINS, env: {} };
@@ -90,7 +86,7 @@ for (const {
 
     // assert
     assert.deepStrictEqual(substituted, {
-      entry: shape.writtenEntry(written, INJECTED_ENV[scope]),
+      entry: shape.writtenEntry(written, INJECTED_ENV),
       report: { missing, blanked },
     });
   });
@@ -169,7 +165,7 @@ test("AVAR-01: passes field values of an unexpected type through unchanged", () 
     entry: {
       command: "server",
       args: ["--level", 2, null],
-      env: { ...INJECTED_ENV.project, RETRIES: 3 },
+      env: { ...INJECTED_ENV, RETRIES: 3 },
     },
     report: { missing: [], blanked: [] },
   });
@@ -197,7 +193,6 @@ test("MENV-02: injects the env first and in place, lets declared keys win and ke
     env: {
       CLAUDE_PLUGIN_ROOT: "declared-root",
       CLAUDE_PLUGIN_DATA: "/data/mp/acme",
-      CLAUDE_PROJECT_DIR: "/work/project",
       TOKEN: "token",
     },
     requestTimeoutMs: 5000,
@@ -217,9 +212,74 @@ test("MENV-02: injects the env first and in place, lets declared keys win and ke
   assert.deepStrictEqual(Object.keys(entry.env as Record<string, unknown>), [
     "CLAUDE_PLUGIN_ROOT",
     "CLAUDE_PLUGIN_DATA",
-    "CLAUDE_PROJECT_DIR",
     "TOKEN",
   ]);
+});
+
+for (const scope of ["project", "user"] as const) {
+  test(`AVAR-01: the injected stdio env is exactly CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA at ${scope} scope`, () => {
+    // arrange
+    const context: McpSubstitutionContext = { ...SCOPE_BUILTINS[scope], env: {} };
+
+    // act
+    const { entry } = substituteAndInject({ command: "server" }, context);
+
+    // assert
+    assert.deepStrictEqual(Object.entries(entry.env as Record<string, unknown>), [
+      ["CLAUDE_PLUGIN_ROOT", "/plugins/acme"],
+      ["CLAUDE_PLUGIN_DATA", "/data/mp/acme"],
+    ]);
+  });
+}
+
+test("AVAR-01: a declared env.CLAUDE_PROJECT_DIR follows the plain rule", () => {
+  // arrange
+  const translated = {
+    command: "server",
+    env: { CLAUDE_PROJECT_DIR: "${CLAUDE_PROJECT_DIR}/${PI_CM_UNSET}" },
+  };
+
+  // act
+  const substituted = substituteAndInject(translated, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(substituted, {
+    entry: {
+      command: "server",
+      env: { ...INJECTED_ENV, CLAUDE_PROJECT_DIR: "/work/project/${PI_CM_UNSET}" },
+    },
+    report: { missing: ["PI_CM_UNSET"], blanked: [] },
+  });
+});
+
+test("AVAR-01: a project-scope ${CLAUDE_PROJECT_DIR} expands at install in command, args, env, url and headers", () => {
+  // arrange
+  const stdio = {
+    command: "${CLAUDE_PROJECT_DIR}/bin/server",
+    args: ["${CLAUDE_PROJECT_DIR}"],
+    env: { DIR: "${CLAUDE_PROJECT_DIR}" },
+  };
+  const remote = {
+    url: "https://mcp.example.test${CLAUDE_PROJECT_DIR}",
+    headers: { Dir: "${CLAUDE_PROJECT_DIR}" },
+  };
+
+  // act
+  const substitutedStdio = substituteAndInject(stdio, PROJECT_CONTEXT);
+  const substitutedRemote = substituteAndInject(remote, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(
+    [substitutedStdio.entry, substitutedRemote.entry],
+    [
+      {
+        command: "/work/project/bin/server",
+        args: ["/work/project"],
+        env: { ...INJECTED_ENV, DIR: "/work/project" },
+      },
+      { url: "https://mcp.example.test/work/project", headers: { Dir: "/work/project" } },
+    ],
+  );
 });
 
 test("MENV-02: injects the env into a stdio entry without args", () => {
@@ -265,7 +325,7 @@ test("preserves a literal __proto__ key in env and headers without changing glob
 
   // assert
   assert.deepStrictEqual(Object.entries(substitutedStdio.entry.env as Record<string, unknown>), [
-    ...Object.entries(INJECTED_ENV.project),
+    ...Object.entries(INJECTED_ENV),
     ["__proto__", "${PI_CM_V}"],
   ]);
   assert.deepStrictEqual(Object.entries(substitutedRemote.entry.headers as object), [
@@ -335,7 +395,6 @@ test("AVAR-03: no written env or headers value starts with a single !", () => {
     env: {
       CLAUDE_PLUGIN_ROOT: "!!/root",
       CLAUDE_PLUGIN_DATA: "!!data",
-      CLAUDE_PROJECT_DIR: "!!/project",
       MODE: "!!${PI_CM_X}",
       PLAIN: "!!!x",
     },
@@ -442,7 +501,7 @@ test("AVAR-05: a plain-field blank adds no blanked name", () => {
 
   // assert
   assert.deepStrictEqual(substituted, {
-    entry: { command: "", args: [""], env: { ...INJECTED_ENV.project, TOKEN: "" } },
+    entry: { command: "", args: [""], env: { ...INJECTED_ENV, TOKEN: "" } },
     report: { missing: [], blanked: [] },
   });
 });

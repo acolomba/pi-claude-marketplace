@@ -85,7 +85,6 @@ test("AVAR-02: a project install writes Claude's variable rule for the adapter a
             env: {
               CLAUDE_PLUGIN_ROOT: pluginRoot,
               CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
-              CLAUDE_PROJECT_DIR: cwd,
               MODE: "!!fast",
             },
             directTools: "search",

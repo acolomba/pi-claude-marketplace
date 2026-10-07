@@ -97,7 +97,6 @@ const OWNED = { directTools: "search", toolPrefix: "mcp" };
 const INJECTED_ENV = {
   CLAUDE_PLUGIN_ROOT: "/plugin/root",
   CLAUDE_PLUGIN_DATA: "/plugin/data",
-  CLAUDE_PROJECT_DIR: "/project/root",
 };
 
 /** An entry holding every ServerEntry key at `<prefix>-<key>`, with an object-valued env. */
@@ -590,7 +589,6 @@ describe("stampServers", () => {
         env: {
           CLAUDE_PLUGIN_ROOT: "/plugin/root",
           CLAUDE_PLUGIN_DATA: "/plugin/data",
-          CLAUDE_PROJECT_DIR: "/project/root",
         },
         ...OWNED,
         disabled: "previous-disabled",
