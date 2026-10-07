@@ -11,6 +11,7 @@ import type {
   MarketplaceInfoMessage,
   MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
+  McpServerSummaryEntry,
   PluginAvailableMessage,
   PluginDisabledMessage,
   PluginInfoCascadeMessage,
@@ -1377,20 +1378,35 @@ function appendResolvedComponentLines(
 }
 
 /**
- * ANAME-07: appends the optional `    mcp: <list>` line. Each entry is the
- * server's Claude name, followed by ` (unsupported <feature>)` when the info
- * command tagged it as left out. The entries arrive stamped and sorted.
+ * ANAME-07 / AVAR-04 / AVAR-05: appends the optional `    mcp: <list>` line.
+ * Each entry is the server's Claude name. A left-out server adds
+ * ` (unsupported <feature>)`. A written server adds its unset and withheld
+ * variable names as ` (unset A, B; withheld C)`, each part only when its list
+ * is non-empty. The entries arrive stamped and sorted.
  */
 function appendMcpLine(
   lines: string[],
   entries: PluginInfoComponentsResolved["components"]["mcp"],
 ): void {
   if (entries !== undefined && entries.length > 0) {
-    const names = entries.map(({ name, unsupportedFeature }) =>
-      unsupportedFeature === undefined ? name : `${name} (unsupported ${unsupportedFeature})`,
-    );
-    lines.push(`    mcp: ${names.join(", ")}`);
+    lines.push(`    mcp: ${entries.map((entry) => mcpEntryText(entry)).join(", ")}`);
   }
+}
+
+function mcpEntryText(entry: McpServerSummaryEntry): string {
+  if (entry.unsupportedFeature !== undefined) {
+    return `${entry.name} (unsupported ${entry.unsupportedFeature})`;
+  }
+
+  const parts = [
+    ...variablePart("unset", entry.unsetVariables),
+    ...variablePart("withheld", entry.withheldVariables),
+  ];
+  return parts.length === 0 ? entry.name : `${entry.name} (${parts.join("; ")})`;
+}
+
+function variablePart(label: string, names: readonly string[] | undefined): string[] {
+  return names === undefined || names.length === 0 ? [] : [`${label} ${names.join(", ")}`];
 }
 
 /**

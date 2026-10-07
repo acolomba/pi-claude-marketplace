@@ -2957,6 +2957,20 @@ The plugin declares two MCP servers. The `live` server uses the `ws` transport, 
     requires: pi-mcp-adapter
 ```
 
+### Installed -- an MCP server's variables (AVAR-04, AVAR-05)
+
+The plugin's `api` server reads variables in its `url` and `headers`. Info computes two lists of variable names from the current environment. It only reads, and it uses no network. `unset` names each variable that the server reads, that is not set, and that has no `:-` default. Claude Code's `/plugin` errors list reports the same variables. `withheld` names each deny-listed variable that the server never receives. That is every deny-listed variable in `url` or `headers`, set or not, and every deny-listed variable in `command`, `args` or `env` that is set now. Here `ANALYTICS_TOKEN` is not set, and `ANTHROPIC_API_KEY` is a deny-listed credential in a header. The line shows names only, never values. Each list shows only when it has a name, and the two lists share one pair of parentheses, separated by a semicolon. A server that a partial install leaves out shows only its unsupported feature. An installation record without the plugin's configs shows no lists. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-mcp-variables -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ● analytics v1.0.0 (installed)
+    Product analytics tools.
+    mcp: plugin:analytics:api (unset ANALYTICS_TOKEN; withheld ANTHROPIC_API_KEY)
+    requires: pi-mcp-adapter
+```
+
 ### Multi-scope fan-out -- both scopes hold the plugin
 
 Triggered by `plugin info <plugin>@<marketplace>` with NO `--scope` filter when the marketplace name is present in BOTH the project scope AND the user scope AND each scope's state records the plugin (the install orchestrator clones the marketplace record across scopes when a plugin is installed cross-scope). The orchestrator emits a `PluginInfoCascadeMessage` whose `blocks` array carries the per-scope `PluginInfoMessage` payloads in project-first order (matches the existing list-surface row-order policy via MSG-GR-3 / Phase 18's `compareByNameThenScope` project-before-user tie-break). The renderer joins per-block bodies with `\n\n` (one blank line). Each block carries its own marketplace header at column 0 (mirrors the install-cascade `composeMarketplaceBlock` join). Severity `info`.

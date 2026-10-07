@@ -705,16 +705,43 @@ test("ADET-01: renders the stamped requires line after the components and before
   );
 });
 
-for (const { label, mcp, mcpLines } of [
+for (const { requirement, label, mcp, mcpLines } of [
   {
+    requirement: "ANAME-07",
     label: "tags a left-out server with its blocking feature beside a plain one",
     mcp: [{ name: "plugin:a:x" }, { name: "plugin:a:y", unsupportedFeature: "headersHelper" }],
     mcpLines: ["    mcp: plugin:a:x, plugin:a:y (unsupported headersHelper)"],
   },
-  { label: "prints no mcp line for an empty list", mcp: [], mcpLines: [] },
-  { label: "prints no mcp line for an absent list", mcp: undefined, mcpLines: [] },
+  { requirement: "ANAME-07", label: "prints no mcp line for an empty list", mcp: [], mcpLines: [] },
+  {
+    requirement: "ANAME-07",
+    label: "prints no mcp line for an absent list",
+    mcp: undefined,
+    mcpLines: [],
+  },
+  {
+    requirement: "AVAR-04",
+    label: "renders each server's variable lists, its unsupported feature, or its bare name",
+    mcp: [
+      { name: "plugin:a:p", unsetVariables: ["A", "B"] },
+      { name: "plugin:a:q", withheldVariables: ["C"] },
+      { name: "plugin:a:r", unsetVariables: ["A"], withheldVariables: ["C"] },
+      { name: "plugin:a:s", unsupportedFeature: "ws" },
+      { name: "plugin:a:t" },
+    ],
+    mcpLines: [
+      "    mcp: plugin:a:p (unset A, B), plugin:a:q (withheld C), " +
+        "plugin:a:r (unset A; withheld C), plugin:a:s (unsupported ws), plugin:a:t",
+    ],
+  },
+  {
+    requirement: "AVAR-04",
+    label: "renders the bare name for two empty variable lists",
+    mcp: [{ name: "plugin:a:p", unsetVariables: [], withheldVariables: [] }],
+    mcpLines: ["    mcp: plugin:a:p"],
+  },
 ]) {
-  test(`ANAME-07: ${label}`, () => {
+  test(`${requirement}: ${label}`, () => {
     // arrange
     const message: PluginInfoMessage = {
       kind: "plugin-info",

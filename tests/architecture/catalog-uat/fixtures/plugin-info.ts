@@ -555,6 +555,35 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
       },
     },
 
+    // AVAR-04 / AVAR-05: a written server names its unset and withheld
+    // variables in one pair of parentheses.
+    "installed-with-mcp-variables": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "analytics",
+          version: "1.0.0",
+          description: "Product analytics tools.",
+          componentsResolved: true,
+          components: {
+            mcp: [
+              {
+                name: "plugin:analytics:api",
+                unsetVariables: ["ANALYTICS_TOKEN"],
+                withheldVariables: ["ANTHROPIC_API_KEY"],
+              },
+            ],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
     "installed-both-scopes-fan-out": {
       pi: piWithBothLoaded(),
       message: {

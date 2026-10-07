@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { describe, test } from "node:test";
 
-import { expandClaudeValue } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
+import {
+  expandClaudeValue,
+  scanClaudeServerVariables,
+} from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
 
 import type {
   ClaudeBuiltins,
   ClaudeEnv,
   ExpandedValue,
   FieldClass,
+  ServerVariableScan,
 } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
 
 interface ExpansionRow {
@@ -476,15 +480,122 @@ const ROWS: readonly ExpansionRow[] = [
   },
 ];
 
-for (const { title, raw, fieldClass, env, builtins, expanded } of ROWS) {
-  test(title, () => {
-    // arrange
-    const expectedValue = expanded;
+describe("expandClaudeValue", () => {
+  for (const { title, raw, fieldClass, env, builtins, expanded } of ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedValue = expanded;
 
-    // act
-    const expandedValue = expandClaudeValue(raw, fieldClass, env, builtins);
+      // act
+      const expandedValue = expandClaudeValue(raw, fieldClass, env, builtins);
 
-    // assert
-    assert.deepStrictEqual(expandedValue, expectedValue);
-  });
+      // assert
+      assert.deepStrictEqual(expandedValue, expectedValue);
+    });
+  }
+});
+
+interface ScanRow {
+  readonly title: string;
+  readonly server: unknown;
+  readonly env: ClaudeEnv;
+  readonly scan: ServerVariableScan;
 }
+
+const SCAN_ROWS: readonly ScanRow[] = [
+  {
+    title:
+      "AVAR-04: lists a stdio server's unset args name and its set plain-listed env credential",
+    server: {
+      command: "${CLAUDE_PLUGIN_ROOT}/bin/x",
+      args: ["${PI_CM_A}", "${PI_CM_B:-d}"],
+      env: { TOKEN: "${CLAUDE_CODE_OAUTH_TOKEN}", CLAUDE_PLUGIN_ROOT: "${PI_CM_C}" },
+    },
+    env: { CLAUDE_CODE_OAUTH_TOKEN: "oauth-value" },
+    scan: { unset: ["PI_CM_A"], withheld: ["CLAUDE_CODE_OAUTH_TOKEN"] },
+  },
+  {
+    title: "AVAR-04: lists an unset plain-listed name with no default as unset, not withheld",
+    server: { command: "${CLAUDE_CODE_OAUTH_TOKEN}" },
+    env: {},
+    scan: { unset: ["CLAUDE_CODE_OAUTH_TOKEN"], withheld: [] },
+  },
+  {
+    title: "AVAR-04: never lists ${CLAUDE_PROJECT_DIR} or ${CLAUDE_PLUGIN_DATA}",
+    server: {
+      type: "stdio",
+      command: "${CLAUDE_PROJECT_DIR}/run",
+      args: ["${CLAUDE_PLUGIN_DATA}/db", 7],
+      env: { DATA: "${CLAUDE_PLUGIN_DATA}", CLAUDE_PLUGIN_DATA: "${PI_CM_C}" },
+    },
+    env: {},
+    scan: { unset: [], withheld: [] },
+  },
+  {
+    title:
+      "AVAR-05: lists a remote server's deny-listed references as withheld whether set or not, each once",
+    server: {
+      type: "streamable-http",
+      url: "https://api.example.test/${ANTHROPIC_API_KEY}/${PI_CM_D}",
+      headers: {
+        Authorization: "Bearer ${ANTHROPIC_API_KEY}",
+        "X-Oauth": "${CLAUDE_CODE_OAUTH_TOKEN}",
+        "X-Github": "${GITHUB_TOKEN}",
+        "X-Count": 3,
+      },
+    },
+    env: { ANTHROPIC_API_KEY: "api-key-value", GITHUB_TOKEN: "github-value" },
+    scan: { unset: ["PI_CM_D"], withheld: ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"] },
+  },
+  {
+    title: "AVAR-04: a ws server gives two empty lists",
+    server: { type: "ws", url: "wss://db.example.test/${PI_CM_E}" },
+    env: {},
+    scan: { unset: [], withheld: [] },
+  },
+  {
+    title: "AVAR-04: a host-only server type gives two empty lists",
+    server: { type: "claudeai-proxy", url: "https://proxy.example.test/${PI_CM_E}" },
+    env: {},
+    scan: { unset: [], withheld: [] },
+  },
+  {
+    title: "AVAR-04: a server with a non-string type gives two empty lists",
+    server: { type: 7, command: "${PI_CM_E}" },
+    env: {},
+    scan: { unset: [], withheld: [] },
+  },
+  {
+    title: "AVAR-04: a null server gives two empty lists",
+    server: null,
+    env: {},
+    scan: { unset: [], withheld: [] },
+  },
+  {
+    title: "AVAR-04: a string server gives two empty lists",
+    server: "${PI_CM_E}",
+    env: {},
+    scan: { unset: [], withheld: [] },
+  },
+  {
+    title: "AVAR-04: an array server gives two empty lists",
+    server: ["${PI_CM_E}"],
+    env: {},
+    scan: { unset: [], withheld: [] },
+  },
+];
+
+describe("scanClaudeServerVariables", () => {
+  for (const { title, server, env, scan } of SCAN_ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedScan = scan;
+
+      // act
+      const serverScan = scanClaudeServerVariables(server, env);
+
+      // assert
+      assert.deepStrictEqual(serverScan, expectedScan);
+    });
+  }
+});

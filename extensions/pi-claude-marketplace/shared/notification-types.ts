@@ -869,10 +869,17 @@ export interface PluginInfoRowBase {
  * the info command. `name` is the name Claude Code gives the server,
  * `plugin:<plugin>:<server>`. `unsupportedFeature` is present only on a server
  * a partial install leaves out, and names the Claude feature that blocks it.
+ *
+ * AVAR-04 / AVAR-05: `unsetVariables` and `withheldVariables` are present only
+ * on a server the plugin writes, and only when non-empty. The info command
+ * computes them from the current environment. They hold variable names, never
+ * values.
  */
 export interface McpServerSummaryEntry {
   readonly name: string;
   readonly unsupportedFeature?: string;
+  readonly unsetVariables?: readonly string[];
+  readonly withheldVariables?: readonly string[];
 }
 
 /**

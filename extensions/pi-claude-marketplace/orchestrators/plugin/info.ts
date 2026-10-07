@@ -29,6 +29,11 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import { discoverPluginWorkflows } from "../../bridges/workflows/index.ts";
+import {
+  scanClaudeServerVariables,
+  type ClaudeEnv,
+  type ServerVariableScan,
+} from "../../domain/claude-mcp-variables.ts";
 import { BUCKET_A_EVENTS } from "../../domain/components/hook-events.ts";
 import {
   hookSummaryEntriesFromPersisted,
@@ -939,6 +944,10 @@ function parseLenientHooksJson(raw: string): unknown {
  * arrays return `undefined` so the renderer omits the line (the
  * renderer assumes pre-sorted input and does not sort defensively).
  *
+ * AVAR-04 / AVAR-05: each written server's raw config is scanned against
+ * `env` for its unset and withheld variable names. The scan is read-only and
+ * returns names only. A left-out server is not scanned.
+ *
  * WFLW-04: `workflows` is the one kind whose names cannot be read off the
  * directory listing -- each command is named by its script's own `meta.name`,
  * so the discovery pass that reads the bodies is the only producer. It runs in
@@ -956,6 +965,7 @@ function parseLenientHooksJson(raw: string): unknown {
  */
 async function composeResolvedComponents(
   reader: PluginInfoReader,
+  env: ClaudeEnv,
   pluginRoot: string,
   resolved: {
     readonly componentPaths: {
@@ -1003,10 +1013,17 @@ async function composeResolvedComponents(
     resolved.componentPaths.skills,
     "skills",
   );
+  const scans = new Map(
+    Object.entries(resolved.mcpServers).map(([server, config]) => [
+      server,
+      scanClaudeServerVariables(config, env),
+    ]),
+  );
   const mcp = composeMcpEntries(
     pluginName,
     Object.keys(resolved.mcpServers),
     resolved.droppedMcpServers,
+    scans,
   );
 
   // SURF-01 / D-63-07: hooks branch. Read-and-project happens ONCE at
@@ -1150,6 +1167,8 @@ interface InfoBlock {
  */
 async function buildBlock(args: {
   reader: PluginInfoReader;
+  /** AVAR-04: the environment the MCP variable lists are computed from. */
+  readonly env: ClaudeEnv;
   marketplace: string;
   pluginName: string;
   scope: Scope;
@@ -1167,6 +1186,7 @@ async function buildBlock(args: {
 }): Promise<InfoBlock> {
   const {
     reader,
+    env,
     marketplace,
     pluginName,
     scope,
@@ -1315,6 +1335,7 @@ async function buildBlock(args: {
     const blockFetchCtx = isRecordedButDisabled(installed) ? undefined : fetchCtx;
     const row = await buildInstalledRow({
       reader,
+      env,
       pluginName,
       version: installed.version,
       description,
@@ -1339,6 +1360,7 @@ async function buildBlock(args: {
   // partially-available / unavailable.
   const row = await buildNotInstalledRow({
     reader,
+    env,
     pluginName,
     version: manifestVersion,
     description,
@@ -1764,22 +1786,39 @@ function compareComponentNames(a: string, b: string): number {
  * shown by the name Claude Code gives it, and a server a partial install
  * leaves out also carries the feature that blocks it. The record arm passes
  * no dropped servers: the record lists only the servers install wrote.
+ *
+ * AVAR-04 / AVAR-05: `scans` holds each written server's unset and withheld
+ * variable names, which the entry carries only when non-empty. The record arm
+ * passes no scans, because the record holds no server configs.
  */
 function composeMcpEntries(
   pluginName: string,
   servers: readonly string[],
   dropped: readonly DroppedMcpServer[] = [],
+  scans?: ReadonlyMap<string, ServerVariableScan>,
 ): readonly McpServerSummaryEntry[] {
-  const declared: readonly ({ readonly server: string } | DroppedMcpServer)[] = [
-    ...servers.map((server) => ({ server })),
-    ...dropped,
-  ];
-  return declared
-    .map((entry) => ({
-      name: mcpServerDisplayName(pluginName, entry.server),
-      ...("feature" in entry && { unsupportedFeature: entry.feature }),
-    }))
-    .sort((a, b) => compareComponentNames(a.name, b.name));
+  const written: readonly McpServerSummaryEntry[] = servers.map((server) => ({
+    name: mcpServerDisplayName(pluginName, server),
+    ...variableFields(scans?.get(server)),
+  }));
+  const leftOut: readonly McpServerSummaryEntry[] = dropped.map(({ server, feature }) => ({
+    name: mcpServerDisplayName(pluginName, server),
+    unsupportedFeature: feature,
+  }));
+  return [...written, ...leftOut].sort((a, b) => compareComponentNames(a.name, b.name));
+}
+
+function variableFields(
+  scan: ServerVariableScan | undefined,
+): Pick<McpServerSummaryEntry, "unsetVariables" | "withheldVariables"> {
+  if (scan === undefined) {
+    return {};
+  }
+
+  return {
+    ...(scan.unset.length > 0 && { unsetVariables: scan.unset }),
+    ...(scan.withheld.length > 0 && { withheldVariables: scan.withheld }),
+  };
 }
 
 /**
@@ -1803,8 +1842,9 @@ function composeMcpEntries(
  */
 async function buildNotInstallablePathRowFields(
   reader: PluginInfoReader,
+  env: ClaudeEnv,
   pluginName: string,
-  resolved: Parameters<typeof composeResolvedComponents>[2],
+  resolved: Parameters<typeof composeResolvedComponents>[3],
   resolverReasons: readonly ContentReason[],
   marketplaceRoot: string,
   parsedSource: PathSource,
@@ -1831,6 +1871,7 @@ async function buildNotInstallablePathRowFields(
   try {
     const resolvedComponents = await composeResolvedComponents(
       reader,
+      env,
       pluginRoot,
       resolved,
       pluginName,
@@ -1909,6 +1950,7 @@ function asDeclaredList(raw: unknown): readonly unknown[] {
  */
 function buildNonInstallableRowFields(
   reader: PluginInfoReader,
+  env: ClaudeEnv,
   pluginName: string,
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   entry: MarketplaceManifest["plugins"][number],
@@ -1921,6 +1963,7 @@ function buildNonInstallableRowFields(
     case "partially-available":
       return buildNotInstallablePathRowFields(
         reader,
+        env,
         pluginName,
         resolved,
         narrowUnsupportedKinds(resolved.unsupported),
@@ -1930,6 +1973,7 @@ function buildNonInstallableRowFields(
     case "unavailable":
       return buildNotInstallablePathRowFields(
         reader,
+        env,
         pluginName,
         {
           componentPaths: deriveLenientComponentPaths(entry),
@@ -2072,6 +2116,7 @@ function foldFetchOrProbeError(err: unknown): ContentReason {
  */
 async function buildInstalledGitRow(opts: {
   reader: PluginInfoReader;
+  readonly env: ClaudeEnv;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -2085,6 +2130,7 @@ async function buildInstalledGitRow(opts: {
 }): Promise<PluginInfoRow> {
   const {
     reader,
+    env,
     pluginName,
     version,
     description,
@@ -2114,6 +2160,7 @@ async function buildInstalledGitRow(opts: {
       if (resolved.state === "installable") {
         const composed = await composeResolvedComponents(
           reader,
+          env,
           presence.pluginRoot,
           resolved,
           pluginName,
@@ -2162,6 +2209,7 @@ async function buildInstalledGitRow(opts: {
  */
 async function buildInstalledRow(opts: {
   reader: PluginInfoReader;
+  readonly env: ClaudeEnv;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -2175,6 +2223,7 @@ async function buildInstalledRow(opts: {
 }): Promise<PluginInfoRow> {
   const {
     reader,
+    env,
     pluginName,
     version,
     description,
@@ -2195,6 +2244,7 @@ async function buildInstalledRow(opts: {
     if (isGitSource(parsedSource)) {
       return buildInstalledGitRow({
         reader,
+        env,
         pluginName,
         version,
         description,
@@ -2220,6 +2270,7 @@ async function buildInstalledRow(opts: {
     if (resolved.state === "installable") {
       const composed = await composeResolvedComponents(
         reader,
+        env,
         resolved.pluginRoot,
         resolved,
         pluginName,
@@ -2250,6 +2301,7 @@ async function buildInstalledRow(opts: {
     // re-derives independently (D-64-05).
     const fields = await buildNonInstallableRowFields(
       reader,
+      env,
       pluginName,
       resolved,
       entry,
@@ -2303,6 +2355,7 @@ async function buildNotInstalledPathRow(
   reader: PluginInfoReader,
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   opts: {
+    readonly env: ClaudeEnv;
     pluginName: string;
     version: string | undefined;
     description: string | undefined;
@@ -2311,10 +2364,11 @@ async function buildNotInstalledPathRow(
     parsedSource: PathSource;
   },
 ): Promise<PluginInfoRow> {
-  const { pluginName, version, description, entry, mpRecord, parsedSource } = opts;
+  const { env, pluginName, version, description, entry, mpRecord, parsedSource } = opts;
   try {
     const fields = await buildNonInstallableRowFields(
       reader,
+      env,
       pluginName,
       resolved,
       entry,
@@ -2386,6 +2440,7 @@ function buildRemoteNotInstalledRow(
  */
 async function buildGitNotInstalledRow(opts: {
   reader: PluginInfoReader;
+  readonly env: ClaudeEnv;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -2398,6 +2453,7 @@ async function buildGitNotInstalledRow(opts: {
 }): Promise<PluginInfoRow> {
   const {
     reader,
+    env,
     pluginName,
     version,
     description,
@@ -2450,6 +2506,7 @@ async function buildGitNotInstalledRow(opts: {
       // is caught by THIS try/catch and folds to the unreadable arm below.
       return await buildWarmGitNonInstallableRow(resolved, {
         reader,
+        env,
         pluginName,
         version,
         description,
@@ -2459,6 +2516,7 @@ async function buildGitNotInstalledRow(opts: {
 
     return await buildAvailableRow({
       reader,
+      env,
       pluginName,
       version,
       description,
@@ -2492,13 +2550,14 @@ async function buildWarmGitNonInstallableRow(
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   opts: {
     reader: PluginInfoReader;
+    readonly env: ClaudeEnv;
     pluginName: string;
     version: string | undefined;
     description: string | undefined;
     pluginRoot: string;
   },
 ): Promise<PluginInfoRow> {
-  const { reader, pluginName, version, description, pluginRoot } = opts;
+  const { reader, env, pluginName, version, description, pluginRoot } = opts;
   const status = resolved.state === "partially-available" ? "partially-available" : "unavailable";
   const resolverReasons =
     resolved.state === "partially-available"
@@ -2521,7 +2580,13 @@ async function buildWarmGitNonInstallableRow(
           mcpServers: {},
         };
   try {
-    const composed = await composeResolvedComponents(reader, pluginRoot, forComponents, pluginName);
+    const composed = await composeResolvedComponents(
+      reader,
+      env,
+      pluginRoot,
+      forComponents,
+      pluginName,
+    );
     return {
       status,
       name: pluginName,
@@ -2552,6 +2617,7 @@ async function buildWarmGitNonInstallableRow(
  */
 async function buildNotInstalledRow(opts: {
   reader: PluginInfoReader;
+  readonly env: ClaudeEnv;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -2564,6 +2630,7 @@ async function buildNotInstalledRow(opts: {
 }): Promise<PluginInfoRow> {
   const { reader, pluginName, version, description, dependencies, entry, mpRecord, parsedSource } =
     opts;
+  const { env } = opts;
   const { locations, fetchCtx } = opts;
   // RSTA-01 / RSTA-05 / D-80-04: a NOT-installed git-source entry (url /
   // git-subdir / github) is classified from its clone/mirror presence. Bare info
@@ -2577,6 +2644,7 @@ async function buildNotInstalledRow(opts: {
   if (isGitSource(parsedSource)) {
     return buildGitNotInstalledRow({
       reader,
+      env,
       pluginName,
       version,
       description,
@@ -2616,6 +2684,7 @@ async function buildNotInstalledRow(opts: {
   if (resolved.state !== "installable") {
     return buildNotInstalledNonInstallableRow(resolved, {
       reader,
+      env,
       pluginName,
       version,
       description,
@@ -2632,6 +2701,7 @@ async function buildNotInstalledRow(opts: {
   // source short-circuit.
   return buildAvailableRow({
     reader,
+    env,
     pluginName,
     version,
     description,
@@ -2652,6 +2722,7 @@ function buildNotInstalledNonInstallableRow(
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   opts: {
     reader: PluginInfoReader;
+    readonly env: ClaudeEnv;
     pluginName: string;
     version: string | undefined;
     description: string | undefined;
@@ -2660,7 +2731,7 @@ function buildNotInstalledNonInstallableRow(
     parsedSource: ParsedSource;
   },
 ): Promise<PluginInfoRow> | PluginInfoRow {
-  const { reader, pluginName, version, description, entry, mpRecord, parsedSource } = opts;
+  const { reader, env, pluginName, version, description, entry, mpRecord, parsedSource } = opts;
   const reasons =
     resolved.state === "unavailable"
       ? narrowResolverNotes(resolved.notes)
@@ -2681,6 +2752,7 @@ function buildNotInstalledNonInstallableRow(
   // (D-64-05); the partially-available arm carries its component payload into
   // the same builder.
   return buildNotInstalledPathRow(reader, resolved, {
+    env,
     pluginName,
     version,
     description,
@@ -2700,18 +2772,20 @@ function buildNotInstalledNonInstallableRow(
  */
 async function buildAvailableRow(opts: {
   readonly reader: PluginInfoReader;
+  readonly env: ClaudeEnv;
   readonly pluginName: string;
   readonly version: string | undefined;
   readonly description: string | undefined;
   readonly dependencies: readonly string[] | undefined;
   readonly pluginRoot: string;
-  readonly resolvedForComponents: Parameters<typeof composeResolvedComponents>[2];
+  readonly resolvedForComponents: Parameters<typeof composeResolvedComponents>[3];
 }): Promise<PluginInfoRow> {
-  const { reader, pluginName, version, description, dependencies } = opts;
+  const { reader, env, pluginName, version, description, dependencies } = opts;
 
   try {
     const composed = await composeResolvedComponents(
       reader,
+      env,
       opts.pluginRoot,
       opts.resolvedForComponents,
       pluginName,
@@ -2900,6 +2974,7 @@ function withCompanionRequirements(built: InfoBlock, probe: SoftDepStatus): Info
 
 async function getPluginInfoWithReader(
   reader: PluginInfoReader,
+  env: ClaudeEnv,
   opts: GetPluginInfoOptions,
 ): Promise<void> {
   // INFO-03 iteration order: project-first per MSG-GR-3 when both
@@ -2969,6 +3044,7 @@ async function getPluginInfoWithReader(
   if (sole !== undefined && rest.length === 0) {
     const soleBlock = await buildBlock({
       reader,
+      env,
       marketplace: opts.marketplace,
       pluginName: opts.plugin,
       scope: sole.scope,
@@ -3003,6 +3079,7 @@ async function getPluginInfoWithReader(
     found.map((f) =>
       buildBlock({
         reader,
+        env,
         marketplace: opts.marketplace,
         pluginName: opts.plugin,
         scope: f.scope,
@@ -3045,9 +3122,15 @@ async function getPluginInfoWithReader(
   }
 }
 
-/** Creates the plugin-info command with an explicit read-only filesystem capability. */
+/**
+ * Creates the plugin-info command with an explicit read-only filesystem
+ * capability. `env` is the environment the MCP server variable lists are
+ * computed from (AVAR-04, AVAR-05); production passes Pi's process
+ * environment.
+ */
 export function createGetPluginInfo(
   reader: PluginInfoReader,
+  env: ClaudeEnv = process.env,
 ): (opts: GetPluginInfoOptions) => Promise<void> {
-  return (opts) => getPluginInfoWithReader(reader, opts);
+  return (opts) => getPluginInfoWithReader(reader, env, opts);
 }

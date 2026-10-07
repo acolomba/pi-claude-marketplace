@@ -6980,6 +6980,188 @@ test("AVAR-03: info names a server left out for a leading ~ with its field", asy
   });
 });
 
+/**
+ * Seeds a user-scope path-source `analytics` plugin whose `plugin.json`
+ * declares the given MCP servers.
+ */
+async function seedAnalyticsWithMcpServers(
+  home: string,
+  cwd: string,
+  mcpServers: Record<string, unknown>,
+): Promise<void> {
+  const mpRoot = await seedPathMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp",
+    manifest: {
+      name: "mp",
+      plugins: [{ name: "analytics", source: "./analytics", version: "1.0.0" }],
+    },
+    installablePluginDirs: ["analytics"],
+  });
+  await mkdir(path.join(mpRoot, "analytics", ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(mpRoot, "analytics", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "analytics", mcpServers }),
+    "utf8",
+  );
+}
+
+test("AVAR-04: info lists an MCP server's unset variables and withheld credentials from the current environment", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAnalyticsWithMcpServers(home, cwd, {
+      api: {
+        type: "http",
+        url: "https://api.example.test/${ANALYTICS_REGION}/mcp",
+        headers: {
+          Authorization: "Bearer ${ANALYTICS_TOKEN}",
+          "X-Anthropic": "${ANTHROPIC_API_KEY}",
+        },
+      },
+    });
+    const getPluginInfoInEnv = createGetPluginInfo(NODE_READER, {
+      ANALYTICS_REGION: "eu",
+      ANTHROPIC_API_KEY: "avar-sentinel-04-07",
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfoInEnv({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "analytics",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ analytics v1.0.0 (available)",
+          "    mcp: plugin:analytics:api (unset ANALYTICS_TOKEN; withheld ANTHROPIC_API_KEY)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepEqual(
+      notifications.filter(({ message }) => message.includes("avar-sentinel-04-07")),
+      [],
+    );
+  });
+});
+
+for (const { label, mcpServers, env, pluginLine, mcpLine } of [
+  {
+    label: "a server left out by a partial install shows only its unsupported feature",
+    mcpServers: {
+      home: { command: "node", args: ["~/bin/server.js", "${PI_CM_X}"] },
+      db: { command: "db-server" },
+    },
+    env: {},
+    pluginLine: "  ⊖ analytics v1.0.0 (partially-available) {unsupported mcp}",
+    mcpLine: "    mcp: plugin:analytics:db, plugin:analytics:home (unsupported args ~)",
+  },
+  {
+    label: "a server with no unset or withheld names shows the bare name",
+    mcpServers: { db: { command: "db-server", args: ["${PI_CM_X}"] } },
+    env: { PI_CM_X: "set-value" },
+    pluginLine: "  ○ analytics v1.0.0 (available)",
+    mcpLine: "    mcp: plugin:analytics:db",
+  },
+  {
+    label: "an unset reference with a :- default is not listed",
+    mcpServers: { db: { command: "db-server", args: ["${PI_CM_X:-default}"] } },
+    env: {},
+    pluginLine: "  ○ analytics v1.0.0 (available)",
+    mcpLine: "    mcp: plugin:analytics:db",
+  },
+]) {
+  test(`AVAR-04: ${label}`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedAnalyticsWithMcpServers(home, cwd, mcpServers);
+      const getPluginInfoInEnv = createGetPluginInfo(NODE_READER, env);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await getPluginInfoInEnv({
+        ctx,
+        pi,
+        marketplace: "mp",
+        plugin: "analytics",
+        scope: "user",
+        cwd,
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message: [
+            "● mp [user] <no autoupdate>",
+            pluginLine,
+            mcpLine,
+            "    requires: pi-mcp-adapter (missing)",
+          ].join("\n"),
+        },
+      ]);
+    });
+  });
+}
+
+test("AVAR-04: the installation-record arm shows no variable lists", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        analytics: { version: "1.0.0", resources: { skills: [], mcpServers: ["api"] } },
+      },
+    });
+    await mkdir(path.join(mpRoot, "analytics", ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "analytics", ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "analytics",
+        mcpServers: { api: { type: "http", url: "https://api.example.test/${PI_CM_X}" } },
+      }),
+      "utf8",
+    );
+    const getPluginInfoInEnv = createGetPluginInfo(NODE_READER, {});
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfoInEnv({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "analytics",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● analytics v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:analytics:api",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 for (const { inventory, label, requiresLine } of [
   {
     label: "Pi's built-in MCP alone tags pi-mcp-adapter missing",
