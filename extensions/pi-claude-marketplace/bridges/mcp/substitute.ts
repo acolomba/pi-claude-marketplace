@@ -1,23 +1,24 @@
 // bridges/mcp/substitute.ts
 //
 // Expands Claude Code's variables in one translated MCP entry and injects the
-// stdio env (MENV-01..03, AVAR-01..03). The entry comes from the closed table
-// in `domain/mcp-server-features.ts`, so it holds only fields Claude reads.
-// Claude expands five of them: stdio `command`, `args` elements and `env`
-// values, and remote `url` and `headers` values. Each goes through Claude's
-// rule in `domain/claude-mcp-variables.ts` and is written in pi-mcp-adapter's
-// encoding by `adapter-escape.ts`. The `env` values under `CLAUDE_PLUGIN_ROOT`
-// and `CLAUDE_PLUGIN_DATA` and every `oauth` value are written as literal text.
-// Every other field, every key and every non-string value is copied unchanged.
-// Bridge-local by design: shared/vars.ts owns content substitution, a different
-// variable set.
+// stdio env (MENV-01..03, AVAR-01..03, AVAR-05). The entry comes from the
+// closed table in `domain/mcp-server-features.ts`, so it holds only fields
+// Claude reads. Claude expands five of them: stdio `command`, `args` elements
+// and `env` values, which use the plain deny-list, and remote `url` and
+// `headers` values, which use the remote-sink deny-list. Each goes through
+// Claude's rule in `domain/claude-mcp-variables.ts` and is written in
+// pi-mcp-adapter's encoding by `adapter-escape.ts`. The `env` values under
+// `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA` and every `oauth` value are
+// written as literal text. Every other field, every key and every non-string
+// value is copied unchanged. Bridge-local by design: shared/vars.ts owns
+// content substitution, a different variable set.
 
 import { expandClaudeValue } from "../../domain/claude-mcp-variables.ts";
 
 import { serializeLiteral, serializeSegments } from "./adapter-escape.ts";
 import { safeSet } from "./safe-set.ts";
 
-import type { ClaudeBuiltins, ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { ClaudeBuiltins, ClaudeEnv, FieldClass } from "../../domain/claude-mcp-variables.ts";
 
 /**
  * Resolution context for one staged entry. `pluginRoot` / `pluginData` are the
@@ -34,12 +35,23 @@ export interface McpSubstitutionContext extends ClaudeBuiltins {
   readonly env: ClaudeEnv;
 }
 
-/** One server's variable facts for the user-facing warning (AVAR-02). */
+/** One server's variable facts for the user-facing warnings (AVAR-02, AVAR-04). */
 export interface VariableReport {
   /** Unset variables with no default, deduplicated in first-seen field order. */
   readonly missing: readonly string[];
-  /** Set variables written as the empty string (AVAR-05). */
+  /**
+   * AVAR-05: set deny-listed variables written as the empty string in `url`
+   * or `headers`, deduplicated in first-seen order: `url`, then the `headers`
+   * values in key order. A plain-field blank is not listed, because Claude
+   * warns only about a remote server.
+   */
   readonly blanked: readonly string[];
+}
+
+/** The names one entry's walk collects, in field order. */
+interface ReportNames {
+  readonly missing: string[];
+  readonly blanked: string[];
 }
 
 /** The written entry and its variable report. */
@@ -58,12 +70,17 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function expandedValue(
   raw: string,
+  fieldClass: FieldClass,
   ctx: McpSubstitutionContext,
   secret: boolean,
-  missing: string[],
+  names: ReportNames,
 ): string {
-  const expanded = expandClaudeValue(raw, ctx.env, ctx);
-  missing.push(...expanded.missing);
+  const expanded = expandClaudeValue(raw, fieldClass, ctx.env, ctx);
+  names.missing.push(...expanded.missing);
+  if (fieldClass === "remote") {
+    names.blanked.push(...expanded.withheld.filter(({ set }) => set).map(({ name }) => name));
+  }
+
   return serializeSegments(expanded.segments, secret);
 }
 
@@ -84,36 +101,37 @@ function writtenEnvValue(
   key: string,
   raw: string,
   ctx: McpSubstitutionContext,
-  missing: string[],
+  names: ReportNames,
 ): string {
   return LITERAL_ENV_KEYS.has(key)
     ? serializeLiteral(raw, true)
-    : expandedValue(raw, ctx, true, missing);
+    : expandedValue(raw, "plain", ctx, true, names);
 }
 
 function writtenField(
   field: string,
   value: unknown,
   ctx: McpSubstitutionContext,
-  missing: string[],
+  names: ReportNames,
 ): unknown {
   switch (field) {
     case "command":
+      return typeof value === "string" ? expandedValue(value, "plain", ctx, false, names) : value;
     case "url":
-      return typeof value === "string" ? expandedValue(value, ctx, false, missing) : value;
+      return typeof value === "string" ? expandedValue(value, "remote", ctx, false, names) : value;
     case "args":
       return Array.isArray(value)
         ? value.map((arg: unknown) =>
-            typeof arg === "string" ? expandedValue(arg, ctx, false, missing) : arg,
+            typeof arg === "string" ? expandedValue(arg, "plain", ctx, false, names) : arg,
           )
         : value;
     case "env":
       return isPlainObject(value)
-        ? mappedStrings(value, (key, raw) => writtenEnvValue(key, raw, ctx, missing))
+        ? mappedStrings(value, (key, raw) => writtenEnvValue(key, raw, ctx, names))
         : value;
     case "headers":
       return isPlainObject(value)
-        ? mappedStrings(value, (_key, raw) => expandedValue(raw, ctx, true, missing))
+        ? mappedStrings(value, (_key, raw) => expandedValue(raw, "remote", ctx, true, names))
         : value;
     case "oauth":
       return isPlainObject(value)
@@ -155,18 +173,22 @@ function withInjectedEnv(
 /**
  * Injects the stdio env, then writes Claude's five expansion fields of one
  * translated entry, in entry order: `command`, `args`, `env`, then `url`,
- * `headers`. The report lists the unset variables with no default once each,
- * in that order. Returns a fresh entry; the input is never mutated.
+ * `headers`. The report lists the unset variables with no default, and the
+ * set deny-listed variables blanked in `url` and `headers`, once each in that
+ * order. Returns a fresh entry; the input is never mutated.
  */
 export function substituteAndInject(
   translated: Readonly<Record<string, unknown>>,
   ctx: McpSubstitutionContext,
 ): SubstitutedEntry {
-  const missing: string[] = [];
+  const names: ReportNames = { missing: [], blanked: [] };
   const entry: Record<string, unknown> = {};
   for (const [field, value] of Object.entries(withInjectedEnv(translated, ctx))) {
-    safeSet(entry, field, writtenField(field, value, ctx, missing));
+    safeSet(entry, field, writtenField(field, value, ctx, names));
   }
 
-  return { entry, report: { missing: [...new Set(missing)], blanked: [] } };
+  return {
+    entry,
+    report: { missing: [...new Set(names.missing)], blanked: [...new Set(names.blanked)] },
+  };
 }

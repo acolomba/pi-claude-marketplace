@@ -1823,6 +1823,131 @@ describe("prepareStageMcpServers", () => {
     );
   });
 
+  test("AVAR-05: no deny-listed credential value reaches the staged document or a notice", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-deny-sentinel-");
+    const sentinels = {
+      ANTHROPIC_API_KEY: "sentinel-anthropic",
+      AWS_SESSION_TOKEN: "sentinel-aws",
+      CLAUDE_CODE_OAUTH_TOKEN: "sentinel-oauth",
+      OTEL_EXPORTER_OTLP_HEADERS: "sentinel-otel-upper",
+      otel_exporter_otlp_headers: "sentinel-otel-lower",
+      INPUT_NPM_TOKEN: "sentinel-npm",
+      GIT_CONFIG_VALUE_0: "sentinel-git-config",
+      CARGO_REGISTRIES_MY_REG_TOKEN: "sentinel-cargo",
+      ANTHROPIC_BASE_URL: "https://user:sentinel-base-url@proxy.example.test",
+    };
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: sentinels,
+      servers: {
+        local: {
+          command: "${CLAUDE_CODE_OAUTH_TOKEN}",
+          args: ["${OTEL_EXPORTER_OTLP_HEADERS}", "${ANTHROPIC_API_KEY}"],
+          env: { TOKEN: "${CLAUDE_CODE_OAUTH_TOKEN}" },
+        },
+        remote: {
+          type: "http",
+          url: "https://mcp.example.test/${GIT_CONFIG_VALUE_0}?k=${AWS_SESSION_TOKEN}",
+          headers: {
+            Authorization: "Bearer ${ANTHROPIC_API_KEY}",
+            Otel: "${otel_exporter_otlp_headers}",
+            Npm: "${INPUT_NPM_TOKEN}",
+            Cargo: "${CARGO_REGISTRIES_MY_REG_TOKEN}",
+            Base: "${ANTHROPIC_BASE_URL}",
+            Oauth: "${CLAUDE_CODE_OAUTH_TOKEN}",
+          },
+        },
+      },
+    });
+    const preparedText = JSON.stringify(prepared);
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "credentials-blanked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_remote_",
+        names: [
+          "GIT_CONFIG_VALUE_0",
+          "AWS_SESSION_TOKEN",
+          "ANTHROPIC_API_KEY",
+          "otel_exporter_otlp_headers",
+          "INPUT_NPM_TOKEN",
+          "CARGO_REGISTRIES_MY_REG_TOKEN",
+          "ANTHROPIC_BASE_URL",
+          "CLAUDE_CODE_OAUTH_TOKEN",
+        ],
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        "sentinel-anthropic",
+        "sentinel-aws",
+        "sentinel-oauth",
+        "sentinel-otel-upper",
+        "sentinel-otel-lower",
+        "sentinel-npm",
+        "sentinel-git-config",
+        "sentinel-cargo",
+        "sentinel-base-url",
+      ].filter((sentinel) => preparedText.includes(sentinel)),
+      [],
+    );
+  });
+
+  test("AVAR-04: a set credential withheld from a remote server reports one credentials-blanked notice after the variables-missing notice", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-withheld-order-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: { ANTHROPIC_API_KEY: "api-key-value" },
+      servers: {
+        srv: {
+          type: "http",
+          url: "https://mcp.example.test/${PI_CM_AVAR_SITE}",
+          headers: { Authorization: "Bearer ${ANTHROPIC_API_KEY}", Retry: "${ANTHROPIC_API_KEY}" },
+        },
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "variables-missing",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+        names: ["PI_CM_AVAR_SITE"],
+      },
+      {
+        kind: "credentials-blanked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+        names: ["ANTHROPIC_API_KEY"],
+      },
+    ]);
+  });
+
   test("AVAR-04: a noop stage reports no variables-missing notice", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-noop-");

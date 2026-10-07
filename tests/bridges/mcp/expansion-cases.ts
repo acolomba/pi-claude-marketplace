@@ -1,8 +1,9 @@
 // Shared raw -> written -> Claude-output cases for plugin MCP variables
-// (AVAR-01..03). Each row is one raw field value, the environment at install,
-// the value this extension writes, the environment when the server connects,
-// and Claude Code's output for that field, derived by hand from Claude's rule.
-// `substitute.test.ts` checks `written` and `missing`. The adapter conformance
+// (AVAR-01..03, AVAR-05). Each row is one raw field value, the environment at
+// install, the value this extension writes, the environment when the server
+// connects, and Claude Code's output for that field, derived by hand from
+// Claude's rule. `substitute.test.ts` checks `written`, `missing` and
+// `blanked`. The adapter conformance
 // test feeds `written` through pi-mcp-adapter's real call chain for `field`
 // with `PI_CLAUDE_MARKETPLACE_EMPTY=""` and `runtimeEnv`, and expects
 // `claudeOutput`. Every reference a row keeps is set in `runtimeEnv`.
@@ -29,6 +30,8 @@ export interface ExpansionCase {
   readonly installEnv: Readonly<Record<string, string>>;
   readonly written: string;
   readonly missing: readonly string[];
+  /** The set deny-listed names withheld from `url` or `headers`; none when absent. */
+  readonly blanked?: readonly string[];
   readonly runtimeEnv: Readonly<Record<string, string>>;
   readonly claudeOutput: string;
 }
@@ -285,5 +288,162 @@ export const EXPANSION_CASES: readonly ExpansionCase[] = [
     missing: [],
     runtimeEnv: {},
     claudeOutput: "~user/x",
+  },
+  {
+    title: "AVAR-05: headers set ANTHROPIC_API_KEY inside text is written empty",
+    field: "headers",
+    raw: "Bearer ${ANTHROPIC_API_KEY}",
+    installEnv: { ANTHROPIC_API_KEY: "api-key-value" },
+    written: "Bearer ",
+    missing: [],
+    blanked: ["ANTHROPIC_API_KEY"],
+    runtimeEnv: { ANTHROPIC_API_KEY: "api-key-value" },
+    claudeOutput: "Bearer ",
+  },
+  {
+    title: "AVAR-05: headers ANTHROPIC_API_KEY ignores its default",
+    field: "headers",
+    raw: "${ANTHROPIC_API_KEY:-fallback}",
+    installEnv: {},
+    written: "",
+    missing: [],
+    runtimeEnv: { ANTHROPIC_API_KEY: "later-value" },
+    claudeOutput: "",
+  },
+  {
+    title: "AVAR-05: url unset AWS_SESSION_TOKEN is written empty and never missing",
+    field: "url",
+    raw: "https://mcp.example.test/?k=${AWS_SESSION_TOKEN}",
+    installEnv: {},
+    written: "https://mcp.example.test/?k=",
+    missing: [],
+    runtimeEnv: { AWS_SESSION_TOKEN: "later-value" },
+    claudeOutput: "https://mcp.example.test/?k=",
+  },
+  {
+    title: "AVAR-05: env set ANTHROPIC_API_KEY keeps the reference",
+    field: "env",
+    raw: "${ANTHROPIC_API_KEY}",
+    installEnv: { ANTHROPIC_API_KEY: "api-key-value" },
+    written: "${ANTHROPIC_API_KEY}",
+    missing: [],
+    runtimeEnv: { ANTHROPIC_API_KEY: "api-key-value" },
+    claudeOutput: "api-key-value",
+  },
+  {
+    title: "AVAR-05: env set CLAUDE_CODE_OAUTH_TOKEN is written empty",
+    field: "env",
+    raw: "${CLAUDE_CODE_OAUTH_TOKEN}",
+    installEnv: { CLAUDE_CODE_OAUTH_TOKEN: "oauth-token-value" },
+    written: "",
+    missing: [],
+    runtimeEnv: { CLAUDE_CODE_OAUTH_TOKEN: "oauth-token-value" },
+    claudeOutput: "",
+  },
+  {
+    title: "AVAR-05: env unset CLAUDE_CODE_OAUTH_TOKEN is the split-token literal and missing",
+    field: "env",
+    raw: "${CLAUDE_CODE_OAUTH_TOKEN}",
+    installEnv: {},
+    written: `$${SPLIT}{CLAUDE_CODE_OAUTH_TOKEN}`,
+    missing: ["CLAUDE_CODE_OAUTH_TOKEN"],
+    runtimeEnv: {},
+    claudeOutput: "${CLAUDE_CODE_OAUTH_TOKEN}",
+  },
+  {
+    title: "AVAR-05: headers set lowercase otel_exporter_otlp_headers is written empty",
+    field: "headers",
+    raw: "${otel_exporter_otlp_headers}",
+    installEnv: { otel_exporter_otlp_headers: "otel-value" },
+    written: "",
+    missing: [],
+    blanked: ["otel_exporter_otlp_headers"],
+    runtimeEnv: { otel_exporter_otlp_headers: "otel-value" },
+    claudeOutput: "",
+  },
+  {
+    title: "AVAR-05: headers set INPUT_NPM_TOKEN is written empty",
+    field: "headers",
+    raw: "${INPUT_NPM_TOKEN}",
+    installEnv: { INPUT_NPM_TOKEN: "npm-token-value" },
+    written: "",
+    missing: [],
+    blanked: ["INPUT_NPM_TOKEN"],
+    runtimeEnv: { INPUT_NPM_TOKEN: "npm-token-value" },
+    claudeOutput: "",
+  },
+  {
+    title: "AVAR-05: url set GIT_CONFIG_VALUE_0 is written empty",
+    field: "url",
+    raw: "https://mcp.example.test/${GIT_CONFIG_VALUE_0}",
+    installEnv: { GIT_CONFIG_VALUE_0: "config-value" },
+    written: "https://mcp.example.test/",
+    missing: [],
+    blanked: ["GIT_CONFIG_VALUE_0"],
+    runtimeEnv: { GIT_CONFIG_VALUE_0: "config-value" },
+    claudeOutput: "https://mcp.example.test/",
+  },
+  {
+    title: "AVAR-05: headers set CARGO_REGISTRIES_MY_REG_TOKEN is written empty",
+    field: "headers",
+    raw: "${CARGO_REGISTRIES_MY_REG_TOKEN}",
+    installEnv: { CARGO_REGISTRIES_MY_REG_TOKEN: "cargo-token-value" },
+    written: "",
+    missing: [],
+    blanked: ["CARGO_REGISTRIES_MY_REG_TOKEN"],
+    runtimeEnv: { CARGO_REGISTRIES_MY_REG_TOKEN: "cargo-token-value" },
+    claudeOutput: "",
+  },
+  {
+    title: "AVAR-05: headers ANTHROPIC_BASE_URL holding a credential is written empty",
+    field: "headers",
+    raw: "${ANTHROPIC_BASE_URL}",
+    installEnv: { ANTHROPIC_BASE_URL: "https://user:pass@proxy.example.test" },
+    written: "",
+    missing: [],
+    blanked: ["ANTHROPIC_BASE_URL"],
+    runtimeEnv: { ANTHROPIC_BASE_URL: "https://user:pass@proxy.example.test" },
+    claudeOutput: "",
+  },
+  {
+    title: "AVAR-05: headers credential-free ANTHROPIC_BASE_URL keeps the reference",
+    field: "headers",
+    raw: "${ANTHROPIC_BASE_URL}",
+    installEnv: { ANTHROPIC_BASE_URL: "https://proxy.example.test" },
+    written: "${ANTHROPIC_BASE_URL}",
+    missing: [],
+    runtimeEnv: { ANTHROPIC_BASE_URL: "https://proxy.example.test" },
+    claudeOutput: "https://proxy.example.test",
+  },
+  {
+    title: "AVAR-05: headers set GITHUB_TOKEN keeps the reference",
+    field: "headers",
+    raw: "${GITHUB_TOKEN}",
+    installEnv: { GITHUB_TOKEN: "github-token-value" },
+    written: "${GITHUB_TOKEN}",
+    missing: [],
+    runtimeEnv: { GITHUB_TOKEN: "github-token-value" },
+    claudeOutput: "github-token-value",
+  },
+  {
+    title: "AVAR-05: headers {env before an empty reference cannot compose {env:ANTHROPIC_API_KEY}",
+    field: "headers",
+    raw: "{env${PI_CM_R}:ANTHROPIC_API_KEY}",
+    installEnv: { PI_CM_R: "" },
+    written: `{env${SPLIT}\${PI_CM_R}:ANTHROPIC_API_KEY}`,
+    missing: [],
+    runtimeEnv: { ANTHROPIC_API_KEY: "api-key-value", PI_CM_R: "" },
+    claudeOutput: "{env:ANTHROPIC_API_KEY}",
+  },
+  {
+    title: "AVAR-05: headers {env around a withheld reference is escaped as one run",
+    field: "headers",
+    raw: "{env${ANTHROPIC_API_KEY}:PI_CM_SECRET}",
+    installEnv: { ANTHROPIC_API_KEY: "api-key-value" },
+    written: `{env:${SPLIT}PI_CM_SECRET}`,
+    missing: [],
+    blanked: ["ANTHROPIC_API_KEY"],
+    runtimeEnv: { ...SECRET_ENV, ANTHROPIC_API_KEY: "api-key-value" },
+    claudeOutput: "{env:PI_CM_SECRET}",
   },
 ];

@@ -78,6 +78,7 @@ for (const {
   installEnv,
   written,
   missing,
+  blanked = [],
 } of EXPANSION_CASES) {
   test(title, () => {
     // arrange
@@ -90,7 +91,7 @@ for (const {
     // assert
     assert.deepStrictEqual(substituted, {
       entry: shape.writtenEntry(written, INJECTED_ENV[scope]),
-      report: { missing, blanked: [] },
+      report: { missing, blanked },
     });
   });
 }
@@ -138,7 +139,14 @@ test("AVAR-01: writes oauth.redirectUri, description, keys and non-string values
 
 test("AVAR-01: passes field values of an unexpected type through unchanged", () => {
   // arrange
-  const remote = { url: 7, headers: "header", oauth: ["client"], env: "env", args: "args" };
+  const remote = {
+    command: 7,
+    url: 7,
+    headers: "header",
+    oauth: ["client"],
+    env: "env",
+    args: "args",
+  };
   const stdio = { command: "server", args: ["--level", 2, null], env: { RETRIES: 3 } };
 
   // act
@@ -147,7 +155,14 @@ test("AVAR-01: passes field values of an unexpected type through unchanged", () 
 
   // assert
   assert.deepStrictEqual(substitutedRemote, {
-    entry: { url: 7, headers: "header", oauth: ["client"], env: "env", args: "args" },
+    entry: {
+      command: 7,
+      url: 7,
+      headers: "header",
+      oauth: ["client"],
+      env: "env",
+      args: "args",
+    },
     report: { missing: [], blanked: [] },
   });
   assert.deepStrictEqual(substitutedStdio, {
@@ -361,4 +376,91 @@ test("AVAR-02: reports a remote server's missing names once each in url, headers
 
   // assert
   assert.deepStrictEqual(report, { missing: ["PI_CM_U", "PI_CM_V", "PI_CM_W"], blanked: [] });
+});
+
+test("AVAR-05: reports a remote server's set withheld names once each in url, headers order", () => {
+  // arrange
+  const translated = {
+    url: "https://mcp.example.test/${GIT_CONFIG_VALUE_0}",
+    headers: {
+      First: "${AWS_SESSION_TOKEN}${ANTHROPIC_API_KEY}",
+      Second: "${GIT_CONFIG_VALUE_0}${NPM_TOKEN}",
+      Third: "${ANTHROPIC_API_KEY}",
+    },
+  };
+  const context: McpSubstitutionContext = {
+    ...PROJECT_CONTEXT,
+    env: {
+      GIT_CONFIG_VALUE_0: "config-value",
+      AWS_SESSION_TOKEN: "aws-value",
+      NPM_TOKEN: "npm-value",
+      ANTHROPIC_API_KEY: "api-key-value",
+    },
+  };
+
+  // act
+  const { report } = substituteAndInject(translated, context);
+
+  // assert
+  assert.deepStrictEqual(report, {
+    missing: [],
+    blanked: ["GIT_CONFIG_VALUE_0", "AWS_SESSION_TOKEN", "ANTHROPIC_API_KEY", "NPM_TOKEN"],
+  });
+});
+
+test("AVAR-05: a remote unset withheld name is neither blanked nor missing", () => {
+  // arrange
+  const translated = {
+    url: "https://mcp.example.test",
+    headers: { Value: "${ANTHROPIC_API_KEY}" },
+  };
+
+  // act
+  const substituted = substituteAndInject(translated, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(substituted, {
+    entry: { url: "https://mcp.example.test", headers: { Value: "" } },
+    report: { missing: [], blanked: [] },
+  });
+});
+
+test("AVAR-05: a plain-field blank adds no blanked name", () => {
+  // arrange
+  const translated = {
+    command: "${CLAUDE_CODE_OAUTH_TOKEN}",
+    args: ["${CLAUDE_CODE_OAUTH_TOKEN}"],
+    env: { TOKEN: "${OTEL_EXPORTER_OTLP_HEADERS}" },
+  };
+  const context: McpSubstitutionContext = {
+    ...PROJECT_CONTEXT,
+    env: { CLAUDE_CODE_OAUTH_TOKEN: "oauth-value", OTEL_EXPORTER_OTLP_HEADERS: "otel-value" },
+  };
+
+  // act
+  const substituted = substituteAndInject(translated, context);
+
+  // assert
+  assert.deepStrictEqual(substituted, {
+    entry: { command: "", args: [""], env: { ...INJECTED_ENV.project, TOKEN: "" } },
+    report: { missing: [], blanked: [] },
+  });
+});
+
+test("AVAR-05: a deny-listed header variable set to the empty string is blanked and listed", () => {
+  // arrange
+  const translated = {
+    url: "https://mcp.example.test",
+    headers: { Value: "${ANTHROPIC_API_KEY}" },
+  };
+  const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, env: { ANTHROPIC_API_KEY: "" } };
+
+  // act
+  const substituted = substituteAndInject(translated, context);
+
+  // assert
+  assert.deepStrictEqual(substituted, {
+    entry: { url: "https://mcp.example.test", headers: { Value: "" } },
+    report: { missing: [], blanked: ["ANTHROPIC_API_KEY"] },
+  });
 });

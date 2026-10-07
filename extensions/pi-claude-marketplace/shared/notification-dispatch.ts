@@ -258,12 +258,28 @@ export interface McpVariablesMissingNotice {
   readonly names: readonly string[];
 }
 
+/**
+ * AVAR-04 / AVAR-05: a staged plugin server's `url` or `headers` references
+ * deny-listed credential variables that were set at install, and the entry
+ * carries empty values in their place. `names` lists them once each, in
+ * first-seen order. It names variables, never their values.
+ */
+export interface McpCredentialsBlankedNotice {
+  readonly kind: "credentials-blanked";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+  readonly names: readonly string[];
+}
+
 /** AFILE-04 / AFILE-06 / AVAR-04: one MCP config fact a command routes to `notifyMcpConfigNotices`. */
 export type McpConfigNotice =
   | McpConfigFileNotice
   | McpOverrideKeptNotice
   | McpOverrideRestoredNotice
-  | McpVariablesMissingNotice;
+  | McpVariablesMissingNotice
+  | McpCredentialsBlankedNotice;
 
 function mcpConfigFileLine(notice: McpConfigFileNotice): string {
   return notice.kind === "comments-dropped"
@@ -281,6 +297,14 @@ function mcpVariablesMissingLine(notice: McpVariablesMissingNotice): string {
 
 function isVariablesMissing(notice: McpConfigNotice): notice is McpVariablesMissingNotice {
   return notice.kind === "variables-missing";
+}
+
+function mcpCredentialsBlankedLine(notice: McpCredentialsBlankedNotice): string {
+  return `Server "${notice.server}" from ${notice.plugin} in the ${notice.scope}-scope ${notice.file} references credential variables that Claude Code never sends to a remote server: ${notice.names.join(", ")}. They were written as empty values.`;
+}
+
+function isCredentialsBlanked(notice: McpConfigNotice): notice is McpCredentialsBlankedNotice {
+  return notice.kind === "credentials-blanked";
 }
 
 function mcpConfigFileLines(
@@ -327,17 +351,19 @@ function standingOverrideNotices(
  * config notices. Bridges report the facts and orchestrators call this after
  * their own row. It sends one `"warning"` notification per kind present, in
  * the order comments-dropped, left-unchanged, override-kept,
- * variables-missing: a summary line, a blank line, then one distinct line per
- * notice in first-seen order. An override-kept line stands only when no later
- * override-restored notice for the same scope, file and server cancels it. An
- * override-restored notice renders nothing. An empty list sends nothing. A
- * line names the scope, the file basename, the plugin, the server, and
- * override field names or environment variable names only, so it carries no
- * absolute path, no field value and no variable value. The host UI prepends
+ * variables-missing, credentials-blanked: a summary line, a blank line, then
+ * one distinct line per notice in first-seen order. An override-kept line
+ * stands only when no later override-restored notice for the same scope, file
+ * and server cancels it. An override-restored notice renders nothing. An
+ * empty list sends nothing. A line names the scope, the file basename, the
+ * plugin, the server, and override field names or environment variable names
+ * only, so it carries no absolute path, no field value and no variable value
+ * (AVAR-05). The host UI prepends
  * the `Warning:` label to the summary line. The byte form is locked by
  * `tests/architecture/mcp-config-notices.test.ts` against the
- * `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept`
- * and `mcp-variables-missing` blocks in `docs/output-catalog.md`.
+ * `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept`,
+ * `mcp-variables-missing` and `mcp-credentials-blanked` blocks in
+ * `docs/output-catalog.md`.
  */
 export function notifyMcpConfigNotices(
   ctx: NotificationContext,
@@ -353,6 +379,10 @@ export function notifyMcpConfigNotices(
     [
       "MCP server variables not set.",
       notices.filter(isVariablesMissing).map((notice) => mcpVariablesMissingLine(notice)),
+    ],
+    [
+      "MCP server credentials withheld.",
+      notices.filter(isCredentialsBlanked).map((notice) => mcpCredentialsBlankedLine(notice)),
     ],
   ];
   for (const [summary, lines] of warnings) {

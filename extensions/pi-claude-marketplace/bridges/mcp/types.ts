@@ -79,7 +79,8 @@ export interface StageMcpCommitResult {
    * a `comments-dropped` or `left-unchanged` notice, then one `override-kept`
    * notice per absorbed override whose fields stop applying, then the
    * per-server variable notices from the variable reports of the staged
-   * entries, in declared server order. Distinct from `warnings`, which are
+   * entries, in declared server order: a server's `variables-missing` notice
+   * before its `credentials-blanked` notice (AVAR-05). Distinct from `warnings`, which are
    * hygiene notes standalone commands do not show.
    */
   readonly notices: readonly McpConfigNotice[];

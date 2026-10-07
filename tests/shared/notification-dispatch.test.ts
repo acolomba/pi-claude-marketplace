@@ -6277,6 +6277,120 @@ test("AVAR-04: a variables-missing notice listed first still sends after the ove
   );
 });
 
+test("AVAR-05: credentials-blanked notices for two servers send MCP server credentials withheld. with a line each", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "credentials-blanked",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_alpha_",
+      names: ["ANTHROPIC_API_KEY", "AWS_SESSION_TOKEN"],
+    },
+    {
+      kind: "credentials-blanked",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_beta_",
+      names: ["NPM_TOKEN"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP server credentials withheld.\n\n" +
+          'Server "plugin_hello_alpha_" from hello in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY, AWS_SESSION_TOKEN. They were written as empty values.\n' +
+          'Server "plugin_hello_beta_" from hello in the user-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: NPM_TOKEN. They were written as empty values.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AVAR-05: a repeated credentials-blanked notice renders once", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "credentials-blanked",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["ANTHROPIC_API_KEY"],
+    },
+    {
+      kind: "credentials-blanked",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["ANTHROPIC_API_KEY"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server credentials withheld.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AVAR-05: a credentials-blanked notice listed first still sends after the variables-missing warning", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "credentials-blanked",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["ANTHROPIC_API_KEY"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["DD_SITE"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: DD_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+        "warning",
+      ],
+      [
+        'MCP server credentials withheld.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+        "warning",
+      ],
+    ],
+  );
+});
+
 test("usage info dispatch preserves usage message at info severity", (t) => {
   // arrange
   const ctx = createContext(t);

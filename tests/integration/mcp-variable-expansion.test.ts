@@ -109,3 +109,51 @@ test("AVAR-02: a project install writes Claude's variable rule for the adapter a
     }
   });
 });
+
+test("AVAR-05: a remote server's header never receives a set deny-listed credential, and the user is told", async () => {
+  await withHermeticEnvironment("mcp-variable-expansion-", async ({ cwd }) => {
+    const saved = new Map([["ANTHROPIC_API_KEY", process.env.ANTHROPIC_API_KEY]]);
+    try {
+      // arrange
+      process.env.ANTHROPIC_API_KEY = "avar-sentinel-04-03";
+      await seedMcpPlugin(cwd, ["project"], {
+        type: "http",
+        url: "https://mcp.example.test/mcp",
+        headers: {
+          Authorization: "Bearer ${ANTHROPIC_API_KEY}",
+          "X-Fallback": "${ANTHROPIC_API_KEY:-unused}",
+        },
+      });
+      const locations = locationsFor("project", cwd);
+      const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+      const installed = makeCtx();
+      const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+
+      // act
+      await createInstallOperation(
+        hooksRouting,
+        createCompletionCache(),
+      )({ ...installed.session, ...request });
+      const installedText = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+      // assert
+      assert.deepStrictEqual(
+        (JSON.parse(installedText) as { mcpServers: Record<string, { headers: unknown }> })
+          .mcpServers.plugin_hello_srv_?.headers,
+        { Authorization: "Bearer ", "X-Fallback": "" },
+      );
+      assert.strictEqual(installedText.includes("avar-sentinel-04-03"), false);
+      assert.deepStrictEqual(
+        installed.notifications.filter(({ message }) => message.includes("avar-sentinel-04-03")),
+        [],
+      );
+      assert.deepStrictEqual(installed.notifications.at(-1), {
+        message:
+          'MCP server credentials withheld.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+        severity: "warning",
+      });
+    } finally {
+      restoreVariables(saved);
+    }
+  });
+});
