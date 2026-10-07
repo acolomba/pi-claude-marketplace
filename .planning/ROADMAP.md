@@ -236,7 +236,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. A referenced variable that is unset and has no default produces a missing-variable warning at install, as Claude Code warns. (AVAR-04)
 5. A `url` or `headers` value that references `ANTHROPIC_API_KEY` or another variable on Claude's credential deny-list does not receive that credential, and a security test proves it. (AVAR-05)
 
-**Plans**: 7/9 plans executed in 7 waves
+**Plans**: 8/9 plans executed in 7 waves
 
 **Wave 1**
 - [x] 04-01-PLAN.md — Claude's variable rule writes the entry for the adapter: five fields only, `${VAR:-default}`, split tokens, the boundary guard and `!!`, with each server's unset variables reported by the walk (AVAR-01, AVAR-02, AVAR-03)
@@ -256,7 +256,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 - [x] 04-07-PLAN.md — `info` lists each MCP server's unset and withheld variables (AVAR-04, AVAR-05)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 04-08-PLAN.md — conformance through pi-mcp-adapter 5.1.0's real functions, run in CI with zero skips; package-legitimacy checkpoint first (AVAR-03, AVAR-05)
+- [x] 04-08-PLAN.md — conformance through pi-mcp-adapter 5.1.0's real functions, run in CI with zero skips; package-legitimacy checkpoint first (AVAR-03, AVAR-05)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 04-09-PLAN.md — every staging path reports both warnings; the variable rules and divergences documented; MENVX-01 and ENVLIT-01 closed (AVAR-04, AVAR-03)
@@ -342,7 +342,7 @@ plan these phases with the UI gate skipped.
 | 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 9/9 | Complete    | 2026-10-02 |
 | 2. Adapter-file delivery | mcp-4 | 12/12 | Complete    | 2026-10-06 |
 | 3. Claude Code tool names and tool search | mcp-4 | 9/9 | Complete    | 2026-10-06 |
-| 4. Variable expansion at Claude Code parity | mcp-4 | 7/9 | In Progress | - |
+| 4. Variable expansion at Claude Code parity | mcp-4 | 8/9 | In Progress | - |
 | 5. Automatic migration on /reload | mcp-4 | 0/TBD | Not started | - |
 | 6. Live MCP status in info | mcp-4 | 0/TBD | Not started | - |
 | 7. Docs and live proof | mcp-4 | 0/TBD | Not started | - |

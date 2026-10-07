@@ -101,7 +101,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
   parity claim (closes MENVX-01, ENVLIT-01).
 - [ ] **AVAR-04**: A referenced variable that is unset with no default produces a missing-variable
   warning at install, as Claude Code warns.
-- [ ] **AVAR-05**: Claude's credential deny-list (`ANTHROPIC_API_KEY` and peers) is applied to
+- [x] **AVAR-05**: Claude's credential deny-list (`ANTHROPIC_API_KEY` and peers) is applied to
   `url` and `headers` expansion and tested as a security control.
 
 ### Migration (AMIG)
@@ -188,7 +188,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | AVAR-02 | Phase 4 | Complete |
 | AVAR-03 | Phase 4 | Pending |
 | AVAR-04 | Phase 4 | Pending |
-| AVAR-05 | Phase 4 | Pending |
+| AVAR-05 | Phase 4 | Complete |
 | AMIG-01 | Phase 5 | Pending |
 | AMIG-02 | Phase 5 | Pending |
 | AMIG-03 | Phase 5 | Pending |
