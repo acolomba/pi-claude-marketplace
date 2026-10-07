@@ -39,7 +39,6 @@ import type {
   HookSurface,
   LoadSurface,
   NotificationMessage,
-  RawSurface,
   ReconcileAppliedCascadeMessage,
   RetainedWorkflowStaging,
   UsageErrorMessage,
@@ -89,17 +88,13 @@ function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, b
   deliver(ctx, formatEnvelopeArguments(envelope, body));
 }
 
-/** D-02 / D-13: resolves, formats, and delivers one raw surface. */
-function emitRawSurface(ctx: NotificationContext, surface: RawSurface): void {
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- the remaining Stop-cap caller always produces text
-  const args = formatRawSurface(resolveRawSurface(surface))!;
-  requireNotificationMode(ctx.mode);
-  deliver(ctx, args);
-}
-
 /** D-14: the entry point for the hook-origin group of raw surfaces. */
-function emitHookSurface(ctx: NotificationContext, surface: HookSurface): void {
-  emitRawSurface(ctx, surface);
+function emitHookSurface(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  surface: HookSurface,
+): void {
+  emitPresentation(ctx, run, resolveRawSurface(surface));
 }
 
 /** D-14: the entry point for the load-origin group of raw surfaces. */
@@ -249,7 +244,7 @@ export function notifyAsyncRewakeSummary(
     return;
   }
 
-  emitPresentation(ctx, run, resolveRawSurface({ kind: "async-rewake-summary", summary }));
+  emitHookSurface(ctx, run, { kind: "async-rewake-summary", summary });
 }
 
 /**
@@ -274,10 +269,11 @@ export function notifyAsyncRewakeSummary(
  */
 export function notifyStopHookOverrideCap(
   ctx: NotificationContext,
+  run: NotificationRun,
   pluginId: string,
   cap: number,
 ): void {
-  emitHookSurface(ctx, { kind: "stop-override-cap", pluginId, cap });
+  emitHookSurface(ctx, run, { kind: "stop-override-cap", pluginId, cap });
 }
 
 /**

@@ -6236,7 +6236,7 @@ test("stop override dispatch preserves exact warning bytes", (t) => {
   const ctx = createContext(t);
 
   // act
-  notifyStopHookOverrideCap(ctx, "official:guard", 8);
+  notifyStopHookOverrideCap(ctx, runWithNothingLoaded(), "official:guard", 8);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6244,6 +6244,39 @@ test("stop override dispatch preserves exact warning bytes", (t) => {
     "warning",
   ]);
 });
+
+for (const mode of ["json", "rpc"]) {
+  test(`Stop cap dispatch appends the complete warning in ${mode}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    notifyStopHookOverrideCap(ctx, run, "official:guard", 8);
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "stop-override-cap",
+          severity: "warning",
+          needsReload: false,
+          pluginId: "official:guard",
+          cap: 8,
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+}
 
 test("usage info dispatch preserves usage message at info severity", (t) => {
   // arrange
