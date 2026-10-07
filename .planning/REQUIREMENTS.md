@@ -96,10 +96,10 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 - [x] **AVAR-02**: `${VAR:-default}` is resolved at install time with Claude's rule (an empty value
   counts as set); plain `${VAR}` is left for the adapter to expand at runtime, so no environment
   value is ever written to disk.
-- [ ] **AVAR-03**: A leading `!` in values the adapter would run as a shell command is escaped as
+- [x] **AVAR-03**: A leading `!` in values the adapter would run as a shell command is escaped as
   `!!`, and fields where the adapter re-expands with no escape produce a warning instead of a
   parity claim (closes MENVX-01, ENVLIT-01).
-- [ ] **AVAR-04**: A referenced variable that is unset with no default produces a missing-variable
+- [x] **AVAR-04**: A referenced variable that is unset with no default produces a missing-variable
   warning at install, as Claude Code warns.
 - [x] **AVAR-05**: Claude's credential deny-list (`ANTHROPIC_API_KEY` and peers) is applied to
   `url` and `headers` expansion and tested as a security control.
@@ -186,8 +186,8 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | ANAME-07 | Phase 3 | Complete |
 | AVAR-01 | Phase 4 | Complete |
 | AVAR-02 | Phase 4 | Complete |
-| AVAR-03 | Phase 4 | Pending |
-| AVAR-04 | Phase 4 | Pending |
+| AVAR-03 | Phase 4 | Complete |
+| AVAR-04 | Phase 4 | Complete |
 | AVAR-05 | Phase 4 | Complete |
 | AMIG-01 | Phase 5 | Pending |
 | AMIG-02 | Phase 5 | Pending |

@@ -4,17 +4,17 @@ milestone: mcp-4
 milestone_name: MCP 4
 current_phase: 04
 current_phase_name: Variable expansion at Claude Code parity
-status: executing
-stopped_at: Completed 04-08-PLAN.md
-last_updated: "2026-10-07T19:46:40.961Z"
+status: verifying
+stopped_at: Completed 04-09-PLAN.md
+last_updated: "2026-10-07T20:00:32.410Z"
 last_activity: 2026-10-07
-last_activity_desc: Completed 04-08 (pi-mcp-adapter 5.1.0 conformance proof, run in CI)
-state_head: b468ced77d042dc2da1ba57b6ddf56c4b04226ef
+last_activity_desc: Completed 04-09 (every staging verb reports both variable warnings; Variables doc; MENVX-01 and ENVLIT-01 closed)
+state_head: c0a51935bb4a6757db43c97232e0c866d8fd0d9e
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 39
-  completed_plans: 38
+  completed_plans: 39
   percent: 43
 ---
 
@@ -36,8 +36,8 @@ sign-ins and approvals.
 
 Phase: 04 (Variable expansion at Claude Code parity) — EXECUTING
 Plan: 9 of 9
-Status: Ready to execute
-Last activity: 2026-10-07 — Completed 04-08 (pi-mcp-adapter 5.1.0 conformance proof, run in CI)
+Status: Phase complete — ready for verification
+Last activity: 2026-10-07 — Completed 04-09 (every staging verb reports both variable warnings; Variables doc; MENVX-01 and ENVLIT-01 closed)
 
 Progress: [████░░░░░░] 43%
 
@@ -284,6 +284,7 @@ still open with a comment explaining what landed.
 | Phase 04 P06 | 5 min | 2 tasks | 7 files |
 | Phase 04 P07 | 15 min | 2 tasks | 11 files |
 | Phase 04 P08 | 14 min | 3 tasks | 5 files |
+| Phase 04 P09 | 11min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -660,6 +661,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 04]: The pi-mcp-adapter optional peer is >=5.1.0 <6, pinned by the PIFL-03 gate and the AFILE-06 assertion (D-04-17)
 - [Phase 04]: info lists each written plugin MCP server's unset (no :- default) and withheld (deny-listed) variable names from the environment injected into createGetPluginInfo, as plugin:<plugin>:<server> (unset A; withheld C); left-out servers and the record arm show no lists (AVAR-04, AVAR-05)
 - [Phase 04]: The adapter conformance test finds pi-mcp-adapter only through PI_MCP_ADAPTER_ROOT; CI installs exactly pi-mcp-adapter@5.1.0 with --ignore-scripts into $RUNNER_TEMP, and the install line carries a zizmor adhoc-packages suppression because PIFL-03 keeps the peer out of every lockfile (AVAR-03, AVAR-05)
+- [Phase 04]: Every staging verb (install, update, reinstall, enable, import, reconcile) has an AVAR-04 case asserting its rows then both variable warnings; the import case runs the real install path
 
 ### Pending Todos
 
@@ -793,11 +795,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 04-08-PLAN.md
+**Stopped at:** Completed 04-09-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-07T19:46:18.933Z
+Last session: 2026-10-07T20:00:03.309Z
 Phase 3 closed. Gates: Nyquist validation (23/23 green), security (20/20
 threats closed), code review (0 critical, 5 warnings, 5 info, all `open`),
 regression gate (`npm run check` green on d6029660, Node v26.10.0), verifier
