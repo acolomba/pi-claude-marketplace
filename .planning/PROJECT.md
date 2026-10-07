@@ -578,10 +578,16 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 ### Active — json-output
 
 Remaining json-output requirements are tracked in [REQUIREMENTS.md](REQUIREMENTS.md):
-mode-selected output, command-run metadata and completion, mode refusals,
-real-Pi verification, and documentation (Phases 5-7).
+command-run metadata and completion, mode refusals, real-Pi verification,
+and documentation (Phases 6-7).
 
 ### Validated
+
+- ✓ Live mode selection delivers JSON/RPC reports as session entries and
+  preserves text output. Unsupported modes are rejected before fresh command
+  and hook state changes; callback failures remain contained. All six criteria
+  and both user intent judgments pass — json-output Phase 5, 2026-10-07
+  (MODE-01/02, JOUT-01/05, TENB-01/02).
 
 - ✓ Versioned wire schema and format-only JSON conversion cover all model
   kinds; both LLM tools expose wire details. Credentials are redacted before
@@ -1167,3 +1173,7 @@ _Last updated: 2026-10-03 after json-output Phase 3 (Typed Raw Surfaces): 4 plan
 _Last updated: 2026-10-06 after json-output Phase 4: six plans, ten requirements,
 5/5 verified criteria and five human-confirmed prohibition assessments.
 Security records 18 mitigated and four accepted threats. Phase 5 is next._
+
+_Last updated: 2026-10-07 after json-output Phase 5: seven plans, six
+requirements, 6/6 verification, both human intent checks approved, clean
+code review and zero open security threats. Phase 6 has not started._

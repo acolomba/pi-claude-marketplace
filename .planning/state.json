@@ -26,7 +26,7 @@
     {
       "number": "5",
       "name": "Mode-Selected JSON Sink",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "6",
@@ -41,8 +41,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 05 of 7 · ready to verify"
+    "label": "Advance to the next step (plan phase 6)",
+    "reason": "Phase 6 of 7 — needs a plan"
   },
-  "updated_at": "2026-10-07T14:42:16.319Z"
+  "updated_at": "2026-10-07T16:41:39.226Z"
 }

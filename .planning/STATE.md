@@ -1,19 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 05
-current_phase_name: Mode-Selected JSON Sink
-status: verifying
-stopped_at: Implementation and independent reviews complete; two explicit intent judgments pending in 05-UAT.md
-last_updated: "2026-10-07T16:10:33.809271Z"
+current_phase: 6
+current_phase_name: Command-Run Contract
+status: planning
+stopped_at: Phase 05 complete, ready to plan Phase 6
+last_updated: "2026-10-07T16:41:39.161Z"
 last_activity: 2026-10-07
-last_activity_desc: All six criteria verified; review gaps fixed; full check and strict corpus pass; two UAT judgments pending
-state_head: 191f75e83dfa3fc26a43edaee315ce72da831ac2
+last_activity_desc: Phase 05 complete, transitioned to Phase 6
+state_head: 11f00a4cbd7f416aa2a2edc2da92b153a6244fe8
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 35
   completed_plans: 35
+  percent: 71
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -21,21 +22,21 @@ milestone_name: Mode-Keyed Presentation Strategies
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-06 after json-output Phase 4 verification)
+See: `.planning/PROJECT.md` (updated 2026-10-07 after json-output Phase 5 completion)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 05 — Mode-Selected JSON Sink
+**Current focus:** Phase 6 — Command-Run Contract (not started)
 
 ## Current Position
 
-Phase: 05 (Mode-Selected JSON Sink) — HUMAN VERIFICATION
-Plan: 7 of 7
-Status: Implementation verified 6/6 — two human judgments pending
-Last activity: 2026-10-07 — All six criteria verified; review gaps fixed; full check and strict corpus pass; two UAT judgments pending
+Phase: 6 — Command-Run Contract
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-07 — Phase 05 complete, transitioned to Phase 6
 
-Progress: [██████░░░░] 57% (4 of 7 phases fully verified; 35 of 35 plans complete)
+Progress: [███████░░░] 71% (5 of 7 phases fully verified; 35 of 35 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,9 +170,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-07T16:10:33.809271Z
-**Stopped at:** Implementation and independent reviews complete; two explicit intent judgments pending in 05-UAT.md
-**Resume file:** .planning/phases/05-mode-selected-json-sink/05-UAT.md
+**Last session:** 2026-10-07T16:42:28.627900Z
+**Stopped at:** Phase 05 complete, ready to plan Phase 6
+**Resume file:** None
 
 **Current work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
@@ -227,23 +228,22 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Phase 5 implementation verifies 6/6 with no open code or security findings.
-  All seven plans are merged. Review fixes `cd569d2a` and `191f75e8` guard
-  fresh hook dispatch and bookkeeping before state changes.
-- The owner verification status is `human_needed`. Continue with
-  `$gsd-verify-work 05` and resolve P-05-01 and P-05-02 in `05-UAT.md`.
-  Both have favorable independent code evidence but need explicit intent
-  judgments. Do not infer their approval from passing tests.
-- `npm run check` exited 0 at `191f75e8` on Node v26.10.0, with all
-  264 direct pairs. Strict corpus verification exited 0: 3149 entries,
-  zero extras. Catalog and schema are unchanged. Logs:
-  `/tmp/json-phase5-state-guard-parent-check.log` and
-  `/tmp/json-phase5-state-guard-parent-corpus.log`.
-- A-05-01 is closed by independent registered-callback verification;
-  A-05-02 is verified for the enumerated output paths. No implementation
-  gap remains. Temporary fix worktrees, branches, and sentinels are removed.
-- Phase 5 remains pending; do not advance to Phase 6 before the two judgments.
-  Execution was invoked with `--no-transition`.
+- Phase 5 is complete: all seven plans, six requirements, and two human
+  judgments pass. User response "approve" explicitly approved P-05-01 and
+  P-05-02; `05-UAT.md` records both. Canonical verification is `passed`.
+- Code review and security have no open findings. Review fixes `cd569d2a`
+  and `191f75e8` guard hook dispatch and bookkeeping before state changes.
+  The independent root audit covers all 11 registered callbacks.
+- The full combined-tree check passed at `191f75e8` on Node v26.10.0 with
+  264 direct pairs. Strict corpus verification passed with 3149 entries,
+  zero extras; catalog and schema are unchanged. No production input has
+  changed during approval closeout.
+- Phase 6 (Command-Run Contract) is next and has not started. Execution's
+  `--no-transition` scope stops here; plan or discuss it when continuing.
+- Phase-close file warnings are parser false positives: abbreviated source
+  paths resolve under `extensions/pi-claude-marketplace/`, and shell commands
+  quoted in summaries are checks, not missing files. Artifact verification
+  and the independent code review checked the actual paths.
 
 ## Performance Metrics
 

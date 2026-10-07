@@ -18,7 +18,7 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 - [x] **Phase 2: Row Policies** — Per-verb rendering differences become a total row-policy map of data instead of string render callbacks (completed 2026-10-02)
 - [x] **Phase 3: Typed Raw Surfaces** — Every raw-string output surface becomes a typed model kind, so text is a pure formatter of the model (completed 2026-10-03)
 - [x] **Phase 4: Wire Schema and JSON Strategy** — A versioned typebox wire schema and a format-only JSON strategy, validated as a pure function and first consumed by the LLM tools (completed 2026-10-06)
-- [ ] **Phase 5: Mode-Selected JSON Sink** — `ctx.mode` selects the strategy, and `json`/`rpc` output reaches consumers through `pi.appendEntry` from every output site
+- [x] **Phase 5: Mode-Selected JSON Sink** — `ctx.mode` selects the strategy, and `json`/`rpc` output reaches consumers through `pi.appendEntry` from every output site (completed 2026-10-07)
 - [ ] **Phase 6: Command-Run Contract** — Payloads carry their origin and invocation, and every command run emits a complete set of payloads, even when it throws
 - [ ] **Phase 7: Mode Refusals, Real-Pi Verification, and Docs** — Browse and device-flow refuse clearly by mode, a real headless Pi run proves the contract, and the schema is documented
 
@@ -209,7 +209,7 @@ Plans:
 5. Every test fake of the notification or extension context carries an explicit `mode` that the type requires; no `as unknown as ExtensionContext` cast hides a missing one. An in-process capture helper records every `appendEntry` payload and fails the test on a schema-invalid payload.
 6. Carried from Phase 3 research: the JSON strategy keeps the text strategy's empty no-ops (empty diagnostic lines, empty rewake summary), and `bridges/hooks/settle.ts`'s Stop-cap notify gains the NFR-2 try/catch once the sink can throw.
 
-**Plans:** 7/7 plans executed
+**Plans:** 7/7 plans complete
 
 Plans:
 **Wave 1**
@@ -272,7 +272,7 @@ Plans:
 | 2. Row Policies | 2/2 | Complete    | 2026-10-02 |
 | 3. Typed Raw Surfaces | 4/4 | Complete    | 2026-10-03 |
 | 4. Wire Schema and JSON Strategy | 6/6 | Complete    | 2026-10-06 |
-| 5. Mode-Selected JSON Sink | 7/7 | In Progress | - |
+| 5. Mode-Selected JSON Sink | 7/7 | Complete    | 2026-10-07 |
 | 6. Command-Run Contract | 0/TBD | Not started | - |
 | 7. Mode Refusals, Real-Pi Verification, and Docs | 0/TBD | Not started | - |
 

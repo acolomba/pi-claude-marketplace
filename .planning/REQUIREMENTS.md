@@ -78,7 +78,7 @@ model that already carries every presentation decision.
 
 ### JSON Strategy and Transport
 
-- [ ] **JOUT-01**: In `json` and `rpc` modes, every `/claude:plugin` output is
+- [x] **JOUT-01**: In `json` and `rpc` modes, every `/claude:plugin` output is
   emitted through `pi.appendEntry("claude-plugin", payload)` and none through
   `ctx.ui.notify`; `appendEntry` is callable only from the dispatch module,
   enforced by an ESLint rule proven by a planted violation.
@@ -91,7 +91,7 @@ model that already carries every presentation decision.
   handler becomes a typed `internal-error` payload with a redacted cause chain,
   so every command yields at least one payload; `tui` and `print` behavior is
   unchanged.
-- [ ] **JOUT-05**: Output calls that can newly throw -- `appendEntry` before
+- [x] **JOUT-05**: Output calls that can newly throw -- `appendEntry` before
   bind, a stale `pi` or `ctx` after `/reload` -- never escape lifecycle or hook
   callbacks (NFR-2).
 
@@ -112,10 +112,10 @@ model that already carries every presentation decision.
 
 ### Mode Selection
 
-- [ ] **MODE-01**: The strategy is chosen by an exhaustive switch over
+- [x] **MODE-01**: The strategy is chosen by an exhaustive switch over
   `ctx.mode`, read at emit time and never cached: `tui` -> text (plus the
   interactive browse strategy), `print` -> text, `json` and `rpc` -> JSON.
-- [ ] **MODE-02**: Any other mode value raises a typed `UnsupportedModeError`
+- [x] **MODE-02**: Any other mode value raises a typed `UnsupportedModeError`
   from a membership check that runs before any state change; lifecycle handlers
   log it and never rethrow.
 - [ ] **MODE-03**: `browse` outside `tui` emits an error-severity payload that
@@ -133,9 +133,9 @@ model that already carries every presentation decision.
 
 ### Test Enablement
 
-- [ ] **TENB-01**: A JSON capture helper for in-process tests records every
+- [x] **TENB-01**: A JSON capture helper for in-process tests records every
   `appendEntry` payload and validates each one against the schema.
-- [ ] **TENB-02**: Every test fake of the notification or extension context
+- [x] **TENB-02**: Every test fake of the notification or extension context
   carries an explicit `mode`, required by the type; the `as unknown as
   ExtensionContext` casts that hide a missing `mode` are removed or given one.
 - [ ] **TENB-03**: A real-Pi e2e test runs
@@ -205,23 +205,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WIRE-07 | Phase 6 | Pending |
 | WIRE-08 | Phase 4 | Complete |
 | WIRE-09 | Phase 4 | Complete |
-| JOUT-01 | Phase 5 | Pending |
+| JOUT-01 | Phase 5 | Complete |
 | JOUT-02 | Phase 4 | Complete |
 | JOUT-03 | Phase 6 | Pending |
 | JOUT-04 | Phase 6 | Pending |
-| JOUT-05 | Phase 5 | Pending |
+| JOUT-05 | Phase 5 | Complete |
 | RAWS-01 | Phase 3 | Complete |
 | RAWS-02 | Phase 3 | Complete |
 | RAWS-03 | Phase 3 | Complete |
 | RAWS-04 | Phase 3 | Complete |
 | RAWS-05 | Phase 3 | Complete |
-| MODE-01 | Phase 5 | Pending |
-| MODE-02 | Phase 5 | Pending |
+| MODE-01 | Phase 5 | Complete |
+| MODE-02 | Phase 5 | Complete |
 | MODE-03 | Phase 7 | Pending |
 | MODE-04 | Phase 7 | Pending |
 | LLMT-01 | Phase 4 | Complete |
-| TENB-01 | Phase 5 | Pending |
-| TENB-02 | Phase 5 | Pending |
+| TENB-01 | Phase 5 | Complete |
+| TENB-02 | Phase 5 | Complete |
 | TENB-03 | Phase 7 | Pending |
 | JDOC-01 | Phase 7 | Pending |
 | JDOC-02 | Phase 7 | Pending |

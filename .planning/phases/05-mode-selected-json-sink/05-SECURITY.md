@@ -103,5 +103,5 @@ roots and validates mode before assistant-cache consumption. Independent
 review verifies all 11 registrations, preserves generation-first ordering,
 and confirms cap/cache state and cleanup behavior. No threat acceptance was
 added; zero threats remain open. The latest combined-tree gate passed with
-264 direct pairs; see 05-VERIFICATION-FIX.md for exact evidence and the
+264 direct pairs; see 05-STATE-GUARD-FIX.md for exact evidence and the
 current commit reference.
