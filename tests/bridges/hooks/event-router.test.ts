@@ -43,6 +43,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
@@ -521,6 +522,10 @@ test(
     await hydration.registerHooksBridge(pi, { cwd: projectRoot, executor });
     const persistedOrphanOutcome = await persistedOrphanExit;
     await Promise.all(settleResetPromises);
+    await registeredHandler(registrations, "session_start")(
+      { type: "session_start", reason: "reload" },
+      { mode: "unknown" },
+    );
     if (typeof staleToolCallHandler === "function") {
       await Reflect.apply(staleToolCallHandler, undefined, [toolCall, context]);
     }
@@ -819,6 +824,38 @@ function makeContext(cwd: string, sessionRoot: string): ExtensionContext {
       throw new Error("event router must not read the system prompt");
     },
   };
+}
+
+async function makeSessionStartFixture(t: TestContext): Promise<{
+  readonly root: string;
+  readonly projectRoot: string;
+  readonly sharedPaths: readonly string[];
+}> {
+  const { root } = await createHermeticEnvironment(t, "hooks-router-session-mode-");
+  const projectRoot = path.join(root, "project");
+  const sharedPaths: string[] = [];
+  for (const scope of ["user", "project"] as const) {
+    const loc = locationsFor(scope, projectRoot);
+    const hooksDirectory = path.join(loc.hooksDir, "session-hooks");
+    await mkdir(hooksDirectory, { recursive: true });
+    await writeFile(
+      path.join(hooksDirectory, "hooks.json"),
+      JSON.stringify(makeConfig([{ event: "SessionStart", handlers: 1 }])),
+    );
+    await saveState(
+      loc.extensionRoot,
+      makeScopeState({
+        scope,
+        cwd: projectRoot,
+        plugins: {
+          session: makeStoredPlugin({ root: path.join(root, scope), hooks: ["session-hooks"] }),
+        },
+      }),
+    );
+    sharedPaths.push(path.join(loc.dataRoot, "_shared"));
+  }
+
+  return { root, projectRoot, sharedPaths };
 }
 
 function makeRecordingPi(): {
@@ -1961,8 +1998,7 @@ test(
     // The SessionStart routing bucket is read immediately before the shared
     // data dir is awaited, so delegating that read and then advancing the
     // generation leaves only the guard after the await for this case to
-    // measure. Registration reads the same bucket once per hydrated scope, so
-    // the advance is armed only for the dispatch.
+    // measure. The advance is armed only for the dispatch.
     const runtimeGoingStaleOnTheSessionStartRead: HooksRuntime = {
       ...runtime,
       getRoutingBucket(event: BucketAEvent): readonly RoutingEntry[] {
@@ -2127,38 +2163,214 @@ test(
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const { root } = await createHermeticEnvironment(t, "hooks-router-shared-dir-");
-    const projectRoot = path.join(root, "project");
+    const { root, projectRoot } = await makeSessionStartFixture(t);
     const userLocations = locationsFor("user", projectRoot);
     const projectLocations = locationsFor("project", projectRoot);
     await mkdir(userLocations.dataRoot, { recursive: true });
     const userSharedPath = path.join(userLocations.dataRoot, "_shared");
     const projectSharedPath = path.join(projectLocations.dataRoot, "_shared");
     await writeFile(userSharedPath, "regular-file-boundary", "utf8");
-    seedPluginConfig(
-      runtime,
-      "user",
-      "catalog",
-      "session",
-      asAbsolutePluginRoot(path.join(root, "plugins", "session")),
-      makeConfig([{ event: "SessionStart", handlers: 1, prefix: "session" }]),
-      new Map(),
-    );
+    const dispatched: string[] = [];
     const { pi, registrations } = makeRecordingPi();
 
     // act
     await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
       cwd: projectRoot,
+      executor: (entry) => {
+        dispatched.push(entry.scope);
+        return Promise.resolve({ kind: "noop" });
+      },
     });
+    const projectSharedBeforeSession = fs.existsSync(projectSharedPath);
+    await registeredHandler(registrations, "session_start")(
+      { type: "session_start", reason: "startup" },
+      makeContext(projectRoot, root),
+    );
     const userSharedBytes = await fs.promises.readFile(userSharedPath, "utf8");
     const projectSharedStat = await fs.promises.stat(projectSharedPath);
 
     // assert
+    assert.strictEqual(projectSharedBeforeSession, false);
+    assert.deepStrictEqual(dispatched, ["project", "user"]);
     assert.strictEqual(userSharedBytes, "regular-file-boundary");
     assert.strictEqual(projectSharedStat.isDirectory(), true);
     assert.strictEqual(registrations.length, 11);
   },
 );
+
+for (const mode of ["tui", "print", "json", "rpc"] as const) {
+  test(`SessionStart prepares both scopes before ${mode} hooks run`, async (t) => {
+    // arrange
+    const { root, projectRoot, sharedPaths } = await makeSessionStartFixture(t);
+    const runtime = createHooksRuntime();
+    const { pi, registrations, messages } = makeRecordingPi();
+    const capture = createJsonCapture();
+    const observations: Array<{ scope: string; directories: boolean[] }> = [];
+    const context = new Proxy(makeContext(projectRoot, root), {
+      get(target, property, receiver): unknown {
+        if (property === "mode") {
+          return mode;
+        }
+
+        if (property === "ui") {
+          return capture.ui;
+        }
+
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+      cwd: projectRoot,
+      executor: (entry) => {
+        observations.push({ scope: entry.scope, directories: sharedPaths.map(fs.existsSync) });
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+    const beforeSession = sharedPaths.map(fs.existsSync);
+
+    // act
+    await registeredHandler(registrations, "session_start")(
+      { type: "session_start", reason: "startup" },
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(beforeSession, [false, false]);
+    assert.deepStrictEqual(observations, [
+      { scope: "project", directories: [true, true] },
+      { scope: "user", directories: [true, true] },
+    ]);
+    assert.deepStrictEqual(messages, []);
+    assert.deepStrictEqual(capture.entries, []);
+    capture.assertValid();
+    assert.strictEqual(registrations.length, 11);
+  });
+}
+
+for (const failure of ["unknown-mode", "stale-mode"] as const) {
+  test(`SessionStart with ${failure} neither hydrates nor creates directories or runs hooks`, async (t) => {
+    // arrange
+    const { root, projectRoot, sharedPaths } = await makeSessionStartFixture(t);
+    const runtime = createHooksRuntime();
+    const { pi, registrations, messages } = makeRecordingPi();
+    const capture = createJsonCapture();
+    const dispatches: string[] = [];
+    const contextReads: string[] = [];
+    const context = {
+      get mode(): string {
+        contextReads.push("mode");
+        if (failure === "stale-mode") {
+          throw new Error("stale mode");
+        }
+
+        return "unknown";
+      },
+      get cwd(): never {
+        contextReads.push("cwd");
+        throw new Error("rejected session must not hydrate");
+      },
+      get ui() {
+        return capture.ui;
+      },
+    };
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+      cwd: projectRoot,
+      executor: (entry) => {
+        dispatches.push(entry.scope);
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+    const cacheBeforeSession = Array.from(runtime.parsedConfigEntries());
+    const treeBeforeSession = await fs.promises.readdir(root, { recursive: true });
+
+    // act
+    await registeredHandler(registrations, "session_start")(
+      { type: "session_start", reason: "startup" },
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(sharedPaths.map(fs.existsSync), [false, false]);
+    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), cacheBeforeSession);
+    assert.deepStrictEqual(await fs.promises.readdir(root, { recursive: true }), treeBeforeSession);
+    assert.deepStrictEqual(dispatches, []);
+    assert.deepStrictEqual(contextReads, ["mode"]);
+    assert.deepStrictEqual(messages, []);
+    assert.deepStrictEqual(capture.entries, []);
+    capture.assertValid();
+  });
+}
+
+for (const { rejectedRead, directories } of [
+  { rejectedRead: 2, directories: [false, false] },
+  { rejectedRead: 3, directories: [true, false] },
+  { rejectedRead: 4, directories: [true, true] },
+]) {
+  test(`SessionStart stops new work when mode changes at stage ${rejectedRead}`, async (t) => {
+    // arrange
+    const { root, projectRoot, sharedPaths } = await makeSessionStartFixture(t);
+    const { pi, registrations, messages } = makeRecordingPi();
+    const runtime = createHooksRuntime();
+    const dispatches: string[] = [];
+    let modeReads = 0;
+    const context = new Proxy(makeContext(projectRoot, root), {
+      get(target, property, receiver): unknown {
+        if (property === "mode") {
+          modeReads += 1;
+          return modeReads === rejectedRead ? "unknown" : "json";
+        }
+
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+      cwd: projectRoot,
+      executor: (entry) => {
+        dispatches.push(entry.scope);
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+
+    // act
+    await registeredHandler(registrations, "session_start")(
+      { type: "session_start", reason: "startup" },
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(sharedPaths.map(fs.existsSync), directories);
+    assert.deepStrictEqual(dispatches, []);
+    assert.deepStrictEqual(messages, []);
+    assert.strictEqual(modeReads, rejectedRead);
+  });
+}
+
+test("SessionStart contains a dispatch failure after preparing both directories", async (t) => {
+  // arrange
+  const { root, projectRoot, sharedPaths } = await makeSessionStartFixture(t);
+  const { pi, registrations, messages } = makeRecordingPi();
+  const runtime = createHooksRuntime();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    cwd: projectRoot,
+    executor: (entry) => {
+      dispatched.push(entry.scope);
+      return Promise.reject(new Error("stale dispatch capability"));
+    },
+  });
+
+  // act
+  const update = await registeredHandler(registrations, "session_start")(
+    { type: "session_start", reason: "startup" },
+    makeContext(projectRoot, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(sharedPaths.map(fs.existsSync), [true, true]);
+  assert.deepStrictEqual(dispatched, ["project"]);
+  assert.deepStrictEqual(messages, []);
+});
 
 test(
   "session_start lazily hydrates project routes and drains their context on the next agent turn",

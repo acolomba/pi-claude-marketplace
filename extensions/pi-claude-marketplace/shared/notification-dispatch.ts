@@ -106,16 +106,24 @@ function emitHookSurface(ctx: NotificationContext, surface: HookSurface): void {
 }
 
 /** D-14: the entry point for the load-origin group of raw surfaces. */
-function emitLoadSurface(ctx: NotificationContext, surface: LoadSurface): void {
-  emitRawSurface(ctx, surface);
+function emitLoadSurface(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  surface: LoadSurface,
+): void {
+  emitPresentation(ctx, run, resolveRawSurface(surface));
 }
 
 /**
  * RAWS-04 / D-13: reports that the load-time reconcile aborted. `cause` is the
  * live thrown value; resolve serializes it.
  */
-export function notifyReconcileAborted(ctx: NotificationContext, cause: unknown): void {
-  emitLoadSurface(ctx, { kind: "reconcile-aborted", cause });
+export function notifyReconcileAborted(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  cause: unknown,
+): void {
+  emitLoadSurface(ctx, run, { kind: "reconcile-aborted", cause });
 }
 
 /**
@@ -124,10 +132,11 @@ export function notifyReconcileAborted(ctx: NotificationContext, cause: unknown)
  */
 export function notifyPluginPathSkipped(
   ctx: NotificationContext,
+  run: NotificationRun,
   scope: Scope,
   reason: string,
 ): void {
-  emitLoadSurface(ctx, { kind: "plugin-path-skipped", scope, reason });
+  emitLoadSurface(ctx, run, { kind: "plugin-path-skipped", scope, reason });
 }
 
 /**
@@ -381,7 +390,7 @@ function emitPresentation(
       if ("envelope" in presentation) {
         emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
       } else {
-        // Usage, device prompts, and nonempty diagnostics always produce a tuple.
+        // Usage, load warnings, device prompts, and nonempty diagnostics produce a tuple.
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- empty diagnostics return before transport selection
         const args = formatRawSurface(presentation)!;
         deliver(ctx, args);
