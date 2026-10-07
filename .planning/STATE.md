@@ -5,7 +5,7 @@ milestone_name: MCP 4
 current_phase: 5
 current_phase_name: Automatic migration on /reload
 status: planning
-stopped_at: Phase 04 complete, ready to plan Phase 5
+stopped_at: Paused at the start of the Phase 5 discuss
 last_updated: "2026-10-07T22:02:43.298Z"
 last_activity: 2026-10-07
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
@@ -795,9 +795,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 04 complete, ready to plan Phase 5
+**Stopped at:** Paused at the start of the Phase 5 discuss (operator paused at the gray-area selection). Resume with `/clear`, then `/gsd-autonomous --from 5 --interactive`; the handoff is `.planning/phases/05-automatic-migration-on-reload/.continue-here.md` plus `.planning/HANDOFF.json`. Work lives on `features/mcp-4` in `~/src/pi-claude-marketplace-mcp-4`. Nothing was skipped in phase 4; environment debt: the adapter scratch install at /var/tmp/mcp4-p4-08/adapter.
 
-**Resume file:** None
+**Resume file:** .planning/phases/05-automatic-migration-on-reload/.continue-here.md
 
 Last session: 2026-10-07T22:10:00Z
 Phase 4 closed in `/gsd-autonomous --from 4 --interactive`, run sequentially on

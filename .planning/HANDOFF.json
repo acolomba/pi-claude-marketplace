@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-10-07T22:06:33.913Z",
+  "phase": "5",
+  "phase_name": "Automatic migration on /reload",
+  "phase_dir": ".planning/phases/05-automatic-migration-on-reload",
+  "plan": 0,
+  "task": 0,
+  "total_tasks": 0,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Phase 4 execute: 9/9 plans (04-01..04-09), sequential on this checkout", "status": "done", "commit": "63ad2116"},
+    {"id": 2, "name": "Phase 4 Nyquist validation (validated, compliant)", "status": "done", "commit": "af2c42b6"},
+    {"id": 3, "name": "Phase 4 security (29/29 closed after review fixes)", "status": "done", "commit": "10b91445"},
+    {"id": 4, "name": "Phase 4 code review + 3-iteration fix loop (WR-01..07 fixed; 8 info open)", "status": "done", "commit": "1629bac1"},
+    {"id": 5, "name": "Phase 4 regression gate npm run check green", "status": "done", "commit": "1629bac1"},
+    {"id": 6, "name": "Phase 4 verification passed 5/5 after operator review; MCPROW-01 filed", "status": "done", "commit": "e88226fa"},
+    {"id": 7, "name": "Phase 4 transition (PROJECT.md, STATE.md)", "status": "done", "commit": "67195e9d"}
+  ],
+  "remaining_tasks": [
+    {"id": 8, "name": "Phase 5 discuss (interactive): gray areas proposed, operator declined the selection prompt and paused", "status": "not_started"},
+    {"id": 9, "name": "Phase 5 plan -> execute -> review -> verify", "status": "not_started"},
+    {"id": 10, "name": "Phases 6-7 (discuss -> plan -> execute each)", "status": "not_started"},
+    {"id": 11, "name": "Re-verify phases 1 and 2 (init.manager reports verification stale), then milestone audit -> complete -> cleanup", "status": "not_started"}
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Phase 5 discuss: choose which gray areas to discuss (entry source re-stage vs in-place; stale/unowned marked entries; user edits and key collisions on migrated entries; notice shape) or ask for recommended defaults", "context": "Operator denied the area-selection prompt and ran /gsd-pause-work", "blocking": true},
+    {"action": "Decide whether openUi joins the D-02-06 carried-field set", "context": "Carried from the previous handoff; adapter 5.1.0 ServerEntry.openUi is dropped on update/reinstall. Decide before the release that ships phases 2-5", "blocking": false},
+    {"action": "Re-verify phases 1 and 2 before the milestone audit", "context": "init.manager reports their verification stale; may be the archived-phase misread (trust init.phase-op)", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "pi-mcp-adapter@5.1.0 approved for the 04-08 scratch/CI install", "rationale": "Operator approved the blocking-human package checkpoint", "phase": "04"},
+    {"decision": "WR-07 fixed with a split token after a kept ${NAME} when the following text matches /^(?:[\\w}]|:\\w)/", "rationale": "Operator choice; closes plugin-chosen credential leak through a joined runtime value", "phase": "04"},
+    {"decision": "WR-02 home-marker forms accepted under widened AR-04-03", "rationale": "Blocking would refuse plugins that work in Claude Code", "phase": "04"},
+    {"decision": "Notice wording, info line and CI zizmor ignore accepted; enable/import row grammar filed as MCPROW-01", "rationale": "Operator review of phase 4 human-verification items", "phase": "04"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "/clear, then /gsd-autonomous --from 5 --interactive (phase 5 has no CONTEXT, so it starts at the interactive discuss)",
+  "context_notes": "Executors must run sequentially on this checkout (agent worktrees lack node_modules): before each executor/reviewer/fixer dispatch run `node .claude/gsd-core/bin/gsd-tools.cjs query dispatch-isolation --raw --phase NN --plan NN-MM --force-isolation none` and keep the [gsd:dispatch] tag matching. init.manager misreports phases 1,2,5-7 (archived dirs); trust init.phase-op. The pi-mcp-adapter 5.1.0 scratch install is at /var/tmp/mcp4-p4-08/adapter (set PI_MCP_ADAPTER_ROOT=/var/tmp/mcp4-p4-08/adapter/node_modules/pi-mcp-adapter for zero-skip conformance runs)."
+}
