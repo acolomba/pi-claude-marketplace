@@ -52,12 +52,12 @@ export function makeInstallHandler(
   return async (args, ctx, run): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts. The catalog-derived
     // pass-through flags are downstream-consumed; pass through verbatim.
-    const localFlag = extractLocalFlag(args, ctx, USAGE, PASS_THROUGH_FLAGS);
+    const localFlag = extractLocalFlag(args, { ctx, run, usage: USAGE }, PASS_THROUGH_FLAGS);
     if (localFlag === undefined) {
       return;
     }
 
-    const flagged = parseMapModelArgs(localFlag.residualArgs, ctx, USAGE);
+    const flagged = parseMapModelArgs(localFlag.residualArgs, ctx, run, USAGE);
     if (flagged === undefined) {
       return;
     }
@@ -66,7 +66,7 @@ export function makeInstallHandler(
 
     const positional = nonFlagPositionals[0];
     if (nonFlagPositionals.length !== 1 || positional === undefined) {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: "install requires exactly one <plugin>@<marketplace> argument.",
         usage: USAGE,
       });
@@ -78,7 +78,7 @@ export function makeInstallHandler(
       // PI-1 invalid `<plugin>@<marketplace>` token (no `@`, leading `@`,
       // trailing `@`) -- this is a USAGE ERROR, not an entity-shape error:
       // the ref string never anchored to a real plugin/marketplace pair.
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: `Invalid <plugin>@<marketplace> ref: "${positional}".`,
         usage: USAGE,
       });

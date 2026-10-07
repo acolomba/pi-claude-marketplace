@@ -24,6 +24,7 @@ import { splitPluginMarketplaceRef } from "./shared.ts";
 
 import type { FetchTarget } from "../../../orchestrators/plugin/fetch.ts";
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { NotificationRun } from "../../../shared/notification-run.ts";
 import type { Scope } from "../../../shared/types.ts";
 import type { SubcommandHandler } from "../../router.ts";
 
@@ -44,6 +45,7 @@ interface ParsedFetchTarget {
 function parseFetchTarget(
   args: string,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
 ): ParsedFetchTarget | undefined {
   let parsed;
   try {
@@ -51,14 +53,14 @@ function parseFetchTarget(
   } catch (err) {
     // MSG-NC-2: argument-parsing failure (invalid --scope value) -- sentence
     // form with Usage block appended after a blank line.
-    notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
+    notifyUsageError(ctx, run, { message: errorMessage(err), usage: USAGE });
     return undefined;
   }
 
   const nonFlagPositionals: string[] = [];
   for (const token of parsed.positional) {
     if (token.startsWith("--")) {
-      notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage: USAGE });
+      notifyUsageError(ctx, run, { message: `Unknown flag: "${token}".`, usage: USAGE });
       return undefined;
     }
 
@@ -66,11 +68,11 @@ function parseFetchTarget(
   }
 
   if (nonFlagPositionals.length > 1) {
-    notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
+    notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
     return undefined;
   }
 
-  const target = toFetchTarget(nonFlagPositionals[0], ctx);
+  const target = toFetchTarget(nonFlagPositionals[0], ctx, run);
   if (target === undefined) {
     return undefined;
   }
@@ -87,6 +89,7 @@ function parseFetchTarget(
 function toFetchTarget(
   ref: string | undefined,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
 ): FetchTarget | undefined {
   if (ref === undefined) {
     return { kind: "all" };
@@ -98,7 +101,7 @@ function toFetchTarget(
 
   const split = splitPluginMarketplaceRef(ref);
   if (split === undefined) {
-    notifyUsageError(ctx, {
+    notifyUsageError(ctx, run, {
       message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
       usage: USAGE,
     });
@@ -115,7 +118,7 @@ function toFetchTarget(
  */
 export function makeFetchHandler(): SubcommandHandler {
   return async (args, ctx, run): Promise<void> => {
-    const parsed = parseFetchTarget(args, ctx);
+    const parsed = parseFetchTarget(args, ctx, run);
     if (parsed === undefined) {
       return;
     }

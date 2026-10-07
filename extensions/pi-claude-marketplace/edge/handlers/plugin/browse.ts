@@ -131,7 +131,7 @@ async function dispatch(
 export function makeBrowseHandler(handlers: BrowseActionHandlers): SubcommandHandler {
   return async (args, ctx, run): Promise<void> => {
     if (args.trim() !== "") {
-      notifyUsageError(ctx, { message: "browse takes no arguments.", usage: USAGE });
+      notifyUsageError(ctx, run, { message: "browse takes no arguments.", usage: USAGE });
       return;
     }
 

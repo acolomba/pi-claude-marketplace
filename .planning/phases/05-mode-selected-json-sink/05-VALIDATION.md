@@ -40,8 +40,8 @@ Task IDs are phase-qualified plan.task names. Each plan supplies the complete co
 |---|---|---|---|---|---|
 | 05-01.1 | MODE-01, MODE-02, JOUT-01, TENB-01, TENB-02 | T-05-01, 02, 04 | node --test tests/shared/errors.test.ts tests/platform/pi-api.test.ts tests/shared/notification-run.test.ts tests/shared/notification-dispatch.test.ts tests/edge/register.test.ts tests/edge/handlers/tools.test.ts tests/architecture/presentation-sink.test.ts | Root mutation, live selection, full payload, retained capture failure, or fake contract assertion fails | passed: 593 tests; direct coverage 100%; commit ccb25e51 |
 | 05-01.2 | JOUT-01 | T-05-03 | 05-01.2 exact ESLint.lintText planting command; npm run lint | Any call form lacks JOUT-01 report; NFR-5 control fails; clean source reports ownership violation | passed: eight append controls, retained NFR-5 control, 274 production configurations; commit 414984c6 |
-| 05-02.1 | JOUT-01, MODE-01, TENB-02 | T-05-05 | node --test tests/edge/router.test.ts tests/edge/handlers/shared.test.ts tests/edge/handlers/plugin/*.test.ts tests/edge/handlers/marketplace/*.test.ts tests/shared/notification-dispatch.test.ts | Any usage branch loses its run, emits text in machine mode, or changes an existing assertion | pending execution |
-| 05-02.2 | MODE-01, JOUT-01, TENB-02 | T-05-06 | node --test tests/shared/notification-dispatch.test.ts tests/edge/router.test.ts | Live mode, duplicate count/order, or snapshot-count assertion fails | pending execution |
+| 05-02.1 | JOUT-01, MODE-01, TENB-02 | T-05-05 | node --test tests/edge/router.test.ts tests/edge/handlers/shared.test.ts tests/edge/handlers/plugin/*.test.ts tests/edge/handlers/marketplace/*.test.ts tests/shared/notification-dispatch.test.ts | Any usage branch loses its run, emits text in machine mode, or changes an existing assertion | passed: 905 focused tests including architecture; final direct coverage 100%; commit f1930ffb |
+| 05-02.2 | MODE-01, JOUT-01, TENB-02 | T-05-06 | node --test tests/shared/notification-dispatch.test.ts tests/edge/router.test.ts | Live mode, duplicate count/order, or snapshot-count assertion fails | passed: 286 tests; ordered mixed entries, adjacent duplicates, live getter and original snapshot; commit 25398caa |
 | 05-03.1 | JOUT-01, MODE-01, TENB-01 | T-05-07 | node --test tests/orchestrators/import/execute.test.ts tests/orchestrators/plugin/shared.test.ts tests/orchestrators/plugin/install-flow.test.ts tests/orchestrators/plugin/reinstall-flow.test.ts tests/orchestrators/plugin/update-flow.test.ts tests/orchestrators/reconcile/apply.test.ts tests/shared/notification-dispatch.test.ts | A diagnostic producer misses capture, bypasses redaction, or changes completed state | pending execution |
 | 05-03.2 | JOUT-01, TENB-01 | T-05-08 | node --test tests/shared/notification-dispatch.test.ts tests/orchestrators/reconcile/apply.test.ts | Empty/no-op, duplicate ordering, or retained invalid-middle assertion fails | pending execution |
 | 05-04.1 | JOUT-01, MODE-01, TENB-01 | T-05-09, 10 | node --test tests/orchestrators/auth-host.test.ts tests/orchestrators/plugin/install-clone-probe.test.ts tests/orchestrators/plugin/reinstall-clone-probe.test.ts tests/orchestrators/plugin/dependency-tag-probe.test.ts tests/orchestrators/plugin/update-preflight.test.ts tests/orchestrators/plugin/update-constraint-gate.test.ts tests/integration/auth-e2e.test.ts | Any auth carrier loses parent run or stored-only paths acquire a prompt | pending execution |
@@ -66,6 +66,18 @@ A-05-01 and A-05-02 remain flagged unclassified assumptions. P-05-01 and P-05-02
 - `git diff --exit-code 26cb0056 -- docs/output-catalog.md` passed with no output.
 - Corpus test run: 8629 passed, zero failed, one existing optional pi-subagents resolver case skipped because that module was unavailable. No skip was added by this plan.
 - Later tasks, assumptions, prohibitions, and phase-wide sign-off remain pending.
+
+### Observed plan 05-02 evidence
+
+- Node `v26.10.0`, isolated branch `agent-p05-02-1791368841`.
+- Task commits `f1930ffb` and `25398caa` passed their required `npm run check:commit` hooks.
+- `npm run check` exited 0 at `25398caab19fea506f9a0edcb9e5d61f42da2499`, including all direct pairs (264 LCOV records).
+- `node scripts/notify-corpus.mjs check` exited 0 into a regular log. Independent missing/extra and exact-count assertions passed: 3149 baseline entries present, 0 extra.
+- Corpus run: 8824 tests, 8823 passed, zero failed, one existing optional resolver test skipped. No skip was added.
+- `git diff --exit-code 26cb0056 -- docs/output-catalog.md` passed without output.
+- The parent approved the second internal raw delivery site and its exact formatter-provenance assertion; the protected two UI calls and existing controls remain enforced.
+- Task 1's retained TAP evidence was classified `RED_EVIDENCE_OK`. Green production and tests were committed together under the explicit hook policy; Task 2 was test-only.
+- Later plan rows and phase-wide sign-off remain pending.
 
 Tests must prove live mode selection on the same run, exclusive JSON/RPC
 entry delivery, unsupported plain-string rejection before mutation, empty

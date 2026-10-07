@@ -40,18 +40,18 @@ export function makeBootstrapHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
+      notifyUsageError(ctx, run, { message: errorMessage(err), usage: USAGE });
       return;
     }
 
     if (parsed.positional.length > 0) {
-      notifyUsageError(ctx, { message: "bootstrap takes no arguments.", usage: USAGE });
+      notifyUsageError(ctx, run, { message: "bootstrap takes no arguments.", usage: USAGE });
       return;
     }
 
     // Reject --scope flag explicitly: bootstrap is user-scope only.
     if (parsed.scope !== undefined) {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: "bootstrap does not accept --scope; it always targets user scope.",
         usage: USAGE,
       });

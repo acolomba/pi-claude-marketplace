@@ -5,89 +5,132 @@
 //   - "marketplace" topic emits MARKETPLACE_USAGE at info severity
 //   - unknown topic emits usage error at error severity
 
+import assert from "node:assert/strict";
 import { test } from "node:test";
-
-import { mock, verify, when } from "strong-mock";
 
 import { makeHelpHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/help.ts";
 import {
   MARKETPLACE_USAGE,
   TOP_LEVEL_USAGE,
 } from "../../../../extensions/pi-claude-marketplace/edge/router.ts";
-
-import type { ExtensionCommandContext } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 
 test("help with empty args emits top-level usage at info severity", async () => {
-  const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
-  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
-  when(() => ctx.mode)
-    .thenReturn("tui")
-    .times(1);
-  when(() => ctx.ui).thenReturn(ui);
-  when(() => {
-    ui.notify(TOP_LEVEL_USAGE, "info");
-  }).thenReturn();
-
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const helpHandler = makeHelpHandler();
-  await helpHandler("", ctx);
 
-  verify(ctx);
-  verify(ui);
+  // act
+  await helpHandler("", ctx, runWithNothingLoaded());
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: TOP_LEVEL_USAGE, severity: "info" }]);
+  verifyBoundary();
 });
 
 test("help with 'help' topic emits top-level usage at info severity", async () => {
-  const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
-  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
-  when(() => ctx.mode)
-    .thenReturn("tui")
-    .times(1);
-  when(() => ctx.ui).thenReturn(ui);
-  when(() => {
-    ui.notify(TOP_LEVEL_USAGE, "info");
-  }).thenReturn();
-
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const helpHandler = makeHelpHandler();
-  await helpHandler("help", ctx);
 
-  verify(ctx);
-  verify(ui);
+  // act
+  await helpHandler("help", ctx, runWithNothingLoaded());
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: TOP_LEVEL_USAGE, severity: "info" }]);
+  verifyBoundary();
 });
 
 test("help with 'marketplace' topic emits marketplace usage at info severity", async () => {
-  const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
-  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
-  when(() => ctx.mode)
-    .thenReturn("tui")
-    .times(1);
-  when(() => ctx.ui).thenReturn(ui);
-  when(() => {
-    ui.notify(MARKETPLACE_USAGE, "info");
-  }).thenReturn();
-
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const helpHandler = makeHelpHandler();
-  await helpHandler("marketplace", ctx);
 
-  verify(ctx);
-  verify(ui);
+  // act
+  await helpHandler("marketplace", ctx, runWithNothingLoaded());
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_USAGE, severity: "info" }]);
+  verifyBoundary();
 });
 
 test("help with unknown topic emits usage error at error severity", async () => {
-  const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
-  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
-  when(() => ctx.mode)
-    .thenReturn("tui")
-    .times(1);
-  when(() => ctx.ui).thenReturn(ui);
-  when(() => {
-    ui.notify(
-      'Unknown help topic: "unknown".\n\nUsage: /claude:plugin help [marketplace]',
-      "error",
-    );
-  }).thenReturn();
-
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const helpHandler = makeHelpHandler();
-  await helpHandler("unknown", ctx);
 
-  verify(ctx);
-  verify(ui);
+  // act
+  await helpHandler("unknown", ctx, runWithNothingLoaded());
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: 'Unknown help topic: "unknown".\n\nUsage: /claude:plugin help [marketplace]',
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { topic, usage } of [
+    { topic: "", usage: TOP_LEVEL_USAGE },
+    { topic: "help", usage: TOP_LEVEL_USAGE },
+    { topic: "marketplace", usage: MARKETPLACE_USAGE },
+  ]) {
+    test(`appends help for ${topic} in ${mode}`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      const help = makeHelpHandler();
+
+      // act
+      await help(topic, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-info",
+            severity: "info",
+            needsReload: false,
+            usage,
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
+
+  test(`appends an unknown help topic in ${mode}`, async () => {
+    // arrange
+    const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+    const help = makeHelpHandler();
+
+    // act
+    await help("unknown", ctx, run);
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "usage-error",
+          severity: "error",
+          needsReload: false,
+          message: 'Unknown help topic: "unknown".',
+          usage: "Usage: /claude:plugin help [marketplace]",
+        },
+      },
+    ]);
+    capture.assertValid();
+    verifyBoundary();
+  });
+}

@@ -29,7 +29,7 @@ export function makeAddHandler(
   deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
 ): SubcommandHandler {
   return async (args, ctx, run): Promise<void> => {
-    const opened = openMarketplaceCommand(args, ctx, {
+    const opened = openMarketplaceCommand(args, ctx, run, {
       usage: USAGE,
       positionalName: "source",
     });

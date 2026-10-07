@@ -206,7 +206,10 @@ export async function routeClaudePlugin(
     case "help":
       return handlers.help(rest, ctx, run);
     default:
-      notifyUsageError(ctx, { message: `Unknown subcommand: "${head}".`, usage: TOP_LEVEL_USAGE });
+      notifyUsageError(ctx, run, {
+        message: `Unknown subcommand: "${head}".`,
+        usage: TOP_LEVEL_USAGE,
+      });
       return;
   }
 }
@@ -222,7 +225,7 @@ async function routeMarketplace(
   const [head, rest] = peelToken(args);
 
   if (head === "") {
-    notifyUsageError(ctx, {
+    notifyUsageError(ctx, run, {
       message: "marketplace requires a subcommand.",
       usage: MARKETPLACE_USAGE,
     });
@@ -252,7 +255,7 @@ async function routeMarketplace(
       // discarding `rest` here would make this the one spelling where a
       // mistyped argument reads as success.
       if (rest.trim() !== "") {
-        notifyUsageError(ctx, {
+        notifyUsageError(ctx, run, {
           message: "marketplace help takes no arguments.",
           usage: MARKETPLACE_HELP_USAGE,
         });
@@ -261,7 +264,7 @@ async function routeMarketplace(
 
       return handlers.help("marketplace", ctx, run);
     default:
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: `Unknown marketplace subcommand: "${head}".`,
         usage: MARKETPLACE_USAGE,
       });

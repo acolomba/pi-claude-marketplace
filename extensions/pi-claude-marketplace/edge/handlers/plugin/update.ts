@@ -33,12 +33,12 @@ export function makeUpdateHandler(updatePlugins: UpdatePluginsFn): SubcommandHan
   return async (args, ctx, run): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts. The catalog-derived
     // pass-through flags are downstream-consumed; pass through verbatim.
-    const localFlag = extractLocalFlag(args, ctx, USAGE, PASS_THROUGH_FLAGS);
+    const localFlag = extractLocalFlag(args, { ctx, run, usage: USAGE }, PASS_THROUGH_FLAGS);
     if (localFlag === undefined) {
       return;
     }
 
-    const flagged = parseMapModelArgs(localFlag.residualArgs, ctx, USAGE);
+    const flagged = parseMapModelArgs(localFlag.residualArgs, ctx, run, USAGE);
     if (flagged === undefined) {
       return;
     }
@@ -46,7 +46,7 @@ export function makeUpdateHandler(updatePlugins: UpdatePluginsFn): SubcommandHan
     const { nonFlagPositionals, mapModel, partial } = flagged;
 
     if (nonFlagPositionals.length > 1) {
-      notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
+      notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
       return;
     }
 
@@ -59,7 +59,7 @@ export function makeUpdateHandler(updatePlugins: UpdatePluginsFn): SubcommandHan
     } else {
       const split = splitPluginMarketplaceRef(ref);
       if (split === undefined) {
-        notifyUsageError(ctx, {
+        notifyUsageError(ctx, run, {
           message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
           usage: USAGE,
         });

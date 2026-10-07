@@ -22,13 +22,13 @@ export function makePruneHandler(
 ): SubcommandHandler {
   const prune = createPruneOperation(hooksRouting, completionCache);
   return async (args, ctx, run): Promise<void> => {
-    const scanned = extractLocalFlag(args, ctx, USAGE, CONSUMED_FLAGS);
+    const scanned = extractLocalFlag(args, { ctx, run, usage: USAGE }, CONSUMED_FLAGS);
     if (scanned === undefined) {
       return;
     }
 
     if (scanned.local) {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: `Unknown flag: "${SCOPE_TARGET_FLAG}".`,
         usage: USAGE,
       });
@@ -37,7 +37,7 @@ export function makePruneHandler(
 
     await withParsedArgs(parseArgs, USAGE, async (parsed, parsedCtx, parsedRun): Promise<void> => {
       if (parsed.positional.length > 0) {
-        notifyUsageError(parsedCtx, { message: "Too many arguments.", usage: USAGE });
+        notifyUsageError(parsedCtx, parsedRun, { message: "Too many arguments.", usage: USAGE });
         return;
       }
 

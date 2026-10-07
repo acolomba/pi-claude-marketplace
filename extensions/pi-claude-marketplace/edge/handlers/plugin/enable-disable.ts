@@ -37,14 +37,14 @@ export function makeEnableDisableHandler(
   const usage = usageFor(enable);
   const setPluginEnabled = createEnableOperation(hooksRouting);
   return async (args, ctx, run): Promise<void> => {
-    const localFlag = extractLocalFlag(args, ctx, usage);
+    const localFlag = extractLocalFlag(args, { ctx, run, usage });
     if (localFlag === undefined) {
       return;
     }
 
     // WR-02: parse the RESIDUE (with `--local` removed) so the flag is
     // position-independent like `--scope`.
-    const parsed = parseRequiredPluginMarketplaceRef(localFlag.residualArgs, ctx, usage);
+    const parsed = parseRequiredPluginMarketplaceRef(localFlag.residualArgs, ctx, run, usage);
     if (parsed === undefined) {
       return;
     }

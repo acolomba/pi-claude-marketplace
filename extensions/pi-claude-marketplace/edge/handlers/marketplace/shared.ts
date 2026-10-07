@@ -16,6 +16,7 @@ import { extractLocalFlag } from "../shared.ts";
 
 import type { GetMarketplaceInfoOptions } from "../../../orchestrators/marketplace/info.ts";
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { NotificationRun } from "../../../shared/notification-run.ts";
 import type { Scope } from "../../../shared/types.ts";
 import type { SubcommandHandler } from "../../router.ts";
 
@@ -59,7 +60,7 @@ export function makeSingleNameMarketplaceHandler(
         usage,
       },
       (message) => {
-        notifyUsageError(ctx, {
+        notifyUsageError(ctx, run, {
           message: message === usage ? "Missing required argument." : message,
           usage,
         });
@@ -106,9 +107,10 @@ export function makeSingleNameMarketplaceHandler(
 export function openMarketplaceCommand<N extends string>(
   args: string,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
   opts: { usage: string; positionalName: N },
 ): (Readonly<Record<N, string>> & { readonly scope?: Scope; readonly local: boolean }) | undefined {
-  const localFlag = extractLocalFlag(args, ctx, opts.usage);
+  const localFlag = extractLocalFlag(args, { ctx, run, usage: opts.usage });
   if (localFlag === undefined) {
     return undefined;
   }
@@ -120,7 +122,7 @@ export function openMarketplaceCommand<N extends string>(
       usage: opts.usage,
     },
     (message) => {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: message === opts.usage ? "Missing required argument." : message,
         usage: opts.usage,
       });
