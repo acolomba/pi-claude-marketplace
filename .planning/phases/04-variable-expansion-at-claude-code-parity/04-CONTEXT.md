@@ -138,7 +138,48 @@ source. Source comments cite requirement IDs (AVAR-0N), never `D-04-NN`.
   `>=1.0.0` (PIFL-01). Runs before planning; this phase's conformance test
   pins 5.1.0.
 
+### Post-research decisions (operator, 2026-10-07)
+Raised by 04-RESEARCH.md. Its "Evidence corrections to CONTEXT.md" table
+supersedes the deny-list facts in D-04-07 and `<compat_evidence>`:
+`ANTHROPIC_API_KEY` is on the remote-sink list only (`Gqe`/`Gur` are mode
+sets), so it expands in stdio fields as in Claude. The remote-sink extra
+list is `kqe`/`No` (95 cloud, CI, registry and webhook credentials; not
+`GITHUB_TOKEN`/`GH_TOKEN`). The value rule is `eRe` = a `FNn` `*_BASE_URL`
+name whose value carries a credential (`JA`), not an Anthropic host.
+"Mirror Claude" (D-04-07) means those exact sets.
+
+- **D-04-13:** Port Claude's `JA` credential-in-value check verbatim for the
+  `eRe` `*_BASE_URL` rule, evaluated at install. A credential-free base URL
+  set at install is kept as `${NAME}`; a value that gains a credential later
+  reaches the server through the adapter. That residual is documented.
+- **D-04-14:** The mode-gated sets `Gqe`, `Voo`, `Gur` and `tRe` are omitted
+  (Claude-only runtime state). Documented divergence.
+- **D-04-15:** D-04-06's `~` block is static and conservative: a raw leading
+  `~`, `~/` or `~\` (every platform) in `command`/`args`, and a leading
+  `${VAR:-~…}` default, both make the plugin partially available.
+- **D-04-16:** D-04-09's export is skipped, with a debug-log line, when the
+  cwd contains `$env:` or `{env:` (threat T4: the adapter would re-expand the
+  directory name). Project decision.
+- **D-04-17:** The `pi-mcp-adapter` peer range becomes `>=5.1.0 <6` (stay on
+  5.x). Amends D-04-12 and the PIFL-03 floor that quick task 261007-9a2
+  landed: package.json, lock, peer-floor gate, README text.
+- **D-04-18:** The AVAR-03 conformance test runs in CI. The `integration`
+  job installs exactly the pinned adapter into `$RUNNER_TEMP` with
+  `--ignore-scripts` and runs the test with zero skips through
+  `PI_MCP_ADAPTER_ROOT` (no fallback to a global install).
+- **D-04-19 [informational]:** Research recommendations adopted: the guard
+  that inserts `{env:E}` before a kept `${VAR}` when the preceding text ends
+  in a prefix of `$env`/`{env` (closes the `{env${UNSET}:SECRET}` leak),
+  merging adjacent text before escaping; `E` is named
+  `PI_CLAUDE_MARKETPLACE_EMPTY`; `E` and `CLAUDE_PROJECT_DIR` are set first
+  in the extension factory (`process.cwd()`) and again in `session_start`
+  (`ctx.cwd`); the MENV-03 `CLAUDE_PROJECT_DIR` stdio-env injection is
+  dropped. The remote-sink warning being user-visible (D-04-10) diverges from
+  Claude's debug-log line; documented.
+
 ### Claude's Discretion
+- D-04-11 "blanked" rule and the wording of the two notices and the info
+  line (closed-catalog drafts for operator review in the plans).
 - Name of the reserved empty variable `E`, and where it is set (extension
   factory, `session_start`, or both), given that `lifecycle` is unset (lazy
   connect) and a carried user override could make a server eager.
