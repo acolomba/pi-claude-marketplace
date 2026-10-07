@@ -52,7 +52,9 @@ import * as entryModule from "../extensions/pi-claude-marketplace/index.ts";
 import { loadState } from "../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { EXTENSION_VERSION } from "../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
+import { createJsonCapture } from "./edge/json-capture.ts";
 import { createNotificationBoundary } from "./edge/notification-boundary.ts";
+import { retryTree } from "./orchestrators/plugin/scope-tree-inventory.ts";
 import { createHermeticEnvironment } from "./platform/hermetic-environment.ts";
 
 import type { Notification } from "./edge/notification-boundary.ts";
@@ -275,14 +277,32 @@ async function loadExtension(
   emissions: number,
   rootReads: number,
   cwd?: { readonly value: string; readonly reads: number },
-  modeReads = emissions,
+  modeReads = emissions + rootReads,
+  output?: {
+    readonly appendEntry: (customType: string, payload: unknown) => void;
+    readonly attempts: number;
+    readonly inventoryError?: Error;
+  },
 ): Promise<LoadedExtension> {
   const boundary = createNotificationBoundary(emissions, cwd, modeReads);
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   if (rootReads > 0) {
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(rootReads);
+    if (output?.inventoryError !== undefined) {
+      when(() => pi.getAllTools())
+        .thenThrow(output.inventoryError)
+        .times(rootReads);
+    } else {
+      when(() => pi.getAllTools())
+        .thenReturn([])
+        .times(rootReads);
+    }
+  }
+
+  if (output !== undefined && output.attempts > 0) {
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- strict property expectation for the run's sink lookup
+    when(() => pi.appendEntry)
+      .thenReturn(output.appendEntry)
+      .times(output.attempts);
   }
 
   const bridgeSessionStartListener =
@@ -905,6 +925,289 @@ test("EXPORT-02: the entry module publishes exactly its default and nothing else
   assert.strictEqual(exported, claudeMarketplaceExtension);
 });
 
+test("unsupported loading preserves disk and environment while discovering existing resources", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "unsupported-load");
+  await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "plugin"), { stamped: false });
+  const promptPath = await seedPrompt(scope.cwd, "existing.md");
+  const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
+  const stateBytes = await readFile(statePath, "utf8");
+  const tree = await retryTree(scope.cwd);
+  const userTree = await retryTree(scope.agentDir);
+  const capture = createJsonCapture();
+  const loaded = await loadExtension(0, 0);
+  const ctx = {
+    mode: "unknown",
+    get ui() {
+      return capture.ui;
+    },
+  };
+  process.env.PATH = "/usr/bin";
+  process.env.PI_CLAUDE_MARKETPLACE_PATH = "unchanged";
+
+  // act
+  const discovered: unknown = await Reflect.apply(loaded.discover, undefined, [
+    discoverEvent(scope.cwd),
+    ctx,
+  ]);
+
+  // assert
+  assert.deepStrictEqual(discovered, { skillPaths: [], promptPaths: [promptPath] });
+  assert.deepStrictEqual(
+    [process.env.PATH, process.env.PI_CLAUDE_MARKETPLACE_PATH],
+    ["/usr/bin", "unchanged"],
+  );
+  assert.strictEqual(await readFile(statePath, "utf8"), stateBytes);
+  assert.deepStrictEqual(await retryTree(scope.cwd), tree);
+  assert.deepStrictEqual(await retryTree(scope.agentDir), userTree);
+  assert.deepStrictEqual(capture.entries, []);
+  capture.assertValid();
+  loaded.verifyBoundary();
+});
+
+for (const mode of ["json", "rpc"]) {
+  for (const refusesAppend of [false, true]) {
+    test(`load warnings share one ${mode} run and continue after append refusal ${refusesAppend}`, async (t) => {
+      // arrange
+      const scope = await createHermeticScope(t, "machine-warnings");
+      const projectState = await seedUnreadableState(scope.cwd);
+      const userState = await seedUnreadableStateAt(
+        path.join(scope.agentDir, "pi-claude-marketplace"),
+      );
+      const promptPath = await seedPrompt(scope.cwd, "kept.md");
+      const capture = createJsonCapture();
+      const loaded = await loadExtension(0, 3, undefined, 0, {
+        attempts: 3,
+        appendEntry(customType, payload) {
+          capture.entrySink.appendEntry(customType, payload);
+          if (refusesAppend) {
+            throw new Error("entry refused");
+          }
+        },
+      });
+      const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_RECONCILE);
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      process.env.PATH = "/usr/bin";
+      process.env.PI_CLAUDE_MARKETPLACE_PATH = "stale-bin";
+
+      // act
+      const discovered: unknown = await Reflect.apply(loaded.discover, undefined, [
+        refusal.event,
+        ctx,
+      ]);
+
+      // assert
+      assert.deepStrictEqual(discovered, { skillPaths: [], promptPaths: [promptPath] });
+      assert.deepStrictEqual(
+        [process.env.PATH, process.env.PI_CLAUDE_MARKETPLACE_PATH],
+        ["/usr/bin", ""],
+      );
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "reconcile-aborted",
+            severity: "error",
+            needsReload: false,
+            causeMessage: "working directory read 2 refused",
+          },
+        },
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "plugin-path-skipped",
+            severity: "warning",
+            needsReload: false,
+            scope: "user",
+            reason: `state.json at ${userState} has an unsupported schema version`,
+          },
+        },
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "plugin-path-skipped",
+            severity: "warning",
+            needsReload: false,
+            scope: "project",
+            reason: `state.json at ${projectState} has an unsupported schema version`,
+          },
+        },
+      ]);
+      capture.assertValid();
+      loaded.verifyBoundary();
+    });
+  }
+}
+
+for (const failure of ["mode", "inventory"] as const) {
+  test(`discovery survives a stale ${failure} capability`, async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "prebind");
+    const promptPath = await seedPrompt(scope.cwd, "kept.md");
+    const tree = await retryTree(scope.cwd);
+    const capture = createJsonCapture();
+    const loaded = await loadExtension(0, failure === "inventory" ? 3 : 0, undefined, 0, {
+      attempts: 0,
+      appendEntry: capture.entrySink.appendEntry,
+      inventoryError: new Error("stale pi"),
+    });
+    const ctx = {
+      get mode(): string {
+        if (failure === "mode") {
+          throw new Error("stale mode");
+        }
+
+        return "json";
+      },
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const originalPath = process.env.PATH;
+
+    // act
+    const discovered: unknown = await Reflect.apply(loaded.discover, undefined, [
+      discoverEvent(scope.cwd),
+      ctx,
+    ]);
+
+    // assert
+    assert.deepStrictEqual(discovered, { skillPaths: [], promptPaths: [promptPath] });
+    assert.strictEqual(process.env.PATH, originalPath);
+    assert.deepStrictEqual(await retryTree(scope.cwd), tree);
+    assert.deepStrictEqual(capture.entries, []);
+    capture.assertValid();
+    loaded.verifyBoundary();
+  });
+}
+
+for (const unsupportedRead of [2, 3]) {
+  test(`rechecks live mode before load mutation stage ${unsupportedRead}`, async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "live-load-mode");
+    await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "plugin"));
+    const promptPath = await seedPrompt(scope.cwd, "kept.md");
+    const capture = createJsonCapture();
+    const loaded = await loadExtension(0, 3, undefined, 0);
+    let reads = 0;
+    const ctx = {
+      get mode(): string {
+        reads += 1;
+        return reads === unsupportedRead ? "unknown" : "json";
+      },
+      get ui() {
+        return capture.ui;
+      },
+    };
+    process.env.PATH = "/usr/bin";
+    process.env.PI_CLAUDE_MARKETPLACE_PATH = "unchanged";
+
+    // act
+    const discovered: unknown = await Reflect.apply(loaded.discover, undefined, [
+      discoverEvent(scope.cwd),
+      ctx,
+    ]);
+
+    // assert
+    assert.deepStrictEqual(discovered, { skillPaths: [], promptPaths: [promptPath] });
+    assert.deepStrictEqual(
+      [process.env.PATH, process.env.PI_CLAUDE_MARKETPLACE_PATH],
+      ["/usr/bin", "unchanged"],
+    );
+    assert.strictEqual(reads, unsupportedRead);
+    assert.deepStrictEqual(capture.entries, []);
+    capture.assertValid();
+    loaded.verifyBoundary();
+  });
+}
+
+test("a refused reconcile append retains committed state and independent PATH work", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "committed-append-refusal");
+  await seedEnabledPluginWithMissingDependency(scope.cwd);
+  const capture = createJsonCapture();
+  const loaded = await loadExtension(0, 3, undefined, 0, {
+    attempts: 2,
+    appendEntry(customType, payload) {
+      capture.entrySink.appendEntry(customType, payload);
+      throw new Error("entry refused");
+    },
+  });
+  const ctx = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const pluginBin = path.join(scope.cwd, "mp-src", "plugins", "plug", "bin");
+  process.env.PATH = `/usr/bin${path.delimiter}${pluginBin}`;
+  process.env.PI_CLAUDE_MARKETPLACE_PATH = pluginBin;
+
+  // act
+  const discovered: unknown = await Reflect.apply(loaded.discover, undefined, [
+    discoverEvent(scope.cwd),
+    ctx,
+  ]);
+
+  // assert
+  assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  const state = await loadState(path.join(scope.cwd, ".pi", "pi-claude-marketplace"));
+  assert.strictEqual(state.marketplaces["mp"]?.plugins["plug"]?.enabled, false);
+  assert.strictEqual(state.marketplaces["mp"]?.plugins["helper"], undefined);
+  assert.deepStrictEqual(
+    [process.env.PATH, process.env.PI_CLAUDE_MARKETPLACE_PATH],
+    ["/usr/bin", ""],
+  );
+  assert.strictEqual(capture.entries.length, 2);
+  capture.assertValid();
+  loaded.verifyBoundary();
+});
+
+for (const failure of ["unknown-mode", "mode", "sessionManager"] as const) {
+  test(`session environment survives ${failure} context without changes`, async (t) => {
+    // arrange
+    await createHermeticScope(t, "session-mode");
+    const loaded = await loadExtension(0, 0);
+    const reads: string[] = [];
+    const ctx = {
+      get mode(): string {
+        if (failure === "mode") {
+          throw new Error("stale mode");
+        }
+
+        return failure === "unknown-mode" ? "unknown" : "rpc";
+      },
+      get sessionManager(): never {
+        reads.push("sessionManager");
+        throw new Error("stale session manager");
+      },
+    };
+    const original = SESSION_ENV_KEYS.map((key) => process.env[key]);
+
+    // act
+    Reflect.apply(loaded.sessionEnv, undefined, [
+      { type: "session_start", reason: "startup" },
+      ctx,
+    ]);
+
+    // assert
+    assert.deepStrictEqual(
+      SESSION_ENV_KEYS.map((key) => process.env[key]),
+      original,
+    );
+    assert.deepStrictEqual(reads, failure === "sessionManager" ? ["sessionManager"] : []);
+    loaded.verifyBoundary();
+  });
+}
+
 test("registers the slash command and the two read-only tools alongside the bridge surface", async (t) => {
   // arrange
   await createHermeticScope(t, "registration");
@@ -967,7 +1270,7 @@ test("D-09-13: the discover handler hands the event's reason to the reconcile", 
   // act
   const reasonThreadConstructions =
     source.match(
-      /applyReconcile\(\{\s*ctx,\s*run:\s*openNotificationRun\(pi\),\s*cwd:\s*event\.cwd,\s*hooksRouting,\s*completionCache,\s*reason:\s*event\.reason,?\s*\}\)/g,
+      /applyReconcile\(\{\s*ctx,\s*run,\s*cwd:\s*event\.cwd,\s*hooksRouting,\s*completionCache,\s*reason:\s*event\.reason,?\s*\}\)/g,
     ) ?? [];
 
   // assert
@@ -1416,7 +1719,7 @@ test("reports an aborted reconcile as one raw error line and still answers (NFR-
     0,
     TOOL_READS_PER_DISCOVER,
     undefined,
-    2,
+    5,
   );
   const recorded: Notification[] = [];
   let attempts = 0;
@@ -1449,7 +1752,7 @@ test("still answers when the last-ditch reconcile notification is also refused (
     0,
     TOOL_READS_PER_DISCOVER,
     undefined,
-    2,
+    5,
   );
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
@@ -1475,7 +1778,7 @@ test("still answers when the plugin PATH warning notification is refused (NFR-2)
     0,
     TOOL_READS_PER_DISCOVER,
     undefined,
-    3,
+    6,
   );
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
@@ -1520,7 +1823,7 @@ test("attempts every skipped-scope PATH warning when every host notification thr
     0,
     2 * TOOL_READS_PER_DISCOVER,
     undefined,
-    4,
+    10,
   );
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
@@ -1570,7 +1873,7 @@ test("attempts every skipped-scope PATH warning when every host notification thr
 test("applies the three Claude-Code session variables from the session id (SENV-01/02/03)", async (t) => {
   // arrange
   await createHermeticScope(t, "session-env");
-  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0);
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, undefined, 1);
   const sessionCtx = contextWithSessionId(ctx, () => "session-1");
   const expectedSessionEnv = ["1", "session-1", "session-1"];
 
@@ -1588,7 +1891,7 @@ test("applies the three Claude-Code session variables from the session id (SENV-
 test("leaves the session variables alone when the session id cannot be read (WR-02)", async (t) => {
   // arrange
   await createHermeticScope(t, "session-env-refused");
-  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0);
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, undefined, 1);
   const sessionCtx = contextWithSessionId(ctx, () => {
     throw new Error("session id refused");
   });
@@ -1612,7 +1915,7 @@ test("leaves the session variables alone when the session id cannot be read (WR-
 test("leaves the session variables alone when there is no session manager (WR-02)", async (t) => {
   // arrange
   await createHermeticScope(t, "session-env-absent");
-  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0);
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, undefined, 1);
   const sessionCtx = contextWithoutSessionManager(ctx);
   for (const key of SESSION_ENV_KEYS) {
     Reflect.deleteProperty(process.env, key);

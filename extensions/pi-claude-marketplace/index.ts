@@ -19,7 +19,7 @@ import { createCompletionCache } from "./shared/completion-cache.ts";
 import { hookDebugLog } from "./shared/debug-log.ts";
 import { errorMessage } from "./shared/errors.ts";
 import { notifyPluginPathSkipped, notifyReconcileAborted } from "./shared/notification-dispatch.ts";
-import { openNotificationRun } from "./shared/notification-run.ts";
+import { openNotificationRun, requireNotificationMode } from "./shared/notification-run.ts";
 import { applySessionEnv } from "./shared/session-env.ts";
 
 import type {
@@ -81,6 +81,51 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // are guaranteed to complete BEFORE the first Pi event fires.
   await hooksHydration.registerHooksBridge(pi, { cwd: homedir() });
 
+  async function prepareResources(
+    event: ResourcesDiscoverEvent,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    requireNotificationMode(ctx.mode);
+    const run = openNotificationRun(pi);
+    try {
+      await hooksHydration.hydrateProjectScopeForCwd(event.cwd);
+    } catch (err) {
+      hookDebugLog(`project-scope hydrate threw unexpectedly: ${errorMessage(err)}`, "hydrate");
+    }
+
+    requireNotificationMode(ctx.mode);
+    try {
+      await applyReconcile({
+        ctx,
+        run,
+        cwd: event.cwd,
+        hooksRouting,
+        completionCache,
+        reason: event.reason,
+      });
+    } catch (err) {
+      try {
+        notifyReconcileAborted(ctx, run, err);
+      } catch (notifyErr) {
+        hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
+      }
+    }
+
+    requireNotificationMode(ctx.mode);
+    try {
+      const pathResult = await recomputePluginPath(event.cwd);
+      for (const skip of pathResult.skipped) {
+        try {
+          notifyPluginPathSkipped(ctx, run, skip.scope, skip.reason);
+        } catch (notifyErr) {
+          hookDebugLog(`plugin PATH warning notify failed: ${errorMessage(notifyErr)}`, "env");
+        }
+      }
+    } catch (err) {
+      hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`, "env");
+    }
+  }
+
   // The peer's own `ExtensionAPI.on("resources_discover", ...)` overload checks
   // this callback: its parameter and its return are compared against the
   // installed `ExtensionHandler<ResourcesDiscoverEvent, ResourcesDiscoverResult>`
@@ -93,79 +138,11 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       event: ResourcesDiscoverEvent,
       ctx: ExtensionContext,
     ): Promise<ResourcesDiscoverResult> => {
-      // D-59-02 deferred project-scope hydrate: the factory-time bridge
-      // registration could not know the project cwd, so re-run project hydrate
-      // here BEFORE applyReconcile rebuilds the per-scope routing tables.
-      // Failures are swallowed by the helper itself via the OBS-01 seam.
+      // D-05-01/02: initialization and live mode guards cannot block read-only discovery.
       try {
-        await hooksHydration.hydrateProjectScopeForCwd(event.cwd);
+        await prepareResources(event, ctx);
       } catch (err) {
-        // Defensive: hydrateProjectScopeForCwd already swallows loadState
-        // failures internally via hookDebugLog. A bubbled throw here would
-        // be a programmer error in the bridge; we still must not let it
-        // propagate past resources_discover (NFR-2). Record it on the debug
-        // seam so a programmer-error throw does not vanish without a trace.
-        hookDebugLog(`project-scope hydrate threw unexpectedly: ${errorMessage(err)}`, "hydrate");
-      }
-
-      // RECON-01..05: apply the load-time reconcile BEFORE
-      // discovering resources so newly-materialized artifacts are picked up on
-      // the SAME load. The outer try/catch enforces NFR-2: a catastrophic
-      // throw NEVER blocks Pi load -- it surfaces as a single last-ditch
-      // notify (inside its own try/catch so a UI failure can't propagate
-      // either) and aggregateDiscoveredResources still runs.
-      //
-      // D-05 / D-07: the load pass opens one notification run, inside this try,
-      // so its tool-inventory probe is covered by the same NFR-2 boundary.
-      // D-09-13: `event.reason` is threaded straight through -- only an
-      // explicit `/reload` runs the dependency-install step; a session
-      // start stays offline even with a missing dependency.
-      try {
-        await applyReconcile({
-          ctx,
-          run: openNotificationRun(pi),
-          cwd: event.cwd,
-          hooksRouting,
-          completionCache,
-          reason: event.reason,
-        });
-      } catch (err) {
-        try {
-          // RAWS-04 / D-13: the load pass reports the abort as the
-          // `reconcile-aborted` kind. Resolve renders a non-Error throw (e.g. a
-          // literal string) as its string form (Y7). The inner try/catch keeps
-          // a notify failure inside resources_discover (NFR-2).
-          notifyReconcileAborted(ctx, err);
-        } catch (notifyErr) {
-          // Last-ditch: never let a notify failure propagate past
-          // resources_discover (NFR-2 boundary preservation); record it on
-          // the debug seam so the reconcile-abort notify does not vanish
-          // without a trace.
-          hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
-        }
-      }
-
-      // PENV-01 / D-90-03 / D-90-04: recompute the plugin-PATH (both scopes)
-      // AFTER applyReconcile has settled install state and BEFORE resource
-      // aggregation. Scope failures are isolated inside recomputePluginPath and
-      // reported back; each skipped scope surfaces as a warning notify (load
-      // carried out, PATH parity short for that scope). The outer wrap is the
-      // NFR-2 backstop -- a throw must never propagate past resources_discover,
-      // and a notify failure must not either.
-      try {
-        const pathResult = await recomputePluginPath(event.cwd);
-        for (const skip of pathResult.skipped) {
-          try {
-            notifyPluginPathSkipped(ctx, skip.scope, skip.reason);
-          } catch (notifyErr) {
-            // A notify failure must never propagate past resources_discover
-            // (NFR-2 boundary preservation); record it on the debug seam so the
-            // skipped-scope warning does not vanish without a trace.
-            hookDebugLog(`plugin PATH warning notify failed: ${errorMessage(notifyErr)}`, "env");
-          }
-        }
-      } catch (err) {
-        hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`, "env");
+        hookDebugLog(`load preparation skipped: ${errorMessage(err)}`, "resources");
       }
 
       try {
@@ -195,6 +172,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // session_start, matching the NFR-2 boundary discipline of the handlers above.
   pi.on("session_start", (_event, ctx) => {
     try {
+      requireNotificationMode(ctx.mode);
       applySessionEnv(ctx.sessionManager.getSessionId());
     } catch (err) {
       hookDebugLog(`session env apply skipped: ${errorMessage(err)}`, "env");

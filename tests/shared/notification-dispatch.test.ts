@@ -6210,7 +6210,7 @@ test("notifyReconcileAborted emits the serialized cause at error severity", (t) 
   const ctx = createContext(t);
 
   // act
-  notifyReconcileAborted(ctx, new Error("boom"));
+  notifyReconcileAborted(ctx, runWithNothingLoaded(), new Error("boom"));
 
   // assert
   assert.deepStrictEqual(
@@ -6219,12 +6219,56 @@ test("notifyReconcileAborted emits the serialized cause at error severity", (t) 
   );
 });
 
+for (const mode of ["json", "rpc"]) {
+  test(`load warnings append complete entries through the same run in ${mode}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    notifyReconcileAborted(ctx, run, new Error("state unreadable"));
+    notifyPluginPathSkipped(ctx, run, "project", "EACCES");
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "reconcile-aborted",
+          severity: "error",
+          needsReload: false,
+          causeMessage: "state unreadable",
+        },
+      },
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "plugin-path-skipped",
+          severity: "warning",
+          needsReload: false,
+          scope: "project",
+          reason: "EACCES",
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+}
+
 test("notifyPluginPathSkipped emits the skipped scope and reason at warning severity", (t) => {
   // arrange
   const ctx = createContext(t);
 
   // act
-  notifyPluginPathSkipped(ctx, "project", "schema unsupported");
+  notifyPluginPathSkipped(ctx, runWithNothingLoaded(), "project", "schema unsupported");
 
   // assert
   assert.deepStrictEqual(

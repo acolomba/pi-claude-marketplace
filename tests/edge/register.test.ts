@@ -555,6 +555,9 @@ function installAutocompleteWrapper(): WrapperUnderTest {
     .thenReturn(ui)
     .times(1);
 
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
   sessionStart(SESSION_START, ctx);
 
   const wrap = providerFactory.value;
@@ -1705,6 +1708,45 @@ test("rebuilds completion rows through the cache that owns a successful register
 });
 
 describe("registerClaudePluginCommand autocomplete wrapper", () => {
+  for (const failure of ["unknown-mode", "mode", "ui", "provider"] as const) {
+    test(`contains ${failure} failure during autocomplete setup`, async (t) => {
+      // arrange
+      await createHermeticScope(t, "autocomplete-failure");
+      const { sessionStart, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
+      const work: string[] = [];
+      const ctx = {
+        get mode(): string {
+          if (failure === "mode") {
+            throw new Error("stale mode");
+          }
+
+          return failure === "unknown-mode" ? "unknown" : "rpc";
+        },
+        get ui() {
+          work.push("ui");
+          if (failure === "ui") {
+            throw new Error("stale ui");
+          }
+
+          return {
+            addAutocompleteProvider() {
+              work.push("provider");
+              throw new Error("stale provider");
+            },
+          };
+        },
+      };
+
+      // act
+      Reflect.apply(sessionStart, undefined, [SESSION_START, ctx]);
+
+      // assert
+      const expected = { "unknown-mode": [], mode: [], ui: ["ui"], provider: ["ui", "provider"] };
+      assert.deepStrictEqual(work, expected[failure]);
+      verifyRegistrar();
+    });
+  }
+
   test("installs exactly one autocomplete provider when the session starts (TC-7)", async (t) => {
     // arrange
     await createHermeticScope(t, "provider-install");

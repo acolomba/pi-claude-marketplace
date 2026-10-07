@@ -36,6 +36,8 @@
 
 import { makeLocationsResolver } from "../orchestrators/edge-deps.ts";
 import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall-flow.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
 import { openNotificationRun, requireNotificationMode } from "../shared/notification-run.ts";
 
 import {
@@ -156,21 +158,26 @@ export function registerClaudePluginCommand(
   // isClaudePluginCommandLine to keep other extensions' completions
   // untouched.
   pi.on("session_start", (_event, ctx) => {
-    ctx.ui.addAutocompleteProvider((current) => ({
-      getSuggestions: (lines, line, col, options) =>
-        current.getSuggestions(lines, line, col, options),
-      applyCompletion: (lines, line, col, item, prefix) => {
-        const result = current.applyCompletion(lines, line, col, item, prefix);
-        const original = lines[line] ?? "";
-        if (!isClaudePluginCommandLine(original)) {
-          return result;
-        }
+    try {
+      requireNotificationMode(ctx.mode);
+      ctx.ui.addAutocompleteProvider((current) => ({
+        getSuggestions: (lines, line, col, options) =>
+          current.getSuggestions(lines, line, col, options),
+        applyCompletion: (lines, line, col, item, prefix) => {
+          const result = current.applyCompletion(lines, line, col, item, prefix);
+          const original = lines[line] ?? "";
+          if (!isClaudePluginCommandLine(original)) {
+            return result;
+          }
 
-        return normalizeCompletionWhitespace(result);
-      },
-      shouldTriggerFileCompletion: (lines, line, col) =>
-        current.shouldTriggerFileCompletion?.(lines, line, col) ?? true,
-    }));
+          return normalizeCompletionWhitespace(result);
+        },
+        shouldTriggerFileCompletion: (lines, line, col) =>
+          current.shouldTriggerFileCompletion?.(lines, line, col) ?? true,
+      }));
+    } catch (err) {
+      hookDebugLog(`autocomplete setup skipped: ${errorMessage(err)}`, "completions");
+    }
   });
 }
 
