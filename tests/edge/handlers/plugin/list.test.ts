@@ -106,6 +106,7 @@ import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/
 import { makeListHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -828,4 +829,49 @@ for (const { args, expectedSentence, label, summary } of [
     assert.strictEqual(workspace.transportCalls(), 0);
     verifyBoundary();
   });
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown option: "--bogus".',
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+  ]) {
+    test(`appends plugin/list rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = makeListHandler();
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user|project]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
 }

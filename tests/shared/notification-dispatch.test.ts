@@ -56,6 +56,50 @@ function createContext(t: TestContext): NotificationContext {
   };
 }
 
+for (const mode of ["json", "rpc"]) {
+  test(`appends complete usage payloads in ${mode} without UI access`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    notifyUsageError(ctx, run, { message: "Invalid input.", usage: "Usage: command" });
+    notifyUsageInfo(ctx, run, "Usage: command");
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "usage-error",
+          severity: "error",
+          needsReload: false,
+          message: "Invalid input.",
+          usage: "Usage: command",
+        },
+      },
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "usage-info",
+          severity: "info",
+          needsReload: false,
+          usage: "Usage: command",
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+}
+
 test("reads a live mode getter on the same run while retaining its original snapshot", () => {
   // arrange
   const capture = createJsonCapture();
@@ -148,7 +192,7 @@ test("rejects an unsupported mode before structured or raw delivery", () => {
     },
   );
   assert.throws(() => {
-    notifyUsageInfo(ctx, "usage");
+    notifyUsageInfo(ctx, runWithNothingLoaded(), "usage");
   }, UnsupportedModeError);
   assert.deepStrictEqual(capture.entries, []);
   capture.assertValid();
@@ -2691,7 +2735,7 @@ test("notifyUsageError emits ${msg.message}\\n\\n${msg.usage} with 'error' sever
   };
 
   // act
-  notifyUsageError(ctx, msg);
+  notifyUsageError(ctx, runWithNothingLoaded(), msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -5999,7 +6043,7 @@ test("usage info dispatch preserves usage message at info severity", (t) => {
   const ctx = createContext(t);
 
   // act
-  notifyUsageInfo(ctx, "Usage: /claude:plugin ...");
+  notifyUsageInfo(ctx, runWithNothingLoaded(), "Usage: /claude:plugin ...");
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [

@@ -122,6 +122,7 @@ import { loadState } from "../../../../extensions/pi-claude-marketplace/persiste
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -1061,4 +1062,53 @@ for (const { args, label, offending, summary } of [
     assert.deepStrictEqual(await readFootprint(workspace), NOTHING_UPDATED);
     verifyBoundary();
   });
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+    {
+      args: "invalid",
+      message: 'Invalid <plugin>@<marketplace> ref: "invalid".',
+    },
+  ]) {
+    test(`appends plugin/update rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = createUpdateHandler();
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model] [--partial] [--local]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
 }

@@ -26,10 +26,15 @@
 
 import { mock, verify, when } from "strong-mock";
 
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
+
+import { createJsonCapture } from "./json-capture.ts";
+
 import type {
   ExtensionCommandContext,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 export type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
 
@@ -99,6 +104,29 @@ export function createNotificationBoundary(
     verifyBoundary: (): void => {
       verify(ctx);
       verify(ui);
+    },
+  };
+}
+
+/** Captures one machine emission while rejecting UI and command work. */
+export function createMachineNotificationBoundary(mode: "json" | "rpc"): {
+  readonly ctx: ExtensionCommandContext;
+  readonly run: NotificationRun;
+  readonly capture: ReturnType<typeof createJsonCapture>;
+  readonly verifyBoundary: () => void;
+} {
+  const capture = createJsonCapture();
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  when(() => ctx.mode)
+    .thenReturn(mode)
+    .times(1);
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+  return {
+    ctx,
+    run,
+    capture,
+    verifyBoundary: (): void => {
+      verify(ctx);
     },
   };
 }

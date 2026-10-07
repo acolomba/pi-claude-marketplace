@@ -45,7 +45,7 @@ export function makeMarketplaceUpdateHandler(
       (message) => {
         // Argument-parsing failure:
         // -> sentence + Usage block via notifyUsageError.
-        notifyUsageError(ctx, {
+        notifyUsageError(ctx, run, {
           message,
           usage: USAGE,
         });

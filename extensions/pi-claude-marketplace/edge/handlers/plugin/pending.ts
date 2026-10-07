@@ -38,9 +38,9 @@ export function makePendingHandler(): SubcommandHandler {
     const [first] = parsed.positional;
     if (first !== undefined) {
       if (first.startsWith("--")) {
-        notifyUsageError(ctx, { message: `Unknown option: "${first}".`, usage: USAGE });
+        notifyUsageError(ctx, run, { message: `Unknown option: "${first}".`, usage: USAGE });
       } else {
-        notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
+        notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
       }
 
       return;

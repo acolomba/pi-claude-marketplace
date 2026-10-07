@@ -67,6 +67,7 @@ import { test, type TestContext } from "node:test";
 import { makeFetchHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -362,3 +363,52 @@ test("reports an unknown flag and never reaches the fetch workflow (D-116-06)", 
   ]);
   verifyBoundary();
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+    {
+      args: "invalid",
+      message: 'Invalid <plugin>@<marketplace> ref: "invalid".',
+    },
+  ]) {
+    test(`appends plugin/fetch rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = makeFetchHandler();
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
+}

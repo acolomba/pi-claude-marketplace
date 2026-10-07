@@ -44,7 +44,43 @@ import {
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
+import { createJsonCapture } from "./json-capture.ts";
 import { createNotificationBoundary } from "./notification-boundary.ts";
+import { createMachineNotificationBoundary } from "./notification-boundary.ts";
+
+import type { ExtensionCommandContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+test("appends a complete unknown-command usage error in json", async () => {
+  // arrange
+  const capture = createJsonCapture();
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  when(() => ctx.mode)
+    .thenReturn("json")
+    .times(1);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+  // act
+  await routeClaudePlugin("unknownverb", handlers, ctx, run);
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "usage-error",
+        severity: "error",
+        needsReload: false,
+        message: 'Unknown subcommand: "unknownverb".',
+        usage: EXPECTED_TOP_LEVEL_USAGE,
+      },
+    },
+  ]);
+  capture.assertValid();
+  verify(ctx);
+  verify(handlers);
+});
 
 type HandlerName = keyof SubcommandHandlers;
 
@@ -495,3 +531,51 @@ test("names an unrecognized marketplace token back to the operator with the mark
   verifyBoundary();
   verify(handlers);
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message, usage } of [
+    { args: "unknown", message: 'Unknown subcommand: "unknown".', usage: EXPECTED_TOP_LEVEL_USAGE },
+    {
+      args: "marketplace",
+      message: "marketplace requires a subcommand.",
+      usage: EXPECTED_MARKETPLACE_USAGE,
+    },
+    {
+      args: "marketplace unknown",
+      message: 'Unknown marketplace subcommand: "unknown".',
+      usage: EXPECTED_MARKETPLACE_USAGE,
+    },
+    {
+      args: "marketplace help extra",
+      message: "marketplace help takes no arguments.",
+      usage: "Usage: /claude:plugin marketplace help",
+    },
+  ]) {
+    test(`appends router rejection for ${args} in ${mode}`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "handlers" });
+
+      // act
+      await routeClaudePlugin(args, handlers, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage,
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+      verify(handlers);
+    });
+  }
+}

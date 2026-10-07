@@ -25,7 +25,7 @@ const USAGE =
 
 export function makeRemoveHandler(deps: Pick<EdgeDeps, "completionCache">): SubcommandHandler {
   return async (args, ctx, run): Promise<void> => {
-    const opened = openMarketplaceCommand(args, ctx, {
+    const opened = openMarketplaceCommand(args, ctx, run, {
       usage: USAGE,
       positionalName: "name",
     });

@@ -24,6 +24,7 @@ import { tokenizeArgs } from "../args.ts";
 import { SCOPE_TARGET_FLAG } from "../flag-catalog.ts";
 
 import type { ExtensionCommandContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 
 /** Selects strict extraction of caller-supplied boolean long flags. */
 export interface ConsumeLongFlags {
@@ -52,20 +53,17 @@ export interface ConsumedFlagScan extends LocalFlagScan {
  */
 export function extractLocalFlag(
   args: string,
-  ctx: ExtensionCommandContext,
-  usage: string,
+  { ctx, run, usage }: { ctx: ExtensionCommandContext; run: NotificationRun; usage: string },
   flags: ConsumeLongFlags,
 ): ConsumedFlagScan | undefined;
 export function extractLocalFlag(
   args: string,
-  ctx: ExtensionCommandContext,
-  usage: string,
+  { ctx, run, usage }: { ctx: ExtensionCommandContext; run: NotificationRun; usage: string },
   flags?: readonly string[],
 ): LocalFlagScan | undefined;
 export function extractLocalFlag(
   args: string,
-  ctx: ExtensionCommandContext,
-  usage: string,
+  { ctx, run, usage }: { ctx: ExtensionCommandContext; run: NotificationRun; usage: string },
   flags: readonly string[] | ConsumeLongFlags = [],
 ): LocalFlagScan | ConsumedFlagScan | undefined {
   const consuming = "consumeLongFlags" in flags;
@@ -101,7 +99,7 @@ export function extractLocalFlag(
     }
 
     if (isRejected(tok)) {
-      notifyUsageError(ctx, { message: `Unknown flag: "${tok}".`, usage });
+      notifyUsageError(ctx, run, { message: `Unknown flag: "${tok}".`, usage });
       return undefined;
     }
   }

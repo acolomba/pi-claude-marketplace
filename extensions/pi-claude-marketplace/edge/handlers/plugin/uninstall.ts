@@ -37,12 +37,12 @@ export function makeUninstallHandler(
   const uninstallPlugin = createUninstallOperation(hooksRouting, completionCache);
   return async (args, ctx, run): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts.
-    const localFlag = extractLocalFlag(args, ctx, USAGE, CONSUMED_FLAGS);
+    const localFlag = extractLocalFlag(args, { ctx, run, usage: USAGE }, CONSUMED_FLAGS);
     if (localFlag === undefined) {
       return;
     }
 
-    const parsed = parseRequiredPluginMarketplaceRef(localFlag.residualArgs, ctx, USAGE);
+    const parsed = parseRequiredPluginMarketplaceRef(localFlag.residualArgs, ctx, run, USAGE);
     if (parsed === undefined) {
       return;
     }

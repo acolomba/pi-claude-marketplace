@@ -35,7 +35,7 @@ export function makeImportHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: errorMessage(err),
         usage: USAGE,
       });
@@ -43,7 +43,7 @@ export function makeImportHandler(
     }
 
     if (parsed.positional.length > 0) {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: "import does not accept positional arguments.",
         usage: USAGE,
       });

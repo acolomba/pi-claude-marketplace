@@ -42,6 +42,7 @@ import {
   type PluginMarketplaceRef,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts";
 import { runWithAllLoaded, runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 type PreludeOperation<P> = Parameters<typeof withParsedArgs<P>>[2];
@@ -107,7 +108,7 @@ describe("parseMapModelArgs", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
-    const parsed = parseMapModelArgs("alpha@official", ctx, INSTALL_USAGE);
+    const parsed = parseMapModelArgs("alpha@official", ctx, runWithNothingLoaded(), INSTALL_USAGE);
 
     // assert
     assert.deepStrictEqual(parsed, {
@@ -141,7 +142,7 @@ describe("parseMapModelArgs", () => {
       const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
       // act
-      const parsed = parseMapModelArgs(args, ctx, INSTALL_USAGE);
+      const parsed = parseMapModelArgs(args, ctx, runWithNothingLoaded(), INSTALL_USAGE);
 
       // assert
       assert.deepStrictEqual(parsed, expectedArgs);
@@ -160,7 +161,7 @@ describe("parseMapModelArgs", () => {
       const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
       // act
-      const parsed = parseMapModelArgs(args, ctx, INSTALL_USAGE);
+      const parsed = parseMapModelArgs(args, ctx, runWithNothingLoaded(), INSTALL_USAGE);
 
       // assert
       assert.deepStrictEqual(parsed, {
@@ -179,7 +180,12 @@ describe("parseMapModelArgs", () => {
       const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
       // act
-      const parsed = parseMapModelArgs(`alpha@official --scope ${scope}`, ctx, INSTALL_USAGE);
+      const parsed = parseMapModelArgs(
+        `alpha@official --scope ${scope}`,
+        ctx,
+        runWithNothingLoaded(),
+        INSTALL_USAGE,
+      );
 
       // assert
       assert.deepStrictEqual(parsed, {
@@ -198,7 +204,7 @@ describe("parseMapModelArgs", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
-    const parsed = parseMapModelArgs("", ctx, INSTALL_USAGE);
+    const parsed = parseMapModelArgs("", ctx, runWithNothingLoaded(), INSTALL_USAGE);
 
     // assert
     assert.deepStrictEqual(parsed, {
@@ -215,7 +221,12 @@ describe("parseMapModelArgs", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    const parsed = parseMapModelArgs("alpha@official --bogus", ctx, INSTALL_USAGE);
+    const parsed = parseMapModelArgs(
+      "alpha@official --bogus",
+      ctx,
+      runWithNothingLoaded(),
+      INSTALL_USAGE,
+    );
 
     // assert
     assert.strictEqual(parsed, undefined);
@@ -234,7 +245,12 @@ describe("parseMapModelArgs", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    const parsed = parseMapModelArgs("--bogus alpha@official --scope global", ctx, INSTALL_USAGE);
+    const parsed = parseMapModelArgs(
+      "--bogus alpha@official --scope global",
+      ctx,
+      runWithNothingLoaded(),
+      INSTALL_USAGE,
+    );
 
     // assert
     assert.strictEqual(parsed, undefined);
@@ -255,7 +271,12 @@ describe("parseRequiredPluginMarketplaceRef", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
-    const parsed = parseRequiredPluginMarketplaceRef("alpha@official", ctx, UNINSTALL_USAGE);
+    const parsed = parseRequiredPluginMarketplaceRef(
+      "alpha@official",
+      ctx,
+      runWithNothingLoaded(),
+      UNINSTALL_USAGE,
+    );
 
     // assert
     assert.deepStrictEqual(parsed, {
@@ -275,6 +296,7 @@ describe("parseRequiredPluginMarketplaceRef", () => {
       const parsed = parseRequiredPluginMarketplaceRef(
         `alpha@official --scope ${scope}`,
         ctx,
+        runWithNothingLoaded(),
         UNINSTALL_USAGE,
       );
 
@@ -297,6 +319,7 @@ describe("parseRequiredPluginMarketplaceRef", () => {
     const parsed = parseRequiredPluginMarketplaceRef(
       "alpha@official beta@official",
       ctx,
+      runWithNothingLoaded(),
       UNINSTALL_USAGE,
     );
 
@@ -317,7 +340,12 @@ describe("parseRequiredPluginMarketplaceRef", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    const parsed = parseRequiredPluginMarketplaceRef("", ctx, UNINSTALL_USAGE);
+    const parsed = parseRequiredPluginMarketplaceRef(
+      "",
+      ctx,
+      runWithNothingLoaded(),
+      UNINSTALL_USAGE,
+    );
 
     // assert
     assert.strictEqual(parsed, undefined);
@@ -339,6 +367,7 @@ describe("parseRequiredPluginMarketplaceRef", () => {
     const parsed = parseRequiredPluginMarketplaceRef(
       "alpha@official --scope global",
       ctx,
+      runWithNothingLoaded(),
       UNINSTALL_USAGE,
     );
 
@@ -364,7 +393,12 @@ describe("parseRequiredPluginMarketplaceRef", () => {
       const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
       // act
-      const parsed = parseRequiredPluginMarketplaceRef(malformedRef, ctx, UNINSTALL_USAGE);
+      const parsed = parseRequiredPluginMarketplaceRef(
+        malformedRef,
+        ctx,
+        runWithNothingLoaded(),
+        UNINSTALL_USAGE,
+      );
 
       // assert
       assert.strictEqual(parsed, undefined);
@@ -526,3 +560,36 @@ describe("withParsedArgs", () => {
     verify(operation);
   });
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    { args: "--scope bad", message: 'Invalid --scope value: "bad". Must be "user" or "project".' },
+    { args: "--bogus", message: 'Unknown flag: "--bogus".' },
+  ]) {
+    test(`appends map-model parse rejection for ${args} in ${mode}`, () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      // act
+      const parsed = parseMapModelArgs(args, ctx, run, INSTALL_USAGE);
+
+      // assert
+      assert.strictEqual(parsed, undefined);
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage: INSTALL_USAGE,
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
+}

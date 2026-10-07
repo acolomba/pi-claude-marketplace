@@ -86,6 +86,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import { mock, verify } from "strong-mock";
+
 import { makeBootstrapHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts";
 import { BOOTSTRAP_MARKETPLACE_NAME } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -93,6 +95,7 @@ import { createCompletionCache } from "../../../../extensions/pi-claude-marketpl
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
@@ -380,3 +383,51 @@ test("converts a thrown bootstrap failure into one failed marketplace row carryi
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "extra",
+      message: "bootstrap takes no arguments.",
+    },
+    {
+      args: "--scope user",
+      message: "bootstrap does not accept --scope; it always targets user scope.",
+    },
+  ]) {
+    test(`appends plugin/bootstrap rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      const deps = mock<Parameters<typeof makeBootstrapHandler>[0]>({
+        exactParams: true,
+        name: "handler dependencies",
+      });
+      const commandHandler = makeBootstrapHandler(deps);
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage: "Usage: /claude:plugin bootstrap",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+      verify(deps);
+    });
+  }
+}

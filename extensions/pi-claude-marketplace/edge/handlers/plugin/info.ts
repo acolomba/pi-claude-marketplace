@@ -39,7 +39,7 @@ export function makePluginInfoHandler(): SubcommandHandler {
       }
 
       if (token.startsWith("--")) {
-        notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage: USAGE });
+        notifyUsageError(ctx, run, { message: `Unknown flag: "${token}".`, usage: USAGE });
         return;
       }
 
@@ -48,7 +48,7 @@ export function makePluginInfoHandler(): SubcommandHandler {
 
     const positional = nonFlagPositionals[0];
     if (nonFlagPositionals.length !== 1 || positional === undefined) {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: "info requires exactly one <plugin>@<marketplace> argument.",
         usage: USAGE,
       });
@@ -57,7 +57,7 @@ export function makePluginInfoHandler(): SubcommandHandler {
 
     const ref = splitPluginMarketplaceRef(positional);
     if (ref === undefined) {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: `Invalid <plugin>@<marketplace> ref: "${positional}".`,
         usage: USAGE,
       });

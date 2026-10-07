@@ -107,6 +107,7 @@ import { loadState } from "../../../../extensions/pi-claude-marketplace/persiste
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -817,4 +818,53 @@ for (const { args, expectedMessage, label, summary } of [
     assert.deepStrictEqual(await readFootprint(workspace), NOTHING_MATERIALIZED);
     verifyBoundary();
   });
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "",
+      message: "install requires exactly one <plugin>@<marketplace> argument.",
+    },
+    {
+      args: "invalid",
+      message: 'Invalid <plugin>@<marketplace> ref: "invalid".',
+    },
+  ]) {
+    test(`appends plugin/install rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = makeInstallHandler();
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
 }

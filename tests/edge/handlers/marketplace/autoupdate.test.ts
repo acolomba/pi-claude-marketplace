@@ -49,6 +49,7 @@ import { test, type TestContext } from "node:test";
 import { makeAutoupdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -427,3 +428,101 @@ test("accepts a scope flag beside the scope-target flag and honors both selector
   assert.deepStrictEqual(await readConfigFootprint(workspace), PROJECT_OVERRIDE_ONLY);
   verifyBoundary();
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: '""',
+      message: "Argument must not be empty.",
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+  ]) {
+    test(`appends marketplace/autoupdate rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = makeAutoupdateHandler(true);
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin marketplace autoupdate [<name>] [--scope user|project] [--local]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: '""',
+      message: "Argument must not be empty.",
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+  ]) {
+    test(`appends marketplace/autoupdate rejection for ${args} in ${mode} (disabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = makeAutoupdateHandler(false);
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin marketplace noautoupdate [<name>] [--scope user|project] [--local]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
+}

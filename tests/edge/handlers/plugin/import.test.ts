@@ -72,6 +72,7 @@ import { createCompletionCache } from "../../../../extensions/pi-claude-marketpl
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -371,3 +372,52 @@ test("takes the scope-target flag as a positional and rejects it alongside a sco
   verifyBoundary();
   verify(importClaudeSettings);
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "extra",
+      message: "import does not accept positional arguments.",
+    },
+  ]) {
+    test(`appends plugin/import rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      const deps = mock<Parameters<typeof makeImportHandler>[0]>({
+        exactParams: true,
+        name: "handler dependencies",
+      });
+      const hooksRouting = mock<Parameters<typeof makeImportHandler>[1]>({
+        exactParams: true,
+        name: "hooks routing",
+      });
+      const commandHandler = makeImportHandler(deps, hooksRouting);
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage: "Usage: /claude:plugin import [--scope user|project]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+      verify(deps);
+      verify(hooksRouting);
+    });
+  }
+}

@@ -29,7 +29,7 @@ function usageFor(enable: boolean): string {
 export function makeAutoupdateHandler(enable: boolean): SubcommandHandler {
   const usage = usageFor(enable);
   return async (args, ctx, run): Promise<void> => {
-    const localFlag = extractLocalFlag(args, ctx, usage);
+    const localFlag = extractLocalFlag(args, { ctx, run, usage });
     if (localFlag === undefined) {
       return;
     }
@@ -41,7 +41,7 @@ export function makeAutoupdateHandler(enable: boolean): SubcommandHandler {
         usage,
       },
       (message) => {
-        notifyUsageError(ctx, { message, usage });
+        notifyUsageError(ctx, run, { message, usage });
       },
     );
     if (parsed === undefined) {

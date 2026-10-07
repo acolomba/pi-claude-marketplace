@@ -57,12 +57,15 @@ import https from "node:https";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import { mock, verify } from "strong-mock";
+
 import { pathSource } from "../../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { makeRemoveHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/remove.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -371,3 +374,60 @@ test("supplies the remove usage block beside a verbatim parse diagnostic and rem
   assert.deepStrictEqual(await readMarketplaceFootprint(workspace.cwd), BOTH_SCOPES_SEEDED);
   verifyBoundary();
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "",
+      message: "Missing required argument.",
+    },
+    {
+      args: '""',
+      message: "Missing required argument.",
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+  ]) {
+    test(`appends marketplace/remove rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      const deps = mock<Parameters<typeof makeRemoveHandler>[0]>({
+        exactParams: true,
+        name: "handler dependencies",
+      });
+      const commandHandler = makeRemoveHandler(deps);
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin marketplace <remove|rm> <name> [--scope user|project] [--local]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+      verify(deps);
+    });
+  }
+}

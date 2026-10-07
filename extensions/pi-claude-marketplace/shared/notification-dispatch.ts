@@ -30,6 +30,7 @@ import type {
   RowPolicyMap,
   ResolvedEnvelope,
   ResolvedMarketplace,
+  ResolvedRawSurface,
 } from "./notification-resolve.ts";
 import type { NotificationRun } from "./notification-run.ts";
 import type {
@@ -63,8 +64,8 @@ import type { NotificationContext } from "../platform/pi-api.ts";
  *    per-row field, reduced to the envelope's severity at resolve time
  *    (SEV-02). The command's run supplies the soft-dep snapshot (D-05).
  *  - The raw-surface path. Each helper builds one `RawSurface` kind, which
- *    `resolveRawSurface` serializes and `formatRawSurface` turns into text
- *    (D-13). Raw kinds carry no run, so no raw call site needs one (D-01, D-04).
+ *    `resolveRawSurface` serializes before transport selection (D-13).
+ *    Usage helpers receive the command run for the entry sink (D-05-05).
  *
  * The fallow rule `architecture/notify-chokepoint` excludes this file, so it
  * needs no inline suppression.
@@ -137,20 +138,32 @@ export function notifyPluginPathSkipped(
  * `tests/shared/notification-dispatch.test.ts` asserts it byte-for-byte (the
  * SNM-13 case).
  */
-export function notifyUsageError(ctx: NotificationContext, message: UsageErrorMessage): void {
-  emitRawSurface(ctx, {
-    kind: "usage-error",
-    message: message.message,
-    usage: message.usage,
-  });
+export function notifyUsageError(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  message: UsageErrorMessage,
+): void {
+  emitPresentation(
+    ctx,
+    run,
+    resolveRawSurface({
+      kind: "usage-error",
+      message: message.message,
+      usage: message.usage,
+    }),
+  );
 }
 
 /**
  * Builds the `usage-info` kind for an explicit help request (RAWS-01, D-06).
  * The text strategy renders the usage verbatim at explicit `info` severity.
  */
-export function notifyUsageInfo(ctx: NotificationContext, usage: string): void {
-  emitRawSurface(ctx, { kind: "usage-info", usage });
+export function notifyUsageInfo(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  usage: string,
+): void {
+  emitPresentation(ctx, run, resolveRawSurface({ kind: "usage-info", usage }));
 }
 
 /**
@@ -347,12 +360,20 @@ function formatPresentationBody(presentation: NotificationPresentation): string 
 function emitPresentation(
   ctx: NotificationContext,
   run: NotificationRun,
-  presentation: NotificationPresentation,
+  presentation: NotificationPresentation | ResolvedRawSurface,
 ): void {
   switch (requireNotificationMode(ctx.mode)) {
     case "tui":
     case "print":
-      emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
+      if ("envelope" in presentation) {
+        emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
+      } else {
+        // Only usage surfaces enter this raw branch; both always produce a tuple.
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- usage helpers are the only raw callers
+        const args = formatRawSurface(presentation)!;
+        deliver(ctx, args);
+      }
+
       return;
     case "json":
     case "rpc":

@@ -29,7 +29,7 @@ export function makeMarketplaceListHandler(): SubcommandHandler {
         usage: USAGE,
       },
       (message) => {
-        notifyUsageError(ctx, { message, usage: USAGE });
+        notifyUsageError(ctx, run, { message, usage: USAGE });
       },
     );
     if (parsed === undefined) {

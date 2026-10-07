@@ -64,6 +64,7 @@ const DOWNSTREAM_BOOLEAN_FLAGS = new Set([
 function parsePositionalsWithFlags(
   tokens: readonly string[],
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
   usage: string,
 ): ParsedPositionalsResult | undefined {
   const flags = new Set<string>();
@@ -75,7 +76,7 @@ function parsePositionalsWithFlags(
       // through to `Unknown flag: "--partial".`.
       flags.add(token);
     } else if (token.startsWith("--")) {
-      notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage });
+      notifyUsageError(ctx, run, { message: `Unknown flag: "${token}".`, usage });
       return undefined;
     } else {
       nonFlagPositionals.push(token);
@@ -110,6 +111,7 @@ export interface ParsedMapModelArgs {
 export function parseMapModelArgs(
   args: string,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
   usage: string,
 ): ParsedMapModelArgs | undefined {
   let parsed;
@@ -118,11 +120,11 @@ export function parseMapModelArgs(
   } catch (err) {
     // MSG-NC-2: argument-parsing failure (invalid --scope value) -- sentence
     // form with Usage block appended after a blank line.
-    notifyUsageError(ctx, { message: errorMessage(err), usage });
+    notifyUsageError(ctx, run, { message: errorMessage(err), usage });
     return undefined;
   }
 
-  const flagged = parsePositionalsWithFlags(parsed.positional, ctx, usage);
+  const flagged = parsePositionalsWithFlags(parsed.positional, ctx, run, usage);
   if (flagged === undefined) {
     return undefined;
   }
@@ -138,6 +140,7 @@ export function parseMapModelArgs(
 export function parseRequiredPluginMarketplaceRef(
   args: string,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
   usage: string,
 ): ParsedPluginMarketplaceRef | undefined {
   const parsed = parseCommandArgs(
@@ -152,7 +155,7 @@ export function parseRequiredPluginMarketplaceRef(
       // itself on the missing-required-positional path; suppress the
       // duplicate-usage case by stripping when message === usage.
       const head = message === usage ? "Missing required argument." : message;
-      notifyUsageError(ctx, { message: head, usage });
+      notifyUsageError(ctx, run, { message: head, usage });
     },
   );
   if (parsed === undefined) {
@@ -162,7 +165,7 @@ export function parseRequiredPluginMarketplaceRef(
   const ref = splitPluginMarketplaceRef(parsed.ref);
   if (ref === undefined) {
     // PI-1 invalid `<plugin>@<marketplace>` token -- USAGE error per MSG-NC-2.
-    notifyUsageError(ctx, {
+    notifyUsageError(ctx, run, {
       message: `Invalid <plugin>@<marketplace> ref: "${parsed.ref}".`,
       usage,
     });
@@ -198,7 +201,7 @@ export function withParsedArgs<P>(
     try {
       parsed = parse(args);
     } catch (err) {
-      notifyUsageError(ctx, { message: errorMessage(err), usage });
+      notifyUsageError(ctx, run, { message: errorMessage(err), usage });
       return;
     }
 

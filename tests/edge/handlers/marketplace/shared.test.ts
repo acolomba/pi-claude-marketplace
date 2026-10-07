@@ -39,6 +39,7 @@ import {
   openMarketplaceCommand,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts";
 import { runWithAllLoaded, runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 type MarketplaceOperation = Parameters<typeof makeSingleNameMarketplaceHandler>[1];
@@ -261,7 +262,7 @@ describe("openMarketplaceCommand", () => {
       const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
       // act
-      const command = openMarketplaceCommand("official --local", ctx, {
+      const command = openMarketplaceCommand("official --local", ctx, runWithNothingLoaded(), {
         positionalName,
         usage: ADD_USAGE,
       });
@@ -282,7 +283,7 @@ describe("openMarketplaceCommand", () => {
       const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
       // act
-      const command = openMarketplaceCommand(args, ctx, {
+      const command = openMarketplaceCommand(args, ctx, runWithNothingLoaded(), {
         positionalName: "source",
         usage: ADD_USAGE,
       });
@@ -299,10 +300,15 @@ describe("openMarketplaceCommand", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
-    const command = openMarketplaceCommand("official --scope project", ctx, {
-      positionalName: "source",
-      usage: ADD_USAGE,
-    });
+    const command = openMarketplaceCommand(
+      "official --scope project",
+      ctx,
+      runWithNothingLoaded(),
+      {
+        positionalName: "source",
+        usage: ADD_USAGE,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(command, { local: false, scope: "project", source: "official" });
@@ -315,7 +321,7 @@ describe("openMarketplaceCommand", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    const command = openMarketplaceCommand("--local", ctx, {
+    const command = openMarketplaceCommand("--local", ctx, runWithNothingLoaded(), {
       positionalName: "source",
       usage: ADD_USAGE,
     });
@@ -337,7 +343,7 @@ describe("openMarketplaceCommand", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    const command = openMarketplaceCommand("official --bogus", ctx, {
+    const command = openMarketplaceCommand("official --bogus", ctx, runWithNothingLoaded(), {
       positionalName: "source",
       usage: ADD_USAGE,
     });
@@ -359,10 +365,15 @@ describe("openMarketplaceCommand", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    const command = openMarketplaceCommand("official --local --scope global", ctx, {
-      positionalName: "source",
-      usage: ADD_USAGE,
-    });
+    const command = openMarketplaceCommand(
+      "official --local --scope global",
+      ctx,
+      runWithNothingLoaded(),
+      {
+        positionalName: "source",
+        usage: ADD_USAGE,
+      },
+    );
 
     // assert
     assert.strictEqual(command, undefined);
@@ -381,7 +392,7 @@ describe("openMarketplaceCommand", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    const command = openMarketplaceCommand("", ctx, {
+    const command = openMarketplaceCommand("", ctx, runWithNothingLoaded(), {
       positionalName: "source",
       usage: ADD_USAGE,
     });
@@ -398,3 +409,40 @@ describe("openMarketplaceCommand", () => {
     verifyBoundary();
   });
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    { args: "--scope bad", message: 'Invalid --scope value: "bad". Must be "user" or "project".' },
+    { args: "--bogus", message: 'Unknown flag: "--bogus".' },
+    { args: "", message: "Missing required argument." },
+  ]) {
+    test(`appends marketplace parse rejection for ${args} in ${mode}`, () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      // act
+      const parsed = openMarketplaceCommand(args, ctx, run, {
+        usage: "Usage: marketplace name",
+        positionalName: "name",
+      });
+
+      // assert
+      assert.strictEqual(parsed, undefined);
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage: "Usage: marketplace name",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
+}

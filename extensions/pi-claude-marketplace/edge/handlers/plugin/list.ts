@@ -48,7 +48,7 @@ export function makeListHandler(): SubcommandHandler {
         filterFlags.add(token);
       } else if (token.startsWith("--")) {
         // Unknown long flag -- surface USAGE.
-        notifyUsageError(ctx, { message: `Unknown option: "${token}".`, usage: USAGE });
+        notifyUsageError(ctx, run, { message: `Unknown option: "${token}".`, usage: USAGE });
         return;
       } else {
         nonFlagPositionals.push(token);
@@ -56,7 +56,7 @@ export function makeListHandler(): SubcommandHandler {
     }
 
     if (nonFlagPositionals.length > 1) {
-      notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
+      notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
       return;
     }
 
