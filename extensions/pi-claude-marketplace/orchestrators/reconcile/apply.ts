@@ -1486,5 +1486,5 @@ function surfacePostCommitWarnings(
     lines.length === 1
       ? "1 post-install warning surfaced from reconcile installs."
       : `${lines.length.toString()} post-install warnings surfaced from reconcile installs.`;
-  notifyDiagnostic(opts.ctx, header, lines);
+  notifyDiagnostic(opts.ctx, opts.run, header, lines);
 }

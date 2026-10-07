@@ -59,6 +59,8 @@ import {
   DependencyCascadeError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -95,6 +97,79 @@ type InstallOptions = Parameters<InstallPlugin>[0];
 type Diagnostic = ClaudeImportExecutionResult["diagnostics"][number];
 type Collaborators = Required<ImportDeps>;
 type TestImportOptions = Omit<ImportClaudeSettingsOptions, "completionCache">;
+
+for (const mode of ["json", "rpc"] as const) {
+  test(`appends import diagnostics after the cascade in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScopes(t, "machine-diagnostics");
+    const capture = createJsonCapture();
+    const ctx = mock<ImportClaudeSettingsOptions["ctx"]>({ exactParams: true, name: "context" });
+    when(() => ctx.mode)
+      .thenReturn(mode)
+      .times(2);
+    const inventory = mock<Pick<Parameters<typeof openNotificationRun>[0], "getAllTools">>({
+      exactParams: true,
+      name: "inventory",
+    });
+    when(() => inventory.getAllTools())
+      .thenReturn([])
+      .times(3);
+    const pi = {
+      getAllTools: () => inventory.getAllTools(),
+      appendEntry: capture.entrySink.appendEntry,
+    };
+    const run = openNotificationRun(pi);
+    const diagnostic: Diagnostic = {
+      code: "malformed-json",
+      message: "Unable to parse settings.",
+      scope: "user",
+      severity: "warning",
+    };
+
+    // act
+    const imported = await importClaudeSettings({
+      ctx,
+      run,
+      cwd,
+      deps: collaborators({
+        loadSettings: () => Promise.resolve(claudeSettings({ diagnostics: [diagnostic] })),
+        loadState: () => Promise.resolve(recordedState([])),
+      }),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      selectedScopes: ["user"],
+    });
+
+    // assert
+    assert.deepStrictEqual(imported, { ...emptyImportResult(), diagnostics: [diagnostic] });
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "cascade",
+          severity: "info",
+          needsReload: false,
+          marketplaces: [],
+        },
+      },
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "diagnostic",
+          severity: "warning",
+          needsReload: false,
+          header: "1 import diagnostic surfaced.",
+          lines: ["Unable to parse settings."],
+        },
+      },
+    ]);
+    capture.assertValid();
+    assert.strictEqual(run.entrySink, pi);
+    verify(inventory);
+    verify(ctx);
+  });
+}
 
 const completionCachesByRouting = new WeakMap<
   HooksRouting,

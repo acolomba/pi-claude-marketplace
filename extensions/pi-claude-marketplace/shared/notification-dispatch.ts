@@ -187,10 +187,15 @@ export function notifyUsageInfo(
  */
 export function notifyDiagnostic(
   ctx: NotificationContext,
+  run: NotificationRun,
   header: string,
   lines: readonly string[],
 ): void {
-  emitRawSurface(ctx, { kind: "diagnostic", header, lines });
+  if (lines.length === 0) {
+    return;
+  }
+
+  emitPresentation(ctx, run, resolveRawSurface({ kind: "diagnostic", header, lines }));
 }
 
 /**
@@ -368,8 +373,8 @@ function emitPresentation(
       if ("envelope" in presentation) {
         emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
       } else {
-        // Only usage surfaces enter this raw branch; both always produce a tuple.
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- usage helpers are the only raw callers
+        // Usage and nonempty diagnostics always produce a tuple.
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- empty diagnostics return before transport selection
         const args = formatRawSurface(presentation)!;
         deliver(ctx, args);
       }

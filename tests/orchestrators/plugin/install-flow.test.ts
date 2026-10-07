@@ -65,6 +65,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
@@ -9155,6 +9156,95 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
     }
   });
 });
+
+for (const mode of ["json", "rpc"]) {
+  test(`appends install discovery diagnostics after the cascade in ${mode}`, async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
+      // arrange
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-machine-diagnostics-"));
+      try {
+        const marketplaceRoot = path.join(cwd, "mp-src");
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot,
+          marketplaceName: "mp",
+          pluginName: "hello",
+          commands: [{ sourceName: "keep" }],
+        });
+        await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
+        const capture = createJsonCapture();
+        const ctx = {
+          mode,
+          get ui() {
+            return capture.ui;
+          },
+        };
+        const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+        // act
+        const installed = await installPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        });
+
+        // assert
+        assert.strictEqual(installed.status, "installed");
+        const locations = locationsFor("project", cwd);
+        assert.strictEqual(
+          (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.version,
+          "0.0.1",
+        );
+        assert.deepStrictEqual(capture.entries, [
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              kind: "cascade",
+              severity: "info",
+              needsReload: true,
+              marketplaces: [
+                {
+                  name: "mp",
+                  scope: "project",
+                  plugins: [
+                    {
+                      name: "hello",
+                      id: "hello@mp",
+                      scope: "project",
+                      reasons: [],
+                      status: "installed",
+                      version: "0.0.1",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              kind: "diagnostic",
+              severity: "warning",
+              needsReload: false,
+              header: 'Plugin "hello" installed; 1 declared component has a note.',
+              lines: [
+                'command source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
+              ],
+            },
+          },
+        ]);
+        capture.assertValid();
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
 
 test("D-141-03: an orchestrated install carries the same warning on postCommitWarnings", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
