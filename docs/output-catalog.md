@@ -4246,10 +4246,10 @@ Uninstall, disable, prune, marketplace remove, a cascade undo, and an update tha
 ```text
 MCP server variables not set.
 
-Server "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: DD_API_KEY, DD_SITE. pi-mcp-adapter reads them from Pi's environment when it starts the server.
+Server "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: DD_API_KEY, DD_SITE.
 ```
 
-Emitted via `notifyMcpConfigNotices` by every command that stages a plugin's MCP servers: install, update, reinstall and enable, run directly or inside the reconcile, import and marketplace update cascades. Following Claude Code, a variable counts as missing only when it is unset and has no `:-` default, so `${DD_API_KEY:-}` with `DD_API_KEY` unset is not reported. The written entry keeps `${NAME}`, so pi-mcp-adapter reads the variable when it starts the server. One line per server, which names each missing variable once, in first-seen order. The line names variables, never their values. The command's rows come first, then any comments-removed and override-kept notices, then this one. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+Emitted via `notifyMcpConfigNotices` by every command that stages a plugin's MCP servers: install, update, reinstall and enable, run directly or inside the reconcile, import and marketplace update cascades. Following Claude Code, a variable counts as missing only when it is unset and has no `:-` default, so `${DD_API_KEY:-}` with `DD_API_KEY` unset is not reported. The written entry keeps `${NAME}`, so pi-mcp-adapter reads the variable when it starts the server. A withheld credential in `command`, `args` or `env` is the exception: it is written as the literal text `${NAME}`, so a value set later never reaches the server. For this reason the line says only that the variables were not set at install. One line per server, which names each missing variable once, in first-seen order. The line names variables, never their values. The command's rows come first, then any comments-removed and override-kept notices, then this one. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
 
 ### MCP server credentials withheld (AVAR-05)
 

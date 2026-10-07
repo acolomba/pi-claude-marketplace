@@ -292,7 +292,7 @@ function mcpOverrideKeptLine(notice: McpOverrideKeptNotice): string {
 }
 
 function mcpVariablesMissingLine(notice: McpVariablesMissingNotice): string {
-  return `Server "${notice.server}" from ${notice.plugin} in the ${notice.scope}-scope ${notice.file} uses environment variables that are not set: ${notice.names.join(", ")}. pi-mcp-adapter reads them from Pi's environment when it starts the server.`;
+  return `Server "${notice.server}" from ${notice.plugin} in the ${notice.scope}-scope ${notice.file} uses environment variables that were not set at install: ${notice.names.join(", ")}.`;
 }
 
 function isVariablesMissing(notice: McpConfigNotice): notice is McpVariablesMissingNotice {

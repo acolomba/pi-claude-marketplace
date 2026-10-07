@@ -6193,8 +6193,8 @@ test("AVAR-04: variables-missing notices for two servers send MCP server variabl
     [
       [
         "MCP server variables not set.\n\n" +
-          'Server "plugin_hello_alpha_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: DD_API_KEY, DD_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.\n' +
-          'Server "plugin_hello_beta_" from hello in the user-scope mcp-adapter.json uses environment variables that are not set: BETA_TOKEN. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+          'Server "plugin_hello_alpha_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: DD_API_KEY, DD_SITE.\n' +
+          'Server "plugin_hello_beta_" from hello in the user-scope mcp-adapter.json uses environment variables that were not set at install: BETA_TOKEN.',
         "warning",
       ],
     ],
@@ -6230,7 +6230,7 @@ test("AVAR-04: a repeated variables-missing notice renders once", (t) => {
     ctx.ui.notify.mock.calls.map((call) => call.arguments),
     [
       [
-        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: DD_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: DD_SITE.',
         "warning",
       ],
     ],
@@ -6270,7 +6270,7 @@ test("AVAR-04: a variables-missing notice listed first still sends after the ove
         "warning",
       ],
       [
-        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: DD_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: DD_SITE.',
         "warning",
       ],
     ],
@@ -6380,7 +6380,7 @@ test("AVAR-05: a credentials-blanked notice listed first still sends after the v
     ctx.ui.notify.mock.calls.map((call) => call.arguments),
     [
       [
-        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: DD_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: DD_SITE.',
         "warning",
       ],
       [

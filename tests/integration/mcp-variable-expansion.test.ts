@@ -105,7 +105,7 @@ test("AVAR-02: a project install writes Claude's variable rule for the adapter a
       );
       assert.deepStrictEqual(installed.notifications.at(-1), {
         message:
-          'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: PI_CM_AVAR_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+          'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_AVAR_SITE.',
         severity: "warning",
       });
     } finally {
@@ -210,7 +210,7 @@ function assertVariableWarningsAfter(
     ...rows,
     {
       message:
-        'MCP server variables not set.\n\nServer "plugin_hello_local_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: PI_CM_AVAR_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+        'MCP server variables not set.\n\nServer "plugin_hello_local_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_AVAR_SITE.',
       severity: "warning",
     },
     {

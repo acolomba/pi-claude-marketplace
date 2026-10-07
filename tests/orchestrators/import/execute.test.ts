@@ -1995,7 +1995,7 @@ test("AVAR-04: an import reports the unset variable and the withheld credential 
     {
       message:
         "MCP server variables not set.\n\n" +
-        'Server "plugin_hello_local_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: PI_CM_AVAR_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+        'Server "plugin_hello_local_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_AVAR_SITE.',
       severity: "warning",
     },
     {
