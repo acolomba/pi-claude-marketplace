@@ -8,7 +8,6 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
-import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   createEnableOperation,
   createInstallOperation,
@@ -17,12 +16,12 @@ import {
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
+import { makeCtx, seedMcpPlugin, type NotifyRecord } from "./mcp-plugin-seed.ts";
+
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // The user override under a plugin server's key survives install and
 // uninstall through the real operations: install keeps it in the plugin
@@ -30,78 +29,6 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 // taking the value the entry holds at that time (AFILE-06, AFILE-01). A user
 // who disables the server in the adapter writes its key,
 // `plugin_hello_srv_` (ANAME-01).
-
-interface NotifyRecord {
-  readonly message: string;
-  readonly severity: string | undefined;
-}
-
-function makeCtx(): {
-  session: { ctx: ExtensionContext; pi: ExtensionAPI };
-  notifications: NotifyRecord[];
-} {
-  const notifications: NotifyRecord[] = [];
-  const ctx = {
-    ui: {
-      notify: (message: string, severity?: string): void => {
-        notifications.push({ message, severity });
-      },
-    },
-  } as ExtensionContext;
-  const pi = { getAllTools: (): unknown[] => [] } as ExtensionAPI;
-  return { session: { ctx, pi }, notifications };
-}
-
-/**
- * Seeds path marketplace `mp` with plugin `hello` 1.0.0 declaring MCP server
- * `srv` as `server`, and registers `mp` at each of `scopes`.
- */
-async function seedMcpPlugin(
-  cwd: string,
-  scopes: readonly Scope[],
-  server: Readonly<Record<string, unknown>> = { command: "node", args: ["v1.js"] },
-): Promise<string> {
-  const marketplaceRoot = path.join(cwd, "mp-src");
-  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
-  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-  await writeFile(
-    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "hello", version: "1.0.0" }),
-  );
-  await writeFile(
-    path.join(pluginRoot, ".mcp.json"),
-    JSON.stringify({ mcpServers: { srv: server } }),
-  );
-  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
-  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  await writeFile(
-    manifestPath,
-    JSON.stringify({
-      name: "mp",
-      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
-    }),
-  );
-  for (const scope of scopes) {
-    const locations = locationsFor(scope, cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        mp: {
-          name: "mp",
-          scope,
-          source: pathSource("./mp-src"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot,
-          plugins: {},
-        },
-      },
-    });
-  }
-
-  return pluginRoot;
-}
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {

@@ -244,9 +244,26 @@ export interface McpOverrideRestoredNotice {
   readonly server: string;
 }
 
-/** AFILE-04 / AFILE-06: one MCP config fact a command routes to `notifyMcpConfigNotices`. */
+/**
+ * AVAR-04: a staged plugin server references environment variables that are
+ * unset and have no `:-` default. `names` lists them once each, in first-seen
+ * order. It names variables, never their values.
+ */
+export interface McpVariablesMissingNotice {
+  readonly kind: "variables-missing";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+  readonly names: readonly string[];
+}
+
+/** AFILE-04 / AFILE-06 / AVAR-04: one MCP config fact a command routes to `notifyMcpConfigNotices`. */
 export type McpConfigNotice =
-  McpConfigFileNotice | McpOverrideKeptNotice | McpOverrideRestoredNotice;
+  | McpConfigFileNotice
+  | McpOverrideKeptNotice
+  | McpOverrideRestoredNotice
+  | McpVariablesMissingNotice;
 
 function mcpConfigFileLine(notice: McpConfigFileNotice): string {
   return notice.kind === "comments-dropped"
@@ -256,6 +273,14 @@ function mcpConfigFileLine(notice: McpConfigFileNotice): string {
 
 function mcpOverrideKeptLine(notice: McpOverrideKeptNotice): string {
   return `${notice.plugin} now provides "${notice.server}" in the ${notice.scope}-scope ${notice.file}. Your override for "${notice.server}" is kept, but these fields of it stop applying: ${notice.fields.join(", ")}. It comes back when you uninstall or disable ${notice.plugin}.`;
+}
+
+function mcpVariablesMissingLine(notice: McpVariablesMissingNotice): string {
+  return `Server "${notice.server}" from ${notice.plugin} in the ${notice.scope}-scope ${notice.file} uses environment variables that are not set: ${notice.names.join(", ")}. pi-mcp-adapter reads them from Pi's environment when it starts the server.`;
+}
+
+function isVariablesMissing(notice: McpConfigNotice): notice is McpVariablesMissingNotice {
+  return notice.kind === "variables-missing";
 }
 
 function mcpConfigFileLines(
@@ -298,20 +323,21 @@ function standingOverrideNotices(
 }
 
 /**
- * AFILE-04 / AFILE-02 / AFILE-06 IL-2 seam: the one surface for MCP config
- * notices. Bridges report the facts and orchestrators call this after their
- * own row. It sends one `"warning"` notification per kind present, in the
- * order comments-dropped, left-unchanged, override-kept: a summary line, a
- * blank line, then one distinct line per notice in first-seen order. An
- * override-kept line stands only when no later override-restored notice for
- * the same scope, file and server cancels it. An override-restored notice
- * renders nothing. An empty list sends nothing. A line names the scope, the
- * file basename, the plugin, the server and override field names only, so it
- * carries no absolute path and no field value. The host UI prepends the
- * `Warning:` label to the summary line. The byte form is locked by
+ * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 IL-2 seam: the one surface for MCP
+ * config notices. Bridges report the facts and orchestrators call this after
+ * their own row. It sends one `"warning"` notification per kind present, in
+ * the order comments-dropped, left-unchanged, override-kept,
+ * variables-missing: a summary line, a blank line, then one distinct line per
+ * notice in first-seen order. An override-kept line stands only when no later
+ * override-restored notice for the same scope, file and server cancels it. An
+ * override-restored notice renders nothing. An empty list sends nothing. A
+ * line names the scope, the file basename, the plugin, the server, and
+ * override field names or environment variable names only, so it carries no
+ * absolute path, no field value and no variable value. The host UI prepends
+ * the `Warning:` label to the summary line. The byte form is locked by
  * `tests/architecture/mcp-config-notices.test.ts` against the
- * `mcp-comments-dropped`, `mcp-config-left-unchanged` and `mcp-override-kept`
- * blocks in `docs/output-catalog.md`.
+ * `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept`
+ * and `mcp-variables-missing` blocks in `docs/output-catalog.md`.
  */
 export function notifyMcpConfigNotices(
   ctx: NotificationContext,
@@ -323,6 +349,10 @@ export function notifyMcpConfigNotices(
     [
       "MCP server override kept.",
       standingOverrideNotices(notices).map((notice) => mcpOverrideKeptLine(notice)),
+    ],
+    [
+      "MCP server variables not set.",
+      notices.filter(isVariablesMissing).map((notice) => mcpVariablesMissingLine(notice)),
     ],
   ];
   for (const [summary, lines] of warnings) {

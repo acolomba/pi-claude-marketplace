@@ -51,7 +51,7 @@ import { walkMcpSources, type McpSourceWalk } from "./collision-slots.ts";
 import { isOwnedBy, pluginSetFieldsOf } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
-import type { McpSubstitutionContext } from "./substitute.ts";
+import type { McpSubstitutionContext, VariableReport } from "./substitute.ts";
 import type {
   McpReplacement,
   PreparedMcpStaging,
@@ -63,6 +63,7 @@ import type {
   McpConfigFileNotice,
   McpConfigNotice,
   McpOverrideKeptNotice,
+  McpVariablesMissingNotice,
 } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -217,6 +218,27 @@ function overrideKeptNotices(
 }
 
 /**
+ * AVAR-04: one notice per server whose variable report names unset variables
+ * with no `:-` default, in declared order. It carries the names only.
+ */
+function variableNotices(
+  reports: ReadonlyMap<string, VariableReport>,
+  scope: Scope,
+  pluginName: string,
+): McpVariablesMissingNotice[] {
+  return [...reports]
+    .filter(([, report]) => report.missing.length > 0)
+    .map(([server, report]) => ({
+      kind: "variables-missing",
+      scope,
+      file: "mcp-adapter.json",
+      plugin: pluginName,
+      server,
+      names: report.missing,
+    }));
+}
+
+/**
  * ANAME-01: the plugin's servers under their generated keys, in declared
  * order. `safeSet` keeps every key an own property (WR-01).
  *
@@ -287,7 +309,9 @@ async function readTargetConfig(
  * builds the next doc. A staged entry replaces a marker-less override under
  * its name, makes its carried fields active and keeps the whole override in
  * its marker. A plugin entry the stage drops writes its kept override back
- * (AFILE-01, AFILE-06). AS-8 noop short-circuits when
+ * (AFILE-01, AFILE-06). The result's notices end with one `variables-missing`
+ * notice per server that references unset variables with no default
+ * (AVAR-04). AS-8 noop short-circuits when
  * there is nothing new AND nothing previously-ours -- in that case
  * `commitPreparedMcp` writes no file (PRD success criterion: AS-8 noop
  * produces no `mcp-adapter.json`).
@@ -359,7 +383,11 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // the plugin's entries under the selected key never share a name. Object
   // spread defines own data properties, so a server named `__proto__` stays an
   // own key (WR-01).
-  const { stamped, warnings: stampWarnings } = stampServers({
+  const {
+    stamped,
+    warnings: stampWarnings,
+    variableReports,
+  } = stampServers({
     servers: keyed,
     pluginName,
     marketplaceName,
@@ -389,10 +417,12 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // AFILE-04: the staged branch always rewrites the file, and the writer drops
   // JSONC comments, so a commented file is reported. The noop branches write
   // nothing and keep the comments. AFILE-06: each absorbed override with
-  // fields the new entry does not carry is reported after it.
+  // fields the new entry does not carry is reported after it. AVAR-04: each
+  // server that references unset variables with no default comes last.
   const notices = Object.freeze<McpConfigNotice[]>([
     ...commentsDroppedNotices(config.hadComments, locations.scope),
     ...overrideKeptNotices(stamped, overlays, locations.scope, pluginName),
+    ...variableNotices(variableReports, locations.scope, pluginName),
   ]);
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...declaredNames]),

@@ -4,10 +4,10 @@
 // `notifyMcpConfigNotices` calls ctx.ui.notify directly, outside the structured
 // NotificationMessage entrypoint, so the catalog-uat walk and the
 // notify-grammar invariant never drive it. This dedicated lock reads the
-// `mcp-comments-dropped`, `mcp-config-left-unchanged` and `mcp-override-kept`
-// blocks from docs/output-catalog.md and asserts that the seam emits each one
-// byte for byte, in one warning-severity call, with a non-empty summary line
-// followed by a blank line (AFILE-06).
+// `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept` and
+// `mcp-variables-missing` blocks from docs/output-catalog.md and asserts that
+// the seam emits each one byte for byte, in one warning-severity call, with a
+// non-empty summary line followed by a blank line (AFILE-06, AVAR-04).
 
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
@@ -43,6 +43,17 @@ const CATALOG_NOTICE_ROWS: readonly CatalogNoticeRow[] = [
       plugin: "hello",
       server: "plugin_hello_srv_",
       fields: ["requestTimeoutMs", "env"],
+    },
+  },
+  {
+    state: "mcp-variables-missing",
+    notice: {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["DD_API_KEY", "DD_SITE"],
     },
   },
 ];

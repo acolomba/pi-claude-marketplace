@@ -1694,6 +1694,155 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
+  test("AVAR-04: a server with an unset variable reports one variables-missing notice after the override-kept notices", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-missing-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_hello_srv_":{"env":{"STUB_TOKEN":"stub-secret"}}}}',
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: {},
+      servers: { srv: { command: "server", args: ["--site", "${DD_SITE}"] } },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "override-kept",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+        fields: ["env"],
+      },
+      {
+        kind: "variables-missing",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+        names: ["DD_SITE"],
+      },
+    ]);
+  });
+
+  test("AVAR-04: variables-missing notices follow declared server order, name each variable once, and skip a server whose references are set or defaulted", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-order-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: { ALPHA_SET: "alpha-value" },
+      servers: {
+        beta: {
+          command: "${BETA_BIN}/server",
+          args: ["--site", "${BETA_SITE}", "--bin", "${BETA_BIN}"],
+        },
+        alpha: {
+          command: "server",
+          args: ["${ALPHA_SET}", "${ALPHA_LEVEL:-info}", "${DD_API_KEY:-}"],
+        },
+        gamma: { type: "http", url: "https://gamma.example/${GAMMA_PATH}" },
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "variables-missing",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_beta_",
+        names: ["BETA_BIN", "BETA_SITE"],
+      },
+      {
+        kind: "variables-missing",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_gamma_",
+        names: ["GAMMA_PATH"],
+      },
+    ]);
+  });
+
+  test("AVAR-04: a variables-missing notice names variables and holds no set variable's value", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-names-only-");
+    const sentinels = { PI_CM_AVAR_ARG: "sentinel-arg", PI_CM_AVAR_ENV: "sentinel-env" };
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: sentinels,
+      servers: {
+        srv: {
+          command: "server",
+          args: ["${PI_CM_AVAR_ARG}", "${PI_CM_AVAR_UNSET}"],
+          env: { VALUE: "${PI_CM_AVAR_ENV}" },
+        },
+      },
+    });
+    const noticesText = JSON.stringify(prepared.result.notices);
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "variables-missing",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+        names: ["PI_CM_AVAR_UNSET"],
+      },
+    ]);
+    assert.deepStrictEqual(
+      Object.values(sentinels).filter((sentinel) => noticesText.includes(sentinel)),
+      [],
+    );
+  });
+
+  test("AVAR-04: a noop stage reports no variables-missing notice", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-noop-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: {},
+      servers: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, []);
+  });
+
   test("ANAME-01: writes each server under its Claude Code key in declared order and records the declared names", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-keys-");

@@ -74,11 +74,13 @@ export interface StageMcpCommitResult {
   readonly recorded: readonly StagedMcpRecord[];
   readonly warnings: readonly string[];
   /**
-   * AFILE-04 / AFILE-02 / AFILE-06: facts about the config file this stage
-   * rewrites or leaves alone, for the orchestrator to route to the user: a
-   * `comments-dropped` or `left-unchanged` notice, then one `override-kept`
-   * notice per absorbed override whose fields stop applying. Distinct from
-   * `warnings`, which are hygiene notes standalone commands do not show.
+   * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04: facts about the config file this
+   * stage rewrites or leaves alone, for the orchestrator to route to the user:
+   * a `comments-dropped` or `left-unchanged` notice, then one `override-kept`
+   * notice per absorbed override whose fields stop applying, then the
+   * per-server variable notices from the variable reports of the staged
+   * entries, in declared server order. Distinct from `warnings`, which are
+   * hygiene notes standalone commands do not show.
    */
   readonly notices: readonly McpConfigNotice[];
 }

@@ -4225,6 +4225,18 @@ The plugin's entry replaces the override and keeps it verbatim as `_piClaudeMark
 
 Uninstall, disable, prune, marketplace remove, a cascade undo, and an update that drops the server write the override back. A plugin-set field comes back with the override's own value. Each other carried field the override holds takes the value of the plugin's entry at that time, so a `/mcp-adapter enable` or `disable` made while the plugin was installed wins. A carried field the override lacks is not added, so a value the plugin declares stays out of the user's entry. Every other field comes back as kept. A command that writes the override back in the same run shows no notice for it. The command's rows come first, then any comments-removed notice, then this one. Severity: `warning`. One line per server. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
 
+### MCP server variables not set (AVAR-04)
+
+<!-- catalog-state: mcp-variables-missing -->
+
+```text
+MCP server variables not set.
+
+Server "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: DD_API_KEY, DD_SITE. pi-mcp-adapter reads them from Pi's environment when it starts the server.
+```
+
+Emitted via `notifyMcpConfigNotices` by every command that stages a plugin's MCP servers: install, update, reinstall and enable, run directly or inside the reconcile, import and marketplace update cascades. Following Claude Code, a variable counts as missing only when it is unset and has no `:-` default, so `${DD_API_KEY:-}` with `DD_API_KEY` unset is not reported. The written entry keeps `${NAME}`, so pi-mcp-adapter reads the variable when it starts the server. One line per server, which names each missing variable once, in first-seen order. The line names variables, never their values. The command's rows come first, then any comments-removed and override-kept notices, then this one. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+
 ______________________________________________________________________
 
 ## Cross-references

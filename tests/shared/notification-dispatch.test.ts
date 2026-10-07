@@ -6163,6 +6163,120 @@ test("AFILE-06: comments-dropped notices still render beside a cancelled overrid
   );
 });
 
+test("AVAR-04: variables-missing notices for two servers send MCP server variables not set. with a line each", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_alpha_",
+      names: ["DD_API_KEY", "DD_SITE"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_beta_",
+      names: ["BETA_TOKEN"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP server variables not set.\n\n" +
+          'Server "plugin_hello_alpha_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: DD_API_KEY, DD_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.\n' +
+          'Server "plugin_hello_beta_" from hello in the user-scope mcp-adapter.json uses environment variables that are not set: BETA_TOKEN. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AVAR-04: a repeated variables-missing notice renders once", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["DD_SITE"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["DD_SITE"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: DD_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AVAR-04: a variables-missing notice listed first still sends after the override-kept warning", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["DD_SITE"],
+    },
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      fields: ["env"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server override kept.\n\nhello now provides "plugin_hello_srv_" in the project-scope mcp-adapter.json. Your override for "plugin_hello_srv_" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable hello.',
+        "warning",
+      ],
+      [
+        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that are not set: DD_SITE. pi-mcp-adapter reads them from Pi\'s environment when it starts the server.',
+        "warning",
+      ],
+    ],
+  );
+});
+
 test("usage info dispatch preserves usage message at info severity", (t) => {
   // arrange
   const ctx = createContext(t);
