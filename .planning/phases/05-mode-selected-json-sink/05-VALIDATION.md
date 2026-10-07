@@ -1,7 +1,7 @@
 ---
 phase: "05"
 slug: mode-selected-json-sink
-status: draft
+status: gaps_found
 nyquist_compliant: false
 wave_0_complete: false
 created: "2026-10-06"
@@ -50,8 +50,8 @@ Task IDs are phase-qualified plan.task names. Each plan supplies the complete co
 | 05-05.2 | MODE-02, JOUT-05 | T-05-14 | node --test tests/bridges/hooks/event-router.test.ts tests/index.test.ts | Factory creates fresh directories, unsupported session dispatches, or cleanup is skipped | passed: 73 owner tests and 77 with integration; router direct coverage 100%; commits f89156b1, c554c134 |
 | 05-06.1 | JOUT-01, JOUT-05, MODE-02, TENB-01 | T-05-16, 17 | node --test tests/bridges/hooks/async-rewake/registry.test.ts tests/shared/notification-dispatch.test.ts tests/architecture/hooks-async-rewake.test.ts | Stale callback escapes, terminal cleanup fails, old generation emits, or independent valid exit-2 handling stops | passed: 295 tests; both direct pairs 100%; commit 4520b0ea |
 | 05-06.2 | JOUT-01, JOUT-05, MODE-02, TENB-01 | T-05-18 | node --test tests/bridges/hooks/settle.test.ts tests/shared/notification-dispatch.test.ts tests/architecture/hooks-cap-notify.test.ts | Failure escapes, recorded cap resets/repeats, or existing reentry behavior changes | passed: 292 tests; both direct pairs 100%; commit fbb7b0ca |
-| 05-07.1 | All six | T-05-19 | node --test tests/architecture/catalog-uat/catalog-wire.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts tests/architecture/notify-producer-wire-coverage.test.ts tests/architecture/no-credential-leak.test.ts | Tuple set is not bijective, raw kind missing, schema/UI proof fails, or pins drift | pending execution |
-| 05-07.2 | All six | T-05-20 | npm run check; strict corpus wrapper from PLAN; git diff --exit-code 26cb0056 -- docs/output-catalog.md; schema diff; repeat 05-01.2 planting | Any gate fails, corpus differs from exactly 3149/0, or evidence does not match the current combined inputs | pending execution |
+| 05-07.1 | All six | T-05-19 | node --test tests/architecture/catalog-uat/catalog-wire.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts tests/architecture/notify-producer-wire-coverage.test.ts tests/architecture/no-credential-leak.test.ts | Tuple set is not bijective, raw kind missing, schema/UI proof fails, or pins drift | passed: 70 tests; 260 catalog tuples and eight raw kinds per machine mode; commit ee1c4362 |
+| 05-07.2 | All six | T-05-20 | npm run check; strict corpus wrapper from PLAN; git diff --exit-code 26cb0056 -- docs/output-catalog.md; schema diff; repeat 05-01.2 planting | Any gate fails, corpus differs from exactly 3149/0, or evidence does not match the current combined inputs | checks passed at ee1c4362; acceptance blocked by nine missing-mode context fixtures under TENB-02 / SC5 |
 
 T-05-SC is reserved in every plan: no installs are planned. For all seven waves, npm run check is the combined-tree gate. A command exit, timeout, missing expected assertion/report, or altered corpus/catalog is a failure, never a partial passing verdict. The strict corpus wrapper in each PLAN checks both exit status and the exact 3149 present/0 extra result; the tool's exit alone is insufficient.
 
@@ -145,6 +145,90 @@ mode-validator owner tests and JSON capture support land with their first
 real callers. Add explicit mode/sink members alongside the required contracts.
 No permanent lint-rule self-test or copied-tree negative-control harness.
 
+## Observed plan 05-07 evidence
+
+- Runtime: Node `v26.10.0`; isolated branch `agent-p05-07-1791381783`.
+- Verified clean commit: `ee1c4362a0fbda084b6066c9f27a6ad3707ad0fc`, based on
+  `b9852e84db55c3f89452c751cbda5a9bfad04cc2`, which includes all six prerequisite
+  plans. No untracked build inputs or dirty source/test/configuration inputs
+  existed when the full gate ran. Subsequent changes are planning Markdown only.
+- Task 05-07.1's exact owner command in the map exited 0: 70 tests, zero
+  failures/skips. Its 18 new tests prove an ordered bijection for all 260
+  catalog tuples in each machine mode and one entry for every raw kind in
+  each mode. The four emit-driven fixtures use their public seams. Each
+  catalog fixture reuses its original run snapshot; the capture replaces
+  only the test run's entry sink. Strict inventory expectations remain intact.
+- Every capture validates original JSON safety and schema at append time;
+  `assertValid()` runs after each catalog callback and after each raw helper.
+  Rejecting UI getters retain attempted UI access. Existing converter,
+  invalid-fixture, whole-payload safety, credential, 260-state and 39143-byte
+  assertions remain unchanged. No production or mock-pi change was needed.
+- The commit hook initially rejected one import-order error. After correction,
+  the fixers and `npm run check:commit` passed with hooks enabled. No amend,
+  hook bypass, dependency installation, or schema regeneration occurred.
+- `npm run check > /tmp/p05-07-full-check.log 2>&1` exited 0 at the verified
+  commit, including static checks, unpaired architecture tests, integration
+  tests, and all 264 direct-coverage pairs. This is the executor handoff
+  gate on the combined prerequisite tree; the parent still owns its
+  post-merge gate and independent phase verdict.
+- `node scripts/notify-corpus.mjs check > /tmp/p05-07-corpus.log 2>&1` exited 0.
+  A separate Node assertion read that regular log and required no lines
+  starting `missing in ` or `extra in ` and the exact line
+  `Notify corpus check passed: 3149 baseline entries present, 0 extra.`
+  It exited 0. Corpus run: 8930 tests, 8929 passed, zero failures, one existing
+  optional resolver skip. No skip or text emission was added.
+- `git diff --exit-code 26cb0056 -- docs/output-catalog.md` and
+  `git diff --exit-code -- schema/claude-plugin.schema.json` both exited 0
+  without output. Production, ESLint configuration, mock-pi, STATE.md, and
+  ROADMAP.md match the starting commit.
+- The exact transient `ESLint.lintText` command from 05-01.2 exited 0 on the
+  final configuration: direct, optional, and computed appendEntry calls in
+  both notify-reasons.ts and dependency-closure.ts produced JOUT-01 findings;
+  the planted gitOps identifier retained its NFR-5 finding. Additional clean
+  lintText checks of those two files and notification-dispatch.ts returned
+  no messages. Subjects existed only in memory. The full gate supplied the
+  clean whole-tree lint pass. Log: `/tmp/p05-07-lint-controls.log`.
+
+### Final source and requirement audit
+
+CodeGraph and current call-site searches confirmed six production run
+construction sites: registered command, load preparation, two read-only
+LLM tools, async rewake, and Stop settle. Nested usage/diagnostic/auth calls
+reuse the parent run. The sole live transport switch and appendEntry call
+remain in notification-dispatch.ts, with exactly two ui.notify calls inside
+deliver. The host object remains the original entry sink; contexts are not
+spread or mode-cached. Command errors propagate normally. Load/session guards
+precede fresh work; lifecycle catches preserve independent discovery,
+cleanup, and recorded Stop-cap state. Existing owner tests exercise live
+getters, receiver identity, invalid capture retention, and no-op boundaries.
+
+| Criterion | Requirements / threats | Executed evidence | Verdict |
+| --- | --- | --- | --- |
+| SC1: all surfaces and exact text | JOUT-01, MODE-01; T-05-02, 05–11, 16–19 | Catalog/raw transport command; auth, diagnostic, load and hook owners in full gate; strict corpus/catalog | pass |
+| SC2: live selection and before-write rejection | MODE-01, MODE-02; T-05-01, 06, 11–18 | notification-run, notification-dispatch, register, index and lifecycle owner pairs in full gate; root/caller audit | pass |
+| SC3: sole append owner | JOUT-01; T-05-03 | Six transient JOUT-01 controls, retained NFR-5 control, three clean controls, full lint | pass |
+| SC4: lifecycle failure containment | JOUT-05, MODE-02; T-05-12–18 | index, register, event-router, async-rewake registry, and settle owner pairs in full gate | pass |
+| SC5: required explicit fake modes and retaining capture | TENB-01, TENB-02; T-05-04, 08, 19 | Capture and type/owner checks pass; full context-construction audit finds nine omissions below | FAIL: TENB-02 fixture gap |
+| SC6: empty no-ops and contained Stop-cap output | JOUT-05, JOUT-01; T-05-08, 16–18 | notification-dispatch empty/stale getter cases, registry and settle owner pairs in full gate | pass |
+
+### Outstanding owner correction: TENB-02 / SC5
+
+`tests/bridges/hooks/if-field/index.test.ts` constructs nine contexts without
+an explicit mode. Line 126 declares a cwd-only Pick and casts it at line 143;
+lines 521, 555, 614, 637, 682, 709, 788, and 821 cast cwd-only literals to
+ExtensionContext. These are concrete contract omissions, not runtime test
+failures or unclassified assumptions. Type assertions let them pass the full
+check. The file is assigned to 05-01 and outside this executor's 05-07 edit
+ownership. Return the correction to that owner, or explicitly expand
+ownership before adding a mode. Do not certify TENB-02 or SC5 from a green
+test command. The requested correction is an explicit `mode: "print"` on
+each fixture, including the Pick's required mode member.
+
+A-05-01 and A-05-02 remain independently unclassified. P-05-01 and P-05-02
+remain descriptorless and unverified. Their dispositions are unchanged;
+none is resolved by this full test run. Phase 6/7 scope and the accepted
+startup-streaming limitation remain unchanged.
+
 ## Manual-Only Verifications
 
 All six requirement behaviors have automated verification. Any prohibition
@@ -154,11 +238,14 @@ the workflow obtains the required assessment; do not mark it passed here.
 ## Validation Sign-Off
 
 - [x] Every final task has an automated check, observable failure, requirement, and threat mapping.
-- [ ] New production modules have paired owner tests and direct coverage.
+- [x] New production modules have paired owner tests and direct coverage (no new modules here; all 264 pairs pass).
 - [ ] Each wave has a combined-tree full check.
-- [ ] Corpus and catalog remain unchanged.
-- [ ] Transient lint violation fails and is removed.
-- [ ] No watch commands or unverified persistent success markers.
+- [x] Corpus and catalog remain unchanged.
+- [x] Transient lint violation fails and is removed (in-memory subjects only).
+- [x] No watch commands or unverified persistent success markers.
 - [ ] Execution evidence supports `nyquist_compliant: true`.
 
-**Approval:** Planning map complete; execution and validation audit pending. Frontmatter remains false until actual evidence satisfies the gates.
+**Approval:** Automated gates pass on the executor's combined prerequisite
+tree. TENB-02 / SC5 remains incomplete pending the nine owner fixture
+corrections; parent post-merge verification and independent assumption /
+prohibition assessments remain outstanding. Frontmatter remains false.
