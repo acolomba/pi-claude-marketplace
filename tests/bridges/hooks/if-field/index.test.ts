@@ -123,7 +123,10 @@ test("compiles and evaluates a Read path declaration", () => {
     toolName: "read",
     input: { path: "src/runtime.ts", offset: 2, limit: 4 },
   } satisfies ToolCallEvent;
-  const extensionContext = { cwd: compileContext.cwd } satisfies Pick<ExtensionContext, "cwd">;
+  const extensionContext = {
+    cwd: compileContext.cwd,
+    mode: "print",
+  } satisfies Pick<ExtensionContext, "cwd" | "mode">;
   const expectedOutcome = {
     predicate: {
       kind: "path-tool",
@@ -518,7 +521,7 @@ test("evaluates Bash matches, misses, and missing commands independently", () =>
     cwd: "/workspace/plugin",
     projectRoot: "/workspace/plugin",
   } satisfies CompileIfPredicateContext;
-  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const extensionContext = { cwd: compileContext.cwd, mode: "print" } as ExtensionContext;
   const predicate = compileIfPredicate("Bash(git push *)", "PreToolUse", compileContext);
   const rows = [
     { name: "known command", event: { toolName: "bash", input: { command: "git push origin" } } },
@@ -552,7 +555,7 @@ test("keeps command-bearing rules on their own shell tool", () => {
     cwd: "/workspace/plugin",
     projectRoot: "/workspace/plugin",
   } satisfies CompileIfPredicateContext;
-  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const extensionContext = { cwd: compileContext.cwd, mode: "print" } as ExtensionContext;
   const powerShellPredicate = compileIfPredicate(
     "PowerShell(Get-ChildItem *)",
     "PreToolUse",
@@ -611,7 +614,7 @@ test("fails open when Bash command parsing exceeds the recursion limit", () => {
     cwd: "/workspace/plugin",
     projectRoot: "/workspace/plugin",
   } satisfies CompileIfPredicateContext;
-  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const extensionContext = { cwd: compileContext.cwd, mode: "print" } as ExtensionContext;
   const predicate = compileIfPredicate("Bash(git push *)", "PostToolUse", compileContext);
   let nestedCommand = "echo";
   for (let depth = 0; depth < 16; depth++) {
@@ -634,7 +637,7 @@ test("evaluates PowerShell matches, misses, and missing commands independently",
     cwd: "/workspace/plugin",
     projectRoot: "/workspace/plugin",
   } satisfies CompileIfPredicateContext;
-  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const extensionContext = { cwd: compileContext.cwd, mode: "print" } as ExtensionContext;
   const predicate = compileIfPredicate("PowerShell(Get-ChildItem *)", "PreToolUse", compileContext);
   const rows = [
     {
@@ -679,7 +682,7 @@ test("fails open when PowerShell command parsing exceeds the recursion limit", (
     cwd: "/workspace/plugin",
     projectRoot: "/workspace/plugin",
   } satisfies CompileIfPredicateContext;
-  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const extensionContext = { cwd: compileContext.cwd, mode: "print" } as ExtensionContext;
   const predicate = compileIfPredicate(
     "PowerShell(Get-ChildItem *)",
     "PostToolUse",
@@ -706,7 +709,7 @@ test("evaluates path membership, non-membership, absolute paths, and cwd fallbac
     cwd: "/workspace/plugin",
     projectRoot: "/workspace/plugin",
   } satisfies CompileIfPredicateContext;
-  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const extensionContext = { cwd: compileContext.cwd, mode: "print" } as ExtensionContext;
   const sourcePredicate = compileIfPredicate("Read(src/**)", "PreToolUse", compileContext);
   const cwdPredicate = compileIfPredicate("Read(./**)", "PreToolUse", compileContext);
   const rows = [
@@ -785,7 +788,7 @@ test("evaluates MCP literal equality, server membership, and wrong servers", () 
     cwd: "/workspace/plugin",
     projectRoot: "/workspace/plugin",
   } satisfies CompileIfPredicateContext;
-  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const extensionContext = { cwd: compileContext.cwd, mode: "print" } as ExtensionContext;
   const literalPredicate = compileIfPredicate("mcp__files__read", "PreToolUse", compileContext);
   const prefixPredicate = compileIfPredicate("mcp__files__*", "PreToolUse", compileContext);
   const rows = [
@@ -818,7 +821,7 @@ test("dispatches all six predicate arms in stable row order", () => {
     cwd: "/workspace/plugin",
     projectRoot: "/workspace/plugin",
   } satisfies CompileIfPredicateContext;
-  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const extensionContext = { cwd: compileContext.cwd, mode: "print" } as ExtensionContext;
   const rows = [
     {
       name: "match-all",
