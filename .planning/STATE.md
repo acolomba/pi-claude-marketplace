@@ -6,10 +6,10 @@ current_phase: 4
 current_phase_name: Variable expansion at Claude Code parity
 status: planning
 stopped_at: Phase 4 context gathered
-last_updated: "2026-10-07T10:40:13.801Z"
+last_updated: "2026-10-07T11:18:08.885Z"
 last_activity: 2026-10-06
 last_activity_desc: Phase 03 complete, transitioned to Phase 4
-state_head: 9b0539f64896610fe1ab17fea61ad31b46b5dab4
+state_head: 25ac810db39aca5e1a34f1fe04411e7e51f03076
 progress:
   total_phases: 7
   completed_phases: 3
@@ -37,7 +37,7 @@ sign-ins and approvals.
 Phase: 4 — Variable expansion at Claude Code parity
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-10-06 — Phase 03 complete, transitioned to Phase 4
+Last activity: 2026-10-07 - Completed quick task 261007-9a2: Raise the pi-mcp-adapter peer floor to 5.1.0 (D-04-12)
 
 Progress: [████░░░░░░] 43%
 
@@ -685,6 +685,7 @@ See [task summary](./milestones/any-git-host-quick/260917-hfp-clear-the-phase-5-
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | 261006-cwq | Pin workflow engine 3.13.1 and update compatibility notes after upstream PRs #233/#234 shipped | 2026-10-06 | e0b0abac | [261006-cwq-update-workflow-engine-compatibility-doc](./quick/261006-cwq-update-workflow-engine-compatibility-doc/) |
 | 261006-kr1 | Adopt workflow engine 3.14.0: mirror PI_CODING_AGENT_DIR storage root and bump pins | 2026-10-06 | 6129e7bd | [261006-kr1-adopt-workflow-engine-3-14-0-mirror-pi-c](./quick/261006-kr1-adopt-workflow-engine-3-14-0-mirror-pi-c/) |
+| 261007-9a2 | Raise the pi-mcp-adapter peer floor to 5.1.0 (D-04-12) | 2026-10-07 | 25ac810d | [261007-9a2-raise-the-pi-mcp-adapter-floor-to-5-1-0](./quick/261007-9a2-raise-the-pi-mcp-adapter-floor-to-5-1-0/) |
 
 ## Deferred Items
 
