@@ -28,20 +28,34 @@ import { fileURLToPath } from "node:url";
 
 import { Compile } from "typebox/compile";
 
+import {
+  notify,
+  notifyAsyncRewakeSummary,
+  notifyDeviceFlowPrompt,
+  notifyDiagnostic,
+  notifyPluginPathSkipped,
+  notifyReconcileAborted,
+  notifyStopHookOverrideCap,
+  notifyUsageError,
+  notifyUsageInfo,
+} from "../../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { formatRawSurface } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { toWirePayload } from "../../../extensions/pi-claude-marketplace/shared/notification-json.ts";
 import { presentNotification } from "../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import { resolveRawSurface } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { NOTIFICATION_PAYLOAD_SCHEMA } from "../../../extensions/pi-claude-marketplace/shared/notification-wire.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 
 import { loadCatalogExamples, type CatalogExample } from "./catalog-parser.ts";
 import { FIXTURE_MAPS, mergeFixtureMaps, tupleKey } from "./fixture-maps.ts";
 import { piWithAllLoaded, verifyPi } from "./mock-pi.ts";
 
 import type { CatalogFixture, FixtureMap } from "./fixture-types.ts";
+import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationPresentation } from "../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import type { ResolvedRawSurface } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type {
   NotificationMessage,
   RawSurface,
@@ -56,6 +70,11 @@ interface PresentedSource {
   readonly state: string;
   readonly text: string;
   readonly source: PayloadSource;
+}
+
+interface PresentedCatalog extends PresentedSource {
+  readonly fixture: CatalogFixture;
+  readonly run: NotificationRun;
 }
 
 /** One payload the compiled union rejected, named by its catalog tuple. */
@@ -128,7 +147,7 @@ function catalogMessage(section: string, fixture: CatalogFixture): NotificationM
 }
 
 /** Presents one catalog example through its fixture's own notification run. */
-function presentExample(example: CatalogExample, fixtures: FixtureMap): PresentedSource {
+function presentExample(example: CatalogExample, fixtures: FixtureMap): PresentedCatalog {
   const fixture = fixtures[example.section]?.[example.state];
   if (fixture === undefined) {
     throw new Error(`Catalog example has no fixture: ${tupleKey(example.section, example.state)}`);
@@ -138,7 +157,14 @@ function presentExample(example: CatalogExample, fixtures: FixtureMap): Presente
   const source =
     fixture.present?.(run) ?? presentNotification(run, catalogMessage(example.section, fixture));
   verifyPi(fixture.pi);
-  return { section: example.section, state: example.state, text: example.expected, source };
+  return {
+    section: example.section,
+    state: example.state,
+    text: example.expected,
+    source,
+    fixture,
+    run,
+  };
 }
 
 function presentRawSamples(): PresentedSource[] {
@@ -151,6 +177,36 @@ function presentRawSamples(): PresentedSource[] {
       source,
     };
   });
+}
+
+/** Dispatches each raw sample through the public helper that owns its kind. */
+function emitRawSample(ctx: NotificationContext, run: NotificationRun, surface: RawSurface): void {
+  switch (surface.kind) {
+    case "usage-error":
+      notifyUsageError(ctx, run, surface);
+      return;
+    case "usage-info":
+      notifyUsageInfo(ctx, run, surface.usage);
+      return;
+    case "diagnostic":
+      notifyDiagnostic(ctx, run, surface.header, surface.lines);
+      return;
+    case "device-flow-prompt":
+      notifyDeviceFlowPrompt(ctx, run, surface);
+      return;
+    case "async-rewake-summary":
+      notifyAsyncRewakeSummary(ctx, run, surface.summary);
+      return;
+    case "stop-override-cap":
+      notifyStopHookOverrideCap(ctx, run, surface.pluginId, surface.cap);
+      return;
+    case "reconcile-aborted":
+      notifyReconcileAborted(ctx, run, surface.cause);
+      return;
+    case "plugin-path-skipped":
+      notifyPluginPathSkipped(ctx, run, surface.scope, surface.reason);
+      return;
+  }
 }
 
 /** Converts every presented source and validates the bytes a consumer receives. */
@@ -293,6 +349,73 @@ const FIXTURES = mergeFixtureMaps(FIXTURE_MAPS);
 const CATALOG_PRESENTED = EXAMPLES.map((example) => presentExample(example, FIXTURES));
 const RAW_PRESENTED = presentRawSamples();
 const PRESENTED: readonly PresentedSource[] = [...CATALOG_PRESENTED, ...RAW_PRESENTED];
+
+for (const mode of ["json", "rpc"] as const) {
+  test(`JOUT-01: every catalog tuple reaches ${mode} transport exactly once`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const emittedKeys: string[] = [];
+    const ctx: NotificationContext = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    for (const presented of CATALOG_PRESENTED) {
+      const start = capture.entries.length;
+      const run: NotificationRun = { ...presented.run, entrySink: capture.entrySink };
+      if (presented.fixture.emit !== undefined) {
+        presented.fixture.emit(ctx, run);
+      } else {
+        notify(ctx, run, catalogMessage(presented.section, presented.fixture));
+      }
+
+      capture.assertValid();
+      emittedKeys.push(
+        ...capture.entries.slice(start).map(() => tupleKey(presented.section, presented.state)),
+      );
+    }
+
+    // assert
+    assert.deepStrictEqual(emittedKeys, tupleKeys(EXAMPLES));
+    assert.strictEqual(new Set(emittedKeys).size, 260);
+    assert.deepStrictEqual(
+      capture.entries.map(({ customType }) => customType),
+      EXAMPLES.map(() => "claude-plugin"),
+    );
+  });
+
+  for (const surface of Object.values(RAW_SAMPLES)) {
+    test(`JOUT-01: ${surface.kind} reaches ${mode} transport exactly once`, () => {
+      // arrange
+      const capture = createJsonCapture();
+      const pi = piWithAllLoaded();
+      const run: NotificationRun = { ...openNotificationRun(pi), entrySink: capture.entrySink };
+      const ctx: NotificationContext = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      emitRawSample(ctx, run, surface);
+
+      // assert
+      capture.assertValid();
+      assert.deepStrictEqual(
+        capture.entries.map(({ customType, payload }) => {
+          assert.ok(PAYLOAD_VALIDATOR.Check(payload));
+          return { customType, kind: payload.kind };
+        }),
+        [{ customType: "claude-plugin", kind: surface.kind }],
+      );
+      verifyPi(pi);
+    });
+  }
+}
 
 test("JOUT-02: every catalog example and raw kind converts to a schema-valid payload", () => {
   // arrange
