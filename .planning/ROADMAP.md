@@ -236,7 +236,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. A referenced variable that is unset and has no default produces a missing-variable warning at install, as Claude Code warns. (AVAR-04)
 5. A `url` or `headers` value that references `ANTHROPIC_API_KEY` or another variable on Claude's credential deny-list does not receive that credential, and a security test proves it. (AVAR-05)
 
-**Plans**: 5/9 plans executed in 7 waves
+**Plans**: 6/9 plans executed in 7 waves
 
 **Wave 1**
 - [x] 04-01-PLAN.md — Claude's variable rule writes the entry for the adapter: five fields only, `${VAR:-default}`, split tokens, the boundary guard and `!!`, with each server's unset variables reported by the walk (AVAR-01, AVAR-02, AVAR-03)
@@ -252,7 +252,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 - [x] 04-05-PLAN.md — `PI_CLAUDE_MARKETPLACE_EMPTY` and `CLAUDE_PROJECT_DIR` set in Pi's process, and the stdio env reduced to Claude's injected set (AVAR-01, AVAR-03)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 04-06-PLAN.md — the pi-mcp-adapter peer range becomes `>=5.1.0 <6` in the manifest, the lock, the gates and both READMEs (AVAR-03)
+- [x] 04-06-PLAN.md — the pi-mcp-adapter peer range becomes `>=5.1.0 <6` in the manifest, the lock, the gates and both READMEs (AVAR-03)
 - [ ] 04-07-PLAN.md — `info` lists each MCP server's unset and withheld variables (AVAR-04, AVAR-05)
 
 **Wave 6** *(blocked on Wave 5 completion)*
@@ -342,7 +342,7 @@ plan these phases with the UI gate skipped.
 | 1. Pi 1.0 floor and adapter-only detection | mcp-4 | 9/9 | Complete    | 2026-10-02 |
 | 2. Adapter-file delivery | mcp-4 | 12/12 | Complete    | 2026-10-06 |
 | 3. Claude Code tool names and tool search | mcp-4 | 9/9 | Complete    | 2026-10-06 |
-| 4. Variable expansion at Claude Code parity | mcp-4 | 5/9 | In Progress | - |
+| 4. Variable expansion at Claude Code parity | mcp-4 | 6/9 | In Progress | - |
 | 5. Automatic migration on /reload | mcp-4 | 0/TBD | Not started | - |
 | 6. Live MCP status in info | mcp-4 | 0/TBD | Not started | - |
 | 7. Docs and live proof | mcp-4 | 0/TBD | Not started | - |
