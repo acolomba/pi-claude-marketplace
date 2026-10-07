@@ -80,6 +80,42 @@ const ROWS: readonly SerializeRow[] = [
     secret: false,
     written: `{${SPLIT}\${PI_CM_A}\${PI_CM_B}`,
   },
+  ...["env:K", "nv:K", "v:K", ":K", ":0", "K", "_x", "0", "}"].map((completion): SerializeRow => ({
+    title: `AVAR-03: guards ${completion} after a reference`,
+    segments: [ref("PI_CM_R"), text(completion)],
+    secret: false,
+    written: `\${PI_CM_R}${SPLIT}${completion}`,
+  })),
+  ...[":", ":/", "/x", "-x", ".x", "@x", " x", "{x"].map((following): SerializeRow => ({
+    title: `AVAR-03: does not guard ${following} after a reference`,
+    segments: [ref("PI_CM_R"), text(following)],
+    secret: false,
+    written: `\${PI_CM_R}${following}`,
+  })),
+  {
+    title: "AVAR-03: does not guard a : between two references",
+    segments: [ref("PI_CM_A"), text(":"), ref("PI_CM_B")],
+    secret: false,
+    written: "${PI_CM_A}:${PI_CM_B}",
+  },
+  {
+    title: "AVAR-03: guards the start of a merged run after a reference",
+    segments: [ref("PI_CM_R"), text("e"), text("nv:K")],
+    secret: false,
+    written: `\${PI_CM_R}${SPLIT}env:K`,
+  },
+  {
+    title: "AVAR-03: guards both sides of a reference between a partial trigger and its completion",
+    segments: [text("$en"), ref("PI_CM_R"), text("v:K")],
+    secret: false,
+    written: `$en${SPLIT}\${PI_CM_R}${SPLIT}v:K`,
+  },
+  {
+    title: "AVAR-03: does not guard a field that starts with a name character",
+    segments: [text("K"), ref("PI_CM_R")],
+    secret: false,
+    written: "K${PI_CM_R}",
+  },
   {
     title: "AVAR-03: escapes adjacent text segments as one merged run",
     segments: [text("{"), text("env:K}")],

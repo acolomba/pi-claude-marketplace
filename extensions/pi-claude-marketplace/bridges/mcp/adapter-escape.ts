@@ -24,6 +24,12 @@ const TRIGGER = /\$env:|\{env:|\$(?=\{\w+\})/g;
 // could complete into `$env:NAME` or `{env:NAME}`.
 const PARTIAL_TRIGGER_TAIL = /[${](?:e(?:nv?)?)?$/;
 
+// The start of literal text after a kept reference that could complete a
+// `$env:NAME` or `{env:NAME}` begun at the end of the reference's runtime
+// value: a name character (which covers `env:`, `nv:` and `v:`), a `:` before
+// a name character, or the closing `}`.
+const MARKER_COMPLETION = /^(?:[\w}]|:\w)/;
+
 function escapeTrigger(trigger: string): string {
   switch (trigger) {
     case "$env:":
@@ -53,22 +59,28 @@ function mergedRuns(segments: readonly Segment[]): Segment[] {
 
 /**
  * Writes the segments of one field. Literal runs get the split token in each
- * adapter trigger, a kept reference after a partial trigger gets the split
- * token in front of it, and each reference is written as `${NAME}`. A `secret`
- * field (`env` and `headers` values) that starts with `!` gains one more `!`,
- * which the adapter removes instead of running a shell command.
+ * adapter trigger, and each reference is written as `${NAME}`. The split token
+ * also goes in front of a kept reference after a partial trigger, and in front
+ * of literal text after a kept reference when that text could complete a
+ * marker begun by the reference's value (AVAR-05). A `secret` field (`env` and
+ * `headers` values) that starts with `!` gains one more `!`, which the adapter
+ * removes instead of running a shell command.
  */
 export function serializeSegments(segments: readonly Segment[], secret: boolean): string {
   let written = "";
   let precedingText = "";
+  let afterReference = false;
   for (const segment of mergedRuns(segments)) {
     if (segment.kind === "text") {
-      written += segment.text.replace(TRIGGER, (trigger) => escapeTrigger(trigger));
+      const guard = afterReference && MARKER_COMPLETION.test(segment.text) ? SPLIT_TOKEN : "";
+      written += guard + segment.text.replace(TRIGGER, (trigger) => escapeTrigger(trigger));
       precedingText = segment.text;
+      afterReference = false;
     } else {
       const guard = PARTIAL_TRIGGER_TAIL.test(precedingText) ? SPLIT_TOKEN : "";
       written += `${guard}\${${segment.name}}`;
       precedingText = "";
+      afterReference = true;
     }
   }
 

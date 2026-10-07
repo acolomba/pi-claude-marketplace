@@ -317,16 +317,19 @@ function mismatchFor(utils: PiMcpAdapterUtils, raw: string, variant: string): Mi
   return got === want ? undefined : { raw, variant, written, got, want };
 }
 
+function tallyCheck(tally: PropertyTally, mismatch: Mismatch | undefined): void {
+  tally.checked += 1;
+  if (mismatch !== undefined) {
+    tally.mismatches += 1;
+    if (tally.first.length < REPORTED_MISMATCHES) {
+      tally.first.push(mismatch);
+    }
+  }
+}
+
 function tallyValue(tally: PropertyTally, utils: PiMcpAdapterUtils, raw: string): void {
   for (const variant of RUNTIME_VARIANTS) {
-    tally.checked += 1;
-    const mismatch = mismatchFor(utils, raw, variant);
-    if (mismatch !== undefined) {
-      tally.mismatches += 1;
-      if (tally.first.length < REPORTED_MISMATCHES) {
-        tally.first.push(mismatch);
-      }
-    }
+    tallyCheck(tally, mismatchFor(utils, raw, variant));
   }
 }
 
@@ -348,6 +351,58 @@ test("AVAR-03: pi-mcp-adapter outputs Claude's value for every short adversarial
 
   // assert
   assert.deepStrictEqual(tally, { checked: EXPECTED_CHECKED_VALUES, mismatches: 0, first: [] });
+});
+
+// Runtime values of a kept reference that end in a partial marker or in a
+// marker that still lacks its name or its closing `}`.
+const REFERENCE_VALUE_TAILS = [
+  "$",
+  "$e",
+  "$en",
+  "$env",
+  "$env:",
+  "{",
+  "{e",
+  "{en",
+  "{env",
+  "{env:",
+  "{env:K",
+];
+
+// Plugin text after the reference: the marker completions, the characters
+// beside them, and a second reference with the same value.
+const COMPLETION_ALPHABET: AdversarialAlphabet = {
+  tokens: ["env:", "nv:", "v:", ":", "K", "}", "$", "{", "/", "${R}"],
+  maxLength: 3,
+};
+
+// 11 tails x (10 + 10^2 + 10^3) texts after `${R}`.
+const EXPECTED_CHECKED_TAIL_VALUES = 12_210;
+
+test("AVAR-05: plugin text after a reference cannot complete a marker that the reference's value begins", async (t) => {
+  // arrange
+  const adapter = await loadAdapter();
+  if (adapter === undefined) {
+    t.skip(NOT_INSTALLED);
+    return;
+  }
+
+  const raws = sequencesOf(COMPLETION_ALPHABET).map((following) => `\${R}${following}`);
+  const tally: PropertyTally = { checked: 0, mismatches: 0, first: [] };
+
+  // act
+  for (const tail of REFERENCE_VALUE_TAILS) {
+    for (const raw of raws) {
+      tallyCheck(tally, mismatchFor(adapter.utils, raw, tail));
+    }
+  }
+
+  // assert
+  assert.deepStrictEqual(tally, {
+    checked: EXPECTED_CHECKED_TAIL_VALUES,
+    mismatches: 0,
+    first: [],
+  });
 });
 
 /** A deny-listed variable, the value it holds, and whether to also install with it unset. */
@@ -376,8 +431,15 @@ const CREDENTIALS: readonly Credential[] = [
   },
 ];
 
-// (7 names x 2 install states + 1 name x 1 install state) x 6 forms.
-const EXPECTED_CREDENTIAL_RUNS = 90;
+// (7 names x 2 install states + 1 name x 1 install state) x 8 forms.
+const EXPECTED_CREDENTIAL_RUNS = 120;
+
+// Kept references whose values end in a marker that plugin text can complete.
+const MARKER_PREFIX_REFERENCES: Environment = {
+  PI_CM_R: "",
+  PI_CM_DOLLAR: "p$",
+  PI_CM_BRACE: "p{env:",
+};
 
 function credentialForms(name: string): string[] {
   return [
@@ -387,12 +449,17 @@ function credentialForms(name: string): string[] {
     `$env:${name}`,
     `{env\${PI_CM_R}:${name}}`,
     `$en\${PI_CM_R}v:${name}`,
+    `\${PI_CM_DOLLAR}env:${name}`,
+    `\${PI_CM_BRACE}${name}}`,
   ];
 }
 
 function installEnvironments(credential: Credential): Environment[] {
-  const setAtInstall: Environment = { [credential.name]: credential.value, PI_CM_R: "" };
-  return credential.unsetAtInstall ? [setAtInstall, { PI_CM_R: "" }] : [setAtInstall];
+  const setAtInstall: Environment = {
+    ...MARKER_PREFIX_REFERENCES,
+    [credential.name]: credential.value,
+  };
+  return credential.unsetAtInstall ? [setAtInstall, MARKER_PREFIX_REFERENCES] : [setAtInstall];
 }
 
 function writtenRemoteValues(form: string, installEnv: Environment): [string, string] {
@@ -421,8 +488,8 @@ function credentialLeaks(
 ): string[] {
   const [writtenUrl, writtenHeader] = writtenRemoteValues(form, installEnv);
   const runtimeEnv: Environment = {
+    ...MARKER_PREFIX_REFERENCES,
     [credential.name]: credential.value,
-    PI_CM_R: "",
     [EMPTY_ENV_NAME]: "",
   };
   const outputs = {
