@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 04
 current_phase_name: Variable expansion at Claude Code parity
 status: executing
-stopped_at: Completed 04-06-PLAN.md
-last_updated: "2026-10-07T18:18:11.615Z"
+stopped_at: Completed 04-07-PLAN.md
+last_updated: "2026-10-07T18:34:34.210Z"
 last_activity: 2026-10-07
-last_activity_desc: Completed 04-06 (pi-mcp-adapter optional peer range kept on 5.x: >=5.1.0 <6)
-state_head: 76ec707c57ae906c590291d1dc5a93b4e749a336
+last_activity_desc: Completed 04-07 (info lists each MCP server's unset and withheld variables)
+state_head: b645d820f3570fd035009c6aa41ca46d67fb2182
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 39
-  completed_plans: 36
+  completed_plans: 37
   percent: 43
 ---
 
@@ -35,9 +35,9 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 04 (Variable expansion at Claude Code parity) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
-Last activity: 2026-10-07 — Completed 04-06 (pi-mcp-adapter optional peer range kept on 5.x: >=5.1.0 <6)
+Last activity: 2026-10-07 — Completed 04-07 (info lists each MCP server's unset and withheld variables)
 
 Progress: [████░░░░░░] 43%
 
@@ -282,6 +282,7 @@ still open with a comment explaining what landed.
 | Phase 04 P04 | 10 min | 2 tasks | 7 files |
 | Phase 04 P05 | 12 min | 3 tasks | 15 files |
 | Phase 04 P06 | 5 min | 2 tasks | 7 files |
+| Phase 04 P07 | 15 min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -656,6 +657,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 04]: A leading ~, ~/, ~\ or ${NAME:-~...} default in a stdio command or args blocks the server as command ~ / args ~ ({unsupported mcp}); remote url and headers never block
 - [Phase 04]: session_start reads ctx.cwd before and outside the session id's try, so adapter variables and the session triple fail independently (AVAR-01, NFR-2)
 - [Phase 04]: The pi-mcp-adapter optional peer is >=5.1.0 <6, pinned by the PIFL-03 gate and the AFILE-06 assertion (D-04-17)
+- [Phase 04]: info lists each written plugin MCP server's unset (no :- default) and withheld (deny-listed) variable names from the environment injected into createGetPluginInfo, as plugin:<plugin>:<server> (unset A; withheld C); left-out servers and the record arm show no lists (AVAR-04, AVAR-05)
 
 ### Pending Todos
 
@@ -789,11 +791,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 04-06-PLAN.md
+**Stopped at:** Completed 04-07-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-07T18:18:11.352Z
+Last session: 2026-10-07T18:34:19.089Z
 Phase 3 closed. Gates: Nyquist validation (23/23 green), security (20/20
 threats closed), code review (0 critical, 5 warnings, 5 info, all `open`),
 regression gate (`npm run check` green on d6029660, Node v26.10.0), verifier
