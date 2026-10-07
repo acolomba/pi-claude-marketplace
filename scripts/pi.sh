@@ -108,7 +108,7 @@ try {
 # (WPTH-04). --home sets the variable, so an engine before 3.14.0 does not
 # find the workflows the bridge installs.
 pi_cm_pins=(
-  "pi-mcp-adapter@5.0.0"
+  "pi-mcp-adapter@5.1.0"
   "pi-subagents@0.74.0"
   "@quintinshaw/pi-dynamic-workflows@3.14.0"
 )

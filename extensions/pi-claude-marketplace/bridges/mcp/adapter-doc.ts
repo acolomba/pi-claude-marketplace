@@ -1,7 +1,7 @@
 // bridges/mcp/adapter-doc.ts
 //
 // Reads an MCP config file and composes the next document the bridge writes
-// back. The read grammar is pi-mcp-adapter 5.0.0's loader grammar by
+// back. The read grammar is pi-mcp-adapter 5.1.0's loader grammar by
 // construction: the same `strip-json-comments` major with the same options,
 // after the same leading-BOM strip (AFILE-02). The server key is the key the
 // adapter's disable-writer picks, so entries land where the adapter loads
