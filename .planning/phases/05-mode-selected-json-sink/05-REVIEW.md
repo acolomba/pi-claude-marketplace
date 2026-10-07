@@ -1,6 +1,6 @@
 ---
 phase: 05-mode-selected-json-sink
-reviewed: 2026-10-07T15:07:48Z
+reviewed: 2026-10-07T15:29:35Z
 depth: standard
 files_reviewed: 145
 files_reviewed_list:
@@ -150,22 +150,22 @@ files_reviewed_list:
   - tests/shared/notification-summary.test.ts
   - tests/shared/notify-context.test.ts
 findings:
-  critical: 1
+  critical: 0
   warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 5: Code Review Report
 
-**Reviewed:** 2026-10-07T15:07:48Z
+**Reviewed:** 2026-10-07T15:29:35Z
 
 **Depth:** standard
 
 **Files Reviewed:** 145
 
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
@@ -175,10 +175,12 @@ base. The review traced context/run ownership, live mode reads, authentication
 projection, lifecycle failure boundaries, hook cleanup, and transport assertions.
 Mechanical fixture changes were distinguished from changed behavior.
 
-One blocker remains: fresh hook dispatch can bypass the unsupported-mode guard.
-The failure is reproducible through the real bridge registration. Phase 6 error
-wrapping and Phase 7 mode-specific browse/authentication behavior and real-Pi e2e
-remain intentional deferrals and are not findings.
+The original blocker, CR-01, is resolved by
+`cd569d2aeb02f2691a636e325fc3c7976c4952c1`. Independent re-review covered the
+two-file fix and its registration, generation, executor, and cleanup boundaries.
+No open findings remain in the original scope or the fix. Phase 6 error wrapping
+and Phase 7 mode-specific browse/authentication behavior and real-Pi e2e remain
+intentional deferrals and are not findings.
 
 ## Structural Findings (fallow)
 
@@ -217,11 +219,49 @@ additional behavioral defect was established from these duplicate groups.
 
 ## Narrative Findings (AI reviewer)
 
-### Critical Issues
+### Current Findings
 
-### CR-01: Fresh hook callbacks bypass unsupported-mode rejection
+No open critical, warning, or informational findings remain.
 
-**Classification:** BLOCKER
+### Resolution History: CR-01 — Fresh hook callbacks bypass unsupported-mode rejection
+
+**Status:** resolved; independently verified at
+`cd569d2aeb02f2691a636e325fc3c7976c4952c1`.
+
+**Original classification:** BLOCKER. Excluded from current finding counts.
+
+**Verified resolution:** `bindDispatch` at
+`extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:831-849`
+validates the live mode for all six affected registrations at lines 947-981.
+The outer generation check still runs before any context access. The catch
+contains only mode reading and membership validation; callback execution remains
+outside it, preserving executor rejection behavior. Factory-time child shutdown
+and orphan reaping remain outside the new guard, and terminal-child removal and
+PID-table persistence still precede notification mode handling.
+
+All 70 new regression cases use the actual bridge registrations and populated
+routing buckets. They cover seven hook outcomes, including both tool-result
+branches, with unsupported strings and throwing getters after rejected startup
+or after successful dispatch in each of tui, print, json, and rpc. The live-mode
+cases assert exactly one dispatch across the supported and rejected calls.
+
+The original registered-callback reproduction was independently repeated after
+the fix and returned:
+
+```json
+{
+  "afterStart": { "executions": 0, "modeReads": 1 },
+  "afterToolCall": { "executions": 0, "modeReads": 2 },
+  "staleGeneration": "no context read"
+}
+```
+
+An additional stale-generation probe supplied a throwing mode getter and
+returned without accessing it. The independent logic review and executable
+regressions resolve the fixer's generic human-verification caveat; no concrete
+human-only check remains for CR-01.
+
+The original finding and pre-fix line references are retained below as history.
 
 **File:** `/home/acolomba/src/pi-claude-marketplace-json/extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:946-952`
 
@@ -230,7 +270,7 @@ additional behavioral defect was established from these duplicate groups.
 `/home/acolomba/src/pi-claude-marketplace-json/extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts:377-392`;
 `/home/acolomba/src/pi-claude-marketplace-json/extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts:170-195`.
 
-**Issue:** The new guarded `session_start` callback rejects unsupported modes,
+**Original issue:** The new guarded `session_start` callback rejects unsupported modes,
 but `tool_call` and `tool_result` register their composite handlers directly.
 Their dispatch functions check the generation and routing bucket, then call the
 executor without reading `ctx.mode`. The same registration pattern is used for
@@ -247,7 +287,7 @@ explicit prohibition on continuing mutations in an unsupported mode. Preserving
 read-only discovery or completing existing-child cleanup does not authorize
 starting fresh plugin work.
 
-**Reproduction:** Registered the actual bridge with an in-memory executor,
+**Original reproduction:** Registered the actual bridge with an in-memory executor,
 populated a `PreToolUse` Bash routing entry, invoked its `session_start`
 callback with `get mode() { modeReads++; return "unsupported"; }`, then invoked
 the registered `tool_call` callback using that same context. The read-only state
@@ -265,7 +305,7 @@ Thus startup rejected the mode, but the later callback executed fresh work and
 did not even read the mode. A direct `compositeHandlerFor` reproduction likewise
 returned one execution and zero mode reads.
 
-**Fix:** Validate the live callback context before each fresh hook dispatch,
+**Original fix recommendation (implemented):** Validate the live callback context before each fresh hook dispatch,
 including the composite and tool-result paths. Catch only the mode-validation
 failure at the lifecycle boundary, log it with the existing debug logger, and
 return without executing the hook. Preserve existing generation checks,
@@ -290,21 +330,29 @@ dispatch assertions for the four supported modes.
 
 ## Validation Evidence and Limits
 
-The supplied full `npm run check` passed at
+The original supplied full `npm run check` passed at
 `5ba904966f9d76e0f83651edc6c98b7967b88e22` on Node 26.10.0 with 264
 source/test pairs. The supplied strict corpus check reports 3149 baseline entries
-and zero extras. Subsequent changes before this review were planning artifacts,
-so the existing build-input validation was reused. Those checks do not exercise
-the unsupported-mode callback sequence reproduced above.
+and zero extras. Those results supported the initial review; they are not reused
+as a combined-tree gate for the subsequent source fix.
+
+At `cd569d2a`, independent execution of
+`node --test --test-reporter=dot tests/bridges/hooks/event-router.test.ts tests/architecture/hooks-lifecycle.test.ts`
+exited 0 on Node 26.10.0. This includes the owner tests, the existing
+rejecting-executor assertion, and the architecture test that invokes every stale
+registration with arguments that throw on property access. The fixer separately
+reported 108 owner tests passing and 100% direct pair coverage in the mandatory
+commit hook. The parent is running the full combined-tree `npm run check`; that
+gate remains separate from this clean code-review verdict.
 
 Review-specific execution used the real hook registration and dispatch code with
 an injected executor, without installing dependencies or changing source files.
-Only this review artifact was created. A05-01/A05-02 and P05-01/P05-02 remain
+Only this review artifact was changed by the reviewer. A05-01/A05-02 and P05-01/P05-02 remain
 independent verifier judgments.
 
 ---
 
-_Reviewed: 2026-10-07T15:07:48Z_
+_Reviewed: 2026-10-07T15:29:35Z_
 
 _Reviewer: the agent (gsd-code-reviewer)_
 

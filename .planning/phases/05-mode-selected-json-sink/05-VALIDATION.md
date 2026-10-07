@@ -306,3 +306,20 @@ P-05-01, and P-05-02 still require independent final-verifier judgment.
 | Gaps found | 0 |
 | Resolved | 0 |
 | Escalated | 0 |
+
+## Post-review regression gate
+
+Independent code review found CR-01: six fresh hook-dispatch callbacks lacked
+live mode validation. Commit `cd569d2aeb02f2691a636e325fc3c7976c4952c1`
+closes the gap with a narrow registration guard and 70 regression cases.
+The owner suite passes all 108 tests; the commit hook confirms 100% direct
+coverage for the changed pair. Independent re-review is clean.
+
+The combined-tree `npm run check` exited 0 on Node `v26.10.0` at that commit,
+including all 264 direct pairs and prior-phase regression suites. Evidence:
+`/tmp/json-phase5-fixed-parent-check.log`. This is the current full-gate
+reference; the earlier `5ba9049` result predates this correction. The strict
+corpus check also exited 0: 3149 baseline entries, zero extras, and no
+missing/extra diagnostic lines (`/tmp/json-phase5-fixed-parent-corpus.log`).
+The output catalog is unchanged from `26cb0056`. The four assumption/prohibition
+judgments still belong to the final verifier.

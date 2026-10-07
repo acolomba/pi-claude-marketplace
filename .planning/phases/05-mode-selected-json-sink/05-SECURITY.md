@@ -80,3 +80,19 @@ files, dependencies, or installed tools changed during this audit.
 
 **Approval:** Security verification complete 2026-10-07. This does not resolve
 A-05-01/02 or P-05-01/02 or declare the overall phase passed.
+
+## Post-review mitigation check
+
+Code review CR-01 exposed additional fresh callback roots beyond the initial
+guard inventory. Commit `cd569d2aeb02f2691a636e325fc3c7976c4952c1` adds live
+mode validation before six registered hook dispatch paths. This strengthens
+the mode and stale-context mitigations without changing cleanup ownership.
+The independent reviewer verified the original failure no longer occurs,
+all callbacks use narrow validation catches, executor errors propagate,
+and generation checks precede context access. Existing shutdown, orphan,
+and terminal-child cleanup remains independent. No new threat or accepted
+risk was introduced; `threats_open` remains zero.
+
+The corrected combined tree passed `npm run check` (exit 0, Node v26.10.0,
+264 direct pairs); see `/tmp/json-phase5-fixed-parent-check.log` and
+05-REVIEW.md for the independent callback review.
