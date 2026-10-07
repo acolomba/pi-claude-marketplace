@@ -81,7 +81,7 @@ test("package.json declares the optional pi-subagents peer at >=0.74.0 and the l
   assert.deepStrictEqual(meta, { optional: true });
 });
 
-test("package.json declares pi-mcp-adapter as an optional peer at >=5.0.0 (PIFL-03)", async () => {
+test("package.json declares pi-mcp-adapter as an optional peer at >=5.1.0 (PIFL-03)", async () => {
   // arrange
   const pkg = await readPackageJson();
 
@@ -90,7 +90,7 @@ test("package.json declares pi-mcp-adapter as an optional peer at >=5.0.0 (PIFL-
   const meta = pkg.peerDependenciesMeta?.[MCP_ADAPTER_PEER];
 
   // assert
-  assert.equal(range, ">=5.0.0");
+  assert.equal(range, ">=5.1.0");
   assert.deepStrictEqual(meta, { optional: true });
 });
 
@@ -119,6 +119,6 @@ test("package-lock.json root peerDependencies mirrors package.json for pi-mcp-ad
   const lockRange = lock.packages?.[""]?.peerDependencies?.[MCP_ADAPTER_PEER];
 
   // assert
-  assert.equal(pkgRange, ">=5.0.0");
+  assert.equal(pkgRange, ">=5.1.0");
   assert.equal(lockRange, pkgRange);
 });
