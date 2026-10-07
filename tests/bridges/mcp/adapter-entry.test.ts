@@ -88,6 +88,7 @@ const PROJECT_CONTEXT: McpSubstitutionContext = {
   pluginRoot: "/plugin/root",
   pluginData: "/plugin/data",
   projectDir: "/project/root",
+  env: {},
 };
 
 // ANAME-01 / ANAME-04: the fields every stamped entry carries by default.
@@ -140,6 +141,58 @@ describe("stampServers", () => {
       }),
     );
     assert.deepStrictEqual(stamping.warnings, []);
+    assert.deepStrictEqual(
+      stamping.variableReports,
+      new Map([["local", { missing: [], blanked: [] }]]),
+    );
+  });
+
+  test("AVAR-02: reports each server's unset variables keyed by server in declared order", () => {
+    // arrange
+    const servers = {
+      remote: { type: "http", url: "https://mcp.example.test/${PI_CM_SITE}" },
+      local: { command: "server", args: ["${PI_CM_LEVEL}", "${PI_CM_TOKEN}"] },
+      scalar: 42,
+    };
+    const substitution: McpSubstitutionContext = {
+      ...PROJECT_CONTEXT,
+      env: { PI_CM_TOKEN: "token-value" },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers,
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution,
+      previous: {},
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      [...stamping.variableReports],
+      [
+        ["remote", { missing: ["PI_CM_SITE"], blanked: [] }],
+        ["local", { missing: ["PI_CM_LEVEL"], blanked: [] }],
+        ["scalar", { missing: [], blanked: [] }],
+      ],
+    );
+    assert.deepStrictEqual(stamping.stamped, {
+      remote: {
+        url: "https://mcp.example.test/${PI_CM_SITE}",
+        ...OWNED,
+        _piClaudeMarketplace: MARKER,
+      },
+      local: {
+        command: "server",
+        args: ["${PI_CM_LEVEL}", "${PI_CM_TOKEN}"],
+        env: INJECTED_ENV,
+        ...OWNED,
+        _piClaudeMarketplace: MARKER,
+      },
+      scalar: { ...OWNED, _piClaudeMarketplace: MARKER },
+    });
   });
 
   test("AFILE-06: a previous entry holding no carried field adds nothing", () => {
@@ -466,6 +519,7 @@ describe("stampServers", () => {
       pluginRoot: "/plugin/root",
       pluginData: "/plugin/data",
       projectDir: undefined,
+      env: {},
     };
 
     // act
@@ -642,6 +696,7 @@ describe("stampServers", () => {
         pluginRoot: "/plugin/root",
         pluginData: "/plugin/data",
         projectDir: undefined,
+        env: {},
       },
       previous: {},
       keptOverrides: {},

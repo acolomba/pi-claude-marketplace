@@ -5,6 +5,7 @@
 // the discriminated `PreparedMcpStaging` union and `StageMcpInput` /
 // `UnstageMcpInput` records cannot drift apart across modules.
 
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { McpWrittenFile } from "../../shared/errors-bridges.ts";
 import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
@@ -36,6 +37,11 @@ export interface StageMcpInput {
   readonly sourcePath?: string;
   /** The plugin's description, written on every server entry when present (ANAME-06). */
   readonly description?: string | undefined;
+  /**
+   * The environment Claude's variable rule reads at install time (AVAR-02).
+   * Absent means Pi's `process.env`.
+   */
+  readonly env?: ClaudeEnv | undefined;
 }
 
 /**

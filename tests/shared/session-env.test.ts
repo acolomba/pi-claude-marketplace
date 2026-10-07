@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, test } from "node:test";
 
 import {
+  ADAPTER_EMPTY_ENV,
   applyPathLedger,
   applySessionEnv,
   claudeSessionEnvFor,
@@ -168,6 +169,19 @@ describe("PATH_LEDGER_ENV", () => {
 
     // assert
     assert.strictEqual(ledgerKey, expectedLedgerKey);
+  });
+});
+
+describe("ADAPTER_EMPTY_ENV", () => {
+  test("AVAR-03: uses the exact reserved empty-variable key", () => {
+    // arrange
+    const expectedEmptyKey = "PI_CLAUDE_MARKETPLACE_EMPTY";
+
+    // act
+    const emptyKey = ADAPTER_EMPTY_ENV;
+
+    // assert
+    assert.strictEqual(emptyKey, expectedEmptyKey);
   });
 });
 

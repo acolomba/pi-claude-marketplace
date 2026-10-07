@@ -341,12 +341,16 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   }
 
   // The CLAUDE_PROJECT_DIR arm is decided HERE, once (MENV-03): project scope
-  // resolves it to the project root `cwd` (NOT scopeRoot); user scope carries
-  // `undefined` so neither substitution nor injection can emit it.
+  // resolves `${CLAUDE_PROJECT_DIR}` at install to the project root `cwd` (NOT
+  // scopeRoot); user scope carries `undefined`, so the reference stays in the
+  // entry for Pi's process to supply at runtime (AVAR-01). `env` is the
+  // environment Claude's rule reads to decide which variables are set
+  // (AVAR-02).
   const substitution: McpSubstitutionContext = {
     pluginRoot,
     pluginData,
     projectDir: locations.scope === "project" ? cwd : undefined,
+    env: input.env ?? process.env,
   };
   // AFILE-06: each new entry carries the user's fields from the entry it
   // replaces. A marker-less override stub under the selected key wins over the

@@ -1541,6 +1541,159 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
+  test("AVAR-02: a project-scope stage writes Claude's variable rule for pi-mcp-adapter and no environment value", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-tracer-");
+    const pluginRoot = path.join(cwd, "plugins", "hello");
+    const pluginData = path.join(cwd, "data", "hello");
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot,
+      pluginData,
+      env: { PI_CM_AVAR_TOKEN: "avar-sentinel-04-01" },
+      servers: {
+        srv: {
+          command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
+          args: [
+            "--project",
+            "${CLAUDE_PROJECT_DIR}",
+            "--site",
+            "${PI_CM_AVAR_SITE}",
+            "--level",
+            "${PI_CM_AVAR_LEVEL:-info}",
+            "--token",
+            "${PI_CM_AVAR_TOKEN}",
+          ],
+          env: { MODE: "!fast" },
+        },
+      },
+    });
+
+    // act
+    await commitPreparedMcp(prepared);
+    const writtenText = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(JSON.parse(writtenText), {
+      mcpServers: {
+        plugin_hello_srv_: {
+          command: `${pluginRoot}/bin/server`,
+          args: [
+            "--project",
+            cwd,
+            "--site",
+            "${PI_CM_AVAR_SITE}",
+            "--level",
+            "info",
+            "--token",
+            "${PI_CM_AVAR_TOKEN}",
+          ],
+          env: {
+            CLAUDE_PLUGIN_ROOT: pluginRoot,
+            CLAUDE_PLUGIN_DATA: pluginData,
+            CLAUDE_PROJECT_DIR: cwd,
+            MODE: "!!fast",
+          },
+          directTools: "search",
+          toolPrefix: "mcp",
+          _piClaudeMarketplace: { plugin: "hello", marketplace: "catalog" },
+        },
+      },
+    });
+    assert.strictEqual(writtenText.includes("avar-sentinel-04-01"), false);
+  });
+
+  test("AVAR-02: no referenced variable's value reaches the staged document", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-sentinel-");
+    const sentinels = {
+      PI_CM_AVAR_COMMAND: "sentinel-command",
+      PI_CM_AVAR_ARG: "sentinel-arg",
+      PI_CM_AVAR_ENV: "sentinel-env",
+      PI_CM_AVAR_URL: "sentinel-url",
+      PI_CM_AVAR_HEADER: "sentinel-header",
+    };
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: sentinels,
+      servers: {
+        local: {
+          command: "${PI_CM_AVAR_COMMAND}",
+          args: ["${PI_CM_AVAR_ARG:-unset}"],
+          env: { VALUE: "${PI_CM_AVAR_ENV}" },
+        },
+        remote: {
+          type: "http",
+          url: "https://${PI_CM_AVAR_URL}/mcp",
+          headers: { Authorization: "Bearer ${PI_CM_AVAR_HEADER}" },
+        },
+      },
+    });
+    const preparedText = JSON.stringify(prepared);
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.deepStrictEqual(
+      Object.values(sentinels).filter((sentinel) => preparedText.includes(sentinel)),
+      [],
+    );
+  });
+
+  test("AVAR-02: a stage without an injected env reads Pi's process environment", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-process-env-");
+    const previousValue = process.env.PI_CM_AVAR_PROCESS;
+    process.env.PI_CM_AVAR_PROCESS = "process-value";
+    t.after(() => {
+      if (previousValue === undefined) {
+        delete process.env.PI_CM_AVAR_PROCESS;
+      } else {
+        process.env.PI_CM_AVAR_PROCESS = previousValue;
+      }
+    });
+    const pluginRoot = path.join(cwd, "plugins", "hello");
+    const pluginData = path.join(cwd, "data", "hello");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot,
+      pluginData,
+      servers: { local: { command: "server", args: ["${PI_CM_AVAR_PROCESS:-unset}"] } },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.kind === "staged" ? prepared._nextDoc : prepared, {
+      mcpServers: {
+        plugin_hello_local_: {
+          command: "server",
+          args: ["${PI_CM_AVAR_PROCESS}"],
+          env: {
+            CLAUDE_PLUGIN_ROOT: pluginRoot,
+            CLAUDE_PLUGIN_DATA: pluginData,
+            CLAUDE_PROJECT_DIR: cwd,
+          },
+          directTools: "search",
+          toolPrefix: "mcp",
+          _piClaudeMarketplace: { plugin: "hello", marketplace: "catalog" },
+        },
+      },
+    });
+  });
+
   test("ANAME-01: writes each server under its Claude Code key in declared order and records the declared names", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-keys-");

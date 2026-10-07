@@ -70,6 +70,15 @@ export function applySessionEnv(sessionId: string): void {
 export const PATH_LEDGER_ENV = "PI_CLAUDE_MARKETPLACE_PATH";
 
 /**
+ * AVAR-03: the pi-only env var this extension keeps set to the empty string
+ * in Pi's process. Written MCP entries split adapter syntax in literal text
+ * with `{env:PI_CLAUDE_MARKETPLACE_EMPTY}`, which pi-mcp-adapter expands to
+ * nothing, so the text reaches the server unchanged (name mirrors the
+ * `PI_CLAUDE_MARKETPLACE_PATH` convention).
+ */
+export const ADAPTER_EMPTY_ENV = "PI_CLAUDE_MARKETPLACE_EMPTY";
+
+/**
  * PENV-01 ledger core (pure): given the current PATH, the prior ledger (the
  * entries this extension appended on a previous recompute), and the freshly
  * derived bin dirs, produce the new PATH and the new ledger.

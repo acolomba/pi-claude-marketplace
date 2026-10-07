@@ -169,7 +169,7 @@ function serverFields(server: Readonly<Record<string, unknown>>): Record<string,
 }
 
 /**
- * Translates one Claude server object, after variable substitution, into the
+ * Translates one Claude server object, before variable expansion, into the
  * adapter entry this extension writes (ANAME-07). The entry holds the mapped
  * transport fields, `oauth` and `requestTimeoutMs`, then the owned fields: the
  * plugin's `description` when given (ANAME-06), `directTools` (`true` for a
