@@ -596,6 +596,15 @@ v1.20 requirements are in [the archive](milestones/v1.20-REQUIREMENTS.md).
   closed 2.1.291 field table translates transport, timeout, OAuth and
   `description`. Unhonored features give `{unsupported mcp}` with `--partial`
   (ANAME-01..07) — mcp-4 Phase 3, verified 2026-10-06.
+- ✓ Plugin MCP entries expand variables by Claude Code 2.1.291 rules: only
+  the five Claude fields, `${VAR:-default}` and the plugin/project builtins at
+  install, plain `${VAR}` kept for pi-mcp-adapter, no environment value on
+  disk. Split tokens, a guard on both sides of a kept reference and `!!`
+  defeat the adapter second expansion, proven against adapter 5.1.0 in CI;
+  Claude credential deny-list blanks withheld credentials; install and `info`
+  name unset and withheld variables; a leading `~` in stdio command/args is
+  `{unsupported mcp}`; peer range `>=5.1.0 <6` (AVAR-01..05) — mcp-4 Phase 4,
+  verified 2026-10-07.
 - ✓ Bare and wrapped plugin manifests follow consistent precedence, malformed
   manifests keep their failure behavior, and missing manifests remain valid —
   v1.20 Phase 1, verified 2026-09-14.
@@ -1055,6 +1064,11 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-07 after mcp-4 Phase 4 (variable expansion at Claude Code
+parity) verified 5/5; the review-fix loop closed WR-01..07 and the operator
+accepted the notice wording, the CI zizmor suppression and the AR-04-03 widening.
+Phase 5 (automatic migration on /reload) is next. Prior updates follow._
 
 _Last updated: 2026-10-06 after mcp-4 Phase 3 (Claude Code tool names and tool
 search) verified; the operator accepted review warnings WR-01, WR-02, WR-03 and

@@ -22,12 +22,12 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-06 after mcp-4 Phase 3)
+See: `.planning/PROJECT.md` (updated 2026-10-07 after mcp-4 Phase 4)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 04 — Variable expansion at Claude Code parity
+**Current focus:** Phase 5 — Automatic migration on /reload
 The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
@@ -799,7 +799,17 @@ hit the same wall; convert it rather than re-disclosing it.
 
 **Resume file:** None
 
-Last session: 2026-10-07T20:00:03.309Z
+Last session: 2026-10-07T22:10:00Z
+Phase 4 closed in `/gsd-autonomous --from 4 --interactive`, run sequentially on
+this checkout (`~/src/pi-claude-marketplace-mcp-4`, branch `features/mcp-4`).
+Gates: 9/9 plans; `npm run check` green on 63ad2116 and again on 1629bac1
+(Node v26.10.0, PI_MCP_ADAPTER_ROOT set); Nyquist validated; security 29/29
+closed; code review fix loop closed WR-01..07 (8 info open, see
+04-REVIEW-DISPOSITION.md); verifier 5/5, human items accepted by the operator
+(row shapes filed as MCPROW-01). Nothing skipped. Environment: the
+pi-mcp-adapter 5.1.0 scratch install lives at /var/tmp/mcp4-p4-08/adapter.
+
+Previous session: 2026-10-07T20:00:03.309Z
 Phase 3 closed. Gates: Nyquist validation (23/23 green), security (20/20
 threats closed), code review (0 critical, 5 warnings, 5 info, all `open`),
 regression gate (`npm run check` green on d6029660, Node v26.10.0), verifier
