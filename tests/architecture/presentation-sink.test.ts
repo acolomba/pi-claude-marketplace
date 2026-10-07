@@ -156,7 +156,7 @@ async function assertSinkPlacement(): Promise<void> {
       /\bdeliver\(\s*[A-Za-z_$][\w$.]*\s*,\s*(?:formatEnvelopeArguments\(|args\))/g,
     ),
   ].length;
-  assert.strictEqual([...stripped.matchAll(/\bdeliver\(ctx, args\)/g)].length, 2);
+  assert.strictEqual([...stripped.matchAll(/\bdeliver\(ctx, args\)/g)].length, 1);
 
   assert.strictEqual(
     uiMentions,
@@ -180,8 +180,8 @@ async function assertSinkPlacement(): Promise<void> {
   );
   assert.match(
     stripped,
-    /function emitRawSurface\([^}]+const args = formatRawSurface\(resolveRawSurface\(surface\)\);\s+if \(args === undefined\) \{\s+return;\s+\}\s+requireNotificationMode\(ctx.mode\);\s+deliver\(ctx, args\);\s+\}/,
-    `D-16: no deliver call in ${SINK_FILE} passes formatRawSurface output, so the raw-surface path never reaches the sink.`,
+    /function emitHookSurface\([^}]+emitPresentation\(ctx, run, resolveRawSurface\(surface\)\);\s+\}/,
+    `D-16: hook raw surfaces must reach the shared presentation transport.`,
   );
   assert.match(stripped, /const args = formatRawSurface\(presentation\)!;\s+deliver\(ctx, args\);/);
 }

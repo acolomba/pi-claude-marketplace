@@ -39,7 +39,6 @@ import type {
   HookSurface,
   LoadSurface,
   NotificationMessage,
-  RawSurface,
   ReconcileAppliedCascadeMessage,
   RetainedWorkflowStaging,
   UsageErrorMessage,
@@ -89,20 +88,13 @@ function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, b
   deliver(ctx, formatEnvelopeArguments(envelope, body));
 }
 
-/** D-02 / D-13: resolves, formats, and delivers one raw surface. */
-function emitRawSurface(ctx: NotificationContext, surface: RawSurface): void {
-  const args = formatRawSurface(resolveRawSurface(surface));
-  if (args === undefined) {
-    return;
-  }
-
-  requireNotificationMode(ctx.mode);
-  deliver(ctx, args);
-}
-
 /** D-14: the entry point for the hook-origin group of raw surfaces. */
-function emitHookSurface(ctx: NotificationContext, surface: HookSurface): void {
-  emitRawSurface(ctx, surface);
+function emitHookSurface(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  surface: HookSurface,
+): void {
+  emitPresentation(ctx, run, resolveRawSurface(surface));
 }
 
 /** D-14: the entry point for the load-origin group of raw surfaces. */
@@ -243,8 +235,16 @@ export function notifyDeviceFlowPrompt(
  * zero-length summary emits nothing, so the caller can pass an
  * `entry.rewakeSummary` field without a guard.
  */
-export function notifyAsyncRewakeSummary(ctx: NotificationContext, summary: string): void {
-  emitHookSurface(ctx, { kind: "async-rewake-summary", summary });
+export function notifyAsyncRewakeSummary(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  summary: string,
+): void {
+  if (summary.length === 0) {
+    return;
+  }
+
+  emitHookSurface(ctx, run, { kind: "async-rewake-summary", summary });
 }
 
 /**
@@ -269,10 +269,11 @@ export function notifyAsyncRewakeSummary(ctx: NotificationContext, summary: stri
  */
 export function notifyStopHookOverrideCap(
   ctx: NotificationContext,
+  run: NotificationRun,
   pluginId: string,
   cap: number,
 ): void {
-  emitHookSurface(ctx, { kind: "stop-override-cap", pluginId, cap });
+  emitHookSurface(ctx, run, { kind: "stop-override-cap", pluginId, cap });
 }
 
 /**
