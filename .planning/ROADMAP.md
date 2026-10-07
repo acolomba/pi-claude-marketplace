@@ -236,24 +236,30 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. A referenced variable that is unset and has no default produces a missing-variable warning at install, as Claude Code warns. (AVAR-04)
 5. A `url` or `headers` value that references `ANTHROPIC_API_KEY` or another variable on Claude's credential deny-list does not receive that credential, and a security test proves it. (AVAR-05)
 
-**Plans**: 7 plans in 5 waves
+**Plans**: 9 plans in 7 waves
 
 **Wave 1**
-- [ ] 04-01-PLAN.md — Claude's variable rule writes the entry for the adapter: five fields only, `${VAR:-default}`, split tokens, the boundary guard, `!!`, and the missing-variable warning (AVAR-01, AVAR-02, AVAR-03, AVAR-04)
+- [ ] 04-01-PLAN.md — Claude's variable rule writes the entry for the adapter: five fields only, `${VAR:-default}`, split tokens, the boundary guard and `!!`, with each server's unset variables reported by the walk (AVAR-01, AVAR-02, AVAR-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 04-02-PLAN.md — Claude Code 2.1.291's credential deny-list in every field, version-pinned, with the withheld-credential warning and the security test (AVAR-05, AVAR-04)
+- [ ] 04-02-PLAN.md — a real install writes Claude's rule and shows the missing-variable warning after its rows (AVAR-04, AVAR-01, AVAR-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 04-03-PLAN.md — a leading `~` in stdio `command` or `args` makes the plugin partially available with `{unsupported mcp}` (AVAR-03)
-- [ ] 04-04-PLAN.md — `PI_CLAUDE_MARKETPLACE_EMPTY` and `CLAUDE_PROJECT_DIR` set in Pi's process, the stdio env reduced to Claude's injected set, and the adapter peer range `>=5.1.0 <6` (AVAR-01, AVAR-03)
+- [ ] 04-03-PLAN.md — Claude Code 2.1.291's credential deny-list in every field, version-pinned, with the withheld-credential warning and the security test (AVAR-05, AVAR-04)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 04-05-PLAN.md — `info` lists each MCP server's unset and withheld variables (AVAR-04, AVAR-05)
-- [ ] 04-06-PLAN.md — conformance through pi-mcp-adapter 5.1.0's real functions, run in CI with zero skips; package-legitimacy checkpoint first (AVAR-03, AVAR-05)
+- [ ] 04-04-PLAN.md — a leading `~` in stdio `command` or `args` makes the plugin partially available with `{unsupported mcp}` (AVAR-03)
+- [ ] 04-05-PLAN.md — `PI_CLAUDE_MARKETPLACE_EMPTY` and `CLAUDE_PROJECT_DIR` set in Pi's process, and the stdio env reduced to Claude's injected set (AVAR-01, AVAR-03)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 04-07-PLAN.md — every staging path reports both warnings; the variable rules and divergences documented; MENVX-01 and ENVLIT-01 closed (AVAR-04, AVAR-03)
+- [ ] 04-06-PLAN.md — the pi-mcp-adapter peer range becomes `>=5.1.0 <6` in the manifest, the lock, the gates and both READMEs (AVAR-03)
+- [ ] 04-07-PLAN.md — `info` lists each MCP server's unset and withheld variables (AVAR-04, AVAR-05)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 04-08-PLAN.md — conformance through pi-mcp-adapter 5.1.0's real functions, run in CI with zero skips; package-legitimacy checkpoint first (AVAR-03, AVAR-05)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 04-09-PLAN.md — every staging path reports both warnings; the variable rules and divergences documented; MENVX-01 and ENVLIT-01 closed (AVAR-04, AVAR-03)
 
 **Notes.** Needs a threat model before planning: secrets on disk, the credential deny-list, and shell execution through a leading `!`. The security gate should flag this phase. Build the per-field escape matrix from the pinned adapter's real expansion functions, not from a re-typed copy.
 
