@@ -209,7 +209,7 @@ Plans:
 5. Every test fake of the notification or extension context carries an explicit `mode` that the type requires; no `as unknown as ExtensionContext` cast hides a missing one. An in-process capture helper records every `appendEntry` payload and fails the test on a schema-invalid payload.
 6. Carried from Phase 3 research: the JSON strategy keeps the text strategy's empty no-ops (empty diagnostic lines, empty rewake summary), and `bridges/hooks/settle.ts`'s Stop-cap notify gains the NFR-2 try/catch once the sink can throw.
 
-**Plans:** 2/7 plans executed
+**Plans:** 3/7 plans executed
 
 Plans:
 **Wave 1**
@@ -219,7 +219,7 @@ Plans:
 - [x] 05-02-PLAN.md — Usage/help transport through every parser and command handler
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 05-03-PLAN.md — Diagnostic producers and exact empty-output behavior
+- [x] 05-03-PLAN.md — Diagnostic producers and exact empty-output behavior
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 05-04-PLAN.md — Device-flow prompts through all authentication carriers
@@ -272,7 +272,7 @@ Plans:
 | 2. Row Policies | 2/2 | Complete    | 2026-10-02 |
 | 3. Typed Raw Surfaces | 4/4 | Complete    | 2026-10-03 |
 | 4. Wire Schema and JSON Strategy | 6/6 | Complete    | 2026-10-06 |
-| 5. Mode-Selected JSON Sink | 2/7 | In Progress | - |
+| 5. Mode-Selected JSON Sink | 3/7 | In Progress | - |
 | 6. Command-Run Contract | 0/TBD | Not started | - |
 | 7. Mode Refusals, Real-Pi Verification, and Docs | 0/TBD | Not started | - |
 
