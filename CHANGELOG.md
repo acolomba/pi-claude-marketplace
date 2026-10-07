@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Plugin MCP servers now need pi-mcp-adapter 5.1.0 or newer, the first adapter release that supports Pi 1.0.
+
 - More plugins with components that Pi cannot install are now partially available. Pass `--partial` to install the components that Pi supports. (#246)
 
   - A hooks module (a non-empty `modules` array in a hooks file) makes its plugin partially available. A `hooks.json` with only a module no longer makes its plugin unavailable.

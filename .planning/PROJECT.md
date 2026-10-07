@@ -19,7 +19,7 @@ adopting Pi's built-in MCP.
 **Target features:**
 
 - **Dependency floor.** Pi `>=1.0.0` (dev `^1.0.0`, with pi-tui), pi-subagents `>=0.74.0`,
-  pi-mcp-adapter `>=5.0.0` as the documented MCP soft dependency. Re-apply the Pi 0.99 typing
+  pi-mcp-adapter `>=5.1.0` as the documented MCP soft dependency. Re-apply the Pi 0.99 typing
   fixes from features/mcp `74162ca6` and its peer-test and canary fixes (`5b1d8ef6`, `dac3a245`,
   `69e0870a`, `4f82096f`) at the 1.0 floor; bump all devDependencies; re-verify the workflow
   engine (`@quintinshaw/pi-dynamic-workflows` 3.13.1) canaries on Pi 1.0.
@@ -42,7 +42,8 @@ adopting Pi's built-in MCP.
 3.x/4.x stopped reading `mcp.json`; 5.0.0 (2026-10-01) reads Pi's `mcp.json` again and replaces
 the built-in `/mcp`, but runtime-registered servers are proxy-only there, so the bridge writes the
 adapter-native file to reach every adapter field. Adapter 5.0's optional `@earendil-works/pi-ai`
-peer range stops at `^0.99.0`; record it as an upstream gap, do not work around it.
+peer range stops at `^0.99.0`; 5.1.0 (2026-10-05) admits `^1.0.0`, so the floor is `>=5.1.0` and
+no upstream gap remains (D-04-12).
 
 ## Previous Milestone: any-git-host -- Any Git Host (workstream: git-hosts, branch: features/git-hosts, completed 2026-09-30, merged via PR #221, no npm release)
 
