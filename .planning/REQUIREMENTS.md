@@ -89,7 +89,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
   equivalent (`ws`, `headersHelper`, ...) makes the plugin partially available with
   `{unsupported mcp}`, and `--partial` installs it without the affected servers (amended in
   Phase 3 discussion, D-03-10).
-- [ ] **AVAR-01**: `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}` and project-scope
+- [x] **AVAR-01**: `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}` and project-scope
   `${CLAUDE_PROJECT_DIR}` are expanded at install time, in Claude's fields only (stdio `command`,
   `args`, `env` values; remote `url`, `headers`).
 - [x] **AVAR-02**: `${VAR:-default}` is resolved at install time with Claude's rule (an empty value
@@ -183,7 +183,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | ANAME-05 | Phase 3 | Complete |
 | ANAME-06 | Phase 3 | Complete |
 | ANAME-07 | Phase 3 | Complete |
-| AVAR-01 | Phase 4 | Pending |
+| AVAR-01 | Phase 4 | Complete |
 | AVAR-02 | Phase 4 | Complete |
 | AVAR-03 | Phase 4 | Pending |
 | AVAR-04 | Phase 4 | Pending |
