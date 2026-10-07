@@ -6045,6 +6045,103 @@ for (const mode of ["json", "rpc"]) {
   });
 }
 
+for (const mode of ["json", "rpc"]) {
+  for (const { name, lines, expected } of [
+    { name: "no lines", lines: [], expected: [] },
+    {
+      name: "one empty line",
+      lines: [""],
+      expected: [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "diagnostic",
+            severity: "warning",
+            needsReload: false,
+            header: "Warnings",
+            lines: [""],
+          },
+        },
+      ],
+    },
+    {
+      name: "whitespace",
+      lines: [" \t "],
+      expected: [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "diagnostic",
+            severity: "warning",
+            needsReload: false,
+            header: "Warnings",
+            lines: [" \t "],
+          },
+        },
+      ],
+    },
+    {
+      name: "ordered duplicates",
+      lines: ["second", "first", "first", "second"],
+      expected: [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "diagnostic",
+            severity: "warning",
+            needsReload: false,
+            header: "Warnings",
+            lines: ["second", "first", "first", "second"],
+          },
+        },
+      ],
+    },
+  ]) {
+    test(`preserves diagnostic ${name} in ${mode}`, () => {
+      // arrange
+      const capture = createJsonCapture();
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+      // act
+      notifyDiagnostic(ctx, run, "Warnings", lines);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, expected);
+      capture.assertValid();
+    });
+  }
+}
+
+test("empty diagnostics do not read a stale mode getter", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const ctx = {
+    get mode(): string {
+      throw new Error("stale mode");
+    },
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+  // act
+  notifyDiagnostic(ctx, run, "Warnings", []);
+
+  // assert
+  assert.deepStrictEqual(capture.entries, []);
+  capture.assertValid();
+});
+
 test("diagnostic dispatch preserves empty and ordered warning captures", (t) => {
   // arrange
   const ctx = createContext(t);

@@ -2599,6 +2599,98 @@ describe("applyReconcile", () => {
     });
   }
 
+  test("retains a caught malformed diagnostic after the reconcile install commits", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "caught-diagnostic");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      duo: { agents: ["with-mcp-servers"] },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "duo@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const capture = createJsonCapture();
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const failures: unknown[] = [];
+    const run = {
+      ...runWithNothingLoaded(),
+      entrySink: {
+        appendEntry(customType: string, payload: unknown): void {
+          try {
+            capture.entrySink.appendEntry(customType, capture.entries.length === 1 ? {} : payload);
+          } catch (error: unknown) {
+            failures.push(error);
+          }
+        },
+      },
+    };
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual((await recordFor(project, "mp", "duo"))?.resources.agents, [
+      "pi-claude-marketplace-duo-bot0",
+    ]);
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "reconcile-applied-cascade",
+          severity: "info",
+          needsReload: false,
+          tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
+          marketplaces: [
+            {
+              name: "mp",
+              scope: "project",
+              plugins: [
+                {
+                  name: "duo",
+                  id: "duo@mp",
+                  scope: "project",
+                  status: "installed",
+                  reasons: ["requires pi-subagents"],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      { customType: "claude-plugin", payload: {} },
+    ]);
+    assert.strictEqual(failures.length, 1);
+    assert.ok(failures[0] instanceof assert.AssertionError);
+    assert.throws(() => {
+      capture.assertValid();
+    }, assert.AssertionError);
+    assert.deepStrictEqual(clonedUrls(), []);
+  });
+
   test("S2: two agents with dropped mcpServers raise the plural post-install warning header", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "install-warnings");
