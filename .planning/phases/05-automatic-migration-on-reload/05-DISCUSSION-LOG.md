@@ -117,6 +117,20 @@ sandboxed probe) refuted it: Claude never expands `~`. D-04-06 stands.
 | One body, fixed order | Rows, cost line, variable notices, reload hint | ✓ |
 | Main + separate notices | | |
 
+## Post-research revisions (2026-10-08)
+
+Research found that the adapter reads `mcp.json` in Pi's format, so fields in
+legacy entries are inert today, and that the adapter panel writes full copies
+under the old name. The operator asked what "user edits" meant (only hand edits
+to our marked entries) and ruled: no carry-over at all; delete the old entries
+as cleanup and install as if they never existed. Follow-ups:
+
+| Question | Selected |
+|----------|----------|
+| Old-name disable stubs and panel full copies | Delete both as cleanup, list in notice |
+| Reinstall/update also sweep legacy entries | Yes, every path |
+| Malformed server in an installed plugin | Fresh-install rule (replaces "drop only that server") |
+
 ## Claude's Discretion
 
 Step placement and locking, write batching, half-done detection, disabled-record

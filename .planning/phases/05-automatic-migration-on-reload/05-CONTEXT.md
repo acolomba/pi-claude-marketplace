@@ -96,43 +96,77 @@ Source comments cite requirement IDs (AMIG-0N), never `D-05-NN`.
   servers move; the record becomes `partially-installed`, the same result as
   `install --partial`; the notice names the server and the blocking feature,
   and `info` shows the `{unsupported mcp}` breakdown.
-- **D-05-07:** A server that is malformed under Claude's schema (D-03-18) in
-  an installed plugin: dropped like D-05-06 (legacy entry deleted, the rest
-  move, record `partially-installed`), with the `{malformed mcp}` detail in
-  the notice. This matches Claude, which skips only the bad server. A fresh
-  install still resolves `unavailable` and refuses (D-03-18 unchanged).
-  — **Reversibility:** costly — migrated records end up `partially-installed`
-  where a fresh install of the same plugin is refused, and later verbs
-  (update, reinstall, info) must handle that record state.
-- **D-05-08:** Every install, enable and reconcile install in a scope removes
-  the same plugin's marked legacy entries from that scope's `mcp.json`, after
-  writing `mcp-adapter.json` (add before remove). This closes the duplicate
-  when an AMIG-04 unowned entry's plugin is then installed by reconcile from
-  `claude-plugins.json`, and it means the AMIG-04 warning fires only for
-  plugins that are really not installed in that scope. Extends D-02-12.
+- **D-05-07 (revised 2026-10-08 after research):** A plugin with a server
+  that is malformed under Claude's schema (D-03-18) follows the fresh-install
+  rule: its MCP component is unavailable, so the migration deletes all of the
+  plugin's marked legacy entries and writes none, and the record's MCP
+  inventory is emptied. The notice names the malformed server with the
+  `{malformed mcp}` detail. No new "partially-installed from malformed" record
+  state exists, so `info`, `list`, `reinstall` and `update` need no special
+  case. (Supersedes the earlier "drop only the bad server" answer.)
+- **D-05-08 (extended 2026-10-08):** Every path that writes a plugin's servers
+  into a scope's `mcp-adapter.json` (install, enable, reconcile install,
+  import, reinstall, update) then removes that plugin's marked legacy entries
+  from the same scope's `mcp.json`, plus the D-05-10 old-name leftovers (add
+  before remove; reinstall and update keep their byte rollback). This closes
+  the duplicate after the D-05-02 "run reinstall" remedy and after an AMIG-04
+  unowned entry's plugin is installed by reconcile; the AMIG-04 warning then
+  fires only for plugins that really are not installed in that scope.
+  Extends D-02-12.
 
-### User edits and key collisions
-- **D-05-09:** Hand edits on a legacy entry carry over exactly as an update
-  carries them: the closed D-02-06 set, with D-03-04's rule that a carried
-  field the plugin's translated entry sets belongs to the plugin. Edits to
-  `command`, `args`, `env` and other fields are dropped.
-- **D-05-10:** A marker-less override stub under the OLD name in
-  `mcp-adapter.json` (for example `github: { "disabled": true }`, written by
-  `/mcp-adapter disable`, D-02-07), whose name matches a server being moved for
-  that plugin in the same scope file, is absorbed under the new name: its
-  carried fields go into `plugin_<p>_<s>_` (so the user's disable survives,
-  Claude parity), the original stub is kept verbatim inside our marker, and
-  the old-name key is removed. Uninstall and every unstage write the kept stub
-  back under its old key (D-02-21..23, D-03-05). A marker-less stub at the NEW
-  key follows D-02-21 as already decided.
-  — **Reversibility:** costly — it widens the kept-stub contract (the stub's
-  original key now differs from our key) that write-back and the marker read.
+### Old entries are cleanup, not input (operator, 2026-10-08)
+- **D-05-09 (revised):** Nothing is carried over from a legacy entry. The
+  migration deletes our old marked entries as cleanup of the old
+  implementation and installs the plugin's servers as a fresh install would,
+  as if the old entries never existed. The only thing read from a legacy entry
+  is its marker (which plugin and marketplace own it). Research showed the
+  adapter reads `mcp.json` in Pi's format under Pi 1.0, so adapter-native
+  fields in a legacy entry are inert today; carrying them would have switched
+  on plugin-declared fields such as `approveTools`. A user's Pi-format disable
+  (`enabled: false`) is not carried either. (Supersedes the D-02-06 carry.)
+- **D-05-10 (revised):** Adapter-written leftovers under an OLD name are
+  deleted as cleanup and listed in the notice: the `/mcp-adapter disable` stub
+  (`github: { "disabled": true }`, written to the project `mcp-adapter.json`
+  even for a user-scope plugin) and the panel's direct-tools full copy (the
+  whole server definition plus `directTools`, written under the old name into
+  the same scope's `mcp-adapter.json`, adapter 5.1.0 `config.ts:1972-2011`,
+  which would otherwise keep running beside the new key). A leftover is
+  removed only when it has no marker, sits under an old name one of the moved
+  legacy entries used, and is in a file the adapter writes for that server
+  (the same scope's `mcp-adapter.json`; for disable stubs also the project
+  file). No kept-stub absorption, no write-back on uninstall.
+  — **Reversibility:** costly — it deletes marker-less content the user's
+  adapter wrote; the matching rule is the only guard.
 - **D-05-11:** A full server already defined at the new key in any of the
   adapter's nine sources is a collision, as at install (D-02-03): that plugin
   moves nothing, its legacy entries stay running under their old names, and a
   warning names the colliding key and its source. Next `/reload` retries. The
   move is all-or-nothing per plugin, so a plugin's servers never end up split
-  across the two files (except the D-05-06/07 drops, which are deletions).
+  across the two files (except the D-05-06 drops and D-05-07 removals, which
+  are deletions).
+
+### Post-research decisions (2026-10-08)
+- **D-05-16:** Write order per scope is `mcp-adapter.json`, then `state.json`,
+  then `mcp.json`. The marked legacy entries are the only trigger (COMPAT-01),
+  so they are removed last: every crash point re-triggers on the next
+  `/reload` and converges to identical bytes. With no legacy entries left the
+  step returns before taking a lock or writing (a second `/reload` changes no
+  bytes); an `mcp-adapter.json` rewrite that would produce identical bytes is
+  skipped.
+- **D-05-17:** The step runs inside `applyReconcileWithReader`'s per-scope
+  loop, after `readPassForScope` and before `applyPlan`, under its own
+  `withLockedStateTransaction`. With the plan in hand it skips the AMIG-04
+  warning for a plugin reconcile installs in the same reload (D-05-08 sweeps
+  those entries). A migration failure becomes its own warning row, never an
+  `invalid-block` reconcile row or an exception out of `applyReconcile`
+  (NFR-2). The notice is emitted even when reconcile has no outcomes.
+- **D-05-18:** The offline source read for git sources is an fs-only presence
+  probe keyed on the record's `resolvedSha` (not the manifest `source.sha`);
+  `probeReinstallClone` and `materializePluginClone` clone on a miss and are
+  never called (NFR-5).
+- **D-05-19:** An unparseable `mcp.json` or `mcp-adapter.json` in a scope: no
+  write in that scope, one left-in-place row naming the scope and file
+  (D-02-14 precedent).
 
 ### Notice
 - **D-05-12:** One migration notice per `/reload`, covering both scopes, rows
@@ -145,15 +179,20 @@ Source comments cite requirement IDs (AMIG-0N), never `D-05-NN`.
   `/mcp-adapter` panel, sign-in prompts and project approvals show.
 - **D-05-14:** Severity follows the house tri-state: `info` when every owned
   entry moved; `warning` when anything was left in place (D-05-02, D-05-11,
-  AMIG-04 unowned) or dropped (D-05-06, D-05-07). D-05-04 removals of
+  AMIG-04 unowned) or dropped (D-05-06, D-05-07), or when a D-05-10 leftover
+  was removed. D-05-04 removals of
   undeclared servers do not by themselves make it a warning.
 - **D-05-15:** One body in a fixed order: moved rows; removed or dropped rows
   with their reason (not declared, `{unsupported mcp}` + feature,
   `{malformed mcp}`); left-in-place rows with their remedy (reinstall, resolve
   the collision, AMIG-04 unowned); one cost line (sign in again, re-approve
   project servers); the D-04-10 variable and credential notices and the
-  D-05-05 permission-policy warnings for the moved servers; the reload hint
-  once at the end (the adapter picks up the move one `/reload` later).
+  D-05-05 permission-policy warnings for the moved servers; the D-05-10
+  leftovers removed; the reload hint once at the end. Research: Pi emits
+  `session_start` (where the adapter reads its config) before
+  `resources_discover`, and in the common lazy path the adapter re-reads at
+  the first MCP operation, so in the migration session old-name tools may be
+  listed while their server is gone; the hint says to `/reload` now.
   Wording is drafted as closed-catalog amendments in `docs/output-catalog.md`
   for operator review in the plans.
 
@@ -190,9 +229,12 @@ Source comments cite requirement IDs (AMIG-0N), never `D-05-NN`.
   and is decided from Pi and project constraints; a server the installed
   plugin no longer declares does not run (basis for D-05-04).
 - **A user's per-server disable survives plugin updates.** From
-  `02-CONTEXT.md` (2.1.287 binary, high). Basis for D-05-09/D-05-10.
+  `02-CONTEXT.md` (2.1.287 binary, high). Not applied to the migration:
+  the operator ruled the old entries cleanup, not input (D-05-09/D-05-10);
+  the release that ships phases 2-5 already costs sign-ins and approvals.
 - **Claude skips only an invalid server and loads the plugin's others**
-  (03-RESEARCH E2, 2.1.291, medium-high). Basis for D-05-07.
+  (03-RESEARCH E2, 2.1.291, medium-high). Not followed: D-05-07 applies the
+  fresh-install rule (D-03-18), the project's existing, stricter divergence.
 - **Leading `~` is never expanded by Claude Code** (researched 2026-10-08,
   Claude Code 2.1.294 at
   `/home/linuxbrew/.linuxbrew/Caskroom/claude-code@latest/2.1.294/claude`).
@@ -273,7 +315,7 @@ Source comments cite requirement IDs (AMIG-0N), never `D-05-NN`.
 
 ### Integration Points
 - `index.ts` `resources_discover` handler (before `applyReconcile`); never throws past the lifecycle event (NFR-2).
-- Install, enable and reconcile staging paths gain the D-05-08 legacy sweep.
+- Install, enable, import, reconcile, reinstall and update staging paths gain the D-05-08 legacy sweep.
 - Every staging path gains the D-05-05 permission-policy warning.
 
 </code_context>
