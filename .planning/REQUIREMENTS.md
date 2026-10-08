@@ -114,7 +114,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 - [ ] **AMIG-03**: The user sees one migration notice listing `old -> new` server names, the
   re-sign-in and project re-approval the rename causes, and the reload hint (the adapter picks up
   the move one `/reload` later).
-- [ ] **AMIG-04**: A marked legacy entry with no owning install record is left in place with a
+- [x] **AMIG-04**: A marked legacy entry with no owning install record is left in place with a
   warning.
 
 ### Live status (ASTAT)
@@ -192,7 +192,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | AMIG-01 | Phase 5 | Pending |
 | AMIG-02 | Phase 5 | Pending |
 | AMIG-03 | Phase 5 | Pending |
-| AMIG-04 | Phase 5 | Pending |
+| AMIG-04 | Phase 5 | Complete |
 | ASTAT-01 | Phase 6 | Pending |
 | ASTAT-02 | Phase 6 | Pending |
 | ADOC-01 | Phase 7 | Pending |
