@@ -96,6 +96,7 @@ import type * as ApplyOrchestrator from "../../../extensions/pi-claude-marketpla
 import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import type {
   ApplyReconcileOptions,
+  McpMigrationStep,
   ReconcilePlan,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -6477,6 +6478,272 @@ describe("applyReconcile", () => {
           "Reconcile: 2 successes",
       },
       COMMENTS_REMOVED_NOTICE,
+    ]);
+    verifyBoundary();
+  });
+  test("AMIG-01: the MCP move runs once per scope after the read pass and before the plan is applied", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "mcp-move-position");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      gone: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({ marketplaces: { mp: { source: marketplaceRoot } }, plugins: {} }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            gone: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "gone") }),
+          },
+        }),
+      },
+    });
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const completionCache = createCompletionCache();
+    const uninstallPlugin = t.mock.fn(createUninstallOperation(hooksRouting, completionCache));
+    const calls: unknown[] = [];
+    const migrateMcpEntries: McpMigrationStep = async (input) => {
+      const state = await loadState(locationsFor(input.scope, cwd).extensionRoot);
+      calls.push({
+        scope: input.scope,
+        reason: input.reason,
+        plannedUninstalls: input.plan?.pluginsToUninstall.map((planned) => planned.plugin),
+        recorded: Object.keys(state.marketplaces["mp"]?.plugins ?? {}),
+        uninstallsBefore: uninstallPlugin.mock.callCount(),
+      });
+    };
+
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcileWithRouting({
+      ctx,
+      pi,
+      cwd,
+      gitOps,
+      hooksRouting,
+      completionCache,
+      reason: "reload",
+      uninstallPlugin,
+      migrateMcpEntries,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" + "  ○ gone v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
+      },
+    ]);
+    assert.deepStrictEqual(calls, [
+      {
+        scope: "project",
+        reason: "reload",
+        plannedUninstalls: ["gone"],
+        recorded: ["gone"],
+        uninstallsBefore: 0,
+      },
+      {
+        scope: "user",
+        reason: "reload",
+        plannedUninstalls: undefined,
+        recorded: [],
+        uninstallsBefore: 1,
+      },
+    ]);
+    assert.deepStrictEqual(
+      uninstallPlugin.mock.calls.map(
+        (call) => `${call.arguments[0].plugin}@${call.arguments[0].marketplace}`,
+      ),
+      ["gone@mp"],
+    );
+    verifyBoundary();
+  });
+
+  test("AMIG-01: the MCP move runs with no plan when the scope's configuration is invalid", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "mcp-move-invalid-config");
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {},
+    });
+    await writeUnder(project.configJsonPath, "{");
+    const calls: unknown[] = [];
+    const migrateMcpEntries: McpMigrationStep = async (input) => {
+      calls.push({ scope: input.scope, plan: input.plan });
+      await Promise.resolve();
+    };
+
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, migrateMcpEntries });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n" +
+          "\n" +
+          "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n" +
+          "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
+          "    cause: JSON parse failed: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n" +
+          "\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(calls, [{ scope: "project", plan: undefined }]);
+    verifyBoundary();
+  });
+
+  test("AMIG-01: the MCP move does not run for a scope whose read pass threw", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "mcp-move-read-pass-threw");
+    await writeUnder(project.configJsonPath, configBytes({ marketplaces: {} }));
+    await writeUnder(project.stateJsonPath, "{ not json");
+    const calls: unknown[] = [];
+    const migrateMcpEntries: McpMigrationStep = async (input) => {
+      calls.push(input.scope);
+      await Promise.resolve();
+    };
+
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, migrateMcpEntries });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n" +
+          "\n" +
+          "⊘ state.json [project] (failed) {unparseable}\n" +
+          "  ⊘ state.json (failed) {unparseable}\n" +
+          "    cause: state.json at state.json is not valid JSON: Expected property name or '}' in JSON at position 2 (line 1 column 3)\n" +
+          "\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(calls, []);
+    verifyBoundary();
+  });
+
+  test("NFR-2: a throwing MCP move becomes one warning notice before the cascade, which still follows", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "mcp-move-throws");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      gone: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({ marketplaces: { mp: { source: marketplaceRoot } }, plugins: {} }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            gone: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "gone") }),
+          },
+        }),
+      },
+    });
+    const migrateMcpEntries: McpMigrationStep = async () => {
+      await Promise.resolve();
+      throw new Error(`cannot read ${path.join(cwd, ".pi", "mcp.json")}`);
+    };
+
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, migrateMcpEntries });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Plugin MCP servers in mcp.json need attention.\n" +
+          "\n" +
+          "Left in mcp.json:\n" +
+          "  The project-scope move stopped: cannot read mcp.json. The next /reload tries again.",
+        severity: "warning",
+      },
+      {
+        message:
+          "● mp [project]\n" + "  ○ gone v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
+      },
+    ]);
+    assert.deepStrictEqual(
+      Object.keys((await loadState(project.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
+      [],
+    );
+    verifyBoundary();
+  });
+
+  test("AMIG-03: the migration notice is sent alone when reconcile has no outcome", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "mcp-move-alone");
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {},
+    });
+    await writeUnder(project.configJsonPath, configBytes({ marketplaces: {} }));
+    const migrateMcpEntries: McpMigrationStep = async (input) => {
+      input.rows.push({
+        kind: "moved",
+        scope: input.scope,
+        plugin: "hello",
+        marketplace: "mp",
+        from: "srv",
+        to: "plugin_hello_srv_",
+      });
+      await Promise.resolve();
+    };
+
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, migrateMcpEntries });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Plugin MCP servers moved from mcp.json to mcp-adapter.json.\n" +
+          "\n" +
+          "Moved to mcp-adapter.json:\n" +
+          "  srv -> plugin_hello_srv_ (hello) [project]\n" +
+          "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.\n" +
+          "/reload to pick up changes",
+        severity: "info",
+      },
     ]);
     verifyBoundary();
   });

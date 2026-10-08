@@ -17,5 +17,6 @@ export {
   replacePreparedMcp,
   rollbackMcpReplacement,
 } from "./stage.ts";
+export { readLegacyMcpOwners, removeLegacyMcpEntries } from "./legacy.ts";
 export { unstageMcpServers } from "./unstage.ts";
-export type { McpReplacement, PreparedMcpStaging } from "./types.ts";
+export type { LegacyMcpOwner, McpReplacement, PreparedMcpStaging } from "./types.ts";

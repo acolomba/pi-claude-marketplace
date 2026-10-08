@@ -61,6 +61,12 @@ import type { NotificationContext, SoftDepStatus, PiInventory } from "../platfor
  *  Argv-validation errors. On-the-wire string is
  *  `${message.message}\n\n${message.usage}` at "error" severity
  *  (SNM-13).
+ *  - notifyMcpConfigNotices(ctx, McpConfigNotice[])
+ *  One warning per MCP config notice kind, rendered from the shared
+ *  `mcpConfigNoticeSections` (AFILE-04, AVAR-04).
+ *  - notifyMcpMigration(ctx, McpMigrationReport)
+ *  The one reload migration notice for both scopes, with the same MCP config
+ *  lines inside its body (AMIG-03).
  *
  * Closed-set source of truth: the `Reason`, `StatusToken`, `PluginStatus` and
  * `MarketplaceStatus` literal-union vocabularies live in
@@ -86,7 +92,9 @@ import type { NotificationContext, SoftDepStatus, PiInventory } from "../platfor
  * remaining public functions (`notifyUsageError`, `notifyUsageInfo`,
  * `notifyDiagnostic`, `notifyAsyncRewakeSummary`, `notifyStopHookOverrideCap`,
  * `notifyMcpConfigNotices`, `makeRawNotifyFn`) carry no summary/tally/reload-hint
- * to compose, so they call `ctx.ui.notify` directly instead.
+ * to compose, so they call `ctx.ui.notify` directly instead. `notifyMcpMigration`
+ * writes its own summary line and reload hint, so it calls `ctx.ui.notify`
+ * directly too.
  */
 function emitWithSummary(
   ctx: NotificationContext,
@@ -347,29 +355,19 @@ function standingOverrideNotices(
 }
 
 /**
- * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 IL-2 seam: the one surface for MCP
- * config notices. Bridges report the facts and orchestrators call this after
- * their own row. It sends one `"warning"` notification per kind present, in
- * the order comments-dropped, left-unchanged, override-kept,
- * variables-missing, credentials-blanked: a summary line, a blank line, then
- * one distinct line per notice in first-seen order. An override-kept line
- * stands only when no later override-restored notice for the same scope, file
- * and server cancels it. An override-restored notice renders nothing. An
- * empty list sends nothing. A line names the scope, the file basename, the
- * plugin, the server, and override field names or environment variable names
- * only, so it carries no absolute path, no field value and no variable value
- * (AVAR-05). The host UI prepends
- * the `Warning:` label to the summary line. The byte form is locked by
- * `tests/architecture/mcp-config-notices.test.ts` against the
- * `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept`,
- * `mcp-variables-missing` and `mcp-credentials-blanked` blocks in
- * `docs/output-catalog.md`.
+ * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04: the MCP config lines of a notice
+ * list, one section per kind in the order comments-dropped, left-unchanged,
+ * override-kept, variables-missing, credentials-blanked. Each section holds
+ * its summary and its distinct lines in first-seen order, and may be empty.
+ * An override-kept line stands only when no later override-restored notice
+ * for the same scope, file and server cancels it. An override-restored notice
+ * renders nothing. `notifyMcpConfigNotices` and `notifyMcpMigration` both
+ * render from these sections, so their lines cannot drift.
  */
-export function notifyMcpConfigNotices(
-  ctx: NotificationContext,
+function mcpConfigNoticeSections(
   notices: readonly McpConfigNotice[],
-): void {
-  const warnings: ReadonlyArray<readonly [summary: string, lines: readonly string[]]> = [
+): ReadonlyArray<readonly [summary: string, lines: readonly string[]]> {
+  const sections: ReadonlyArray<readonly [summary: string, lines: readonly string[]]> = [
     ["MCP config comments removed.", mcpConfigFileLines(notices, "comments-dropped")],
     ["MCP config left unchanged.", mcpConfigFileLines(notices, "left-unchanged")],
     [
@@ -385,11 +383,164 @@ export function notifyMcpConfigNotices(
       notices.filter(isCredentialsBlanked).map((notice) => mcpCredentialsBlankedLine(notice)),
     ],
   ];
-  for (const [summary, lines] of warnings) {
-    const distinct = new Set(lines);
-    if (distinct.size > 0) {
-      ctx.ui.notify(`${summary}\n\n${[...distinct].join("\n")}`, "warning");
+  return sections.map(([summary, lines]) => [summary, [...new Set(lines)]] as const);
+}
+
+/**
+ * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 IL-2 seam: the one surface for MCP
+ * config notices. Bridges report the facts and orchestrators call this after
+ * their own row. It sends one `"warning"` notification per non-empty
+ * `mcpConfigNoticeSections` section, in section order: a summary line, a
+ * blank line, then the section's lines. An empty list sends nothing. A line
+ * names the scope, the file basename, the plugin, the server, and override
+ * field names or environment variable names only, so it carries no absolute
+ * path, no field value and no variable value (AVAR-05). The host UI prepends
+ * the `Warning:` label to the summary line. The byte form is locked by
+ * `tests/architecture/mcp-config-notices.test.ts` against the
+ * `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept`,
+ * `mcp-variables-missing` and `mcp-credentials-blanked` blocks in
+ * `docs/output-catalog.md`. The reload migration renders the same sections
+ * inside its one notice instead (`notifyMcpMigration`).
+ */
+export function notifyMcpConfigNotices(
+  ctx: NotificationContext,
+  notices: readonly McpConfigNotice[],
+): void {
+  for (const [summary, lines] of mcpConfigNoticeSections(notices)) {
+    if (lines.length > 0) {
+      ctx.ui.notify(`${summary}\n\n${lines.join("\n")}`, "warning");
     }
+  }
+}
+
+/** AMIG-01 / AMIG-03: a server the reload moved from `mcp.json` to `mcp-adapter.json`. */
+export interface McpMigrationMovedRow {
+  readonly kind: "moved";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  /** The server's key in `mcp.json`, its declared name. */
+  readonly from: string;
+  /** The server's key in `mcp-adapter.json` (ANAME-01). */
+  readonly to: string;
+}
+
+/** AMIG-01 / AMIG-03: a scope or plugin whose move stopped, with a path-free detail. */
+export interface McpMigrationStoppedRow {
+  readonly kind: "stopped";
+  readonly scope: Scope;
+  readonly detail: string;
+}
+
+/** AMIG-03: one row of the reload migration notice. */
+export type McpMigrationRow = McpMigrationMovedRow | McpMigrationStoppedRow;
+
+/** AMIG-03: everything one reload's migration reports, across both scopes. */
+export interface McpMigrationReport {
+  readonly rows: readonly McpMigrationRow[];
+  /** The MCP config facts of the files the migration wrote. */
+  readonly notices: readonly McpConfigNotice[];
+}
+
+const MCP_MIGRATION_MOVED_SUMMARY = "Plugin MCP servers moved from mcp.json to mcp-adapter.json.";
+const MCP_MIGRATION_STOPPED_SUMMARY = "Plugin MCP servers in mcp.json need attention.";
+const MCP_MIGRATION_COST_LINE =
+  "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.";
+
+/** Whether a UTF-16 code unit is a C0 control, DEL, or a C1 control. */
+function isControlCodeUnit(code: number): boolean {
+  return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+}
+
+/**
+ * AMIG-03: writes each C0 or C1 control character as `\u` and four
+ * lowercase hex digits, so a name read from a config file cannot move the
+ * cursor or end a line in the notice.
+ */
+function printable(text: string): string {
+  return Array.from(text, (char) => {
+    const code = char.charCodeAt(0);
+    return isControlCodeUnit(code) ? `\\u${code.toString(16).padStart(4, "0")}` : char;
+  }).join("");
+}
+
+/** Plain code-unit order: no locale, no normalization. */
+function codeUnitOrder(left: string, right: string): number {
+  return left < right ? -1 : Number(left > right);
+}
+
+/** Project before user, then plugin, then old name, in code-unit order. */
+function compareMovedRows(left: McpMigrationMovedRow, right: McpMigrationMovedRow): number {
+  return (
+    codeUnitOrder(left.scope, right.scope) ||
+    codeUnitOrder(left.plugin, right.plugin) ||
+    codeUnitOrder(left.from, right.from)
+  );
+}
+
+function compareStoppedRows(left: McpMigrationStoppedRow, right: McpMigrationStoppedRow): number {
+  return codeUnitOrder(left.scope, right.scope) || codeUnitOrder(left.detail, right.detail);
+}
+
+function isMovedRow(row: McpMigrationRow): row is McpMigrationMovedRow {
+  return row.kind === "moved";
+}
+
+function isStoppedRow(row: McpMigrationRow): row is McpMigrationStoppedRow {
+  return row.kind === "stopped";
+}
+
+function movedRowLine(row: McpMigrationMovedRow): string {
+  return `  ${printable(row.from)} -> ${row.to} (${printable(row.plugin)}) [${row.scope}]`;
+}
+
+function stoppedRowLine(row: McpMigrationStoppedRow): string {
+  return `  The ${row.scope}-scope move stopped: ${printable(row.detail)}. The next /reload tries again.`;
+}
+
+/** The notice body in its fixed order (AMIG-03). */
+function mcpMigrationLines(
+  moved: readonly McpMigrationMovedRow[],
+  stopped: readonly McpMigrationStoppedRow[],
+  notices: readonly McpConfigNotice[],
+): string[] {
+  const movedLines =
+    moved.length > 0 ? ["Moved to mcp-adapter.json:", ...moved.map(movedRowLine)] : [];
+  const stoppedLines =
+    stopped.length > 0 ? ["Left in mcp.json:", ...stopped.map(stoppedRowLine)] : [];
+  const configLines = mcpConfigNoticeSections(notices).flatMap(([, lines]) => lines);
+  return moved.length > 0
+    ? [...movedLines, ...stoppedLines, MCP_MIGRATION_COST_LINE, ...configLines, RELOAD_HINT_TRAILER]
+    : [...stoppedLines, ...configLines];
+}
+
+/**
+ * AMIG-01 / AMIG-03 IL-2 seam: the one migration notice per reload, covering
+ * both scopes. With no row it sends nothing. Otherwise it sends one
+ * notification: a summary line, a blank line, the moved rows, the stopped
+ * rows, then, when a row moved, the cost line, then the lines of every
+ * `mcpConfigNoticeSections` section, then, when a row moved, the reload hint.
+ * Rows sort project before user, then by plugin, then by old name (a stopped
+ * row by its detail), in code-unit order. Severity is `"info"` when every row
+ * moved and `"warning"` when a move stopped. A row names the old name, the
+ * adapter key, the plugin and the scope, and every control character in a
+ * name or detail is escaped; a detail carries no absolute path. The byte form
+ * is locked by `tests/architecture/mcp-migration-notice.test.ts` against the
+ * `mcp-migration-moved` and `mcp-migration-stopped` blocks in
+ * `docs/output-catalog.md`.
+ */
+export function notifyMcpMigration(ctx: NotificationContext, report: McpMigrationReport): void {
+  if (report.rows.length === 0) {
+    return;
+  }
+
+  const moved = report.rows.filter(isMovedRow).sort(compareMovedRows);
+  const stopped = report.rows.filter(isStoppedRow).sort(compareStoppedRows);
+  const lines = mcpMigrationLines(moved, stopped, report.notices);
+  if (stopped.length > 0) {
+    ctx.ui.notify(`${MCP_MIGRATION_STOPPED_SUMMARY}\n\n${lines.join("\n")}`, "warning");
+  } else {
+    ctx.ui.notify(`${MCP_MIGRATION_MOVED_SUMMARY}\n\n${lines.join("\n")}`, "info");
   }
 }
 

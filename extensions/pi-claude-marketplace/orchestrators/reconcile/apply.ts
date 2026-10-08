@@ -47,6 +47,12 @@
 //     and toggle loops need it as defense-in-depth even though their three
 //     entrypoints are documented to handle every throw internally and always
 //     answer with a typed outcome -- see the note above each loop.
+//   - AMIG-01 MCP MOVE per scope, after the read pass and before the apply
+//     pass, also when the config is invalid and never after a read pass that
+//     threw (`mcp-migration.ts`). It takes its own scope lock; a throw out of
+//     it becomes a stopped row (NFR-2). One migration notice for both scopes
+//     (`notifyMcpMigration`) precedes the cascade and is sent even when
+//     reconcile has no outcome (AMIG-03).
 //   - SINGLE notify() emission per applyReconcile invocation (IL-2 /
 //     RECON-04). Empty-and-clean reconciles are SILENT (NFR-2 / A4) -- the
 //     orchestrator skips the notify() call when no outcomes accumulated AND
@@ -69,7 +75,11 @@ import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { DependencyCascadeError, errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
-import { notifyDiagnostic, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
+import {
+  notifyDiagnostic,
+  notifyMcpConfigNotices,
+  notifyMcpMigration,
+} from "../../shared/notification-dispatch.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
 import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
@@ -94,6 +104,7 @@ import {
 } from "./apply-outcomes.ts";
 import { applyBackfillForScopeIsolated, runScopeIsolated } from "./backfill.ts";
 import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
+import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
 import { buildReconcileAppliedCascade } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
 import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
@@ -107,6 +118,7 @@ import type {
   ScopeReadResult,
 } from "./types.ts";
 import type { loadState } from "../../persistence/state-io.ts";
+import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   EnableDegradationSignals,
@@ -1294,6 +1306,32 @@ function reportUnreadableDeclarer(
 }
 
 /**
+ * AMIG-01 / NFR-2: runs one scope's MCP move and turns any throw out of it
+ * into a stopped row, never an `invalid-block` reconcile row, so the move
+ * cannot abort the reconcile of either scope.
+ */
+async function migrateScopeIsolated(
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  readResult: ScopeReadResult,
+  rows: McpMigrationRow[],
+  notices: McpConfigNotice[],
+): Promise<void> {
+  try {
+    await (opts.migrateMcpEntries ?? migrateLegacyMcpEntries)({
+      scope,
+      cwd: opts.cwd,
+      plan: readResult.plan,
+      reason: opts.reason,
+      rows,
+      notices,
+    });
+  } catch (err) {
+    rows.push({ kind: "stopped", scope, detail: redactAbsolutePaths(errorMessage(err)) });
+  }
+}
+
+/**
  * RECON-01..05: the load-time apply orchestrator. Fans out across both
  * scopes project-first (or just the explicit scope when `opts.scope` is
  * set), per-scope read pass under withLockedStateTransaction (migrate ->
@@ -1314,6 +1352,8 @@ async function applyReconcileWithReader(
   // compareByNameThenScope (project-before-user per MSG-GR-3) so the final
   // cascade emits in canonical order regardless of which scope ran first.
   const outcomes: PerEntryOutcome[] = [];
+  const migrationRows: McpMigrationRow[] = [];
+  const migrationNotices: McpConfigNotice[] = [];
 
   for (const scope of scopes) {
     // WR-01: per-scope failure isolation. A read-pass
@@ -1352,6 +1392,11 @@ async function applyReconcileWithReader(
       continue;
     }
 
+    // AMIG-01: the MCP move runs before the plan is applied, also when the
+    // config is invalid. A scope whose read pass threw skips it above.
+    // eslint-disable-next-line no-await-in-loop -- each scope's move takes that scope's lock
+    await migrateScopeIsolated(opts, scope, readResult, migrationRows, migrationNotices);
+
     // CFG-03 / state-load invalid rows surfaced first; the plan is undefined
     // for that scope so we skip the apply pass.
     if (readResult.invalidOutcomes.length > 0) {
@@ -1383,6 +1428,10 @@ async function applyReconcileWithReader(
     // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
     await rebuildScopeRoutingTableIsolated(scope, opts.cwd, opts.hooksRouting, outcomes);
   }
+
+  // AMIG-03: the one migration notice for both scopes comes before the
+  // reconcile cascade and speaks even when reconcile has no outcome.
+  notifyMcpMigration(opts.ctx, { rows: migrationRows, notices: migrationNotices });
 
   // Empty-and-clean reconcile -> SILENT (NFR-2 / A4 / RECON-05). The load-
   // time invariant is that a no-op reconcile produces zero notifications;

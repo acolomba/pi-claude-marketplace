@@ -6,6 +6,7 @@ import {
   buildMarker,
   isOwnedBy,
   keptOverrideOf,
+  markerOwnerOf,
   pluginSetFieldsOf,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/marker.ts";
 
@@ -525,4 +526,56 @@ describe("isOwnedBy", () => {
     // assert
     assert.strictEqual(owned, expectedOwnership);
   });
+});
+
+describe("markerOwnerOf", () => {
+  test("AMIG-01: returns the plugin and marketplace of a well-formed marker", () => {
+    // arrange
+    const server = {
+      command: "node",
+      _piClaudeMarketplace: {
+        plugin: "hello",
+        marketplace: "mp",
+        pluginSetFields: ["env"],
+        keptOverride: { disabled: true },
+      },
+    };
+
+    // act
+    const owner = markerOwnerOf(server);
+
+    // assert
+    assert.deepStrictEqual(owner, { plugin: "hello", marketplace: "mp" });
+  });
+
+  for (const { description, server } of [
+    { description: "a primitive", server: "srv" as unknown },
+    {
+      description: "an array",
+      server: [{ _piClaudeMarketplace: { plugin: "a", marketplace: "b" } }],
+    },
+    { description: "an entry with no marker", server: { command: "node" } },
+    { description: "a non-object marker", server: { _piClaudeMarketplace: "hello@mp" } },
+    {
+      description: "a marker with a non-string plugin",
+      server: { _piClaudeMarketplace: { plugin: 7, marketplace: "mp" } },
+    },
+    {
+      description: "a marker with inherited identity fields",
+      server: {
+        _piClaudeMarketplace: Object.create({ plugin: "hello", marketplace: "mp" }) as unknown,
+      },
+    },
+  ]) {
+    test(`AMIG-01: returns no owner for ${description}`, () => {
+      // arrange
+      const expectedOwner = undefined;
+
+      // act
+      const owner = markerOwnerOf(server);
+
+      // assert
+      assert.strictEqual(owner, expectedOwner);
+    });
+  }
 });

@@ -2,12 +2,19 @@
 // notifications are recorded, and a path marketplace holding one plugin with
 // one MCP server.
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
+import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -82,4 +89,35 @@ export async function seedMcpPlugin(
   }
 
   return pluginRoot;
+}
+
+/**
+ * Reproduces what the released builds left on disk: installs `hello@mp` at
+ * `scope` through the real install, keeps the bytes it wrote to
+ * `mcp-adapter.json`, then deletes that file and writes `legacyEntry` with the
+ * plugin's marker into the scope's `mcp.json` under the declared name `srv`.
+ */
+export async function seedLegacyMcpInstall(
+  cwd: string,
+  scope: Scope,
+  legacyEntry: Readonly<Record<string, unknown>>,
+): Promise<{ pluginRoot: string; freshAdapterBytes: Buffer }> {
+  const pluginRoot = await seedMcpPlugin(cwd, [scope]);
+  const locations = locationsFor(scope, cwd);
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  await createInstallOperation(
+    hooksRouting,
+    createCompletionCache(),
+  )({ ...makeCtx().session, scope, cwd, marketplace: "mp", plugin: "hello" });
+  const freshAdapterBytes = await readFile(locations.mcpAdapterJsonPath);
+  await rm(locations.mcpAdapterJsonPath);
+  await writeFile(
+    locations.mcpJsonPath,
+    JSON.stringify({
+      mcpServers: {
+        srv: { ...legacyEntry, _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" } },
+      },
+    }),
+  );
+  return { pluginRoot, freshAdapterBytes };
 }

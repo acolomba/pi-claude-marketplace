@@ -13,6 +13,8 @@ import {
   plannedSourceMismatchSubject,
   type ApplyReconcileOptions,
   type DependencyDisableStamp,
+  type McpMigrationInput,
+  type McpMigrationStep,
   type PlannedDependencyDisable,
   type PlannedDependencyInstall,
   type PlannedMarketplaceAdd,
@@ -55,6 +57,7 @@ const uninstallPlugin = mock<UninstallPluginOperation>({
   name: "uninstall operation type evidence",
 });
 const dependencyDisableStamp: DependencyDisableStamp = () => Promise.resolve();
+const migrateMcpEntries: McpMigrationStep = () => Promise.resolve();
 
 const plannedMarketplaceAdd = {
   scope: "project",
@@ -179,6 +182,21 @@ void ({
   hooksRouting,
   stampDependencyDisabled: dependencyDisableStamp,
 } satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  migrateMcpEntries,
+} satisfies ApplyReconcileOptions);
+void ({
+  scope: "project",
+  cwd: "/work/project",
+  plan: undefined,
+  rows: [],
+  notices: [],
+} satisfies McpMigrationInput);
 // D-09-13: the host's resources_discover reason.
 void ({
   ctx: extensionContext,

@@ -1,4 +1,5 @@
 import type {
+  LegacyMcpOwner,
   McpReplacement,
   McpReplacementNoop,
   McpReplacementReplaced,
@@ -6,6 +7,8 @@ import type {
   PreparedMcpStaged,
   PreparedMcpStaging,
   RawMcpDoc,
+  RemoveLegacyMcpInput,
+  RemoveLegacyMcpResult,
   StageMcpCommitResult,
   StageMcpInput,
   StagedMcpRecord,
@@ -119,6 +122,24 @@ const unstageMcpResult: UnstageMcpResult = {
   written: [{ path: "/scope/mcp.json", bytes: Buffer.from("{}\n") }],
 } satisfies UnstageMcpResult;
 void unstageMcpResult;
+
+void ({
+  plugin: "acme",
+  marketplace: "official",
+  names: ["search", "deploy"],
+} satisfies LegacyMcpOwner);
+
+void ({
+  locations: undefined!,
+  pluginName: "acme",
+  marketplaceName: "official",
+} satisfies RemoveLegacyMcpInput);
+
+void ({
+  removedNames: ["search"],
+  notices: [{ kind: "left-unchanged", scope: "project", file: "mcp.json" }],
+  written: [{ path: "/scope/mcp.json", bytes: Buffer.from("{}\n") }],
+} satisfies RemoveLegacyMcpResult);
 
 type IsMutableArray<T extends readonly unknown[]> = T extends unknown[] ? true : false;
 
@@ -236,3 +257,7 @@ void (true satisfies IsMutableArray<UnstageMcpResult["removedNames"]>);
 void (true satisfies IsMutableArray<UnstageMcpResult["warnings"]>);
 // @ts-expect-error unstage result written files are a readonly array
 void (true satisfies IsMutableArray<UnstageMcpResult["written"]>);
+// @ts-expect-error a legacy owner's names are a readonly array
+void (true satisfies IsMutableArray<LegacyMcpOwner["names"]>);
+// @ts-expect-error legacy removal results always expose the files they wrote
+void ({ removedNames: [], notices: [] } satisfies RemoveLegacyMcpResult);

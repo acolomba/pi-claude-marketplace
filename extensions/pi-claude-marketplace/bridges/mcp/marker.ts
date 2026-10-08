@@ -8,6 +8,8 @@
 // The marker may also carry `pluginSetFields`, the names of the carried fields
 // the plugin's entry sets (ANAME-07), and `keptOverride`: the user override
 // the entry replaced, which an unstage writes back (AFILE-06, AFILE-01).
+// The load-time move reads only the owner a legacy `mcp.json` entry's marker
+// names (AMIG-01).
 //
 // The marker key string is USER CONTRACT -- it must stay byte-stable so
 // existing `mcp.json` documents remain readable.
@@ -110,6 +112,18 @@ export function buildMarker(
     ...(pluginSetFields.length > 0 ? { pluginSetFields } : {}),
     ...(keptOverride === undefined ? {} : { keptOverride }),
   };
+}
+
+/** The plugin and marketplace a marker names (AMIG-01). */
+export interface McpMarkerOwner {
+  readonly plugin: string;
+  readonly marketplace: string;
+}
+
+/** The owner a well-formed marker names, or none (AMIG-01). */
+export function markerOwnerOf(value: unknown): McpMarkerOwner | undefined {
+  const marker = readMarker(value);
+  return marker === null ? undefined : { plugin: marker.plugin, marketplace: marker.marketplace };
 }
 
 /** Convenience: `readMarker(value)` followed by tuple equality. */

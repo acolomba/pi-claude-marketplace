@@ -4263,6 +4263,36 @@ Server "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json refe
 
 Emitted via `notifyMcpConfigNotices` by the same commands as the missing-variable notice. It fires when a remote server's `url` or `headers` references a variable on Claude Code's credential deny-list and that variable is set at install. The written entry carries an empty value in its place, so a value set later never reaches the server. Claude Code writes the same fact only to its debug log, so this user-visible warning is a documented divergence. Like the missing-variable notice, it shows no line for a server whose entry the same command removed again. One line per server, which names each withheld variable once, in first-seen order. The line names variables, never their values. It follows the missing-variable notice. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
 
+### Plugin MCP servers moved out of mcp.json (AMIG-01, AMIG-03)
+
+<!-- catalog-state: mcp-migration-moved -->
+
+```text
+Plugin MCP servers moved from mcp.json to mcp-adapter.json.
+
+Moved to mcp-adapter.json:
+  github -> plugin_acme_github_ (acme) [project]
+  slack -> plugin_acme_slack_ (acme) [user]
+The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.
+Server "plugin_acme_github_" from acme in the project-scope mcp-adapter.json uses environment variables that were not set at install: GITHUB_TOKEN.
+/reload to pick up changes
+```
+
+Emitted once per `/reload` or start by `notifyMcpMigration`, after the reconcile step has visited both scopes and before the reconcile cascade. It is sent even when reconcile has nothing else to report. Released builds wrote each plugin MCP server into the scope's `mcp.json` under its declared name. The step moves each server of an installed, enabled plugin into the same scope's `mcp-adapter.json` and removes the old entry. One row per moved server, project rows before user rows, then by plugin, then by old name. The old name comes from `mcp.json`. The new name is the adapter key, `plugin_<plugin>_<server>_`, which the `/mcp-adapter` panel, sign-in prompts and project approvals show. pi-mcp-adapter read its config at `session_start`, before this step, so the old names can show until the next reload. Nothing from an old entry is carried: each server is written as a fresh install of the plugin writes it, so an edit made in `mcp.json` does not survive. After the rows come the cost line, then the MCP config lines for the files the step wrote (here a variable that was not set), then the reload hint. Severity: `info` when every server moved. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+
+### Plugin MCP server move stopped (AMIG-03)
+
+<!-- catalog-state: mcp-migration-stopped -->
+
+```text
+Plugin MCP servers in mcp.json need attention.
+
+Left in mcp.json:
+  The user-scope move stopped: state.json is locked by another Pi process. The next /reload tries again.
+```
+
+Emitted by `notifyMcpMigration` at the same point as the moved notice, in the same single notification. A stopped row names the scope and what stopped the move, with no absolute path. A failure while moving one plugin names it as `<plugin>@<marketplace>` and does not stop the other plugins. The entries stay in `mcp.json` and keep working under their old names, and the next `/reload` tries again. Moved rows come first when the same reload also moved servers, and the cost line and the reload hint then follow the rows. Severity: `warning` when a move stopped; the first line is the summary. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts`.
+
 ______________________________________________________________________
 
 ## Cross-references

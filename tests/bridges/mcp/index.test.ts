@@ -6,10 +6,16 @@ import {
   commitPreparedMcp,
   finalizeMcpReplacement,
   prepareStageMcpServers,
+  readLegacyMcpOwners,
+  removeLegacyMcpEntries,
   replacePreparedMcp,
   rollbackMcpReplacement,
   unstageMcpServers,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
+import {
+  readLegacyMcpOwners as peerReadLegacyMcpOwners,
+  removeLegacyMcpEntries as peerRemoveLegacyMcpEntries,
+} from "../../../extensions/pi-claude-marketplace/bridges/mcp/legacy.ts";
 import {
   abortPreparedMcp as peerAbortPreparedMcp,
   commitPreparedMcp as peerCommitPreparedMcp,
@@ -21,10 +27,12 @@ import {
 import { unstageMcpServers as peerUnstageMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/unstage.ts";
 
 import type {
+  LegacyMcpOwner,
   McpReplacement,
   PreparedMcpStaging,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
 import type {
+  LegacyMcpOwner as PeerLegacyMcpOwner,
   McpReplacement as PeerMcpReplacement,
   PreparedMcpStaging as PeerPreparedMcpStaging,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/types.ts";
@@ -37,6 +45,7 @@ type ReplacementReplaced = Extract<McpReplacement, { kind: "replaced" }>;
 
 void (true satisfies Same<PreparedMcpStaging, PeerPreparedMcpStaging>);
 void (true satisfies Same<McpReplacement, PeerMcpReplacement>);
+void (true satisfies Same<LegacyMcpOwner, PeerLegacyMcpOwner>);
 void (true satisfies Same<PreparedNoop["kind"], "noop">);
 void (true satisfies Same<PreparedStaged["kind"], "staged">);
 void (true satisfies Same<ReplacementNoop["prepared"], PreparedNoop>);
@@ -87,6 +96,28 @@ describe("MCP barrel runtime bindings", () => {
 
     // assert
     assert.strictEqual(boundaryPrepareStageMcpServers, expectedPrepareStageMcpServers);
+  });
+
+  test("re-exports readLegacyMcpOwners from the legacy module", () => {
+    // arrange
+    const expectedReadLegacyMcpOwners = peerReadLegacyMcpOwners;
+
+    // act
+    const boundaryReadLegacyMcpOwners = readLegacyMcpOwners;
+
+    // assert
+    assert.strictEqual(boundaryReadLegacyMcpOwners, expectedReadLegacyMcpOwners);
+  });
+
+  test("re-exports removeLegacyMcpEntries from the legacy module", () => {
+    // arrange
+    const expectedRemoveLegacyMcpEntries = peerRemoveLegacyMcpEntries;
+
+    // act
+    const boundaryRemoveLegacyMcpEntries = removeLegacyMcpEntries;
+
+    // assert
+    assert.strictEqual(boundaryRemoveLegacyMcpEntries, expectedRemoveLegacyMcpEntries);
   });
 
   test("re-exports replacePreparedMcp from the stage module", () => {

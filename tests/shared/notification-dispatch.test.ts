@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test, type TestContext } from "node:test";
+import { describe, test, type TestContext } from "node:test";
 
 import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
@@ -11,6 +11,7 @@ import {
   notifyAsyncRewakeSummary,
   notifyDiagnostic,
   notifyMcpConfigNotices,
+  notifyMcpMigration,
   notifyStopHookOverrideCap,
   notifyUsageError,
   notifyUsageInfo,
@@ -6389,6 +6390,321 @@ test("AVAR-05: a credentials-blanked notice listed first still sends after the v
       ],
     ],
   );
+});
+
+test("AFILE-04: notices of every kind send one warning per kind in section order", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "credentials-blanked",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["ANTHROPIC_API_KEY"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["DD_SITE"],
+    },
+    {
+      kind: "override-kept",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      fields: ["env"],
+    },
+    { kind: "left-unchanged", scope: "user", file: "mcp.json" },
+    { kind: "comments-dropped", scope: "user", file: "mcp.json" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP config comments removed.\n\nThe user-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        "warning",
+      ],
+      [
+        "MCP config left unchanged.\n\nThe user-scope mcp.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.",
+        "warning",
+      ],
+      [
+        'MCP server override kept.\n\nhello now provides "plugin_hello_srv_" in the user-scope mcp-adapter.json. Your override for "plugin_hello_srv_" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable hello.',
+        "warning",
+      ],
+      [
+        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the user-scope mcp-adapter.json uses environment variables that were not set at install: DD_SITE.',
+        "warning",
+      ],
+      [
+        'MCP server credentials withheld.\n\nServer "plugin_hello_srv_" from hello in the user-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+const MCP_MIGRATION_COST_LINE =
+  "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.";
+
+describe("notifyMcpMigration", () => {
+  test("AMIG-03: a report with no row sends nothing, even with config notices", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [],
+      notices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+    });
+
+    // assert
+    assert.equal(ctx.ui.notify.mock.callCount(), 0);
+  });
+
+  test("AMIG-03: moved rows sort project first, then by plugin and old name in code-unit order, at info", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "moved",
+          scope: "user",
+          plugin: "acme",
+          marketplace: "mp",
+          from: "srv",
+          to: "plugin_acme_srv_",
+        },
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "beta",
+          marketplace: "mp",
+          from: "alpha",
+          to: "plugin_beta_alpha_",
+        },
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "acme",
+          marketplace: "mp",
+          from: "web",
+          to: "plugin_acme_web_",
+        },
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "acme",
+          marketplace: "mp",
+          from: "api",
+          to: "plugin_acme_api_",
+        },
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "Zed",
+          marketplace: "mp",
+          from: "srv",
+          to: "plugin_Zed_srv_",
+        },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers moved from mcp.json to mcp-adapter.json.",
+            "",
+            "Moved to mcp-adapter.json:",
+            "  srv -> plugin_Zed_srv_ (Zed) [project]",
+            "  api -> plugin_acme_api_ (acme) [project]",
+            "  web -> plugin_acme_web_ (acme) [project]",
+            "  alpha -> plugin_beta_alpha_ (beta) [project]",
+            "  srv -> plugin_acme_srv_ (acme) [user]",
+            MCP_MIGRATION_COST_LINE,
+            "/reload to pick up changes",
+          ].join("\n"),
+          "info",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-03: a stopped row with nothing moved is a warning with no cost line and no reload hint", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [{ kind: "stopped", scope: "user", detail: "state.json is locked" }],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          "Plugin MCP servers in mcp.json need attention.\n\nLeft in mcp.json:\n  The user-scope move stopped: state.json is locked. The next /reload tries again.",
+          "warning",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-03: moved and stopped rows share one warning, stopped rows sorted by scope then detail", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        { kind: "stopped", scope: "user", detail: "b@mp: denied" },
+        { kind: "stopped", scope: "project", detail: "z@mp: denied" },
+        {
+          kind: "moved",
+          scope: "user",
+          plugin: "acme",
+          marketplace: "mp",
+          from: "srv",
+          to: "plugin_acme_srv_",
+        },
+        { kind: "stopped", scope: "project", detail: "a@mp: denied" },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers in mcp.json need attention.",
+            "",
+            "Moved to mcp-adapter.json:",
+            "  srv -> plugin_acme_srv_ (acme) [user]",
+            "Left in mcp.json:",
+            "  The project-scope move stopped: a@mp: denied. The next /reload tries again.",
+            "  The project-scope move stopped: z@mp: denied. The next /reload tries again.",
+            "  The user-scope move stopped: b@mp: denied. The next /reload tries again.",
+            MCP_MIGRATION_COST_LINE,
+            "/reload to pick up changes",
+          ].join("\n"),
+          "warning",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-03: config notices render as their distinct lines after the cost line, in section order", (t) => {
+    // arrange
+    const ctx = createContext(t);
+    const variablesMissing = {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "plugin_acme_srv_",
+      names: ["TOKEN"],
+    } as const;
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "acme",
+          marketplace: "mp",
+          from: "srv",
+          to: "plugin_acme_srv_",
+        },
+      ],
+      notices: [
+        variablesMissing,
+        { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+        variablesMissing,
+      ],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers moved from mcp.json to mcp-adapter.json.",
+            "",
+            "Moved to mcp-adapter.json:",
+            "  srv -> plugin_acme_srv_ (acme) [project]",
+            MCP_MIGRATION_COST_LINE,
+            "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+            'Server "plugin_acme_srv_" from acme in the project-scope mcp-adapter.json uses environment variables that were not set at install: TOKEN.',
+            "/reload to pick up changes",
+          ].join("\n"),
+          "info",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-03: control characters in names and details render as \\u escapes", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "ac\u0000me",
+          marketplace: "mp",
+          from: "s\u001b[2Jrv",
+          to: "plugin_acme_srv_",
+        },
+        { kind: "stopped", scope: "project", detail: "line\nbreak\u007f\u009f\u00a0" },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers in mcp.json need attention.",
+            "",
+            "Moved to mcp-adapter.json:",
+            "  s\\u001b[2Jrv -> plugin_acme_srv_ (ac\\u0000me) [project]",
+            "Left in mcp.json:",
+            "  The project-scope move stopped: line\\u000abreak\\u007f\\u009f\u00a0. The next /reload tries again.",
+            MCP_MIGRATION_COST_LINE,
+            "/reload to pick up changes",
+          ].join("\n"),
+          "warning",
+        ],
+      ],
+    );
+  });
 });
 
 test("usage info dispatch preserves usage message at info severity", (t) => {

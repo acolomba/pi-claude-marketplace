@@ -1,7 +1,7 @@
 // bridges/mcp/types.ts
 //
 // Type-only module: shapes shared across the MCP bridge surface
-// (collision-slots / adapter-doc / stage / unstage). Kept in a single file so
+// (collision-slots / adapter-doc / stage / unstage / legacy). Kept in a single file so
 // the discriminated `PreparedMcpStaging` union and `StageMcpInput` /
 // `UnstageMcpInput` records cannot drift apart across modules.
 
@@ -149,5 +149,34 @@ export interface UnstageMcpResult {
    * NFR-3: each file the unstage rewrote and the exact bytes it wrote, in
    * write order. Empty when nothing was removed.
    */
+  readonly written: readonly McpWrittenFile[];
+}
+
+/**
+ * AMIG-01: one plugin that owns marked entries in a scope's legacy
+ * `mcp.json`. `names` lists its server keys in file order.
+ */
+export interface LegacyMcpOwner {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly names: readonly string[];
+}
+
+/** AMIG-01: input record for `removeLegacyMcpEntries`. */
+export interface RemoveLegacyMcpInput {
+  readonly locations: ScopedLocations;
+  readonly pluginName: string;
+  readonly marketplaceName: string;
+}
+
+/**
+ * AMIG-01: result of `removeLegacyMcpEntries`. `removedNames` lists the
+ * removed server keys in file order, `notices` the facts about `mcp.json`
+ * (AFILE-04, AFILE-02), and `written` the file and the exact bytes written to
+ * it (NFR-3). All three are empty when nothing was removed.
+ */
+export interface RemoveLegacyMcpResult {
+  readonly removedNames: readonly string[];
+  readonly notices: readonly McpConfigNotice[];
   readonly written: readonly McpWrittenFile[];
 }
