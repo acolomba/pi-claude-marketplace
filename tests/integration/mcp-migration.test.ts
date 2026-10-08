@@ -211,7 +211,7 @@ test("AMIG-03: one notice covers both scopes, project rows first", async () => {
   });
 });
 
-test("AMIG-01: a migrated plugin whose server declares tool permission rules matches a fresh install and its notice says the rules are not enforced", async () => {
+test("AMIG-01: a migrated plugin whose server declares tool permission rules matches a fresh install and its notice warns that the rules are not enforced", async () => {
   await withHermeticEnvironment("mcp-migration-tool-rules-", async ({ cwd }) => {
     // arrange
     const { freshAdapterBytes } = await seedLegacyMcpInstall(
@@ -243,7 +243,7 @@ test("AMIG-01: a migrated plugin whose server declares tool permission rules mat
           'Server "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: tools[].permission_policy, toolPermissions. Its tools run without these rules.',
           "/reload to pick up changes",
         ].join("\n"),
-        severity: "info",
+        severity: "warning",
       },
     ]);
   });

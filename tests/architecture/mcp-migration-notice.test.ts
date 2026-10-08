@@ -30,7 +30,7 @@ interface CatalogReportRow {
 const CATALOG_REPORT_ROWS: readonly CatalogReportRow[] = [
   {
     state: "mcp-migration-moved",
-    severity: "info",
+    severity: "warning",
     report: {
       rows: [
         {

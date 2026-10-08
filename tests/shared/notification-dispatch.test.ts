@@ -6814,7 +6814,7 @@ describe("notifyMcpMigration", () => {
     );
   });
 
-  test("AMIG-03: config notices render as their distinct lines after the cost line, in section order", (t) => {
+  test("AMIG-03: config notices render as their distinct lines after the cost line, in section order, at warning", (t) => {
     // arrange
     const ctx = createContext(t);
     const variablesMissing = {
@@ -6860,13 +6860,13 @@ describe("notifyMcpMigration", () => {
             'Server "plugin_acme_srv_" from acme in the project-scope mcp-adapter.json uses environment variables that were not set at install: TOKEN.',
             "/reload to pick up changes",
           ].join("\n"),
-          "info",
+          "warning",
         ],
       ],
     );
   });
 
-  test("AMIG-03: a tool-rules-unenforced notice renders its line after the credentials-withheld line", (t) => {
+  test("AMIG-03: a tool-rules-unenforced notice renders its line after the credentials-withheld line, at warning", (t) => {
     // arrange
     const ctx = createContext(t);
 
@@ -6917,11 +6917,77 @@ describe("notifyMcpMigration", () => {
             'Server "plugin_acme_srv_" from acme in the project-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: tools[].permission_policy, toolPermissions. Its tools run without these rules.',
             "/reload to pick up changes",
           ].join("\n"),
-          "info",
+          "warning",
         ],
       ],
     );
   });
+
+  for (const { notice, severity } of [
+    {
+      notice: {
+        kind: "variables-missing",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "plugin_acme_srv_",
+        names: ["TOKEN"],
+      },
+      severity: "warning",
+    },
+    {
+      notice: {
+        kind: "credentials-blanked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "plugin_acme_srv_",
+        names: ["NPM_TOKEN"],
+      },
+      severity: "warning",
+    },
+    {
+      notice: {
+        kind: "tool-rules-unenforced",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "plugin_acme_srv_",
+        fields: ["toolPermissions"],
+      },
+      severity: "warning",
+    },
+    {
+      notice: { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+      severity: "info",
+    },
+  ] as const) {
+    test(`AMIG-03: a ${notice.kind} notice alone sends an all-moved report at ${severity}`, (t) => {
+      // arrange
+      const ctx = createContext(t);
+
+      // act
+      notifyMcpMigration(ctx as never, {
+        rows: [
+          {
+            kind: "moved",
+            scope: "project",
+            plugin: "acme",
+            marketplace: "mp",
+            from: "srv",
+            to: "plugin_acme_srv_",
+          },
+        ],
+        notices: [notice],
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        ctx.ui.notify.mock.calls.map((call) => call.arguments[1]),
+        [severity],
+      );
+    });
+  }
 
   test("AMIG-03: a leftover-removed notice makes an all-moved report a warning, its line last", (t) => {
     // arrange

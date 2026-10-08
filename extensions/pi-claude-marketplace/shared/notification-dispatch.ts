@@ -790,13 +790,28 @@ function mcpMigrationSummary(rows: McpMigrationSortedRows): string {
   return rows.moved.length > 0 ? MCP_MIGRATION_MOVED_SUMMARY : MCP_MIGRATION_REMOVED_SUMMARY;
 }
 
-/** `"warning"` when a row stays, a server was dropped, or a leftover was removed (AMIG-03). */
+/**
+ * Whether a notice makes the migration notice a warning: a leftover removed,
+ * or a moved server with an unset variable, a withheld credential or tool
+ * rules not enforced. `notifyMcpConfigNotices` sends these at `"warning"` on
+ * every other staging path (ANAME-07, AVAR-04).
+ */
+function isWarningNotice(notice: McpConfigNotice): boolean {
+  return (
+    isLeftoverRemoved(notice) ||
+    isVariablesMissing(notice) ||
+    isCredentialsBlanked(notice) ||
+    isToolRulesUnenforced(notice)
+  );
+}
+
+/** `"warning"` when a row stays, a server was dropped, or a notice warns (AMIG-03). */
 function mcpMigrationSeverity(
   rows: McpMigrationSortedRows,
   notices: readonly McpConfigNotice[],
 ): "info" | "warning" {
   const warns =
-    rows.left.length > 0 || rows.removed.some(isWarningRemoval) || notices.some(isLeftoverRemoved);
+    rows.left.length > 0 || rows.removed.some(isWarningRemoval) || notices.some(isWarningNotice);
   return warns ? "warning" : "info";
 }
 
@@ -812,10 +827,11 @@ function mcpMigrationSeverity(
  * plugin, then by old name; left rows by scope, then plugin, then first old
  * name (a stopped row by its detail, a file row before the plugin rows), in
  * code-unit order. Severity is `"warning"` when a row was left in place, a
- * server was removed as unsupported or malformed, or a leftover was removed,
- * and `"info"` otherwise: a server removed because its plugin no longer
- * declares it or is disabled does not by itself warn. A row
- * names old names, the adapter key, the plugin, the marketplace and the
+ * server was removed as unsupported or malformed, a leftover was removed, or
+ * a moved server has an unset variable, a withheld credential or tool rules
+ * not enforced, and `"info"` otherwise: a server removed because its plugin
+ * no longer declares it or is disabled does not by itself warn. A row names
+ * old names, the adapter key, the plugin, the marketplace and the
  * scope, and every control character in a file-derived string is escaped; a
  * detail or source label carries no absolute path. The byte form is locked
  * by `tests/architecture/mcp-migration-notice.test.ts` against the
