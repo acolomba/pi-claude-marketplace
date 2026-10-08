@@ -601,6 +601,8 @@ export interface McpMigrationUnfinishedRow {
   readonly plugin: string;
   readonly marketplace: string;
   readonly servers: readonly string[];
+  /** The file whose write failed after the new entries were written. */
+  readonly file: "mcp.json" | "project-scope mcp-adapter.json";
   readonly detail: string;
 }
 
@@ -750,10 +752,15 @@ function ownerRowPrefix(
   return `  ${row.servers.map(printable).join(", ")} (${printable(row.plugin)}) [${row.scope}]`;
 }
 
+/** A printable detail without its own final period, which the row adds. */
+function sentenceBody(detail: string): string {
+  return printable(detail).replace(/\.$/u, "");
+}
+
 function leftRowLine(row: McpMigrationLeftRow): string {
   switch (row.kind) {
     case "stopped":
-      return `  The ${row.scope}-scope move stopped: ${printable(row.detail)}. The next /reload tries again.`;
+      return `  The ${row.scope}-scope move stopped: ${sentenceBody(row.detail)}. The next /reload tries again.`;
     case "file-unreadable":
       return `  The ${row.scope}-scope ${row.file} is not a valid MCP config, so nothing in this scope moved. Fix it, then run /reload.`;
     case "unowned":
@@ -767,7 +774,7 @@ function leftRowLine(row: McpMigrationLeftRow): string {
     case "collision":
       return `${ownerRowPrefix(row)} ${printable(row.key)} is already defined in the ${printable(row.source)}, so no server of ${printable(row.plugin)} moved. Remove or rename that server, then run /reload.`;
     case "unfinished":
-      return `${ownerRowPrefix(row)} The new entries are written, but mcp.json could not be updated: ${printable(row.detail)}. The next /reload finishes the move.`;
+      return `${ownerRowPrefix(row)} The new entries are written, but ${row.file} could not be updated: ${sentenceBody(row.detail)}. The next /reload finishes the move.`;
   }
 }
 

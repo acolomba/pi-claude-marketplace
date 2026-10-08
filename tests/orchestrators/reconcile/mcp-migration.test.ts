@@ -941,6 +941,7 @@ describe("migrateLegacyMcpEntries", () => {
         plugin: "beta",
         marketplace: "mp",
         servers: ["beta-srv"],
+        file: "mcp.json",
         detail: "mcp.json is busy",
       },
       {
@@ -1572,6 +1573,7 @@ describe("migrateLegacyMcpEntries", () => {
         plugin: "hello",
         marketplace: "mp",
         servers: ["srv"],
+        file: "mcp.json",
         detail: "injected removeLegacyMcpEntries failure",
       },
     ]);
@@ -1669,6 +1671,29 @@ describe("migrateLegacyMcpEntries", () => {
       '{\n  "mcpServers": {\n    "other": {\n      "disabled": true\n    }\n  }\n}\n',
     );
     assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
+    assert.strictEqual(await pathExists(locationsFor("project", cwd).extensionRoot), false);
+  });
+
+  test("AMIG-01: a user-scope move drops the project stub under the project lock without reading an invalid project state.json", async (t) => {
+    // arrange
+    const { cwd } = await createProjectScope(t, "user-project-bad-state");
+    const user = await seedUserMoveOwner(cwd, PROJECT_STUBS_TEXT);
+    const project = locationsFor("project", cwd);
+    await mkdir(project.extensionRoot, { recursive: true });
+    await writeFile(project.stateJsonPath, "{ not json");
+    const input = { ...migrationInput(cwd), scope: "user" } as const;
+
+    // act
+    await migrateLegacyMcpEntries(input, recordingOperations([]));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [USER_HELLO_MOVED]);
+    assert.strictEqual(
+      await readFile(project.mcpAdapterJsonPath, "utf8"),
+      '{\n  "mcpServers": {\n    "other": {\n      "disabled": true\n    }\n  }\n}\n',
+    );
+    assert.strictEqual(await readFile(project.stateJsonPath, "utf8"), "{ not json");
+    assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
   });
 
   test("AMIG-02: a held project lock keeps a user owner's legacy entry and project stub with an unfinished row", async (t) => {
@@ -1696,6 +1721,7 @@ describe("migrateLegacyMcpEntries", () => {
             plugin: "hello",
             marketplace: "mp",
             servers: ["srv"],
+            file: "project-scope mcp-adapter.json",
             detail:
               "Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes.",
           },

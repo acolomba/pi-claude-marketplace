@@ -180,6 +180,7 @@ const CATALOG_REPORT_ROWS: readonly CatalogReportRow[] = [
           plugin: "hello",
           marketplace: "mp",
           servers: ["srv"],
+          file: "mcp.json",
           detail: "permission denied",
         },
       ],

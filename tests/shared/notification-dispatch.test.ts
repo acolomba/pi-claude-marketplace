@@ -7600,6 +7600,7 @@ describe("notifyMcpMigration", () => {
           plugin: "hello",
           marketplace: "mp",
           servers: ["srv", "web"],
+          file: "mcp.json",
           detail: "permission denied",
         },
       ],
@@ -7616,6 +7617,43 @@ describe("notifyMcpMigration", () => {
             "",
             "Left in mcp.json:",
             "  srv, web (hello) [project] The new entries are written, but mcp.json could not be updated: permission denied. The next /reload finishes the move.",
+          ].join("\n"),
+          "warning",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-02: an unfinished row names the project-scope mcp-adapter.json and adds one final period to the detail", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "unfinished",
+          scope: "user",
+          plugin: "hello",
+          marketplace: "mp",
+          servers: ["srv"],
+          file: "project-scope mcp-adapter.json",
+          detail: "Retry after it completes.",
+        },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers in mcp.json need attention.",
+            "",
+            "Left in mcp.json:",
+            "  srv (hello) [user] The new entries are written, but project-scope mcp-adapter.json could not be updated: Retry after it completes. The next /reload finishes the move.",
           ].join("\n"),
           "warning",
         ],
@@ -7653,6 +7691,7 @@ describe("notifyMcpMigration", () => {
           plugin: "r\r",
           marketplace: "mp",
           servers: ["u\u0000"],
+          file: "mcp.json",
           detail: "d\u007f",
         },
       ],

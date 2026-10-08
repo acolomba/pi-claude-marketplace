@@ -76,7 +76,10 @@ import { pathExists } from "../../shared/fs-utils.ts";
 import { narrowResolverNotes } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { SCOPES } from "../../shared/types.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import {
+  withExistingScopeLock,
+  withLockedStateTransaction,
+} from "../../transaction/with-state-guard.ts";
 import { makeRecordedShaPresenceProbe } from "../plugin/git-source-probe.ts";
 
 import type { McpMigrationInput, ReconcilePlan } from "./types.ts";
@@ -89,7 +92,10 @@ import type {
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
-import type { McpMigrationRow } from "../../shared/notification-dispatch.ts";
+import type {
+  McpMigrationRow,
+  McpMigrationUnfinishedRow,
+} from "../../shared/notification-dispatch.ts";
 import type { LockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 /**
@@ -538,11 +544,16 @@ function removalRow(input: McpMigrationInput, staged: StagedOwner, name: string)
 }
 
 /**
- * AMIG-02: a failed legacy removal after a committed move leaves both files
- * holding the servers; the row says the next reload finishes it. An owner
- * whose stage wrote no server gets a stopped row.
+ * AMIG-02: a failed write to `file` after a committed move leaves both files
+ * holding the servers; the row names that file and says the next reload
+ * finishes it. An owner whose stage wrote no server gets a stopped row.
  */
-function pushRemovalFailureRow(input: McpMigrationInput, action: OwnerAction, err: unknown): void {
+function pushRemovalFailureRow(
+  input: McpMigrationInput,
+  action: OwnerAction,
+  err: unknown,
+  file: McpMigrationUnfinishedRow["file"],
+): void {
   if (action.arm !== "move") {
     pushStoppedRow(input, action.owner, err);
     return;
@@ -551,6 +562,7 @@ function pushRemovalFailureRow(input: McpMigrationInput, action: OwnerAction, er
   input.rows.push({
     kind: "unfinished",
     ...ownerRowFields(input, action.owner),
+    file,
     detail: redactAbsolutePaths(errorMessage(err)),
   });
 }
@@ -572,7 +584,7 @@ async function removeOwnerLegacyEntries(
     input.notices.push(...removed.notices);
     input.rows.push(...removed.removedNames.map((name) => removalRow(input, staged, name)));
   } catch (err) {
-    pushRemovalFailureRow(input, staged.action, err);
+    pushRemovalFailureRow(input, staged.action, err, "mcp.json");
   }
 }
 
@@ -588,13 +600,15 @@ function stubOwner({ action }: StagedOwner): ProjectDisableStubOwner {
  * AMIG-01: `/mcp-adapter disable` writes its stub into the project
  * `mcp-adapter.json` whatever the server's scope, so the user-scope move also
  * drops the stubs under the staged owners' old names there. Project-scope
- * commands rewrite that file under the project-scope lock, so the step writes
- * it only under that lock, taken inside the user-scope lock. No command takes
- * the two locks in the other order, and both are taken with no retry, so a
- * held lock fails at once. Returns the owners whose legacy entries can go
- * now. When the project file cannot be written, an owner with a stub there
- * keeps its legacy entries and its stub, gets a row, and the next `/reload`
- * tries again.
+ * commands rewrite that file under the project-scope lock, so the step takes
+ * that lock, inside the user-scope lock, and reads no project state. No
+ * command takes the two locks in the other order, and both are taken with no
+ * retry, so a held lock fails at once. With no project extension directory,
+ * no project-scope command has run in this project, and the step writes the
+ * file without the lock rather than create that directory (NFR-10). Returns
+ * the owners whose legacy entries can go now. When the project file cannot
+ * be written, an owner with a stub there keeps its legacy entries and its
+ * stub, gets a row naming that file, and the next `/reload` tries again.
  */
 async function clearProjectStubs(
   input: McpMigrationInput,
@@ -616,15 +630,20 @@ async function clearProjectStubs(
     return staged;
   }
 
+  const project = locationsFor("project", input.cwd);
+  const removeStubs = async (): Promise<void> => {
+    input.notices.push(
+      ...(await operations.removeProjectDisableStubs(input.cwd, withStubs.map(stubOwner))),
+    );
+  };
+
   try {
-    await withLockedStateTransaction(locationsFor("project", input.cwd), async () => {
-      input.notices.push(
-        ...(await operations.removeProjectDisableStubs(input.cwd, withStubs.map(stubOwner))),
-      );
-    });
+    await ((await pathExists(project.extensionRoot))
+      ? withExistingScopeLock(project, removeStubs)
+      : removeStubs());
   } catch (err) {
     for (const owner of withStubs) {
-      pushRemovalFailureRow(input, owner.action, err);
+      pushRemovalFailureRow(input, owner.action, err, "project-scope mcp-adapter.json");
     }
 
     return staged.filter((owner) => !withStubs.includes(owner));

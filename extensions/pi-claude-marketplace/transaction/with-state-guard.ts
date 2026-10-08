@@ -109,14 +109,22 @@ export async function withLockedStateTransaction<T>(
   });
 }
 
-/**
- * Per-scope proper-lockfile lifecycle. Acquires the lock (mapping ELOCKED
- * to StateLockHeldError), runs the body, and releases the lock -- chaining
- * release errors into the body error if both fail so neither is dropped.
- */
 async function withScopeLock<T>(locations: ScopedLocations, body: () => Promise<T>): Promise<T> {
   await mkdir(locations.extensionRoot, { recursive: true });
+  return withExistingScopeLock(locations, body);
+}
 
+/**
+ * Per-scope proper-lockfile lifecycle around `body`, with no state read or
+ * write. Acquires the lock (mapping ELOCKED to StateLockHeldError), runs the
+ * body, and releases the lock -- chaining release errors into the body error
+ * if both fail so neither is dropped. It creates no directory, so acquisition
+ * rejects when the scope's extension root does not exist.
+ */
+export async function withExistingScopeLock<T>(
+  locations: ScopedLocations,
+  body: () => Promise<T>,
+): Promise<T> {
   let release: () => Promise<void>;
   try {
     release = await acquireStateLock(locations);
