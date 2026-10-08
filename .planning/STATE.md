@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 05
 current_phase_name: Automatic migration on /reload
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-10-08T14:11:41.097Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-10-08T14:42:37.771Z"
 last_activity: 2026-10-08
 last_activity_desc: Phase 05 execution started
-state_head: 2bbce472ad93411ffb4f9ea5dfcc184a99a70dbf
+state_head: 257483b667244fdd11a954f37b4c771e4e6d0d38
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 44
-  completed_plans: 41
+  completed_plans: 42
   percent: 57
 ---
 
@@ -35,7 +35,7 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 05 (Automatic migration on /reload) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-10-08 — Phase 05 execution started
 
@@ -287,6 +287,7 @@ still open with a comment explaining what landed.
 | Phase 04 P09 | 11min | 2 tasks | 5 files |
 | Phase 05 P01 | 34 min | 3 tasks | 20 files |
 | Phase 05 P02 | 16 min | 3 tasks | 16 files |
+| Phase 05 P03 | 25 min | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -667,6 +668,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 05]: MCP migration step reads the manifest through lookupDeclaredPlugin (D-99-02a drift gate)
 - [Phase 05]: An unreadable mcp-adapter.json makes a movable owner's stage refuse: stopped row, legacy entries kept
 - [Phase 05]: Servers with tool permission rules install and warn; unenforcedToolRules re-checks the remote schema so a malformed server never gets the notice
+- [Phase 05]: Update takes the MCP stage notices right after its commit and appends the legacy removal's, so a removal throw still reports the adapter rewrite (AFILE-04)
+- [Phase 05]: An unparseable mcp.json gives no legacy names at prepare: install, enable, reinstall send no left-unchanged notice for it; update does
 
 ### Pending Todos
 
@@ -800,11 +803,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 05-02-PLAN.md
+**Stopped at:** Completed 05-03-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-08T14:11:40.789Z
+Last session: 2026-10-08T14:42:37.459Z
 Phase 4 closed in `/gsd-autonomous --from 4 --interactive`, run sequentially on
 this checkout (`~/src/pi-claude-marketplace-mcp-4`, branch `features/mcp-4`).
 Gates: 9/9 plans; `npm run check` green on 63ad2116 and again on 1629bac1
