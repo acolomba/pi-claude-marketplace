@@ -106,12 +106,12 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 
 ### Migration (AMIG)
 
-- [ ] **AMIG-01**: After upgrading, `/reload` moves each installed plugin's marked entries from
+- [x] **AMIG-01**: After upgrading, `/reload` moves each installed plugin's marked entries from
   `<scopeRoot>/mcp.json` into `mcp-adapter.json` in their final translated shape, with no
   reinstall; the pass is idempotent and retries after a partial failure (NFR-2, NFR-3).
-- [ ] **AMIG-02**: The move adds to `mcp-adapter.json` before removing from `mcp.json`, so a
+- [x] **AMIG-02**: The move adds to `mcp-adapter.json` before removing from `mcp.json`, so a
   failure between the two writes never loses a server, proven by a fault-injection test.
-- [ ] **AMIG-03**: The user sees one migration notice listing `old -> new` server names, the
+- [x] **AMIG-03**: The user sees one migration notice listing `old -> new` server names, the
   re-sign-in and project re-approval the rename causes, and the reload hint (the adapter picks up
   the move one `/reload` later).
 - [x] **AMIG-04**: A marked legacy entry with no owning install record is left in place with a
@@ -189,9 +189,9 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | AVAR-03 | Phase 4 | Complete |
 | AVAR-04 | Phase 4 | Complete |
 | AVAR-05 | Phase 4 | Complete |
-| AMIG-01 | Phase 5 | Pending |
-| AMIG-02 | Phase 5 | Pending |
-| AMIG-03 | Phase 5 | Pending |
+| AMIG-01 | Phase 5 | Complete |
+| AMIG-02 | Phase 5 | Complete |
+| AMIG-03 | Phase 5 | Complete |
 | AMIG-04 | Phase 5 | Complete |
 | ASTAT-01 | Phase 6 | Pending |
 | ASTAT-02 | Phase 6 | Pending |

@@ -4,17 +4,17 @@ milestone: mcp-4
 milestone_name: MCP 4
 current_phase: 05
 current_phase_name: Automatic migration on /reload
-status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-10-08T15:11:31.324Z"
+status: verifying
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-10-08T15:32:55.730Z"
 last_activity: 2026-10-08
 last_activity_desc: Phase 05 execution started
-state_head: e878f8cd98abada0f84be63c2f671188a8f4da54
+state_head: 6d56547e4a36795d6b65ff1ac836e6b3f5113542
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 44
-  completed_plans: 43
+  completed_plans: 44
   percent: 57
 ---
 
@@ -36,7 +36,7 @@ sign-ins and approvals.
 
 Phase: 05 (Automatic migration on /reload) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-08 — Phase 05 execution started
 
 Progress: [██████░░░░] 57%
@@ -289,6 +289,7 @@ still open with a comment explaining what landed.
 | Phase 05 P02 | 16 min | 3 tasks | 16 files |
 | Phase 05 P03 | 25 min | 3 tasks | 18 files |
 | Phase 05 P04 | 27min | 3 tasks | 13 files |
+| Phase 05 P05 | 75min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -674,6 +675,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 05]: The reload migration passes the recorded-sha presence probe whenever the record has resolvedSha; resolveStrict calls it only for git sources
 - [Phase 05]: An unavailable offline resolve is source-unreadable unless its notes narrow to malformed mcp
 - [Phase 05]: Left-in-place rows sort by scope, plugin key, first old name; a file-unreadable row leads its scope
+- [Phase 05]: The migration unsupported removal cause is "unsupported-feature"; the partial-vocabulary guard forbids the bare literal
+- [Phase 05]: A failed mcp.json removal is an unfinished row only for a moving owner; disabled and malformed owners keep a stopped row
 
 ### Pending Todos
 
@@ -807,11 +810,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 05-04-PLAN.md
+**Stopped at:** Completed 05-05-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-08T15:11:30.999Z
+Last session: 2026-10-08T15:32:55.426Z
 Phase 4 closed in `/gsd-autonomous --from 4 --interactive`, run sequentially on
 this checkout (`~/src/pi-claude-marketplace-mcp-4`, branch `features/mcp-4`).
 Gates: 9/9 plans; `npm run check` green on 63ad2116 and again on 1629bac1
