@@ -13,7 +13,7 @@
 // hand: no git process and no network module runs (NFR-5).
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
@@ -236,6 +236,147 @@ function recordingOperations(log: string[]): McpMigrationOperations {
       return removeLegacyMcpEntries(input);
     },
     now: () => new Date(MOVED_AT),
+  };
+}
+
+/** A file's inode, modification time and bytes, or `absent`. */
+async function fileIdentity(filePath: string): Promise<string> {
+  try {
+    const [stats, bytes] = await Promise.all([
+      stat(filePath, { bigint: true }),
+      readFile(filePath),
+    ]);
+    return `${stats.ino}:${stats.mtimeNs}:${bytes.toString("base64")}`;
+  } catch {
+    return "absent";
+  }
+}
+
+type FailingOperation = "commitPreparedMcp" | "saveState" | "removeLegacyMcpEntries";
+
+/**
+ * AMIG-02: the real bridge writes and `tx.save()` with a fixed clock, logging
+ * the basename of the file each call changed (bytes or inode), in call order.
+ * `failOnce` throws instead of the named operation's first call.
+ */
+function writeRecordingOperations(
+  locations: ScopedLocations,
+  log: string[],
+  failOnce?: FailingOperation,
+): McpMigrationOperations {
+  let failed = false;
+  async function observed<T>(
+    operation: FailingOperation,
+    filePath: string,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    if (operation === failOnce && !failed) {
+      failed = true;
+      throw new Error(`injected ${operation} failure`);
+    }
+
+    const before = await fileIdentity(filePath);
+    const result = await run();
+    if ((await fileIdentity(filePath)) !== before) {
+      log.push(path.basename(filePath));
+    }
+
+    return result;
+  }
+
+  return {
+    prepareStageMcpServers,
+    commitPreparedMcp: (prepared) =>
+      observed("commitPreparedMcp", locations.mcpAdapterJsonPath, () =>
+        commitPreparedMcp(prepared),
+      ),
+    saveState: (tx) => observed("saveState", locations.stateJsonPath, () => tx.save()),
+    removeLegacyMcpEntries: (removeInput) =>
+      observed("removeLegacyMcpEntries", locations.mcpJsonPath, () =>
+        removeLegacyMcpEntries(removeInput),
+      ),
+    now: () => new Date(MOVED_AT),
+  };
+}
+
+const WS_SERVER = { type: "ws", url: "wss://example.test/ws" };
+
+/**
+ * Seeds `hello` declaring `srv` and the unsupported `live`, recorded and left
+ * in `mcp.json` with both, so its move drops `live` and saves the record.
+ */
+async function seedDroppedServerOwner({ cwd, locations }: Scope): Promise<string> {
+  const marketplace = await seedMarketplace(cwd, {
+    hello: { servers: { srv: { command: "srv" }, live: WS_SERVER } },
+  });
+  await seedState(
+    locations,
+    stateWith(cwd, marketplace, {
+      hello: pluginRecord(marketplace.marketplaceRoot, "hello", ["srv", "live"]),
+    }),
+  );
+  await writeLegacy(locations, {
+    srv: legacyEntry("hello"),
+    live: legacyEntry("hello", WS_SERVER),
+  });
+  return marketplace.marketplaceRoot;
+}
+
+/** Seeds `hello` declaring `srv`, recorded with it, and its one legacy entry. */
+async function seedPlainMoveOwner({ cwd, locations }: Scope): Promise<string> {
+  const marketplace = await seedMarketplace(cwd, {
+    hello: { servers: { srv: { command: "srv" } } },
+  });
+  await seedState(
+    locations,
+    stateWith(cwd, marketplace, {
+      hello: pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+    }),
+  );
+  await writeLegacy(locations, { srv: legacyEntry("hello") });
+  return marketplace.marketplaceRoot;
+}
+
+/** The scope's three files as text with the tree's own paths replaced, so two trees compare. */
+async function scopeTexts({ cwd, home, locations }: Scope): Promise<readonly string[]> {
+  const files = [locations.mcpJsonPath, locations.mcpAdapterJsonPath, locations.stateJsonPath];
+  const texts = await Promise.all(files.map((file) => readFile(file, "utf8")));
+  return texts.map((text) => text.replaceAll(cwd, "<cwd>").replaceAll(home, "<home>"));
+}
+
+/** The server keys of an MCP config file. */
+async function serverKeys(filePath: string): Promise<readonly string[]> {
+  const config = JSON.parse(await readFile(filePath, "utf8")) as {
+    readonly mcpServers: Readonly<Record<string, unknown>>;
+  };
+  return Object.keys(config.mcpServers);
+}
+
+const EMPTY_MCP_JSON = '{\n  "mcpServers": {}\n}\n';
+
+const HELLO_MOVED = {
+  kind: "moved",
+  scope: "project",
+  plugin: "hello",
+  marketplace: "mp",
+  from: "srv",
+  to: "plugin_hello_srv_",
+} as const;
+
+/** The removed row of `hello`'s legacy `server` for `cause`. */
+function helloRemoved(
+  server: string,
+  cause: "not-declared" | "disabled" | "unsupported-feature" | "malformed",
+  feature?: string,
+): Record<string, unknown> {
+  return {
+    kind: "removed",
+    scope: "project",
+    plugin: "hello",
+    marketplace: "mp",
+    server,
+    cause,
+    ...(feature !== undefined && { feature }),
   };
 }
 
@@ -619,11 +760,6 @@ describe("migrateLegacyMcpEntries", () => {
       rows: [helloRow("unowned", "constructor")],
     },
     {
-      owner: "a disabled record",
-      seed: (scope: Scope) => seedNotMovable(scope, { enabled: false }),
-      rows: [],
-    },
-    {
       owner: "a source whose manifest cannot be read",
       seed: (scope: Scope) => seedNotMovable(scope, { manifestMissing: true }),
       rows: [helloRow("source-unreadable")],
@@ -632,16 +768,6 @@ describe("migrateLegacyMcpEntries", () => {
       owner: "a plugin the manifest does not list",
       seed: (scope: Scope) => seedNotMovable(scope, { listedPlugin: "other" }),
       rows: [helloRow("source-unreadable")],
-    },
-    {
-      owner: "a source that resolves non-installable",
-      seed: (scope: Scope) => seedNotMovable(scope, { lsp: true }),
-      rows: [],
-    },
-    {
-      owner: "a legacy name the source does not declare",
-      seed: (scope: Scope) => seedNotMovable(scope, { legacyName: "gone" }),
-      rows: [],
     },
   ]) {
     test(`AMIG-01 / AMIG-04: ${owner} calls no operation and keeps mcp.json byte-identical`, async (t) => {
@@ -721,7 +847,7 @@ describe("migrateLegacyMcpEntries", () => {
     );
   });
 
-  test("AMIG-01: a legacy removal failure for one owner is a stopped row, and the next owner is still removed", async (t) => {
+  test("AMIG-02: a legacy removal failure after the owner's adapter write is an unfinished row, and the next owner is still removed", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "remove-throws");
     const marketplace = await seedMarketplace(cwd, {
@@ -756,7 +882,14 @@ describe("migrateLegacyMcpEntries", () => {
 
     // assert
     assert.deepStrictEqual(input.rows, [
-      { kind: "stopped", scope: "project", detail: "beta@mp: mcp.json is busy" },
+      {
+        kind: "unfinished",
+        scope: "project",
+        plugin: "beta",
+        marketplace: "mp",
+        servers: ["beta-srv"],
+        detail: "mcp.json is busy",
+      },
       {
         kind: "moved",
         scope: "project",
@@ -986,30 +1119,6 @@ describe("migrateLegacyMcpEntries", () => {
     assert.deepStrictEqual(log, ["prepare hello@mp", "commit", "removeLegacy hello@mp"]);
   });
 
-  test("AMIG-01: an owner whose MCP config is malformed keeps its entries with no row", async (t) => {
-    // arrange
-    const { cwd, locations } = await createProjectScope(t, "malformed");
-    const marketplace = await seedMarketplace(cwd, {
-      hello: { servers: { srv: { command: 42 } } },
-    });
-    await seedState(
-      locations,
-      stateWith(cwd, marketplace, {
-        hello: pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
-      }),
-    );
-    const legacyBytes = await writeLegacy(locations, { srv: legacyEntry("hello") });
-    const log: string[] = [];
-    const input = migrationInput(cwd);
-
-    // act
-    await migrateLegacyMcpEntries(input, recordingOperations(log));
-
-    // assert
-    assert.deepStrictEqual({ rows: input.rows, log }, { rows: [], log: [] });
-    assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), legacyBytes);
-  });
-
   test("AMIG-01: a git owner moves offline from its warm recorded-sha clone, never the manifest sha", async (t) => {
     // arrange
     const scope = await createProjectScope(t, "git-warm");
@@ -1144,4 +1253,334 @@ describe("migrateLegacyMcpEntries", () => {
       );
     });
   }
+
+  test("AMIG-01: a legacy name the source no longer declares is removed in the same write, with a not-declared row", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "not-declared");
+    const { locations } = scope;
+    await seedNotMovable(scope, { legacyName: "gone" });
+    const stateBytes = await readFile(locations.stateJsonPath);
+    const log: string[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, log));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [helloRemoved("gone", "not-declared")]);
+    assert.deepStrictEqual(log, ["mcp-adapter.json", "mcp.json"]);
+    assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
+    assert.strictEqual(
+      await readFile(locations.mcpAdapterJsonPath, "utf8"),
+      freshAdapterText(locations, path.join(scope.cwd, "mp-src"), {
+        plugin_hello_srv_: { plugin: "hello", fields: { command: "srv" } },
+      }),
+    );
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBytes);
+  });
+
+  test("AMIG-01: a source that resolves partially available for another component moves its servers and keeps the record", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "partial-lsp");
+    const { locations } = scope;
+    await seedNotMovable(scope, { lsp: true });
+    const stateBytes = await readFile(locations.stateJsonPath);
+    const log: string[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, log));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [HELLO_MOVED]);
+    assert.deepStrictEqual(log, ["mcp-adapter.json", "mcp.json"]);
+    assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBytes);
+  });
+
+  test("AMIG-01: an unsupported server is removed and not written, the rest move, and the record becomes partially installed", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "unsupported-feature");
+    const { locations } = scope;
+    const marketplaceRoot = await seedDroppedServerOwner(scope);
+    const log: string[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, log));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [
+      HELLO_MOVED,
+      helloRemoved("live", "unsupported-feature", "ws"),
+    ]);
+    assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
+    assert.strictEqual(
+      await readFile(locations.mcpAdapterJsonPath, "utf8"),
+      freshAdapterText(locations, marketplaceRoot, {
+        plugin_hello_srv_: { plugin: "hello", fields: { command: "srv" } },
+      }),
+    );
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...pluginRecord(marketplaceRoot, "hello", ["srv"]),
+        compatibility: {
+          installable: false,
+          notes: [],
+          supported: ["mcpServers"],
+          unsupported: ["mcpServers"],
+        },
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
+  test("AMIG-01: a record already partially installed for its MCP servers is not stamped again", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "unsupported-recorded");
+    const { cwd, locations } = scope;
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" }, live: WS_SERVER } },
+    });
+    const record = pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]);
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: {
+          ...record,
+          compatibility: {
+            ...record.compatibility,
+            installable: false,
+            unsupported: ["mcpServers"],
+          },
+        },
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const stateBytes = await readFile(locations.stateJsonPath);
+    const log: string[] = [];
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, log));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [HELLO_MOVED]);
+    assert.deepStrictEqual(log, ["mcp-adapter.json", "mcp.json"]);
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBytes);
+  });
+
+  test("AMIG-01: a plugin whose MCP config is malformed has every legacy entry removed, none written, and its inventory emptied", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "malformed");
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: 42 } } },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: pluginRecord(marketplace.marketplaceRoot, "hello", ["srv", "old"]),
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello"), old: legacyEntry("hello") });
+    const log: string[] = [];
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, log));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [
+      helloRemoved("srv", "malformed"),
+      helloRemoved("old", "malformed"),
+    ]);
+    assert.deepStrictEqual(log, ["state.json", "mcp.json"]);
+    assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+      "mcp.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/state.json",
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: { ...pluginRecord(marketplace.marketplaceRoot, "hello", []), updatedAt: MOVED_AT },
+    });
+  });
+
+  test("AMIG-01: a disabled record's legacy entries are removed with no server written and no record change", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "disabled");
+    const { locations } = scope;
+    await seedNotMovable(scope, { enabled: false });
+    const stateBytes = await readFile(locations.stateJsonPath);
+    const log: string[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, log));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [helloRemoved("srv", "disabled")]);
+    assert.deepStrictEqual(log, ["mcp.json"]);
+    assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBytes);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+      "mcp.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/state.json",
+    ]);
+  });
+
+  test("AMIG-01: a disabled owner whose legacy removal fails gets a stopped row", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "disabled-remove-throws");
+    await seedNotMovable(scope, { enabled: false });
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(
+      input,
+      writeRecordingOperations(scope.locations, [], "removeLegacyMcpEntries"),
+    );
+
+    // assert
+    assert.deepStrictEqual(input.rows, [
+      {
+        kind: "stopped",
+        scope: "project",
+        detail: "hello@mp: injected removeLegacyMcpEntries failure",
+      },
+    ]);
+  });
+
+  test("AMIG-02: a plugin with a dropped server writes mcp-adapter.json, then state.json, then mcp.json", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "order-dropped");
+    await seedDroppedServerOwner(scope);
+    const log: string[] = [];
+
+    // act
+    await migrateLegacyMcpEntries(
+      migrationInput(scope.cwd),
+      writeRecordingOperations(scope.locations, log),
+    );
+
+    // assert
+    assert.deepStrictEqual(log, ["mcp-adapter.json", "state.json", "mcp.json"]);
+  });
+
+  test("AMIG-02: a plain move writes mcp-adapter.json, then mcp.json", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "order-plain");
+    await seedPlainMoveOwner(scope);
+    const log: string[] = [];
+
+    // act
+    await migrateLegacyMcpEntries(
+      migrationInput(scope.cwd),
+      writeRecordingOperations(scope.locations, log),
+    );
+
+    // assert
+    assert.deepStrictEqual(log, ["mcp-adapter.json", "mcp.json"]);
+  });
+
+  test("AMIG-02: a legacy removal that fails once leaves both files holding the server, and the next two runs finish then write nothing", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "unfinished");
+    const { locations } = scope;
+    await seedPlainMoveOwner(scope);
+    const firstLog: string[] = [];
+    const first = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(
+      first,
+      writeRecordingOperations(locations, firstLog, "removeLegacyMcpEntries"),
+    );
+    const afterFirst = {
+      legacy: await serverKeys(locations.mcpJsonPath),
+      adapter: await serverKeys(locations.mcpAdapterJsonPath),
+    };
+    const secondLog: string[] = [];
+    const second = migrationInput(scope.cwd);
+    await migrateLegacyMcpEntries(second, writeRecordingOperations(locations, secondLog));
+    const settled = await scopeTexts(scope);
+    const thirdLog: string[] = [];
+    const third = migrationInput(scope.cwd);
+    await migrateLegacyMcpEntries(third, writeRecordingOperations(locations, thirdLog));
+
+    // assert
+    assert.deepStrictEqual(firstLog, ["mcp-adapter.json"]);
+    assert.deepStrictEqual(afterFirst, { legacy: ["srv"], adapter: ["plugin_hello_srv_"] });
+    assert.deepStrictEqual(first.rows, [
+      {
+        kind: "unfinished",
+        scope: "project",
+        plugin: "hello",
+        marketplace: "mp",
+        servers: ["srv"],
+        detail: "injected removeLegacyMcpEntries failure",
+      },
+    ]);
+    assert.deepStrictEqual(
+      { log: secondLog, rows: second.rows },
+      {
+        log: ["mcp.json"],
+        rows: [HELLO_MOVED],
+      },
+    );
+    assert.deepStrictEqual({ log: thirdLog, rows: third.rows }, { log: [], rows: [] });
+    assert.deepStrictEqual(await scopeTexts(scope), settled);
+  });
+
+  for (const failOnce of ["commitPreparedMcp", "saveState", "removeLegacyMcpEntries"] as const) {
+    test(`AMIG-02: a crash in ${failOnce} converges on the next run to the bytes of an uninterrupted run`, async (t) => {
+      // arrange
+      const reference = await createProjectScope(t, "crash-reference");
+      await seedDroppedServerOwner(reference);
+      await migrateLegacyMcpEntries(
+        migrationInput(reference.cwd),
+        writeRecordingOperations(reference.locations, []),
+      );
+      const scope = await createProjectScope(t, `crash-${failOnce}`);
+      await seedDroppedServerOwner(scope);
+      const crashed = migrateLegacyMcpEntries(
+        migrationInput(scope.cwd),
+        writeRecordingOperations(scope.locations, [], failOnce),
+      );
+      await (failOnce === "saveState"
+        ? assert.rejects(crashed, /injected saveState failure/)
+        : crashed);
+
+      // act
+      await migrateLegacyMcpEntries(
+        migrationInput(scope.cwd),
+        writeRecordingOperations(scope.locations, []),
+      );
+
+      // assert
+      assert.deepStrictEqual(await scopeTexts(scope), await scopeTexts(reference));
+    });
+  }
+
+  test("AMIG-01: the half-done state finishes with one entry under the new key, none under the old name, and no adapter write", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "half-done");
+    const { locations } = scope;
+    const marketplaceRoot = await seedPlainMoveOwner(scope);
+    const adapterText = freshAdapterText(locations, marketplaceRoot, {
+      plugin_hello_srv_: { plugin: "hello", fields: { command: "srv" } },
+    });
+    await writeFile(locations.mcpAdapterJsonPath, adapterText);
+    const log: string[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, log));
+
+    // assert
+    assert.deepStrictEqual({ log, rows: input.rows }, { log: ["mcp.json"], rows: [HELLO_MOVED] });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), adapterText);
+    assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
+  });
 });

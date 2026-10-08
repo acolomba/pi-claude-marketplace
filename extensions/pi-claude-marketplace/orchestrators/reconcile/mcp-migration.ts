@@ -16,6 +16,21 @@
 // the step again, and the rerun converges to the same bytes. With no marked
 // entry the step takes no lock and writes nothing.
 //
+// AMIG-01: the move also removes what the installed plugin no longer
+// provides, in the same `mcp.json` write. A legacy name the re-staged source
+// no longer declares is removed. A server the source declares with a feature
+// pi-mcp-adapter cannot run is removed and not written, and the record becomes
+// partially installed, as `install --partial` leaves it. A plugin whose MCP
+// config is malformed has every legacy entry removed and none written, and
+// its record lists no MCP server, as a fresh install refuses it. A disabled
+// plugin's entries are removed with no re-stage and no record change
+// (ENBL-08: a disabled plugin's servers are never restored at load). The
+// record change is saved before the legacy entries go, so the trigger
+// outlives it. This differs from load-time backfill, which refuses to degrade
+// a clean record on a load the user did not start: the move degrades a record
+// or drops a plugin's MCP servers because that is what the installed plugin
+// now provides, and the notice lists every change with its reason.
+//
 // AMIG-04: an entry belongs to an install record of this scope only; a record
 // of the same plugin in the other scope does not own it. An owner with no
 // record stays in place and is reported, unless the scope's reconcile plan
@@ -61,9 +76,10 @@ import { makeRecordedShaPresenceProbe } from "../plugin/git-source-probe.ts";
 
 import type { McpMigrationInput, ReconcilePlan } from "./types.ts";
 import type { LegacyMcpOwner } from "../../bridges/mcp/index.ts";
-import type { ResolvedPlugin, ResolvedPluginInstallable } from "../../domain/resolver-types.ts";
+import type { MaterializablePlugin, ResolvedPlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
+import type { McpMigrationRow } from "../../shared/notification-dispatch.ts";
 import type { LockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 /**
@@ -90,11 +106,28 @@ const REAL_OPERATIONS: McpMigrationOperations = {
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 
-/** An owner whose entries this step moves, with the record and source it moves them from. */
-interface MovableOwner {
-  readonly owner: LegacyMcpOwner;
-  readonly record: PluginInstallRecord;
-  readonly resolved: ResolvedPluginInstallable;
+/**
+ * An owner whose entries this step acts on. A `move` owner's servers are
+ * re-staged from its source; a `malformed` or `disabled` owner's entries are
+ * removed and none is written.
+ */
+type OwnerAction =
+  | {
+      readonly arm: "move";
+      readonly owner: LegacyMcpOwner;
+      readonly record: PluginInstallRecord;
+      readonly resolved: MaterializablePlugin;
+    }
+  | {
+      readonly arm: "malformed" | "disabled";
+      readonly owner: LegacyMcpOwner;
+      readonly record: PluginInstallRecord;
+    };
+
+/** An owner whose stage committed, with the names it wrote. */
+interface StagedOwner {
+  readonly action: OwnerAction;
+  readonly stagedNames: readonly string[];
 }
 
 /** A plan entry that names one plugin. */
@@ -233,18 +266,19 @@ async function resolveOffline(
 }
 
 /**
- * AMIG-01 / AMIG-04: an owner moves when its record exists in this scope and
- * is enabled, the plan does not rewrite it, its source resolves offline as
- * installable, and the source still declares every legacy name. An owner
- * with no record, or whose source cannot be read offline, gets its row; any
- * other owner keeps its entries.
+ * AMIG-01 / AMIG-04: what the step does with a recorded owner the plan does
+ * not rewrite. A disabled record's entries are removed. Otherwise the source
+ * is resolved offline: a materializable resolve moves the servers it still
+ * supports, and a malformed MCP config removes every entry. An owner with no
+ * record, or whose source cannot be read offline, gets its row; an owner the
+ * plan rewrites keeps its entries.
  */
-async function movableOwner(
+async function ownerAction(
   input: McpMigrationInput,
   locations: ScopedLocations,
   state: ExtensionState,
   owner: LegacyMcpOwner,
-): Promise<MovableOwner | undefined> {
+): Promise<OwnerAction | undefined> {
   const marketplace = ownValue(state.marketplaces, owner.marketplace);
   const record = marketplace && ownValue(marketplace.plugins, owner.plugin);
   if (marketplace === undefined || record === undefined) {
@@ -252,8 +286,12 @@ async function movableOwner(
     return undefined;
   }
 
-  if (rewrittenByPlan(input, owner, record) || isRecordedButDisabled(record)) {
+  if (rewrittenByPlan(input, owner, record)) {
     return undefined;
+  }
+
+  if (isRecordedButDisabled(record)) {
+    return { arm: "disabled", owner, record };
   }
 
   const resolved = await resolveOffline(locations, marketplace, record, owner.plugin);
@@ -262,12 +300,9 @@ async function movableOwner(
     return undefined;
   }
 
-  if (resolved.state !== "installable") {
-    return undefined;
-  }
-
-  const declaresAll = owner.names.every((name) => Object.hasOwn(resolved.mcpServers, name));
-  return declaresAll ? { owner, record, resolved } : undefined;
+  return resolved.state === "unavailable"
+    ? { arm: "malformed", owner, record }
+    : { arm: "move", owner, record, resolved };
 }
 
 /**
@@ -296,31 +331,49 @@ function pushStoppedRow(input: McpMigrationInput, owner: LegacyMcpOwner, err: un
 }
 
 /**
+ * The servers an owner's stage writes: a moving owner's supported servers
+ * from its source, none for a malformed or disabled owner, whose stage only
+ * drops the plugin's old-name leftovers.
+ */
+function stagedSource(action: OwnerAction): {
+  readonly servers: Record<string, unknown>;
+  readonly pluginRoot: string;
+  readonly description: string | undefined;
+} {
+  return action.arm === "move"
+    ? {
+        servers: action.resolved.mcpServers,
+        pluginRoot: action.resolved.pluginRoot,
+        description: action.resolved.description,
+      }
+    : { servers: {}, pluginRoot: action.record.resolvedSource, description: undefined };
+}
+
+/**
  * Writes the owner's servers into `mcp-adapter.json` exactly as an install
  * stages them and returns the staged names, or undefined when the stage
- * failed. The owner declares every legacy name, so the stage always has
- * servers to write: an unreadable `mcp-adapter.json` refuses (AFILE-02) and
- * the legacy entries stay. The stage's notices describe the write just made,
- * so they are reported now.
+ * failed. The stage's notices describe the write just made, so they are
+ * reported now.
  */
 async function stageOwner(
   input: McpMigrationInput,
   operations: McpMigrationOperations,
   locations: ScopedLocations,
-  move: MovableOwner,
+  action: OwnerAction,
 ): Promise<readonly string[] | undefined> {
-  const { owner, resolved } = move;
+  const { owner } = action;
+  const { servers, pluginRoot, description } = stagedSource(action);
   try {
     const prepared = await operations.prepareStageMcpServers({
       locations,
       cwd: input.cwd,
       marketplaceName: owner.marketplace,
       pluginName: owner.plugin,
-      servers: resolved.mcpServers,
-      pluginRoot: resolved.pluginRoot,
+      servers,
+      pluginRoot,
       pluginData: await locations.pluginDataDir(owner.marketplace, owner.plugin),
-      sourcePath: `${resolved.pluginRoot}#mcpServers`,
-      description: resolved.description,
+      sourcePath: `${pluginRoot}#mcpServers`,
+      description,
     });
     const result = await operations.commitPreparedMcp(prepared);
     input.notices.push(...result.notices);
@@ -341,16 +394,8 @@ async function stageOwner(
   }
 }
 
-/**
- * Sets the record's MCP inventory to the staged names and stamps `updatedAt`
- * when they differ in content or order. Nothing else on the record changes:
- * the move is MCP-only. Returns whether the record changed.
- */
-function recordStagedNames(
-  record: PluginInstallRecord,
-  stagedNames: readonly string[],
-  now: () => Date,
-): boolean {
+/** Sets the record's MCP inventory to the staged names when they differ in content or order. */
+function applyStagedNames(record: PluginInstallRecord, stagedNames: readonly string[]): boolean {
   const recorded = record.resources.mcpServers;
   const same =
     recorded.length === stagedNames.length &&
@@ -360,17 +405,114 @@ function recordStagedNames(
   }
 
   record.resources.mcpServers = [...stagedNames];
-  record.updatedAt = now().toISOString();
   return true;
 }
 
-/** Removes the owner's marked entries from `mcp.json`; one moved row per removed name. */
+/**
+ * AMIG-01: a moving owner whose source declares a server pi-mcp-adapter
+ * cannot run becomes partially installed, as `install --partial` records it:
+ * not installable, with `mcpServers` among the unsupported components.
+ */
+function applyDroppedServers(action: OwnerAction): boolean {
+  if (action.arm !== "move" || (action.resolved.droppedMcpServers ?? []).length === 0) {
+    return false;
+  }
+
+  const compatibility = action.record.compatibility;
+  const listed = compatibility.unsupported.includes("mcpServers");
+  if (!compatibility.installable && listed) {
+    return false;
+  }
+
+  compatibility.installable = false;
+  if (!listed) {
+    compatibility.unsupported = [...compatibility.unsupported, "mcpServers"];
+  }
+
+  return true;
+}
+
+/**
+ * Records what the owner's stage wrote and stamps `updatedAt` when anything
+ * differs. Nothing else on the record changes: the move is MCP-only. A
+ * disabled record is never changed. Returns whether the record changed.
+ */
+function recordAction(
+  action: OwnerAction,
+  stagedNames: readonly string[],
+  now: () => Date,
+): boolean {
+  if (action.arm === "disabled") {
+    return false;
+  }
+
+  const namesChanged = applyStagedNames(action.record, stagedNames);
+  const compatibilityChanged = applyDroppedServers(action);
+  if (!namesChanged && !compatibilityChanged) {
+    return false;
+  }
+
+  action.record.updatedAt = now().toISOString();
+  return true;
+}
+
+/**
+ * AMIG-01 / AMIG-03: the row for one removed legacy name: moved when the
+ * stage wrote it, otherwise removed with its cause.
+ */
+function removalRow(input: McpMigrationInput, staged: StagedOwner, name: string): McpMigrationRow {
+  const { action, stagedNames } = staged;
+  const fields = {
+    scope: input.scope,
+    plugin: action.owner.plugin,
+    marketplace: action.owner.marketplace,
+  };
+  if (action.arm !== "move") {
+    return { kind: "removed", ...fields, server: name, cause: action.arm };
+  }
+
+  if (stagedNames.includes(name)) {
+    return { kind: "moved", ...fields, from: name, to: generatedMcpServerKey(fields.plugin, name) };
+  }
+
+  const dropped = action.resolved.droppedMcpServers?.find((entry) => entry.server === name);
+  return dropped === undefined
+    ? { kind: "removed", ...fields, server: name, cause: "not-declared" }
+    : {
+        kind: "removed",
+        ...fields,
+        server: name,
+        cause: "unsupported-feature",
+        feature: dropped.feature,
+      };
+}
+
+/**
+ * AMIG-02: a failed legacy removal after a committed move leaves both files
+ * holding the servers; the row says the next reload finishes it. An owner
+ * whose stage wrote no server gets a stopped row.
+ */
+function pushRemovalFailureRow(input: McpMigrationInput, action: OwnerAction, err: unknown): void {
+  if (action.arm !== "move") {
+    pushStoppedRow(input, action.owner, err);
+    return;
+  }
+
+  input.rows.push({
+    kind: "unfinished",
+    ...ownerRowFields(input, action.owner),
+    detail: redactAbsolutePaths(errorMessage(err)),
+  });
+}
+
+/** Removes the owner's marked entries from `mcp.json`; one row per removed name. */
 async function removeOwnerLegacyEntries(
   input: McpMigrationInput,
   operations: McpMigrationOperations,
   locations: ScopedLocations,
-  owner: LegacyMcpOwner,
+  staged: StagedOwner,
 ): Promise<void> {
+  const { owner } = staged.action;
   try {
     const removed = await operations.removeLegacyMcpEntries({
       locations,
@@ -378,37 +520,28 @@ async function removeOwnerLegacyEntries(
       marketplaceName: owner.marketplace,
     });
     input.notices.push(...removed.notices);
-    input.rows.push(
-      ...removed.removedNames.map((name) => ({
-        kind: "moved" as const,
-        scope: input.scope,
-        plugin: owner.plugin,
-        marketplace: owner.marketplace,
-        from: name,
-        to: generatedMcpServerKey(owner.plugin, name),
-      })),
-    );
+    input.rows.push(...removed.removedNames.map((name) => removalRow(input, staged, name)));
   } catch (err) {
-    pushStoppedRow(input, owner, err);
+    pushRemovalFailureRow(input, staged.action, err);
   }
 }
 
-async function movableOwners(
+async function ownerActions(
   input: McpMigrationInput,
   locations: ScopedLocations,
   state: ExtensionState,
   owners: readonly LegacyMcpOwner[],
-): Promise<MovableOwner[]> {
-  const movable: MovableOwner[] = [];
+): Promise<OwnerAction[]> {
+  const actions: OwnerAction[] = [];
   for (const owner of owners) {
     // eslint-disable-next-line no-await-in-loop -- owners resolve in their sorted order, one source read at a time
-    const move = await movableOwner(input, locations, state, owner);
-    if (move !== undefined) {
-      movable.push(move);
+    const action = await ownerAction(input, locations, state, owner);
+    if (action !== undefined) {
+      actions.push(action);
     }
   }
 
-  return movable;
+  return actions;
 }
 
 /**
@@ -461,15 +594,14 @@ async function migrateLocked(
   }
 
   const owners = await readLegacyMcpOwners(locations.mcpJsonPath);
-  const staged: LegacyMcpOwner[] = [];
+  const staged: StagedOwner[] = [];
   let recordsChanged = false;
-  for (const move of await movableOwners(input, locations, tx.state, owners)) {
+  for (const action of await ownerActions(input, locations, tx.state, owners)) {
     // eslint-disable-next-line no-await-in-loop -- each stage reads the mcp-adapter.json the previous one wrote
-    const stagedNames = await stageOwner(input, operations, locations, move);
+    const stagedNames = await stageOwner(input, operations, locations, action);
     if (stagedNames !== undefined) {
-      staged.push(move.owner);
-      recordsChanged =
-        recordStagedNames(move.record, stagedNames, operations.now) || recordsChanged;
+      staged.push({ action, stagedNames });
+      recordsChanged = recordAction(action, stagedNames, operations.now) || recordsChanged;
     }
   }
 

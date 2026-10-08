@@ -7246,6 +7246,359 @@ describe("notifyMcpMigration", () => {
       ],
     );
   });
+
+  test("AMIG-03: removed rows render between moved and left-in-place rows, each with its reason, at warning", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "removed",
+          scope: "user",
+          plugin: "broken",
+          marketplace: "mp",
+          server: "bad",
+          cause: "malformed",
+        },
+        {
+          kind: "unowned",
+          scope: "project",
+          plugin: "ghost",
+          marketplace: "mp",
+          servers: ["old"],
+        },
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          server: "live",
+          cause: "unsupported-feature",
+          feature: "ws",
+        },
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          server: "gone",
+          cause: "not-declared",
+        },
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "acme",
+          marketplace: "mp",
+          server: "srv",
+          cause: "disabled",
+        },
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          from: "srv",
+          to: "plugin_hello_srv_",
+        },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers in mcp.json need attention.",
+            "",
+            "Moved to mcp-adapter.json:",
+            "  srv -> plugin_hello_srv_ (hello) [project]",
+            "Removed from mcp.json:",
+            "  srv (acme) [project] acme is disabled.",
+            "  gone (hello) [project] hello no longer declares it.",
+            "  live (hello) [project] {unsupported mcp} ws: pi-mcp-adapter cannot run it.",
+            "  bad (broken) [user] {malformed mcp}: broken's MCP config is not valid, so none of its servers are installed.",
+            "Left in mcp.json:",
+            "  old (ghost) [project] No plugin installed in the project scope owns it. Install ghost@mp or remove it from mcp.json.",
+            MCP_MIGRATION_COST_LINE,
+            "/reload to pick up changes",
+          ].join("\n"),
+          "warning",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-03: not-declared and disabled removals alone stay info, with no cost line but the reload hint", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          server: "gone",
+          cause: "not-declared",
+        },
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "acme",
+          marketplace: "mp",
+          server: "srv",
+          cause: "disabled",
+        },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers removed from mcp.json.",
+            "",
+            "Removed from mcp.json:",
+            "  srv (acme) [project] acme is disabled.",
+            "  gone (hello) [project] hello no longer declares it.",
+            "/reload to pick up changes",
+          ].join("\n"),
+          "info",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-03: a move with a not-declared removal stays info", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "moved",
+          scope: "user",
+          plugin: "hello",
+          marketplace: "mp",
+          from: "srv",
+          to: "plugin_hello_srv_",
+        },
+        {
+          kind: "removed",
+          scope: "user",
+          plugin: "hello",
+          marketplace: "mp",
+          server: "gone",
+          cause: "not-declared",
+        },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers moved from mcp.json to mcp-adapter.json.",
+            "",
+            "Moved to mcp-adapter.json:",
+            "  srv -> plugin_hello_srv_ (hello) [user]",
+            "Removed from mcp.json:",
+            "  gone (hello) [user] hello no longer declares it.",
+            MCP_MIGRATION_COST_LINE,
+            "/reload to pick up changes",
+          ].join("\n"),
+          "info",
+        ],
+      ],
+    );
+  });
+
+  for (const { cause, line } of [
+    {
+      cause: "unsupported-feature",
+      line: "  live (hello) [project] {unsupported mcp} sdk: pi-mcp-adapter cannot run it.",
+    },
+    {
+      cause: "malformed",
+      line: "  live (hello) [project] {malformed mcp}: hello's MCP config is not valid, so none of its servers are installed.",
+    },
+  ] as const) {
+    test(`AMIG-03: a removal for ${cause} alone is a warning with the reload hint`, (t) => {
+      // arrange
+      const ctx = createContext(t);
+
+      // act
+      notifyMcpMigration(ctx as never, {
+        rows: [
+          {
+            kind: "removed",
+            scope: "project",
+            plugin: "hello",
+            marketplace: "mp",
+            server: "live",
+            cause,
+            ...(cause === "unsupported-feature" && { feature: "sdk" }),
+          },
+        ],
+        notices: [],
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        ctx.ui.notify.mock.calls.map((call) => call.arguments),
+        [
+          [
+            [
+              "Plugin MCP servers removed from mcp.json.",
+              "",
+              "Removed from mcp.json:",
+              line,
+              "/reload to pick up changes",
+            ].join("\n"),
+            "warning",
+          ],
+        ],
+      );
+    });
+  }
+
+  test("AMIG-03: an unsupported removal with no feature names only the token", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          server: "live",
+          cause: "unsupported-feature",
+        },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]?.arguments, [
+      [
+        "Plugin MCP servers removed from mcp.json.",
+        "",
+        "Removed from mcp.json:",
+        "  live (hello) [project] {unsupported mcp}: pi-mcp-adapter cannot run it.",
+        "/reload to pick up changes",
+      ].join("\n"),
+      "warning",
+    ]);
+  });
+
+  test("AMIG-02: an unfinished move renders under the left-in-place rows at warning", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "unfinished",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          servers: ["srv", "web"],
+          detail: "permission denied",
+        },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers in mcp.json need attention.",
+            "",
+            "Left in mcp.json:",
+            "  srv, web (hello) [project] The new entries are written, but mcp.json could not be updated: permission denied. The next /reload finishes the move.",
+          ].join("\n"),
+          "warning",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-03: control characters in removed and unfinished rows render as \\u escapes", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "p\u001b",
+          marketplace: "mp",
+          server: "s\nv",
+          cause: "unsupported-feature",
+          feature: "w\u0007s",
+        },
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "q\u009b",
+          marketplace: "mp",
+          server: "t",
+          cause: "not-declared",
+        },
+        {
+          kind: "unfinished",
+          scope: "user",
+          plugin: "r\r",
+          marketplace: "mp",
+          servers: ["u\u0000"],
+          detail: "d\u007f",
+        },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers in mcp.json need attention.",
+            "",
+            "Removed from mcp.json:",
+            "  s\\u000av (p\\u001b) [project] {unsupported mcp} w\\u0007s: pi-mcp-adapter cannot run it.",
+            "  t (q\\u009b) [project] q\\u009b no longer declares it.",
+            "Left in mcp.json:",
+            "  u\\u0000 (r\\u000d) [user] The new entries are written, but mcp.json could not be updated: d\\u007f. The next /reload finishes the move.",
+            "/reload to pick up changes",
+          ].join("\n"),
+          "warning",
+        ],
+      ],
+    );
+  });
 });
 
 test("usage info dispatch preserves usage message at info severity", (t) => {

@@ -5,7 +5,7 @@
 // edits in the legacy entry do not survive.
 
 import assert from "node:assert/strict";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -22,7 +22,10 @@ import {
   parsePluginSource,
   pathSource,
 } from "../../extensions/pi-claude-marketplace/domain/source.ts";
-import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import {
+  createInstallOperation,
+  getPluginInfo,
+} from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { saveConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -36,6 +39,7 @@ import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { makeCtx, seedLegacyMcpInstall, seedMcpPlugin } from "./mcp-plugin-seed.ts";
 
 import type { NotifyRecord } from "./mcp-plugin-seed.ts";
+import type { TestContext } from "node:test";
 
 const COST_LINE =
   "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.";
@@ -50,6 +54,76 @@ async function reload(cwd: string): Promise<NotifyRecord[]> {
     completionCache: createCompletionCache(),
   });
   return notifications;
+}
+
+const MARKER = { _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" } };
+
+/** The plugin's declared servers, as its `.mcp.json` now holds them. */
+async function declareServers(
+  pluginRoot: string,
+  servers: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  await writeFile(path.join(pluginRoot, ".mcp.json"), JSON.stringify({ mcpServers: servers }));
+}
+
+/** Rewrites the legacy `mcp.json` with a marked stdio entry per name, and the record's inventory to match. */
+async function seedLegacyNames(cwd: string, names: readonly string[]): Promise<void> {
+  const locations = locationsFor("project", cwd);
+  const entries = Object.fromEntries(
+    names.map((name) => [name, { command: "node", args: [`${name}.js`], ...MARKER }]),
+  );
+  await writeFile(locations.mcpJsonPath, JSON.stringify({ mcpServers: entries }));
+  const state = await loadState(locations.extensionRoot);
+  const record = state.marketplaces.mp?.plugins.hello;
+  assert.ok(record);
+  record.resources.mcpServers = [...names];
+  await saveState(locations.extensionRoot, state);
+}
+
+/** The server keys of a scope's `mcp-adapter.json`; none when the file does not exist. */
+async function adapterKeys(cwd: string): Promise<readonly string[]> {
+  const raw = await readFile(locationsFor("project", cwd).mcpAdapterJsonPath, "utf8").catch(
+    () => '{"mcpServers":{}}',
+  );
+  return Object.keys((JSON.parse(raw) as { mcpServers: Record<string, unknown> }).mcpServers);
+}
+
+/** The marked entries left in a scope's `mcp.json`. */
+async function markedLegacyNames(cwd: string): Promise<readonly string[]> {
+  const raw = await readFile(locationsFor("project", cwd).mcpJsonPath, "utf8");
+  const servers = (JSON.parse(raw) as { mcpServers: Record<string, Record<string, unknown>> })
+    .mcpServers;
+  return Object.keys(servers).filter((name) => servers[name]?._piClaudeMarketplace !== undefined);
+}
+
+/**
+ * Points `filePath` at a readable file inside a directory the test makes
+ * read-only, so the file reads normally and an atomic write to it fails.
+ * Returns the directory, which the case unlocks after acting.
+ */
+async function lockedLink(
+  t: TestContext,
+  cwd: string,
+  filePath: string,
+  bytes: string,
+): Promise<string> {
+  // A 0o555 directory stays writable for uid 0, so the write this helper
+  // exists to refuse would succeed. Refuse up front and name the environment.
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    throw new Error("lockedLink cannot deny root; run this suite as a non-root user");
+  }
+
+  const lockedDirectory = path.join(cwd, "locked");
+  const target = path.join(lockedDirectory, path.basename(filePath));
+  await mkdir(lockedDirectory, { recursive: true });
+  await writeFile(target, bytes, "utf8");
+  await rm(filePath, { force: true });
+  await symlink(target, filePath);
+  t.after(async () => {
+    await chmod(lockedDirectory, 0o700).catch(() => undefined);
+  });
+  await chmod(lockedDirectory, 0o555);
+  return lockedDirectory;
 }
 
 async function scopeBytes(cwd: string): Promise<readonly Buffer[]> {
@@ -406,5 +480,204 @@ test("AMIG-01: a git plugin left in place on a cold clone cache moves once its r
       CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
     });
     assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
+  });
+});
+
+test("AMIG-01: /reload removes an undeclared server, drops an unsupported one and moves the rest", async () => {
+  await withHermeticEnvironment("mcp-migration-removed-", async ({ cwd }) => {
+    // arrange
+    const { pluginRoot } = await seedLegacyMcpInstall(cwd, "project", {
+      command: "node",
+      args: ["v1.js"],
+    });
+    await declareServers(pluginRoot, {
+      srv: { command: "node", args: ["v1.js"] },
+      live: { type: "ws", url: "wss://example.test/ws" },
+    });
+    await seedLegacyNames(cwd, ["srv", "live", "gone"]);
+    const locations = locationsFor("project", cwd);
+
+    // act
+    const notifications = await reload(cwd);
+
+    // assert
+    assert.deepStrictEqual(await adapterKeys(cwd), ["plugin_hello_srv_"]);
+    assert.deepStrictEqual(await markedLegacyNames(cwd), []);
+    const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+    assert.deepStrictEqual(record?.resources.mcpServers, ["srv"]);
+    assert.strictEqual(record.compatibility.installable, false);
+    assert.ok(record.compatibility.unsupported.includes("mcpServers"));
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "Plugin MCP servers moved from mcp.json to mcp-adapter.json.",
+          "",
+          "Moved to mcp-adapter.json:",
+          "  srv -> plugin_hello_srv_ (hello) [project]",
+          "Removed from mcp.json:",
+          "  gone (hello) [project] hello no longer declares it.",
+          "  live (hello) [project] {unsupported mcp} ws: pi-mcp-adapter cannot run it.",
+          COST_LINE,
+          "/reload to pick up changes",
+        ].join("\n"),
+        severity: "warning",
+      },
+    ]);
+    const info = makeCtx();
+    await getPluginInfo({
+      ...info.session,
+      marketplace: "mp",
+      plugin: "hello",
+      scope: "project",
+      cwd,
+    });
+    assert.ok(
+      info.notifications.some((entry) =>
+        entry.message.includes("plugin:hello:live (unsupported ws)"),
+      ),
+    );
+  });
+});
+
+test("AMIG-01: a plugin whose MCP config is malformed has all its old entries removed and none written", async () => {
+  await withHermeticEnvironment("mcp-migration-malformed-", async ({ cwd }) => {
+    // arrange
+    const { pluginRoot } = await seedLegacyMcpInstall(cwd, "project", {
+      command: "node",
+      args: ["v1.js"],
+    });
+    await seedMcpPlugin(cwd, ["user"]);
+    await declareServers(pluginRoot, {
+      srv: { command: "node", args: ["v1.js"], timeout: "soon" },
+    });
+    await seedLegacyNames(cwd, ["srv", "old"]);
+    const locations = locationsFor("project", cwd);
+
+    // act
+    const notifications = await reload(cwd);
+
+    // assert
+    assert.deepStrictEqual(
+      (await adapterKeys(cwd)).filter((key) => key.startsWith("plugin_hello_")),
+      [],
+    );
+    assert.deepStrictEqual(await markedLegacyNames(cwd), []);
+    const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+    assert.deepStrictEqual(record?.resources.mcpServers, []);
+    const malformed =
+      "{malformed mcp}: hello's MCP config is not valid, so none of its servers are installed.";
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "Plugin MCP servers removed from mcp.json.",
+          "",
+          "Removed from mcp.json:",
+          `  old (hello) [project] ${malformed}`,
+          `  srv (hello) [project] ${malformed}`,
+          "/reload to pick up changes",
+        ].join("\n"),
+        severity: "warning",
+      },
+    ]);
+    const fresh = makeCtx();
+    await createInstallOperation(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    )({ ...fresh.session, scope: "user", cwd, marketplace: "mp", plugin: "hello" });
+    assert.ok(fresh.notifications.some((entry) => entry.message.includes("{malformed mcp}")));
+    assert.strictEqual(
+      (await loadState(locationsFor("user", cwd).extensionRoot)).marketplaces.mp?.plugins.hello,
+      undefined,
+    );
+  });
+});
+
+test("AMIG-03: an old-name disable stub removed during the move is listed and makes the notice a warning", async () => {
+  await withHermeticEnvironment("mcp-migration-leftover-", async ({ cwd }) => {
+    // arrange
+    await seedLegacyMcpInstall(cwd, "project", { command: "node", args: ["v1.js"] });
+    await writeFile(
+      locationsFor("project", cwd).mcpAdapterJsonPath,
+      JSON.stringify({ mcpServers: { srv: { disabled: true } } }),
+    );
+
+    // act
+    const notifications = await reload(cwd);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "Plugin MCP servers moved from mcp.json to mcp-adapter.json.",
+          "",
+          "Moved to mcp-adapter.json:",
+          "  srv -> plugin_hello_srv_ (hello) [project]",
+          COST_LINE,
+          'Removed "srv" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.',
+          "/reload to pick up changes",
+        ].join("\n"),
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
+test("AMIG-02: a filesystem refusal between the two writes loses no server and the next reload finishes the move", async (t) => {
+  await withHermeticEnvironment("mcp-migration-refused-", async ({ cwd }) => {
+    // arrange
+    await seedLegacyMcpInstall(cwd, "project", { command: "node", args: ["v1.js"] });
+    const locations = locationsFor("project", cwd);
+    const lockedDirectory = await lockedLink(
+      t,
+      cwd,
+      locations.mcpJsonPath,
+      await readFile(locations.mcpJsonPath, "utf8"),
+    );
+
+    // act
+    const refused = await reload(cwd);
+    const afterRefusal = {
+      adapter: await adapterKeys(cwd),
+      legacy: await markedLegacyNames(cwd),
+    };
+    await chmod(lockedDirectory, 0o700);
+    const finished = await reload(cwd);
+    const finishedBytes = await scopeBytes(cwd);
+    const settled = await reload(cwd);
+
+    // assert
+    assert.deepStrictEqual(afterRefusal, { adapter: ["plugin_hello_srv_"], legacy: ["srv"] });
+    // write-file-atomic names its temporary file with a random suffix.
+    const refusedStable = refused.map((entry) => ({
+      ...entry,
+      message: entry.message.replace(/mcp\.json\.\d+/, "mcp.json.<tmp>"),
+    }));
+    assert.deepStrictEqual(refusedStable, [
+      {
+        message: [
+          "Plugin MCP servers in mcp.json need attention.",
+          "",
+          "Left in mcp.json:",
+          "  srv (hello) [project] The new entries are written, but mcp.json could not be updated: EACCES: permission denied, open 'mcp.json.<tmp>'. The next /reload finishes the move.",
+        ].join("\n"),
+        severity: "warning",
+      },
+    ]);
+    assert.deepStrictEqual(finished, [
+      {
+        message: [
+          "Plugin MCP servers moved from mcp.json to mcp-adapter.json.",
+          "",
+          "Moved to mcp-adapter.json:",
+          "  srv -> plugin_hello_srv_ (hello) [project]",
+          COST_LINE,
+          "/reload to pick up changes",
+        ].join("\n"),
+        severity: "info",
+      },
+    ]);
+    assert.deepStrictEqual(await markedLegacyNames(cwd), []);
+    assert.deepStrictEqual(settled, []);
+    assert.deepStrictEqual(await scopeBytes(cwd), finishedBytes);
   });
 });

@@ -4,7 +4,8 @@
 // AMIG-04). `notifyMcpMigration` calls ctx.ui.notify directly, outside the
 // structured NotificationMessage entrypoint, so the catalog-uat walk never
 // drives it. This lock reads the `mcp-migration-moved`,
-// `mcp-migration-stopped` and `mcp-migration-left-in-place` blocks from
+// `mcp-migration-stopped`, `mcp-migration-left-in-place`,
+// `mcp-migration-removed` and `mcp-migration-unfinished` blocks from
 // docs/output-catalog.md and asserts that the seam emits each one byte for
 // byte, in one call at the documented severity, with a summary line followed
 // by a blank line.
@@ -99,6 +100,73 @@ const CATALOG_REPORT_ROWS: readonly CatalogReportRow[] = [
           servers: ["db"],
           key: "plugin_dbtools_db_",
           source: "user-scope mcp-adapter.json",
+        },
+      ],
+      notices: [],
+    },
+  },
+  {
+    state: "mcp-migration-removed",
+    severity: "warning",
+    report: {
+      rows: [
+        {
+          kind: "removed",
+          scope: "user",
+          plugin: "broken",
+          marketplace: "mp",
+          server: "bad",
+          cause: "malformed",
+        },
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          server: "live",
+          cause: "unsupported-feature",
+          feature: "ws",
+        },
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          from: "srv",
+          to: "plugin_hello_srv_",
+        },
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          server: "gone",
+          cause: "not-declared",
+        },
+      ],
+      notices: [
+        {
+          kind: "leftover-removed",
+          scope: "project",
+          file: "mcp-adapter.json",
+          plugin: "hello",
+          server: "srv",
+        },
+      ],
+    },
+  },
+  {
+    state: "mcp-migration-unfinished",
+    severity: "warning",
+    report: {
+      rows: [
+        {
+          kind: "unfinished",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          servers: ["srv"],
+          detail: "permission denied",
         },
       ],
       notices: [],
