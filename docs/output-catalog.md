@@ -4317,6 +4317,22 @@ Left in mcp.json:
 
 Emitted by `notifyMcpMigration` at the same point as the moved notice, in the same single notification. A stopped row names the scope and what stopped the move, with no absolute path. A failure while moving one plugin names it as `<plugin>@<marketplace>` and does not stop the other plugins. The entries stay in `mcp.json` and keep working under their old names, and the next `/reload` tries again. Moved rows come first when the same reload also moved servers, and the cost line and the reload hint then follow the rows. Severity: `warning` when a move stopped; the first line is the summary. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts`.
 
+### Plugin MCP servers left in mcp.json (AMIG-01, AMIG-04)
+
+<!-- catalog-state: mcp-migration-left-in-place -->
+
+```text
+Plugin MCP servers in mcp.json need attention.
+
+Left in mcp.json:
+  The project-scope mcp-adapter.json is not a valid MCP config, so nothing in this scope moved. Fix it, then run /reload.
+  orphan (gone) [project] No plugin installed in the project scope owns it. Install gone@mp or remove it from mcp.json.
+  github, slack (acme) [user] The plugin source is not available offline. Run /claude:plugin reinstall acme@official to move it.
+  db (dbtools) [user] plugin_dbtools_db_ is already defined in the user-scope mcp-adapter.json, so no server of dbtools moved. Remove or rename that server, then run /reload.
+```
+
+Emitted by `notifyMcpMigration` in the same single notification as the moved and stopped rows. Each row names a plugin whose servers the step could not move, and why. The entries stay in `mcp.json` and keep working under their old names, and the next `/reload` tries again. An entry is unowned when no install record in its own scope owns it; a record of the same plugin in the other scope does not. The plugin source is not available offline when the step cannot read it without the network: a git source whose clone is not in the cache, a missing marketplace checkout or manifest, or a plugin the manifest no longer lists. A reinstall fetches the source and moves the entries. A collision is a full server that another pi-mcp-adapter config source already defines under the plugin's new key; then none of that plugin's servers move, and the row names the key and the source as a scope and file name, never an absolute path. A config file that is not valid stops every move in its scope before any write. A plugin that the same reload installs, uninstalls, disables or enables is not listed, because that operation moves or removes its entries itself. There is no damping: an entry is reported on every reload until its cause is cleared, because the step keeps no state (COMPAT-01). One row per plugin, which lists its old names in file order. Rows sort project before user, then by plugin, then by first old name, together with the stopped rows. With no moved row there is no cost line and no reload hint. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts`.
+
 ______________________________________________________________________
 
 ## Cross-references

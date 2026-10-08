@@ -21,6 +21,7 @@ import { canonicalCloneUrl, pluginCloneKey, pluginMirrorKey } from "../../domain
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import {
   parsePluginSource,
+  type GitBackedSource,
   type GitHubSource,
   type GitSubdirSource,
   type UrlSource,
@@ -89,6 +90,60 @@ export async function readMirrorHeadSha(mirrorDir: string): Promise<string> {
 }
 
 /**
+ * PURL-03 / NFR-10: applies the git-subdir containment tail to a materialized
+ * clone/mirror root and stamps the resolved sha. A git-subdir pluginRoot
+ * resolves under the clone root (escapes / missing-subdir arms propagate
+ * unchanged); other kinds materialize at the clone root itself. The subdir
+ * join shares the clone's commit, so `resolvedSha` is unchanged.
+ */
+async function anchorSubdir(
+  source: GitBackedSource,
+  cloneDir: string,
+  resolvedSha: string,
+): Promise<GitPluginRootResult> {
+  if (source.kind === "git-subdir") {
+    const subdirResult = await resolveGitSubdirRoot(cloneDir, source.path);
+    if (subdirResult.kind !== "materialized") {
+      return subdirResult;
+    }
+
+    return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha };
+  }
+
+  return { kind: "materialized", pluginRoot: cloneDir, resolvedSha };
+}
+
+/**
+ * MIRR-05: the source's URL-keyed mirror when it is present, materialized
+ * with the sha its checked-out HEAD names, or undefined when it is absent.
+ */
+async function probeMirror(
+  locations: ScopedLocations,
+  source: GitBackedSource,
+  cloneUrl: string,
+): Promise<GitPluginRootResult | undefined> {
+  const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+  if (!(await pathExists(mirrorDir))) {
+    return undefined;
+  }
+
+  return anchorSubdir(source, mirrorDir, await readMirrorHeadSha(mirrorDir));
+}
+
+/** The clone keyed on `sha`: materialized when it is present, else `not-cached`. */
+async function probeShaClone(
+  locations: ScopedLocations,
+  source: GitBackedSource,
+  cloneUrl: string,
+  sha: string,
+): Promise<GitPluginRootResult> {
+  const cloneDir = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, sha));
+  return (await pathExists(cloneDir))
+    ? anchorSubdir(source, cloneDir, sha)
+    : { kind: "not-cached" };
+}
+
+/**
  * PURL-08 / D-78-04 / NFR-5: an fs-only cache-PRESENCE probe for the resolver's
  * `resolveGitPluginRoot` seam. Unlike install's clone-materializing probe, this
  * one NEVER clones and NEVER touches the network -- it reconstructs the clone
@@ -117,28 +172,6 @@ export async function readMirrorHeadSha(mirrorDir: string): Promise<string> {
 export function makePresenceProbe(
   locations: ScopedLocations,
 ): (source: UrlSource | GitSubdirSource | GitHubSource) => Promise<GitPluginRootResult> {
-  // PURL-03 / NFR-10 / D-77-03: apply the git-subdir containment tail to a
-  // materialized clone/mirror root and stamp the resolved sha. A git-subdir
-  // pluginRoot resolves under the clone root (escapes / missing-subdir arms
-  // propagate unchanged); other kinds materialize at the clone root itself. The
-  // subdir join shares the clone's commit, so `resolvedSha` is unchanged.
-  const anchorSubdir = async (
-    source: UrlSource | GitSubdirSource | GitHubSource,
-    cloneDir: string,
-    resolvedSha: string,
-  ): Promise<GitPluginRootResult> => {
-    if (source.kind === "git-subdir") {
-      const subdirResult = await resolveGitSubdirRoot(cloneDir, source.path);
-      if (subdirResult.kind !== "materialized") {
-        return subdirResult;
-      }
-
-      return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha };
-    }
-
-    return { kind: "materialized", pluginRoot: cloneDir, resolvedSha };
-  };
-
   return async (source): Promise<GitPluginRootResult> => {
     // D-77-06: the canonical clone url the cache key is hashed over -- the
     // SAME shared `canonicalCloneUrl` the clone seam keys with (imported from
@@ -151,20 +184,31 @@ export function makePresenceProbe(
     // the HEAD sha read off disk; a cold one -> not-cached (the arm rendered
     // `(remote)` downstream). Read surfaces read the mirror but never refresh.
     if (source.sha === undefined) {
-      const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-      if (!(await pathExists(mirrorDir))) {
-        return { kind: "not-cached" };
-      }
-
-      const sha = await readMirrorHeadSha(mirrorDir);
-      return anchorSubdir(source, mirrorDir, sha);
+      return (await probeMirror(locations, source, cloneUrl)) ?? { kind: "not-cached" };
     }
 
-    const key = pluginCloneKey(cloneUrl, source.sha);
-    const cloneDir = await locations.pluginCloneDir(key);
-    return (await pathExists(cloneDir))
-      ? anchorSubdir(source, cloneDir, source.sha)
-      : { kind: "not-cached" };
+    return probeShaClone(locations, source, cloneUrl, source.sha);
+  };
+}
+
+/**
+ * AMIG-01 / NFR-5: reinstall's source choice (`reinstall-clone-probe.ts`) with
+ * `not-cached` in place of the clone, so the reload migration stays offline.
+ * An unpinned source reads a present URL-keyed mirror first; otherwise the
+ * clone is keyed on the install record's sha, never the manifest's
+ * `source.sha`, which can differ from it after a marketplace update. Every
+ * read is a path check or a file read: it never creates a directory and
+ * never spawns git.
+ */
+export function makeRecordedShaPresenceProbe(
+  locations: ScopedLocations,
+  recordedSha: string,
+): (source: GitBackedSource) => Promise<GitPluginRootResult> {
+  return async (source): Promise<GitPluginRootResult> => {
+    const cloneUrl = canonicalCloneUrl(source);
+    const mirror =
+      source.sha === undefined ? await probeMirror(locations, source, cloneUrl) : undefined;
+    return mirror ?? probeShaClone(locations, source, cloneUrl, recordedSha);
   };
 }
 

@@ -493,8 +493,63 @@ export interface McpMigrationStoppedRow {
   readonly detail: string;
 }
 
+/**
+ * AMIG-04: a plugin's marked `mcp.json` entries that no install record in
+ * this scope owns. `servers` holds the old names in file order.
+ */
+export interface McpMigrationUnownedRow {
+  readonly kind: "unowned";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+}
+
+/**
+ * AMIG-01: an installed plugin whose source cannot be read offline, so its
+ * entries stay under their old names until a reinstall or the next reload.
+ */
+export interface McpMigrationSourceUnreadableRow {
+  readonly kind: "source-unreadable";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+}
+
+/**
+ * AMIG-01: an installed plugin whose new key another config source already
+ * defines in full, so none of its servers moved. `key` is that source's key
+ * and `source` a scope-and-file label, never an absolute path.
+ */
+export interface McpMigrationCollisionRow {
+  readonly kind: "collision";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+  readonly key: string;
+  readonly source: string;
+}
+
+/** AMIG-01: a scope config file that does not parse, so nothing in the scope moved. */
+export interface McpMigrationFileUnreadableRow {
+  readonly kind: "file-unreadable";
+  readonly scope: Scope;
+  readonly file: "mcp.json" | "mcp-adapter.json";
+}
+
 /** AMIG-03: one row of the reload migration notice. */
-export type McpMigrationRow = McpMigrationMovedRow | McpMigrationStoppedRow;
+export type McpMigrationRow =
+  | McpMigrationMovedRow
+  | McpMigrationStoppedRow
+  | McpMigrationUnownedRow
+  | McpMigrationSourceUnreadableRow
+  | McpMigrationCollisionRow
+  | McpMigrationFileUnreadableRow;
+
+/** A row whose servers stay in `mcp.json`. */
+type McpMigrationLeftRow = Exclude<McpMigrationRow, McpMigrationMovedRow>;
 
 /** AMIG-03: everything one reload's migration reports, across both scopes. */
 export interface McpMigrationReport {
@@ -539,57 +594,98 @@ function compareMovedRows(left: McpMigrationMovedRow, right: McpMigrationMovedRo
   );
 }
 
-function compareStoppedRows(left: McpMigrationStoppedRow, right: McpMigrationStoppedRow): number {
-  return codeUnitOrder(left.scope, right.scope) || codeUnitOrder(left.detail, right.detail);
+/** The plugin and first-name sort keys of a left row; a stopped row sorts by its detail. */
+function leftRowKeys(row: McpMigrationLeftRow): readonly [plugin: string, name: string] {
+  switch (row.kind) {
+    case "stopped":
+      return [row.detail, ""];
+    case "file-unreadable":
+      return ["", row.file];
+    case "unowned":
+    case "source-unreadable":
+    case "collision":
+      return [row.plugin, row.servers.slice(0, 1).join("")];
+  }
+}
+
+/** Project before user, then plugin, then first old name, in code-unit order. */
+function compareLeftRows(left: McpMigrationLeftRow, right: McpMigrationLeftRow): number {
+  const [leftPlugin, leftName] = leftRowKeys(left);
+  const [rightPlugin, rightName] = leftRowKeys(right);
+  return (
+    codeUnitOrder(left.scope, right.scope) ||
+    codeUnitOrder(leftPlugin, rightPlugin) ||
+    codeUnitOrder(leftName, rightName)
+  );
 }
 
 function isMovedRow(row: McpMigrationRow): row is McpMigrationMovedRow {
   return row.kind === "moved";
 }
 
-function isStoppedRow(row: McpMigrationRow): row is McpMigrationStoppedRow {
-  return row.kind === "stopped";
+function isLeftRow(row: McpMigrationRow): row is McpMigrationLeftRow {
+  return row.kind !== "moved";
 }
 
 function movedRowLine(row: McpMigrationMovedRow): string {
   return `  ${printable(row.from)} -> ${row.to} (${printable(row.plugin)}) [${row.scope}]`;
 }
 
-function stoppedRowLine(row: McpMigrationStoppedRow): string {
-  return `  The ${row.scope}-scope move stopped: ${printable(row.detail)}. The next /reload tries again.`;
+/** An owner row's prefix: its old names, plugin and scope. */
+function ownerRowPrefix(
+  row: Exclude<McpMigrationLeftRow, McpMigrationStoppedRow | McpMigrationFileUnreadableRow>,
+): string {
+  return `  ${row.servers.map(printable).join(", ")} (${printable(row.plugin)}) [${row.scope}]`;
+}
+
+function leftRowLine(row: McpMigrationLeftRow): string {
+  switch (row.kind) {
+    case "stopped":
+      return `  The ${row.scope}-scope move stopped: ${printable(row.detail)}. The next /reload tries again.`;
+    case "file-unreadable":
+      return `  The ${row.scope}-scope ${row.file} is not a valid MCP config, so nothing in this scope moved. Fix it, then run /reload.`;
+    case "unowned":
+      return `${ownerRowPrefix(row)} No plugin installed in the ${row.scope} scope owns it. Install ${printable(row.plugin)}@${printable(row.marketplace)} or remove it from mcp.json.`;
+    case "source-unreadable":
+      return `${ownerRowPrefix(row)} The plugin source is not available offline. Run /claude:plugin reinstall ${printable(row.plugin)}@${printable(row.marketplace)} to move it.`;
+    case "collision":
+      return `${ownerRowPrefix(row)} ${printable(row.key)} is already defined in the ${printable(row.source)}, so no server of ${printable(row.plugin)} moved. Remove or rename that server, then run /reload.`;
+  }
 }
 
 /** The notice body in its fixed order (AMIG-03). */
 function mcpMigrationLines(
   moved: readonly McpMigrationMovedRow[],
-  stopped: readonly McpMigrationStoppedRow[],
+  left: readonly McpMigrationLeftRow[],
   notices: readonly McpConfigNotice[],
 ): string[] {
   const movedLines =
     moved.length > 0 ? ["Moved to mcp-adapter.json:", ...moved.map(movedRowLine)] : [];
-  const stoppedLines =
-    stopped.length > 0 ? ["Left in mcp.json:", ...stopped.map(stoppedRowLine)] : [];
+  const leftLines = left.length > 0 ? ["Left in mcp.json:", ...left.map(leftRowLine)] : [];
   const configLines = mcpConfigNoticeSections(notices).flatMap(([, lines]) => lines);
   return moved.length > 0
-    ? [...movedLines, ...stoppedLines, MCP_MIGRATION_COST_LINE, ...configLines, RELOAD_HINT_TRAILER]
-    : [...stoppedLines, ...configLines];
+    ? [...movedLines, ...leftLines, MCP_MIGRATION_COST_LINE, ...configLines, RELOAD_HINT_TRAILER]
+    : [...leftLines, ...configLines];
 }
 
 /**
- * AMIG-01 / AMIG-03 IL-2 seam: the one migration notice per reload, covering
- * both scopes. With no row it sends nothing. Otherwise it sends one
- * notification: a summary line, a blank line, the moved rows, the stopped
- * rows, then, when a row moved, the cost line, then the lines of every
+ * AMIG-01 / AMIG-03 / AMIG-04 IL-2 seam: the one migration notice per reload,
+ * covering both scopes. With no row it sends nothing. Otherwise it sends one
+ * notification: a summary line, a blank line, the moved rows, the rows left
+ * in `mcp.json` (stopped, file-unreadable, unowned, source-unreadable,
+ * collision), then, when a row moved, the cost line, then the lines of every
  * `mcpConfigNoticeSections` section, then, when a row moved, the reload hint.
- * Rows sort project before user, then by plugin, then by old name (a stopped
- * row by its detail), in code-unit order. Severity is `"info"` when every row
- * moved and no old-name leftover was removed, and `"warning"` when a move
- * stopped or a leftover was removed. A row names the old name, the
- * adapter key, the plugin and the scope, and every control character in a
- * name or detail is escaped; a detail carries no absolute path. The byte form
- * is locked by `tests/architecture/mcp-migration-notice.test.ts` against the
- * `mcp-migration-moved` and `mcp-migration-stopped` blocks in
- * `docs/output-catalog.md`.
+ * Moved rows sort project before user, then by plugin, then by old name; left
+ * rows by scope, then plugin, then first old name (a stopped row by its
+ * detail, a file row before the plugin rows), in code-unit order. Severity is
+ * `"info"` when every row moved and no old-name leftover was removed, and
+ * `"warning"` when a row was left in place or a leftover was removed. A row
+ * names old names, the adapter key, the plugin, the marketplace and the
+ * scope, and every control character in a file-derived string is escaped; a
+ * detail or source label carries no absolute path. The byte form is locked
+ * by `tests/architecture/mcp-migration-notice.test.ts` against the
+ * `mcp-migration-moved`, `mcp-migration-stopped` and
+ * `mcp-migration-left-in-place` blocks in `docs/output-catalog.md`.
  */
 export function notifyMcpMigration(ctx: NotificationContext, report: McpMigrationReport): void {
   if (report.rows.length === 0) {
@@ -597,9 +693,9 @@ export function notifyMcpMigration(ctx: NotificationContext, report: McpMigratio
   }
 
   const moved = report.rows.filter(isMovedRow).sort(compareMovedRows);
-  const stopped = report.rows.filter(isStoppedRow).sort(compareStoppedRows);
-  const lines = mcpMigrationLines(moved, stopped, report.notices);
-  if (stopped.length > 0) {
+  const left = report.rows.filter(isLeftRow).sort(compareLeftRows);
+  const lines = mcpMigrationLines(moved, left, report.notices);
+  if (left.length > 0) {
     ctx.ui.notify(`${MCP_MIGRATION_STOPPED_SUMMARY}\n\n${lines.join("\n")}`, "warning");
   } else {
     const severity = report.notices.some(isLeftoverRemoved) ? "warning" : "info";

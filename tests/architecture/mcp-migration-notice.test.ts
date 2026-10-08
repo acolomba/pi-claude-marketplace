@@ -1,12 +1,13 @@
 // tests/architecture/mcp-migration-notice.test.ts
 //
-// Byte-equality lock for the reload migration notice (AMIG-01, AMIG-03).
-// `notifyMcpMigration` calls ctx.ui.notify directly, outside the structured
-// NotificationMessage entrypoint, so the catalog-uat walk never drives it.
-// This lock reads the `mcp-migration-moved` and `mcp-migration-stopped`
-// blocks from docs/output-catalog.md and asserts that the seam emits each one
-// byte for byte, in one call at the documented severity, with a summary line
-// followed by a blank line.
+// Byte-equality lock for the reload migration notice (AMIG-01, AMIG-03,
+// AMIG-04). `notifyMcpMigration` calls ctx.ui.notify directly, outside the
+// structured NotificationMessage entrypoint, so the catalog-uat walk never
+// drives it. This lock reads the `mcp-migration-moved`,
+// `mcp-migration-stopped` and `mcp-migration-left-in-place` blocks from
+// docs/output-catalog.md and asserts that the seam emits each one byte for
+// byte, in one call at the documented severity, with a summary line followed
+// by a blank line.
 
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
@@ -66,6 +67,39 @@ const CATALOG_REPORT_ROWS: readonly CatalogReportRow[] = [
     report: {
       rows: [
         { kind: "stopped", scope: "user", detail: "state.json is locked by another Pi process" },
+      ],
+      notices: [],
+    },
+  },
+  {
+    state: "mcp-migration-left-in-place",
+    severity: "warning",
+    report: {
+      rows: [
+        { kind: "file-unreadable", scope: "project", file: "mcp-adapter.json" },
+        {
+          kind: "unowned",
+          scope: "project",
+          plugin: "gone",
+          marketplace: "mp",
+          servers: ["orphan"],
+        },
+        {
+          kind: "source-unreadable",
+          scope: "user",
+          plugin: "acme",
+          marketplace: "official",
+          servers: ["github", "slack"],
+        },
+        {
+          kind: "collision",
+          scope: "user",
+          plugin: "dbtools",
+          marketplace: "official",
+          servers: ["db"],
+          key: "plugin_dbtools_db_",
+          source: "user-scope mcp-adapter.json",
+        },
       ],
       notices: [],
     },

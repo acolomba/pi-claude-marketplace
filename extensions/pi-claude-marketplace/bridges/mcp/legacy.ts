@@ -19,6 +19,7 @@ import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { McpConfigFileError } from "../../shared/errors-bridges.ts";
 
 import {
+  ADAPTER_SERVER_KEYS,
   isFullDefinition,
   PI_MCP_SERVER_KEYS,
   partitionServers,
@@ -88,6 +89,16 @@ export async function readLegacyMcpOwners(filePath: string): Promise<readonly Le
   }
 
   return [...owners.values()].sort(compareOwners);
+}
+
+/**
+ * AMIG-01: resolves when the scope's `mcp-adapter.json` is missing or a valid
+ * adapter config, and rejects with `McpConfigFileError` for invalid JSONC, a
+ * non-object top level or a non-object server map, so the reload move can
+ * leave a scope alone before it writes anything there.
+ */
+export async function checkMcpAdapterConfig(filePath: string): Promise<void> {
+  await readMcpConfigDoc(filePath, ADAPTER_SERVER_KEYS);
 }
 
 function ownedNames(

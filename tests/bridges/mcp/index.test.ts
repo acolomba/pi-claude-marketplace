@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   abortPreparedMcp,
+  checkMcpAdapterConfig,
   commitPreparedMcp,
   finalizeMcpReplacement,
   prepareStageMcpServers,
@@ -13,6 +14,7 @@ import {
   unstageMcpServers,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
 import {
+  checkMcpAdapterConfig as peerCheckMcpAdapterConfig,
   readLegacyMcpOwners as peerReadLegacyMcpOwners,
   removeLegacyMcpEntries as peerRemoveLegacyMcpEntries,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/legacy.ts";
@@ -96,6 +98,17 @@ describe("MCP barrel runtime bindings", () => {
 
     // assert
     assert.strictEqual(boundaryPrepareStageMcpServers, expectedPrepareStageMcpServers);
+  });
+
+  test("re-exports checkMcpAdapterConfig from the legacy module", () => {
+    // arrange
+    const expectedCheckMcpAdapterConfig = peerCheckMcpAdapterConfig;
+
+    // act
+    const boundaryCheckMcpAdapterConfig = checkMcpAdapterConfig;
+
+    // assert
+    assert.strictEqual(boundaryCheckMcpAdapterConfig, expectedCheckMcpAdapterConfig);
   });
 
   test("re-exports readLegacyMcpOwners from the legacy module", () => {

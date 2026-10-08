@@ -7019,6 +7019,233 @@ describe("notifyMcpMigration", () => {
       ],
     );
   });
+
+  test("AMIG-01 / AMIG-04: each left-in-place kind renders its remedy, project first, with no cost line and no reload hint", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "collision",
+          scope: "user",
+          plugin: "dbtools",
+          marketplace: "official",
+          servers: ["db"],
+          key: "plugin_dbtools_db_",
+          source: "user-scope mcp-adapter.json",
+        },
+        {
+          kind: "source-unreadable",
+          scope: "user",
+          plugin: "acme",
+          marketplace: "official",
+          servers: ["github", "slack"],
+        },
+        {
+          kind: "unowned",
+          scope: "project",
+          plugin: "gone",
+          marketplace: "mp",
+          servers: ["orphan"],
+        },
+        { kind: "file-unreadable", scope: "project", file: "mcp-adapter.json" },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers in mcp.json need attention.",
+            "",
+            "Left in mcp.json:",
+            "  The project-scope mcp-adapter.json is not a valid MCP config, so nothing in this scope moved. Fix it, then run /reload.",
+            "  orphan (gone) [project] No plugin installed in the project scope owns it. Install gone@mp or remove it from mcp.json.",
+            "  github, slack (acme) [user] The plugin source is not available offline. Run /claude:plugin reinstall acme@official to move it.",
+            "  db (dbtools) [user] plugin_dbtools_db_ is already defined in the user-scope mcp-adapter.json, so no server of dbtools moved. Remove or rename that server, then run /reload.",
+          ].join("\n"),
+          "warning",
+        ],
+      ],
+    );
+  });
+
+  for (const { row, line } of [
+    {
+      row: { kind: "unowned", scope: "user", plugin: "p", marketplace: "m", servers: ["s"] },
+      line: "  s (p) [user] No plugin installed in the user scope owns it. Install p@m or remove it from mcp.json.",
+    },
+    {
+      row: {
+        kind: "source-unreadable",
+        scope: "user",
+        plugin: "p",
+        marketplace: "m",
+        servers: ["s"],
+      },
+      line: "  s (p) [user] The plugin source is not available offline. Run /claude:plugin reinstall p@m to move it.",
+    },
+    {
+      row: {
+        kind: "collision",
+        scope: "user",
+        plugin: "p",
+        marketplace: "m",
+        servers: ["s"],
+        key: "plugin_p_s_",
+        source: "mcp.json",
+      },
+      line: "  s (p) [user] plugin_p_s_ is already defined in the mcp.json, so no server of p moved. Remove or rename that server, then run /reload.",
+    },
+    {
+      row: { kind: "file-unreadable", scope: "user", file: "mcp.json" },
+      line: "  The user-scope mcp.json is not a valid MCP config, so nothing in this scope moved. Fix it, then run /reload.",
+    },
+  ] as const) {
+    test(`AMIG-03: a ${row.kind} row beside a moved row makes the notice a warning that keeps the reload hint`, (t) => {
+      // arrange
+      const ctx = createContext(t);
+
+      // act
+      notifyMcpMigration(ctx as never, {
+        rows: [
+          row,
+          {
+            kind: "moved",
+            scope: "project",
+            plugin: "acme",
+            marketplace: "mp",
+            from: "srv",
+            to: "plugin_acme_srv_",
+          },
+        ],
+        notices: [],
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        ctx.ui.notify.mock.calls.map((call) => call.arguments),
+        [
+          [
+            [
+              "Plugin MCP servers in mcp.json need attention.",
+              "",
+              "Moved to mcp-adapter.json:",
+              "  srv -> plugin_acme_srv_ (acme) [project]",
+              "Left in mcp.json:",
+              line,
+              MCP_MIGRATION_COST_LINE,
+              "/reload to pick up changes",
+            ].join("\n"),
+            "warning",
+          ],
+        ],
+      );
+    });
+  }
+
+  test("AMIG-03: left-in-place rows sort with the stopped rows by scope, then plugin, then first old name", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        { kind: "unowned", scope: "project", plugin: "b", marketplace: "mp", servers: ["x"] },
+        { kind: "stopped", scope: "project", detail: "a@mp: denied" },
+        { kind: "unowned", scope: "project", plugin: "a", marketplace: "mp", servers: ["z", "b"] },
+        { kind: "unowned", scope: "user", plugin: "a", marketplace: "mp", servers: ["a"] },
+        {
+          kind: "source-unreadable",
+          scope: "project",
+          plugin: "a",
+          marketplace: "other",
+          servers: ["m"],
+        },
+        { kind: "file-unreadable", scope: "project", file: "mcp.json" },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers in mcp.json need attention.",
+            "",
+            "Left in mcp.json:",
+            "  The project-scope mcp.json is not a valid MCP config, so nothing in this scope moved. Fix it, then run /reload.",
+            "  m (a) [project] The plugin source is not available offline. Run /claude:plugin reinstall a@other to move it.",
+            "  z, b (a) [project] No plugin installed in the project scope owns it. Install a@mp or remove it from mcp.json.",
+            "  The project-scope move stopped: a@mp: denied. The next /reload tries again.",
+            "  x (b) [project] No plugin installed in the project scope owns it. Install b@mp or remove it from mcp.json.",
+            "  a (a) [user] No plugin installed in the user scope owns it. Install a@mp or remove it from mcp.json.",
+          ].join("\n"),
+          "warning",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-04: control characters in a left-in-place row's file-derived strings render as \\u escapes", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "collision",
+          scope: "project",
+          plugin: "p\u001b",
+          marketplace: "m\u0007",
+          servers: ["s\nx", "t"],
+          key: "k\u009b",
+          source: "f\r.json",
+        },
+        {
+          kind: "unowned",
+          scope: "user",
+          plugin: "q\u0000",
+          marketplace: "m\u007f",
+          servers: ["o"],
+        },
+        {
+          kind: "source-unreadable",
+          scope: "user",
+          plugin: "r",
+          marketplace: "m\u0085",
+          servers: ["u"],
+        },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers in mcp.json need attention.",
+            "",
+            "Left in mcp.json:",
+            "  s\\u000ax, t (p\\u001b) [project] k\\u009b is already defined in the f\\u000d.json, so no server of p\\u001b moved. Remove or rename that server, then run /reload.",
+            "  o (q\\u0000) [user] No plugin installed in the user scope owns it. Install q\\u0000@m\\u007f or remove it from mcp.json.",
+            "  u (r) [user] The plugin source is not available offline. Run /claude:plugin reinstall r@m\\u0085 to move it.",
+          ].join("\n"),
+          "warning",
+        ],
+      ],
+    );
+  });
 });
 
 test("usage info dispatch preserves usage message at info severity", (t) => {

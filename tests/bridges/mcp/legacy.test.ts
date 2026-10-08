@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
 import {
+  checkMcpAdapterConfig,
   leftoverNames,
   readLegacyMcpNames,
   readLegacyMcpOwners,
@@ -29,6 +30,52 @@ async function fileIdentity(filePath: string): Promise<readonly bigint[]> {
   const stats = await stat(filePath, { bigint: true });
   return [stats.ino, stats.mtimeNs];
 }
+
+describe("checkMcpAdapterConfig", () => {
+  test("AMIG-01: a missing mcp-adapter.json passes", async (t) => {
+    // arrange
+    const locations = await createScope(t, "mcp-legacy-adapter-missing-");
+
+    // act & assert
+    await assert.doesNotReject(checkMcpAdapterConfig(locations.mcpAdapterJsonPath));
+  });
+
+  test("AMIG-01: a valid mcp-adapter.json passes and stays byte-identical", async (t) => {
+    // arrange
+    const locations = await createScope(t, "mcp-legacy-adapter-valid-");
+    const bytes = '{\n  // mine\n  "mcp-servers": { "srv": { "command": "x" } },\n}\n';
+    await writeFile(locations.mcpAdapterJsonPath, bytes);
+
+    // act
+    await assert.doesNotReject(checkMcpAdapterConfig(locations.mcpAdapterJsonPath));
+
+    // assert
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), bytes);
+  });
+
+  for (const { defect, bytes } of [
+    { defect: "invalid-jsonc", bytes: "{ broken" },
+    { defect: "top-level-not-object", bytes: '["srv"]\n' },
+    { defect: "mcpServers-not-object", bytes: '{ "mcpServers": ["srv"] }\n' },
+  ] as const) {
+    test(`AMIG-01: an mcp-adapter.json with defect ${defect} rejects with McpConfigFileError`, async (t) => {
+      // arrange
+      const locations = await createScope(t, "mcp-legacy-adapter-invalid-");
+      await writeFile(locations.mcpAdapterJsonPath, bytes);
+
+      // act & assert
+      await assert.rejects(
+        checkMcpAdapterConfig(locations.mcpAdapterJsonPath),
+        (error: unknown) => {
+          assert.ok(error instanceof McpConfigFileError);
+          assert.strictEqual(error.defect, defect);
+          assert.strictEqual(error.filePath, locations.mcpAdapterJsonPath);
+          return true;
+        },
+      );
+    });
+  }
+});
 
 describe("readLegacyMcpOwners", () => {
   test("AMIG-01: a missing file has no owner", async (t) => {

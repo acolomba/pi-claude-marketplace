@@ -7,7 +7,10 @@
 // `mcp.json` literal shaped like the released builds wrote it (declared-name
 // keys, every field passed through, the `_piClaudeMarketplace` marker). The
 // write-order cases wrap the real bridge functions and `tx.save()` in one
-// recording operations object, so the log is the order of the real writes.
+// recording operations object, so the log is the order of the real writes;
+// an empty log proves that a left-in-place owner was never written (AMIG-04).
+// The git-source cases lay a plugin tree out under the case's clone cache by
+// hand: no git process and no network module runs (NFR-5).
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -21,8 +24,17 @@ import {
   prepareStageMcpServers,
   removeLegacyMcpEntries,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
-import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import {
+  canonicalCloneUrl,
+  pluginCloneKey,
+  pluginMirrorKey,
+} from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import {
+  parsePluginSource,
+  pathSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { migrateLegacyMcpEntries } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts";
+import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -32,7 +44,10 @@ import { createHermeticEnvironment } from "../../platform/hermetic-environment.t
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { McpMigrationOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts";
-import type { McpMigrationInput } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type {
+  McpMigrationInput,
+  ReconcilePlan,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { TestContext } from "node:test";
@@ -45,14 +60,15 @@ const MOVED_AT = "2026-02-03T04:05:06.000Z";
 
 interface Scope {
   readonly cwd: string;
+  readonly home: string;
   readonly locations: ScopedLocations;
 }
 
 async function createProjectScope(t: TestContext, label: string): Promise<Scope> {
-  const { cwd } = await createHermeticEnvironment(t, `mcp-migration-${label}-`);
+  const { cwd, home } = await createHermeticEnvironment(t, `mcp-migration-${label}-`);
   const locations = locationsFor("project", cwd);
   await mkdir(locations.scopeRoot, { recursive: true });
-  return { cwd, locations };
+  return { cwd, home, locations };
 }
 
 interface PluginSeed {
@@ -171,8 +187,33 @@ async function writeLegacy(
   return bytes;
 }
 
-function migrationInput(cwd: string): McpMigrationInput {
-  return { scope: "project", cwd, plan: undefined, rows: [], notices: [] };
+function migrationInput(
+  cwd: string,
+  plan?: ReconcilePlan,
+  reason?: McpMigrationInput["reason"],
+): McpMigrationInput {
+  return { scope: "project", cwd, plan, reason, rows: [], notices: [] };
+}
+
+/** The project plan with `buckets` set; every other bucket is empty. */
+function planWith(buckets: Partial<Omit<ReconcilePlan, "scope">>): ReconcilePlan {
+  return { ...emptyReconcilePlan("project"), ...buckets };
+}
+
+const HELLO_PLANNED = { scope: "project", plugin: "hello", marketplace: "mp" } as const;
+
+/** The row of an owner `hello` whose one legacy entry `srv` stays in place. */
+function helloRow<Kind extends "unowned" | "source-unreadable">(
+  kind: Kind,
+  marketplace = "mp",
+): {
+  readonly kind: Kind;
+  readonly scope: "project";
+  readonly plugin: "hello";
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+} {
+  return { kind, scope: "project", plugin: "hello", marketplace, servers: ["srv"] };
 }
 
 /** The real bridge writes and `tx.save()`, each logged as it runs, with a fixed clock. */
@@ -269,6 +310,97 @@ async function seedNotMovable({ cwd, locations }: Scope, seed: NotMovableSeed): 
   });
 }
 
+const GIT_URL = "https://example.test/hello.git";
+const MANIFEST_SHA = "1111111111111111111111111111111111111111";
+const RECORDED_SHA = "2222222222222222222222222222222222222222";
+
+interface GitOwnerSeed {
+  /** The record's `resolvedSha`; absent for a record that predates it. */
+  readonly recordedSha?: string;
+  /** Whether the manifest pins `MANIFEST_SHA`. */
+  readonly pinned: boolean;
+  /** `warm` lays the plugin out under the recorded-sha clone; `headless-mirror` leaves a mirror without `.git/HEAD`. */
+  readonly cache: "warm" | "cold" | "headless-mirror";
+}
+
+/**
+ * Seeds marketplace `mp` whose `hello` has a `url` source declaring `srv`,
+ * the scope's enabled record of it, and its legacy entry. Returns the clone
+ * directory the recorded sha names and the `mcp.json` bytes.
+ */
+async function seedGitOwner(
+  { cwd, locations }: Scope,
+  seed: GitOwnerSeed,
+): Promise<{ readonly cloneDir: string; readonly legacyBytes: string }> {
+  const source = seed.pinned
+    ? { source: "url", url: GIT_URL, sha: MANIFEST_SHA }
+    : { source: "url", url: GIT_URL };
+  const parsed = parsePluginSource(source);
+  assert.strictEqual(parsed.kind, "url");
+  const cloneUrl = canonicalCloneUrl(parsed);
+  const cloneDir = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, RECORDED_SHA));
+  if (seed.cache === "warm") {
+    await mkdir(path.join(cloneDir, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(cloneDir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "hello", version: "1.0.0" }),
+    );
+    await writeFile(
+      path.join(cloneDir, ".mcp.json"),
+      JSON.stringify({ mcpServers: { srv: { command: "srv" } } }),
+    );
+  } else if (seed.cache === "headless-mirror") {
+    await mkdir(await locations.pluginCloneDir(pluginMirrorKey(cloneUrl)), { recursive: true });
+  }
+
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ name: "mp", plugins: [{ name: "hello", source, version: "1.0.0" }] }),
+  );
+  const record = {
+    ...pluginRecord(marketplaceRoot, "hello", ["srv"]),
+    resolvedSource: cloneDir,
+    ...(seed.recordedSha !== undefined && { resolvedSha: seed.recordedSha }),
+  };
+  await seedState(locations, stateWith(cwd, { marketplaceRoot, manifestPath }, { hello: record }));
+  const legacyBytes = await writeLegacy(locations, { srv: legacyEntry("hello") });
+  return { cloneDir, legacyBytes };
+}
+
+/** Seeds movable owners `beta` and `hello` of marketplace `mp`, each with one legacy entry. */
+async function seedTwoMovableOwners({ cwd, locations }: Scope): Promise<void> {
+  const marketplace = await seedMarketplace(cwd, {
+    beta: { servers: { "beta-srv": { command: "srv" } } },
+    hello: { servers: { srv: { command: "srv" } } },
+  });
+  const { marketplaceRoot } = marketplace;
+  await seedState(
+    locations,
+    stateWith(cwd, marketplace, {
+      beta: pluginRecord(marketplaceRoot, "beta", ["beta-srv"]),
+      hello: pluginRecord(marketplaceRoot, "hello", ["srv"]),
+    }),
+  );
+  await writeLegacy(locations, { "beta-srv": legacyEntry("beta"), srv: legacyEntry("hello") });
+}
+
+async function writeConfigFile(filePath: string, servers: Record<string, unknown>): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, JSON.stringify({ mcpServers: servers }));
+}
+
+const BETA_MOVED = {
+  kind: "moved",
+  scope: "project",
+  plugin: "beta",
+  marketplace: "mp",
+  from: "beta-srv",
+  to: "plugin_beta_beta-srv_",
+} as const;
+
 describe("migrateLegacyMcpEntries", () => {
   for (const { shape, writeMcpJson } of [
     { shape: "no mcp.json", writeMcpJson: async (): Promise<void> => {} },
@@ -314,23 +446,32 @@ describe("migrateLegacyMcpEntries", () => {
     });
   }
 
-  test("AMIG-01: a legacy owner in a scope with no state.json creates nothing and calls no operation", async (t) => {
-    // arrange
-    const { cwd, locations } = await createProjectScope(t, "no-state");
-    await writeLegacy(locations, { srv: legacyEntry("hello") });
-    const treeBefore = await retryTree(locations.scopeRoot);
-    const log: string[] = [];
-    const input = migrationInput(cwd);
+  for (const { owner, plan, rows } of [
+    { owner: "a legacy owner", plan: undefined, rows: [helloRow("unowned")] },
+    {
+      owner: "an owner the plan installs",
+      plan: planWith({ pluginsToInstall: [{ ...HELLO_PLANNED, configSource: "base" }] }),
+      rows: [],
+    },
+  ]) {
+    test(`AMIG-04: ${owner} in a scope with no state.json gets its row, with no lock and nothing created`, async (t) => {
+      // arrange
+      const { cwd, locations } = await createProjectScope(t, "no-state");
+      await writeLegacy(locations, { srv: legacyEntry("hello") });
+      const treeBefore = await retryTree(locations.scopeRoot);
+      const log: string[] = [];
+      const input = migrationInput(cwd, plan);
 
-    // act
-    await migrateLegacyMcpEntries(input, recordingOperations(log));
+      // act
+      await migrateLegacyMcpEntries(input, recordingOperations(log));
 
-    // assert
-    assert.deepStrictEqual(treeBefore, ["mcp.json"]);
-    assert.deepStrictEqual(await retryTree(locations.scopeRoot), treeBefore);
-    assert.deepStrictEqual({ rows: input.rows, notices: input.notices }, { rows: [], notices: [] });
-    assert.deepStrictEqual(log, []);
-  });
+      // assert
+      assert.deepStrictEqual(treeBefore, ["mcp.json"]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), treeBefore);
+      assert.deepStrictEqual({ rows: input.rows, notices: input.notices }, { rows, notices: [] });
+      assert.deepStrictEqual(log, []);
+    });
+  }
 
   test("AMIG-01: a movable owner is prepared, committed, then removed from mcp.json, with its stage notices", async (t) => {
     // arrange
@@ -461,41 +602,49 @@ describe("migrateLegacyMcpEntries", () => {
     assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
   });
 
-  for (const { owner, seed } of [
+  for (const { owner, seed, rows } of [
     {
       owner: "an owner with no record",
       seed: (scope: Scope) => seedNotMovable(scope, { records: {} }),
+      rows: [helloRow("unowned")],
     },
     {
       owner: "an owner whose marketplace is not recorded",
       seed: (scope: Scope) => seedNotMovable(scope, { markerMarketplace: "elsewhere" }),
+      rows: [helloRow("unowned", "elsewhere")],
     },
     {
       owner: "an owner whose marker names an inherited marketplace key",
       seed: (scope: Scope) => seedNotMovable(scope, { markerMarketplace: "constructor" }),
+      rows: [helloRow("unowned", "constructor")],
     },
     {
       owner: "a disabled record",
       seed: (scope: Scope) => seedNotMovable(scope, { enabled: false }),
+      rows: [],
     },
     {
       owner: "a source whose manifest cannot be read",
       seed: (scope: Scope) => seedNotMovable(scope, { manifestMissing: true }),
+      rows: [helloRow("source-unreadable")],
     },
     {
       owner: "a plugin the manifest does not list",
       seed: (scope: Scope) => seedNotMovable(scope, { listedPlugin: "other" }),
+      rows: [helloRow("source-unreadable")],
     },
     {
       owner: "a source that resolves non-installable",
       seed: (scope: Scope) => seedNotMovable(scope, { lsp: true }),
+      rows: [],
     },
     {
       owner: "a legacy name the source does not declare",
       seed: (scope: Scope) => seedNotMovable(scope, { legacyName: "gone" }),
+      rows: [],
     },
   ]) {
-    test(`AMIG-01: ${owner} calls no operation and keeps mcp.json byte-identical`, async (t) => {
+    test(`AMIG-01 / AMIG-04: ${owner} calls no operation and keeps mcp.json byte-identical`, async (t) => {
       // arrange
       const scope = await createProjectScope(t, "not-movable");
       const legacyBytes = await seed(scope);
@@ -507,10 +656,7 @@ describe("migrateLegacyMcpEntries", () => {
 
       // assert
       assert.deepStrictEqual(log, []);
-      assert.deepStrictEqual(
-        { rows: input.rows, notices: input.notices },
-        { rows: [], notices: [] },
-      );
+      assert.deepStrictEqual({ rows: input.rows, notices: input.notices }, { rows, notices: [] });
       assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), legacyBytes);
       assert.deepStrictEqual(await retryTree(scope.locations.scopeRoot), [
         "mcp.json",
@@ -627,7 +773,7 @@ describe("migrateLegacyMcpEntries", () => {
     );
   });
 
-  test("AFILE-02: an unreadable mcp-adapter.json stops the owner's move, so its legacy entries and record stay", async (t) => {
+  test("AMIG-01: an unparseable mcp-adapter.json stops the scope before any write, with one file-unreadable row", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "adapter-unreadable");
     const marketplace = await seedMarketplace(cwd, {
@@ -650,16 +796,352 @@ describe("migrateLegacyMcpEntries", () => {
 
     // assert
     assert.deepStrictEqual(input.rows, [
-      {
-        kind: "stopped",
-        scope: "project",
-        detail: "hello@mp: MCP config mcp-adapter.json is not valid JSONC; it was left unchanged.",
-      },
+      { kind: "file-unreadable", scope: "project", file: "mcp-adapter.json" },
     ]);
     assert.deepStrictEqual(input.notices, []);
-    assert.deepStrictEqual(log, ["prepare hello@mp"]);
+    assert.deepStrictEqual(log, []);
     assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), legacyBytes);
     assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{ broken");
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBytes);
   });
+  for (const { defect, bytes } of [
+    { defect: "invalid JSONC", bytes: "{ broken" },
+    { defect: "a non-object mcpServers", bytes: '{ "mcpServers": ["srv"] }\n' },
+  ]) {
+    test(`AMIG-01: an mcp.json with ${defect} gives one file-unreadable row without a lock or a write`, async (t) => {
+      // arrange
+      const scope = await createProjectScope(t, "legacy-unparseable");
+      await seedNotMovable(scope, {});
+      await writeFile(scope.locations.mcpJsonPath, bytes);
+      await holdStateLock(t, scope.locations);
+      const treeBefore = await retryTree(scope.locations.scopeRoot);
+      const log: string[] = [];
+      const input = migrationInput(scope.cwd);
+
+      // act
+      await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+      // assert
+      assert.deepStrictEqual(input.rows, [
+        { kind: "file-unreadable", scope: "project", file: "mcp.json" },
+      ]);
+      assert.deepStrictEqual(log, []);
+      assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), bytes);
+      assert.deepStrictEqual(await retryTree(scope.locations.scopeRoot), treeBefore);
+    });
+  }
+
+  test("AMIG-01: an mcp.json read failure other than a config defect propagates", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "legacy-eisdir");
+    await mkdir(locations.mcpJsonPath);
+    const input = migrationInput(cwd);
+
+    // act & assert
+    await assert.rejects(migrateLegacyMcpEntries(input, recordingOperations([])), {
+      code: "EISDIR",
+    });
+    assert.deepStrictEqual(input.rows, []);
+  });
+
+  test("AMIG-01: an mcp-adapter.json read failure other than a config defect propagates before any write", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "adapter-eisdir");
+    const legacyBytes = await seedNotMovable(scope, {});
+    await mkdir(scope.locations.mcpAdapterJsonPath);
+    const log: string[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act & assert
+    await assert.rejects(migrateLegacyMcpEntries(input, recordingOperations(log)), {
+      code: "EISDIR",
+    });
+    assert.deepStrictEqual({ rows: input.rows, log }, { rows: [], log: [] });
+    assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), legacyBytes);
+  });
+
+  for (const { owner, plan, reason, rows } of [
+    {
+      owner: "an owner the plan installs",
+      plan: planWith({ pluginsToInstall: [{ ...HELLO_PLANNED, configSource: "local" }] }),
+      reason: undefined,
+      rows: [],
+    },
+    {
+      owner: "an owner the reload's dependency install installs",
+      plan: planWith({
+        pluginsToDependencyInstall: [
+          { ...HELLO_PLANNED, ranges: [], requiredBy: "app@mp", declarers: ["app@mp"] },
+        ],
+      }),
+      reason: "reload",
+      rows: [],
+    },
+    {
+      owner: "an owner the dependency install plans at startup",
+      plan: planWith({
+        pluginsToDependencyInstall: [
+          { ...HELLO_PLANNED, ranges: [], requiredBy: "app@mp", declarers: ["app@mp"] },
+        ],
+      }),
+      reason: "startup",
+      rows: [helloRow("unowned")],
+    },
+    {
+      owner: "an owner while the plan installs another plugin",
+      plan: planWith({
+        pluginsToInstall: [
+          { ...HELLO_PLANNED, plugin: "beta", configSource: "base" },
+          { ...HELLO_PLANNED, marketplace: "other", configSource: "base" },
+        ],
+      }),
+      reason: "reload",
+      rows: [helloRow("unowned")],
+    },
+  ] as const) {
+    test(`AMIG-04: ${owner} with no record here gets ${rows.length} unowned row(s) and no write`, async (t) => {
+      // arrange
+      const scope = await createProjectScope(t, "unowned-plan");
+      const legacyBytes = await seedNotMovable(scope, { records: {} });
+      const log: string[] = [];
+      const input = migrationInput(scope.cwd, plan, reason);
+
+      // act
+      await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+      // assert
+      assert.deepStrictEqual({ rows: input.rows, log }, { rows, log: [] });
+      assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), legacyBytes);
+    });
+  }
+
+  for (const { operation, enabled, plan } of [
+    {
+      operation: "uninstalls",
+      enabled: true,
+      plan: planWith({ pluginsToUninstall: [HELLO_PLANNED] }),
+    },
+    { operation: "disables", enabled: true, plan: planWith({ pluginsToDisable: [HELLO_PLANNED] }) },
+    {
+      operation: "holds down for a dependency",
+      enabled: true,
+      plan: planWith({
+        pluginsToDependencyDisable: [{ ...HELLO_PLANNED, dependency: "dep@mp", kind: "missing" }],
+      }),
+    },
+    {
+      operation: "removes with its marketplace",
+      enabled: true,
+      plan: planWith({
+        marketplacesToRemove: [{ scope: "project", marketplace: "mp", plugins: ["hello"] }],
+      }),
+    },
+    { operation: "enables", enabled: false, plan: planWith({ pluginsToEnable: [HELLO_PLANNED] }) },
+  ]) {
+    test(`AMIG-01: a recorded owner the plan ${operation} is skipped silently`, async (t) => {
+      // arrange
+      const scope = await createProjectScope(t, "planned-skip");
+      const legacyBytes = await seedNotMovable(scope, { enabled });
+      const log: string[] = [];
+      const input = migrationInput(scope.cwd, plan, "reload");
+
+      // act
+      await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+      // assert
+      assert.deepStrictEqual({ rows: input.rows, log }, { rows: [], log: [] });
+      assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), legacyBytes);
+    });
+  }
+
+  test("AMIG-01: a plan that names only other plugins and marketplaces still moves the owner", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "plan-others");
+    await seedNotMovable(scope, {});
+    const beta = { ...HELLO_PLANNED, plugin: "beta" };
+    const plan = planWith({
+      pluginsToUninstall: [beta],
+      pluginsToDisable: [beta],
+      pluginsToDependencyDisable: [{ ...beta, dependency: "dep@mp", kind: "missing" }],
+      pluginsToEnable: [beta],
+      marketplacesToRemove: [{ scope: "project", marketplace: "other", plugins: ["hello"] }],
+    });
+    const log: string[] = [];
+    const input = migrationInput(scope.cwd, plan, "reload");
+
+    // act
+    await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [
+      {
+        kind: "moved",
+        scope: "project",
+        plugin: "hello",
+        marketplace: "mp",
+        from: "srv",
+        to: "plugin_hello_srv_",
+      },
+    ]);
+    assert.deepStrictEqual(log, ["prepare hello@mp", "commit", "removeLegacy hello@mp"]);
+  });
+
+  test("AMIG-01: an owner whose MCP config is malformed keeps its entries with no row", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "malformed");
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: 42 } } },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+      }),
+    );
+    const legacyBytes = await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const log: string[] = [];
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+    // assert
+    assert.deepStrictEqual({ rows: input.rows, log }, { rows: [], log: [] });
+    assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), legacyBytes);
+  });
+
+  test("AMIG-01: a git owner moves offline from its warm recorded-sha clone, never the manifest sha", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "git-warm");
+    const { cloneDir } = await seedGitOwner(scope, {
+      recordedSha: RECORDED_SHA,
+      pinned: true,
+      cache: "warm",
+    });
+    const log: string[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [
+      {
+        kind: "moved",
+        scope: "project",
+        plugin: "hello",
+        marketplace: "mp",
+        from: "srv",
+        to: "plugin_hello_srv_",
+      },
+    ]);
+    assert.deepStrictEqual(log, ["prepare hello@mp", "commit", "removeLegacy hello@mp"]);
+    const adapter = JSON.parse(await readFile(scope.locations.mcpAdapterJsonPath, "utf8")) as {
+      readonly mcpServers: Readonly<Record<string, { readonly env: unknown }>>;
+    };
+    assert.deepStrictEqual(adapter.mcpServers["plugin_hello_srv_"]?.env, {
+      CLAUDE_PLUGIN_ROOT: cloneDir,
+      CLAUDE_PLUGIN_DATA: path.join(scope.locations.dataRoot, "mp", "hello"),
+    });
+  });
+
+  for (const { cause, seed } of [
+    {
+      cause: "a cold clone cache",
+      seed: { recordedSha: RECORDED_SHA, pinned: true, cache: "cold" },
+    },
+    { cause: "a git record without resolvedSha", seed: { pinned: true, cache: "warm" } },
+    {
+      cause: "a mirror whose HEAD cannot be read, so the resolve throws",
+      seed: { recordedSha: RECORDED_SHA, pinned: false, cache: "headless-mirror" },
+    },
+  ] as const) {
+    test(`AMIG-01 / NFR-5: ${cause} gives one source-unreadable row and no write`, async (t) => {
+      // arrange
+      const scope = await createProjectScope(t, "git-unreadable");
+      const { legacyBytes } = await seedGitOwner(scope, seed);
+      const log: string[] = [];
+      const input = migrationInput(scope.cwd);
+
+      // act
+      await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+      // assert
+      assert.deepStrictEqual(
+        { rows: input.rows, log },
+        { rows: [helloRow("source-unreadable")], log: [] },
+      );
+      assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), legacyBytes);
+      await assert.rejects(readFile(scope.locations.mcpAdapterJsonPath), { code: "ENOENT" });
+    });
+  }
+
+  for (const { source, key, label, write } of [
+    {
+      source: "the user mcp-adapter.json",
+      key: "plugin_hello_srv_",
+      label: "user-scope mcp-adapter.json",
+      write: async ({ cwd }: Scope): Promise<void> => {
+        await writeConfigFile(locationsFor("user", cwd).mcpAdapterJsonPath, {
+          plugin_hello_srv_: { command: "theirs" },
+        });
+      },
+    },
+    {
+      source: "~/.config/mcp/mcp.json",
+      key: "plugin_hello_srv_",
+      label: "mcp.json",
+      write: async ({ home }: Scope): Promise<void> => {
+        await writeConfigFile(path.join(home, ".config", "mcp", "mcp.json"), {
+          plugin_hello_srv_: { command: "theirs" },
+        });
+      },
+    },
+    {
+      source: "the project .mcp.json under a key that folds equal",
+      key: "plugin-hello-srv-",
+      label: "project .mcp.json",
+      write: async ({ cwd }: Scope): Promise<void> => {
+        await writeConfigFile(path.join(cwd, ".mcp.json"), {
+          "plugin-hello-srv-": { url: "https://example.test/mcp" },
+        });
+      },
+    },
+  ]) {
+    test(`AMIG-01: a full server at the new key in ${source} gives one collision row while another owner still moves`, async (t) => {
+      // arrange
+      const scope = await createProjectScope(t, "collision");
+      await seedTwoMovableOwners(scope);
+      await write(scope);
+      const log: string[] = [];
+      const input = migrationInput(scope.cwd);
+
+      // act
+      await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+      // assert
+      assert.deepStrictEqual(input.rows, [
+        {
+          kind: "collision",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          servers: ["srv"],
+          key,
+          source: label,
+        },
+        BETA_MOVED,
+      ]);
+      assert.deepStrictEqual(log, [
+        "prepare beta@mp",
+        "commit",
+        "prepare hello@mp",
+        "removeLegacy beta@mp",
+      ]);
+      assert.strictEqual(
+        await readFile(scope.locations.mcpJsonPath, "utf8"),
+        `${JSON.stringify({ mcpServers: { srv: legacyEntry("hello") } }, null, 2)}\n`,
+      );
+    });
+  }
 });
