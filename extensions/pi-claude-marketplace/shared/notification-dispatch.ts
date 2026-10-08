@@ -281,13 +281,31 @@ export interface McpCredentialsBlankedNotice {
   readonly names: readonly string[];
 }
 
-/** AFILE-04 / AFILE-06 / AVAR-04: one MCP config fact a command routes to `notifyMcpConfigNotices`. */
+/**
+ * ANAME-07 / AMIG-01: a staged plugin server declares tool permission rules
+ * that pi-mcp-adapter does not enforce. `fields` lists the field names in
+ * table order. It names fields, never tool names or policy values.
+ */
+export interface McpToolRulesUnenforcedNotice {
+  readonly kind: "tool-rules-unenforced";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+  readonly fields: readonly string[];
+}
+
+/**
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07: one MCP config fact a command
+ * routes to `notifyMcpConfigNotices`.
+ */
 export type McpConfigNotice =
   | McpConfigFileNotice
   | McpOverrideKeptNotice
   | McpOverrideRestoredNotice
   | McpVariablesMissingNotice
-  | McpCredentialsBlankedNotice;
+  | McpCredentialsBlankedNotice
+  | McpToolRulesUnenforcedNotice;
 
 function mcpConfigFileLine(notice: McpConfigFileNotice): string {
   return notice.kind === "comments-dropped"
@@ -313,6 +331,14 @@ function mcpCredentialsBlankedLine(notice: McpCredentialsBlankedNotice): string 
 
 function isCredentialsBlanked(notice: McpConfigNotice): notice is McpCredentialsBlankedNotice {
   return notice.kind === "credentials-blanked";
+}
+
+function mcpToolRulesUnenforcedLine(notice: McpToolRulesUnenforcedNotice): string {
+  return `Server "${notice.server}" from ${notice.plugin} in the ${notice.scope}-scope ${notice.file} declares tool permission rules that pi-mcp-adapter does not enforce: ${notice.fields.join(", ")}. Its tools run without these rules.`;
+}
+
+function isToolRulesUnenforced(notice: McpConfigNotice): notice is McpToolRulesUnenforcedNotice {
+  return notice.kind === "tool-rules-unenforced";
 }
 
 function mcpConfigFileLines(
@@ -355,10 +381,11 @@ function standingOverrideNotices(
 }
 
 /**
- * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04: the MCP config lines of a notice
- * list, one section per kind in the order comments-dropped, left-unchanged,
- * override-kept, variables-missing, credentials-blanked. Each section holds
- * its summary and its distinct lines in first-seen order, and may be empty.
+ * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 / ANAME-07: the MCP config lines of
+ * a notice list, one section per kind in the order comments-dropped,
+ * left-unchanged, override-kept, variables-missing, credentials-blanked,
+ * tool-rules-unenforced. Each section holds its summary and its distinct
+ * lines in first-seen order, and may be empty.
  * An override-kept line stands only when no later override-restored notice
  * for the same scope, file and server cancels it. An override-restored notice
  * renders nothing. `notifyMcpConfigNotices` and `notifyMcpMigration` both
@@ -382,25 +409,31 @@ function mcpConfigNoticeSections(
       "MCP server credentials withheld.",
       notices.filter(isCredentialsBlanked).map((notice) => mcpCredentialsBlankedLine(notice)),
     ],
+    [
+      "MCP server tool rules not enforced.",
+      notices.filter(isToolRulesUnenforced).map((notice) => mcpToolRulesUnenforcedLine(notice)),
+    ],
   ];
   return sections.map(([summary, lines]) => [summary, [...new Set(lines)]] as const);
 }
 
 /**
- * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 IL-2 seam: the one surface for MCP
- * config notices. Bridges report the facts and orchestrators call this after
- * their own row. It sends one `"warning"` notification per non-empty
- * `mcpConfigNoticeSections` section, in section order: a summary line, a
- * blank line, then the section's lines. An empty list sends nothing. A line
- * names the scope, the file basename, the plugin, the server, and override
- * field names or environment variable names only, so it carries no absolute
- * path, no field value and no variable value (AVAR-05). The host UI prepends
- * the `Warning:` label to the summary line. The byte form is locked by
+ * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 / ANAME-07 IL-2 seam: the one
+ * surface for MCP config notices. Bridges report the facts and orchestrators
+ * call this after their own row. It sends one `"warning"` notification per
+ * non-empty `mcpConfigNoticeSections` section, in section order: a summary
+ * line, a blank line, then the section's lines. An empty list sends nothing.
+ * A line names the scope, the file basename, the plugin, the server, and
+ * override field names, environment variable names or tool permission field
+ * names only, so it carries no absolute path, no field value, no variable
+ * value and no tool name (AVAR-05). The host UI prepends the `Warning:` label
+ * to the summary line. The byte form is locked by
  * `tests/architecture/mcp-config-notices.test.ts` against the
  * `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept`,
- * `mcp-variables-missing` and `mcp-credentials-blanked` blocks in
- * `docs/output-catalog.md`. The reload migration renders the same sections
- * inside its one notice instead (`notifyMcpMigration`).
+ * `mcp-variables-missing`, `mcp-credentials-blanked` and
+ * `mcp-tool-rules-unenforced` blocks in `docs/output-catalog.md`. The reload
+ * migration renders the same sections inside its one notice instead
+ * (`notifyMcpMigration`).
  */
 export function notifyMcpConfigNotices(
   ctx: NotificationContext,

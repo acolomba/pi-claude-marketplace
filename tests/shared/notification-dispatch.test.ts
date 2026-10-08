@@ -6399,6 +6399,14 @@ test("AFILE-04: notices of every kind send one warning per kind in section order
   // act
   notifyMcpConfigNotices(ctx as never, [
     {
+      kind: "tool-rules-unenforced",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      fields: ["toolPermissions"],
+    },
+    {
       kind: "credentials-blanked",
       scope: "user",
       file: "mcp-adapter.json",
@@ -6448,6 +6456,87 @@ test("AFILE-04: notices of every kind send one warning per kind in section order
       ],
       [
         'MCP server credentials withheld.\n\nServer "plugin_hello_srv_" from hello in the user-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+        "warning",
+      ],
+      [
+        'MCP server tool rules not enforced.\n\nServer "plugin_hello_srv_" from hello in the user-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: toolPermissions. Its tools run without these rules.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("ANAME-07: tool-rules-unenforced notices send MCP server tool rules not enforced. after the credentials-withheld warning, with a line each", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_alpha_",
+      fields: ["tools[].permission_policy", "toolPermissions"],
+    },
+    {
+      kind: "credentials-blanked",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_alpha_",
+      names: ["ANTHROPIC_API_KEY"],
+    },
+    {
+      kind: "tool-rules-unenforced",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "plugin_acme_beta_",
+      fields: ["tools[].permission_policy"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server credentials withheld.\n\nServer "plugin_hello_alpha_" from hello in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+        "warning",
+      ],
+      [
+        "MCP server tool rules not enforced.\n\n" +
+          'Server "plugin_hello_alpha_" from hello in the project-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: tools[].permission_policy, toolPermissions. Its tools run without these rules.\n' +
+          'Server "plugin_acme_beta_" from acme in the user-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: tools[].permission_policy. Its tools run without these rules.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("ANAME-07: a repeated tool-rules-unenforced notice renders once", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const toolRules = {
+    kind: "tool-rules-unenforced",
+    scope: "project",
+    file: "mcp-adapter.json",
+    plugin: "hello",
+    server: "plugin_hello_srv_",
+    fields: ["toolPermissions"],
+  } as const;
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [toolRules, toolRules]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server tool rules not enforced.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: toolPermissions. Its tools run without these rules.',
         "warning",
       ],
     ],
@@ -6657,6 +6746,63 @@ describe("notifyMcpMigration", () => {
             MCP_MIGRATION_COST_LINE,
             "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
             'Server "plugin_acme_srv_" from acme in the project-scope mcp-adapter.json uses environment variables that were not set at install: TOKEN.',
+            "/reload to pick up changes",
+          ].join("\n"),
+          "info",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-03: a tool-rules-unenforced notice renders its line after the credentials-withheld line", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "acme",
+          marketplace: "mp",
+          from: "srv",
+          to: "plugin_acme_srv_",
+        },
+      ],
+      notices: [
+        {
+          kind: "tool-rules-unenforced",
+          scope: "project",
+          file: "mcp-adapter.json",
+          plugin: "acme",
+          server: "plugin_acme_srv_",
+          fields: ["tools[].permission_policy", "toolPermissions"],
+        },
+        {
+          kind: "credentials-blanked",
+          scope: "project",
+          file: "mcp-adapter.json",
+          plugin: "acme",
+          server: "plugin_acme_srv_",
+          names: ["NPM_TOKEN"],
+        },
+      ],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers moved from mcp.json to mcp-adapter.json.",
+            "",
+            "Moved to mcp-adapter.json:",
+            "  srv -> plugin_acme_srv_ (acme) [project]",
+            MCP_MIGRATION_COST_LINE,
+            'Server "plugin_acme_srv_" from acme in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: NPM_TOKEN. They were written as empty values.',
+            'Server "plugin_acme_srv_" from acme in the project-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: tools[].permission_policy, toolPermissions. Its tools run without these rules.',
             "/reload to pick up changes",
           ].join("\n"),
           "info",

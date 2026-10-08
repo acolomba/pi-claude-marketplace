@@ -80,8 +80,10 @@ export interface StageMcpCommitResult {
    * notice per absorbed override whose fields stop applying, then the
    * per-server variable notices from the variable reports of the staged
    * entries, in declared server order: a server's `variables-missing` notice
-   * before its `credentials-blanked` notice (AVAR-05). Distinct from `warnings`, which are
-   * hygiene notes standalone commands do not show.
+   * before its `credentials-blanked` notice (AVAR-05), then the per-server
+   * `tool-rules-unenforced` notices, in declared server order (ANAME-07).
+   * Distinct from `warnings`, which are hygiene notes standalone commands do
+   * not show.
    */
   readonly notices: readonly McpConfigNotice[];
 }

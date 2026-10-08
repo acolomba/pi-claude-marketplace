@@ -722,7 +722,7 @@ A plugin operation has failed.
     Re-run with --partial to install the supported components.
 ```
 
-A server of the plugin uses a Claude Code MCP feature that pi-mcp-adapter cannot honor. The features are a `ws` transport, the host-only types `sse-ide`, `ws-ide`, `sdk` and `claudeai-proxy`, `headersHelper`, a truthy `oauth.xaa`, a per-tool `permission_policy`, a non-empty `toolPermissions`, `bareElicitationCapability: true`, and a leading `~`, `~/` or `~\` in a stdio server's `command` or in an `args` element. A leading `${NAME:-…}` reference whose default starts that way counts too. Claude Code passes such a value through literally, but pi-mcp-adapter expands the home directory after it interpolates the value, so no written form keeps the value literal. `info` names such a server as `(unsupported command ~)` or `(unsupported args ~)`. The resolver gives the partially-available arm, so a normal install refuses before any write. The row carries the one aggregate `{unsupported mcp}` token, however many servers are affected, and the `--partial` hint. With `--partial`, the install writes every other component and every other server. It leaves each affected server out whole, and the record then derives `(partially-installed)`. `info` names each server that was left out, with the feature that blocks it. A server config that Claude Code's own schema rejects is a different case: it is a structural defect, and the plugin is `(unavailable) {malformed mcp}`.
+A server of the plugin uses a Claude Code MCP feature that pi-mcp-adapter cannot honor. The features are a `ws` transport, the host-only types `sse-ide`, `ws-ide`, `sdk` and `claudeai-proxy`, `headersHelper`, a truthy `oauth.xaa`, `bareElicitationCapability: true`, and a leading `~`, `~/` or `~\` in a stdio server's `command` or in an `args` element. A leading `${NAME:-…}` reference whose default starts that way counts too. Claude Code passes such a value through literally, but pi-mcp-adapter expands the home directory after it interpolates the value, so no written form keeps the value literal. `info` names such a server as `(unsupported command ~)` or `(unsupported args ~)`. The resolver gives the partially-available arm, so a normal install refuses before any write. The row carries the one aggregate `{unsupported mcp}` token, however many servers are affected, and the `--partial` hint. With `--partial`, the install writes every other component and every other server. It leaves each affected server out whole, and the record then derives `(partially-installed)`. `info` names each server that was left out, with the feature that blocks it. A per-tool `permission_policy` or a non-empty `toolPermissions` does not block; the server installs and the command warns that the rules are not enforced. A server config that Claude Code's own schema rejects is a different case: it is a structural defect, and the plugin is `(unavailable) {malformed mcp}`.
 
 ### Workflow plus unsupported-kind rejection (WINV-04)
 
@@ -4262,6 +4262,18 @@ Server "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json refe
 ```
 
 Emitted via `notifyMcpConfigNotices` by the same commands as the missing-variable notice. It fires when a remote server's `url` or `headers` references a variable on Claude Code's credential deny-list and that variable is set at install. The written entry carries an empty value in its place, so a value set later never reaches the server. Claude Code writes the same fact only to its debug log, so this user-visible warning is a documented divergence. Like the missing-variable notice, it shows no line for a server whose entry the same command removed again. One line per server, which names each withheld variable once, in first-seen order. The line names variables, never their values. It follows the missing-variable notice. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+
+### MCP server tool rules not enforced (ANAME-07)
+
+<!-- catalog-state: mcp-tool-rules-unenforced -->
+
+```text
+MCP server tool rules not enforced.
+
+Server "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: tools[].permission_policy, toolPermissions. Its tools run without these rules.
+```
+
+Emitted via `notifyMcpConfigNotices` by every command that stages a plugin's MCP servers: install, update, reinstall and enable, run directly or inside the reconcile, import and marketplace update cascades. The reload migration carries the same line in its notice for a moved server. It fires when a remote server declares a `tools` element with a `permission_policy` or a non-empty `toolPermissions`. The server is installed and works, but its per-tool restrictions are not enforced, because pi-mcp-adapter has no per-tool rule. The written entry carries neither field. A command that removes the server's entry again in the same run shows no line for it. One line per server, which names the fields in the order `tools[].permission_policy`, `toolPermissions`. The line names fields, never tool names or policy values. It follows the credentials-withheld notice. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
 
 ### Plugin MCP servers moved out of mcp.json (AMIG-01, AMIG-03)
 

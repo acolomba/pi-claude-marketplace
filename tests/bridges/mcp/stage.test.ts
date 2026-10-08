@@ -1964,6 +1964,125 @@ describe("prepareStageMcpServers", () => {
     assert.deepStrictEqual(prepared.result.notices, []);
   });
 
+  test("ANAME-07: each server with tool permission rules reports one tool-rules-unenforced notice, in declared order after the variable notices", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-tool-rules-order-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: {},
+      servers: {
+        alpha: {
+          type: "http",
+          url: "https://a.example/${PI_CM_ANAME7_SITE}",
+          toolPermissions: { drop: "blocked" },
+        },
+        beta: { type: "http", url: "https://b.example/mcp" },
+        gamma: {
+          type: "sse",
+          url: "https://g.example/mcp",
+          toolPermissions: { drop: "ask" },
+          tools: [{ name: "drop", permission_policy: "always_deny" }],
+        },
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "variables-missing",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_alpha_",
+        names: ["PI_CM_ANAME7_SITE"],
+      },
+      {
+        kind: "tool-rules-unenforced",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_alpha_",
+        fields: ["toolPermissions"],
+      },
+      {
+        kind: "tool-rules-unenforced",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_gamma_",
+        fields: ["tools[].permission_policy", "toolPermissions"],
+      },
+    ]);
+  });
+
+  test("ANAME-07: a server with tool permission rules is written without either rule field", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-tool-rules-entry-");
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: {},
+      servers: {
+        srv: {
+          type: "http",
+          url: "https://s.example/mcp",
+          tools: [{ name: "drop", permission_policy: "always_deny" }],
+          toolPermissions: { drop: "blocked" },
+        },
+      },
+    });
+
+    // act
+    await commitPreparedMcp(prepared);
+    const adapter: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+
+    // assert
+    assert.deepStrictEqual(adapter, {
+      mcpServers: {
+        plugin_hello_srv_: {
+          url: "https://s.example/mcp",
+          directTools: "search",
+          toolPrefix: "mcp",
+          _piClaudeMarketplace: { plugin: "hello", marketplace: "catalog" },
+        },
+      },
+    });
+  });
+
+  test("ANAME-07: servers without tool permission rules report no tool-rules-unenforced notice", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-tool-rules-none-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: {},
+      servers: {
+        remote: { type: "http", url: "https://r.example/mcp", toolPermissions: {} },
+        local: { command: "node", toolPermissions: { drop: "blocked" } },
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, []);
+  });
+
   test("ANAME-01: writes each server under its Claude Code key in declared order and records the declared names", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-keys-");

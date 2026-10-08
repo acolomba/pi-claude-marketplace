@@ -30,6 +30,7 @@ import path from "node:path";
 
 import writeFileAtomic from "write-file-atomic";
 
+import { unenforcedToolRules } from "../../domain/mcp-server-features.ts";
 import { foldedMcpServerKey, generatedMcpServerKey } from "../../domain/name.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import {
@@ -64,6 +65,7 @@ import type {
   McpConfigNotice,
   McpCredentialsBlankedNotice,
   McpOverrideKeptNotice,
+  McpToolRulesUnenforcedNotice,
   McpVariablesMissingNotice,
 } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -241,6 +243,34 @@ function variableNotices(
 }
 
 /**
+ * ANAME-07 / AMIG-01: one `tool-rules-unenforced` notice per server, in
+ * declared order, whose raw config declares tool permission rules that
+ * pi-mcp-adapter does not enforce. It names the adapter key and the field
+ * names only.
+ */
+function toolRuleNotices(
+  keyed: Readonly<Record<string, unknown>>,
+  scope: Scope,
+  pluginName: string,
+): McpToolRulesUnenforcedNotice[] {
+  return Object.entries(keyed).flatMap(([server, entry]) => {
+    const fields = unenforcedToolRules(entry);
+    return fields.length > 0
+      ? [
+          {
+            kind: "tool-rules-unenforced",
+            scope,
+            file: "mcp-adapter.json",
+            plugin: pluginName,
+            server,
+            fields,
+          } as const,
+        ]
+      : [];
+  });
+}
+
+/**
  * ANAME-01: the plugin's servers under their generated keys, in declared
  * order. `safeSet` keeps every key an own property (WR-01).
  *
@@ -314,8 +344,10 @@ async function readTargetConfig(
  * (AFILE-01, AFILE-06). The result's notices end with each server's
  * `variables-missing` notice for unset variables with no default, then its
  * `credentials-blanked` notice for set credentials blanked in `url` or
- * `headers` (AVAR-04, AVAR-05). AS-8 noop short-circuits when
- * there is nothing new AND nothing previously-ours -- in that case
+ * `headers` (AVAR-04, AVAR-05), then one `tool-rules-unenforced` notice per
+ * server that declares tool permission rules (ANAME-07). AS-8 noop
+ * short-circuits when there is nothing new AND nothing previously-ours -- in
+ * that case
  * `commitPreparedMcp` writes no file (PRD success criterion: AS-8 noop
  * produces no `mcp-adapter.json`).
  *
@@ -422,11 +454,12 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // nothing and keep the comments. AFILE-06: each absorbed override with
   // fields the new entry does not carry is reported after it. AVAR-04 /
   // AVAR-05: each server's missing-variable and withheld-credential notices
-  // come last.
+  // follow. ANAME-07: each server's unenforced tool-rule notice comes last.
   const notices = Object.freeze<McpConfigNotice[]>([
     ...commentsDroppedNotices(config.hadComments, locations.scope),
     ...overrideKeptNotices(stamped, overlays, locations.scope, pluginName),
     ...variableNotices(variableReports, locations.scope, pluginName),
+    ...toolRuleNotices(keyed, locations.scope, pluginName),
   ]);
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...declaredNames]),

@@ -96,13 +96,15 @@ export async function seedMcpPlugin(
  * `scope` through the real install, keeps the bytes it wrote to
  * `mcp-adapter.json`, then deletes that file and writes `legacyEntry` with the
  * plugin's marker into the scope's `mcp.json` under the declared name `srv`.
+ * `server` is the plugin's declared `srv`, as `seedMcpPlugin` takes it.
  */
 export async function seedLegacyMcpInstall(
   cwd: string,
   scope: Scope,
   legacyEntry: Readonly<Record<string, unknown>>,
+  server?: Readonly<Record<string, unknown>>,
 ): Promise<{ pluginRoot: string; freshAdapterBytes: Buffer }> {
-  const pluginRoot = await seedMcpPlugin(cwd, [scope]);
+  const pluginRoot = await seedMcpPlugin(cwd, [scope], server);
   const locations = locationsFor(scope, cwd);
   const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   await createInstallOperation(

@@ -842,7 +842,7 @@ test("cascadeUnstagePlugin raises a typed workflows failure naming every unremov
   await assert.rejects(() => stat(removablePath), { code: "ENOENT" });
 });
 
-test("AVAR-04: foldUnstageNotices drops the variable notices of the removed servers and appends the unstage's notices", () => {
+test("AVAR-04 / ANAME-07: foldUnstageNotices drops the variable and tool-rule notices of the removed servers and appends the unstage's notices", () => {
   // arrange
   const notices: McpConfigNotice[] = [
     { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
@@ -861,6 +861,14 @@ test("AVAR-04: foldUnstageNotices drops the variable notices of the removed serv
       plugin: "hello",
       server: "plugin_hello_api_",
       names: ["ANTHROPIC_API_KEY"],
+    },
+    {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      fields: ["toolPermissions"],
     },
     {
       kind: "override-kept",
@@ -885,6 +893,14 @@ test("AVAR-04: foldUnstageNotices drops the variable notices of the removed serv
       plugin: "hello",
       server: "plugin_hello_docs_",
       names: ["DOCS_SITE"],
+    },
+    {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
+      fields: ["tools[].permission_policy"],
     },
   ];
 
@@ -929,6 +945,14 @@ test("AVAR-04: foldUnstageNotices drops the variable notices of the removed serv
       plugin: "hello",
       server: "plugin_hello_docs_",
       names: ["DOCS_SITE"],
+    },
+    {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
+      fields: ["tools[].permission_policy"],
     },
     {
       kind: "override-restored",

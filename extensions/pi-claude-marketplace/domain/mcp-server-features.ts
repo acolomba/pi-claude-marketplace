@@ -29,8 +29,6 @@ export type McpUnsupportedFeature =
   | "claudeai-proxy"
   | "headersHelper"
   | "oauth.xaa"
-  | "tools[].permission_policy"
-  | "toolPermissions"
   | "command ~"
   | "args ~"
   | "bareElicitationCapability";
@@ -284,9 +282,9 @@ function elicitationFeature(server: {
 }
 
 /**
- * The remote fields in table order: `headersHelper`, a truthy `oauth.xaa`, a
- * per-tool `permission_policy`, a non-empty `toolPermissions`, then
- * `bareElicitationCapability: true`.
+ * The remote fields in table order: `headersHelper`, a truthy `oauth.xaa`,
+ * then `bareElicitationCapability: true`. Tool permission rules do not block
+ * (`unenforcedToolRules`).
  */
 function remoteFeature(server: RemoteServer): McpUnsupportedFeature | undefined {
   if (server.headersHelper !== undefined) {
@@ -297,15 +295,40 @@ function remoteFeature(server: RemoteServer): McpUnsupportedFeature | undefined 
     return "oauth.xaa";
   }
 
+  return elicitationFeature(server);
+}
+
+/** A Claude Code tool permission field that pi-mcp-adapter does not enforce. */
+export type McpUnenforcedToolRule = "tools[].permission_policy" | "toolPermissions";
+
+/**
+ * Lists the tool permission fields a valid remote server declares, in table
+ * order: `tools[].permission_policy` when a `tools` element has a
+ * `permission_policy`, then `toolPermissions` when it has a key (ANAME-07,
+ * AMIG-01). The server works under pi-mcp-adapter, which has no per-tool
+ * rule, so these restrictions are not enforced. Whether Claude Code enforces
+ * them for a plugin server is not established. Any other input, including a
+ * stdio server and a remote server its schema rejects, gives `[]`.
+ */
+export function unenforcedToolRules(server: unknown): readonly McpUnenforcedToolRule[] {
+  if (
+    !isPlainObject(server) ||
+    (server.type !== "sse" && server.type !== "http" && server.type !== "streamable-http") ||
+    !REMOTE_SERVER.Check(server)
+  ) {
+    return [];
+  }
+
+  const rules: McpUnenforcedToolRule[] = [];
   if ((server.tools ?? []).some((tool) => tool.permission_policy !== undefined)) {
-    return "tools[].permission_policy";
+    rules.push("tools[].permission_policy");
   }
 
   if (Object.keys(server.toolPermissions ?? {}).length > 0) {
-    return "toolPermissions";
+    rules.push("toolPermissions");
   }
 
-  return elicitationFeature(server);
+  return rules;
 }
 
 // The values pi-mcp-adapter home-expands: exactly `~`, or a `~/` or `~\`
@@ -358,11 +381,11 @@ function classifyWs(server: unknown): McpServerVerdict {
  * type (`sse-ide`, `ws-ide`, `sdk`, `claudeai-proxy`) is `blocked` without
  * validation, since Claude does not run one from a plugin. A valid server that
  * uses a feature pi-mcp-adapter cannot honor is `blocked` with the first such
- * feature in table order: `ws`, `headersHelper`, `oauth.xaa`,
- * `tools[].permission_policy`, `toolPermissions`, then for stdio `command ~`
- * and `args ~` (AVAR-03), then `bareElicitationCapability`. `role` and
- * `discoveryCache` never block, and neither does a `~` in a remote server's
- * `url` or `headers`, which the adapter does not home-expand.
+ * feature in table order: `ws`, `headersHelper`, `oauth.xaa`, then for stdio
+ * `command ~` and `args ~` (AVAR-03), then `bareElicitationCapability`.
+ * `role`, `discoveryCache` and the tool permission rules never block
+ * (`unenforcedToolRules`, AMIG-01), and neither does a `~` in a remote
+ * server's `url` or `headers`, which the adapter does not home-expand.
  */
 export function classifyMcpServer(server: unknown): McpServerVerdict {
   if (!isPlainObject(server)) {

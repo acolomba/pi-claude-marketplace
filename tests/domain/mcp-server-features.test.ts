@@ -4,9 +4,13 @@ import { describe, test } from "node:test";
 import {
   classifyMcpServer,
   translateMcpServer,
+  unenforcedToolRules,
 } from "../../extensions/pi-claude-marketplace/domain/mcp-server-features.ts";
 
-import type { McpServerVerdict } from "../../extensions/pi-claude-marketplace/domain/mcp-server-features.ts";
+import type {
+  McpServerVerdict,
+  McpUnenforcedToolRule,
+} from "../../extensions/pi-claude-marketplace/domain/mcp-server-features.ts";
 
 interface TranslationRow {
   readonly title: string;
@@ -460,18 +464,28 @@ const VERDICT_ROWS: readonly VerdictRow[] = [
     verdict: { kind: "blocked", feature: "oauth.xaa" },
   },
   {
-    title: "ANAME-07: a per-tool permission_policy blocks a remote server",
+    title: "ANAME-07: a remote server with a per-tool permission_policy is supported",
     server: {
       type: "http",
       url: "x",
       tools: [{ name: "read" }, { name: "drop", permission_policy: "always_deny" }],
     },
-    verdict: { kind: "blocked", feature: "tools[].permission_policy" },
+    verdict: SUPPORTED,
   },
   {
-    title: "ANAME-07: a non-empty toolPermissions blocks a remote server",
-    server: { type: "http", url: "x", toolPermissions: { drop: "blocked" } },
-    verdict: { kind: "blocked", feature: "toolPermissions" },
+    title: "ANAME-07: a remote server with a non-empty toolPermissions is supported",
+    server: { type: "sse", url: "x", toolPermissions: { drop: "blocked" } },
+    verdict: SUPPORTED,
+  },
+  {
+    title: "ANAME-07: an invalid permission_policy value is malformed",
+    server: { type: "http", url: "x", tools: [{ name: "drop", permission_policy: "never" }] },
+    verdict: { kind: "malformed", detail: "/tools/0/permission_policy: must be equal to constant" },
+  },
+  {
+    title: "ANAME-07: an invalid toolPermissions value is malformed",
+    server: { type: "http", url: "x", toolPermissions: { drop: "deny" } },
+    verdict: { kind: "malformed", detail: "/toolPermissions/drop: must be equal to constant" },
   },
   {
     title: "ANAME-07: bareElicitationCapability true blocks a stdio server",
@@ -489,14 +503,14 @@ const VERDICT_ROWS: readonly VerdictRow[] = [
     verdict: { kind: "blocked", feature: "headersHelper" },
   },
   {
-    title: "ANAME-07: a per-tool policy wins over toolPermissions in table order",
+    title: "ANAME-07: a remote server with both tool permission rules is supported",
     server: {
       type: "sse",
       url: "x",
       toolPermissions: { drop: "blocked" },
       tools: [{ name: "drop", permission_policy: "always_ask" }],
     },
-    verdict: { kind: "blocked", feature: "tools[].permission_policy" },
+    verdict: SUPPORTED,
   },
   {
     title: "AVAR-03: a command of exactly ~ blocks a stdio server",
@@ -588,6 +602,90 @@ describe("classifyMcpServer", () => {
 
       // assert
       assert.deepStrictEqual(classified, expectedVerdict);
+    });
+  }
+});
+
+interface ToolRuleRow {
+  readonly title: string;
+  readonly server: unknown;
+  readonly rules: readonly McpUnenforcedToolRule[];
+}
+
+const TOOL_RULE_ROWS: readonly ToolRuleRow[] = [
+  {
+    title: "ANAME-07: a remote server with both rules reports them in table order",
+    server: {
+      type: "sse",
+      url: "x",
+      toolPermissions: { drop: "blocked" },
+      tools: [{ name: "read" }, { name: "drop", permission_policy: "always_ask" }],
+    },
+    rules: ["tools[].permission_policy", "toolPermissions"],
+  },
+  {
+    title: "ANAME-07: an http server with a per-tool permission_policy reports that rule alone",
+    server: { type: "http", url: "x", tools: [{ name: "drop", permission_policy: "always_deny" }] },
+    rules: ["tools[].permission_policy"],
+  },
+  {
+    title:
+      "ANAME-07: a streamable-http server with a non-empty toolPermissions reports that rule alone",
+    server: { type: "streamable-http", url: "x", toolPermissions: { drop: "ask" } },
+    rules: ["toolPermissions"],
+  },
+  {
+    title: "ANAME-07: an empty toolPermissions and a tool without a policy report no rule",
+    server: { type: "http", url: "x", toolPermissions: {}, tools: [{ name: "read" }] },
+    rules: [],
+  },
+  {
+    title: "ANAME-07: a stdio server carrying tool rules reports no rule",
+    server: {
+      command: "node",
+      tools: [{ name: "drop", permission_policy: "always_deny" }],
+      toolPermissions: { drop: "blocked" },
+    },
+    rules: [],
+  },
+  {
+    title: "ANAME-07: a ws server carrying tool rules reports no rule",
+    server: { type: "ws", url: "x", toolPermissions: { drop: "blocked" } },
+    rules: [],
+  },
+  {
+    title: "ANAME-07: a remote server its schema rejects reports no rule",
+    server: {
+      type: "http",
+      url: "x",
+      tools: [{ name: "drop", permission_policy: "never" }],
+      toolPermissions: { drop: "blocked" },
+    },
+    rules: [],
+  },
+  {
+    title: "ANAME-07: a primitive reports no rule",
+    server: "http",
+    rules: [],
+  },
+  {
+    title: "ANAME-07: an array reports no rule",
+    server: [{ type: "http", url: "x", toolPermissions: { drop: "blocked" } }],
+    rules: [],
+  },
+];
+
+describe("unenforcedToolRules", () => {
+  for (const { title, server, rules } of TOOL_RULE_ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedRules = rules;
+
+      // act
+      const reportedRules = unenforcedToolRules(server);
+
+      // assert
+      assert.deepStrictEqual(reportedRules, expectedRules);
     });
   }
 });

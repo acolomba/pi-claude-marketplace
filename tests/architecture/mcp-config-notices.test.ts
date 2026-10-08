@@ -5,10 +5,11 @@
 // NotificationMessage entrypoint, so the catalog-uat walk and the
 // notify-grammar invariant never drive it. This dedicated lock reads the
 // `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept`,
-// `mcp-variables-missing` and `mcp-credentials-blanked` blocks from
-// docs/output-catalog.md and asserts that the seam emits each one byte for
-// byte, in one warning-severity call, with a non-empty summary line followed
-// by a blank line (AFILE-06, AVAR-04, AVAR-05).
+// `mcp-variables-missing`, `mcp-credentials-blanked` and
+// `mcp-tool-rules-unenforced` blocks from docs/output-catalog.md and asserts
+// that the seam emits each one byte for byte, in one warning-severity call,
+// with a non-empty summary line followed by a blank line (AFILE-06, AVAR-04,
+// AVAR-05, ANAME-07).
 
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
@@ -66,6 +67,17 @@ const CATALOG_NOTICE_ROWS: readonly CatalogNoticeRow[] = [
       plugin: "hello",
       server: "plugin_hello_srv_",
       names: ["ANTHROPIC_API_KEY"],
+    },
+  },
+  {
+    state: "mcp-tool-rules-unenforced",
+    notice: {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      fields: ["tools[].permission_policy", "toolPermissions"],
     },
   },
 ];
