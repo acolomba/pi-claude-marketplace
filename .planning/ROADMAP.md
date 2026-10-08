@@ -278,7 +278,22 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 3. The user sees one migration notice that lists each `old -> new` server name, says that the rename requires signing in again and re-approving project servers, and carries the reload hint, because the adapter picks up the move one `/reload` later. (AMIG-03)
 4. A marked legacy entry with no owning install record stays in `mcp.json`, and the user is warned about it. (AMIG-04)
 
-**Plans**: TBD
+**Plans**: 5 plans in 5 waves
+
+**Wave 1**
+- [ ] 05-01-PLAN.md — `/reload` moves an installed path-source plugin's `mcp.json` entries into `mcp-adapter.json` in the fresh-install shape, in the order adapter, state, legacy, with one notice (AMIG-01, AMIG-03)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 05-02-PLAN.md — servers with per-tool permission rules install with a warning on every staging path and in the migration (D-05-05; AMIG-01, AMIG-03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 05-03-PLAN.md — install, enable, reconcile install, import, reinstall and update remove the plugin's old `mcp.json` entries and old-name adapter leftovers after writing, with ordered byte rollback (D-05-08, D-05-10; AMIG-01, AMIG-02)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 05-04-PLAN.md — unowned entries, cold or unreadable sources (offline recorded-sha probe), collisions and unparseable files stay in place with a warning; planned installs are swept instead (AMIG-01, AMIG-03, AMIG-04)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 05-05-PLAN.md — undeclared, unsupported and malformed servers are removed and listed, the record turns partially installed, and fault injection proves the write order (AMIG-01, AMIG-02, AMIG-03)
 
 **Notes.** The migration is its own reconcile step with its own state lock, run per scope before the reconcile plan is applied. It must not hang on the backfill gate, which stamps unconditionally and so would never retry after a partial failure. The file an entry sits in tells whether it is translated, so no migration flag is persisted (COMPAT-01). Research flags: the one-reload lag, adapter panel copies of our entries, and the fault-injection design.
 

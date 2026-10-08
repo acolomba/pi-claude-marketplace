@@ -131,10 +131,13 @@ Source comments cite requirement IDs (AMIG-0N), never `D-05-NN`.
   whole server definition plus `directTools`, written under the old name into
   the same scope's `mcp-adapter.json`, adapter 5.1.0 `config.ts:1972-2011`,
   which would otherwise keep running beside the new key). A leftover is
-  removed only when it has no marker, sits under an old name one of the moved
-  legacy entries used, and is in a file the adapter writes for that server
-  (the same scope's `mcp-adapter.json`; for disable stubs also the project
-  file). No kept-stub absorption, no write-back on uninstall.
+  removed only when all of these hold: it has no marker; it sits under an old
+  name one of the moved legacy entries used; it is an override stub, or a full
+  definition carrying `directTools` (the panel copy); and it is in a file the
+  adapter writes for that server (the same scope's `mcp-adapter.json`; for
+  disable stubs also the project file). A marker-less full definition without
+  `directTools` is the user's own server and is never removed. No kept-stub
+  absorption, no write-back on uninstall.
   — **Reversibility:** costly — it deletes marker-less content the user's
   adapter wrote; the matching rule is the only guard.
 - **D-05-11:** A full server already defined at the new key in any of the

@@ -629,7 +629,7 @@ Names are illustrative [ASSUMED]; the real ones must match the existing exports 
 | A5 | No damping of repeated left-in-place warnings is needed; every condition is user-clearable (reinstall, resolve collision, remove or install). | Open Questions | Noise on every reload for users who ignore it. |
 | A6 | Skipping plugins planned for uninstall/disable in the same reload is safe because unstage sweeps both files. | Pattern 5 | A skipped plugin whose uninstall then fails keeps legacy entries (they still work; next reload migrates). |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **D-05-09 against the Pi-format reality (needs operator decision).**
    - What we know: legacy entries' D-02-06 fields are inert today; plugin-declared values sit in them because 0.19.x passed every field through; the live user disable in Pi format is `enabled: false` (and `exposure: "hidden"`), not in the carried set.
