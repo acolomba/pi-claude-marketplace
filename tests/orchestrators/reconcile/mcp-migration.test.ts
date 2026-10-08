@@ -203,7 +203,7 @@ function planWith(buckets: Partial<Omit<ReconcilePlan, "scope">>): ReconcilePlan
 const HELLO_PLANNED = { scope: "project", plugin: "hello", marketplace: "mp" } as const;
 
 /** The row of an owner `hello` whose one legacy entry `srv` stays in place. */
-function helloRow<Kind extends "unowned" | "source-unreadable">(
+function helloRow<Kind extends "unowned" | "not-listed" | "source-unreadable">(
   kind: Kind,
   marketplace = "mp",
 ): {
@@ -767,7 +767,7 @@ describe("migrateLegacyMcpEntries", () => {
     {
       owner: "a plugin the manifest does not list",
       seed: (scope: Scope) => seedNotMovable(scope, { listedPlugin: "other" }),
-      rows: [helloRow("source-unreadable")],
+      rows: [helloRow("not-listed")],
     },
   ]) {
     test(`AMIG-01 / AMIG-04: ${owner} calls no operation and keeps mcp.json byte-identical`, async (t) => {

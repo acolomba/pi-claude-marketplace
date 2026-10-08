@@ -101,6 +101,13 @@ const CATALOG_REPORT_ROWS: readonly CatalogReportRow[] = [
           key: "plugin_dbtools_db_",
           source: "user-scope mcp-adapter.json",
         },
+        {
+          kind: "not-listed",
+          scope: "user",
+          plugin: "retired",
+          marketplace: "official",
+          servers: ["old"],
+        },
       ],
       notices: [],
     },

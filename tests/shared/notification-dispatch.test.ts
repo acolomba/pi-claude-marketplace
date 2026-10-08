@@ -7081,6 +7081,10 @@ describe("notifyMcpMigration", () => {
       line: "  s (p) [user] No plugin installed in the user scope owns it. Install p@m or remove it from mcp.json.",
     },
     {
+      row: { kind: "not-listed", scope: "user", plugin: "p", marketplace: "m", servers: ["s"] },
+      line: "  s (p) [user] The m marketplace no longer lists p in a valid form. Run /claude:plugin marketplace update m, or /claude:plugin uninstall p@m to remove it.",
+    },
+    {
       row: {
         kind: "source-unreadable",
         scope: "user",

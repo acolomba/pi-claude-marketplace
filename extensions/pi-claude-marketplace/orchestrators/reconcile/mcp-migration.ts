@@ -36,10 +36,11 @@
 // record stays in place and is reported, unless the scope's reconcile plan
 // installs it in the same reload: that install removes the entry itself. An
 // owner the plan uninstalls, disables or enables is skipped silently for the
-// same reason. An owner whose source cannot be read offline, whose new key
-// another config source already defines, or whose scope holds a config file
-// that does not parse stays in place with a row, and the next `/reload`
-// tries again. Nothing is damped: such an entry is reported on every reload
+// same reason. An owner whose manifest no longer lists it in a valid form,
+// whose source cannot be read offline, whose new key another config source
+// already defines, or whose scope holds a config file that does not parse
+// stays in place with a row, and the next `/reload` tries again. Each row
+// names a remedy that clears its cause. Nothing is damped: such an entry is reported on every reload
 // until its cause is cleared (COMPAT-01 keeps no state).
 //
 // NFR-5: no network. This module stays outside `NETWORK_SEAMS` and never names
@@ -233,21 +234,23 @@ function readableOffline(resolved: ResolvedPlugin): boolean {
  * Re-resolves the plugin from the cached marketplace manifest with no network
  * (NFR-5). A git source with a recorded sha resolves from that sha's warm
  * clone; one without resolves `unavailable`, as reinstall's does. Gives
- * undefined when the source cannot be read offline: a manifest read or
- * resolve that throws, an absent or invalid entry, or an `unavailable`
- * result for anything but a malformed MCP server.
+ * `not-listed` when the manifest has no valid entry for the plugin, which a
+ * reinstall cannot fix because it reads the same manifest. Gives
+ * `source-unreadable` when the source cannot be read offline: a manifest
+ * read or resolve that throws, or an `unavailable` result for anything but a
+ * malformed MCP server.
  */
 async function resolveOffline(
   locations: ScopedLocations,
   marketplace: MarketplaceRecord,
   record: PluginInstallRecord,
   plugin: string,
-): Promise<ResolvedPlugin | undefined> {
+): Promise<ResolvedPlugin | "not-listed" | "source-unreadable"> {
   try {
     const manifest = await loadMarketplaceManifest(marketplace.manifestPath);
     const lookup = lookupDeclaredPlugin(manifest, plugin);
     if (lookup.kind === "absent" || !PLUGIN_ENTRY_VALIDATOR.Check(lookup.entry)) {
-      return undefined;
+      return "not-listed";
     }
 
     const resolved = await resolveStrict(lookup.entry, {
@@ -257,11 +260,11 @@ async function resolveOffline(
         resolveGitPluginRoot: makeRecordedShaPresenceProbe(locations, record.resolvedSha),
       }),
     });
-    return readableOffline(resolved) ? resolved : undefined;
+    return readableOffline(resolved) ? resolved : "source-unreadable";
   } catch {
     // An unreadable manifest or source leaves the entries working under their
     // old names; the next reload tries again.
-    return undefined;
+    return "source-unreadable";
   }
 }
 
@@ -270,8 +273,8 @@ async function resolveOffline(
  * not rewrite. A disabled record's entries are removed. Otherwise the source
  * is resolved offline: a materializable resolve moves the servers it still
  * supports, and a malformed MCP config removes every entry. An owner with no
- * record, or whose source cannot be read offline, gets its row; an owner the
- * plan rewrites keeps its entries.
+ * record, whose manifest entry is gone or not valid, or whose source cannot
+ * be read offline, gets its row; an owner the plan rewrites keeps its entries.
  */
 async function ownerAction(
   input: McpMigrationInput,
@@ -295,8 +298,8 @@ async function ownerAction(
   }
 
   const resolved = await resolveOffline(locations, marketplace, record, owner.plugin);
-  if (resolved === undefined) {
-    input.rows.push({ kind: "source-unreadable", ...ownerRowFields(input, owner) });
+  if (typeof resolved === "string") {
+    input.rows.push({ kind: resolved, ...ownerRowFields(input, owner) });
     return undefined;
   }
 
