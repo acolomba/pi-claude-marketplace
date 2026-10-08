@@ -2580,6 +2580,41 @@ describe("prepareStageMcpServers", () => {
     );
   });
 
+  test("AMIG-01: removes a same-scope panel copy even when a project .mcp.json defines its old name", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-live-panel-");
+    await writeSource(locations.mcpJsonPath, LEGACY_ACME_TEXT);
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"srv":{"command":"s","directTools":"search"}}}\n',
+    );
+    await writeSource(path.join(cwd, ".mcp.json"), '{"mcpServers":{"srv":{"command":"gh"}}}\n');
+
+    // act
+    const prepared = await prepareAcme(locations, cwd);
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    assert.deepStrictEqual(
+      {
+        nextDoc: prepared._nextDoc,
+        removed: prepared.result.notices.filter((notice) => notice.kind === "leftover-removed"),
+      },
+      {
+        nextDoc: { mcpServers: { plugin_acme_server_: ACME_ENTRY } },
+        removed: [
+          {
+            kind: "leftover-removed",
+            scope: "project",
+            file: "mcp-adapter.json",
+            plugin: "acme",
+            server: "srv",
+          },
+        ],
+      },
+    );
+  });
+
   test("AMIG-01: keeps a same-scope marker-less full definition without directTools under an old name and reports nothing", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-own-server-");

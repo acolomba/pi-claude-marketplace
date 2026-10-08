@@ -458,16 +458,18 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     return noopStaging([]);
   }
 
-  // AMIG-01: a leftover under a name another source still defines stays.
-  const leftovers = await namesWithNoLiveServer(
-    cwd,
-    leftoverNames(config, legacyNames, { newKeys, panelCopies: true }),
-    {
-      leftoverPath: locations.mcpAdapterJsonPath,
-      legacyPath: locations.mcpJsonPath,
-      pluginName,
-      marketplaceName,
-    },
+  // AMIG-01: an override stub under a name another source still defines
+  // applies to that live server, so it stays. A panel copy is a full server
+  // that would run beside the new key, so it always goes.
+  const stubs = leftoverNames(config, legacyNames, { newKeys, panelCopies: false });
+  const deadStubs = await namesWithNoLiveServer(cwd, stubs, {
+    leftoverPath: locations.mcpAdapterJsonPath,
+    legacyPath: locations.mcpJsonPath,
+    pluginName,
+    marketplaceName,
+  });
+  const leftovers = leftoverNames(config, legacyNames, { newKeys, panelCopies: true }).filter(
+    (name) => !stubs.includes(name) || deadStubs.includes(name),
   );
 
   // The CLAUDE_PROJECT_DIR arm is decided HERE, once (MENV-03): project scope
