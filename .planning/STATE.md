@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 5
+current_phase: 05
 current_phase_name: Automatic migration on /reload
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-10-08T13:12:02.861Z"
-last_activity: 2026-10-07
-last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 5e41a606d2ae0b3968da0dd38ebfa1c179f3f22c
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-10-08T13:51:21.333Z"
+last_activity: 2026-10-08
+last_activity_desc: Phase 05 execution started
+state_head: f5686c61231be64d9e9880d4e82d2189fd2972b2
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 44
-  completed_plans: 39
+  completed_plans: 40
   percent: 57
 ---
 
@@ -27,17 +27,17 @@ See: `.planning/PROJECT.md` (updated 2026-10-07 after mcp-4 Phase 4)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 5 — Automatic migration on /reload
+**Current focus:** Phase 05 — Automatic migration on /reload
 The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
 
 ## Current Position
 
-Phase: 5 (Automatic migration on /reload) — READY TO EXECUTE
-Plan: Not started
+Phase: 05 (Automatic migration on /reload) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-10-07 — Phase 04 complete, transitioned to Phase 5
+Last activity: 2026-10-08 — Phase 05 execution started
 
 Progress: [██████░░░░] 57%
 
@@ -285,6 +285,7 @@ still open with a comment explaining what landed.
 | Phase 04 P07 | 15 min | 2 tasks | 11 files |
 | Phase 04 P08 | 14 min | 3 tasks | 5 files |
 | Phase 04 P09 | 11min | 2 tasks | 5 files |
+| Phase 05 P01 | 34 min | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -662,6 +663,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 04]: info lists each written plugin MCP server's unset (no :- default) and withheld (deny-listed) variable names from the environment injected into createGetPluginInfo, as plugin:<plugin>:<server> (unset A; withheld C); left-out servers and the record arm show no lists (AVAR-04, AVAR-05)
 - [Phase 04]: The adapter conformance test finds pi-mcp-adapter only through PI_MCP_ADAPTER_ROOT; CI installs exactly pi-mcp-adapter@5.1.0 with --ignore-scripts into $RUNNER_TEMP, and the install line carries a zizmor adhoc-packages suppression because PIFL-03 keeps the peer out of every lockfile (AVAR-03, AVAR-05)
 - [Phase 04]: Every staging verb (install, update, reinstall, enable, import, reconcile) has an AVAR-04 case asserting its rows then both variable warnings; the import case runs the real install path
+- [Phase 05]: MCP migration step reads the manifest through lookupDeclaredPlugin (D-99-02a drift gate)
+- [Phase 05]: An unreadable mcp-adapter.json makes a movable owner's stage refuse: stopped row, legacy entries kept
 
 ### Pending Todos
 
@@ -795,11 +798,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 5 context gathered
+**Stopped at:** Completed 05-01-PLAN.md
 
-**Resume file:** .planning/phases/05-automatic-migration-on-reload/05-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-10-08T11:12:41.158Z
+Last session: 2026-10-08T13:51:21.023Z
 Phase 4 closed in `/gsd-autonomous --from 4 --interactive`, run sequentially on
 this checkout (`~/src/pi-claude-marketplace-mcp-4`, branch `features/mcp-4`).
 Gates: 9/9 plans; `npm run check` green on 63ad2116 and again on 1629bac1
