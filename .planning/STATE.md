@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 05
 current_phase_name: Automatic migration on /reload
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-10-08T13:51:21.333Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-10-08T14:11:41.097Z"
 last_activity: 2026-10-08
 last_activity_desc: Phase 05 execution started
-state_head: f5686c61231be64d9e9880d4e82d2189fd2972b2
+state_head: 2bbce472ad93411ffb4f9ea5dfcc184a99a70dbf
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 44
-  completed_plans: 40
+  completed_plans: 41
   percent: 57
 ---
 
@@ -35,7 +35,7 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 05 (Automatic migration on /reload) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-10-08 — Phase 05 execution started
 
@@ -286,6 +286,7 @@ still open with a comment explaining what landed.
 | Phase 04 P08 | 14 min | 3 tasks | 5 files |
 | Phase 04 P09 | 11min | 2 tasks | 5 files |
 | Phase 05 P01 | 34 min | 3 tasks | 20 files |
+| Phase 05 P02 | 16 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -665,6 +666,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 04]: Every staging verb (install, update, reinstall, enable, import, reconcile) has an AVAR-04 case asserting its rows then both variable warnings; the import case runs the real install path
 - [Phase 05]: MCP migration step reads the manifest through lookupDeclaredPlugin (D-99-02a drift gate)
 - [Phase 05]: An unreadable mcp-adapter.json makes a movable owner's stage refuse: stopped row, legacy entries kept
+- [Phase 05]: Servers with tool permission rules install and warn; unenforcedToolRules re-checks the remote schema so a malformed server never gets the notice
 
 ### Pending Todos
 
@@ -798,11 +800,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 05-01-PLAN.md
+**Stopped at:** Completed 05-02-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-08T13:51:21.023Z
+Last session: 2026-10-08T14:11:40.789Z
 Phase 4 closed in `/gsd-autonomous --from 4 --interactive`, run sequentially on
 this checkout (`~/src/pi-claude-marketplace-mcp-4`, branch `features/mcp-4`).
 Gates: 9/9 plans; `npm run check` green on 63ad2116 and again on 1629bac1

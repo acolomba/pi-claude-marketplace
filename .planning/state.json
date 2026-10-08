@@ -26,7 +26,7 @@
     {
       "number": "5",
       "name": "Automatic migration on /reload",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "6",
@@ -44,5 +44,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 05 of 7 · 57% · executing"
   },
-  "updated_at": "2026-10-08T13:51:17.502Z"
+  "updated_at": "2026-10-08T14:11:37.977Z"
 }
