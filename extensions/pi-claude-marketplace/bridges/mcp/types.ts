@@ -82,10 +82,8 @@ export interface StageMcpCommitResult {
    * entries, in declared server order: a server's `variables-missing` notice
    * before its `credentials-blanked` notice (AVAR-05), then the per-server
    * `tool-rules-unenforced` notices, in declared server order (ANAME-07), then
-   * one `leftover-removed` notice per old-name leftover the stage drops, the
-   * target file's before the project file's (AMIG-01). A stage that rewrites
-   * the project `mcp-adapter.json` reports its `comments-dropped` notice right
-   * after the target's. Distinct from `warnings`, which are hygiene notes
+   * one `leftover-removed` notice per old-name leftover the stage drops from
+   * the target (AMIG-01). Distinct from `warnings`, which are hygiene notes
    * standalone commands do not show.
    */
   readonly notices: readonly McpConfigNotice[];
@@ -122,11 +120,6 @@ export interface PreparedMcpStaged {
    * there (AMIG-01).
    */
   readonly _nextDoc?: RawMcpDoc;
-  /**
-   * AMIG-01: the next project `mcp-adapter.json`, which a user-scope stage
-   * rewrites to drop the disable stubs under the plugin's old names.
-   */
-  readonly _projectDoc?: { readonly path: string; readonly doc: RawMcpDoc };
   /**
    * AMIG-02: present when the scope's `mcp.json` holds the plugin's marked
    * entries, so `replacePreparedMcp` knows whose entries to remove. `names`
@@ -189,6 +182,17 @@ export interface UnstageMcpResult {
 export interface LegacyMcpOwner {
   readonly plugin: string;
   readonly marketplace: string;
+  readonly names: readonly string[];
+}
+
+/**
+ * AMIG-01: a user-scope plugin the reload move stages, and the old names of
+ * its marked `mcp.json` entries, whose disable stubs in the project
+ * `mcp-adapter.json` `removeProjectDisableStubs` drops.
+ */
+export interface ProjectDisableStubOwner {
+  readonly pluginName: string;
+  readonly marketplaceName: string;
   readonly names: readonly string[];
 }
 

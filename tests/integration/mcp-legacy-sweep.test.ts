@@ -162,7 +162,7 @@ test("AMIG-01: a user's own full server under the old name stays and is not repo
   });
 });
 
-test("AMIG-01: a user-scope install removes the old-name disable stub from the project mcp-adapter.json", async () => {
+test("AMIG-01: a user-scope install holds only the user-scope lock, so it leaves the project mcp-adapter.json unchanged", async () => {
   await withHermeticEnvironment("mcp-legacy-sweep-user-", async ({ cwd }) => {
     // arrange
     const pluginRoot = await seedMcpPlugin(cwd, ["user"]);
@@ -178,7 +178,7 @@ test("AMIG-01: a user-scope install removes the old-name disable stub from the p
 
     // assert
     assert.deepStrictEqual(await readJson(project.mcpAdapterJsonPath), {
-      mcpServers: { srv2: { command: "node", args: ["two.js"] } },
+      mcpServers: { srv: { disabled: true }, srv2: { command: "node", args: ["two.js"] } },
     });
     assert.deepStrictEqual(await readJson(user.mcpAdapterJsonPath), {
       mcpServers: { plugin_hello_srv_: helloEntry(pluginRoot, user) },

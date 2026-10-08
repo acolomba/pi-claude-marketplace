@@ -622,6 +622,41 @@ test("AMIG-03: an old-name disable stub removed during the move is listed and ma
   });
 });
 
+test("AMIG-01: the reload move of a user-scope plugin removes its old-name disable stub from the project mcp-adapter.json", async () => {
+  await withHermeticEnvironment("mcp-migration-user-leftover-", async ({ cwd }) => {
+    // arrange
+    await seedLegacyMcpInstall(cwd, "user", { command: "node", args: ["v1.js"] });
+    const projectAdapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+    await mkdir(path.dirname(projectAdapterPath), { recursive: true });
+    await writeFile(
+      projectAdapterPath,
+      JSON.stringify({ mcpServers: { srv: { disabled: true }, other: { disabled: true } } }),
+    );
+
+    // act
+    const notifications = await reload(cwd);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "Plugin MCP servers moved from mcp.json to mcp-adapter.json.",
+          "",
+          "Moved to mcp-adapter.json:",
+          "  srv -> plugin_hello_srv_ (hello) [user]",
+          COST_LINE,
+          'Removed "srv" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.',
+          "/reload to pick up changes",
+        ].join("\n"),
+        severity: "warning",
+      },
+    ]);
+    assert.deepStrictEqual(JSON.parse(await readFile(projectAdapterPath, "utf8")), {
+      mcpServers: { other: { disabled: true } },
+    });
+  });
+});
+
 test("AMIG-02: a filesystem refusal between the two writes loses no server and the next reload finishes the move", async (t) => {
   await withHermeticEnvironment("mcp-migration-refused-", async ({ cwd }) => {
     // arrange

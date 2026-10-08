@@ -7,16 +7,20 @@ import {
   commitPreparedMcp,
   finalizeMcpReplacement,
   prepareStageMcpServers,
+  projectDisableStubNames,
   readLegacyMcpOwners,
   removeLegacyMcpEntries,
+  removeProjectDisableStubs,
   replacePreparedMcp,
   rollbackMcpReplacement,
   unstageMcpServers,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
 import {
   checkMcpAdapterConfig as peerCheckMcpAdapterConfig,
+  projectDisableStubNames as peerProjectDisableStubNames,
   readLegacyMcpOwners as peerReadLegacyMcpOwners,
   removeLegacyMcpEntries as peerRemoveLegacyMcpEntries,
+  removeProjectDisableStubs as peerRemoveProjectDisableStubs,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/legacy.ts";
 import {
   abortPreparedMcp as peerAbortPreparedMcp,
@@ -131,6 +135,28 @@ describe("MCP barrel runtime bindings", () => {
 
     // assert
     assert.strictEqual(boundaryRemoveLegacyMcpEntries, expectedRemoveLegacyMcpEntries);
+  });
+
+  test("re-exports projectDisableStubNames from the legacy module", () => {
+    // arrange
+    const expectedProjectDisableStubNames = peerProjectDisableStubNames;
+
+    // act
+    const boundaryProjectDisableStubNames = projectDisableStubNames;
+
+    // assert
+    assert.strictEqual(boundaryProjectDisableStubNames, expectedProjectDisableStubNames);
+  });
+
+  test("re-exports removeProjectDisableStubs from the legacy module", () => {
+    // arrange
+    const expectedRemoveProjectDisableStubs = peerRemoveProjectDisableStubs;
+
+    // act
+    const boundaryRemoveProjectDisableStubs = removeProjectDisableStubs;
+
+    // assert
+    assert.strictEqual(boundaryRemoveProjectDisableStubs, expectedRemoveProjectDisableStubs);
   });
 
   test("re-exports replacePreparedMcp from the stage module", () => {

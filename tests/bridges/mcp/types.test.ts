@@ -89,7 +89,6 @@ const preparedMcpLegacyOnly: PreparedMcpStaged = {
   locations: undefined!,
   stagedNames: [],
   result: stageMcpCommitResult,
-  _projectDoc: { path: "/work/project/.pi/mcp-adapter.json", doc: wrappedMcpDoc },
   _legacy: { pluginName: "acme", marketplaceName: "official", names: ["search"] },
 } satisfies PreparedMcpStaged;
 void preparedMcpLegacyOnly;
@@ -202,8 +201,6 @@ void ({ kind: "prepared", result: stageMcpCommitResult } satisfies PreparedMcpSt
 void ({ kind: "staged", result: stageMcpCommitResult } satisfies PreparedMcpStaging);
 // @ts-expect-error exact optional properties reject an explicit undefined pending document
 void ({ ...preparedMcpStaged, _nextDoc: undefined } satisfies PreparedMcpStaged);
-// @ts-expect-error a project rewrite always names its file
-void ({ ...preparedMcpStaged, _projectDoc: { doc: wrappedMcpDoc } } satisfies PreparedMcpStaged);
 // @ts-expect-error a legacy sweep always names the entries' owner
 void ({ ...preparedMcpStaged, _legacy: { names: ["search"] } } satisfies PreparedMcpStaged);
 // @ts-expect-error noop preparations do not expose staged locations

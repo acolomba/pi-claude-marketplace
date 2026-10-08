@@ -7,9 +7,11 @@ import { describe, test, type TestContext } from "node:test";
 import {
   checkMcpAdapterConfig,
   leftoverNames,
+  projectDisableStubNames,
   readLegacyMcpNames,
   readLegacyMcpOwners,
   removeLegacyMcpEntries,
+  removeProjectDisableStubs,
   withoutServers,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/legacy.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -30,6 +32,155 @@ async function fileIdentity(filePath: string): Promise<readonly bigint[]> {
   const stats = await stat(filePath, { bigint: true });
   return [stats.ino, stats.mtimeNs];
 }
+
+/** A temporary project tree; returns its root and the project `mcp-adapter.json` path. */
+async function createProject(
+  t: TestContext,
+  prefix: string,
+): Promise<{ readonly cwd: string; readonly adapterPath: string }> {
+  const cwd = await mkdtemp(path.join(tmpdir(), prefix));
+  t.after(() => rm(cwd, { recursive: true, force: true, maxRetries: 3 }));
+  const adapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+  await mkdir(path.dirname(adapterPath), { recursive: true });
+  return { cwd, adapterPath };
+}
+
+/** A commented project file: stubs under `srv`, `b` and `x`, a direct-tools copy under `tool`. */
+const PROJECT_STUBS_TEXT = `{
+  // project
+  "mcpServers": {
+    "srv": { "disabled": true },
+    "tool": { "command": "t", "directTools": true },
+    "b": { "disabled": true },
+    "x": { "disabled": true }
+  }
+}
+`;
+
+const ACME_OWNER = { pluginName: "acme", marketplaceName: "mp", names: ["srv", "tool"] } as const;
+
+describe("projectDisableStubNames", () => {
+  test("AMIG-01: gives the old names that hold an override stub in the project file", async (t) => {
+    // arrange
+    const { cwd, adapterPath } = await createProject(t, "mcp-legacy-stub-names-");
+    await writeFile(adapterPath, PROJECT_STUBS_TEXT);
+
+    // act
+    const names = await projectDisableStubNames(cwd, ACME_OWNER);
+
+    // assert
+    assert.deepStrictEqual(names, ["srv"]);
+  });
+
+  for (const { file, write } of [
+    { file: "a missing project file", write: async (): Promise<void> => {} },
+    {
+      file: "a project file that is not a valid MCP config",
+      write: async (adapterPath: string): Promise<void> => {
+        await writeFile(adapterPath, '{ "mcpServers": \n');
+      },
+    },
+  ]) {
+    test(`AMIG-01: ${file} gives no name`, async (t) => {
+      // arrange
+      const { cwd, adapterPath } = await createProject(t, "mcp-legacy-stub-names-none-");
+      await write(adapterPath);
+
+      // act
+      const names = await projectDisableStubNames(cwd, ACME_OWNER);
+
+      // assert
+      assert.deepStrictEqual(names, []);
+    });
+  }
+
+  test("AMIG-01: a project file it cannot read rejects", async (t) => {
+    // arrange
+    const { cwd, adapterPath } = await createProject(t, "mcp-legacy-stub-names-dir-");
+    await mkdir(adapterPath);
+
+    // act & assert
+    await assert.rejects(projectDisableStubNames(cwd, ACME_OWNER), { code: "EISDIR" });
+  });
+});
+
+describe("removeProjectDisableStubs", () => {
+  test("AMIG-01: removes only the owners' old-name stubs and reports them in owner order", async (t) => {
+    // arrange
+    const { cwd, adapterPath } = await createProject(t, "mcp-legacy-stub-remove-");
+    await writeFile(adapterPath, PROJECT_STUBS_TEXT);
+
+    // act
+    const notices = await removeProjectDisableStubs(cwd, [
+      ACME_OWNER,
+      { pluginName: "beta", marketplaceName: "mp", names: ["b"] },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(notices, [
+      { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      {
+        kind: "leftover-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "srv",
+      },
+      {
+        kind: "leftover-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "beta",
+        server: "b",
+      },
+    ]);
+    assert.strictEqual(
+      await readFile(adapterPath, "utf8"),
+      '{\n  "mcpServers": {\n    "tool": {\n      "command": "t",\n      "directTools": true\n    },\n    "x": {\n      "disabled": true\n    }\n  }\n}\n',
+    );
+  });
+
+  test("AMIG-01: an uncommented project file loses its stub with no comments notice", async (t) => {
+    // arrange
+    const { cwd, adapterPath } = await createProject(t, "mcp-legacy-stub-plain-");
+    await writeFile(adapterPath, '{"mcpServers":{"srv":{"disabled":true}}}\n');
+
+    // act
+    const notices = await removeProjectDisableStubs(cwd, [ACME_OWNER]);
+
+    // assert
+    assert.deepStrictEqual(notices, [
+      {
+        kind: "leftover-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "srv",
+      },
+    ]);
+    assert.strictEqual(await readFile(adapterPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
+  });
+
+  for (const { file, bytes } of [
+    { file: "with no stub under an old name", bytes: '{"mcpServers":{"x":{"disabled":true}}}\n' },
+    { file: "that is not a valid MCP config", bytes: '{ "mcpServers": \n' },
+  ]) {
+    test(`AMIG-01: a project file ${file} is not written and gives no notice`, async (t) => {
+      // arrange
+      const { cwd, adapterPath } = await createProject(t, "mcp-legacy-stub-keep-");
+      await writeFile(adapterPath, bytes);
+      const before = await fileIdentity(adapterPath);
+
+      // act
+      const notices = await removeProjectDisableStubs(cwd, [ACME_OWNER]);
+
+      // assert
+      assert.deepStrictEqual(notices, []);
+      assert.deepStrictEqual(await fileIdentity(adapterPath), before);
+      assert.strictEqual(await readFile(adapterPath, "utf8"), bytes);
+    });
+  }
+});
 
 describe("checkMcpAdapterConfig", () => {
   test("AMIG-01: a missing mcp-adapter.json passes", async (t) => {

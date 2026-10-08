@@ -23,6 +23,7 @@ import {
   commitPreparedMcp,
   prepareStageMcpServers,
   removeLegacyMcpEntries,
+  removeProjectDisableStubs,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
 import {
   canonicalCloneUrl,
@@ -40,6 +41,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
@@ -147,13 +149,14 @@ function stateWith(
   cwd: string,
   marketplace: { readonly marketplaceRoot: string; readonly manifestPath: string },
   plugins: Readonly<Record<string, PluginRecord>>,
+  scope: MarketplaceRecord["scope"] = "project",
 ): ExtensionState {
   return {
     schemaVersion: 3,
     marketplaces: {
       mp: {
         name: "mp",
-        scope: "project",
+        scope,
         source: pathSource("./mp-src"),
         addedFromCwd: cwd,
         manifestPath: marketplace.manifestPath,
@@ -231,6 +234,12 @@ function recordingOperations(log: string[]): McpMigrationOperations {
       log.push("saveState");
       await tx.save();
     },
+    removeProjectDisableStubs: async (cwd, owners) => {
+      log.push(
+        `removeProjectStubs ${owners.map((owner) => `${owner.pluginName}@${owner.marketplaceName}`).join(" ")}`,
+      );
+      return removeProjectDisableStubs(cwd, owners);
+    },
     removeLegacyMcpEntries: async (input) => {
       log.push(`removeLegacy ${input.pluginName}@${input.marketplaceName}`);
       return removeLegacyMcpEntries(input);
@@ -291,6 +300,7 @@ function writeRecordingOperations(
         commitPreparedMcp(prepared),
       ),
     saveState: (tx) => observed("saveState", locations.stateJsonPath, () => tx.save()),
+    removeProjectDisableStubs,
     removeLegacyMcpEntries: (removeInput) =>
       observed("removeLegacyMcpEntries", locations.mcpJsonPath, () =>
         removeLegacyMcpEntries(removeInput),
@@ -532,6 +542,36 @@ async function writeConfigFile(filePath: string, servers: Record<string, unknown
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, JSON.stringify({ mcpServers: servers }));
 }
+
+/**
+ * Seeds a user-scope `hello` declaring `srv`, recorded with it, its one
+ * legacy entry in the user `mcp.json`, and the project `mcp-adapter.json`
+ * text `projectAdapter`. Returns the user-scope locations.
+ */
+async function seedUserMoveOwner(cwd: string, projectAdapter: string): Promise<ScopedLocations> {
+  const user = locationsFor("user", cwd);
+  const marketplace = await seedMarketplace(cwd, {
+    hello: { servers: { srv: { command: "srv" } } },
+  });
+  await seedState(
+    user,
+    stateWith(
+      cwd,
+      marketplace,
+      { hello: pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]) },
+      "user",
+    ),
+  );
+  await writeLegacy(user, { srv: legacyEntry("hello") });
+  const projectAdapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+  await mkdir(path.dirname(projectAdapterPath), { recursive: true });
+  await writeFile(projectAdapterPath, projectAdapter);
+  return user;
+}
+
+const PROJECT_STUBS_TEXT = '{"mcpServers":{"srv":{"disabled":true},"other":{"disabled":true}}}\n';
+
+const USER_HELLO_MOVED = { ...HELLO_MOVED, scope: "user" } as const;
 
 const BETA_MOVED = {
   kind: "moved",
@@ -1582,5 +1622,98 @@ describe("migrateLegacyMcpEntries", () => {
     assert.deepStrictEqual({ log, rows: input.rows }, { log: ["mcp.json"], rows: [HELLO_MOVED] });
     assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), adapterText);
     assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
+  });
+
+  test("AMIG-01: a user-scope move drops the old-name disable stub from the project file under the project lock, before the legacy removal", async (t) => {
+    // arrange
+    const { cwd } = await createProjectScope(t, "user-project-stub");
+    const user = await seedUserMoveOwner(cwd, PROJECT_STUBS_TEXT);
+    const log: string[] = [];
+    const input = { ...migrationInput(cwd), scope: "user" } as const;
+
+    // act
+    await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+    // assert
+    assert.deepStrictEqual(
+      { rows: input.rows, notices: input.notices, log },
+      {
+        rows: [USER_HELLO_MOVED],
+        notices: [
+          {
+            kind: "leftover-removed",
+            scope: "project",
+            file: "mcp-adapter.json",
+            plugin: "hello",
+            server: "srv",
+          },
+        ],
+        log: ["prepare hello@mp", "commit", "removeProjectStubs hello@mp", "removeLegacy hello@mp"],
+      },
+    );
+    assert.strictEqual(
+      await readFile(locationsFor("project", cwd).mcpAdapterJsonPath, "utf8"),
+      '{\n  "mcpServers": {\n    "other": {\n      "disabled": true\n    }\n  }\n}\n',
+    );
+    assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
+  });
+
+  test("AMIG-02: a held project lock keeps a user owner's legacy entry and project stub with an unfinished row", async (t) => {
+    // arrange
+    const { cwd } = await createProjectScope(t, "user-project-locked");
+    const user = await seedUserMoveOwner(cwd, PROJECT_STUBS_TEXT);
+    const legacyBytes = await readFile(user.mcpJsonPath, "utf8");
+    const project = locationsFor("project", cwd);
+    await mkdir(project.extensionRoot, { recursive: true });
+    await holdStateLock(t, project);
+    const log: string[] = [];
+    const input = { ...migrationInput(cwd), scope: "user" } as const;
+
+    // act
+    await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+    // assert
+    assert.deepStrictEqual(
+      { rows: input.rows, log },
+      {
+        rows: [
+          {
+            kind: "unfinished",
+            scope: "user",
+            plugin: "hello",
+            marketplace: "mp",
+            servers: ["srv"],
+            detail:
+              "Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes.",
+          },
+        ],
+        log: ["prepare hello@mp", "commit"],
+      },
+    );
+    assert.strictEqual(await readFile(project.mcpAdapterJsonPath, "utf8"), PROJECT_STUBS_TEXT);
+    assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), legacyBytes);
+  });
+
+  test("AMIG-01: a user-scope move with no project stub under its old names never takes the project lock", async (t) => {
+    // arrange
+    const { cwd } = await createProjectScope(t, "user-no-project-stub");
+    const user = await seedUserMoveOwner(cwd, '{"mcpServers":{"other":{"disabled":true}}}\n');
+    const log: string[] = [];
+    const input = { ...migrationInput(cwd), scope: "user" } as const;
+
+    // act
+    await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+    // assert
+    assert.deepStrictEqual(
+      { rows: input.rows, notices: input.notices, log },
+      {
+        rows: [USER_HELLO_MOVED],
+        notices: [],
+        log: ["prepare hello@mp", "commit", "removeLegacy hello@mp"],
+      },
+    );
+    assert.strictEqual(await pathExists(locationsFor("project", cwd).extensionRoot), false);
+    assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
   });
 });

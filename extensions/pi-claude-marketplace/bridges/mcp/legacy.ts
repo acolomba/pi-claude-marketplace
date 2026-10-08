@@ -14,7 +14,13 @@
 // writes the whole definition plus `directTools` under that name into the same
 // scope's `mcp-adapter.json`. The `directTools` key tells the panel's copy from
 // a user's own full server under the same name, which is never removed.
+//
+// A stage removes the leftovers in its own scope's file only. The project
+// file's disable stubs of a user-scope plugin are removed by the reload move
+// through `removeProjectDisableStubs`, under the project-scope lock that every
+// project-scope writer of that file holds.
 
+import { locationsFor } from "../../persistence/locations.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { McpConfigFileError } from "../../shared/errors-bridges.ts";
 
@@ -33,10 +39,12 @@ import { safeSet } from "./safe-set.ts";
 
 import type {
   LegacyMcpOwner,
+  ProjectDisableStubOwner,
   RawMcpDoc,
   RemoveLegacyMcpInput,
   RemoveLegacyMcpResult,
 } from "./types.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 
 /**
  * Reads the legacy file. A non-object top level reads as no document: no
@@ -197,6 +205,89 @@ function without(
   }
 
   return kept;
+}
+
+/** The project `mcp-adapter.json`, or undefined when it is not a valid MCP config. */
+async function readProjectAdapter(filePath: string): Promise<McpConfigDoc | undefined> {
+  try {
+    return await readMcpConfigDoc(filePath, ADAPTER_SERVER_KEYS);
+  } catch (err) {
+    if (err instanceof McpConfigFileError) {
+      return undefined;
+    }
+
+    throw err;
+  }
+}
+
+/** The owner's old names whose project-file entry is an override stub. */
+function projectStubNames(config: McpConfigDoc, owner: ProjectDisableStubOwner): readonly string[] {
+  return leftoverNames(config, owner.names, { newKeys: [], panelCopies: false });
+}
+
+/**
+ * AMIG-01: the owner's old names that hold an override stub in the project
+ * `mcp-adapter.json`, read without writing. A missing file, or one that is
+ * not a valid MCP config, gives none. Any other read error rejects.
+ */
+export async function projectDisableStubNames(
+  cwd: string,
+  owner: ProjectDisableStubOwner,
+): Promise<readonly string[]> {
+  const config = await readProjectAdapter(locationsFor("project", cwd).mcpAdapterJsonPath);
+  return config === undefined ? [] : projectStubNames(config, owner);
+}
+
+/**
+ * AMIG-01: removes the override stubs under the owners' old names from the
+ * project `mcp-adapter.json`, where `/mcp-adapter disable` writes them
+ * whatever the server's scope. Every other entry, top-level key and key order
+ * is kept, and a file with no such stub, or not a valid MCP config, is not
+ * written. The caller holds the project-scope lock, under which
+ * project-scope commands rewrite this file. Returns a `comments-dropped`
+ * notice when the rewritten bytes held comments (AFILE-04), then one
+ * `leftover-removed` notice per removed stub, in owner order.
+ */
+export async function removeProjectDisableStubs(
+  cwd: string,
+  owners: readonly ProjectDisableStubOwner[],
+): Promise<readonly McpConfigNotice[]> {
+  const filePath = locationsFor("project", cwd).mcpAdapterJsonPath;
+  const config = await readProjectAdapter(filePath);
+  if (config === undefined) {
+    return [];
+  }
+
+  const removed = owners.flatMap((owner) =>
+    projectStubNames(config, owner).map((server) => ({ plugin: owner.pluginName, server })),
+  );
+  if (removed.length === 0) {
+    return [];
+  }
+
+  await atomicWriteJson(
+    filePath,
+    withoutServers(
+      config.doc,
+      config.serverKey,
+      removed.map(({ server }) => server),
+    ),
+  );
+  return [
+    ...(config.hadComments
+      ? [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" } as const]
+      : []),
+    ...removed.map(
+      ({ plugin, server }) =>
+        ({
+          kind: "leftover-removed",
+          scope: "project",
+          file: "mcp-adapter.json",
+          plugin,
+          server,
+        }) as const,
+    ),
+  ];
 }
 
 const NOTHING_REMOVED: RemoveLegacyMcpResult = Object.freeze({

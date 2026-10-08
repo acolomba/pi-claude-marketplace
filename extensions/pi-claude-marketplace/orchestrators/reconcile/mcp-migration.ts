@@ -11,7 +11,9 @@
 // The marked legacy entries are the only trigger (COMPAT-01): no flag is
 // stored. Per scope the step writes `mcp-adapter.json` for every movable
 // plugin first, then `state.json` once when a record's MCP inventory changed,
-// then removes the plugins' marked entries from `mcp.json`. The trigger goes
+// then, for the user scope, the project `mcp-adapter.json` disable stubs under
+// the moved old names, then removes the plugins' marked entries from
+// `mcp.json`. The trigger goes
 // last, so a crash at any point leaves it in place, the next `/reload` runs
 // the step again, and the rerun converges to the same bytes. With no marked
 // entry the step takes no lock and writes nothing.
@@ -56,8 +58,10 @@ import {
   checkMcpAdapterConfig,
   commitPreparedMcp,
   prepareStageMcpServers,
+  projectDisableStubNames,
   readLegacyMcpOwners,
   removeLegacyMcpEntries,
+  removeProjectDisableStubs,
 } from "../../bridges/mcp/index.ts";
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
@@ -76,7 +80,7 @@ import { withLockedStateTransaction } from "../../transaction/with-state-guard.t
 import { makeRecordedShaPresenceProbe } from "../plugin/git-source-probe.ts";
 
 import type { McpMigrationInput, ReconcilePlan } from "./types.ts";
-import type { LegacyMcpOwner } from "../../bridges/mcp/index.ts";
+import type { LegacyMcpOwner, ProjectDisableStubOwner } from "../../bridges/mcp/index.ts";
 import type { MaterializablePlugin, ResolvedPlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
@@ -91,6 +95,7 @@ export interface McpMigrationOperations {
   readonly prepareStageMcpServers: typeof prepareStageMcpServers;
   readonly commitPreparedMcp: typeof commitPreparedMcp;
   readonly saveState: (tx: LockedStateTransaction) => Promise<void>;
+  readonly removeProjectDisableStubs: typeof removeProjectDisableStubs;
   readonly removeLegacyMcpEntries: typeof removeLegacyMcpEntries;
   readonly now: () => Date;
 }
@@ -101,6 +106,7 @@ const REAL_OPERATIONS: McpMigrationOperations = {
   saveState: async (tx) => {
     await tx.save();
   },
+  removeProjectDisableStubs,
   removeLegacyMcpEntries,
   now: () => new Date(),
 };
@@ -529,6 +535,63 @@ async function removeOwnerLegacyEntries(
   }
 }
 
+function stubOwner({ action }: StagedOwner): ProjectDisableStubOwner {
+  return {
+    pluginName: action.owner.plugin,
+    marketplaceName: action.owner.marketplace,
+    names: action.owner.names,
+  };
+}
+
+/**
+ * AMIG-01: `/mcp-adapter disable` writes its stub into the project
+ * `mcp-adapter.json` whatever the server's scope, so the user-scope move also
+ * drops the stubs under the staged owners' old names there. Project-scope
+ * commands rewrite that file under the project-scope lock, so the step writes
+ * it only under that lock, taken inside the user-scope lock. No command takes
+ * the two locks in the other order, and both are taken with no retry, so a
+ * held lock fails at once. Returns the owners whose legacy entries can go
+ * now. When the project file cannot be written, an owner with a stub there
+ * keeps its legacy entries and its stub, gets a row, and the next `/reload`
+ * tries again.
+ */
+async function clearProjectStubs(
+  input: McpMigrationInput,
+  operations: McpMigrationOperations,
+  staged: readonly StagedOwner[],
+): Promise<readonly StagedOwner[]> {
+  if (input.scope !== "user") {
+    return staged;
+  }
+
+  const probes = await Promise.all(
+    staged.map(async (owner) => ({
+      owner,
+      names: await projectDisableStubNames(input.cwd, stubOwner(owner)),
+    })),
+  );
+  const withStubs = probes.filter(({ names }) => names.length > 0).map(({ owner }) => owner);
+  if (withStubs.length === 0) {
+    return staged;
+  }
+
+  try {
+    await withLockedStateTransaction(locationsFor("project", input.cwd), async () => {
+      input.notices.push(
+        ...(await operations.removeProjectDisableStubs(input.cwd, withStubs.map(stubOwner))),
+      );
+    });
+  } catch (err) {
+    for (const owner of withStubs) {
+      pushRemovalFailureRow(input, owner.action, err);
+    }
+
+    return staged.filter((owner) => !withStubs.includes(owner));
+  }
+
+  return staged;
+}
+
 async function ownerActions(
   input: McpMigrationInput,
   locations: ScopedLocations,
@@ -612,7 +675,7 @@ async function migrateLocked(
     await operations.saveState(tx);
   }
 
-  for (const owner of staged) {
+  for (const owner of await clearProjectStubs(input, operations, staged)) {
     // eslint-disable-next-line no-await-in-loop -- each removal reads the mcp.json the previous one wrote
     await removeOwnerLegacyEntries(input, operations, locations, owner);
   }
