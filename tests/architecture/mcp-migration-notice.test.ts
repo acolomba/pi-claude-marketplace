@@ -102,6 +102,13 @@ const CATALOG_REPORT_ROWS: readonly CatalogReportRow[] = [
           source: "user-scope mcp-adapter.json",
         },
         {
+          kind: "marketplace-unreadable",
+          scope: "user",
+          plugin: "legacy",
+          marketplace: "official",
+          servers: ["tool"],
+        },
+        {
           kind: "not-listed",
           scope: "user",
           plugin: "retired",

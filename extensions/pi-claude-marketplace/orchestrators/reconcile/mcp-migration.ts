@@ -81,7 +81,12 @@ import { makeRecordedShaPresenceProbe } from "../plugin/git-source-probe.ts";
 
 import type { McpMigrationInput, ReconcilePlan } from "./types.ts";
 import type { LegacyMcpOwner, ProjectDisableStubOwner } from "../../bridges/mcp/index.ts";
-import type { MaterializablePlugin, ResolvedPlugin } from "../../domain/resolver-types.ts";
+import type {
+  GitPluginRootResult,
+  MaterializablePlugin,
+  ResolvedPlugin,
+} from "../../domain/resolver-types.ts";
+import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { McpMigrationRow } from "../../shared/notification-dispatch.ts";
@@ -236,22 +241,56 @@ function readableOffline(resolved: ResolvedPlugin): boolean {
   );
 }
 
+/** Why an owner's source gives no resolve the move can act on. */
+type OfflineMiss = "not-listed" | "source-unreadable" | "marketplace-unreadable";
+
+/**
+ * The git-root resolver of the offline read (NFR-5), and whether the
+ * plugin's clone could not be read from the cache: it is missing, or its
+ * probe threw. A record with a sha reads that sha's warm clone; one without
+ * has no clone to read.
+ */
+function offlineCloneRead(
+  locations: ScopedLocations,
+  record: PluginInstallRecord,
+): {
+  readonly resolve: (source: GitBackedSource) => Promise<GitPluginRootResult>;
+  readonly cloneUnread: () => boolean;
+} {
+  const probe =
+    record.resolvedSha === undefined
+      ? undefined
+      : makeRecordedShaPresenceProbe(locations, record.resolvedSha);
+  let unread = false;
+  return {
+    resolve: async (source) => {
+      unread = true;
+      const result: GitPluginRootResult =
+        probe === undefined ? { kind: "not-cached" } : await probe(source);
+      unread = result.kind === "not-cached";
+      return result;
+    },
+    cloneUnread: () => unread,
+  };
+}
+
 /**
  * Re-resolves the plugin from the cached marketplace manifest with no network
- * (NFR-5). A git source with a recorded sha resolves from that sha's warm
- * clone; one without resolves `unavailable`, as reinstall's does. Gives
- * `not-listed` when the manifest has no valid entry for the plugin, which a
- * reinstall cannot fix because it reads the same manifest. Gives
- * `source-unreadable` when the source cannot be read offline: a manifest
- * read or resolve that throws, or an `unavailable` result for anything but a
- * malformed MCP server.
+ * (NFR-5). Each miss names the cause a command can clear (AMIG-01):
+ * `source-unreadable` for a git clone the cache cannot give, which a
+ * reinstall fetches; `not-listed` when the manifest has no valid entry for
+ * the plugin; `marketplace-unreadable` for any other read failure, such as a
+ * missing or unparseable manifest or a plugin directory the marketplace copy
+ * lacks. A reinstall reads the same marketplace copy, so it clears neither of
+ * the last two.
  */
 async function resolveOffline(
   locations: ScopedLocations,
   marketplace: MarketplaceRecord,
   record: PluginInstallRecord,
   plugin: string,
-): Promise<ResolvedPlugin | "not-listed" | "source-unreadable"> {
+): Promise<ResolvedPlugin | OfflineMiss> {
+  const clone = offlineCloneRead(locations, record);
   try {
     const manifest = await loadMarketplaceManifest(marketplace.manifestPath);
     const lookup = lookupDeclaredPlugin(manifest, plugin);
@@ -262,15 +301,17 @@ async function resolveOffline(
     const resolved = await resolveStrict(lookup.entry, {
       marketplaceRoot: marketplace.marketplaceRoot,
       marketplaceName: marketplace.name,
-      ...(record.resolvedSha !== undefined && {
-        resolveGitPluginRoot: makeRecordedShaPresenceProbe(locations, record.resolvedSha),
-      }),
+      resolveGitPluginRoot: clone.resolve,
     });
-    return readableOffline(resolved) ? resolved : "source-unreadable";
+    if (readableOffline(resolved)) {
+      return resolved;
+    }
+
+    return clone.cloneUnread() ? "source-unreadable" : "marketplace-unreadable";
   } catch {
-    // An unreadable manifest or source leaves the entries working under their
-    // old names; the next reload tries again.
-    return "source-unreadable";
+    // The entries keep working under their old names; the next reload tries
+    // again.
+    return clone.cloneUnread() ? "source-unreadable" : "marketplace-unreadable";
   }
 }
 

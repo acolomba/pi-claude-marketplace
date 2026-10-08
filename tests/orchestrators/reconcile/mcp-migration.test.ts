@@ -13,7 +13,7 @@
 // hand: no git process and no network module runs (NFR-5).
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
@@ -206,7 +206,9 @@ function planWith(buckets: Partial<Omit<ReconcilePlan, "scope">>): ReconcilePlan
 const HELLO_PLANNED = { scope: "project", plugin: "hello", marketplace: "mp" } as const;
 
 /** The row of an owner `hello` whose one legacy entry `srv` stays in place. */
-function helloRow<Kind extends "unowned" | "not-listed" | "source-unreadable">(
+function helloRow<
+  Kind extends "unowned" | "not-listed" | "source-unreadable" | "marketplace-unreadable",
+>(
   kind: Kind,
   marketplace = "mp",
 ): {
@@ -431,6 +433,8 @@ interface NotMovableSeed {
   readonly enabled?: boolean;
   readonly markerMarketplace?: string;
   readonly manifestMissing?: boolean;
+  /** Removes the listed plugin's directory from the marketplace copy. */
+  readonly pluginDirMissing?: boolean;
   readonly listedPlugin?: string;
   readonly lsp?: boolean;
   readonly legacyName?: string;
@@ -448,6 +452,10 @@ async function seedNotMovable({ cwd, locations }: Scope, seed: NotMovableSeed): 
       lsp: seed.lsp ?? false,
     },
   });
+  if (seed.pluginDirMissing === true) {
+    await rm(path.join(marketplace.marketplaceRoot, "plugins", "hello"), { recursive: true });
+  }
+
   const manifestPath =
     seed.manifestMissing === true
       ? path.join(cwd, "nowhere", "marketplace.json")
@@ -802,7 +810,12 @@ describe("migrateLegacyMcpEntries", () => {
     {
       owner: "a source whose manifest cannot be read",
       seed: (scope: Scope) => seedNotMovable(scope, { manifestMissing: true }),
-      rows: [helloRow("source-unreadable")],
+      rows: [helloRow("marketplace-unreadable")],
+    },
+    {
+      owner: "a path source the marketplace copy lacks",
+      seed: (scope: Scope) => seedNotMovable(scope, { pluginDirMissing: true }),
+      rows: [helloRow("marketplace-unreadable")],
     },
     {
       owner: "a plugin the manifest does not list",

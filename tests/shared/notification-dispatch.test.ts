@@ -7162,6 +7162,16 @@ describe("notifyMcpMigration", () => {
     },
     {
       row: {
+        kind: "marketplace-unreadable",
+        scope: "user",
+        plugin: "p",
+        marketplace: "m",
+        servers: ["s"],
+      },
+      line: "  s (p) [user] The m marketplace copy cannot give the source of p. Run /claude:plugin marketplace update m, or /claude:plugin uninstall p@m to remove it.",
+    },
+    {
+      row: {
         kind: "collision",
         scope: "user",
         plugin: "p",
