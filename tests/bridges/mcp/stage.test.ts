@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
@@ -17,6 +17,7 @@ import {
   McpServerCollisionError,
   McpServerKeyCollisionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { PreparedMcpStaging } from "../../../extensions/pi-claude-marketplace/bridges/mcp/types.ts";
@@ -45,6 +46,41 @@ async function pathExists(filePath: string): Promise<boolean> {
 async function writeSource(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, text);
+}
+
+async function fileIdentity(filePath: string): Promise<readonly bigint[]> {
+  const stats = await stat(filePath, { bigint: true });
+  return [stats.ino, stats.mtimeNs];
+}
+
+/**
+ * Points `filePath` at a readable file inside a directory the test makes
+ * read-only, so the file reads normally and an atomic write to it fails.
+ * Returns the directory, which the case unlocks after acting.
+ */
+async function lockedLink(
+  t: TestContext,
+  cwd: string,
+  filePath: string,
+  bytes: string,
+): Promise<string> {
+  // A 0o555 directory stays writable for uid 0, so the write this helper
+  // exists to refuse would succeed. Refuse up front and name the environment.
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    throw new Error("lockedLink cannot deny root; run this suite as a non-root user");
+  }
+
+  const lockedDirectory = path.join(cwd, "locked");
+  const target = path.join(lockedDirectory, path.basename(filePath));
+  await mkdir(lockedDirectory, { recursive: true });
+  await writeFile(target, bytes, "utf8");
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await symlink(target, filePath);
+  t.after(async () => {
+    await chmod(lockedDirectory, 0o700).catch(() => undefined);
+  });
+  await chmod(lockedDirectory, 0o555);
+  return lockedDirectory;
 }
 
 /** Prepares the `acme` plugin's single `server` entry, a URL transport with no env injection. */
@@ -128,6 +164,56 @@ const ACME_ONLY_BYTES = `{
   }
 }
 `;
+
+/** The entry `prepareAcme` stages under `plugin_acme_server_`. */
+const ACME_ENTRY = {
+  url: "https://acme.example/mcp",
+  directTools: "search",
+  toolPrefix: "mcp",
+  _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+};
+
+/** A commented legacy mcp.json holding acme's marked `srv` and `tool` and a foreign entry. */
+const LEGACY_ACME_TEXT = `{
+  // released build
+  "mcpServers": {
+    "srv": { "url": "https://old.example/mcp", "_piClaudeMarketplace": { "plugin": "acme", "marketplace": "catalog" } },
+    "mine": { "command": "my-server" },
+    "tool": { "command": "t", "_piClaudeMarketplace": { "plugin": "acme", "marketplace": "catalog" } }
+  }
+}
+`;
+
+const EMPTIED_LEGACY_ACME_TEXT = `{
+  "mcpServers": {
+    "mine": {
+      "command": "my-server"
+    }
+  }
+}
+`;
+
+/** A commented project mcp-adapter.json with a stub and a direct-tools copy under acme's old names. */
+const PROJECT_LEFTOVERS_TEXT = `{
+  // project
+  "mcpServers": {
+    "srv": { "disabled": true },
+    "tool": { "command": "t", "directTools": true },
+    "x": { "disabled": true }
+  }
+}
+`;
+
+/** Seeds a user-scope acme legacy entry pair and the project file holding its old-name copies. */
+async function seedUserLegacy(
+  cwd: string,
+): Promise<{ user: ReturnType<typeof locationsFor>; project: ReturnType<typeof locationsFor> }> {
+  const user = locationsFor("user", cwd);
+  const project = locationsFor("project", cwd);
+  await writeSource(user.mcpJsonPath, LEGACY_ACME_TEXT);
+  await writeSource(project.mcpAdapterJsonPath, PROJECT_LEFTOVERS_TEXT);
+  return { user, project };
+}
 
 describe("prepareStageMcpServers", () => {
   test("returns a complete frozen no-op for an empty resolved server set", async (t) => {
@@ -2404,6 +2490,284 @@ describe("prepareStageMcpServers", () => {
     // assert
     assert.strictEqual(storedBytes, expectedBytes);
   });
+  test("AMIG-01: drops a same-scope leftover from the next doc and reports it after the tool-rules notices", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-leftover-");
+    await writeSource(locations.mcpJsonPath, LEGACY_ACME_TEXT);
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"srv":{"disabled":true},"keep":{"command":"k"},"tool":{"command":"t","directTools":false}}}\n',
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: {
+        server: { type: "http", url: "https://acme.example/mcp", toolPermissions: { drop: "ask" } },
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared, {
+      kind: "staged",
+      locations,
+      stagedNames: ["server"],
+      result: {
+        stagedNames: ["server"],
+        recorded: [
+          {
+            generatedName: "server",
+            sourcePath: "acme#mcpServers",
+            targetPath: locations.mcpAdapterJsonPath,
+          },
+        ],
+        warnings: [],
+        notices: [
+          {
+            kind: "tool-rules-unenforced",
+            scope: "project",
+            file: "mcp-adapter.json",
+            plugin: "acme",
+            server: "plugin_acme_server_",
+            fields: ["toolPermissions"],
+          },
+          {
+            kind: "leftover-removed",
+            scope: "project",
+            file: "mcp-adapter.json",
+            plugin: "acme",
+            server: "srv",
+          },
+          {
+            kind: "leftover-removed",
+            scope: "project",
+            file: "mcp-adapter.json",
+            plugin: "acme",
+            server: "tool",
+          },
+        ],
+      },
+      _nextDoc: { mcpServers: { keep: { command: "k" }, plugin_acme_server_: ACME_ENTRY } },
+      _legacy: { pluginName: "acme", marketplaceName: "catalog", names: ["srv", "tool"] },
+    });
+  });
+
+  test("AMIG-01: keeps a same-scope marker-less full definition without directTools under an old name and reports nothing", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-own-server-");
+    await writeSource(locations.mcpJsonPath, LEGACY_ACME_TEXT);
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"srv":{"command":"node","args":["mine.js"]}}}\n',
+    );
+
+    // act
+    const prepared = await prepareAcme(locations, cwd);
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    assert.deepStrictEqual(
+      { nextDoc: prepared._nextDoc, notices: prepared.result.notices },
+      {
+        nextDoc: {
+          mcpServers: {
+            srv: { command: "node", args: ["mine.js"] },
+            plugin_acme_server_: ACME_ENTRY,
+          },
+        },
+        notices: [],
+      },
+    );
+  });
+
+  test("AMIG-01: a user-scope stage carries a project-file doc that drops only the stubs under old names", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-user-project-");
+    const { user, project } = await seedUserLegacy(cwd);
+
+    // act
+    const prepared = await prepareAcme(user, cwd);
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    assert.deepStrictEqual(
+      {
+        nextDoc: prepared._nextDoc,
+        projectDoc: prepared._projectDoc,
+        legacy: prepared._legacy,
+        notices: prepared.result.notices,
+      },
+      {
+        nextDoc: { mcpServers: { plugin_acme_server_: ACME_ENTRY } },
+        projectDoc: {
+          path: project.mcpAdapterJsonPath,
+          doc: {
+            mcpServers: {
+              tool: { command: "t", directTools: true },
+              x: { disabled: true },
+            },
+          },
+        },
+        legacy: { pluginName: "acme", marketplaceName: "catalog", names: ["srv", "tool"] },
+        notices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+          {
+            kind: "leftover-removed",
+            scope: "project",
+            file: "mcp-adapter.json",
+            plugin: "acme",
+            server: "srv",
+          },
+        ],
+      },
+    );
+  });
+
+  test("AMIG-01: a user-scope stage whose project file holds no stub under an old name carries no project doc", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-user-no-stub-");
+    const user = locationsFor("user", cwd);
+    await writeSource(user.mcpJsonPath, LEGACY_ACME_TEXT);
+    await writeSource(
+      locationsFor("project", cwd).mcpAdapterJsonPath,
+      '{"mcpServers":{"srv":{"command":"node","directTools":true}}}\n',
+    );
+
+    // act
+    const prepared = await prepareAcme(user, cwd);
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    assert.deepStrictEqual(
+      { hasProjectDoc: Object.hasOwn(prepared, "_projectDoc"), notices: prepared.result.notices },
+      { hasProjectDoc: false, notices: [] },
+    );
+  });
+
+  test("AMIG-01: a user-scope stage skips a project file that is not a valid MCP config", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-user-bad-project-");
+    const user = locationsFor("user", cwd);
+    await writeSource(user.mcpJsonPath, LEGACY_ACME_TEXT);
+    await writeSource(locationsFor("project", cwd).mcpAdapterJsonPath, '{ "mcpServers": \n');
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations: user,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared, {
+      kind: "staged",
+      locations: user,
+      stagedNames: [],
+      result: { stagedNames: [], recorded: [], warnings: [], notices: [] },
+      _legacy: { pluginName: "acme", marketplaceName: "catalog", names: ["srv", "tool"] },
+    });
+  });
+
+  test("AMIG-01: a user-scope stage rejects a project file it cannot read", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-user-unreadable-project-");
+    const user = locationsFor("user", cwd);
+    await writeSource(user.mcpJsonPath, LEGACY_ACME_TEXT);
+    await mkdir(locationsFor("project", cwd).mcpAdapterJsonPath, { recursive: true });
+
+    // act & assert
+    await assert.rejects(
+      prepareStageMcpServers({
+        locations: user,
+        cwd,
+        marketplaceName: "catalog",
+        pluginName: "acme",
+        pluginRoot: path.join(cwd, "plugins", "acme"),
+        pluginData: path.join(cwd, "data", "acme"),
+        servers: {},
+      }),
+      { code: "EISDIR" },
+    );
+  });
+
+  test("AMIG-01: a plugin with no servers but legacy names stages with no target doc and keeps a commented file's comments", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-legacy-only-");
+    await writeSource(locations.mcpJsonPath, LEGACY_ACME_TEXT);
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '// mine\n{"mcpServers":{"other":{"command":"o"}}}\n',
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared, {
+      kind: "staged",
+      locations,
+      stagedNames: [],
+      result: { stagedNames: [], recorded: [], warnings: [], notices: [] },
+      _legacy: { pluginName: "acme", marketplaceName: "catalog", names: ["srv", "tool"] },
+    });
+  });
+
+  test("AMIG-01: a plugin with no servers drops its leftovers from a commented file and reports both", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-legacy-only-leftover-");
+    await writeSource(locations.mcpJsonPath, LEGACY_ACME_TEXT);
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '// mine\n{"mcpServers":{"srv":{"disabled":true},"other":{"command":"o"}}}\n',
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: {},
+    });
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    assert.deepStrictEqual(
+      { nextDoc: prepared._nextDoc, notices: prepared.result.notices },
+      {
+        nextDoc: { mcpServers: { other: { command: "o" } } },
+        notices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+          {
+            kind: "leftover-removed",
+            scope: "project",
+            file: "mcp-adapter.json",
+            plugin: "acme",
+            server: "srv",
+          },
+        ],
+      },
+    );
+  });
 });
 
 describe("commitPreparedMcp", () => {
@@ -2484,6 +2848,50 @@ describe("commitPreparedMcp", () => {
     // assert
     assert.deepStrictEqual(commit, { stagedNames: [], recorded: [], warnings: [], notices: [] });
     assert.strictEqual(await pathExists(locations.mcpAdapterJsonPath), false);
+  });
+  test("AMIG-01: skips a rewrite whose bytes equal the file's, so the file keeps its inode and mtime", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-commit-same-bytes-");
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const before = await fileIdentity(locations.mcpAdapterJsonPath);
+    const prepared = await prepareAcme(locations, cwd);
+
+    // act
+    await commitPreparedMcp(prepared);
+
+    // assert
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), ACME_ONLY_BYTES);
+    assert.deepStrictEqual(await fileIdentity(locations.mcpAdapterJsonPath), before);
+  });
+
+  test("AMIG-01: writes the target and the project file and never touches mcp.json", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-commit-user-");
+    const { user, project } = await seedUserLegacy(cwd);
+    const prepared = await prepareAcme(user, cwd);
+
+    // act
+    await commitPreparedMcp(prepared);
+
+    // assert
+    assert.strictEqual(await readFile(user.mcpAdapterJsonPath, "utf8"), ACME_ONLY_BYTES);
+    assert.strictEqual(
+      await readFile(project.mcpAdapterJsonPath, "utf8"),
+      '{\n  "mcpServers": {\n    "tool": {\n      "command": "t",\n      "directTools": true\n    },\n    "x": {\n      "disabled": true\n    }\n  }\n}\n',
+    );
+    assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), LEGACY_ACME_TEXT);
+  });
+
+  test("AMIG-01: a target write that fails leaves the project file unwritten", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-commit-order-");
+    const { user, project } = await seedUserLegacy(cwd);
+    const prepared = await prepareAcme(user, cwd);
+    await mkdir(user.mcpAdapterJsonPath, { recursive: true });
+
+    // act & assert
+    await assert.rejects(commitPreparedMcp(prepared), { code: "EISDIR" });
+    assert.strictEqual(await readFile(project.mcpAdapterJsonPath, "utf8"), PROJECT_LEFTOVERS_TEXT);
   });
 });
 
@@ -2599,7 +3007,11 @@ describe("replacePreparedMcp", () => {
     const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
 
     // assert
-    assert.deepStrictEqual(replacement, { kind: "replaced", prepared });
+    assert.deepStrictEqual(replacement, {
+      kind: "replaced",
+      prepared,
+      legacy: { removedNames: [], notices: [], written: [] },
+    });
     assert.strictEqual(storedBytes, expectedBytes);
   });
 
@@ -2640,6 +3052,141 @@ describe("replacePreparedMcp", () => {
         return true;
       },
     );
+  });
+  test("AMIG-02: writes the target, then the project file, then removes the legacy entries", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-replace-legacy-");
+    const { user, project } = await seedUserLegacy(cwd);
+    const prepared = await prepareAcme(user, cwd);
+
+    // act
+    const replacement = await replacePreparedMcp(prepared);
+
+    // assert
+    assert.deepStrictEqual(replacement, {
+      kind: "replaced",
+      prepared,
+      legacy: {
+        removedNames: ["srv", "tool"],
+        notices: [{ kind: "comments-dropped", scope: "user", file: "mcp.json" }],
+        written: [{ path: user.mcpJsonPath, bytes: Buffer.from(EMPTIED_LEGACY_ACME_TEXT) }],
+      },
+    });
+    assert.strictEqual(await readFile(user.mcpAdapterJsonPath, "utf8"), ACME_ONLY_BYTES);
+    assert.deepStrictEqual(JSON.parse(await readFile(project.mcpAdapterJsonPath, "utf8")), {
+      mcpServers: { tool: { command: "t", directTools: true }, x: { disabled: true } },
+    });
+    assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), EMPTIED_LEGACY_ACME_TEXT);
+  });
+
+  test("AMIG-01: a plugin with no servers removes its legacy entries and creates no mcp-adapter.json", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-replace-legacy-only-");
+    await writeSource(locations.mcpJsonPath, LEGACY_ACME_TEXT);
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: {},
+    });
+
+    // act
+    const replacement = await replacePreparedMcp(prepared);
+
+    // assert
+    assert.deepStrictEqual(replacement, {
+      kind: "replaced",
+      prepared,
+      legacy: {
+        removedNames: ["srv", "tool"],
+        notices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+        written: [{ path: locations.mcpJsonPath, bytes: Buffer.from(EMPTIED_LEGACY_ACME_TEXT) }],
+      },
+    });
+    assert.strictEqual(await pathExists(locations.mcpAdapterJsonPath), false);
+  });
+
+  test("AMIG-02: a legacy step that fails restores the project file and the target in reverse and rethrows", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-replace-legacy-fails-");
+    const { user, project } = await seedUserLegacy(cwd);
+    const prepared = await prepareAcme(user, cwd);
+    await rm(user.mcpJsonPath);
+    await mkdir(user.mcpJsonPath);
+
+    // act & assert
+    await assert.rejects(replacePreparedMcp(prepared), (error: unknown) => {
+      assert.ok(!(error instanceof ManualRecoveryError));
+      assert.strictEqual((error as NodeJS.ErrnoException).code, "EISDIR");
+      return true;
+    });
+    assert.strictEqual(await pathExists(user.mcpAdapterJsonPath), false);
+    assert.strictEqual(await readFile(project.mcpAdapterJsonPath, "utf8"), PROJECT_LEFTOVERS_TEXT);
+  });
+
+  test("AMIG-02: a project-file write that fails restores the target and reports the leaked project restore", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-replace-project-fails-");
+    const user = locationsFor("user", cwd);
+    const project = locationsFor("project", cwd);
+    await writeSource(user.mcpJsonPath, LEGACY_ACME_TEXT);
+    const lockedDirectory = await lockedLink(
+      t,
+      cwd,
+      project.mcpAdapterJsonPath,
+      PROJECT_LEFTOVERS_TEXT,
+    );
+    const prepared = await prepareAcme(user, cwd);
+
+    // act & assert
+    await assert.rejects(replacePreparedMcp(prepared), (error: unknown) => {
+      assert.ok(error instanceof ManualRecoveryError);
+      assert.strictEqual(error.leaks.length, 1);
+      assert.match(
+        error.leaks[0] ?? "",
+        new RegExp(
+          `^failed to restore mcp-adapter\\.json at ${project.mcpAdapterJsonPath.replaceAll(".", "\\.")}: EACCES: permission denied`,
+        ),
+      );
+      assert.strictEqual((error.cause as NodeJS.ErrnoException).code, "EACCES");
+      return true;
+    });
+    await chmod(lockedDirectory, 0o700);
+    assert.strictEqual(await pathExists(user.mcpAdapterJsonPath), false);
+    assert.strictEqual(await readFile(project.mcpAdapterJsonPath, "utf8"), PROJECT_LEFTOVERS_TEXT);
+    assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), LEGACY_ACME_TEXT);
+  });
+
+  test("AMIG-02: a legacy removal whose mcp.json restore leaks leaves the adapter files as written", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-replace-legacy-leak-");
+    const user = locationsFor("user", cwd);
+    const project = locationsFor("project", cwd);
+    await writeSource(project.mcpAdapterJsonPath, PROJECT_LEFTOVERS_TEXT);
+    const lockedDirectory = await lockedLink(t, cwd, user.mcpJsonPath, LEGACY_ACME_TEXT);
+    const prepared = await prepareAcme(user, cwd);
+
+    // act & assert
+    await assert.rejects(replacePreparedMcp(prepared), (error: unknown) => {
+      assert.ok(error instanceof ManualRecoveryError);
+      assert.strictEqual(error.leaks.length, 1);
+      assert.match(
+        error.leaks[0] ?? "",
+        new RegExp(
+          `^failed to restore mcp\\.json at ${user.mcpJsonPath.replaceAll(".", "\\.")}: EACCES: permission denied`,
+        ),
+      );
+      return true;
+    });
+    await chmod(lockedDirectory, 0o700);
+    assert.strictEqual(await readFile(user.mcpAdapterJsonPath, "utf8"), ACME_ONLY_BYTES);
+    assert.deepStrictEqual(JSON.parse(await readFile(project.mcpAdapterJsonPath, "utf8")), {
+      mcpServers: { tool: { command: "t", directTools: true }, x: { disabled: true } },
+    });
+    assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), LEGACY_ACME_TEXT);
   });
 });
 
@@ -2775,6 +3322,50 @@ describe("rollbackMcpReplacement", () => {
     ]);
     assert.strictEqual(Object.isFrozen(leaks), true);
     assert.strictEqual(await readFile(parentDirectory, "utf8"), "blocks-directory-creation");
+  });
+  test("AMIG-02: restores mcp.json, the project file and the target to their exact prior bytes", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-rollback-legacy-");
+    const { user, project } = await seedUserLegacy(cwd);
+    const targetBytes = '{\n  // user\n  "mcpServers": { "foreign": { "command": "f" } }\n}\n';
+    await writeSource(user.mcpAdapterJsonPath, targetBytes);
+    const replacement = await replacePreparedMcp(await prepareAcme(user, cwd));
+
+    // act
+    const leaks = await rollbackMcpReplacement(replacement);
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+    assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), LEGACY_ACME_TEXT);
+    assert.strictEqual(await readFile(project.mcpAdapterJsonPath, "utf8"), PROJECT_LEFTOVERS_TEXT);
+    assert.strictEqual(await readFile(user.mcpAdapterJsonPath, "utf8"), targetBytes);
+  });
+
+  test("AMIG-02: when mcp.json cannot be restored the adapter files keep the new entries and the leak names mcp.json", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "mcp-rollback-legacy-leak-");
+    const { user, project } = await seedUserLegacy(cwd);
+    const replacement = await replacePreparedMcp(await prepareAcme(user, cwd));
+    await rm(user.mcpJsonPath);
+    const lockedDirectory = await lockedLink(t, cwd, user.mcpJsonPath, EMPTIED_LEGACY_ACME_TEXT);
+
+    // act
+    const leaks = await rollbackMcpReplacement(replacement);
+    await chmod(lockedDirectory, 0o700);
+
+    // assert
+    assert.strictEqual(leaks.length, 1);
+    assert.match(
+      leaks[0] ?? "",
+      new RegExp(
+        `^failed to restore mcp\\.json at ${user.mcpJsonPath.replaceAll(".", "\\.")}: EACCES: permission denied`,
+      ),
+    );
+    assert.strictEqual(await readFile(user.mcpAdapterJsonPath, "utf8"), ACME_ONLY_BYTES);
+    assert.deepStrictEqual(JSON.parse(await readFile(project.mcpAdapterJsonPath, "utf8")), {
+      mcpServers: { tool: { command: "t", directTools: true }, x: { disabled: true } },
+    });
+    assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), EMPTIED_LEGACY_ACME_TEXT);
   });
 });
 

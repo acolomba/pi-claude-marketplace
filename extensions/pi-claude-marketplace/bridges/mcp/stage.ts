@@ -13,10 +13,20 @@
 // short-circuits AS-8 noops, hands the new entries and the entries they
 // replace to adapter-entry.ts, which applies the AFILE-06 carry-forward and
 // the MC-5 marker, and builds the next doc IN MEMORY only, writing under the
-// key the adapter loads (AFILE-03). Commit is a single
-// `atomicWriteJson` -- no per-file rename loop, no EXDEV risk, no
-// partial-state recovery surface. Abort is a synchronous no-op because
+// key the adapter loads (AFILE-03). Commit is one `atomicWriteJson` per
+// rewritten file, skipped when the file already holds those bytes -- no
+// per-file rename loop, no EXDEV risk. Abort is a synchronous no-op because
 // prepare wrote nothing to disk.
+//
+// AMIG-01 / AMIG-02: prepare also reads the plugin's marked entries in the
+// scope's legacy `mcp.json` and drops the leftovers pi-mcp-adapter wrote under
+// their old names: from the scope's `mcp-adapter.json`, and for a user-scope
+// stage the disable stubs in the project `mcp-adapter.json`. The replace
+// writes the scope's `mcp-adapter.json`, then the project file, and only then
+// removes the marked legacy entries, so a server is never in neither file. A
+// replace that fails part way restores what it wrote, in reverse order. The
+// rollback restores `mcp.json` first; when that restore fails it leaves the
+// adapter files as written, so the server stays in one of them.
 //
 // The collision throw is a typed `McpServerCollisionError` so callers can
 // `instanceof`-discriminate the refusal category.
@@ -32,13 +42,14 @@ import writeFileAtomic from "write-file-atomic";
 
 import { unenforcedToolRules } from "../../domain/mcp-server-features.ts";
 import { foldedMcpServerKey, generatedMcpServerKey } from "../../domain/name.ts";
+import { locationsFor } from "../../persistence/locations.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import {
   McpConfigFileError,
   McpServerCollisionError,
   McpServerKeyCollisionError,
 } from "../../shared/errors-bridges.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { errorMessage, errorWithManualRecovery } from "../../shared/errors.ts";
 
 import {
   ADAPTER_SERVER_KEYS,
@@ -49,31 +60,57 @@ import {
 } from "./adapter-doc.ts";
 import { inactiveOverrideFields, stampServers } from "./adapter-entry.ts";
 import { walkMcpSources, type McpSourceWalk } from "./collision-slots.ts";
+import {
+  leftoverNames,
+  readLegacyMcpNames,
+  removeLegacyMcpEntries,
+  withoutServers,
+} from "./legacy.ts";
 import { isOwnedBy, pluginSetFieldsOf } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
 import type { McpSubstitutionContext, VariableReport } from "./substitute.ts";
 import type {
   McpReplacement,
+  PreparedMcpStaged,
   PreparedMcpStaging,
+  RawMcpDoc,
+  RemoveLegacyMcpResult,
   StageMcpCommitResult,
   StageMcpInput,
   StagedMcpRecord,
 } from "./types.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type {
   McpConfigFileNotice,
   McpConfigNotice,
   McpCredentialsBlankedNotice,
+  McpLeftoverRemovedNotice,
   McpOverrideKeptNotice,
   McpToolRulesUnenforcedNotice,
   McpVariablesMissingNotice,
 } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 
-interface McpReplacementInternals {
+/** A file a replace is about to write, and what it held before. */
+interface PriorFile {
+  readonly filePath: string;
   /** The raw prior bytes, so a restore is byte-exact even for invalid UTF-8. */
-  readonly oldBytes: Buffer | undefined;
+  readonly bytes: Buffer | undefined;
+  /** Whether this is the scope's legacy `mcp.json`. */
+  readonly legacy: boolean;
 }
+
+interface McpReplacementInternals {
+  /** The files the replace wrote, in write order. */
+  readonly written: readonly PriorFile[];
+}
+
+const NOTHING_REMOVED: RemoveLegacyMcpResult = Object.freeze({
+  removedNames: Object.freeze([]),
+  notices: Object.freeze([]),
+  written: Object.freeze([]),
+});
 
 const mcpReplacementInternals = new WeakMap<
   Extract<McpReplacement, { kind: "replaced" }>,
@@ -185,6 +222,61 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function commentsDroppedNotices(hadComments: boolean, scope: Scope): McpConfigFileNotice[] {
   return hadComments ? [{ kind: "comments-dropped", scope, file: "mcp-adapter.json" }] : [];
+}
+
+/** AMIG-01: one notice per old-name leftover the stage drops from a file. */
+function leftoverNotices(
+  names: readonly string[],
+  scope: Scope,
+  pluginName: string,
+): McpLeftoverRemovedNotice[] {
+  return names.map((server) => ({
+    kind: "leftover-removed",
+    scope,
+    file: "mcp-adapter.json",
+    plugin: pluginName,
+    server,
+  }));
+}
+
+/** The project `mcp-adapter.json` a user-scope stage rewrites, and its leftovers. */
+interface ProjectLeftovers {
+  readonly path: string;
+  readonly config: McpConfigDoc;
+  readonly names: readonly string[];
+}
+
+/**
+ * AMIG-01: `/mcp-adapter disable` writes its stub into the project
+ * `mcp-adapter.json` whatever the server's scope, so a user-scope stage with
+ * legacy names also drops the stubs under those names there. The panel writes
+ * its direct-tools copy into the server's own scope file, so no full
+ * definition in the project file is a leftover. A project file that is not a
+ * valid MCP config is left alone; the project-scope commands report it.
+ */
+async function projectLeftovers(
+  locations: ScopedLocations,
+  cwd: string,
+  legacyNames: readonly string[],
+): Promise<ProjectLeftovers | undefined> {
+  if (locations.scope !== "user" || legacyNames.length === 0) {
+    return undefined;
+  }
+
+  const projectPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+  let config: McpConfigDoc;
+  try {
+    config = await readMcpConfigDoc(projectPath, ADAPTER_SERVER_KEYS);
+  } catch (err) {
+    if (err instanceof McpConfigFileError) {
+      return undefined;
+    }
+
+    throw err;
+  }
+
+  const names = leftoverNames(config, legacyNames, { newKeys: [], panelCopies: false });
+  return names.length > 0 ? { path: projectPath, config, names } : undefined;
 }
 
 /**
@@ -393,11 +485,19 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     marketplaceName,
   });
 
-  // AS-8 noop: nothing new AND nothing previously-ours. Don't materialize
-  // the file; commit returns the noop result without touching disk.
-  if (newKeys.length === 0 && Object.keys(ours).length === 0) {
+  // AMIG-01: the plugin's marked entries in the scope's legacy mcp.json. Their
+  // names are the old names whose adapter leftovers the stage drops.
+  const legacyNames = await readLegacyMcpNames(locations.mcpJsonPath, pluginName, marketplaceName);
+
+  // AS-8 noop: nothing new, nothing previously-ours AND no legacy entry. Don't
+  // materialize the file; commit returns the noop result without touching
+  // disk. A leftover sits under a legacy name, so none can exist here.
+  if (newKeys.length === 0 && Object.keys(ours).length === 0 && legacyNames.length === 0) {
     return noopStaging([]);
   }
+
+  const leftovers = leftoverNames(config, legacyNames, { newKeys, panelCopies: true });
+  const project = await projectLeftovers(locations, cwd, legacyNames);
 
   // The CLAUDE_PROJECT_DIR arm is decided HERE, once (MENV-03): project scope
   // resolves `${CLAUDE_PROJECT_DIR}` at install to the project root `cwd` (NOT
@@ -433,8 +533,16 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   });
 
   // Keep theirs verbatim; replace ours with stamped (or drop ours when
-  // there are no new servers).
-  const next = withPluginServers(config, pluginName, marketplaceName, stamped);
+  // there are no new servers), and drop the old-name leftovers. A plugin that
+  // has no server, owns no entry and left no leftover leaves the file alone.
+  const rewritesTarget = newKeys.length > 0 || Object.keys(ours).length > 0 || leftovers.length > 0;
+  const next = rewritesTarget
+    ? withoutServers(
+        withPluginServers(config, pluginName, marketplaceName, stamped),
+        config.serverKey,
+        leftovers,
+      )
+    : undefined;
 
   // W-05: callers read `recorded` to populate state.json. `sourcePath`
   // is the canonical provenance the install path passes in (e.g.
@@ -449,17 +557,21 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     })),
   );
 
-  // AFILE-04: the staged branch always rewrites the file, and the writer drops
-  // JSONC comments, so a commented file is reported. The noop branches write
-  // nothing and keep the comments. AFILE-06: each absorbed override with
-  // fields the new entry does not carry is reported after it. AVAR-04 /
-  // AVAR-05: each server's missing-variable and withheld-credential notices
-  // follow. ANAME-07: each server's unenforced tool-rule notice comes last.
+  // AFILE-04: the writer drops JSONC comments, so each file the stage
+  // rewrites and whose bytes held comments is reported, the target first. The
+  // noop branches write nothing and keep the comments. AFILE-06: each
+  // absorbed override with fields the new entry does not carry is reported
+  // after them. AVAR-04 / AVAR-05: each server's missing-variable and
+  // withheld-credential notices follow, then ANAME-07: each server's
+  // unenforced tool-rule notice. AMIG-01: each dropped leftover comes last.
   const notices = Object.freeze<McpConfigNotice[]>([
-    ...commentsDroppedNotices(config.hadComments, locations.scope),
+    ...commentsDroppedNotices(rewritesTarget && config.hadComments, locations.scope),
+    ...commentsDroppedNotices(project?.config.hadComments === true, "project"),
     ...overrideKeptNotices(stamped, overlays, locations.scope, pluginName),
     ...variableNotices(variableReports, locations.scope, pluginName),
     ...toolRuleNotices(keyed, locations.scope, pluginName),
+    ...leftoverNotices(leftovers, locations.scope, pluginName),
+    ...leftoverNotices(project?.names ?? [], "project", pluginName),
   ]);
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...declaredNames]),
@@ -473,24 +585,66 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     locations,
     stagedNames: result.stagedNames,
     result,
-    _nextDoc: next,
+    ...(next !== undefined && { _nextDoc: next }),
+    ...(project !== undefined && {
+      _projectDoc: {
+        path: project.path,
+        doc: withoutServers(project.config.doc, project.config.serverKey, project.names),
+      },
+    }),
+    ...(legacyNames.length > 0 && {
+      _legacy: { pluginName, marketplaceName, names: legacyNames },
+    }),
   };
 }
 
 /**
- * MC-6 commit: a single `atomicWriteJson` for the staged branch; a
- * zero-op for the noop branch. Returns the same `StageMcpCommitResult`
- * the prepare phase computed (W-05) so callers have a stable hand-off
- * shape regardless of which branch the prepare took.
+ * AMIG-01: writes `doc` unless the file already holds the bytes
+ * `atomicWriteJson` would write, so a re-stage that changes nothing keeps the
+ * file, its inode and its mtime. A write first records the file's prior bytes
+ * in `written`, so a restore covers a write that failed part way.
+ */
+async function writeIfChanged(
+  filePath: string,
+  doc: RawMcpDoc,
+  written: PriorFile[],
+): Promise<void> {
+  const prior = await readOptionalBytes(filePath);
+  if (prior?.equals(Buffer.from(JSON.stringify(doc, null, 2) + "\n", "utf8")) === true) {
+    return;
+  }
+
+  written.push({ filePath, bytes: prior, legacy: false });
+  await atomicWriteJson(filePath, doc);
+}
+
+/** The staged `mcp-adapter.json` writes: the scope's file, then the project file. */
+async function writeStagedDocs(prepared: PreparedMcpStaged, written: PriorFile[]): Promise<void> {
+  if (prepared._nextDoc !== undefined) {
+    await writeIfChanged(prepared.locations.mcpAdapterJsonPath, prepared._nextDoc, written);
+  }
+
+  if (prepared._projectDoc !== undefined) {
+    await writeIfChanged(prepared._projectDoc.path, prepared._projectDoc.doc, written);
+  }
+}
+
+/**
+ * MC-6 commit: one write per `mcp-adapter.json` the stage rewrites, the
+ * scope's file before the project file, each skipped when the file already
+ * holds its bytes (AMIG-01); a zero-op for the noop branch. It never touches
+ * `mcp.json`: a caller that commits removes the legacy entries itself, in the
+ * order it needs. Returns the same `StageMcpCommitResult` the prepare phase
+ * computed (W-05) so callers have a stable hand-off shape regardless of which
+ * branch the prepare took.
  */
 export async function commitPreparedMcp(
   prepared: PreparedMcpStaging,
 ): Promise<StageMcpCommitResult> {
-  if (prepared.kind === "noop") {
-    return prepared.result;
+  if (prepared.kind === "staged") {
+    await writeStagedDocs(prepared, []);
   }
 
-  await atomicWriteJson(prepared.locations.mcpAdapterJsonPath, prepared._nextDoc);
   return prepared.result;
 }
 
@@ -504,22 +658,101 @@ export function abortPreparedMcp(_prepared: PreparedMcpStaging): void {
   // No-op: nothing was written outside memory pre-commit.
 }
 
+/** AMIG-02: removes the plugin's marked legacy entries, recording `mcp.json` first. */
+async function removeLegacy(
+  prepared: PreparedMcpStaged,
+  written: PriorFile[],
+): Promise<RemoveLegacyMcpResult> {
+  if (prepared._legacy === undefined) {
+    return NOTHING_REMOVED;
+  }
+
+  const { mcpJsonPath } = prepared.locations;
+  written.push({
+    filePath: mcpJsonPath,
+    bytes: await readOptionalBytes(mcpJsonPath),
+    legacy: true,
+  });
+  return removeLegacyMcpEntries({
+    locations: prepared.locations,
+    pluginName: prepared._legacy.pluginName,
+    marketplaceName: prepared._legacy.marketplaceName,
+  });
+}
+
+async function restoreFile(file: PriorFile): Promise<void> {
+  if (file.bytes === undefined) {
+    await rm(file.filePath, { force: true });
+  } else {
+    await mkdir(path.dirname(file.filePath), { recursive: true });
+    await writeFileAtomic(file.filePath, file.bytes);
+  }
+}
+
+/**
+ * AMIG-02: restores the written files to their prior bytes in reverse write
+ * order, so `mcp.json` comes first, and returns one leak per file it could
+ * not restore. When `mcp.json` cannot be restored it stops: the adapter files
+ * keep the plugin's new entries, so the servers removed from `mcp.json` stay
+ * in one file.
+ */
+async function restoreFiles(written: readonly PriorFile[]): Promise<string[]> {
+  const leaks: string[] = [];
+  for (const file of [...written].reverse()) {
+    try {
+      // eslint-disable-next-line no-await-in-loop -- mcp.json is restored before the adapter files it decides about
+      await restoreFile(file);
+    } catch (err) {
+      leaks.push(
+        `failed to restore ${path.basename(file.filePath)} at ${file.filePath}: ${errorMessage(err)}`,
+      );
+      if (file.legacy) {
+        return leaks;
+      }
+    }
+  }
+
+  return leaks;
+}
+
+/**
+ * AMIG-02 / NFR-3: performs a staged preparation's writes as one
+ * compensatable step: the scope's `mcp-adapter.json`, then the project file,
+ * then the removal of the plugin's marked entries from the scope's `mcp.json`.
+ * Each file's prior bytes are kept for `rollbackMcpReplacement`. A failure
+ * part way restores what was already written, in reverse order, and rethrows,
+ * as a `ManualRecoveryError` when a restore leaked.
+ */
 export async function replacePreparedMcp(prepared: PreparedMcpStaging): Promise<McpReplacement> {
   if (prepared.kind === "noop") {
     return { kind: "noop", prepared };
   }
 
-  const oldBytes = await readOptionalBytes(prepared.locations.mcpAdapterJsonPath);
-  await commitPreparedMcp(prepared);
+  const written: PriorFile[] = [];
+  let legacy: RemoveLegacyMcpResult;
+  try {
+    await writeStagedDocs(prepared, written);
+    legacy = await removeLegacy(prepared, written);
+  } catch (err) {
+    throw errorWithManualRecovery(err, await restoreFiles(written));
+  }
 
   const replacement: Extract<McpReplacement, { kind: "replaced" }> = {
     kind: "replaced",
     prepared,
+    legacy,
   };
-  mcpReplacementInternals.set(replacement, { oldBytes });
+  mcpReplacementInternals.set(replacement, { written: Object.freeze(written) });
   return replacement;
 }
 
+/**
+ * AMIG-02 / NFR-3: restores every file the replace wrote to its exact prior
+ * bytes, `mcp.json` first, then the project `mcp-adapter.json`, then the
+ * scope's. When the `mcp.json` restore fails it returns that leak at once and
+ * leaves the adapter files as written. Returns one leak per file it could not
+ * restore.
+ */
 export async function rollbackMcpReplacement(
   replacement: McpReplacement,
 ): Promise<readonly string[]> {
@@ -527,24 +760,7 @@ export async function rollbackMcpReplacement(
     return Object.freeze([]);
   }
 
-  const internals = requireMcpReplacementInternals(replacement);
-  const leaks: string[] = [];
-  try {
-    if (internals.oldBytes === undefined) {
-      await rm(replacement.prepared.locations.mcpAdapterJsonPath, { force: true });
-    } else {
-      await mkdir(path.dirname(replacement.prepared.locations.mcpAdapterJsonPath), {
-        recursive: true,
-      });
-      await writeFileAtomic(replacement.prepared.locations.mcpAdapterJsonPath, internals.oldBytes);
-    }
-  } catch (err) {
-    leaks.push(
-      `failed to restore mcp-adapter.json at ${replacement.prepared.locations.mcpAdapterJsonPath}: ${errorMessage(err)}`,
-    );
-  }
-
-  return Object.freeze(leaks);
+  return Object.freeze(await restoreFiles(requireMcpReplacementInternals(replacement).written));
 }
 
 export function finalizeMcpReplacement(replacement: McpReplacement): readonly string[] {

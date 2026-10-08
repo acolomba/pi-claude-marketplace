@@ -79,6 +79,7 @@ import {
   abortPreparedMcp,
   commitPreparedMcp,
   prepareStageMcpServers,
+  removeLegacyMcpEntries,
 } from "../../bridges/mcp/index.ts";
 import {
   abortPreparedSkills,
@@ -1063,6 +1064,11 @@ async function commitUpdateWorkflows(prepared: PreparedWorkflowsStaging): Promis
  * workflows order, matching install's PI-9 ledger order. Each commit is
  * independently atomic at the OS level (rename for skills/commands/agents/
  * workflows, atomicWriteJson for mcp, write-or-remove for hooks).
+ *
+ * AMIG-02: right after the MCP commit writes `mcp-adapter.json`, the plugin's
+ * marked entries leave the scope's `mcp.json`. Update has no rollback, so a
+ * removal that throws is an `mcp` failure that keeps the new entry and the
+ * legacy one; the next reload or a reinstall finishes the move.
  */
 async function commitUpdatePhase3a(
   ops: RemovalOps,
@@ -1075,7 +1081,11 @@ async function commitUpdatePhase3a(
   /** CR-03 / WR-01: what the workflows commit reported. The record write is
    * the only consumer. */
   readonly workflows: WorkflowsCommitReport;
-  /** AFILE-04: the MCP commit's file notices; empty when that commit threw. */
+  /**
+   * AFILE-04 / AMIG-02: the MCP commit's file notices, then the legacy
+   * removal's; empty when the commit threw, the commit's alone when the
+   * removal threw.
+   */
   readonly mcpConfigNotices: readonly McpConfigNotice[];
 }> {
   const failures: UpdatePhase3Failure[] = [];
@@ -1150,6 +1160,12 @@ async function commitUpdatePhase3a(
   try {
     await commitPreparedMcp(handles.mcp);
     mcpConfigNotices = handles.mcp.result.notices;
+    const legacy = await removeLegacyMcpEntries({
+      locations: args.locations,
+      pluginName: args.plugin,
+      marketplaceName: args.marketplace,
+    });
+    mcpConfigNotices = [...mcpConfigNotices, ...legacy.notices];
   } catch (err) {
     failures.push({ phase: "mcp", msg: errorMessage(err), cause: err as Error });
   }

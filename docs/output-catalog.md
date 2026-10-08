@@ -4209,7 +4209,7 @@ MCP config comments removed.
 The user-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.
 ```
 
-Emitted via `notifyMcpConfigNotices` by every command that rewrites an MCP config file whose read bytes held JSONC comments: install, update, reinstall, enable, uninstall, disable, marketplace remove, prune, and the reconcile, import and marketplace update cascades. The command's own row comes first. The notice fires at most once per file per command, because the rewrite removes the comments and the next read finds none. A trailing comma alone is not a comment. Severity: `warning`. One line per file; the line names the scope and the file name (`mcp-adapter.json` or `mcp.json`), never an absolute path. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`, whose driver only knows the structured `notify()` entrypoint).
+Emitted via `notifyMcpConfigNotices` by every command that rewrites an MCP config file whose read bytes held JSONC comments: install, update, reinstall, enable, uninstall, disable, marketplace remove, prune, and the reconcile, import and marketplace update cascades. The commands that stage a plugin's MCP servers also rewrite the scope's `mcp.json` to remove the plugin's old entries there, so the file can be `mcp.json` for them too. The command's own row comes first. The notice fires at most once per file per command, because the rewrite removes the comments and the next read finds none. A trailing comma alone is not a comment. Severity: `warning`. One line per file; the line names the scope and the file name (`mcp-adapter.json` or `mcp.json`), never an absolute path. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`, whose driver only knows the structured `notify()` entrypoint).
 
 ### MCP config left unchanged (AFILE-02)
 
@@ -4221,7 +4221,7 @@ MCP config left unchanged.
 The project-scope mcp-adapter.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.
 ```
 
-Emitted via `notifyMcpConfigNotices` when a command with no MCP servers to write (install, update, reinstall or enable of such a plugin, directly or inside a cascade) meets an `mcp-adapter.json` that is not a valid MCP config. The file is not rewritten and keeps its exact bytes. A plugin that does have MCP servers refuses instead, and its failed row names the file. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts`.
+Emitted via `notifyMcpConfigNotices` when a command with no MCP servers to write (install, update, reinstall or enable of such a plugin, directly or inside a cascade) meets an `mcp-adapter.json` that is not a valid MCP config. The file is not rewritten and keeps its exact bytes. A plugin that does have MCP servers refuses instead, and its failed row names the file. When a staging command removes a plugin's old entries from the scope's `mcp.json` and that file is not a valid MCP config, the file is left unchanged with this notice for `mcp.json`, and the command does not fail. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts`.
 
 ### MCP server override kept (AFILE-06)
 
@@ -4275,6 +4275,18 @@ Server "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json decl
 
 Emitted via `notifyMcpConfigNotices` by every command that stages a plugin's MCP servers: install, update, reinstall and enable, run directly or inside the reconcile, import and marketplace update cascades. The reload migration carries the same line in its notice for a moved server. It fires when a remote server declares a `tools` element with a `permission_policy` or a non-empty `toolPermissions`. The server is installed and works, but its per-tool restrictions are not enforced, because pi-mcp-adapter has no per-tool rule. The written entry carries neither field. A command that removes the server's entry again in the same run shows no line for it. One line per server, which names the fields in the order `tools[].permission_policy`, `toolPermissions`. The line names fields, never tool names or policy values. It follows the credentials-withheld notice. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
 
+### Old MCP server settings removed (AMIG-01)
+
+<!-- catalog-state: mcp-leftover-removed -->
+
+```text
+Old MCP server settings removed.
+
+Removed "srv" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.
+```
+
+Emitted via `notifyMcpConfigNotices` by install, enable, reinstall and update, run directly or inside the reconcile, import and marketplace update cascades, and carried in the reload migration notice. A leftover is a marker-less entry under the old name of a server whose `mcp.json` entry the command removed, in one of the two shapes pi-mcp-adapter writes under a server's name. In the same scope's `mcp-adapter.json` it is an override stub, such as the `{ "disabled": true }` stub `/mcp-adapter disable` writes, or a full definition that carries `directTools`, which is the copy the panel's direct-tools toggle writes. In the project `mcp-adapter.json`, for a user-scope plugin, it is an override stub only, because `/mcp-adapter disable` always writes the project file. A marker-less full definition without `directTools` is the user's own server: it is never removed or reported. Nothing else marker-less is removed. One line per removed entry; the line names the old name, the scope, the file name and the plugin, and escapes control characters in the old name. It is the last MCP config notice. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+
 ### Plugin MCP servers moved out of mcp.json (AMIG-01, AMIG-03)
 
 <!-- catalog-state: mcp-migration-moved -->
@@ -4290,7 +4302,7 @@ Server "plugin_acme_github_" from acme in the project-scope mcp-adapter.json use
 /reload to pick up changes
 ```
 
-Emitted once per `/reload` or start by `notifyMcpMigration`, after the reconcile step has visited both scopes and before the reconcile cascade. It is sent even when reconcile has nothing else to report. Released builds wrote each plugin MCP server into the scope's `mcp.json` under its declared name. The step moves each server of an installed, enabled plugin into the same scope's `mcp-adapter.json` and removes the old entry. One row per moved server, project rows before user rows, then by plugin, then by old name. The old name comes from `mcp.json`. The new name is the adapter key, `plugin_<plugin>_<server>_`, which the `/mcp-adapter` panel, sign-in prompts and project approvals show. pi-mcp-adapter read its config at `session_start`, before this step, so the old names can show until the next reload. Nothing from an old entry is carried: each server is written as a fresh install of the plugin writes it, so an edit made in `mcp.json` does not survive. After the rows come the cost line, then the MCP config lines for the files the step wrote (here a variable that was not set), then the reload hint. Severity: `info` when every server moved. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+Emitted once per `/reload` or start by `notifyMcpMigration`, after the reconcile step has visited both scopes and before the reconcile cascade. It is sent even when reconcile has nothing else to report. Released builds wrote each plugin MCP server into the scope's `mcp.json` under its declared name. The step moves each server of an installed, enabled plugin into the same scope's `mcp-adapter.json` and removes the old entry. One row per moved server, project rows before user rows, then by plugin, then by old name. The old name comes from `mcp.json`. The new name is the adapter key, `plugin_<plugin>_<server>_`, which the `/mcp-adapter` panel, sign-in prompts and project approvals show. pi-mcp-adapter read its config at `session_start`, before this step, so the old names can show until the next reload. Nothing from an old entry is carried: each server is written as a fresh install of the plugin writes it, so an edit made in `mcp.json` does not survive. After the rows come the cost line, then the MCP config lines for the files the step wrote (here a variable that was not set), then the reload hint. Severity: `info` when every server moved and no old-name leftover was removed, `warning` when one was. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
 
 ### Plugin MCP server move stopped (AMIG-03)
 

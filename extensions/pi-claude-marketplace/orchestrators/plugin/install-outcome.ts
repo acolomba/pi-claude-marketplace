@@ -982,13 +982,20 @@ async function runInstallLedgerBody(
       // strings instead of being dropped.
       c.bridgeWarnings.push(...result.warnings);
       c.mcpConfigNotices.push(...result.notices);
+      // AMIG-02: the replace removed the plugin's marked entries from the
+      // scope's mcp.json after writing mcp-adapter.json; its notices describe
+      // that later write. This phase serves install, enable, the install
+      // cascade, the reconcile install and import.
+      if (c.mcpReplacement.kind === "replaced") {
+        c.mcpConfigNotices.push(...c.mcpReplacement.legacy.notices);
+      }
     },
-    // AFILE-04 / NFR-3: a failed install restores the file's prior bytes,
-    // comments included, instead of unstaging from the rewritten file. A
-    // restore that cannot write throws, so the ledger records the mcp
-    // rollback partial rather than reporting a clean unwind over a changed
-    // file. The handle needs no finalize on success; it is dropped with the
-    // context.
+    // AFILE-04 / AMIG-02 / NFR-3: a failed install restores every file the mcp
+    // phase rewrote to its prior bytes, comments included, `mcp.json` first,
+    // instead of unstaging from the rewritten files. A restore that cannot
+    // write throws, so the ledger records the mcp rollback partial rather than
+    // reporting a clean unwind over a changed file. The handle needs no
+    // finalize on success; it is dropped with the context.
     undo: async (c) => {
       if (c.mcpReplacement === undefined) {
         return;

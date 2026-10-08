@@ -81,9 +81,12 @@ export interface StageMcpCommitResult {
    * per-server variable notices from the variable reports of the staged
    * entries, in declared server order: a server's `variables-missing` notice
    * before its `credentials-blanked` notice (AVAR-05), then the per-server
-   * `tool-rules-unenforced` notices, in declared server order (ANAME-07).
-   * Distinct from `warnings`, which are hygiene notes standalone commands do
-   * not show.
+   * `tool-rules-unenforced` notices, in declared server order (ANAME-07), then
+   * one `leftover-removed` notice per old-name leftover the stage drops, the
+   * target file's before the project file's (AMIG-01). A stage that rewrites
+   * the project `mcp-adapter.json` reports its `comments-dropped` notice right
+   * after the target's. Distinct from `warnings`, which are hygiene notes
+   * standalone commands do not show.
    */
   readonly notices: readonly McpConfigNotice[];
 }
@@ -102,9 +105,9 @@ export interface PreparedMcpNoop {
 }
 
 /**
- * Staged branch. `_nextDoc` is the in-memory merged doc that
- * `commitPreparedMcp` will write atomically. The leading underscore
- * marks it as bridge-internal by convention only -- it is still
+ * Staged branch. The underscored members are the in-memory writes that
+ * `commitPreparedMcp` and `replacePreparedMcp` perform. The leading underscore
+ * marks them as bridge-internal by convention only -- they are still
  * reachable through the exported `PreparedMcpStaging` union; consumers
  * should use `result` instead.
  */
@@ -113,7 +116,27 @@ export interface PreparedMcpStaged {
   readonly locations: ScopedLocations;
   readonly stagedNames: readonly string[];
   readonly result: StageMcpCommitResult;
-  readonly _nextDoc: RawMcpDoc;
+  /**
+   * The next scope `mcp-adapter.json`. Absent when the stage leaves that file
+   * alone: the plugin has no server, owns no entry there and left no leftover
+   * there (AMIG-01).
+   */
+  readonly _nextDoc?: RawMcpDoc;
+  /**
+   * AMIG-01: the next project `mcp-adapter.json`, which a user-scope stage
+   * rewrites to drop the disable stubs under the plugin's old names.
+   */
+  readonly _projectDoc?: { readonly path: string; readonly doc: RawMcpDoc };
+  /**
+   * AMIG-02: present when the scope's `mcp.json` holds the plugin's marked
+   * entries, so `replacePreparedMcp` knows whose entries to remove. `names`
+   * lists them in file order.
+   */
+  readonly _legacy?: {
+    readonly pluginName: string;
+    readonly marketplaceName: string;
+    readonly names: readonly string[];
+  };
 }
 
 /** Opaque reinstall replacement handle for staged MCP changes. */
@@ -127,6 +150,11 @@ export interface McpReplacementNoop {
 export interface McpReplacementReplaced {
   readonly kind: "replaced";
   readonly prepared: PreparedMcpStaged;
+  /**
+   * AMIG-02: what the replace removed from the scope's `mcp.json` after its
+   * `mcp-adapter.json` writes; all empty when the plugin had no marked entry.
+   */
+  readonly legacy: RemoveLegacyMcpResult;
 }
 
 /** Input record for `unstageMcpServers`. */

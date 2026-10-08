@@ -296,8 +296,21 @@ export interface McpToolRulesUnenforcedNotice {
 }
 
 /**
- * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07: one MCP config fact a command
- * routes to `notifyMcpConfigNotices`.
+ * AMIG-01: a stage removed a marker-less entry pi-mcp-adapter had written
+ * under `server`, the old name of a plugin server whose `mcp.json` entry the
+ * command removed: an override stub or the panel's direct-tools copy.
+ */
+export interface McpLeftoverRemovedNotice {
+  readonly kind: "leftover-removed";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+}
+
+/**
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: one MCP config fact a
+ * command routes to `notifyMcpConfigNotices`.
  */
 export type McpConfigNotice =
   | McpConfigFileNotice
@@ -305,7 +318,8 @@ export type McpConfigNotice =
   | McpOverrideRestoredNotice
   | McpVariablesMissingNotice
   | McpCredentialsBlankedNotice
-  | McpToolRulesUnenforcedNotice;
+  | McpToolRulesUnenforcedNotice
+  | McpLeftoverRemovedNotice;
 
 function mcpConfigFileLine(notice: McpConfigFileNotice): string {
   return notice.kind === "comments-dropped"
@@ -339,6 +353,14 @@ function mcpToolRulesUnenforcedLine(notice: McpToolRulesUnenforcedNotice): strin
 
 function isToolRulesUnenforced(notice: McpConfigNotice): notice is McpToolRulesUnenforcedNotice {
   return notice.kind === "tool-rules-unenforced";
+}
+
+function mcpLeftoverRemovedLine(notice: McpLeftoverRemovedNotice): string {
+  return `Removed "${printable(notice.server)}" from the ${notice.scope}-scope ${notice.file}: pi-mcp-adapter had written it under the old name of a server from ${notice.plugin}, for example for /mcp-adapter disable, and it no longer applies.`;
+}
+
+function isLeftoverRemoved(notice: McpConfigNotice): notice is McpLeftoverRemovedNotice {
+  return notice.kind === "leftover-removed";
 }
 
 function mcpConfigFileLines(
@@ -381,11 +403,11 @@ function standingOverrideNotices(
 }
 
 /**
- * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 / ANAME-07: the MCP config lines of
- * a notice list, one section per kind in the order comments-dropped,
+ * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: the MCP config
+ * lines of a notice list, one section per kind in the order comments-dropped,
  * left-unchanged, override-kept, variables-missing, credentials-blanked,
- * tool-rules-unenforced. Each section holds its summary and its distinct
- * lines in first-seen order, and may be empty.
+ * tool-rules-unenforced, leftover-removed. Each section holds its summary and
+ * its distinct lines in first-seen order, and may be empty.
  * An override-kept line stands only when no later override-restored notice
  * for the same scope, file and server cancels it. An override-restored notice
  * renders nothing. `notifyMcpConfigNotices` and `notifyMcpMigration` both
@@ -413,25 +435,31 @@ function mcpConfigNoticeSections(
       "MCP server tool rules not enforced.",
       notices.filter(isToolRulesUnenforced).map((notice) => mcpToolRulesUnenforcedLine(notice)),
     ],
+    [
+      "Old MCP server settings removed.",
+      notices.filter(isLeftoverRemoved).map((notice) => mcpLeftoverRemovedLine(notice)),
+    ],
   ];
   return sections.map(([summary, lines]) => [summary, [...new Set(lines)]] as const);
 }
 
 /**
- * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 / ANAME-07 IL-2 seam: the one
- * surface for MCP config notices. Bridges report the facts and orchestrators
+ * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 IL-2 seam: the
+ * one surface for MCP config notices. Bridges report the facts and orchestrators
  * call this after their own row. It sends one `"warning"` notification per
  * non-empty `mcpConfigNoticeSections` section, in section order: a summary
  * line, a blank line, then the section's lines. An empty list sends nothing.
  * A line names the scope, the file basename, the plugin, the server, and
  * override field names, environment variable names or tool permission field
  * names only, so it carries no absolute path, no field value, no variable
- * value and no tool name (AVAR-05). The host UI prepends the `Warning:` label
- * to the summary line. The byte form is locked by
+ * value and no tool name (AVAR-05). A leftover's old name is read from a
+ * config file, so its control characters are escaped. The host UI prepends
+ * the `Warning:` label to the summary line. The byte form is locked by
  * `tests/architecture/mcp-config-notices.test.ts` against the
  * `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept`,
- * `mcp-variables-missing`, `mcp-credentials-blanked` and
- * `mcp-tool-rules-unenforced` blocks in `docs/output-catalog.md`. The reload
+ * `mcp-variables-missing`, `mcp-credentials-blanked`,
+ * `mcp-tool-rules-unenforced` and `mcp-leftover-removed` blocks in
+ * `docs/output-catalog.md`. The reload
  * migration renders the same sections inside its one notice instead
  * (`notifyMcpMigration`).
  */
@@ -555,7 +583,8 @@ function mcpMigrationLines(
  * `mcpConfigNoticeSections` section, then, when a row moved, the reload hint.
  * Rows sort project before user, then by plugin, then by old name (a stopped
  * row by its detail), in code-unit order. Severity is `"info"` when every row
- * moved and `"warning"` when a move stopped. A row names the old name, the
+ * moved and no old-name leftover was removed, and `"warning"` when a move
+ * stopped or a leftover was removed. A row names the old name, the
  * adapter key, the plugin and the scope, and every control character in a
  * name or detail is escaped; a detail carries no absolute path. The byte form
  * is locked by `tests/architecture/mcp-migration-notice.test.ts` against the
@@ -573,7 +602,8 @@ export function notifyMcpMigration(ctx: NotificationContext, report: McpMigratio
   if (stopped.length > 0) {
     ctx.ui.notify(`${MCP_MIGRATION_STOPPED_SUMMARY}\n\n${lines.join("\n")}`, "warning");
   } else {
-    ctx.ui.notify(`${MCP_MIGRATION_MOVED_SUMMARY}\n\n${lines.join("\n")}`, "info");
+    const severity = report.notices.some(isLeftoverRemoved) ? "warning" : "info";
+    ctx.ui.notify(`${MCP_MIGRATION_MOVED_SUMMARY}\n\n${lines.join("\n")}`, severity);
   }
 }
 

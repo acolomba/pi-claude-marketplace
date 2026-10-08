@@ -1451,6 +1451,89 @@ test("AFILE-04: a later-phase failure restores the commented mcp-adapter.json by
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
 });
 
+/** AMIG-02: a commented legacy mcp.json holding the plugin's marked entry and a foreign one. */
+const COMMENTED_LEGACY_MCP_BYTES = `{
+  // released build
+  "mcpServers": {
+    "server1": { "command": "old", "_piClaudeMarketplace": { "plugin": "empty", "marketplace": "marketplace" } },
+    "other": { "command": "y" }
+  }
+}
+`;
+
+test("AMIG-02: a plugin with a commented legacy entry installs, and its MCP notices end with the mcp.json comments-dropped notice", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-legacy-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+  await writeFile(locations.mcpJsonPath, COMMENTED_LEGACY_MCP_BYTES);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+  ]);
+  assert.strictEqual(
+    await readFile(locations.mcpJsonPath, "utf8"),
+    '{\n  "mcpServers": {\n    "other": {\n      "command": "y"\n    }\n  }\n}\n',
+  );
+});
+
+test("AMIG-02: a later-phase failure restores mcp.json and mcp-adapter.json byte for byte", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-legacy-restore-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { workflows: ["delta"] },
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_BYTES);
+  await writeFile(locations.mcpJsonPath, COMMENTED_LEGACY_MCP_BYTES);
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await symlink("/nonexistent-decoy", path.join(locations.workflowsSavedDir, "empty:delta.json"));
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PathContainmentError);
+    return true;
+  });
+  assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), COMMENTED_LEGACY_MCP_BYTES);
+  assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), COMMENTED_ADAPTER_BYTES);
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
 test("AFILE-04 / NFR-3: an mcp restore that cannot write is reported as the mcp rollback partial", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-mcp-restore-fails-");

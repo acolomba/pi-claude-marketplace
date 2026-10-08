@@ -110,8 +110,10 @@ export interface ReinstallReplacement {
   readonly discoveryWarnings: readonly string[];
   readonly bridgeWarnings: readonly string[];
   /**
-   * AFILE-04: the MCP replace's file notices. Only a completed replace returns
-   * a replacement; a failed one restores the file's exact bytes and throws.
+   * AFILE-04 / AMIG-02: the MCP replace's file notices: the stage's, then those
+   * of the replace's removal of the plugin's marked `mcp.json` entries. Only a
+   * completed replace returns a replacement; a failed one restores the files'
+   * exact bytes and throws.
    */
   readonly mcpConfigNotices: readonly McpConfigNotice[];
   /** Operations retained so compensation uses the same transaction owner. */
@@ -270,17 +272,18 @@ async function replaceReinstalledPlugin(
   // step below performs its cleanup through that one collaborator.
   const removalOps = createRemovalOps();
   const handles = await prepareAllHandles(removalOps, input, operations);
-  const { replacements, hookEntries, placedWorkflowNames, workflowsCommitLeaks } = await replaceAll(
-    removalOps,
-    handles,
-    {
-      locations: input.locations,
-      cwd: input.cwd,
-      plugin: input.plugin,
-      installable: input.installable,
-    },
-    operations,
-  );
+  const { replacements, mcp, hookEntries, placedWorkflowNames, workflowsCommitLeaks } =
+    await replaceAll(
+      removalOps,
+      handles,
+      {
+        locations: input.locations,
+        cwd: input.cwd,
+        plugin: input.plugin,
+        installable: input.installable,
+      },
+      operations,
+    );
   const warnings = splitHandleWarnings(handles);
   return {
     handles,
@@ -288,7 +291,10 @@ async function replaceReinstalledPlugin(
     hookEntries,
     discoveryWarnings: warnings.discovery,
     bridgeWarnings: [...warnings.bridge, ...workflowsCommitLeaks],
-    mcpConfigNotices: handles.mcp.result.notices,
+    mcpConfigNotices: [
+      ...handles.mcp.result.notices,
+      ...(mcp.kind === "replaced" ? mcp.legacy.notices : []),
+    ],
     operations,
     removalOps,
     locations: input.locations,
@@ -477,12 +483,15 @@ async function replaceAll(
   operations: ReinstallReplaceOperations,
 ): Promise<{
   readonly replacements: readonly ReplacementEntry[];
+  /** The MCP replacement, also pushed onto `replacements`. */
+  readonly mcp: McpReplacement;
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
   readonly placedWorkflowNames: readonly string[];
   /** The workflows commit's staging-cleanup leak, empty when it cleaned up. */
   readonly workflowsCommitLeaks: readonly string[];
 }> {
   const replacements: ReplacementEntry[] = [];
+  let mcp: McpReplacement;
   let hookEntries: readonly HookSummaryEntry[] | undefined;
   let placedWorkflowNames: readonly string[] = [];
   let workflowsCommitEntered = false;
@@ -495,7 +504,7 @@ async function replaceAll(
     const agents = await operations.replacePreparedAgents(ops, handles.agents, { force: true });
     replacements.push({ phase: "agents", handle: agents });
     hookEntries = await commitHooks(hooks, operations);
-    const mcp = await operations.replacePreparedMcp(handles.mcp);
+    mcp = await operations.replacePreparedMcp(handles.mcp);
     replacements.push({ phase: "mcp", handle: mcp });
     // WLIF-01: the LAST step, mirroring the install ledger's ordering. The
     // workflows bridge has no `replacePrepared*` twin and needs none -- the
@@ -544,6 +553,7 @@ async function replaceAll(
 
   return {
     replacements: Object.freeze(replacements),
+    mcp,
     hookEntries,
     placedWorkflowNames,
     workflowsCommitLeaks: Object.freeze(workflowsCommitLeaks),

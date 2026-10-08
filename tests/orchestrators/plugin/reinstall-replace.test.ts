@@ -158,6 +158,7 @@ function fakeOperations(
       recorded: [{ generatedName: `${kind}-name` }],
       degraded: [],
       warnings: [`${kind} warning`],
+      notices: [],
     },
   });
   const operation =
@@ -471,6 +472,83 @@ test("AFILE-04: a completed replace carries the MCP replace's file notices", asy
   // assert
   assert.deepStrictEqual(replacement.mcpConfigNotices, [
     { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+  ]);
+});
+
+test("AMIG-02: a completed replace carries the MCP replacement's legacy notices after the stage notices", async () => {
+  // arrange
+  const calls: string[] = [];
+  const prepared = {
+    kind: "staged",
+    result: {
+      recorded: [],
+      warnings: [],
+      notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    },
+  };
+  const operations = fakeOperations(calls, {
+    prepareStageMcpServers: () => {
+      calls.push("prepare mcp");
+      return Promise.resolve(prepared);
+    },
+    replacePreparedMcp: () => {
+      calls.push("replace mcp");
+      return Promise.resolve({
+        kind: "replaced",
+        prepared,
+        legacy: {
+          removedNames: ["srv"],
+          notices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+          written: [],
+        },
+      });
+    },
+  } as unknown as Partial<ReinstallReplaceOperations>);
+
+  // act
+  const replacement = await REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(
+    replacementInput(),
+    operations,
+  );
+
+  // assert
+  assert.deepStrictEqual(replacement.mcpConfigNotices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+  ]);
+});
+
+test("AMIG-02: a noop MCP replacement adds no legacy notice", async () => {
+  // arrange
+  const calls: string[] = [];
+  const prepared = {
+    kind: "noop",
+    result: {
+      recorded: [],
+      warnings: [],
+      notices: [{ kind: "left-unchanged", scope: "user", file: "mcp-adapter.json" }],
+    },
+  };
+  const operations = fakeOperations(calls, {
+    prepareStageMcpServers: () => {
+      calls.push("prepare mcp");
+      return Promise.resolve(prepared);
+    },
+    replacePreparedMcp: () => {
+      calls.push("replace mcp");
+      return Promise.resolve({ kind: "noop", prepared });
+    },
+  } as unknown as Partial<ReinstallReplaceOperations>);
+
+  // act
+  const replacement = await REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(
+    replacementInput(),
+    operations,
+  );
+
+  // assert
+  assert.deepStrictEqual(replacement.mcpConfigNotices, [
+    { kind: "left-unchanged", scope: "user", file: "mcp-adapter.json" },
   ]);
 });
 

@@ -6399,6 +6399,13 @@ test("AFILE-04: notices of every kind send one warning per kind in section order
   // act
   notifyMcpConfigNotices(ctx as never, [
     {
+      kind: "leftover-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+    },
+    {
       kind: "tool-rules-unenforced",
       scope: "user",
       file: "mcp-adapter.json",
@@ -6460,6 +6467,10 @@ test("AFILE-04: notices of every kind send one warning per kind in section order
       ],
       [
         'MCP server tool rules not enforced.\n\nServer "plugin_hello_srv_" from hello in the user-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: toolPermissions. Its tools run without these rules.',
+        "warning",
+      ],
+      [
+        'Old MCP server settings removed.\n\nRemoved "srv" from the user-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.',
         "warning",
       ],
     ],
@@ -6537,6 +6548,107 @@ test("ANAME-07: a repeated tool-rules-unenforced notice renders once", (t) => {
     [
       [
         'MCP server tool rules not enforced.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: toolPermissions. Its tools run without these rules.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AMIG-01: leftover-removed notices send Old MCP server settings removed. after the tool-rules warning, with a line each", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "leftover-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "github",
+    },
+    {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      fields: ["toolPermissions"],
+    },
+    {
+      kind: "leftover-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server tool rules not enforced.\n\nServer "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: toolPermissions. Its tools run without these rules.',
+        "warning",
+      ],
+      [
+        "Old MCP server settings removed.\n\n" +
+          'Removed "github" from the user-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from acme, for example for /mcp-adapter disable, and it no longer applies.\n' +
+          'Removed "srv" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AMIG-01: a repeated leftover-removed notice renders once", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const leftover = {
+    kind: "leftover-removed",
+    scope: "project",
+    file: "mcp-adapter.json",
+    plugin: "hello",
+    server: "srv",
+  } as const;
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [leftover, leftover]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'Old MCP server settings removed.\n\nRemoved "srv" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AMIG-01: control characters in a leftover's old name render as \\u escapes", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "leftover-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "s\u001b[2Jr\nv",
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'Old MCP server settings removed.\n\nRemoved "s\\u001b[2Jr\\u000av" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.',
         "warning",
       ],
     ],
@@ -6806,6 +6918,62 @@ describe("notifyMcpMigration", () => {
             "/reload to pick up changes",
           ].join("\n"),
           "info",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-03: a leftover-removed notice makes an all-moved report a warning, its line last", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "acme",
+          marketplace: "mp",
+          from: "srv",
+          to: "plugin_acme_srv_",
+        },
+      ],
+      notices: [
+        {
+          kind: "leftover-removed",
+          scope: "project",
+          file: "mcp-adapter.json",
+          plugin: "acme",
+          server: "srv",
+        },
+        {
+          kind: "tool-rules-unenforced",
+          scope: "project",
+          file: "mcp-adapter.json",
+          plugin: "acme",
+          server: "plugin_acme_srv_",
+          fields: ["toolPermissions"],
+        },
+      ],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers moved from mcp.json to mcp-adapter.json.",
+            "",
+            "Moved to mcp-adapter.json:",
+            "  srv -> plugin_acme_srv_ (acme) [project]",
+            MCP_MIGRATION_COST_LINE,
+            'Server "plugin_acme_srv_" from acme in the project-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: toolPermissions. Its tools run without these rules.',
+            'Removed "srv" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from acme, for example for /mcp-adapter disable, and it no longer applies.',
+            "/reload to pick up changes",
+          ].join("\n"),
+          "warning",
         ],
       ],
     );

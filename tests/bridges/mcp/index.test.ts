@@ -51,7 +51,7 @@ void (true satisfies Same<PreparedStaged["kind"], "staged">);
 void (true satisfies Same<ReplacementNoop["prepared"], PreparedNoop>);
 void (true satisfies Same<ReplacementReplaced["prepared"], PreparedStaged>);
 void (true satisfies Same<keyof ReplacementNoop, "kind" | "prepared">);
-void (true satisfies Same<keyof ReplacementReplaced, "kind" | "prepared">);
+void (true satisfies Same<keyof ReplacementReplaced, "kind" | "prepared" | "legacy">);
 
 describe("MCP barrel runtime bindings", () => {
   test("re-exports abortPreparedMcp from the stage module", () => {

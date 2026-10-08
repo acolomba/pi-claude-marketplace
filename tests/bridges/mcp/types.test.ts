@@ -84,6 +84,16 @@ const preparedMcpStaged: PreparedMcpStaged = {
 } satisfies PreparedMcpStaged;
 void preparedMcpStaged;
 
+const preparedMcpLegacyOnly: PreparedMcpStaged = {
+  kind: "staged",
+  locations: undefined!,
+  stagedNames: [],
+  result: stageMcpCommitResult,
+  _projectDoc: { path: "/work/project/.pi/mcp-adapter.json", doc: wrappedMcpDoc },
+  _legacy: { pluginName: "acme", marketplaceName: "official", names: ["search"] },
+} satisfies PreparedMcpStaged;
+void preparedMcpLegacyOnly;
+
 void (preparedMcpNoop satisfies PreparedMcpStaging);
 void (preparedMcpStaged satisfies PreparedMcpStaging);
 void (preparedMcpNoop.kind satisfies "noop");
@@ -98,6 +108,11 @@ void mcpReplacementNoop;
 const mcpReplacementReplaced: McpReplacementReplaced = {
   kind: "replaced",
   prepared: preparedMcpStaged,
+  legacy: {
+    removedNames: ["search"],
+    notices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+    written: [{ path: "/scope/mcp.json", bytes: Buffer.from("{}\n") }],
+  },
 } satisfies McpReplacementReplaced;
 void mcpReplacementReplaced;
 
@@ -183,8 +198,14 @@ const stageMcpCommitResultWithoutWarnings: StageMcpCommitResult = {
 void stageMcpCommitResultWithoutWarnings;
 // @ts-expect-error a preparation handle has a closed discriminant set
 void ({ kind: "prepared", result: stageMcpCommitResult } satisfies PreparedMcpStaging);
-// @ts-expect-error staged preparations require their pending document and paths
+// @ts-expect-error staged preparations require their locations and server names
 void ({ kind: "staged", result: stageMcpCommitResult } satisfies PreparedMcpStaging);
+// @ts-expect-error exact optional properties reject an explicit undefined pending document
+void ({ ...preparedMcpStaged, _nextDoc: undefined } satisfies PreparedMcpStaged);
+// @ts-expect-error a project rewrite always names its file
+void ({ ...preparedMcpStaged, _projectDoc: { doc: wrappedMcpDoc } } satisfies PreparedMcpStaged);
+// @ts-expect-error a legacy sweep always names the entries' owner
+void ({ ...preparedMcpStaged, _legacy: { names: ["search"] } } satisfies PreparedMcpStaged);
 // @ts-expect-error noop preparations do not expose staged locations
 void preparedMcpNoop.locations;
 // @ts-expect-error noop preparations do not expose staged server names
@@ -196,7 +217,9 @@ void (preparedMcpStaged satisfies PreparedMcpNoop);
 // @ts-expect-error noop replacements contain only noop preparations
 void mcpReplacementNoop.prepared._nextDoc;
 // @ts-expect-error replaced handles require a staged preparation
-void ({ kind: "replaced", prepared: preparedMcpNoop } satisfies McpReplacement);
+void ({ ...mcpReplacementReplaced, prepared: preparedMcpNoop } satisfies McpReplacement);
+// @ts-expect-error replaced handles always report the legacy removal
+void ({ kind: "replaced", prepared: preparedMcpStaged } satisfies McpReplacement);
 // @ts-expect-error noop handles require a noop preparation
 void ({ kind: "noop", prepared: preparedMcpStaged } satisfies McpReplacement);
 // @ts-expect-error replacement handles have a closed discriminant set
