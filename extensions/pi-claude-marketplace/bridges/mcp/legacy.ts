@@ -13,7 +13,9 @@
 // `mcp-adapter.json`, whatever the server's scope. Its direct-tools toggle
 // writes the whole definition plus `directTools` under that name into the same
 // scope's `mcp-adapter.json`. The `directTools` key tells the panel's copy from
-// a user's own full server under the same name, which is never removed.
+// a user's own full server under the same name, which is never removed. A
+// leftover whose name another config source still defines in full applies to
+// that live server, so it is the user's setting and is never removed either.
 //
 // A stage removes the leftovers in its own scope's file only. The project
 // file's disable stubs of a user-scope plugin are removed by the reload move
@@ -34,11 +36,13 @@ import {
   type McpConfigDoc,
   type McpServerKey,
 } from "./adapter-doc.ts";
-import { CLAUDE_MARKETPLACE_MARKER_KEY, markerOwnerOf } from "./marker.ts";
+import { walkMcpSources, type McpSourceDeclaration } from "./collision-slots.ts";
+import { CLAUDE_MARKETPLACE_MARKER_KEY, isOwnedBy, markerOwnerOf } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
 import type {
   LegacyMcpOwner,
+  McpLeftoverPlace,
   ProjectDisableStubOwner,
   RawMcpDoc,
   RemoveLegacyMcpInput,
@@ -207,6 +211,45 @@ function without(
   return kept;
 }
 
+/**
+ * Whether a full definition still runs once the move is done: it sits outside
+ * the leftover's own file, and it is not one of the plugin's marked entries
+ * in the legacy file, which the move removes.
+ */
+function staysLive(declaration: McpSourceDeclaration, place: McpLeftoverPlace): boolean {
+  if (declaration.sourcePath === place.leftoverPath) {
+    return false;
+  }
+
+  return !(
+    declaration.sourcePath === place.legacyPath &&
+    isOwnedBy(declaration.entry, place.pluginName, place.marketplaceName)
+  );
+}
+
+/**
+ * AMIG-01: the names among `names` that no pi-mcp-adapter config source
+ * still defines in full after the move (`staysLive`). A leftover under a
+ * name another source defines applies to that live server, for example the
+ * user's `/mcp-adapter disable` of it, so it is kept. With no name it reads
+ * no source.
+ */
+export async function namesWithNoLiveServer(
+  cwd: string,
+  names: readonly string[],
+  place: McpLeftoverPlace,
+): Promise<readonly string[]> {
+  if (names.length === 0) {
+    return names;
+  }
+
+  const walk = await walkMcpSources(cwd);
+  return names.filter(
+    (name) =>
+      !(walk.declarations.get(name) ?? []).some((declaration) => staysLive(declaration, place)),
+  );
+}
+
 /** The project `mcp-adapter.json`, or undefined when it is not a valid MCP config. */
 async function readProjectAdapter(filePath: string): Promise<McpConfigDoc | undefined> {
   try {
@@ -220,28 +263,46 @@ async function readProjectAdapter(filePath: string): Promise<McpConfigDoc | unde
   }
 }
 
-/** The owner's old names whose project-file entry is an override stub. */
-function projectStubNames(config: McpConfigDoc, owner: ProjectDisableStubOwner): readonly string[] {
-  return leftoverNames(config, owner.names, { newKeys: [], panelCopies: false });
+/**
+ * The owner's old names whose project-file entry is an override stub that
+ * applies to no live server once the owner's user-scope legacy entries go.
+ */
+function projectStubNames(
+  cwd: string,
+  config: McpConfigDoc,
+  owner: ProjectDisableStubOwner,
+): Promise<readonly string[]> {
+  return namesWithNoLiveServer(
+    cwd,
+    leftoverNames(config, owner.names, { newKeys: [], panelCopies: false }),
+    {
+      leftoverPath: locationsFor("project", cwd).mcpAdapterJsonPath,
+      legacyPath: locationsFor("user", cwd).mcpJsonPath,
+      pluginName: owner.pluginName,
+      marketplaceName: owner.marketplaceName,
+    },
+  );
 }
 
 /**
  * AMIG-01: the owner's old names that hold an override stub in the project
- * `mcp-adapter.json`, read without writing. A missing file, or one that is
- * not a valid MCP config, gives none. Any other read error rejects.
+ * `mcp-adapter.json` and name no live server, read without writing. A
+ * missing file, or one that is not a valid MCP config, gives none. Any other
+ * read error rejects.
  */
 export async function projectDisableStubNames(
   cwd: string,
   owner: ProjectDisableStubOwner,
 ): Promise<readonly string[]> {
   const config = await readProjectAdapter(locationsFor("project", cwd).mcpAdapterJsonPath);
-  return config === undefined ? [] : projectStubNames(config, owner);
+  return config === undefined ? [] : projectStubNames(cwd, config, owner);
 }
 
 /**
  * AMIG-01: removes the override stubs under the owners' old names from the
  * project `mcp-adapter.json`, where `/mcp-adapter disable` writes them
- * whatever the server's scope. Every other entry, top-level key and key order
+ * whatever the server's scope, unless another source still defines the name
+ * (`namesWithNoLiveServer`). Every other entry, top-level key and key order
  * is kept, and a file with no such stub, or not a valid MCP config, is not
  * written. The caller holds the project-scope lock, under which
  * project-scope commands rewrite this file. Returns a `comments-dropped`
@@ -258,9 +319,15 @@ export async function removeProjectDisableStubs(
     return [];
   }
 
-  const removed = owners.flatMap((owner) =>
-    projectStubNames(config, owner).map((server) => ({ plugin: owner.pluginName, server })),
+  const perOwner = await Promise.all(
+    owners.map(async (owner) =>
+      (await projectStubNames(cwd, config, owner)).map((server) => ({
+        plugin: owner.pluginName,
+        server,
+      })),
+    ),
   );
+  const removed = perOwner.flat();
   if (removed.length === 0) {
     return [];
   }

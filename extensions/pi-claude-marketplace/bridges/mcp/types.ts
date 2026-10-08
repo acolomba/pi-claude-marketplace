@@ -186,6 +186,18 @@ export interface LegacyMcpOwner {
 }
 
 /**
+ * AMIG-01: where an old-name leftover sits and whose legacy entries the move
+ * removes: the leftover's file, the scope's legacy `mcp.json`, and the
+ * plugin that owns the marked entries there.
+ */
+export interface McpLeftoverPlace {
+  readonly leftoverPath: string;
+  readonly legacyPath: string;
+  readonly pluginName: string;
+  readonly marketplaceName: string;
+}
+
+/**
  * AMIG-01: a user-scope plugin the reload move stages, and the old names of
  * its marked `mcp.json` entries, whose disable stubs in the project
  * `mcp-adapter.json` `removeProjectDisableStubs` drops.

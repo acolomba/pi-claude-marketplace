@@ -1716,4 +1716,30 @@ describe("migrateLegacyMcpEntries", () => {
     assert.strictEqual(await pathExists(locationsFor("project", cwd).extensionRoot), false);
     assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), EMPTY_MCP_JSON);
   });
+
+  test("AMIG-01: a user-scope move keeps the project stub under an old name that a project .mcp.json still defines", async (t) => {
+    // arrange
+    const { cwd } = await createProjectScope(t, "user-project-live-stub");
+    await seedUserMoveOwner(cwd, PROJECT_STUBS_TEXT);
+    await writeConfigFile(path.join(cwd, ".mcp.json"), { srv: { command: "theirs" } });
+    const log: string[] = [];
+    const input = { ...migrationInput(cwd), scope: "user" } as const;
+
+    // act
+    await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+    // assert
+    assert.deepStrictEqual(
+      { rows: input.rows, notices: input.notices, log },
+      {
+        rows: [USER_HELLO_MOVED],
+        notices: [],
+        log: ["prepare hello@mp", "commit", "removeLegacy hello@mp"],
+      },
+    );
+    assert.strictEqual(
+      await readFile(locationsFor("project", cwd).mcpAdapterJsonPath, "utf8"),
+      PROJECT_STUBS_TEXT,
+    );
+  });
 });

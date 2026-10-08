@@ -7,6 +7,7 @@ import { describe, test, type TestContext } from "node:test";
 import {
   checkMcpAdapterConfig,
   leftoverNames,
+  namesWithNoLiveServer,
   projectDisableStubNames,
   readLegacyMcpNames,
   readLegacyMcpOwners,
@@ -16,6 +17,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/legacy.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { McpConfigDoc } from "../../../extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -33,16 +35,23 @@ async function fileIdentity(filePath: string): Promise<readonly bigint[]> {
   return [stats.ino, stats.mtimeNs];
 }
 
-/** A temporary project tree; returns its root and the project `mcp-adapter.json` path. */
+/**
+ * A hermetic home and project tree, so the source walk reads only the case's
+ * files; returns the project root and the project `mcp-adapter.json` path.
+ */
 async function createProject(
   t: TestContext,
   prefix: string,
 ): Promise<{ readonly cwd: string; readonly adapterPath: string }> {
-  const cwd = await mkdtemp(path.join(tmpdir(), prefix));
-  t.after(() => rm(cwd, { recursive: true, force: true, maxRetries: 3 }));
+  const { cwd } = await createHermeticEnvironment(t, prefix);
   const adapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
   await mkdir(path.dirname(adapterPath), { recursive: true });
   return { cwd, adapterPath };
+}
+
+async function writeConfig(filePath: string, servers: Record<string, unknown>): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, JSON.stringify({ mcpServers: servers }));
 }
 
 /** A commented project file: stubs under `srv`, `b` and `x`, a direct-tools copy under `tool`. */
@@ -58,6 +67,66 @@ const PROJECT_STUBS_TEXT = `{
 `;
 
 const ACME_OWNER = { pluginName: "acme", marketplaceName: "mp", names: ["srv", "tool"] } as const;
+
+describe("namesWithNoLiveServer", () => {
+  test("AMIG-01: keeps out an old name that a project .mcp.json still defines in full", async (t) => {
+    // arrange
+    const { cwd, adapterPath } = await createProject(t, "mcp-legacy-live-dotmcp-");
+    await writeConfig(path.join(cwd, ".mcp.json"), { github: { command: "gh" } });
+
+    // act
+    const names = await namesWithNoLiveServer(cwd, ["github", "slack"], {
+      leftoverPath: adapterPath,
+      legacyPath: locationsFor("user", cwd).mcpJsonPath,
+      pluginName: "acme",
+      marketplaceName: "mp",
+    });
+
+    // assert
+    assert.deepStrictEqual(names, ["slack"]);
+  });
+
+  test("AMIG-01: another plugin's marked legacy entry under the old name stays live", async (t) => {
+    // arrange
+    const { cwd, adapterPath } = await createProject(t, "mcp-legacy-live-other-plugin-");
+    const legacyPath = locationsFor("user", cwd).mcpJsonPath;
+    await writeConfig(legacyPath, {
+      github: { command: "gh", _piClaudeMarketplace: { plugin: "beta", marketplace: "mp" } },
+    });
+
+    // act
+    const names = await namesWithNoLiveServer(cwd, ["github"], {
+      leftoverPath: adapterPath,
+      legacyPath,
+      pluginName: "acme",
+      marketplaceName: "mp",
+    });
+
+    // assert
+    assert.deepStrictEqual(names, []);
+  });
+
+  test("AMIG-01: the plugin's own marked legacy entry and the leftover's own file define nothing live", async (t) => {
+    // arrange
+    const { cwd, adapterPath } = await createProject(t, "mcp-legacy-live-own-");
+    const legacyPath = locationsFor("user", cwd).mcpJsonPath;
+    await writeConfig(legacyPath, {
+      github: { command: "gh", _piClaudeMarketplace: { plugin: "acme", marketplace: "mp" } },
+    });
+    await writeConfig(adapterPath, { tool: { command: "t", directTools: true } });
+
+    // act
+    const names = await namesWithNoLiveServer(cwd, ["github", "tool"], {
+      leftoverPath: adapterPath,
+      legacyPath,
+      pluginName: "acme",
+      marketplaceName: "mp",
+    });
+
+    // assert
+    assert.deepStrictEqual(names, ["github", "tool"]);
+  });
+});
 
 describe("projectDisableStubNames", () => {
   test("AMIG-01: gives the old names that hold an override stub in the project file", async (t) => {
@@ -159,6 +228,23 @@ describe("removeProjectDisableStubs", () => {
       },
     ]);
     assert.strictEqual(await readFile(adapterPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
+  });
+
+  test("AMIG-01: keeps a stub whose old name a project .mcp.json still defines", async (t) => {
+    // arrange
+    const { cwd, adapterPath } = await createProject(t, "mcp-legacy-stub-live-");
+    const bytes = '{"mcpServers":{"github":{"disabled":true}}}\n';
+    await writeFile(adapterPath, bytes);
+    await writeConfig(path.join(cwd, ".mcp.json"), { github: { command: "gh" } });
+
+    // act
+    const notices = await removeProjectDisableStubs(cwd, [
+      { pluginName: "acme", marketplaceName: "mp", names: ["github"] },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(notices, []);
+    assert.strictEqual(await readFile(adapterPath, "utf8"), bytes);
   });
 
   for (const { file, bytes } of [

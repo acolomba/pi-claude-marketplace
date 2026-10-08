@@ -64,6 +64,7 @@ import { inactiveOverrideFields, stampServers } from "./adapter-entry.ts";
 import { walkMcpSources, type McpSourceWalk } from "./collision-slots.ts";
 import {
   leftoverNames,
+  namesWithNoLiveServer,
   readLegacyMcpNames,
   removeLegacyMcpEntries,
   withoutServers,
@@ -457,7 +458,17 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     return noopStaging([]);
   }
 
-  const leftovers = leftoverNames(config, legacyNames, { newKeys, panelCopies: true });
+  // AMIG-01: a leftover under a name another source still defines stays.
+  const leftovers = await namesWithNoLiveServer(
+    cwd,
+    leftoverNames(config, legacyNames, { newKeys, panelCopies: true }),
+    {
+      leftoverPath: locations.mcpAdapterJsonPath,
+      legacyPath: locations.mcpJsonPath,
+      pluginName,
+      marketplaceName,
+    },
+  );
 
   // The CLAUDE_PROJECT_DIR arm is decided HERE, once (MENV-03): project scope
   // resolves `${CLAUDE_PROJECT_DIR}` at install to the project root `cwd` (NOT

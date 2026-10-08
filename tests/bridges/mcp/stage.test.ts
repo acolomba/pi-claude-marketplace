@@ -2557,6 +2557,29 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
+  test("AMIG-01: keeps a same-scope stub whose old name a project .mcp.json still defines and reports nothing", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-live-stub-");
+    await writeSource(locations.mcpJsonPath, LEGACY_ACME_TEXT);
+    await writeSource(locations.mcpAdapterJsonPath, '{"mcpServers":{"srv":{"disabled":true}}}\n');
+    await writeSource(path.join(cwd, ".mcp.json"), '{"mcpServers":{"srv":{"command":"gh"}}}\n');
+
+    // act
+    const prepared = await prepareAcme(locations, cwd);
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    assert.deepStrictEqual(
+      { nextDoc: prepared._nextDoc, notices: prepared.result.notices },
+      {
+        nextDoc: {
+          mcpServers: { srv: { disabled: true }, plugin_acme_server_: ACME_ENTRY },
+        },
+        notices: [],
+      },
+    );
+  });
+
   test("AMIG-01: keeps a same-scope marker-less full definition without directTools under an old name and reports nothing", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-own-server-");
