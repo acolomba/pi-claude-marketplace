@@ -45,7 +45,7 @@ function resolveCause(cause: unknown): SerializedCauseChain {
 }
 
 function redactCommandPaths(message: string): string {
-  const locations = message.matchAll(/https?:\/\/[^\s"'`<>]+|file:\/|\b[a-z]:[\\/]|\\\\|\//gi);
+  const locations = message.matchAll(/https?:\/\/[^\s"'`<>]+|file:\/|\b[a-z]:[\\/]|[\\/]/gi);
   for (const location of locations) {
     if (/^https?:/i.test(location[0])) {
       continue;

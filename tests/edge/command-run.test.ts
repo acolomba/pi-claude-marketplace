@@ -248,6 +248,42 @@ for (const directoryName of [
 }
 
 for (const { message, safeMessage, disclosure } of [
+  ...[
+    "\\",
+    "D:\\",
+    "D:/",
+    "\\\\host\\share\\",
+    "\\\\?\\UNC\\host\\share\\",
+    "\\\\?\\D:\\",
+    "/",
+    "//host/share/",
+  ].flatMap((root) => [
+    {
+      message: `ENOENT: open '${root}Users\\ClientLedger\\secret.json'`,
+      safeMessage: "ENOENT: open '[path]'",
+      disclosure: "ClientLedger",
+    },
+    {
+      message: `failed at:${root}PrivateVault`,
+      safeMessage: "failed at:[path]",
+      disclosure: "PrivateVault",
+    },
+    {
+      message: `ENOENT: open '${root}O'ClientLedger\\secret.json'`,
+      safeMessage: "Command failure details omitted.",
+      disclosure: "ClientLedger",
+    },
+    {
+      message: `ENOENT: open '${root}\nClientLedger\\secret.json'`,
+      safeMessage: "Command failure details omitted.",
+      disclosure: "ClientLedger",
+    },
+    {
+      message: `failed at:${root}<ClientLedger>\\secret.json`,
+      safeMessage: "Command failure details omitted.",
+      disclosure: "ClientLedger",
+    },
+  ]),
   {
     message: "failed at /Users/<Confidential Client>/secret.json",
     safeMessage: "Command failure details omitted.",

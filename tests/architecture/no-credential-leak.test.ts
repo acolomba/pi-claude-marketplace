@@ -1044,8 +1044,75 @@ test("AUTH-09 / PMOD-04: the planted-credential assertion reports an unredacted 
   );
 });
 
-/** Checks every string of the machine-only error without inventing a text renderer. */
-function assertSafeCommandPayload(payload: unknown): void {
+for (const root of [
+  "\\",
+  "E:\\",
+  "\\\\host\\share\\",
+  "\\\\?\\UNC\\host\\share\\",
+  "\\\\?\\E:\\",
+  "/",
+  "//host/share/",
+]) {
+  for (const { tail, safeMessage } of [
+    { tail: "ClientLedger", safeMessage: "open '[path]'" },
+    { tail: "O'ClientLedger", safeMessage: "Command failure details omitted." },
+    { tail: "\nClientLedger", safeMessage: "Command failure details omitted." },
+    { tail: "<ClientLedger>", safeMessage: "Command failure details omitted." },
+  ]) {
+    for (const mode of ["json", "rpc"]) {
+      test(`AUTH-09 root-form delivery and controls: ${JSON.stringify({ root, tail, mode })}`, () => {
+        // arrange
+        const message = `open '${root}${tail}'`;
+        const capture = createJsonCapture();
+        const origin = {
+          kind: "command",
+          commandId: "plugin update",
+          invocationId: "root-error",
+        } as const;
+        const expected = {
+          schemaVersion: 1,
+          kind: "internal-error",
+          origin,
+          severity: "error",
+          needsReload: false,
+          summary: "Command failed unexpectedly.",
+          cause: { causeChain: [safeMessage], truncated: false },
+        };
+        const ctx: NotificationContext = {
+          mode,
+          get ui() {
+            return capture.ui;
+          },
+        };
+
+        // act
+        notifyCommandError(
+          ctx,
+          capture.entrySink,
+          origin,
+          createCommandRunState(),
+          new Error(message),
+        );
+
+        // assert
+        assert.deepStrictEqual(capture.entries, [
+          { customType: "claude-plugin", payload: expected },
+        ]);
+        capture.assertValid();
+        assertSafeCommandPayload(capture.entries, [safeMessage]);
+        for (const disclosure of [message, `open '[path]${tail}[path]'`]) {
+          const planted = { ...expected, cause: { causeChain: [disclosure], truncated: false } };
+          assert.throws(() => {
+            assertSafeCommandPayload(planted, [safeMessage]);
+          }, assert.AssertionError);
+        }
+      });
+    }
+  }
+}
+
+/** Checks exact cause messages and every string without inventing a text renderer. */
+function assertSafeCommandPayload(payload: unknown, expectedCauseChain: readonly string[]): void {
   if (typeof payload === "string") {
     assert.doesNotMatch(payload, /gh[pousr]_[A-Za-z0-9]+|alice:s3cret|s3cret|Bearer secret123/);
     for (const disclosure of [
@@ -1065,8 +1132,12 @@ function assertSafeCommandPayload(payload: unknown): void {
   }
 
   if (payload !== null && typeof payload === "object") {
-    for (const member of Object.values(payload)) {
-      assertSafeCommandPayload(member);
+    for (const [key, member] of Object.entries(payload)) {
+      if (key === "causeChain") {
+        assert.deepStrictEqual(member, expectedCauseChain);
+      }
+
+      assertSafeCommandPayload(member, expectedCauseChain);
     }
   }
 }
@@ -1120,8 +1191,8 @@ for (const mode of ["json", "rpc"] as const) {
     // assert
     assert.deepStrictEqual(converted, expected);
     assert.deepStrictEqual(capture.entries, [{ customType: "claude-plugin", payload: expected }]);
-    assertSafeCommandPayload(converted);
-    assertSafeCommandPayload(capture.entries);
+    assertSafeCommandPayload(converted, expected.cause.causeChain);
+    assertSafeCommandPayload(capture.entries, expected.cause.causeChain);
     capture.assertValid();
   });
 }
@@ -1172,7 +1243,7 @@ for (const message of [
           },
         },
       ]);
-      assertSafeCommandPayload(capture.entries);
+      assertSafeCommandPayload(capture.entries, ["Command failure details omitted."]);
       capture.assertValid();
     });
   }
@@ -1212,7 +1283,7 @@ for (const [name, disclosure] of [
 
     // act & assert
     assert.throws(() => {
-      assertSafeCommandPayload(planted);
+      assertSafeCommandPayload(planted, ["operation failed"]);
     }, assert.AssertionError);
   });
 }

@@ -39,7 +39,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 
-function assertSafeCommandPayload(payload: unknown): void {
+function assertSafeCommandPayload(payload: unknown, expectedCauseChain: readonly string[]): void {
   if (typeof payload === "string") {
     assert.doesNotMatch(payload, /secret123|user:private|ghp_abcdefghijklmnop/);
     for (const disclosure of [
@@ -72,8 +72,53 @@ function assertSafeCommandPayload(payload: unknown): void {
   assert.deepStrictEqual(Object.getOwnPropertySymbols(payload), []);
   for (const [key, member] of Object.entries(payload)) {
     assert.notStrictEqual(key, "stack");
-    assertSafeCommandPayload(member);
+    if (key === "causeChain") {
+      assert.deepStrictEqual(member, expectedCauseChain);
+    }
+
+    assertSafeCommandPayload(member, expectedCauseChain);
   }
+}
+
+for (const { message, safeMessage } of [
+  { message: String.raw`open '\Users\ClientLedger\secret.json'`, safeMessage: "open '[path]'" },
+  { message: String.raw`\PrivateVault\secret.json`, safeMessage: "[path]" },
+  {
+    message: String.raw`open '\Users\O'ClientLedger\secret.json'`,
+    safeMessage: "Command failure details omitted.",
+  },
+  {
+    message: "open '\\Users\\\nClientLedger\\secret.json'",
+    safeMessage: "Command failure details omitted.",
+  },
+]) {
+  test(`converts current-drive roots with exact disclosure controls: ${JSON.stringify(message)}`, () => {
+    // arrange
+    const origin = { kind: "command", commandId: "plugin update", invocationId: "run-a" } as const;
+    const presentation = resolveCommandError(new Error(message), false);
+    const expected = {
+      schemaVersion: 1,
+      kind: "internal-error",
+      origin,
+      severity: "error",
+      needsReload: false,
+      summary: "Command failed unexpectedly.",
+      cause: { causeChain: [safeMessage], truncated: false },
+    };
+
+    // act
+    const payload = toWirePayload(presentation, origin);
+
+    // assert
+    assert.deepStrictEqual(payload, expected);
+    assertSafeCommandPayload(payload, [safeMessage]);
+    for (const disclosure of [message, "open '[path]ClientLedger[path]'"]) {
+      const planted = { ...expected, cause: { causeChain: [disclosure], truncated: false } };
+      assert.throws(() => {
+        assertSafeCommandPayload(planted, [safeMessage]);
+      }, assert.AssertionError);
+    }
+  });
 }
 
 test("converts hostile command causes to schema-valid disclosure-safe plain JSON", () => {
@@ -114,7 +159,11 @@ test("converts hostile command causes to schema-valid disclosure-safe plain JSON
   });
   assert.strictEqual(validator.Check(payload), true);
   assert.deepStrictEqual(JSON.parse(JSON.stringify(payload)), payload);
-  assertSafeCommandPayload(payload);
+  assertSafeCommandPayload(payload, [
+    "https://***@host/repo Bearer *** ***",
+    "[path]",
+    "Command failure details omitted.",
+  ]);
 });
 
 for (const message of [
@@ -143,7 +192,7 @@ for (const message of [
       cause: { causeChain: ["Command failure details omitted."], truncated: false },
     });
     assert.strictEqual(validator.Check(payload), true);
-    assertSafeCommandPayload(payload);
+    assertSafeCommandPayload(payload, ["Command failure details omitted."]);
   });
 }
 
@@ -209,7 +258,7 @@ for (const { title, cause } of [
 
     // act & assert
     assert.throws(() => {
-      assertSafeCommandPayload(payload);
+      assertSafeCommandPayload(payload, ["operation failed"]);
     }, assert.AssertionError);
   });
 }

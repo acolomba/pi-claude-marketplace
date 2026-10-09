@@ -3,6 +3,57 @@ import test from "node:test";
 
 import { resolveCommandError } from "../../extensions/pi-claude-marketplace/shared/notification-command-error.ts";
 
+for (const root of [
+  "\\",
+  "C:\\",
+  "C:/",
+  "\\\\host\\share\\",
+  "\\\\?\\UNC\\host\\share\\",
+  "\\\\?\\C:\\",
+  "/",
+  "//host/share/",
+  "file:///",
+]) {
+  for (const { directory, ambiguous } of [
+    { directory: "ClientLedger", ambiguous: false },
+    { directory: "PrivateVault", ambiguous: false },
+    { directory: "Client Ledger 用户", ambiguous: false },
+    { directory: "O'ClientLedger", ambiguous: true },
+    { directory: "'ClientLedger'", ambiguous: true },
+    { directory: '"ClientLedger"', ambiguous: true },
+    { directory: "<ClientLedger>", ambiguous: true },
+    { directory: "\nClientLedger", ambiguous: true },
+    { directory: "\r\nClientLedger", ambiguous: true },
+    { directory: "\tClientLedger", ambiguous: true },
+    { directory: "\u2028ClientLedger", ambiguous: true },
+    { directory: "\u2029ClientLedger", ambiguous: true },
+  ]) {
+    for (const quote of ["", "'", '"', "`"]) {
+      test(`root-form matrix: ${JSON.stringify({ root, directory, quote })}`, () => {
+        // arrange
+        const separator = root.includes("\\") ? "\\" : "/";
+        const localPath = `${root}${directory}${separator}secret.json`;
+        const message = `open ${quote}${localPath}${quote}`;
+        const safeMessage = ambiguous
+          ? "Command failure details omitted."
+          : `open ${quote}[path]${quote}`;
+
+        // act
+        const presentation = resolveCommandError(new Error(message, { cause: "unchanged" }), true);
+
+        // assert
+        assert.deepStrictEqual(presentation, {
+          kind: "internal-error",
+          severity: "error",
+          needsReload: true,
+          summary: "Command failed unexpectedly.",
+          cause: { causeChain: [safeMessage, "unchanged"], truncated: false },
+        });
+      });
+    }
+  }
+}
+
 for (const localPath of [
   "/tmp/review-absent/'Confidential Client'/secret.json",
   "/tmp/review-absent/O'Connor/secret.json",
